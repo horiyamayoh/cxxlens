@@ -28,7 +28,14 @@ packages:
   - unresolved
   - precision_level
   - stable_code_registry
+  - confidence
+  - result_guarantee
+  - evidence_kind
+  - evidence_item
   - evidence
+  - coverage_state
+  - coverage_request
+  - coverage_unit
   - coverage_report
   - diagnostic
   - finding
@@ -88,40 +95,56 @@ packages:
     phase: M0
     guarantees:
     - Structured evidence is authoritative; prose is a projection.
+    requirements:
+    - FR-008
+    - FR-011
     contract_maturity: contract-defined
-    implementation_state: unimplemented
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/core/evidence.hpp
+      signature: 'cxxlens::evidence& cxxlens::evidence::add(cxxlens::evidence_item); std::span<const cxxlens::evidence_item> cxxlens::evidence::items() const noexcept; std::string cxxlens::evidence::to_json() const; std::string cxxlens::evidence::to_markdown() const'
+      signature_fingerprint: sha256:d590366b80be69a4c215c934de46c443e9b938c5cafe38d120222c398c392bb2
+    implementation_evidence:
+    - include/cxxlens/core/evidence.hpp
+    - src/core/evidence.cpp
+    - schemas/cxxlens_evidence_coverage_contract.yaml
+    - tests/unit/core/evidence_coverage_test.cpp
+    - tests/public_headers/evidence_header_test.cpp
     atomic_unit:
       id: AU-CORE-003
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-CORE-004
     symbol: coverage_report::{complete,units,to_json,to_markdown}
     kind: method_family
     phase: M0
     guarantees:
     - Complete accounting of requested, covered, excluded, failed, unresolved and not-applicable units.
+    requirements:
+    - FR-008
+    - FR-010
     contract_maturity: contract-defined
-    implementation_state: unimplemented
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/core/evidence.hpp
+      signature: 'bool cxxlens::coverage_report::complete() const; std::span<const cxxlens::coverage_unit> cxxlens::coverage_report::units() const noexcept; std::string cxxlens::coverage_report::to_json() const; std::string cxxlens::coverage_report::to_markdown() const'
+      signature_fingerprint: sha256:439cfc1f164979287ff750183b73afcc9d3980d2cdebdad620789fe80f0d03a9
+    implementation_evidence:
+    - include/cxxlens/core/evidence.hpp
+    - src/core/evidence.cpp
+    - schemas/cxxlens_evidence_coverage_contract.yaml
+    - tests/unit/core/evidence_coverage_test.cpp
+    - tests/evidence/test_evidence_process.py
     atomic_unit:
       id: AU-CORE-004
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-CORE-005
     symbol: finding::{id,why,unresolved_items,explain,to_json}
     kind: method_family
@@ -3249,9 +3272,9 @@ summary:
   api_entry_count: 123
   atomic_unit_count: 123
   implementation_state_counts:
-    unimplemented: 122
+    unimplemented: 120
     implemented: 0
-    conformant: 1
+    conformant: 3
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.

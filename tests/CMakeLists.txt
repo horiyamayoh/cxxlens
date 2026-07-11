@@ -32,6 +32,14 @@ cxxlens_set_project_warnings(cxxlens-public-header-failure)
 add_test(NAME public-api.failure-header COMMAND cxxlens-public-header-failure)
 set_tests_properties(public-api.failure-header PROPERTIES LABELS public-api)
 
+add_executable(cxxlens-public-header-evidence
+               public_headers/evidence_header_test.cpp)
+target_link_libraries(cxxlens-public-header-evidence PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-public-header-evidence PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-public-header-evidence)
+add_test(NAME public-api.evidence-header COMMAND cxxlens-public-header-evidence)
+set_tests_properties(public-api.evidence-header PROPERTIES LABELS public-api)
+
 configure_file(install/run_install_test.cmake.in
                "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake" @ONLY)
 add_test(NAME install.consumer
@@ -98,3 +106,22 @@ cxxlens_set_project_warnings(cxxlens-unit-failure-contract)
 add_test(NAME unit.failure-contract COMMAND cxxlens-unit-failure-contract)
 set_tests_properties(unit.failure-contract
                      PROPERTIES LABELS "unit;failure;schema;conformance")
+
+add_executable(cxxlens-unit-evidence-coverage
+               unit/core/evidence_coverage_test.cpp)
+target_link_libraries(cxxlens-unit-evidence-coverage PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-unit-evidence-coverage PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-evidence-coverage)
+add_test(NAME unit.evidence-coverage COMMAND cxxlens-unit-evidence-coverage)
+set_tests_properties(
+  unit.evidence-coverage
+  PROPERTIES LABELS "unit;evidence;coverage;schema;determinism;conformance")
+add_test(
+  NAME determinism.evidence-process
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/evidence/test_evidence_process.py"
+    "$<TARGET_FILE:cxxlens-unit-evidence-coverage>"
+    "${PROJECT_SOURCE_DIR}/tests/golden/evidence_coverage/canonical_v1.txt")
+set_tests_properties(determinism.evidence-process
+                     PROPERTIES LABELS "evidence;coverage;determinism;golden")

@@ -34,6 +34,7 @@ include(CxxlensSanitizers)
 add_library(
   cxxlens
   src/core/canonical_encoding.cpp
+  src/core/evidence.cpp
   src/core/failure.cpp
   src/core/version.cpp
   src/runtime/fault_plan.cpp
@@ -91,6 +92,7 @@ install(DIRECTORY include/ DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 install(
   FILES schemas/cxxlens_public_api_contract.yaml
         schemas/cxxlens_api_catalog.schema.yaml
+        schemas/cxxlens_evidence_coverage_contract.yaml
         schemas/cxxlens_failure_contract.yaml
         schemas/cxxlens_identity_contract.yaml
         schemas/cxxlens_source_span.schema.yaml

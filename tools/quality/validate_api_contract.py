@@ -349,8 +349,9 @@ def validate_document(document: Any, inventory_text: str | None = None) -> dict:
     implemented = sorted(
         api["id"] for _, api in iter_apis(document) if api["implementation_state"] != "unimplemented"
     )
-    if implemented != ["API-CORE-001"]:
-        fail("implementation evidence currently identifies only API-CORE-001")
+    expected_implemented = ["API-CORE-001", "API-CORE-003", "API-CORE-004"]
+    if implemented != expected_implemented:
+        fail(f"implementation evidence must match the completed foundation APIs: {expected_implemented}")
     if inventory_text is not None and inventory_text != render_inventory(document):
         fail("chapter 40 generated inventory does not match the YAML catalog")
     return calculated

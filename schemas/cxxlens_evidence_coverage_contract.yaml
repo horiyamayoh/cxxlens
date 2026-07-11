@@ -1,0 +1,69 @@
+schema: cxxlens.evidence-coverage-contract.v1
+evidence:
+  authoritative: structured-rows
+  prose_fields: [summary]
+  semantic_fields: [kind, source, supporting_facts, attributes]
+  row_order: canonical-semantic-key
+  union: sorted-unique-idempotent
+  supporting_fact_order: lexical-full-typed-id
+  supporting_fact_membership: acquired-snapshot-required
+  custom_factory: registered-namespaced-id-required
+  kinds:
+  - source
+  - ast_binding
+  - canonical_symbol
+  - canonical_type
+  - inheritance_relation
+  - override_relation
+  - call_resolution
+  - control_flow
+  - dataflow_path
+  - api_model
+  - dynamic_observation
+  - build_context
+  - approximation
+  - exclusion
+  - custom
+coverage:
+  equation: requested-minus-terminal-states-equals-zero
+  terminal_states: [covered, excluded, failed, unresolved, not_applicable]
+  exactly_one_terminal_state_per_request: true
+  unrequested_terminal_row: reject
+  duplicate_request: reject
+  missing_terminal_row: reject
+  separately_mutable_summary: forbidden
+  complete:
+    requires_valid_accounting: true
+    blocking_states: [failed, unresolved]
+    empty_universe: true
+guarantee:
+  values:
+  - exact_within_coverage
+  - sound_over_approximation
+  - sound_under_approximation
+  - best_effort
+  - heuristic
+  compatibility:
+    exact_within_coverage:
+      complete_coverage: required
+      achieved_precision_at_least_required: true
+      material_evidence: required
+    sound_over_approximation:
+      approximation_evidence: required
+    sound_under_approximation:
+      approximation_evidence: required
+    best_effort: {partial_coverage: allowed}
+    heuristic: {partial_coverage: allowed}
+precision_order:
+- ast_structural
+- local_semantic
+- workspace_semantic
+- local_flow
+- interprocedural_summary
+- path_sensitive
+- dynamic_observation
+confidence_order: [speculative, possible, probable, high, certain]
+serialization:
+  source: authoritative-rows-only
+  schema_versions: [cxxlens.evidence.v1, cxxlens.coverage.v1]
+  summary_counts: derived-during-projection
