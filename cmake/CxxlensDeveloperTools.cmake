@@ -43,6 +43,14 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-runtime-port-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_runtime_port_usage.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-text-lint
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -66,7 +74,7 @@ endif()
 add_custom_target(cxxlens-quality)
 add_dependencies(
   cxxlens-quality cxxlens-api-contract-check cxxlens-design-package-check
-  cxxlens-public-boundary-check cxxlens-text-lint)
+  cxxlens-public-boundary-check cxxlens-runtime-port-check cxxlens-text-lint)
 if(TARGET cxxlens-format-check)
   add_dependencies(cxxlens-quality cxxlens-format-check)
 endif()

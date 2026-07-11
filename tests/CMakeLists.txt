@@ -22,3 +22,13 @@ add_test(NAME install.consumer
          COMMAND "${CMAKE_COMMAND}" -P
                  "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake")
 set_tests_properties(install.consumer PROPERTIES LABELS install RUN_SERIAL TRUE)
+
+add_executable(cxxlens-unit-runtime-ports unit/runtime/runtime_ports_test.cpp)
+target_link_libraries(cxxlens-unit-runtime-ports PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-unit-runtime-ports
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-unit-runtime-ports PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-runtime-ports)
+add_test(NAME unit.runtime-ports COMMAND cxxlens-unit-runtime-ports)
+set_tests_properties(unit.runtime-ports PROPERTIES LABELS
+                                                   "unit;runtime;security")

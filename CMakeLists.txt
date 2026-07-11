@@ -31,7 +31,11 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CxxlensWarnings)
 include(CxxlensSanitizers)
 
-add_library(cxxlens src/core/version.cpp)
+add_library(
+  cxxlens
+  src/core/version.cpp src/runtime/fault_plan.cpp
+  src/runtime/filesystem_adapter.cpp src/runtime/hash_adapter.cpp
+  src/runtime/process_adapter.cpp src/runtime/time_adapter.cpp)
 add_library(cxxlens::cxxlens ALIAS cxxlens)
 
 target_compile_features(cxxlens PUBLIC cxx_std_23)
