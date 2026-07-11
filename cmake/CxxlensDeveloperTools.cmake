@@ -59,6 +59,14 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-failure-contract-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_failure_contract.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-text-lint
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -84,6 +92,7 @@ add_dependencies(
   cxxlens-quality
   cxxlens-api-contract-check
   cxxlens-design-package-check
+  cxxlens-failure-contract-check
   cxxlens-identity-path-check
   cxxlens-public-boundary-check
   cxxlens-runtime-port-check

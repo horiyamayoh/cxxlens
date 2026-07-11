@@ -20,8 +20,14 @@ packages:
   - api_versions
   - capability_set
   - typed_id<T>
+  - failure_scope
+  - error_code
   - error
+  - result<T>
+  - unresolved_kind
   - unresolved
+  - precision_level
+  - stable_code_registry
   - evidence
   - coverage_report
   - diagnostic
@@ -3400,24 +3406,44 @@ registries:
   - config.profile-not-found
   - config.unknown-key
   - config.yaml-invalid
+  - core.budget-exhausted
+  - core.cancelled
+  - core.capability-unavailable
+  - core.deadline-exceeded
+  - core.internal-invariant-violation
   - core.invalid-argument
   - core.schema-validation-failed
+  - core.unsupported-capability
+  - core.version-mismatch
+  - extractor.invalid-observation
+  - facts.cache-incompatible
+  - facts.identity-collision
+  - facts.reduction-conflict
+  - facts.store-corrupt
   - facts.transaction-failed
   - flow.cfg-unavailable
+  - flow.model-invalid
   - flow.non-convergent
   - flow.path-budget-exhausted
   - generate.artifact-quarantined
   - generate.macro-surface-rejected
   - generate.odr-risk-rejected
+  - generate.payload-missing
   - generate.plan-invalid
   - generate.structural-audit-failed
   - generate.surface-census-incomplete
+  - generate.target-ambiguous
   - generate.type-unspellable
+  - generate.unknown-decision
   - generate.variant-artifact-conflict
   - interop.borrowed-lifetime-violation
   - interop.custom-schema-conflict
   - interop.nondeterministic-extractor
+  - io.retryable
+  - parse.crashed
   - parse.frontend-failed
+  - parse.invocation-build-failed
+  - parse.timeout
   - qa.build-failed
   - qa.coverage-missing
   - qa.process-not-allowed
@@ -3428,13 +3454,17 @@ registries:
   - review.gate-failed
   - rules.invalid-metadata
   - rules.suppression-invalid
+  - search.plan-compilation-failed
   - search.refinement-failed
   - search.required-facts-unavailable
   - select.ambiguous-name
   - select.invalid-expression
   - select.type-mismatch
   - transform.commit-failed
+  - transform.format-failed
   - transform.macro-edit-rejected
+  - transform.plan-invalid
+  - transform.range-conflict
   - transform.reparse-failed
   - transform.source-stale
   - transform.target-ambiguous
@@ -3443,8 +3473,11 @@ registries:
   - workspace.compile-command-ambiguous
   - workspace.compile-database-invalid
   - workspace.compile-database-not-found
+  - workspace.driver-not-allowed
+  - workspace.header-inference-rejected
   - workspace.model-load-failed
   - workspace.resource-dir-not-found
+  - workspace.snapshot-stale
 migrations:
 - from_schema: cxxlens.api-catalog.v1
   to_schema: cxxlens.api-catalog.v2

@@ -24,6 +24,14 @@ cxxlens_set_project_warnings(cxxlens-public-header-identity)
 add_test(NAME public-api.identity-header COMMAND cxxlens-public-header-identity)
 set_tests_properties(public-api.identity-header PROPERTIES LABELS public-api)
 
+add_executable(cxxlens-public-header-failure
+               public_headers/failure_header_test.cpp)
+target_link_libraries(cxxlens-public-header-failure PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-public-header-failure PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-public-header-failure)
+add_test(NAME public-api.failure-header COMMAND cxxlens-public-header-failure)
+set_tests_properties(public-api.failure-header PROPERTIES LABELS public-api)
+
 configure_file(install/run_install_test.cmake.in
                "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake" @ONLY)
 add_test(NAME install.consumer
@@ -81,3 +89,12 @@ add_test(
     "${PROJECT_SOURCE_DIR}/schemas/cxxlens_identity_contract.yaml")
 set_tests_properties(determinism.identity-process
                      PROPERTIES LABELS "identity;determinism;schema")
+
+add_executable(cxxlens-unit-failure-contract
+               unit/core/failure_contract_test.cpp)
+target_link_libraries(cxxlens-unit-failure-contract PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-unit-failure-contract PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-failure-contract)
+add_test(NAME unit.failure-contract COMMAND cxxlens-unit-failure-contract)
+set_tests_properties(unit.failure-contract
+                     PROPERTIES LABELS "unit;failure;schema;conformance")
