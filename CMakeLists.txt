@@ -33,9 +33,13 @@ include(CxxlensSanitizers)
 
 add_library(
   cxxlens
-  src/core/version.cpp src/runtime/fault_plan.cpp
-  src/runtime/filesystem_adapter.cpp src/runtime/hash_adapter.cpp
-  src/runtime/process_adapter.cpp src/runtime/time_adapter.cpp)
+  src/core/version.cpp
+  src/runtime/fault_plan.cpp
+  src/runtime/filesystem_adapter.cpp
+  src/runtime/hash_adapter.cpp
+  src/runtime/process_adapter.cpp
+  src/runtime/time_adapter.cpp
+  src/source/source_span.cpp)
 add_library(cxxlens::cxxlens ALIAS cxxlens)
 
 target_compile_features(cxxlens PUBLIC cxx_std_23)
@@ -82,9 +86,11 @@ install(
   INCLUDES
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 install(DIRECTORY include/ DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
-install(FILES schemas/cxxlens_public_api_contract.yaml
-              schemas/cxxlens_api_catalog.schema.yaml
-        DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
+install(
+  FILES schemas/cxxlens_public_api_contract.yaml
+        schemas/cxxlens_api_catalog.schema.yaml
+        schemas/cxxlens_source_span.schema.yaml
+  DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
 
 configure_package_config_file(
   cmake/CxxlensConfig.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/cxxlensConfig.cmake"

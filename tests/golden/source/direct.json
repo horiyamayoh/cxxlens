@@ -1,0 +1,1 @@
+{"schema":"cxxlens.source-span.v1","primary":{"file":"file:src/main.cpp","begin":0,"end":3,"begin_line":1,"begin_column":1,"end_line":1,"end_column":4,"kind":"token"},"spelling":null,"expansion":null,"macro_stack":[],"origin":"directly_spelled","digest":{"algorithm":"sha256","version":1,"value":"abc"},"read_only":false}

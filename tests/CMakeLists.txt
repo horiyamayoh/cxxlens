@@ -32,3 +32,24 @@ cxxlens_set_project_warnings(cxxlens-unit-runtime-ports)
 add_test(NAME unit.runtime-ports COMMAND cxxlens-unit-runtime-ports)
 set_tests_properties(unit.runtime-ports PROPERTIES LABELS
                                                    "unit;runtime;security")
+
+add_executable(cxxlens-unit-source-span unit/source/source_span_test.cpp)
+target_link_libraries(cxxlens-unit-source-span PRIVATE cxxlens::cxxlens)
+target_compile_definitions(
+  cxxlens-unit-source-span
+  PRIVATE
+    CXXLENS_NESTED_SOURCE_GOLDEN="${PROJECT_SOURCE_DIR}/tests/golden/source/nested_macro.json"
+)
+target_compile_features(cxxlens-unit-source-span PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-source-span)
+add_test(NAME unit.source-span COMMAND cxxlens-unit-source-span)
+set_tests_properties(unit.source-span PROPERTIES LABELS "unit;source;schema")
+
+find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
+add_test(
+  NAME schema.source-span
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/schema/test_source_schema.py"
+    "${PROJECT_SOURCE_DIR}")
+set_tests_properties(schema.source-span PROPERTIES LABELS "source;schema")

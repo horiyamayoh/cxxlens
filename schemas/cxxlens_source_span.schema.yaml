@@ -1,0 +1,39 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.source-span.v1.schema.yaml
+title: cxxlens source span v1
+type: object
+required: [schema, primary, spelling, expansion, macro_stack, origin, digest, read_only]
+properties:
+  schema: {const: cxxlens.source-span.v1}
+  primary: {$ref: '#/$defs/range'}
+  spelling: {oneOf: [{$ref: '#/$defs/range'}, {type: 'null'}]}
+  expansion: {oneOf: [{$ref: '#/$defs/range'}, {type: 'null'}]}
+  macro_stack: {type: array}
+  origin:
+    enum:
+    - directly_spelled
+    - macro_argument
+    - macro_body
+    - macro_expansion
+    - implicit_compiler_node
+    - generated_file
+    - system_header
+    - builtin
+    - unknown
+  digest:
+    type: object
+    required: [algorithm, version, value]
+  read_only: {type: boolean}
+$defs:
+  range:
+    type: object
+    required: [file, begin, end, begin_line, begin_column, end_line, end_column, kind]
+    properties:
+      file: {type: string, pattern: '^file:'}
+      begin: {type: integer, minimum: 0}
+      end: {type: integer, minimum: 0}
+      begin_line: {type: integer, minimum: 1}
+      begin_column: {type: integer, minimum: 1}
+      end_line: {type: integer, minimum: 1}
+      end_column: {type: integer, minimum: 1}
+      kind: {enum: [character, token]}
