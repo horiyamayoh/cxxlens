@@ -38,6 +38,10 @@ packages:
   - coverage_unit
   - coverage_report
   - diagnostic
+  - severity
+  - finding_input
+  - finding_validation_context
+  - finding_explanation_input
   - finding
   - finding_set
   - execution_context

@@ -1,0 +1,50 @@
+schema: cxxlens.finding-contract.v1
+classification:
+  diagnostic: external-compiler-or-tool-observation
+  finding: semantic-result-about-user-code
+  implicit_diagnostic_to_finding_conversion: forbidden
+finding_identity:
+  domain: cxxlens.finding-id.v1
+  prefix: finding
+  includes:
+  - rule_or_recipe
+  - subject_semantic_id
+  - primary_semantic_file_id
+  - primary_begin_offset
+  - primary_end_offset
+  - variant_signature
+  - identity_parameters
+  excludes: [message, severity, checkout_root, diagnostic_prose, jobs, hash_seed]
+  collision_policy: shared-hard-error-registry
+finding_payload:
+  required:
+  - id
+  - rule_or_recipe
+  - subject_semantic_id
+  - primary
+  - severity
+  - confidence
+  - guarantee
+  - message
+  - evidence
+  - unresolved
+  - coverage
+canonical_order:
+  keys:
+  - rule_or_recipe
+  - primary_file_id
+  - primary_begin_offset
+  - primary_end_offset
+  - subject_semantic_id
+  - variant_signature
+  - full_finding_id
+duplicate_policy:
+  same_id_same_material_payload: exactly-once
+  same_id_conflicting_material_payload: hard-invariant-error
+filters:
+  source_mutation: forbidden
+  thresholds: [minimum_severity, minimum_confidence]
+  payload_preservation: [id, evidence, unresolved, coverage]
+serialization:
+  owner: issue-9
+  implemented_here: false

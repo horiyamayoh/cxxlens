@@ -40,6 +40,14 @@ cxxlens_set_project_warnings(cxxlens-public-header-evidence)
 add_test(NAME public-api.evidence-header COMMAND cxxlens-public-header-evidence)
 set_tests_properties(public-api.evidence-header PROPERTIES LABELS public-api)
 
+add_executable(cxxlens-public-header-finding
+               public_headers/finding_header_test.cpp)
+target_link_libraries(cxxlens-public-header-finding PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-public-header-finding PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-public-header-finding)
+add_test(NAME public-api.finding-header COMMAND cxxlens-public-header-finding)
+set_tests_properties(public-api.finding-header PROPERTIES LABELS public-api)
+
 configure_file(install/run_install_test.cmake.in
                "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake" @ONLY)
 add_test(NAME install.consumer
@@ -125,3 +133,23 @@ add_test(
     "${PROJECT_SOURCE_DIR}/tests/golden/evidence_coverage/canonical_v1.txt")
 set_tests_properties(determinism.evidence-process
                      PROPERTIES LABELS "evidence;coverage;determinism;golden")
+
+add_executable(cxxlens-unit-finding-contract
+               unit/core/finding_contract_test.cpp)
+target_link_libraries(cxxlens-unit-finding-contract PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-unit-finding-contract
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-unit-finding-contract PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-finding-contract)
+add_test(NAME unit.finding-contract COMMAND cxxlens-unit-finding-contract)
+set_tests_properties(unit.finding-contract
+                     PROPERTIES LABELS "unit;finding;determinism;conformance")
+add_test(
+  NAME determinism.finding-process
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/finding/test_finding_process.py"
+    "$<TARGET_FILE:cxxlens-unit-finding-contract>"
+    "${PROJECT_SOURCE_DIR}/tests/golden/finding/canonical_v1.txt")
+set_tests_properties(determinism.finding-process
+                     PROPERTIES LABELS "finding;determinism;golden")

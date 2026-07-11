@@ -36,6 +36,7 @@ add_library(
   src/core/canonical_encoding.cpp
   src/core/evidence.cpp
   src/core/failure.cpp
+  src/core/finding.cpp
   src/core/version.cpp
   src/runtime/fault_plan.cpp
   src/runtime/filesystem_adapter.cpp
@@ -94,6 +95,7 @@ install(
         schemas/cxxlens_api_catalog.schema.yaml
         schemas/cxxlens_evidence_coverage_contract.yaml
         schemas/cxxlens_failure_contract.yaml
+        schemas/cxxlens_finding_contract.yaml
         schemas/cxxlens_identity_contract.yaml
         schemas/cxxlens_source_span.schema.yaml
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
