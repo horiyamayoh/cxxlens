@@ -1,3 +1,7 @@
+> [!WARNING]
+> この文書は旧 LLVM/Clang wrapper 構想の履歴資料であり、現在の規範仕様ではない。
+> 実装判断には `../cxxlens_integrated_design_ja.md` を使用すること。
+
 # LLVM/Clang ラッパライブラリ構想設計書
 
 **仮称:** `cxxlens`  

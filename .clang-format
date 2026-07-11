@@ -1,0 +1,75 @@
+BasedOnStyle: LLVM
+Language: Cpp
+Standard: Latest
+
+UseTab: Always
+IndentWidth: 4
+TabWidth: 4
+ContinuationIndentWidth: 4
+ColumnLimit: 100
+
+BreakBeforeBraces: Allman
+NamespaceIndentation: All
+FixNamespaceComments: true
+ShortNamespaceLines: 0
+IndentCaseLabels: true
+IndentCaseBlocks: false
+
+PointerAlignment: Left
+ReferenceAlignment: Left
+DerivePointerAlignment: false
+QualifierAlignment: Left
+
+AlignConsecutiveAssignments: None
+AlignConsecutiveBitFields: None
+AlignConsecutiveDeclarations: None
+AlignConsecutiveMacros: None
+AlignEscapedNewlines: DontAlign
+AlignOperands: DontAlign
+AlignTrailingComments: true
+
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: None
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakTemplateDeclarations: Yes
+BreakBeforeConceptDeclarations: Always
+BreakConstructorInitializers: BeforeColon
+CompactNamespaces: false
+EmptyLineAfterAccessModifier: Never
+EmptyLineBeforeAccessModifier: LogicalBlock
+KeepEmptyLinesAtEOF: false
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+SeparateDefinitionBlocks: Leave
+SortUsingDeclarations: LexicographicNumeric
+
+BinPackArguments: false
+BinPackParameters: false
+Cpp11BracedListStyle: true
+ReflowComments: true
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+IncludeIsMainRegex: '(_test)?$'
+IncludeCategories:
+  - Regex: '^<(algorithm|array|atomic|bit|cassert|cctype|cerrno|cfenv|cfloat|charconv|chrono|cinttypes|climits|clocale|cmath|codecvt|compare|complex|concepts|condition_variable|coroutine|csetjmp|csignal|cstdarg|cstddef|cstdint|cstdio|cstdlib|cstring|ctime|cwchar|cwctype|deque|exception|execution|expected|filesystem|format|forward_list|fstream|functional|future|initializer_list|iomanip|ios|iosfwd|iostream|istream|iterator|latch|limits|list|locale|map|memory|memory_resource|mutex|new|numbers|numeric|optional|ostream|queue|random|ranges|regex|scoped_allocator|semaphore|set|shared_mutex|source_location|span|sstream|stack|stdexcept|stop_token|streambuf|string|string_view|strstream|syncstream|system_error|thread|tuple|type_traits|typeindex|typeinfo|unordered_map|unordered_set|utility|valarray|variant|vector|version)>$'
+    Priority: 1
+    SortPriority: 1
+  - Regex: '^(<|"(gtest|gmock)/)'
+    Priority: 2
+    SortPriority: 2
+  - Regex: '^(<cxxlens/.*>|"cxxlens/.*")'
+    Priority: 3
+    SortPriority: 3
+  - Regex: '.*'
+    Priority: 4
+    SortPriority: 4
+SpaceAfterCStyleCast: false
+SpaceAfterLogicalNot: false
+SpaceBeforeParens: ControlStatements
+SpacesInAngles: Never
+SpacesInParens: Never
+SpacesInSquareBrackets: false

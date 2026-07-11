@@ -1,0 +1,28 @@
+---
+Checks: >
+  -*,
+  clang-analyzer-*,
+  bugprone-*,
+  performance-*,
+  portability-*,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  cppcoreguidelines-avoid-goto,
+  cppcoreguidelines-init-variables,
+  cppcoreguidelines-pro-bounds-constant-array-index,
+  readability-avoid-const-params-in-decls,
+  readability-const-return-type,
+  readability-container-size-empty,
+  readability-duplicate-include,
+  readability-inconsistent-declaration-parameter-name,
+  readability-make-member-function-const,
+  readability-misleading-indentation,
+  readability-redundant-*,
+  readability-simplify-boolean-expr
+WarningsAsErrors: '*'
+HeaderFilterRegex: '^(?!.*(/usr/|/opt/|/build/)).*(include/cxxlens|src|tests)/.*'
+FormatStyle: file
+CheckOptions:
+  modernize-use-trailing-return-type.IgnoreMacros: 'true'
+  readability-identifier-naming.NamespaceCase: lower_case
+...

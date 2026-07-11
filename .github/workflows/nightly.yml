@@ -1,0 +1,80 @@
+name: Nightly quality
+
+on:
+  schedule:
+    - cron: "17 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sanitizers:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Clang 22 and Ninja
+        run: |
+          wget --quiet https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install --yes ninja-build
+      - name: Build and test with ASan/UBSan
+        env:
+          CXX: clang++-22
+        run: |
+          cmake --preset asan-ubsan
+          cmake --build --preset asan-ubsan
+          ctest --preset asan-ubsan
+
+  iwyu:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain and IWYU
+        run: |
+          wget --quiet https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install --yes iwyu ninja-build
+      - name: Build with IWYU
+        env:
+          CXX: clang++-22
+        run: |
+          cmake --preset ci-quick -DCXXLENS_ENABLE_IWYU=ON
+          cmake --build --preset ci-quick
+
+  clang-static-analyzer:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Clang 22 tools and Ninja
+        run: |
+          wget --quiet https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install --yes clang-tools-22 ninja-build
+      - name: Analyze
+        env:
+          CXX: clang++-22
+        run: |
+          cmake --preset ci-quick
+          scan-build-22 --status-bugs cmake --build --preset ci-quick --clean-first
+
+  clean-release-install:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Clang 22 and Ninja
+        run: |
+          wget --quiet https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install --yes ninja-build
+      - name: Clean release and install verification
+        env:
+          CXX: clang++-22
+        run: |
+          cmake --preset install-check
+          cmake --build --preset install-check --clean-first
+          ctest --preset install-check

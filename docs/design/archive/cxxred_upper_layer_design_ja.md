@@ -1,3 +1,7 @@
+> [!WARNING]
+> この文書は旧 `cxxlens` / `cxxred` 二層構想の履歴資料であり、現在の規範仕様ではない。
+> 実装判断には `../cxxlens_integrated_design_ja.md` を使用すること。
+
 # C/C++ ユースケース駆動アプリケーションライブラリ設計書
 
 **仮称:** `cxxred`  

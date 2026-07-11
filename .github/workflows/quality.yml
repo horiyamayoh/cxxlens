@@ -1,0 +1,150 @@
+name: Quality gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  CMAKE_GENERATOR: Ninja
+
+jobs:
+  format-lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Clang 22
+        run: |
+          wget --quiet https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install text linters
+        run: |
+          python -m pip install --requirement tools/quality/requirements.txt
+          npm install --global markdownlint-cli2@0.18.1
+      - name: Configure
+        env:
+          CXX: clang++-22
+        run: cmake --preset ci-quick
+      - name: Check format and text files
+        run: cmake --build --preset ci-quick --target cxxlens-format-check cxxlens-text-lint
+
+  build-test-clang22:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Clang 22 and Ninja
+        run: |
+          wget --quiet https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install --yes ninja-build
+      - name: Configure
+        env:
+          CXX: clang++-22
+        run: cmake --preset ci-quick
+      - name: Build
+        run: cmake --build --preset ci-quick
+      - name: Test
+        run: ctest --preset ci-quick
+
+  static-analysis:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Clang 22 tools
+        run: |
+          wget --quiet https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install --yes clang-tidy-22 ninja-build
+      - name: Configure and build
+        env:
+          CXX: clang++-22
+        run: |
+          cmake --preset ci-quick
+          cmake --build --preset ci-quick
+      - name: Run clang-tidy
+        run: cmake --build --preset ci-quick --target cxxlens-clang-tidy
+
+  contracts-docs:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Clang 22, Doxygen, and Ninja
+        run: |
+          wget --quiet https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install --yes doxygen ninja-build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install PyYAML==6.0.2
+      - name: Configure documentation
+        env:
+          CXX: clang++-22
+        run: cmake --preset docs
+      - name: Validate catalog and public boundary
+        run: |
+          cmake --build --preset docs --target cxxlens-api-contract-check
+          cmake --build --preset docs --target cxxlens-design-package-check
+          cmake --build --preset docs --target cxxlens-public-boundary-check
+      - name: Build and validate Doxygen
+        run: cmake --build --preset docs --target cxxlens-doxygen-contract
+
+  public-api:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Clang 22 and Ninja
+        run: |
+          wget --quiet https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install --yes ninja-build
+      - name: Configure and build public header tests
+        env:
+          CXX: clang++-22
+        run: |
+          cmake --preset ci-quick
+          cmake --build --preset ci-quick
+      - name: Validate public API boundary
+        run: |
+          ctest --preset ci-quick --label-regex public-api
+          cmake --build --preset ci-quick --target cxxlens-public-boundary-check
+
+  install-consumer:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Clang 22 and Ninja
+        run: |
+          wget --quiet https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install --yes ninja-build
+      - name: Configure and build
+        env:
+          CXX: clang++-22
+        run: |
+          cmake --preset install-check
+          cmake --build --preset install-check
+      - name: Test installed consumer
+        run: ctest --preset install-check --label-regex install
+
+  gcc-header-compat:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile LLVM-independent public headers
+        run: |
+          for source in tests/public_headers/*_header_test.cpp; do
+            g++ -std=c++23 -Wall -Wextra -Wpedantic -Werror -Iinclude -fsyntax-only "$source"
+          done

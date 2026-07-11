@@ -1,0 +1,99 @@
+cmake_minimum_required(VERSION 3.25)
+
+project(
+  cxxlens
+  VERSION 0.1.0
+  DESCRIPTION "Use-case-driven C and C++ semantic analysis library"
+  LANGUAGES CXX)
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+  message(
+    FATAL_ERROR
+      "In-source builds are not supported. Use a CMake preset or a separate build directory."
+  )
+endif()
+
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+include(CTest)
+
+option(CXXLENS_WARNINGS_AS_ERRORS "Treat cxxlens compiler warnings as errors"
+       OFF)
+option(CXXLENS_ENABLE_CLANG_TIDY "Run clang-tidy while compiling cxxlens" OFF)
+option(CXXLENS_ENABLE_IWYU "Run include-what-you-use while compiling cxxlens"
+       OFF)
+option(CXXLENS_ENABLE_ASAN "Enable AddressSanitizer" OFF)
+option(CXXLENS_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
+option(CXXLENS_BUILD_DOCS "Enable Doxygen documentation targets" OFF)
+option(CXXLENS_BUILD_QUALITY_TOOLS "Enable local quality targets" ON)
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(CxxlensWarnings)
+include(CxxlensSanitizers)
+
+add_library(cxxlens src/core/version.cpp)
+add_library(cxxlens::cxxlens ALIAS cxxlens)
+
+target_compile_features(cxxlens PUBLIC cxx_std_23)
+target_include_directories(
+  cxxlens PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+                 "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
+set_target_properties(
+  cxxlens
+  PROPERTIES CXX_EXTENSIONS OFF
+             EXPORT_NAME cxxlens
+             VERSION "${PROJECT_VERSION}"
+             SOVERSION "${PROJECT_VERSION_MAJOR}")
+
+cxxlens_set_project_warnings(cxxlens)
+cxxlens_enable_sanitizers(cxxlens)
+
+if(CXXLENS_ENABLE_CLANG_TIDY)
+  find_program(CXXLENS_CLANG_TIDY NAMES clang-tidy-22 clang-tidy REQUIRED)
+  set_target_properties(
+    cxxlens PROPERTIES CXX_CLANG_TIDY
+                       "${CXXLENS_CLANG_TIDY};--warnings-as-errors=*")
+endif()
+
+if(CXXLENS_ENABLE_IWYU)
+  find_program(CXXLENS_IWYU NAMES include-what-you-use iwyu REQUIRED)
+  set_target_properties(cxxlens PROPERTIES CXX_INCLUDE_WHAT_YOU_USE
+                                           "${CXXLENS_IWYU}")
+endif()
+
+if(BUILD_TESTING)
+  add_subdirectory(tests)
+endif()
+
+if(CXXLENS_BUILD_QUALITY_TOOLS OR CXXLENS_BUILD_DOCS)
+  include(CxxlensDeveloperTools)
+endif()
+
+install(
+  TARGETS cxxlens
+  EXPORT cxxlensTargets
+  ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+  INCLUDES
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+install(DIRECTORY include/ DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+install(FILES schemas/cxxlens_public_api_contract.yaml
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
+
+configure_package_config_file(
+  cmake/CxxlensConfig.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/cxxlensConfig.cmake"
+  INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlens")
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/cxxlensConfigVersion.cmake"
+  VERSION "${PROJECT_VERSION}"
+  COMPATIBILITY SameMajorVersion)
+
+install(
+  EXPORT cxxlensTargets
+  FILE cxxlensTargets.cmake
+  NAMESPACE cxxlens::
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlens")
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/cxxlensConfig.cmake"
+              "${CMAKE_CURRENT_BINARY_DIR}/cxxlensConfigVersion.cmake"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlens")

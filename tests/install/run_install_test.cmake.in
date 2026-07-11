@@ -1,0 +1,23 @@
+set(test_root "@CMAKE_CURRENT_BINARY_DIR@/install-consumer")
+set(install_prefix "${test_root}/prefix")
+set(consumer_build "${test_root}/build")
+
+file(REMOVE_RECURSE "${test_root}")
+
+execute_process(
+  COMMAND "@CMAKE_COMMAND@" --install "@CMAKE_BINARY_DIR@" --prefix
+          "${install_prefix}" RESULT_VARIABLE install_result
+                                              COMMAND_ERROR_IS_FATAL ANY)
+
+execute_process(
+  COMMAND
+    "@CMAKE_COMMAND@" -S "@CMAKE_CURRENT_SOURCE_DIR@/install/consumer" -B
+    "${consumer_build}" "-DCMAKE_PREFIX_PATH=${install_prefix}"
+    "-DCMAKE_CXX_COMPILER=@CMAKE_CXX_COMPILER@"
+  RESULT_VARIABLE configure_result COMMAND_ERROR_IS_FATAL ANY)
+
+execute_process(COMMAND "@CMAKE_COMMAND@" --build "${consumer_build}"
+                RESULT_VARIABLE build_result COMMAND_ERROR_IS_FATAL ANY)
+
+execute_process(COMMAND "${consumer_build}/cxxlens-consumer"
+                RESULT_VARIABLE run_result COMMAND_ERROR_IS_FATAL ANY)

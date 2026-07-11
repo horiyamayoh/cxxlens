@@ -1,0 +1,1580 @@
+schema: cxxlens.api-catalog.v1
+document_id: CXXLENS-SRAD-001
+document_version: 1.0.0-draft
+generated_on: '2026-07-11'
+language: C++23
+llvm_baseline:
+  major: 22
+  initial_validation: 22.1.8
+stability:
+  stable_headers_expose_clang_types: false
+  raw_interop_header: <cxxlens/interop/clang.hpp>
+  default_mutation_mode: dry_run
+  all_result_operations_require_coverage: true
+packages:
+- id: core
+  header: <cxxlens/core.hpp>
+  purpose: Version, capability, IDs, errors, evidence, coverage and findings.
+  public_types:
+  - semantic_version
+  - api_versions
+  - capability_set
+  - typed_id<T>
+  - error
+  - unresolved
+  - evidence
+  - coverage_report
+  - diagnostic
+  - finding
+  - finding_set
+  - execution_context
+  apis:
+  - id: API-CORE-001
+    symbol: versions()
+    kind: free_function
+    phase: M0
+    maturity: contract-defined
+    guarantees:
+    - Returns all relevant product/schema/LLVM versions.
+  - id: API-CORE-002
+    symbol: capabilities()
+    kind: free_function
+    phase: M0
+    maturity: contract-defined
+    guarantees:
+    - Never represents an unavailable capability as an empty successful result.
+  - id: API-CORE-003
+    symbol: evidence::{add,items,to_json,to_markdown}
+    kind: method_family
+    phase: M0
+    maturity: contract-defined
+    guarantees:
+    - Structured evidence is authoritative; prose is a projection.
+  - id: API-CORE-004
+    symbol: coverage_report::{complete,units,to_json,to_markdown}
+    kind: method_family
+    phase: M0
+    maturity: contract-defined
+    guarantees:
+    - Complete accounting of requested, covered, excluded, failed, unresolved and not-applicable units.
+  - id: API-CORE-005
+    symbol: finding::{id,why,unresolved_items,explain,to_json}
+    kind: method_family
+    phase: M0
+    maturity: contract-defined
+    guarantees:
+    - Stable identity does not depend on message text or absolute checkout root.
+  - id: API-CORE-006
+    symbol: finding_set::{minimum_confidence,minimum_severity,to_json,to_markdown,to_sarif}
+    kind: method_family
+    phase: M0
+    maturity: contract-defined
+- id: workspace
+  header: <cxxlens/workspace.hpp>
+  purpose: Compilation database, build variants, snapshots and fact provisioning.
+  public_types:
+  - workspace_options
+  - compile_command
+  - target_context
+  - compile_unit
+  - analysis_scope
+  - workspace
+  - doctor_report
+  apis:
+  - id: API-WS-001
+    symbol: workspace_options::from_compilation_database(path)
+    kind: static_factory
+    phase: M1
+    maturity: planned
+    requires:
+      facts:
+      - compile_command
+    llvm:
+      components:
+      - clangTooling
+      - clangDriver
+      - clangOptions
+      primary_apis:
+      - JSONCompilationDatabase
+      - CompilationDatabase
+    errors:
+    - workspace.compile-database-not-found
+    - workspace.compile-database-invalid
+  - id: API-WS-002
+    symbol: workspace::open(workspace_options, execution_context)
+    kind: static_factory
+    phase: M1
+    maturity: planned
+    requires:
+      facts:
+      - compile_command
+      - file
+    llvm:
+      components:
+      - clangTooling
+      - clangFrontend
+      - clangDriver
+      primary_apis:
+      - getAllCompileCommands
+      - CompilerInvocation::CreateFromArgs
+    guarantees:
+    - Preserves all relevant commands as build variants; does not first-win.
+    errors:
+    - workspace.compile-command-ambiguous
+    - workspace.resource-dir-not-found
+  - id: API-WS-003
+    symbol: workspace::compile_units()
+    kind: method
+    phase: M1
+    maturity: planned
+    guarantees:
+    - Returns canonical deterministic order.
+  - id: API-WS-004
+    symbol: workspace::command_for(path)
+    kind: method
+    phase: M1
+    maturity: planned
+    guarantees:
+    - Returns zero, one or many commands; ambiguity is visible.
+  - id: API-WS-005
+    symbol: workspace::ensure(fact_profile, analysis_scope, execution_context)
+    kind: method
+    phase: M1
+    maturity: planned
+    requires:
+      facts:
+      - requested_profile
+    llvm:
+      components:
+      - clangFrontend
+      - clangAST
+      - clangLex
+      primary_apis:
+      - CompilerInstance
+      - FrontendAction
+    guarantees:
+    - Builds only missing coverage while retaining partial failures.
+    errors:
+    - parse.frontend-failed
+    - facts.transaction-failed
+  - id: API-WS-006
+    symbol: workspace::facts()
+    kind: method
+    phase: M1
+    maturity: planned
+  - id: API-WS-007
+    symbol: workspace::doctor(execution_context)
+    kind: method
+    phase: M1
+    maturity: planned
+    llvm:
+      components:
+      - clangDriver
+      - clangFrontend
+      primary_apis: []
+    errors:
+    - workspace.compile-database-invalid
+    - workspace.resource-dir-not-found
+  - id: API-WS-008
+    symbol: analysis_scope::{all,files,compile_units,changed_files,include_headers,variants}
+    kind: method_family
+    phase: M0
+    maturity: contract-defined
+- id: facts
+  header: <cxxlens/facts.hpp>
+  purpose: Immutable semantic facts and typed fact access.
+  public_types:
+  - fact_kind
+  - fact_profile
+  - provenance
+  - fact
+  - symbol
+  - type_ref
+  - reference
+  - call_site
+  - inheritance_edge
+  - override_edge
+  - include_relation
+  - macro_expansion
+  - fact_query
+  - fact_store
+  apis:
+  - id: API-FACT-001
+    symbol: fact_profile::{minimal,semantic_search,refactor,generation,flow,full,include,exclude,precision}
+    kind: method_family
+    phase: M0
+    maturity: contract-defined
+  - id: API-FACT-002
+    symbol: fact_store::find(fact_query)
+    kind: method
+    phase: M1
+    maturity: planned
+    guarantees:
+    - Queries one immutable fact snapshot.
+  - id: API-FACT-003
+    symbol: fact_store::symbols()
+    kind: method
+    phase: M1
+    maturity: planned
+    requires:
+      facts:
+      - symbol
+    guarantees:
+    - Results are detached from AST lifetime and deterministically ordered.
+  - id: API-FACT-004
+    symbol: fact_store::references(symbol_id)
+    kind: method
+    phase: M1
+    maturity: planned
+    requires:
+      facts:
+      - reference
+    guarantees:
+    - Results are detached from AST lifetime and deterministically ordered.
+  - id: API-FACT-005
+    symbol: fact_store::calls()
+    kind: method
+    phase: M1
+    maturity: planned
+    requires:
+      facts:
+      - call
+    guarantees:
+    - Results are detached from AST lifetime and deterministically ordered.
+  - id: API-FACT-006
+    symbol: fact_store::inheritance()
+    kind: method
+    phase: M1
+    maturity: planned
+    requires:
+      facts:
+      - inheritance
+    guarantees:
+    - Results are detached from AST lifetime and deterministically ordered.
+  - id: API-FACT-007
+    symbol: fact_store::overrides()
+    kind: method
+    phase: M1
+    maturity: planned
+    requires:
+      facts:
+      - override_relation
+    guarantees:
+    - Results are detached from AST lifetime and deterministically ordered.
+  - id: API-FACT-008
+    symbol: fact_store::includes()
+    kind: method
+    phase: M1
+    maturity: planned
+    requires:
+      facts:
+      - include_relation
+    guarantees:
+    - Results are detached from AST lifetime and deterministically ordered.
+  - id: API-FACT-009
+    symbol: fact_store::macros()
+    kind: method
+    phase: M1
+    maturity: planned
+    requires:
+      facts:
+      - macro_expansion
+    guarantees:
+    - Results are detached from AST lifetime and deterministically ordered.
+  - id: API-FACT-010
+    symbol: fact_store::coverage(fact_profile,analysis_scope)
+    kind: method
+    phase: M1
+    maturity: planned
+    requires:
+      facts:
+      - coverage
+    guarantees:
+    - Results are detached from AST lifetime and deterministically ordered.
+- id: models
+  header: <cxxlens/models.hpp>
+  purpose: Versioned project API effects, replacements and flow models.
+  public_types:
+  - effect_kind
+  - parameter_effect
+  - api_effects
+  - api_model_pack
+  apis:
+  - id: API-MODEL-001
+    symbol: api_model_pack::empty(id,version)
+    kind: static_factory
+    phase: M3
+    maturity: planned
+  - id: API-MODEL-002
+    symbol: api_model_pack::{function,method,replacement,source,sink,barrier}
+    kind: builder_family
+    phase: M3
+    maturity: planned
+    requires:
+      facts:
+      - symbol
+      - type
+    guarantees:
+    - Model bindings are exact/ambiguous/unresolved and versioned.
+  - id: API-MODEL-003
+    symbol: api_model_pack::merge
+    kind: method
+    phase: M3
+    maturity: planned
+    errors:
+    - workspace.model-load-failed
+  - id: API-MODEL-004
+    symbol: api_model_pack::{load,save,to_json}
+    kind: method_family
+    phase: M3
+    maturity: planned
+    errors:
+    - core.schema-validation-failed
+    - workspace.model-load-failed
+- id: select
+  header: <cxxlens/select.hpp>
+  purpose: Immutable serializable semantic selector DSL.
+  public_types:
+  - file_selector
+  - symbol_selector
+  - type_selector
+  - expression_selector
+  - reference_selector
+  - call_selector
+  - conversion_selector
+  - include_selector
+  - macro_selector
+  - semantic_selector
+  - selector_requirements
+  apis:
+  - id: API-SEL-001
+    symbol: file_selector builder family
+    kind: builder_family
+    phase: M2
+    maturity: planned
+    requires:
+      facts:
+      - file
+  - id: API-SEL-002
+    symbol: symbol_selector builder family
+    kind: builder_family
+    phase: M2
+    maturity: planned
+    requires:
+      facts:
+      - symbol
+      - inheritance
+      - override_relation
+      minimum_precision: workspace_semantic
+  - id: API-SEL-003
+    symbol: type_selector builder family
+    kind: builder_family
+    phase: M2
+    maturity: planned
+    requires:
+      facts:
+      - type
+      - inheritance
+      - conversion
+      minimum_precision: local_semantic
+  - id: API-SEL-004
+    symbol: expression_selector builder family
+    kind: builder_family
+    phase: M3
+    maturity: planned
+    requires:
+      facts:
+      - reference
+      - call
+      - conversion
+      minimum_precision: local_semantic
+  - id: API-SEL-005
+    symbol: reference_selector builder family
+    kind: builder_family
+    phase: M3
+    maturity: planned
+    use_cases:
+    - UC-SR-003
+    - UC-SR-004
+    requires:
+      facts:
+      - reference
+  - id: API-SEL-006
+    symbol: call_selector builder family
+    kind: builder_family
+    phase: M2
+    maturity: planned
+    use_cases:
+    - UC-SR-001
+    - UC-SR-002
+    requires:
+      facts:
+      - call
+      - type
+      - inheritance
+      - override_relation
+      minimum_precision: workspace_semantic
+  - id: API-SEL-007
+    symbol: conversion/include/macro selector families
+    kind: builder_family
+    phase: M3
+    maturity: planned
+    use_cases:
+    - UC-SR-006
+    - UC-SR-007
+    - UC-SR-008
+  - id: API-SEL-008
+    symbol: any_symbol/function/method/record/variable/macro/type helpers
+    kind: free_function_family
+    phase: M2
+    maturity: planned
+  - id: API-SEL-009
+    symbol: calls_to/calls_to_function/calls_to_method helpers
+    kind: free_function_family
+    phase: M2
+    maturity: planned
+    use_cases:
+    - UC-SR-001
+    - UC-SR-002
+  - id: API-SEL-010
+    symbol: semantic_selector::{from_json,requirements,explain,to_json}
+    kind: method_family
+    phase: M2
+    maturity: planned
+    errors:
+    - select.invalid-expression
+    - select.type-mismatch
+  - id: API-SEL-011
+    symbol: semantic(typed_selector)
+    kind: free_function_family
+    phase: M2
+    maturity: planned
+    notes: Type-erases a typed selector without changing its semantics.
+- id: search
+  header: <cxxlens/search.hpp>
+  purpose: Semantic grep over facts with targeted AST/CFG refinement.
+  public_types:
+  - search_options
+  - search_report<T>
+  apis:
+  - id: API-SRCH-001
+    symbol: search::symbols
+    kind: free_function
+    phase: M3
+    maturity: planned
+    use_cases:
+    - UC-SR-003
+    requires:
+      facts:
+      - symbol
+      minimum_precision: workspace_semantic
+    llvm:
+      components:
+      - clangAST
+      - clangIndex
+      primary_apis:
+      - NamedDecl
+      - generateUSRForDecl
+    guarantees:
+    - Canonical symbol identity within coverage.
+    errors:
+    - search.required-facts-unavailable
+  - id: API-SRCH-002
+    symbol: search::references
+    kind: free_function
+    phase: M3
+    maturity: planned
+    use_cases:
+    - UC-SR-003
+    - UC-SR-004
+    requires:
+      facts:
+      - reference
+      - symbol
+      minimum_precision: local_semantic
+    llvm:
+      components:
+      - clangAST
+      - clangIndex
+      primary_apis:
+      - DeclRefExpr
+      - MemberExpr
+      - TypeLoc
+  - id: API-SRCH-003
+    symbol: search::calls
+    kind: free_function
+    phase: M2
+    maturity: planned
+    use_cases:
+    - UC-SR-001
+    - UC-SR-002
+    requires:
+      facts:
+      - call
+      - type
+      - inheritance
+      - override_relation
+      minimum_precision: workspace_semantic
+    llvm:
+      components:
+      - clangAST
+      - clangSema
+      primary_apis:
+      - CallExpr::getDirectCallee
+      - CXXMemberCallExpr::getMethodDecl
+    guarantees:
+    - Direct and possible targets are distinct; unresolved targets are not silently omitted.
+    errors:
+    - search.refinement-failed
+  - id: API-SRCH-004
+    symbol: search::calls_to_function
+    kind: free_function
+    phase: M2
+    maturity: planned
+    use_cases:
+    - UC-SR-001
+    requires:
+      facts:
+      - call
+      - symbol
+      minimum_precision: local_semantic
+  - id: API-SRCH-005
+    symbol: search::calls_to_method
+    kind: free_function
+    phase: M2
+    maturity: planned
+    use_cases:
+    - UC-SR-002
+    requires:
+      facts:
+      - call
+      - type
+      - inheritance
+      - override_relation
+      minimum_precision: workspace_semantic
+  - id: API-SRCH-006
+    symbol: search::inheritance
+    kind: free_function
+    phase: M2
+    maturity: planned
+    use_cases:
+    - UC-GR-001
+    requires:
+      facts:
+      - inheritance
+    llvm:
+      components:
+      - clangAST
+      primary_apis:
+      - CXXRecordDecl::bases
+  - id: API-SRCH-007
+    symbol: search::overrides
+    kind: free_function
+    phase: M2
+    maturity: planned
+    use_cases:
+    - UC-GR-001
+    requires:
+      facts:
+      - override_relation
+    llvm:
+      components:
+      - clangAST
+      primary_apis:
+      - CXXMethodDecl::overridden_methods
+  - id: API-SRCH-008
+    symbol: search::includes
+    kind: free_function
+    phase: M3
+    maturity: planned
+    use_cases:
+    - UC-SR-008
+    requires:
+      facts:
+      - include_relation
+      - symbol
+    llvm:
+      components:
+      - clangLex
+      - clangIncludeCleaner
+      primary_apis:
+      - PPCallbacks::InclusionDirective
+  - id: API-SRCH-009
+    symbol: search::macros
+    kind: free_function
+    phase: M3
+    maturity: planned
+    use_cases:
+    - UC-SR-007
+    requires:
+      facts:
+      - macro_expansion
+    llvm:
+      components:
+      - clangLex
+      primary_apis:
+      - PPCallbacks::MacroExpands
+  - id: API-SRCH-010
+    symbol: search::conversions
+    kind: free_function
+    phase: M3
+    maturity: planned
+    use_cases:
+    - UC-SR-006
+    requires:
+      facts:
+      - conversion
+    llvm:
+      components:
+      - clangAST
+      primary_apis:
+      - ImplicitCastExpr
+- id: graph
+  header: <cxxlens/graph.hpp>
+  purpose: Call, hierarchy, override, include and impact graphs.
+  public_types:
+  - graph_kind
+  - graph_node
+  - graph_edge
+  - semantic_graph
+  - graph_options
+  - impact_query
+  apis:
+  - id: API-GRAPH-001
+    symbol: graph::class_hierarchy
+    kind: free_function
+    phase: M2
+    maturity: planned
+    use_cases:
+    - UC-GR-001
+    requires:
+      facts:
+      - inheritance
+      minimum_precision: workspace_semantic
+  - id: API-GRAPH-002
+    symbol: graph::override_graph
+    kind: free_function
+    phase: M2
+    maturity: planned
+    use_cases:
+    - UC-GR-001
+    requires:
+      facts:
+      - override_relation
+      minimum_precision: workspace_semantic
+  - id: API-GRAPH-003
+    symbol: graph::call_graph
+    kind: free_function
+    phase: M3
+    maturity: planned
+    use_cases:
+    - UC-GR-002
+    requires:
+      facts:
+      - call
+      minimum_precision: workspace_semantic
+  - id: API-GRAPH-004
+    symbol: graph::include_graph
+    kind: free_function
+    phase: M3
+    maturity: planned
+    use_cases:
+    - UC-SR-008
+    requires:
+      facts:
+      - include_relation
+      minimum_precision: workspace_semantic
+  - id: API-GRAPH-005
+    symbol: impact_query builder and run
+    kind: builder_operation
+    phase: M3
+    maturity: planned
+    use_cases:
+    - UC-GR-003
+    requires:
+      facts:
+      - call
+      - inheritance
+      - include_relation
+  - id: API-GRAPH-006
+    symbol: semantic_graph::{subgraph,to_json,to_dot}
+    kind: method_family
+    phase: M3
+    maturity: planned
+- id: rules
+  header: <cxxlens/rules.hpp>
+  purpose: Declarative rules, suppressions and shared execution.
+  public_types:
+  - rule_metadata
+  - rule_builder
+  - rule
+  - suppression_policy
+  - rule_run_options
+  - rule_pack
+  apis:
+  - id: API-RULE-001
+    symbol: rules::make_rule
+    kind: free_function
+    phase: M4
+    maturity: planned
+    use_cases:
+    - UC-RL-001
+    - UC-RL-002
+  - id: API-RULE-002
+    symbol: rule_builder::{metadata,when,unless,scope,severity_level,confidence_at_least,diagnose,note,fix,explain,build}
+    kind: builder_family
+    phase: M4
+    maturity: planned
+    requires:
+      facts:
+      - selector_dependent
+    errors:
+    - rules.invalid-metadata
+  - id: API-RULE-003
+    symbol: rule::run
+    kind: method
+    phase: M4
+    maturity: planned
+    requires:
+      facts:
+      - selector_dependent
+    guarantees:
+    - Finding identity is stable and every result carries evidence/coverage.
+  - id: API-RULE-004
+    symbol: rule_pack::{add,enable,disable,run}
+    kind: method_family
+    phase: M4
+    maturity: planned
+    notes: Shares extraction and query subexpressions across rules.
+  - id: API-RULE-005
+    symbol: suppression_policy builder family
+    kind: builder_family
+    phase: M4
+    maturity: planned
+    use_cases:
+    - UC-RL-003
+    errors:
+    - rules.suppression-invalid
+- id: flow
+  header: <cxxlens/flow.hpp>
+  purpose: CFG/dataflow, taint and resource protocol analyses.
+  public_types:
+  - flow_node
+  - flow_path
+  - source_model
+  - sink_model
+  - barrier_model
+  - taint_policy
+  - taint_report
+  - resource_protocol
+  - effect_summary
+  apis:
+  - id: API-FLOW-001
+    symbol: source_model factories
+    kind: static_factory_family
+    phase: M7
+    maturity: planned
+    requires:
+      facts:
+      - call
+      - symbol
+      - reference
+  - id: API-FLOW-002
+    symbol: sink_model factories
+    kind: static_factory_family
+    phase: M7
+    maturity: planned
+    requires:
+      facts:
+      - call
+      - reference
+  - id: API-FLOW-003
+    symbol: barrier_model factories
+    kind: static_factory_family
+    phase: M7
+    maturity: planned
+    requires:
+      facts:
+      - call
+      - control_flow
+  - id: API-FLOW-004
+    symbol: taint_policy builder family
+    kind: builder_family
+    phase: M7
+    maturity: planned
+  - id: API-FLOW-005
+    symbol: flow::run_taint
+    kind: free_function
+    phase: M7
+    maturity: planned
+    use_cases:
+    - UC-RL-006
+    requires:
+      facts:
+      - call
+      - cfg_summary
+      - flow_summary
+      minimum_precision: local_flow
+    llvm:
+      components:
+      - clangAnalysis
+      - clangAnalysisFlowSensitive
+      primary_apis:
+      - CFG::buildCFG
+    errors:
+    - flow.cfg-unavailable
+    - flow.non-convergent
+    - flow.path-budget-exhausted
+  - id: API-FLOW-006
+    symbol: resource_protocol builder family
+    kind: builder_family
+    phase: M7
+    maturity: planned
+    use_cases:
+    - UC-RL-005
+  - id: API-FLOW-007
+    symbol: flow::check_resource_protocol
+    kind: free_function
+    phase: M7
+    maturity: planned
+    use_cases:
+    - UC-RL-005
+    requires:
+      facts:
+      - call
+      - cfg_summary
+      minimum_precision: local_flow
+  - id: API-FLOW-008
+    symbol: flow::build_effect_summaries
+    kind: free_function
+    phase: M7
+    maturity: planned
+    requires:
+      facts:
+      - call
+      - cfg_summary
+      - effect_summary
+      minimum_precision: interprocedural_summary
+- id: transform
+  header: <cxxlens/transform.hpp>
+  purpose: Immutable edit plans, validation, formatting, reparsing and transactional apply.
+  public_types:
+  - edit_kind
+  - edit_precondition
+  - edit
+  - plan_options
+  - edit_plan
+  - apply_result
+  - replacement_template
+  - codemod
+  apis:
+  - id: API-TF-001
+    symbol: transform::replace_function_call
+    kind: free_function
+    phase: M4
+    maturity: planned
+    use_cases:
+    - UC-TF-001
+    requires:
+      facts:
+      - call
+      - symbol
+      minimum_precision: workspace_semantic
+  - id: API-TF-002
+    symbol: transform::replace_method_call
+    kind: free_function
+    phase: M4
+    maturity: planned
+    use_cases:
+    - UC-TF-002
+    requires:
+      facts:
+      - call
+      - type
+      - inheritance
+      - override_relation
+      minimum_precision: workspace_semantic
+  - id: API-TF-003
+    symbol: transform::rewrite_calls
+    kind: free_function
+    phase: M4
+    maturity: planned
+    requires:
+      facts:
+      - call
+      minimum_precision: local_semantic
+  - id: API-TF-004
+    symbol: transform::rename_symbol
+    kind: free_function
+    phase: M4
+    maturity: planned
+    use_cases:
+    - UC-TF-004
+    requires:
+      facts:
+      - symbol
+      - reference
+      - override_relation
+      minimum_precision: workspace_semantic
+  - id: API-TF-005
+    symbol: transform::add_include_where_needed
+    kind: free_function
+    phase: M4
+    maturity: planned
+    use_cases:
+    - UC-TF-005
+    requires:
+      facts:
+      - include_relation
+      - symbol
+  - id: API-TF-006
+    symbol: transform::remove_unused_includes
+    kind: free_function
+    phase: M4
+    maturity: planned
+    use_cases:
+    - UC-TF-005
+    requires:
+      facts:
+      - include_relation
+      - reference
+      capabilities:
+      - include.cleaner
+  - id: API-TF-007
+    symbol: codemod::plan
+    kind: method
+    phase: M4
+    maturity: planned
+    use_cases:
+    - UC-TF-003
+    requires:
+      facts:
+      - recipe_dependent
+    llvm:
+      components:
+      - clangToolingRefactoring
+      - clangTransformer
+      - clangFormat
+      primary_apis:
+      - tooling::Replacement
+      - format::reformat
+    guarantees:
+    - No filesystem side effect; invalid/partial safety remains invalid.
+    errors:
+    - transform.target-ambiguous
+    - transform.macro-edit-rejected
+    - transform.variant-divergence
+    - transform.reparse-failed
+  - id: API-TF-008
+    symbol: edit_plan::preview_unified_diff
+    kind: method
+    phase: M4
+    maturity: planned
+    guarantees:
+    - Pure deterministic projection of validated edits.
+  - id: API-TF-009
+    symbol: edit_plan::apply
+    kind: method
+    phase: M4
+    maturity: planned
+    guarantees:
+    - Rechecks source digest, path safety, authorization and writer lock.
+    errors:
+    - transform.source-stale
+    - transform.writer-lock-conflict
+    - transform.commit-failed
+    side_effects: dry_run or transactional workspace write
+- id: generate
+  header: <cxxlens/generate.hpp>
+  purpose: Common census, decisions, artifacts and transaction apply.
+  public_types:
+  - surface_kind
+  - decision_state
+  - surface
+  - surface_decision
+  - artifact_kind
+  - artifact_state
+  - artifact_plan
+  - generation_plan
+  - generation_result
+  apis:
+  - id: API-GEN-001
+    symbol: generation_plan::{census,decisions,artifacts,diagnostics,unresolved_items,coverage,preview,to_json,to_markdown}
+    kind: method_family
+    phase: M5
+    maturity: planned
+    guarantees:
+    - All relevant surfaces and required decision axes are accounted for.
+  - id: API-GEN-002
+    symbol: generation_plan::apply
+    kind: method
+    phase: M5
+    maturity: planned
+    errors:
+    - generate.plan-invalid
+    - generate.structural-audit-failed
+    - generate.artifact-quarantined
+    side_effects: dry_run or transactional artifact write
+- id: mock
+  header: <cxxlens/generate.hpp>
+  purpose: Mock/fake planning and emission.
+  public_types:
+  - mock_framework
+  - fake_strategy
+  - include_strategy
+  - mock_decision
+  - fake_definition_decision
+  - fake_dispatch_decision
+  - link_effect
+  - generation_options
+  - mock::generator
+  apis:
+  - id: API-MOCK-001
+    symbol: mock::generator::{for_class,for_symbol,for_c_api_header}
+    kind: static_factory_family
+    phase: M5
+    maturity: planned
+    use_cases:
+    - UC-GN-002
+    - UC-GN-003
+    - UC-GN-007
+    requires:
+      facts:
+      - symbol
+      - type
+  - id: API-MOCK-002
+    symbol: mock::generator::{options,include_method,exclude_method}
+    kind: builder_family
+    phase: M5
+    maturity: planned
+  - id: API-MOCK-003
+    symbol: mock::generator::plan
+    kind: method
+    phase: M5
+    maturity: planned
+    use_cases:
+    - UC-GN-001
+    - UC-GN-002
+    - UC-GN-003
+    requires:
+      facts:
+      - symbol
+      - type
+      - declaration
+      - definition
+      - inheritance
+      - override_relation
+      minimum_precision: workspace_semantic
+    llvm:
+      components:
+      - clangAST
+      - clangLex
+      primary_apis:
+      - CXXRecordDecl
+      - CXXMethodDecl
+      - TypeLoc
+    guarantees:
+    - Every relevant surface gets mock, definition, dispatch and link-effect decisions.
+    errors:
+    - generate.surface-census-incomplete
+    - generate.type-unspellable
+    - generate.variant-artifact-conflict
+- id: method_harness
+  header: <cxxlens/generate.hpp>
+  purpose: Exact method selection, inspection and extraction/harness planning.
+  public_types:
+  - method_spec
+  - ref_qualifier
+  - extraction_class
+  - dependency_kind
+  - method_feature
+  - method_inspection
+  - harness_options
+  - method_harness::generator
+  apis:
+  - id: API-METHOD-001
+    symbol: method_harness::parse_method_spec
+    kind: free_function
+    phase: M6
+    maturity: planned
+    use_cases:
+    - UC-GN-004
+    errors:
+    - core.invalid-argument
+  - id: API-METHOD-002
+    symbol: method_harness::resolve_method
+    kind: free_function
+    phase: M6
+    maturity: planned
+    use_cases:
+    - UC-GN-004
+    requires:
+      facts:
+      - symbol
+      - type
+      minimum_precision: workspace_semantic
+    llvm:
+      components:
+      - clangAST
+      - clangSema
+      primary_apis:
+      - CXXMethodDecl
+      - QualType
+    guarantees:
+    - Never selects the first overload on ambiguity.
+    errors:
+    - select.ambiguous-name
+  - id: API-METHOD-003
+    symbol: method_harness::generator::{for_method,for_symbol,options}
+    kind: builder_family
+    phase: M6
+    maturity: planned
+  - id: API-METHOD-004
+    symbol: method_harness::generator::inspect
+    kind: method
+    phase: M6
+    maturity: planned
+    requires:
+      facts:
+      - call
+      - reference
+      - cfg_summary
+      - effect_summary
+      minimum_precision: local_flow
+    llvm:
+      components:
+      - clangAST
+      - clangAnalysis
+      primary_apis:
+      - CFG::buildCFG
+  - id: API-METHOD-005
+    symbol: method_harness::generator::plan
+    kind: method
+    phase: M6
+    maturity: planned
+    use_cases:
+    - UC-GN-005
+    requires:
+      facts:
+      - method_inspection
+      - type
+      - declaration
+      minimum_precision: local_flow
+    guarantees:
+    - Unsafe this/lifetime/virtual/ODR cases are classified rather than forced through an unsafe fallback.
+- id: copy
+  header: <cxxlens/generate.hpp>
+  purpose: Semantic public-surface and dependency copying.
+  public_types:
+  - copy_policy
+  - copy_options
+  apis:
+  - id: API-COPY-001
+    symbol: copy::public_surface
+    kind: free_function
+    phase: M6
+    maturity: planned
+    use_cases:
+    - UC-GN-006
+    requires:
+      facts:
+      - symbol
+      - type
+      - declaration
+      - definition
+      - include_relation
+      minimum_precision: workspace_semantic
+    errors:
+    - generate.odr-risk-rejected
+    - generate.macro-surface-rejected
+  - id: API-COPY-002
+    symbol: copy::required_types
+    kind: free_function
+    phase: M6
+    maturity: planned
+    use_cases:
+    - UC-GN-006
+    requires:
+      facts:
+      - type
+      - declaration
+      - include_relation
+- id: fuzz
+  header: <cxxlens/generate.hpp>
+  purpose: Type-driven fuzz harness planning.
+  public_types:
+  - input_kind
+  - input_model
+  - fuzz_options
+  - fuzz::generator
+  apis:
+  - id: API-FUZZ-001
+    symbol: fuzz::generator::for_function
+    kind: static_factory
+    phase: M6
+    maturity: planned
+    use_cases:
+    - UC-GN-008
+    requires:
+      facts:
+      - symbol
+      - type
+  - id: API-FUZZ-002
+    symbol: fuzz::generator::{input,infer_inputs,options}
+    kind: builder_family
+    phase: M6
+    maturity: planned
+  - id: API-FUZZ-003
+    symbol: fuzz::generator::plan
+    kind: method
+    phase: M6
+    maturity: planned
+    use_cases:
+    - UC-GN-008
+    requires:
+      facts:
+      - symbol
+      - type
+      - call
+      minimum_precision: workspace_semantic
+    guarantees:
+    - Unsupported ownership, pointer-length or object invariants remain explicit.
+- id: qa
+  header: <cxxlens/qa.hpp>
+  purpose: Sanitizer, coverage and external QA workflows.
+  public_types:
+  - sanitizer_kind
+  - coverage_mode
+  - qa::profile
+  - process_policy
+  - dynamic_report
+  - qa::workflow
+  - coverage_import_options
+  apis:
+  - id: API-QA-001
+    symbol: qa::profile factory/builder family
+    kind: builder_family
+    phase: M8
+    maturity: planned
+    use_cases:
+    - UC-QA-001
+    - UC-QA-002
+  - id: API-QA-002
+    symbol: qa::workflow::{for_project,use,process_policy_,import_coverage,associate_with}
+    kind: builder_family
+    phase: M8
+    maturity: planned
+  - id: API-QA-003
+    symbol: qa::workflow::run
+    kind: method
+    phase: M8
+    maturity: planned
+    use_cases:
+    - UC-QA-001
+    requires:
+      capabilities:
+      - qa.sanitizers
+    guarantees:
+    - Uses argv, limits, identity and explicit process policy; shell disabled by default.
+    errors:
+    - qa.process-not-allowed
+    - qa.build-failed
+    - qa.report-parse-failed
+    side_effects: allowlisted external build/test execution
+  - id: API-QA-004
+    symbol: qa::import_source_coverage
+    kind: free_function
+    phase: M8
+    maturity: planned
+    use_cases:
+    - UC-QA-002
+    requires:
+      capabilities:
+      - qa.coverage
+    llvm:
+      components:
+      - LLVM coverage tools/formats
+      primary_apis: []
+    errors:
+    - qa.coverage-missing
+- id: review
+  header: <cxxlens/review.hpp>
+  purpose: Diff scope, baseline, gate and review workflow.
+  public_types:
+  - diff_view
+  - baseline
+  - gate_policy
+  - review_report
+  - review::workflow
+  apis:
+  - id: API-RV-001
+    symbol: diff_view::{from_unified_diff,from_git,contains,changed_files,to_json}
+    kind: method_family
+    phase: M8
+    maturity: planned
+    use_cases:
+    - UC-RV-001
+    errors:
+    - review.diff-invalid
+  - id: API-RV-002
+    symbol: baseline::{load,save,contains_equivalent,to_json}
+    kind: method_family
+    phase: M8
+    maturity: planned
+    use_cases:
+    - UC-RV-002
+    errors:
+    - review.baseline-invalid
+  - id: API-RV-003
+    symbol: gate_policy factory/builder family
+    kind: builder_family
+    phase: M8
+    maturity: planned
+    use_cases:
+    - UC-RV-002
+  - id: API-RV-004
+    symbol: review::workflow builder family
+    kind: builder_family
+    phase: M8
+    maturity: planned
+  - id: API-RV-005
+    symbol: review::workflow::run
+    kind: method
+    phase: M8
+    maturity: planned
+    use_cases:
+    - UC-RV-001
+    - UC-RV-002
+    requires:
+      facts:
+      - finding
+      - call
+      - inheritance
+      - include_relation
+      minimum_precision: workspace_semantic
+    errors:
+    - review.gate-failed
+- id: report
+  header: <cxxlens/report.hpp>
+  purpose: Deterministic human and machine report projections.
+  public_types:
+  - report::format
+  - report::path_presentation
+  - report::options
+  apis:
+  - id: API-REPORT-001
+    symbol: report::render(finding_set)
+    kind: free_function
+    phase: M4
+    maturity: planned
+    guarantees:
+    - Pure projection from authoritative rows; deterministic when requested.
+    errors:
+    - report.format-unsupported
+  - id: API-REPORT-002
+    symbol: report::render(edit_plan)
+    kind: free_function
+    phase: M5
+    maturity: planned
+    guarantees:
+    - Pure projection from authoritative rows; deterministic when requested.
+    errors:
+    - report.format-unsupported
+  - id: API-REPORT-003
+    symbol: report::render(generation_plan)
+    kind: free_function
+    phase: M5
+    maturity: planned
+    guarantees:
+    - Pure projection from authoritative rows; deterministic when requested.
+    errors:
+    - report.format-unsupported
+  - id: API-REPORT-004
+    symbol: report::render(review_report)
+    kind: free_function
+    phase: M5
+    maturity: planned
+    guarantees:
+    - Pure projection from authoritative rows; deterministic when requested.
+    errors:
+    - report.format-unsupported
+- id: explain
+  header: <cxxlens/explain.hpp>
+  purpose: Why/explanation and coding-agent task cards.
+  public_types:
+  - detail_level
+  - explanation
+  - agent_task_card
+  apis:
+  - id: API-EXP-001
+    symbol: explain::{selector,finding,coverage,edit_plan,generation_plan}
+    kind: free_function_family
+    phase: M2
+    maturity: planned
+  - id: API-EXP-002
+    symbol: explain::why_not_matched
+    kind: free_function
+    phase: M2
+    maturity: planned
+    requires:
+      facts:
+      - selector_dependent
+    guarantees:
+    - Reports predicate rejection counts and unresolved prerequisites.
+  - id: API-EXP-003
+    symbol: explain::{for_selector,for_rule,for_codemod,for_generation}
+    kind: free_function_family
+    phase: M2
+    maturity: planned
+  - id: API-EXP-004
+    symbol: explain::api_catalog_json
+    kind: free_function
+    phase: M0
+    maturity: contract-defined
+- id: testing
+  header: <cxxlens/testing.hpp>
+  purpose: Production-path fixtures, assertions, schema and determinism checks.
+  public_types:
+  - fixture_variant
+  - workspace_fixture
+  - result_assertion
+  - edit_plan_assertion
+  - generation_plan_assertion
+  - determinism_options
+  apis:
+  - id: API-TEST-001
+    symbol: workspace_fixture::{cpp,c,main_file,add_file,add_header,add_variant,standard,target,argument,generated,system_header,open}
+    kind: method_family
+    phase: M0
+    maturity: contract-defined
+    llvm:
+      components:
+      - clangTooling
+      - clangFrontend
+      primary_apis:
+      - FixedCompilationDatabase
+      - InMemoryFileSystem
+  - id: API-TEST-002
+    symbol: result_assertion builder/check
+    kind: method_family
+    phase: M0
+    maturity: contract-defined
+  - id: API-TEST-003
+    symbol: edit_plan_assertion builder/check
+    kind: method_family
+    phase: M4
+    maturity: planned
+  - id: API-TEST-004
+    symbol: generation_plan_assertion builder/check
+    kind: method_family
+    phase: M5
+    maturity: planned
+  - id: API-TEST-005
+    symbol: testing::check_determinism
+    kind: function_template
+    phase: M0
+    maturity: contract-defined
+    guarantees:
+    - Compares semantic outputs across parallelism, order and root relocation.
+  - id: API-TEST-006
+    symbol: testing::assert_schema_conforms
+    kind: free_function
+    phase: M0
+    maturity: contract-defined
+- id: interop
+  header: <cxxlens/interop/clang.hpp>
+  purpose: Unstable LLVM-major-scoped raw Clang corridor.
+  public_types:
+  - clang_api_version
+  - borrowed_clang_tu
+  - fact_sink
+  - clang_fact_extractor
+  apis:
+  - id: API-INT-001
+    symbol: interop::linked_clang_version
+    kind: free_function
+    phase: M1
+    maturity: planned
+    requires:
+      capabilities:
+      - interop.clang
+  - id: API-INT-002
+    symbol: interop::with_translation_unit
+    kind: free_function
+    phase: M1
+    maturity: planned
+    requires:
+      capabilities:
+      - interop.clang
+    llvm:
+      components:
+      - clangFrontend
+      - clangAST
+      - clangLex
+      primary_apis:
+      - CompilerInstance
+      - ASTContext
+      - SourceManager
+      - Preprocessor
+    guarantees:
+    - Borrowed objects are valid only during the callback.
+    errors:
+    - interop.borrowed-lifetime-violation
+  - id: API-INT-003
+    symbol: fact_sink::{emit,emit_custom,emit_evidence,mark_partial}
+    kind: method_family
+    phase: M1
+    maturity: planned
+  - id: API-INT-004
+    symbol: interop::{register_extractor,unregister_extractor}
+    kind: free_function_family
+    phase: M1
+    maturity: planned
+    errors:
+    - interop.custom-schema-conflict
+    - interop.nondeterministic-extractor
+- id: configuration
+  header: <cxxlens/cxxlens.hpp>
+  purpose: Typed configuration loading, overlay and explanation.
+  public_types:
+  - configuration
+  apis:
+  - id: API-CFG-001
+    symbol: configuration::defaults
+    kind: static_factory
+    phase: M0
+    maturity: contract-defined
+  - id: API-CFG-002
+    symbol: configuration::{load,load_nearest}
+    kind: static_factory_family
+    phase: M0
+    maturity: contract-defined
+    errors:
+    - config.file-not-found
+    - config.yaml-invalid
+    - config.unknown-key
+  - id: API-CFG-003
+    symbol: configuration::{with_profile,overlay}
+    kind: method_family
+    phase: M0
+    maturity: contract-defined
+    errors:
+    - config.profile-not-found
+    - config.overlay-conflict
+  - id: API-CFG-004
+    symbol: configuration::{validate,resolved_json,explain}
+    kind: method_family
+    phase: M0
+    maturity: contract-defined
+    errors:
+    - config.invalid-value
+summary:
+  package_count: 22
+  api_entry_count: 123
+invariants:
+- Stable public headers do not expose clang::* or llvm::* types.
+- AST pointers never outlive a frontend job or borrowed callback.
+- Every material result carries evidence, guarantee, coverage and unresolved information where applicable.
+- Mutation and generation require an immutable validated plan before side effects.
+- No relevant translation unit, variant, surface, decision or artifact is silently omitted.
+- Semantic IDs and output order are deterministic across parallelism and checkout-root relocation.

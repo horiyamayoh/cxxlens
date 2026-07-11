@@ -1,0 +1,81 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_EXTENSIONS": "OFF",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "ON",
+        "CXXLENS_BUILD_QUALITY_TOOLS": "ON"
+      }
+    },
+    {
+      "name": "dev-clang",
+      "inherits": "base",
+      "displayName": "Developer build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "ci-quick",
+      "inherits": "base",
+      "displayName": "CI quick gate",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CXXLENS_WARNINGS_AS_ERRORS": "ON"
+      }
+    },
+    {
+      "name": "docs",
+      "inherits": "base",
+      "displayName": "Doxygen documentation",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CXXLENS_BUILD_DOCS": "ON"
+      }
+    },
+    {
+      "name": "asan-ubsan",
+      "inherits": "base",
+      "displayName": "ASan and UBSan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CXXLENS_ENABLE_ASAN": "ON",
+        "CXXLENS_ENABLE_UBSAN": "ON",
+        "CXXLENS_WARNINGS_AS_ERRORS": "ON"
+      }
+    },
+    {
+      "name": "install-check",
+      "inherits": "base",
+      "displayName": "Release install verification",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CXXLENS_WARNINGS_AS_ERRORS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "dev-clang", "configurePreset": "dev-clang", "jobs": 4 },
+    { "name": "ci-quick", "configurePreset": "ci-quick", "jobs": 4 },
+    { "name": "docs", "configurePreset": "docs", "jobs": 4 },
+    { "name": "asan-ubsan", "configurePreset": "asan-ubsan", "jobs": 4 },
+    { "name": "install-check", "configurePreset": "install-check", "jobs": 4 }
+  ],
+  "testPresets": [
+    { "name": "dev-clang", "configurePreset": "dev-clang", "output": { "outputOnFailure": true } },
+    { "name": "ci-quick", "configurePreset": "ci-quick", "output": { "outputOnFailure": true } },
+    { "name": "asan-ubsan", "configurePreset": "asan-ubsan", "output": { "outputOnFailure": true } },
+    { "name": "install-check", "configurePreset": "install-check", "output": { "outputOnFailure": true } }
+  ]
+}

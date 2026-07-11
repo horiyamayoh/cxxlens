@@ -1,0 +1,15 @@
+/build/
+/build-*/
+/out/
+/install/
+/compile_commands.json
+/.cache/
+/.clangd/
+/.idea/
+/.vscode/
+*.user
+*.swp
+*.tmp
+*.log
+__pycache__/
+*.pyc
