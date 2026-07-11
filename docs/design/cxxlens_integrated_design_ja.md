@@ -3431,7 +3431,13 @@ Coverageは requested universe − excluded − covered − failed − unresolve
 
 ## 40. Public API inventory
 
-本章は operation-level index。全 value type/accessor/builder signature は Sections 10–29 を規範とする。付属 `cxxlens_public_api_contract.yaml` が machine-readable source of truthであり、API ID、header、maturity、phase、facts、capability、LLVM components、guarantees/errorsを持つ。
+本章の規範的 operation-level index は、付属 `cxxlens_public_api_contract.yaml` から生成する
+`api_catalog_inventory.md` である。全 value type/accessor/builder signature は Sections 10–29 を
+規範とする。YAML が machine-readable source of truth であり、API ID、header、
+`contract_maturity`、`implementation_state`、exact declaration、signature fingerprint、phase、
+typed fact/capability/API/expression dependency、atomic unit、readiness、guarantees/errors を持つ。
+以下の表は package group の非規範的な案内であり、全 123 entry の一致は
+`cxxlens-api-contract-check` が生成 inventory と YAML を機械照合する。
 
 ### 40.1 Core/workspace/facts
 

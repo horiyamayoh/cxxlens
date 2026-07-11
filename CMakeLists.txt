@@ -79,6 +79,7 @@ install(
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 install(DIRECTORY include/ DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 install(FILES schemas/cxxlens_public_api_contract.yaml
+              schemas/cxxlens_api_catalog.schema.yaml
         DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
 
 configure_package_config_file(

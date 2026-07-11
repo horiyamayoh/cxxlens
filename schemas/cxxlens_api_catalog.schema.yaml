@@ -1,0 +1,74 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.api-catalog.v2.schema.yaml
+title: cxxlens public API catalog v2
+type: object
+required:
+- schema
+- document_id
+- document_version
+- language
+- authority
+- registries
+- packages
+- summary
+- migrations
+properties:
+  schema:
+    const: cxxlens.api-catalog.v2
+  language:
+    const: C++23
+  authority:
+    type: object
+    required: [machine_readable_source, human_inventory, change_policy]
+  registries:
+    type: object
+    required:
+    - fact_kinds
+    - capabilities
+    - dependency_expressions
+    - implementation_states
+    - readiness_states
+    - use_cases
+    - requirements
+    - error_codes
+  packages:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      required: [id, header, purpose, public_types, apis]
+      properties:
+        apis:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - symbol
+            - kind
+            - phase
+            - contract_maturity
+            - implementation_state
+            - declaration
+            - atomic_unit
+            - readiness
+            properties:
+              id:
+                pattern: ^API-[A-Z]+-[0-9]{3}$
+              declaration:
+                type: object
+                required: [status, source, signature, signature_fingerprint]
+              atomic_unit:
+                type: object
+                required: [id, indivisible]
+              readiness:
+                type: object
+                required: [state, blockers]
+  summary:
+    type: object
+    required:
+    - package_count
+    - api_entry_count
+    - atomic_unit_count
+    - implementation_state_counts
+additionalProperties: true

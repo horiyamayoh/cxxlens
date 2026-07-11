@@ -20,6 +20,10 @@ add_custom_target(
     "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/validate_api_contract.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/schemas/cxxlens_public_api_contract.yaml"
+    --inventory
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/design/api_catalog_inventory.md"
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_api_contract.py"
   VERBATIM)
 
 add_custom_target(
