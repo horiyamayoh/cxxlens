@@ -1,0 +1,31 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.coverage.v1.schema.yaml
+title: cxxlens coverage v1
+type: object
+required: [schema, semantics_version, library_version, requested, units, summary, complete]
+properties:
+  schema: {const: cxxlens.coverage.v1}
+  semantics_version: {const: 1.0.0}
+  library_version: {type: string}
+  requested: {type: array, items: {$ref: '#/$defs/request'}}
+  units: {type: array, items: {$ref: '#/$defs/unit'}}
+  summary:
+    type: object
+    required: [covered, excluded, failed, unresolved, not_applicable]
+  complete: {type: boolean}
+additionalProperties: false
+$defs:
+  request:
+    type: object
+    required: [id, kind]
+    properties: {id: {type: string}, kind: {type: string}}
+    additionalProperties: false
+  unit:
+    type: object
+    required: [id, kind, reason, state]
+    properties:
+      id: {type: string}
+      kind: {type: string}
+      reason: {type: [string, 'null']}
+      state: {enum: [covered, excluded, failed, unresolved, not_applicable]}
+    additionalProperties: false

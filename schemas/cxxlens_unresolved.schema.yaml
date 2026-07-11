@@ -1,0 +1,33 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.unresolved.v1.schema.yaml
+title: cxxlens unresolved v1
+type: object
+required:
+- schema
+- semantics_version
+- library_version
+- kind
+- stable_code
+- summary
+- scope
+- related
+- missing_inputs
+- suggested_actions
+- required_precision
+- required_capability
+- attributes
+properties:
+  schema: {const: cxxlens.unresolved.v1}
+  semantics_version: {const: 1.0.0}
+  library_version: {type: string}
+  kind: {type: string}
+  stable_code: {type: string}
+  summary: {type: string}
+  scope: {type: string}
+  related: {type: array, items: {type: object}}
+  missing_inputs: {type: array, items: {type: string}}
+  suggested_actions: {type: array, items: {type: string}}
+  required_precision: {type: [integer, 'null']}
+  required_capability: {type: [string, 'null']}
+  attributes: {type: object, additionalProperties: {type: string}}
+additionalProperties: false

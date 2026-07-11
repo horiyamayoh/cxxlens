@@ -1,7 +1,8 @@
 #include <algorithm>
-#include <sstream>
 
 #include <cxxlens/source.hpp>
+
+#include "../core/json_projections.hpp"
 
 namespace cxxlens
 {
@@ -43,16 +44,19 @@ namespace cxxlens
 			return std::nullopt;
 		}
 
-		std::string range_json(const file_range& range)
+		detail::json::json_value range_value(const file_range& range)
 		{
-			std::ostringstream out;
-			out << R"({"file":")" << range.begin.file.value() << R"(","begin":)"
-				<< range.begin.byte_offset << ",\"end\":" << range.end.byte_offset
-				<< ",\"begin_line\":" << range.begin.line
-				<< ",\"begin_column\":" << range.begin.column << ",\"end_line\":" << range.end.line
-				<< ",\"end_column\":" << range.end.column << R"(,"kind":")"
-				<< (range.kind == source_range_kind::token ? "token" : "character") << "\"}";
-			return out.str();
+			using detail::json::json_value;
+			return json_value::object{
+				{"file", std::string{range.begin.file.value()}},
+				{"begin", range.begin.byte_offset},
+				{"end", range.end.byte_offset},
+				{"begin_line", static_cast<std::uint64_t>(range.begin.line)},
+				{"begin_column", static_cast<std::uint64_t>(range.begin.column)},
+				{"end_line", static_cast<std::uint64_t>(range.end.line)},
+				{"end_column", static_cast<std::uint64_t>(range.end.column)},
+				{"kind", range.kind == source_range_kind::token ? "token" : "character"},
+			};
 		}
 
 		const char* origin_name(const source_origin origin)
@@ -173,31 +177,39 @@ namespace cxxlens
 			valid_range(primary) && valid_digest(digest);
 	}
 
+	detail::json::json_value detail::json::source_span_value(const source_span& span)
+	{
+		json_value::array frames;
+		frames.reserve(span.macro_stack.size());
+		for (const auto& frame : span.macro_stack)
+		{
+			frames.emplace_back(json_value::object{
+				{"name", frame.macro_name},
+				{"invocation", range_value(frame.invocation)},
+				{"definition", frame.definition ? range_value(*frame.definition) : json_value{}},
+				{"argument_index",
+				 frame.argument_index
+					 ? json_value{static_cast<std::uint64_t>(*frame.argument_index)}
+					 : json_value{}},
+			});
+		}
+		json_value::object fields{
+			{"primary", range_value(span.primary)},
+			{"spelling", span.spelling ? range_value(*span.spelling) : json_value{}},
+			{"expansion", span.expansion ? range_value(*span.expansion) : json_value{}},
+			{"macro_stack", std::move(frames)},
+			{"origin", origin_name(span.origin)},
+			{"digest",
+			 json_value::object{{"algorithm", span.digest.algorithm},
+								{"version", static_cast<std::uint64_t>(span.digest.version)},
+								{"value", span.digest.value}}},
+			{"read_only", span.read_only},
+		};
+		return json_value{envelope(document_versions{"cxxlens.source-span.v1"}, std::move(fields))};
+	}
+
 	std::string source_span::to_canonical_json() const
 	{
-		std::ostringstream out;
-		out << R"({"schema":"cxxlens.source-span.v1","primary":)" << range_json(primary)
-			<< ",\"spelling\":" << (spelling ? range_json(*spelling) : "null")
-			<< ",\"expansion\":" << (expansion ? range_json(*expansion) : "null")
-			<< ",\"macro_stack\":[";
-		for (std::size_t index = 0; index < macro_stack.size(); ++index)
-		{
-			if (index != 0U)
-				out << ',';
-			const auto& frame = macro_stack[index];
-			out << R"({"name":")" << frame.macro_name << R"(","invocation":)"
-				<< range_json(frame.invocation)
-				<< ",\"definition\":" << (frame.definition ? range_json(*frame.definition) : "null")
-				<< ",\"argument_index\":";
-			if (frame.argument_index)
-				out << *frame.argument_index;
-			else
-				out << "null";
-			out << '}';
-		}
-		out << R"(],"origin":")" << origin_name(origin) << R"(","digest":{"algorithm":")"
-			<< digest.algorithm << R"(","version":)" << digest.version << R"(,"value":")"
-			<< digest.value << R"("},"read_only":)" << (read_only ? "true" : "false") << '}';
-		return out.str();
+		return detail::json::write(detail::json::source_span_value(*this)).value();
 	}
 } // namespace cxxlens

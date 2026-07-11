@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
@@ -13,6 +14,7 @@
 
 #include "../runtime/hash_port.hpp"
 #include "canonical_encoding.hpp"
+#include "json_projections.hpp"
 
 namespace cxxlens
 {
@@ -76,6 +78,30 @@ namespace cxxlens
 		[[nodiscard]] std::string framed(const std::string_view value)
 		{
 			return std::to_string(value.size()) + ':' + std::string{value};
+		}
+
+		[[nodiscard]] std::string severity_name(const severity value)
+		{
+			constexpr std::array<std::string_view, 5U> names{
+				"note", "info", "warning", "error", "fatal"};
+			return std::string{names.at(static_cast<std::size_t>(value))};
+		}
+
+		[[nodiscard]] std::string confidence_name(const confidence value)
+		{
+			constexpr std::array<std::string_view, 5U> names{
+				"speculative", "possible", "probable", "high", "certain"};
+			return std::string{names.at(static_cast<std::size_t>(value))};
+		}
+
+		[[nodiscard]] std::string guarantee_name(const result_guarantee value)
+		{
+			constexpr std::array<std::string_view, 5U> names{"exact_within_coverage",
+															 "sound_over_approximation",
+															 "sound_under_approximation",
+															 "best_effort",
+															 "heuristic"};
+			return std::string{names.at(static_cast<std::size_t>(value))};
 		}
 
 		[[nodiscard]] result<finding_id> make_finding_id(const finding_input& input)
@@ -152,6 +178,11 @@ namespace cxxlens
 			previous = key;
 		}
 		return {};
+	}
+
+	std::string diagnostic::to_json() const
+	{
+		return detail::json::write(detail::json::diagnostic_value(*this)).value();
 	}
 
 	result<finding> finding::make(finding_input input, const finding_validation_context& context)
@@ -304,6 +335,39 @@ namespace cxxlens
 		return output;
 	}
 
+	std::string finding::to_json() const
+	{
+		using detail::json::json_value;
+		json_value::object parameters;
+		for (const auto& [key, value] : identity_parameters_)
+			parameters.emplace_back(key, value);
+		json_value::array unresolved_rows;
+		for (const auto& item : unresolved_items_)
+			unresolved_rows.emplace_back(detail::json::unresolved_value(item));
+		json_value::object fields{
+			{"id", std::string{id_.value()}},
+			{"rule_or_recipe", rule_or_recipe_},
+			{"subject_semantic_id", subject_semantic_id_},
+			{"primary", detail::json::source_span_value(primary_)},
+			{"variant_signature",
+			 variant_signature_ ? json_value{*variant_signature_} : json_value{}},
+			{"identity_parameters", std::move(parameters)},
+			{"severity", severity_name(level_)},
+			{"confidence", confidence_name(certainty_)},
+			{"guarantee", guarantee_name(guarantee_)},
+			{"message", message_},
+			{"evidence", detail::json::evidence_value(why_)},
+			{"unresolved", std::move(unresolved_rows)},
+			{"coverage", detail::json::coverage_value(coverage_)},
+			{"achieved_precision", static_cast<std::uint64_t>(achieved_precision_)},
+			{"required_precision", static_cast<std::uint64_t>(required_precision_)},
+		};
+		return detail::json::write(
+				   json_value{detail::json::envelope(
+					   detail::json::document_versions{"cxxlens.finding.v1"}, std::move(fields))})
+			.value();
+	}
+
 	result<void> finding_set::add(finding value)
 	{
 		if (!value.id_.valid())
@@ -375,5 +439,42 @@ namespace cxxlens
 				output.rows_.push_back(item);
 		}
 		return output;
+	}
+
+	std::string finding_set::to_json() const
+	{
+		using detail::json::json_value;
+		json_value::array findings;
+		for (const auto& item : rows_)
+		{
+			json_value::object parameters;
+			for (const auto& [key, value] : item.identity_parameters_)
+				parameters.emplace_back(key, value);
+			json_value::array unresolved_rows;
+			for (const auto& unresolved_item : item.unresolved_items_)
+				unresolved_rows.emplace_back(detail::json::unresolved_value(unresolved_item));
+			findings.emplace_back(json_value::object{
+				{"id", std::string{item.id_.value()}},
+				{"rule_or_recipe", item.rule_or_recipe_},
+				{"subject_semantic_id", item.subject_semantic_id_},
+				{"primary", detail::json::source_span_value(item.primary_)},
+				{"variant_signature",
+				 item.variant_signature_ ? json_value{*item.variant_signature_} : json_value{}},
+				{"identity_parameters", std::move(parameters)},
+				{"severity", severity_name(item.level_)},
+				{"confidence", confidence_name(item.certainty_)},
+				{"guarantee", guarantee_name(item.guarantee_)},
+				{"message", item.message_},
+				{"evidence", detail::json::evidence_value(item.why_)},
+				{"unresolved", std::move(unresolved_rows)},
+				{"coverage", detail::json::coverage_value(item.coverage_)},
+				{"achieved_precision", static_cast<std::uint64_t>(item.achieved_precision_)},
+				{"required_precision", static_cast<std::uint64_t>(item.required_precision_)},
+			});
+		}
+		return detail::json::write(json_value{detail::json::envelope(
+									   detail::json::document_versions{"cxxlens.finding-set.v1"},
+									   {{"findings", std::move(findings)}})})
+			.value();
 	}
 } // namespace cxxlens

@@ -98,6 +98,16 @@ namespace cxxlens
 		 * e.explain().empty()?1:0;}
 		 * @endcode */
 		[[nodiscard]] std::string explain() const;
+
+		/** @brief Versioned canonical JSONへ射影する。
+		 * @retval value Common writer output。 @pre `validate()` succeeds。 @post
+		 * Objectを変更しない。
+		 * @note Message remains display data and versions are embedded。
+		 * @code{.cpp}
+		 * #include <cxxlens/core/failure.hpp>
+		 * int main(){cxxlens::error e;return e.to_json().empty()?1:0;}
+		 * @endcode */
+		[[nodiscard]] std::string to_json() const;
 	};
 
 	/** @brief Expected failure を value または original `error` として保持する。 */
@@ -368,6 +378,16 @@ namespace cxxlens
 		 * "semantic.dependent-type","x"};return u.semantic_representation().empty()?1:0;}
 		 * @endcode */
 		[[nodiscard]] std::string semantic_representation() const;
+
+		/** @brief Versioned canonical JSONへ射影する。
+		 * @retval value Common writer output。 @pre `validate()` succeeds。 @post
+		 * Objectを変更しない。
+		 * @note Missing optional requirements are explicit null。
+		 * @code{.cpp}
+		 * #include <cxxlens/core/failure.hpp>
+		 * int main(){cxxlens::unresolved u;return u.to_json().empty()?1:0;}
+		 * @endcode */
+		[[nodiscard]] std::string to_json() const;
 	};
 
 	/** @brief Common/package stable error code registry。 */

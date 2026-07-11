@@ -49,6 +49,15 @@ namespace cxxlens
 		 * int main(){cxxlens::diagnostic d;d.id="clang.warning";return d.validate()?0:1;}
 		 * @endcode */
 		[[nodiscard]] result<void> validate() const;
+
+		/** @brief Versioned canonical diagnostic JSONを返す。
+		 * @retval value Common writer projection。 @pre `validate()` succeeds。 @post 変更しない。
+		 * @note Observation remains distinct from finding。
+		 * @code{.cpp}
+		 * #include <cxxlens/core/finding.hpp>
+		 * int main(){cxxlens::diagnostic d;return d.to_json().empty()?1:0;}
+		 * @endcode */
+		[[nodiscard]] std::string to_json() const;
 	};
 
 	/** @brief Identity and material payload used to construct one finding。 */
@@ -243,6 +252,15 @@ namespace cxxlens
 		 * @endcode */
 		[[nodiscard]] std::string semantic_representation() const;
 
+		/** @brief Versioned canonical finding JSONを返す。
+		 * @retval value Common writer projection。 @pre Finding is valid。 @post 変更しない。
+		 * @note Operational metadata is excluded。
+		 * @code{.cpp}
+		 * #include <cxxlens/core/finding.hpp>
+		 * int main(){cxxlens::finding f;return f.to_json().empty()?1:0;}
+		 * @endcode */
+		[[nodiscard]] std::string to_json() const;
+
 	  private:
 		finding_id id_;
 		std::string rule_or_recipe_;
@@ -324,6 +342,16 @@ namespace cxxlens
 		 * s.minimum_severity(cxxlens::severity::error).empty()?0:1;}
 		 * @endcode */
 		[[nodiscard]] finding_set minimum_severity(severity minimum) const;
+
+		/** @brief Canonical finding rowsをversioned JSONへ射影する。
+		 * @retval value Common writer projection。 @pre Rows are valid。 @post Source
+		 * setを変更しない。
+		 * @note Row order is the set authoritative total order。
+		 * @code{.cpp}
+		 * #include <cxxlens/core/finding.hpp>
+		 * int main(){return cxxlens::finding_set{}.to_json().empty()?1:0;}
+		 * @endcode */
+		[[nodiscard]] std::string to_json() const;
 
 	  private:
 		std::vector<finding> rows_;

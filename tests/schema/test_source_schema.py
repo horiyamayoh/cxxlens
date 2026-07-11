@@ -9,10 +9,19 @@ import sys
 
 
 EXPECTED_KEYS = [
-    "schema", "primary", "spelling", "expansion", "macro_stack", "origin", "digest", "read_only"
+    "digest",
+    "expansion",
+    "library_version",
+    "macro_stack",
+    "origin",
+    "primary",
+    "read_only",
+    "schema",
+    "semantics_version",
+    "spelling",
 ]
 RANGE_KEYS = [
-    "file", "begin", "end", "begin_line", "begin_column", "end_line", "end_column", "kind"
+    "begin", "begin_column", "begin_line", "end", "end_column", "end_line", "file", "kind"
 ]
 
 

@@ -33,6 +33,7 @@ auto main() -> int
 	passed &= check(product_versions.library == cxxlens::semantic_version{0U, 1U, 0U, {}},
 					"library version mismatch");
 	passed &= check(product_versions.public_schema.major == 1U, "public schema version missing");
+	passed &= check(product_versions.semantics.major == 1U, "semantics version missing");
 	passed &= check(product_versions.fact_schema.major == 1U, "fact schema version missing");
 	passed &= check(product_versions.finding_schema.major == 1U, "finding schema version missing");
 	passed &=

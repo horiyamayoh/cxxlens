@@ -79,6 +79,8 @@ namespace cxxlens
 		semantic_version library;
 		/** @brief Public JSON/YAML schema version。 */
 		semantic_version public_schema;
+		/** @brief Semantic interpretation version independent from wire schemas。 */
+		semantic_version semantics;
 		/** @brief Immutable fact schema version。 */
 		semantic_version fact_schema;
 		/** @brief Finding schema version。 */

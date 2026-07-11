@@ -11,6 +11,8 @@
 
 #include <cxxlens/core/evidence.hpp>
 
+#include "json_projections.hpp"
+
 namespace cxxlens
 {
 	namespace
@@ -71,36 +73,6 @@ namespace cxxlens
 		[[nodiscard]] std::string framed(const std::string_view value)
 		{
 			return std::to_string(value.size()) + ':' + std::string{value};
-		}
-
-		[[nodiscard]] std::string json_escape(const std::string_view input)
-		{
-			std::string output;
-			for (const char character : input)
-			{
-				switch (character)
-				{
-					case '\\':
-						output += "\\\\";
-						break;
-					case '"':
-						output += "\\\"";
-						break;
-					case '\n':
-						output += "\\n";
-						break;
-					case '\r':
-						output += "\\r";
-						break;
-					case '\t':
-						output += "\\t";
-						break;
-					default:
-						output += character;
-						break;
-				}
-			}
-			return output;
 		}
 
 		[[nodiscard]] std::string evidence_kind_name(const evidence_kind kind)
@@ -300,39 +272,7 @@ namespace cxxlens
 
 	std::string evidence::to_json() const
 	{
-		std::ostringstream output;
-		output << R"({"schema":"cxxlens.evidence.v1","items":[)";
-		for (std::size_t index = 0U; index < items_.size(); ++index)
-		{
-			if (index != 0U)
-				output << ',';
-			const auto& item = items_.at(index);
-			output << R"({"kind":")" << evidence_kind_name(item.kind) << R"(","summary":")"
-				   << json_escape(item.summary) << R"(","source":)";
-			if (item.source)
-				output << item.source->to_canonical_json();
-			else
-				output << "null";
-			output << R"(,"supporting_facts":[)";
-			for (std::size_t fact_index = 0U; fact_index < item.supporting_facts.size();
-				 ++fact_index)
-			{
-				if (fact_index != 0U)
-					output << ',';
-				output << '"' << item.supporting_facts.at(fact_index).value() << '"';
-			}
-			output << R"(],"attributes":{)";
-			std::size_t attribute_index = 0U;
-			for (const auto& [key, value] : item.attributes)
-			{
-				if (attribute_index++ != 0U)
-					output << ',';
-				output << '"' << json_escape(key) << R"(":")" << json_escape(value) << '"';
-			}
-			output << "}}";
-		}
-		output << "]}";
-		return output.str();
+		return detail::json::write(detail::json::evidence_value(*this)).value();
 	}
 
 	std::string evidence::to_markdown() const
@@ -451,48 +391,7 @@ namespace cxxlens
 
 	std::string coverage_report::to_json() const
 	{
-		std::ostringstream output;
-		output << R"({"schema":"cxxlens.coverage.v1","requested":[)";
-		for (std::size_t index = 0U; index < requested_.size(); ++index)
-		{
-			if (index != 0U)
-				output << ',';
-			const auto& request_value = requested_.at(index);
-			output << R"({"kind":")" << json_escape(request_value.kind) << R"(","id":")"
-				   << json_escape(request_value.id) << R"("})";
-		}
-		output << R"(],"units":[)";
-		for (std::size_t index = 0U; index < units_.size(); ++index)
-		{
-			if (index != 0U)
-				output << ',';
-			const auto& unit = units_.at(index);
-			output << R"({"kind":")" << json_escape(unit.kind) << R"(","id":")"
-				   << json_escape(unit.id) << R"(","state":")" << coverage_state_name(unit.state)
-				   << R"(","reason":)";
-			if (unit.reason)
-				output << '"' << json_escape(*unit.reason) << '"';
-			else
-				output << "null";
-			output << '}';
-		}
-		output << R"(],"summary":{)";
-		constexpr std::array<coverage_state, 5U> states{
-			coverage_state::covered,
-			coverage_state::excluded,
-			coverage_state::failed,
-			coverage_state::unresolved,
-			coverage_state::not_applicable,
-		};
-		for (std::size_t index = 0U; index < states.size(); ++index)
-		{
-			if (index != 0U)
-				output << ',';
-			output << '"' << coverage_state_name(states.at(index)) << R"(":)"
-				   << count(states.at(index));
-		}
-		output << R"(},"complete":)" << (complete() ? "true" : "false") << '}';
-		return output.str();
+		return detail::json::write(detail::json::coverage_value(*this)).value();
 	}
 
 	std::string coverage_report::to_markdown() const

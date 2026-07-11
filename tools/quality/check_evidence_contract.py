@@ -16,6 +16,7 @@ def main() -> int:
     )
     header = (root / "include/cxxlens/core/evidence.hpp").read_text(encoding="utf-8")
     source = (root / "src/core/evidence.cpp").read_text(encoding="utf-8")
+    projections = (root / "src/core/json_projections.cpp").read_text(encoding="utf-8")
     tests = (root / "tests/unit/core/evidence_coverage_test.cpp").read_text(encoding="utf-8")
     failures: list[str] = []
 
@@ -27,8 +28,13 @@ def main() -> int:
         failures.append("guarantee taxonomy must contain five unique values")
     if "summary_" in header or "count_" in header:
         failures.append("coverage report contains separately mutable summary state")
-    for required in ("count(states.at(index))", "complete() ?", "requested_", "units_"):
-        if required not in source:
+    for required, location in (
+        ("coverage.count(state)", projections),
+        ("coverage.complete()", projections),
+        ("requested_", source),
+        ("units_", source),
+    ):
+        if required not in location:
             failures.append(f"authoritative-row projection is missing {required!r}")
     for state in states:
         cpp_name = state.replace("not_applicable", "not_applicable")

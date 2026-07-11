@@ -1,0 +1,25 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.diagnostic.v1.schema.yaml
+title: cxxlens diagnostic v1
+type: object
+required:
+- schema
+- semantics_version
+- library_version
+- id
+- message
+- severity
+- primary
+- related
+- compiler_option
+properties:
+  schema: {const: cxxlens.diagnostic.v1}
+  semantics_version: {const: 1.0.0}
+  library_version: {type: string}
+  id: {type: string}
+  message: {type: string}
+  severity: {enum: [note, info, warning, error, fatal]}
+  primary: {type: [object, 'null']}
+  related: {type: array, items: {type: object}}
+  compiler_option: {type: [string, 'null']}
+additionalProperties: false

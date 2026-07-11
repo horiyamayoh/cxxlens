@@ -45,6 +45,12 @@ packages:
   - finding
   - finding_set
   - execution_context
+  - schema_change_kind
+  - schema_change
+  - schema_descriptor
+  - schema_compatibility
+  - schema_compatibility_report
+  - schema_registry
   apis:
   - id: API-CORE-001
     symbol: versions()

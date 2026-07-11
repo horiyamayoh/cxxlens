@@ -1,3 +1,4 @@
 cmakelang==0.6.13
+jsonschema==4.23.0
 PyYAML==6.0.2
 yamllint==1.35.1

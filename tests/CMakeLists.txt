@@ -48,6 +48,14 @@ cxxlens_set_project_warnings(cxxlens-public-header-finding)
 add_test(NAME public-api.finding-header COMMAND cxxlens-public-header-finding)
 set_tests_properties(public-api.finding-header PROPERTIES LABELS public-api)
 
+add_executable(cxxlens-public-header-schema
+               public_headers/schema_header_test.cpp)
+target_link_libraries(cxxlens-public-header-schema PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-public-header-schema PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-public-header-schema)
+add_test(NAME public-api.schema-header COMMAND cxxlens-public-header-schema)
+set_tests_properties(public-api.schema-header PROPERTIES LABELS public-api)
+
 configure_file(install/run_install_test.cmake.in
                "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake" @ONLY)
 add_test(NAME install.consumer
@@ -153,3 +161,36 @@ add_test(
     "${PROJECT_SOURCE_DIR}/tests/golden/finding/canonical_v1.txt")
 set_tests_properties(determinism.finding-process
                      PROPERTIES LABELS "finding;determinism;golden")
+
+add_executable(cxxlens-unit-canonical-json unit/core/canonical_json_test.cpp)
+target_link_libraries(cxxlens-unit-canonical-json PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-unit-canonical-json
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-unit-canonical-json PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-canonical-json)
+add_test(NAME unit.canonical-json COMMAND cxxlens-unit-canonical-json)
+set_tests_properties(unit.canonical-json
+                     PROPERTIES LABELS "unit;json;schema;security;determinism")
+
+add_executable(cxxlens-unit-schema-registry unit/core/schema_registry_test.cpp)
+target_link_libraries(cxxlens-unit-schema-registry PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-unit-schema-registry PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-schema-registry)
+add_test(NAME unit.schema-registry COMMAND cxxlens-unit-schema-registry)
+set_tests_properties(unit.schema-registry
+                     PROPERTIES LABELS "unit;schema;compatibility")
+
+add_executable(cxxlens-unit-m0-serialization
+               unit/core/m0_serialization_test.cpp)
+target_link_libraries(cxxlens-unit-m0-serialization PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-unit-m0-serialization PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-m0-serialization)
+add_test(
+  NAME schema.m0-serialization
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/schema/test_m0_serialization.py"
+    "$<TARGET_FILE:cxxlens-unit-m0-serialization>" "${PROJECT_SOURCE_DIR}")
+set_tests_properties(
+  schema.m0-serialization PROPERTIES LABELS
+                                     "schema;json;golden;determinism;security")

@@ -24,6 +24,7 @@ namespace cxxlens
 		return api_versions{
 			.library = semantic_version{0U, 1U, 0U, {}},
 			.public_schema = initial_schema,
+			.semantics = initial_schema,
 			.fact_schema = initial_schema,
 			.finding_schema = initial_schema,
 			.edit_plan_schema = initial_schema,

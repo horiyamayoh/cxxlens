@@ -1,0 +1,20 @@
+schema: cxxlens.schema-compatibility.v1
+registry_version: 1.0.0
+semantics_version: 1.0.0
+documents:
+- {id: cxxlens.coverage.v1, version: 1.0.0, file: cxxlens_coverage.schema.yaml}
+- {id: cxxlens.diagnostic.v1, version: 1.0.0, file: cxxlens_diagnostic.schema.yaml}
+- {id: cxxlens.error.v1, version: 1.0.0, file: cxxlens_error.schema.yaml}
+- {id: cxxlens.evidence.v1, version: 1.0.0, file: cxxlens_evidence.schema.yaml}
+- {id: cxxlens.finding-set.v1, version: 1.0.0, file: cxxlens_finding_set.schema.yaml}
+- {id: cxxlens.finding.v1, version: 1.0.0, file: cxxlens_finding.schema.yaml}
+- {id: cxxlens.source-span.v1, version: 1.0.0, file: cxxlens_source_span.schema.yaml}
+- {id: cxxlens.unresolved.v1, version: 1.0.0, file: cxxlens_unresolved.schema.yaml}
+compatible_changes: [optional_field_added]
+rebuild_required_changes:
+- optional_field_removed
+- required_field_added
+- required_field_removed
+- field_type_changed
+- field_meaning_changed
+unsafe_cache_migration: forbidden

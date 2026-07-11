@@ -1,0 +1,22 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.evidence.v1.schema.yaml
+title: cxxlens evidence v1
+type: object
+required: [schema, semantics_version, library_version, items]
+properties:
+  schema: {const: cxxlens.evidence.v1}
+  semantics_version: {const: 1.0.0}
+  library_version: {type: string}
+  items:
+    type: array
+    items:
+      type: object
+      required: [kind, summary, source, supporting_facts, attributes]
+      properties:
+        kind: {type: string}
+        summary: {type: string}
+        source: {type: [object, 'null']}
+        supporting_facts: {type: array, items: {type: string}}
+        attributes: {type: object, additionalProperties: {type: string}}
+      additionalProperties: false
+additionalProperties: false

@@ -11,6 +11,8 @@
 
 #include <cxxlens/core/failure.hpp>
 
+#include "json_projections.hpp"
+
 namespace cxxlens
 {
 	namespace
@@ -297,6 +299,11 @@ namespace cxxlens
 		return output.str();
 	}
 
+	std::string error::to_json() const
+	{
+		return detail::json::write(detail::json::error_value(*this)).value();
+	}
+
 	result<void> unresolved::validate(const std::vector<std::string>& registered_capabilities) const
 	{
 		const auto kind_index = static_cast<std::size_t>(kind);
@@ -368,6 +375,11 @@ namespace cxxlens
 		for (const auto& [key, attribute] : attributes)
 			output += "|attribute=" + framed(key) + framed(attribute);
 		return output;
+	}
+
+	std::string unresolved::to_json() const
+	{
+		return detail::json::write(detail::json::unresolved_value(*this)).value();
 	}
 
 	stable_code_registry::stable_code_registry() : codes_{common_error_codes()} {}

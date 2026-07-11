@@ -2,9 +2,21 @@ $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens.source-span.v1.schema.yaml
 title: cxxlens source span v1
 type: object
-required: [schema, primary, spelling, expansion, macro_stack, origin, digest, read_only]
+required:
+- schema
+- semantics_version
+- library_version
+- primary
+- spelling
+- expansion
+- macro_stack
+- origin
+- digest
+- read_only
 properties:
   schema: {const: cxxlens.source-span.v1}
+  semantics_version: {const: 1.0.0}
+  library_version: {const: 0.1.0}
   primary: {$ref: '#/$defs/range'}
   spelling: {oneOf: [{$ref: '#/$defs/range'}, {type: 'null'}]}
   expansion: {oneOf: [{$ref: '#/$defs/range'}, {type: 'null'}]}

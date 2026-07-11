@@ -2,6 +2,7 @@
 #include <iostream>
 #include <iterator>
 #include <string>
+#include <string_view>
 
 #include <cxxlens/source.hpp>
 
@@ -49,7 +50,7 @@ namespace
 	}
 } // namespace
 
-auto main() -> int
+auto main(const int argc, const char* const* argv) -> int
 {
 	using namespace cxxlens;
 	bool passed = true;
@@ -96,6 +97,11 @@ auto main() -> int
 						   1U}};
 	nested.origin = source_origin::macro_argument;
 	nested.digest = {"sha256", 1U, "def"};
+	if (argc == 2 && std::string_view{argv[1]} == "--emit")
+	{
+		std::cout << direct.to_canonical_json() << '\n' << nested.to_canonical_json() << '\n';
+		return 0;
+	}
 	passed &=
 		check(!nested.validate() && nested.macro_stack.size() == 2U, "nested macro mapping lost");
 	passed &= check(!nested.is_directly_editable(), "macro span editable");
