@@ -107,6 +107,14 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-m0-completion-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_m0_completion.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-text-lint
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -137,6 +145,7 @@ add_dependencies(
   cxxlens-failure-contract-check
   cxxlens-finding-contract-check
   cxxlens-identity-path-check
+  cxxlens-m0-completion-check
   cxxlens-public-boundary-check
   cxxlens-runtime-port-check
   cxxlens-serialization-contract-check
@@ -147,6 +156,28 @@ if(TARGET cxxlens-format-check)
 endif()
 if(TARGET cxxlens-clang-tidy)
   add_dependencies(cxxlens-quality cxxlens-clang-tidy)
+endif()
+
+if(TARGET cxxlens-m0-test-binaries)
+  add_custom_target(
+    cxxlens-m0-acceptance
+    COMMAND "${CMAKE_CTEST_COMMAND}" --test-dir "${CMAKE_BINARY_DIR}"
+            --output-on-failure
+    COMMAND
+      "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/run_m0_acceptance.py" --root
+      "${CMAKE_CURRENT_SOURCE_DIR}" --build "${CMAKE_BINARY_DIR}" --manifest
+      "${CMAKE_CURRENT_SOURCE_DIR}/schemas/cxxlens_m0_completion.yaml" --report
+      "${CMAKE_BINARY_DIR}/m0-acceptance-report.json" --compiler
+      "${CMAKE_CXX_COMPILER}" --identity
+      "$<TARGET_FILE:cxxlens-unit-canonical-identity>" --evidence
+      "$<TARGET_FILE:cxxlens-unit-evidence-coverage>" --finding
+      "$<TARGET_FILE:cxxlens-unit-finding-contract>" --serialization
+      "$<TARGET_FILE:cxxlens-unit-m0-serialization>" --configuration
+      "$<TARGET_FILE:cxxlens-unit-configuration-process>" --fixture
+      "$<TARGET_FILE:cxxlens-unit-testing-fixture-process>"
+    DEPENDS cxxlens-m0-test-binaries cxxlens-quality
+    USES_TERMINAL VERBATIM)
 endif()
 
 if(CXXLENS_BUILD_DOCS)

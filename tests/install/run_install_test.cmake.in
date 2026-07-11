@@ -9,6 +9,20 @@ execute_process(
           "${install_prefix}" RESULT_VARIABLE install_result
                                               COMMAND_ERROR_IS_FATAL ANY)
 
+foreach(
+  required IN
+  ITEMS
+    "${install_prefix}/include/cxxlens/cxxlens.hpp"
+    "${install_prefix}/include/cxxlens/testing.hpp"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_public_api_contract.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_m0_completion.yaml"
+    "${install_prefix}/share/doc/cxxlens/README.md"
+    "${install_prefix}/share/doc/cxxlens/SECURITY.md")
+  if(NOT EXISTS "${required}")
+    message(FATAL_ERROR "installed M0 artifact is missing: ${required}")
+  endif()
+endforeach()
+
 execute_process(
   COMMAND
     "@CMAKE_COMMAND@" -S "@CMAKE_CURRENT_SOURCE_DIR@/install/consumer" -B

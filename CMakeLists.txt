@@ -19,6 +19,7 @@ include(CTest)
 
 option(CXXLENS_WARNINGS_AS_ERRORS "Treat cxxlens compiler warnings as errors"
        OFF)
+option(CXXLENS_BUILD_SHARED "Build cxxlens as a shared library" OFF)
 option(CXXLENS_ENABLE_CLANG_TIDY "Run clang-tidy while compiling cxxlens" OFF)
 option(CXXLENS_ENABLE_IWYU "Run include-what-you-use while compiling cxxlens"
        OFF)
@@ -31,8 +32,15 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CxxlensWarnings)
 include(CxxlensSanitizers)
 
+if(CXXLENS_BUILD_SHARED)
+  set(CXXLENS_LIBRARY_TYPE SHARED)
+else()
+  set(CXXLENS_LIBRARY_TYPE STATIC)
+endif()
+
 add_library(
   cxxlens
+  ${CXXLENS_LIBRARY_TYPE}
   src/config/configuration.cpp
   src/config/configuration_spec.cpp
   src/config/environment_adapter.cpp
@@ -117,11 +125,16 @@ install(
         schemas/cxxlens_finding.schema.yaml
         schemas/cxxlens_finding_set.schema.yaml
         schemas/cxxlens_identity_contract.yaml
+        schemas/cxxlens_m0_acceptance_report.schema.yaml
+        schemas/cxxlens_m0_completion.schema.yaml
+        schemas/cxxlens_m0_completion.yaml
         schemas/cxxlens_schema_compatibility.yaml
         schemas/cxxlens_source_span.schema.yaml
         schemas/cxxlens_testing_fixture.schema.yaml
         schemas/cxxlens_unresolved.schema.yaml
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
+install(FILES README.md SECURITY.md
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cxxlens")
 
 configure_package_config_file(
   cmake/CxxlensConfig.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/cxxlensConfig.cmake"

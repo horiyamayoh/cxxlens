@@ -45,6 +45,14 @@ cmake --preset docs
 cmake --build --preset docs --target docs
 ```
 
+M0 Semantic Kernel の全 acceptance criteria は、依存ツールを導入した clean checkout で
+次の一つの build targetから検証できます。
+
+```sh
+CXX=clang++ cmake --preset m0-acceptance
+cmake --build --preset m0-acceptance --target cxxlens-m0-acceptance
+```
+
 ## インストール後の利用
 
 ```cmake
@@ -67,6 +75,7 @@ const auto product_versions = cxxlens::versions();
 - [ビルドとテスト](docs/development/build-and-test.md)
 - [コーディング規約](docs/development/coding-style.md)
 - [Doxygen 規約](docs/development/doxygen-style.md)
+- [M0 acceptance gate](docs/development/m0-acceptance.md)
 - [コントリビューション](CONTRIBUTING.md)
 
 旧二層構想の設計書は `docs/design/archive/` に保存していますが、現在の仕様判断には使用しません。

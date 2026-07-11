@@ -22,3 +22,6 @@ e685a645c2d8399ea802fc5bf230e765ac624d6090f1c7d0a90982cc9ee1429d  ../../schemas/
 2a6954c9227f2f15dfa7439bcc7ad4604a51cc0cf5ca60244aa2beb629eb2d34  ../../schemas/cxxlens_finding_set.schema.yaml
 2e342aa41e5b0b904ee44bd5c1342631eec9bf2838984f2ac8743df756e6283a  ../../schemas/cxxlens_schema_compatibility.yaml
 4881fb67968f4ddce1cbf0e694fdf11d0a8c3ceb1cde40f1ad91e88ff8f486dd  ../../schemas/cxxlens_testing_fixture.schema.yaml
+d7d4481dced50c6ac18db3631d53930bfd2ece54a8d1e2a6a919e5e05ec2d41a  ../../schemas/cxxlens_m0_completion.yaml
+f1070f6a03d357054a67e02aeff938799f83403f39af27b9202100544d1ae03c  ../../schemas/cxxlens_m0_completion.schema.yaml
+6e22b363f179e26b65c620473832c3bdd89adb6485a9fb6967191c16fec2acb3  ../../schemas/cxxlens_m0_acceptance_report.schema.yaml

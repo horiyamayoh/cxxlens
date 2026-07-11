@@ -114,7 +114,7 @@ namespace cxxlens
 	template <class T>
 	class result
 	{
-		static_assert(!std::is_same_v<std::remove_cv_t<T>, error>);
+		static_assert(!std::is_same_v<std::remove_cv_t<T>, cxxlens::error>);
 
 	  public:
 		/** @brief Success value から構築する。
@@ -133,7 +133,7 @@ namespace cxxlens
 		 * #include <cxxlens/core/failure.hpp>
 		 * int main(){cxxlens::result<int> r{cxxlens::error{{"core.cancelled"},"x"}};return r?1:0;}
 		 * @endcode */
-		result(error failure) : storage_{std::move(failure)} {}
+		result(cxxlens::error failure) : storage_{std::move(failure)} {}
 
 		/** @brief Success state を返す。
 		 * @retval value Success value を保持すれば true。 @pre なし。 @post 変更しない。
@@ -233,7 +233,7 @@ namespace cxxlens
 		 * #include <cxxlens/core/failure.hpp>
 		 * int main(){cxxlens::result<void> r{cxxlens::error{{"core.cancelled"},"x"}};return r?1:0;}
 		 * @endcode */
-		result(error failure) : storage_{std::move(failure)} {}
+		result(cxxlens::error failure) : storage_{std::move(failure)} {}
 
 		/** @brief Success state を返す。
 		 * @retval value Success なら true。 @pre なし。 @post 変更しない。

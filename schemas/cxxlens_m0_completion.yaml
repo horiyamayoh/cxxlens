@@ -1,0 +1,112 @@
+schema: cxxlens.m0-completion.v1
+acceptance_command: CXX=clang++ cmake --preset m0-acceptance && cmake --build --preset m0-acceptance --target cxxlens-m0-acceptance
+conformant_catalog_ids:
+- API-CFG-001
+- API-CFG-002
+- API-CFG-003
+- API-CFG-004
+- API-CORE-001
+- API-CORE-003
+- API-CORE-004
+- API-TEST-001
+- API-TEST-002
+- API-TEST-005
+- API-TEST-006
+public_headers:
+- include/cxxlens/configuration.hpp
+- include/cxxlens/core.hpp
+- include/cxxlens/core/evidence.hpp
+- include/cxxlens/core/failure.hpp
+- include/cxxlens/core/finding.hpp
+- include/cxxlens/core/identity.hpp
+- include/cxxlens/core/schema.hpp
+- include/cxxlens/cxxlens.hpp
+- include/cxxlens/source.hpp
+- include/cxxlens/testing.hpp
+allowed_run_metadata: [cache_hit, elapsed, elapsed_ms, pid, thread, thread_id, timestamp]
+matrix:
+  jobs: [1, 2, 8]
+  scheduler_seeds: [0, 1, 816926]
+  orders: [forward, reverse]
+  roots: [/workspace/a, /relocated/workspace/b]
+  repeats: 2
+  library_kinds: [static, shared]
+  compilers: [clang-22, gcc]
+vectors:
+- id: M0-VERSION
+  owner_issue: 2
+  catalog_ids: [API-CORE-001]
+  requirements: [FR-018, QR-001]
+  tests: [unit.version, install.consumer]
+  fixture: tests/unit/version_test.cpp
+  reproduction_seed: 0
+- id: M0-RUNTIME-PORTS
+  owner_issue: 3
+  catalog_ids: []
+  requirements: [QR-007, QR-008, QR-012]
+  tests: [unit.runtime-ports]
+  fixture: tests/unit/runtime/runtime_ports_test.cpp
+  reproduction_seed: 1
+- id: M0-SOURCE
+  owner_issue: 4
+  catalog_ids: []
+  requirements: [FR-003, QR-009]
+  tests: [unit.source-span, schema.source-span]
+  fixture: tests/golden/source/nested_macro.json
+  reproduction_seed: 0
+- id: M0-IDENTITY
+  owner_issue: 5
+  catalog_ids: []
+  requirements: [FR-006, QR-001]
+  tests: [unit.canonical-identity, determinism.identity-process]
+  fixture: tests/golden/identity/canonical_v1.txt
+  reproduction_seed: 816926
+- id: M0-FAILURE
+  owner_issue: 6
+  catalog_ids: []
+  requirements: [FR-010, QR-010]
+  tests: [unit.failure-contract]
+  fixture: tests/unit/core/failure_contract_test.cpp
+  reproduction_seed: 1
+- id: M0-EVIDENCE-COVERAGE
+  owner_issue: 7
+  catalog_ids: [API-CORE-003, API-CORE-004]
+  requirements: [FR-008, FR-010, QR-005]
+  tests: [unit.evidence-coverage, determinism.evidence-process]
+  fixture: tests/golden/evidence_coverage/canonical_v1.txt
+  reproduction_seed: 816926
+- id: M0-FINDING
+  owner_issue: 8
+  catalog_ids: []
+  requirements: [FR-011, QR-001]
+  tests: [unit.finding-contract, determinism.finding-process]
+  fixture: tests/golden/finding/canonical_v1.txt
+  reproduction_seed: 1
+- id: M0-SERIALIZATION
+  owner_issue: 9
+  catalog_ids: []
+  requirements: [FR-018, QR-001, QR-009]
+  tests: [unit.canonical-json, unit.schema-registry, schema.m0-serialization]
+  fixture: tests/golden/json/m0_documents_v1.sha256
+  reproduction_seed: 0
+- id: M0-CONFIGURATION
+  owner_issue: 10
+  catalog_ids: [API-CFG-001, API-CFG-002, API-CFG-003, API-CFG-004]
+  requirements: [FR-018, QR-001, QR-008]
+  tests: [unit.configuration, schema.configuration]
+  fixture: tests/golden/config/resolved_v1.sha256
+  reproduction_seed: 1
+- id: M0-TESTING
+  owner_issue: 11
+  catalog_ids: [API-TEST-001, API-TEST-002, API-TEST-005, API-TEST-006]
+  requirements: [FR-020, QR-001, QR-009]
+  tests: [unit.testing-substrate, schema.testing-fixture, fixtures.m0-discovery]
+  fixture: tests/golden/testing/fixture_v1.sha256
+  reproduction_seed: 816926
+- id: M0-INTEGRATION
+  owner_issue: 12
+  catalog_ids: []
+  requirements: [QR-001, QR-002, QR-003, QR-004, QR-006, QR-009, QR-010]
+  tests: [public-api.cxxlens-header, install.consumer]
+  fixture: schemas/cxxlens_m0_completion.yaml
+  reproduction_seed: 816926

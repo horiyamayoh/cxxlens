@@ -277,3 +277,31 @@ add_test(
     "${PROJECT_SOURCE_DIR}/tests/fixtures/m0")
 set_tests_properties(fixtures.m0-discovery
                      PROPERTIES LABELS "testing;fixture;discovery")
+
+add_custom_target(cxxlens-m0-test-binaries)
+add_dependencies(
+  cxxlens-m0-test-binaries
+  cxxlens-public-header-configuration
+  cxxlens-public-header-core
+  cxxlens-public-header-cxxlens
+  cxxlens-public-header-evidence
+  cxxlens-public-header-failure
+  cxxlens-public-header-finding
+  cxxlens-public-header-identity
+  cxxlens-public-header-schema
+  cxxlens-public-header-source
+  cxxlens-public-header-testing
+  cxxlens-unit-canonical-identity
+  cxxlens-unit-canonical-json
+  cxxlens-unit-configuration
+  cxxlens-unit-configuration-process
+  cxxlens-unit-evidence-coverage
+  cxxlens-unit-failure-contract
+  cxxlens-unit-finding-contract
+  cxxlens-unit-m0-serialization
+  cxxlens-unit-runtime-ports
+  cxxlens-unit-schema-registry
+  cxxlens-unit-source-span
+  cxxlens-unit-testing-fixture-process
+  cxxlens-unit-testing-substrate
+  cxxlens-unit-version)

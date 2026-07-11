@@ -1,0 +1,65 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://schemas.cxxlens.dev/cxxlens.m0-completion.v1.json
+title: cxxlens.m0-completion.v1
+type: object
+required:
+- schema
+- acceptance_command
+- conformant_catalog_ids
+- public_headers
+- matrix
+- allowed_run_metadata
+- vectors
+additionalProperties: false
+properties:
+  schema: {const: cxxlens.m0-completion.v1}
+  acceptance_command: {type: string}
+  conformant_catalog_ids:
+    type: array
+    items: {type: string, pattern: '^API-[A-Z]+-[0-9]{3}$'}
+    uniqueItems: true
+  public_headers:
+    type: array
+    items: {type: string, pattern: '^include/cxxlens/.+\.hpp$'}
+    uniqueItems: true
+  allowed_run_metadata:
+    type: array
+    items: {type: string}
+    uniqueItems: true
+  matrix:
+    type: object
+    required: [jobs, scheduler_seeds, orders, roots, repeats, library_kinds, compilers]
+    additionalProperties: false
+    properties:
+      jobs: {type: array, items: {type: integer, minimum: 1}, uniqueItems: true}
+      scheduler_seeds: {type: array, items: {type: integer, minimum: 0}, uniqueItems: true}
+      orders: {type: array, items: {enum: [forward, reverse]}, uniqueItems: true}
+      roots: {type: array, items: {type: string}, minItems: 2, uniqueItems: true}
+      repeats: {type: integer, minimum: 2}
+      library_kinds: {type: array, items: {enum: [static, shared]}, uniqueItems: true}
+      compilers: {type: array, items: {enum: [clang-22, gcc]}, uniqueItems: true}
+  vectors:
+    type: array
+    items:
+      type: object
+      required: [id, owner_issue, catalog_ids, requirements, tests, fixture, reproduction_seed]
+      additionalProperties: false
+      properties:
+        id: {type: string, pattern: '^M0-[A-Z0-9-]+$'}
+        owner_issue: {type: integer, minimum: 2, maximum: 12}
+        catalog_ids:
+          type: array
+          items: {type: string, pattern: '^API-[A-Z]+-[0-9]{3}$'}
+          uniqueItems: true
+        requirements:
+          type: array
+          items: {type: string, pattern: '^(FR|QR)-[0-9]{3}$'}
+          minItems: 1
+          uniqueItems: true
+        tests:
+          type: array
+          items: {type: string}
+          minItems: 1
+          uniqueItems: true
+        fixture: {type: string}
+        reproduction_seed: {type: integer, minimum: 0}
