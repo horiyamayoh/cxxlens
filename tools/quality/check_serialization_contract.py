@@ -29,6 +29,7 @@ def main() -> int:
 
     serializer_files = [
         root / "src/config/configuration.cpp",
+        root / "src/testing/workspace_fixture.cpp",
         root / "src/source/source_span.cpp",
         root / "src/core/evidence.cpp",
         root / "src/core/failure.cpp",

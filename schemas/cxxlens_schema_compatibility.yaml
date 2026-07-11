@@ -12,6 +12,7 @@ documents:
 - {id: cxxlens.finding-set.v1, version: 1.0.0, file: cxxlens_finding_set.schema.yaml}
 - {id: cxxlens.finding.v1, version: 1.0.0, file: cxxlens_finding.schema.yaml}
 - {id: cxxlens.source-span.v1, version: 1.0.0, file: cxxlens_source_span.schema.yaml}
+- {id: cxxlens.testing.fixture.v1, version: 1.0.0, file: cxxlens_testing_fixture.schema.yaml}
 - {id: cxxlens.unresolved.v1, version: 1.0.0, file: cxxlens_unresolved.schema.yaml}
 compatible_changes: [optional_field_added]
 rebuild_required_changes:

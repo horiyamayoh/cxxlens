@@ -2960,56 +2960,79 @@ packages:
   header: <cxxlens/testing.hpp>
   purpose: Production-path fixtures, assertions, schema and determinism checks.
   public_types:
+  - fixture_file_kind
+  - fixture_file
   - fixture_variant
+  - fixture_bundle
   - workspace_fixture
+  - fault_target
+  - fault_injection
+  - fault_plan
+  - result_observation
   - result_assertion
   - edit_plan_assertion
   - generation_plan_assertion
+  - golden_context
+  - property_options
+  - property_failure
+  - property_report
   - determinism_options
+  - determinism_report
   apis:
   - id: API-TEST-001
-    symbol: workspace_fixture::{cpp,c,main_file,add_file,add_header,add_variant,standard,target,argument,generated,system_header,open}
+    symbol: workspace_fixture::{cpp,c,main_file,add_file,add_header,add_variant,standard,target,argument,generated,system_header,materialize}; fault_plan::{make,probe}
     kind: method_family
     phase: M0
-    llvm:
-      components:
-      - clangTooling
-      - clangFrontend
-      primary_apis:
-      - FixedCompilationDatabase
-      - InMemoryFileSystem
+    requirements:
+    - FR-020
+    - QR-001
+    errors:
+    - testing.fixture-invalid
     contract_maturity: contract-defined
-    implementation_state: unimplemented
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/testing.hpp
+      signature: 'cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::cpp(std::string); cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::c(std::string); cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::main_file(cxxlens::path) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::add_file(cxxlens::path,std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::add_header(cxxlens::path,std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::add_variant(cxxlens::testing::fixture_variant) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::standard(std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::target(std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::argument(std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::generated(cxxlens::path) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::system_header(cxxlens::path) const; cxxlens::result<cxxlens::testing::fixture_bundle> cxxlens::testing::workspace_fixture::materialize(const cxxlens::path&) const; cxxlens::result<cxxlens::testing::fault_plan> cxxlens::testing::fault_plan::make(std::vector<cxxlens::testing::fault_injection>); cxxlens::result<void> cxxlens::testing::fault_plan::probe(cxxlens::testing::fault_target,std::string_view,std::uint64_t) const'
+      signature_fingerprint: sha256:4c9b40c214f9ece3c5f4fda3e86951dca06cd8479e6db023c7e4aca7598dfb4d
+    implementation_evidence:
+    - include/cxxlens/testing.hpp
+    - src/testing/workspace_fixture.cpp
+    - src/testing/fault_plan.cpp
+    - schemas/cxxlens_testing_fixture.schema.yaml
+    - tests/unit/testing/testing_substrate_test.cpp
+    - tests/testing/test_testing_fixture_process.py
     atomic_unit:
       id: AU-TEST-001
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-TEST-002
     symbol: result_assertion builder/check
     kind: method_family
     phase: M0
+    requirements:
+    - FR-008
+    errors:
+    - testing.assertion-failed
     contract_maturity: contract-defined
-    implementation_state: unimplemented
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/testing.hpp
+      signature: 'cxxlens::testing::result_assertion cxxlens::testing::result_assertion::has_exactly(std::size_t) const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::has_no_errors() const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::is_complete() const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::is_partial_with(cxxlens::unresolved_kind) const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::json_matches(cxxlens::path) const; cxxlens::result<void> cxxlens::testing::result_assertion::check(const cxxlens::testing::result_observation&) const'
+      signature_fingerprint: sha256:4e30f3fdec5f05e2f6f69b4e555188ba1e9cd258a9af39bab6cd080074644a10
+    implementation_evidence:
+    - include/cxxlens/testing.hpp
+    - src/testing/result_assertion.cpp
+    - tests/unit/testing/testing_substrate_test.cpp
     atomic_unit:
       id: AU-TEST-002
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-TEST-003
     symbol: edit_plan_assertion builder/check
     kind: method_family
@@ -3047,43 +3070,56 @@ packages:
       blockers:
       - exact_declaration_unresolved
   - id: API-TEST-005
-    symbol: testing::check_determinism
+    symbol: testing::{check_property,check_determinism}
     kind: function_template
     phase: M0
     guarantees:
     - Compares semantic outputs across parallelism, order and root relocation.
+    requirements:
+    - QR-001
     contract_maturity: contract-defined
-    implementation_state: unimplemented
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/testing.hpp
+      signature: 'template<class Generator,class Predicate,class Renderer> cxxlens::testing::property_report cxxlens::testing::check_property(const cxxlens::testing::property_options&,Generator&&,Predicate&&,Renderer&&); template<class Generator,class Predicate,class Shrinker,class Renderer> cxxlens::testing::property_report cxxlens::testing::check_property(const cxxlens::testing::property_options&,Generator&&,Predicate&&,Shrinker&&,Renderer&&); template<class Operation> cxxlens::result<cxxlens::testing::determinism_report> cxxlens::testing::check_determinism(const cxxlens::testing::workspace_fixture&,Operation&&,const cxxlens::testing::determinism_options&)'
+      signature_fingerprint: sha256:072d60f45b1db5c9556a2cff38d4570e18d4c4263259075863abe7e288909214
+    implementation_evidence:
+    - include/cxxlens/testing.hpp
+    - tests/unit/testing/testing_substrate_test.cpp
     atomic_unit:
       id: AU-TEST-005
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-TEST-006
     symbol: testing::assert_schema_conforms
     kind: free_function
     phase: M0
+    requirements:
+    - QR-009
+    errors:
+    - testing.json-invalid
+    - testing.schema-mismatch
     contract_maturity: contract-defined
-    implementation_state: unimplemented
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/testing.hpp
+      signature: cxxlens::result<void> cxxlens::testing::assert_schema_conforms(std::string_view,std::string_view)
+      signature_fingerprint: sha256:63d098a2572aceefec45abfe1a8ed665eb6ce014cc119e67f9a9f85b67492995
+    implementation_evidence:
+    - include/cxxlens/testing.hpp
+    - src/testing/json_parser.cpp
+    - src/testing/result_assertion.cpp
+    - tests/unit/testing/testing_substrate_test.cpp
     atomic_unit:
       id: AU-TEST-006
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
 - id: interop
   header: <cxxlens/interop/clang.hpp>
   purpose: Unstable LLVM-major-scoped raw Clang corridor.
@@ -3308,9 +3344,9 @@ summary:
   api_entry_count: 123
   atomic_unit_count: 123
   implementation_state_counts:
-    unimplemented: 116
+    unimplemented: 112
     implemented: 0
-    conformant: 7
+    conformant: 11
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.
@@ -3519,6 +3555,10 @@ registries:
   - select.ambiguous-name
   - select.invalid-expression
   - select.type-mismatch
+  - testing.assertion-failed
+  - testing.fixture-invalid
+  - testing.json-invalid
+  - testing.schema-mismatch
   - transform.commit-failed
   - transform.format-failed
   - transform.macro-edit-rejected

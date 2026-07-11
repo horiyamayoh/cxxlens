@@ -104,12 +104,12 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-SRCH-008 | search | <cxxlens/search.hpp> | search::includes | AU-SRCH-008 | unimplemented |
 | API-SRCH-009 | search | <cxxlens/search.hpp> | search::macros | AU-SRCH-009 | unimplemented |
 | API-SRCH-010 | search | <cxxlens/search.hpp> | search::conversions | AU-SRCH-010 | unimplemented |
-| API-TEST-001 | testing | <cxxlens/testing.hpp> | workspace_fixture::{cpp,c,main_file,add_file,add_header,add_variant,standard,target,argument,generated,system_header,open} | AU-TEST-001 | unimplemented |
-| API-TEST-002 | testing | <cxxlens/testing.hpp> | result_assertion builder/check | AU-TEST-002 | unimplemented |
+| API-TEST-001 | testing | <cxxlens/testing.hpp> | workspace_fixture::{cpp,c,main_file,add_file,add_header,add_variant,standard,target,argument,generated,system_header,materialize}; fault_plan::{make,probe} | AU-TEST-001 | conformant |
+| API-TEST-002 | testing | <cxxlens/testing.hpp> | result_assertion builder/check | AU-TEST-002 | conformant |
 | API-TEST-003 | testing | <cxxlens/testing.hpp> | edit_plan_assertion builder/check | AU-TEST-003 | unimplemented |
 | API-TEST-004 | testing | <cxxlens/testing.hpp> | generation_plan_assertion builder/check | AU-TEST-004 | unimplemented |
-| API-TEST-005 | testing | <cxxlens/testing.hpp> | testing::check_determinism | AU-TEST-005 | unimplemented |
-| API-TEST-006 | testing | <cxxlens/testing.hpp> | testing::assert_schema_conforms | AU-TEST-006 | unimplemented |
+| API-TEST-005 | testing | <cxxlens/testing.hpp> | testing::{check_property,check_determinism} | AU-TEST-005 | conformant |
+| API-TEST-006 | testing | <cxxlens/testing.hpp> | testing::assert_schema_conforms | AU-TEST-006 | conformant |
 | API-TF-001 | transform | <cxxlens/transform.hpp> | transform::replace_function_call | AU-TF-001 | unimplemented |
 | API-TF-002 | transform | <cxxlens/transform.hpp> | transform::replace_method_call | AU-TF-002 | unimplemented |
 | API-TF-003 | transform | <cxxlens/transform.hpp> | transform::rewrite_calls | AU-TF-003 | unimplemented |

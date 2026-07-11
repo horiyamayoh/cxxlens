@@ -50,7 +50,11 @@ add_library(
   src/runtime/hash_adapter.cpp
   src/runtime/process_adapter.cpp
   src/runtime/time_adapter.cpp
-  src/source/source_span.cpp)
+  src/source/source_span.cpp
+  src/testing/fault_plan.cpp
+  src/testing/json_parser.cpp
+  src/testing/result_assertion.cpp
+  src/testing/workspace_fixture.cpp)
 add_library(cxxlens::cxxlens ALIAS cxxlens)
 
 target_compile_features(cxxlens PUBLIC cxx_std_23)
@@ -115,6 +119,7 @@ install(
         schemas/cxxlens_identity_contract.yaml
         schemas/cxxlens_schema_compatibility.yaml
         schemas/cxxlens_source_span.schema.yaml
+        schemas/cxxlens_testing_fixture.schema.yaml
         schemas/cxxlens_unresolved.schema.yaml
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
 

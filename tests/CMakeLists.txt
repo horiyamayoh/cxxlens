@@ -67,6 +67,14 @@ add_test(NAME public-api.configuration-header
 set_tests_properties(public-api.configuration-header PROPERTIES LABELS
                                                                 public-api)
 
+add_executable(cxxlens-public-header-testing
+               public_headers/testing_header_test.cpp)
+target_link_libraries(cxxlens-public-header-testing PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-public-header-testing PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-public-header-testing)
+add_test(NAME public-api.testing-header COMMAND cxxlens-public-header-testing)
+set_tests_properties(public-api.testing-header PROPERTIES LABELS public-api)
+
 configure_file(install/run_install_test.cmake.in
                "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake" @ONLY)
 add_test(NAME install.consumer
@@ -231,3 +239,41 @@ add_test(
 set_tests_properties(
   schema.configuration PROPERTIES LABELS
                                   "config;schema;golden;determinism;security")
+
+add_executable(cxxlens-unit-testing-substrate
+               unit/testing/testing_substrate_test.cpp)
+target_link_libraries(cxxlens-unit-testing-substrate PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-unit-testing-substrate
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-unit-testing-substrate PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-testing-substrate)
+add_test(NAME unit.testing-substrate COMMAND cxxlens-unit-testing-substrate)
+set_tests_properties(
+  unit.testing-substrate
+  PROPERTIES LABELS "unit;testing;property;schema;golden;determinism;security")
+
+add_executable(cxxlens-unit-testing-fixture-process
+               unit/testing/testing_fixture_process_test.cpp)
+target_link_libraries(cxxlens-unit-testing-fixture-process
+                      PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-unit-testing-fixture-process PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-testing-fixture-process)
+add_test(
+  NAME schema.testing-fixture
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/testing/test_testing_fixture_process.py"
+    "$<TARGET_FILE:cxxlens-unit-testing-fixture-process>"
+    "${PROJECT_SOURCE_DIR}")
+set_tests_properties(
+  schema.testing-fixture
+  PROPERTIES LABELS "testing;fixture;schema;golden;determinism;security")
+
+add_test(
+  NAME fixtures.m0-discovery
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/support/discover_fixtures.py"
+    "${PROJECT_SOURCE_DIR}/tests/fixtures/m0")
+set_tests_properties(fixtures.m0-discovery
+                     PROPERTIES LABELS "testing;fixture;discovery")

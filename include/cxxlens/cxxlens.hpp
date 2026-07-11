@@ -8,3 +8,4 @@
 #include <cxxlens/configuration.hpp>
 #include <cxxlens/core.hpp>
 #include <cxxlens/source.hpp>
+#include <cxxlens/testing.hpp>

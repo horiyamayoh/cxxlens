@@ -19,7 +19,7 @@ namespace cxxlens
 	{
 		constexpr std::size_t maximum_cause_depth = 64U;
 
-		constexpr std::array<std::string_view, 78U> built_in_codes{
+		constexpr std::array<std::string_view, 82U> built_in_codes{
 			"config.file-not-found",
 			"config.invalid-value",
 			"config.overlay-conflict",
@@ -80,6 +80,10 @@ namespace cxxlens
 			"select.ambiguous-name",
 			"select.invalid-expression",
 			"select.type-mismatch",
+			"testing.assertion-failed",
+			"testing.fixture-invalid",
+			"testing.json-invalid",
+			"testing.schema-mismatch",
 			"transform.commit-failed",
 			"transform.format-failed",
 			"transform.macro-edit-rejected",

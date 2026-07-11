@@ -1,0 +1,4 @@
+schema: cxxlens.testing.case.v1
+name: preserved-unresolved-fixture
+category: ambiguous
+expected: partial-unresolved

@@ -1,0 +1,4 @@
+schema: cxxlens.testing.case.v1
+name: rejected-traversal-fixture
+category: negative
+expected: testing.fixture-invalid

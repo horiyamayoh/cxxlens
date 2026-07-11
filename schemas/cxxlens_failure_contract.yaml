@@ -129,6 +129,10 @@ common_error_codes:
 - select.ambiguous-name
 - select.invalid-expression
 - select.type-mismatch
+- testing.assertion-failed
+- testing.fixture-invalid
+- testing.json-invalid
+- testing.schema-mismatch
 - transform.commit-failed
 - transform.format-failed
 - transform.macro-edit-rejected
