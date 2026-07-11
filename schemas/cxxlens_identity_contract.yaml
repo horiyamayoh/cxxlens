@@ -1,0 +1,42 @@
+schema: cxxlens.identity-contract.v1
+canonical_encoding:
+  format: field-tagged-length-prefixed-binary
+  format_version: 1
+  field_order: lexical-by-field-name
+  integer_encoding: fixed-width-big-endian
+  sequence_order: semantic
+  set_order: lexical-unique
+  map_order: lexical-by-key
+digest:
+  algorithm: fnv1a64x4
+  algorithm_version: 1
+  full_hexadecimal_digits: 64
+  cryptographic_security_claim: false
+  short_display_is_identity: false
+required_bindings: [domain, schema_version, semantics_version]
+forbidden_roles:
+- absolute_path
+- wall_time
+- process_id
+- thread_id
+- pointer_value
+- cache_state
+- observation_order
+- diagnostic_message
+domains:
+- {prefix: file, domain: cxxlens.file-id.v1}
+- {prefix: cu, domain: cxxlens.compile-unit-id.v1}
+- {prefix: variant, domain: cxxlens.build-variant-id.v1}
+- {prefix: fact, domain: cxxlens.fact-id.v1}
+- {prefix: symbol, domain: cxxlens.symbol-id.v1}
+- {prefix: type, domain: cxxlens.type-id.v1}
+- {prefix: finding, domain: cxxlens.finding-id.v1}
+- {prefix: plan, domain: cxxlens.plan-id.v1}
+- {prefix: artifact, domain: cxxlens.artifact-id.v1}
+- {prefix: surface, domain: cxxlens.surface-id.v1}
+- {prefix: rule, domain: cxxlens.rule-id.v1}
+- {prefix: operation, domain: cxxlens.operation-id.v1}
+collision_policy:
+  key: prefixed-full-digest
+  comparison: canonical-payload-fingerprint
+  distinct_payload_same_key: hard-error

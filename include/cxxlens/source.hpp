@@ -10,63 +10,12 @@
 #include <string_view>
 #include <vector>
 
+#include <cxxlens/core/identity.hpp>
+
 namespace cxxlens
 {
 	/** @brief Public filesystem path value。Semantic identity には直接使用しない。 */
 	using path = std::filesystem::path;
-
-	/** @brief Project-relative source semantic key。 */
-	class file_id
-	{
-	  public:
-		/** @brief Empty/invalid key を作る。
-		 * @pre なし。 @post `valid()` は false。
-		 * @note Invalid/unknown source point の構築に使用する。
-		 * @code{.cpp}
-		 * #include <cxxlens/source.hpp>
-		 * int main(){return cxxlens::file_id{}.valid()?1:0;}
-		 * @endcode */
-		file_id() = default;
-		/**
-		 * @brief Project-relative semantic source key を保持する。
-		 * @param[in] semantic_key `file:src/main.cpp` 形式の key。
-		 * @pre なし。不正値は保持され、`valid()` が false を返す。
-		 * @post display root や absolute path を補完しない。
-		 * @note Stable digest への変換は canonical identity slice の責務である。
-		 * @code{.cpp}
-		 * #include <cxxlens/source.hpp>
-		 * int main() { return cxxlens::file_id{"file:src/main.cpp"}.valid() ? 0 : 1; }
-		 * @endcode
-		 */
-		explicit file_id(std::string semantic_key);
-		/** @brief Semantic key を参照する。
-		 * @retval value 保持された project-relative key。
-		 * @pre なし。 @post object を変更しない。 @note absolute root を返さない。
-		 * @code{.cpp}
-		 * #include <cxxlens/source.hpp>
-		 * int main() { cxxlens::file_id id{"file:a.cpp"}; return id.value()=="file:a.cpp"?0:1; }
-		 * @endcode */
-		[[nodiscard]] std::string_view value() const noexcept;
-		/** @brief Key grammar と root-independence を検証する。
-		 * @retval value project-relative canonical key なら true。
-		 * @pre なし。 @post object を変更しない。 @note `file:/absolute` と `..` を拒否する。
-		 * @code{.cpp}
-		 * #include <cxxlens/source.hpp>
-		 * int main() { return cxxlens::file_id{"file:/tmp/a"}.valid()?1:0; }
-		 * @endcode */
-		[[nodiscard]] bool valid() const noexcept;
-		/** @brief Semantic key を比較する。
-		 * @param[in] other 比較対象。 @retval value key が同一なら true。
-		 * @pre なし。 @post 両 object を変更しない。 @note display root は比較対象に存在しない。
-		 * @code{.cpp}
-		 * #include <cxxlens/source.hpp>
-		 * int main() { return cxxlens::file_id{"file:a"}==cxxlens::file_id{"file:a"}?0:1; }
-		 * @endcode */
-		[[nodiscard]] bool operator==(const file_id& other) const noexcept;
-
-	  private:
-		std::string value_;
-	};
 
 	/** @brief Location が real、invalid、unknown のいずれかを示す。 */
 	enum class source_location_state : std::uint8_t
@@ -96,7 +45,8 @@ namespace cxxlens
 		 * @post 値をそのまま保持する。 @note validator が zero coordinate を拒否する。
 		 * @code{.cpp}
 		 * #include <cxxlens/source.hpp>
-		 * int main(){auto p=cxxlens::source_point::at(cxxlens::file_id{"file:a"},2,1,3);return
+		 * int main(){auto
+		 * p=cxxlens::source_point::at(cxxlens::file_id{"file_"+std::string(64,'a')},2,1,3);return
 		 * p.column==3?0:1;}
 		 * @endcode */
 		[[nodiscard]] static source_point at(file_id file,

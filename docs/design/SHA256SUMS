@@ -5,4 +5,5 @@ b2b8040f6e7930bcfdc6291c6748c671a631769ebdc76cc1d22ddb94f00004be  README.md
 3be78cc1a87858d18f5c66bfa49e72e5f0bf4e529ff1e2d46da342573fbade55  api_catalog_inventory.md
 893d8c6b6593e28290eaf9c8894cfe7b4b99e2c5c7356d6e49f2b12fd0617109  ../../schemas/cxxlens_public_api_contract.yaml
 fd50d6cdee59360023bb5d2b588d1c59a11d38890687babd40e105bc99de6299  ../../schemas/cxxlens_api_catalog.schema.yaml
-f44d6959c0aebc0d36d38700e4a4c6b05d729f40b6ce8d2380f316a8de9bfa36  ../../schemas/cxxlens_source_span.schema.yaml
+231fb2e9b5bdfe0f48b0317e3ec33f11bb05da053f4430ca93078d517b758946  ../../schemas/cxxlens_source_span.schema.yaml
+834e64562c2cc6659d2d71c61ea2481d30f5c21a6e6f809a60f50cf767ff9ca1  ../../schemas/cxxlens_identity_contract.yaml

@@ -29,7 +29,7 @@ $defs:
     type: object
     required: [file, begin, end, begin_line, begin_column, end_line, end_column, kind]
     properties:
-      file: {type: string, pattern: '^file:'}
+      file: {type: string, pattern: '^file_[0-9a-f]{64}$'}
       begin: {type: integer, minimum: 0}
       end: {type: integer, minimum: 0}
       begin_line: {type: integer, minimum: 1}

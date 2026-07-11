@@ -30,7 +30,7 @@ def main() -> int:
         ranges.extend(frame["invocation"] for frame in value["macro_stack"])
         ranges.extend(frame["definition"] for frame in value["macro_stack"])
         for item in filter(None, ranges):
-            if list(item) != RANGE_KEYS or not item["file"].startswith("file:"):
+            if list(item) != RANGE_KEYS or not item["file"].startswith("file_"):
                 raise ValueError(f"{path}: non-canonical range")
             if item["begin"] > item["end"] or min(item["begin_line"], item["begin_column"]) < 1:
                 raise ValueError(f"{path}: invalid half-open coordinates")

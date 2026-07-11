@@ -7,37 +7,6 @@ namespace cxxlens
 {
 	namespace
 	{
-		bool valid_key(const std::string_view key)
-		{
-			if (!key.starts_with("file:") || key.size() <= 5U || key[5] == '/' || key[5] == '\\')
-			{
-				return false;
-			}
-			const auto path = key.substr(5U);
-			if (path.find('\\') != path.npos || path.find("//") != path.npos ||
-				path.find('"') != path.npos)
-			{
-				return false;
-			}
-			std::size_t start{};
-			while (start <= path.size())
-			{
-				const auto end = path.find('/', start);
-				const auto component =
-					path.substr(start, end == path.npos ? path.npos : end - start);
-				if (component.empty() || component == "." || component == "..")
-				{
-					return false;
-				}
-				if (end == path.npos)
-				{
-					break;
-				}
-				start = end + 1U;
-			}
-			return true;
-		}
-
 		bool valid_range(const file_range& range) noexcept
 		{
 			return range.begin.state == source_location_state::valid &&
@@ -150,20 +119,6 @@ namespace cxxlens
 									});
 		}
 	} // namespace
-
-	file_id::file_id(std::string semantic_key) : value_{std::move(semantic_key)} {}
-	std::string_view file_id::value() const noexcept
-	{
-		return value_;
-	}
-	bool file_id::valid() const noexcept
-	{
-		return valid_key(value_);
-	}
-	bool file_id::operator==(const file_id& other) const noexcept
-	{
-		return value_ == other.value_;
-	}
 
 	source_point source_point::at(file_id file,
 								  const std::uint64_t byte_offset,

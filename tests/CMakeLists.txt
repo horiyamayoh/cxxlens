@@ -16,6 +16,14 @@ foreach(header IN ITEMS core source cxxlens)
                                                                 public-api)
 endforeach()
 
+add_executable(cxxlens-public-header-identity
+               public_headers/identity_header_test.cpp)
+target_link_libraries(cxxlens-public-header-identity PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-public-header-identity PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-public-header-identity)
+add_test(NAME public-api.identity-header COMMAND cxxlens-public-header-identity)
+set_tests_properties(public-api.identity-header PROPERTIES LABELS public-api)
+
 configure_file(install/run_install_test.cmake.in
                "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake" @ONLY)
 add_test(NAME install.consumer
@@ -53,3 +61,23 @@ add_test(
     "${PROJECT_SOURCE_DIR}/tests/schema/test_source_schema.py"
     "${PROJECT_SOURCE_DIR}")
 set_tests_properties(schema.source-span PROPERTIES LABELS "source;schema")
+
+add_executable(cxxlens-unit-canonical-identity
+               unit/identity/canonical_identity_test.cpp)
+target_link_libraries(cxxlens-unit-canonical-identity PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-unit-canonical-identity
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-unit-canonical-identity PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-canonical-identity)
+add_test(NAME unit.canonical-identity COMMAND cxxlens-unit-canonical-identity)
+set_tests_properties(unit.canonical-identity PROPERTIES LABELS "unit;identity")
+add_test(
+  NAME determinism.identity-process
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/identity/test_identity_process.py"
+    "$<TARGET_FILE:cxxlens-unit-canonical-identity>"
+    "${PROJECT_SOURCE_DIR}/tests/golden/identity/canonical_v1.txt"
+    "${PROJECT_SOURCE_DIR}/schemas/cxxlens_identity_contract.yaml")
+set_tests_properties(determinism.identity-process
+                     PROPERTIES LABELS "identity;determinism;schema")
