@@ -4,10 +4,10 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 
 | API ID | Package | Header | Symbol | Atomic unit | Implementation state |
 |---|---|---|---|---|---|
-| API-CFG-001 | configuration | <cxxlens/cxxlens.hpp> | configuration::defaults | AU-CFG-001 | unimplemented |
-| API-CFG-002 | configuration | <cxxlens/cxxlens.hpp> | configuration::{load,load_nearest} | AU-CFG-002 | unimplemented |
-| API-CFG-003 | configuration | <cxxlens/cxxlens.hpp> | configuration::{with_profile,overlay} | AU-CFG-003 | unimplemented |
-| API-CFG-004 | configuration | <cxxlens/cxxlens.hpp> | configuration::{validate,resolved_json,explain} | AU-CFG-004 | unimplemented |
+| API-CFG-001 | configuration | <cxxlens/configuration.hpp> | configuration::defaults | AU-CFG-001 | conformant |
+| API-CFG-002 | configuration | <cxxlens/configuration.hpp> | configuration::{load,load_nearest} | AU-CFG-002 | conformant |
+| API-CFG-003 | configuration | <cxxlens/configuration.hpp> | configuration::{with_profile,overlay} | AU-CFG-003 | conformant |
+| API-CFG-004 | configuration | <cxxlens/configuration.hpp> | configuration::{validate,resolved_json,explain} | AU-CFG-004 | conformant |
 | API-COPY-001 | copy | <cxxlens/generate.hpp> | copy::public_surface | AU-COPY-001 | unimplemented |
 | API-COPY-002 | copy | <cxxlens/generate.hpp> | copy::required_types | AU-COPY-002 | unimplemented |
 | API-CORE-001 | core | <cxxlens/core.hpp> | versions() | AU-CORE-001 | conformant |

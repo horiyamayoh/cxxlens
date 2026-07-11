@@ -3191,29 +3191,36 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: configuration
-  header: <cxxlens/cxxlens.hpp>
+  header: <cxxlens/configuration.hpp>
   purpose: Typed configuration loading, overlay and explanation.
   public_types:
   - configuration
+  - configuration_layer
   apis:
   - id: API-CFG-001
     symbol: configuration::defaults
     kind: static_factory
     phase: M0
+    requirements:
+    - QR-001
     contract_maturity: contract-defined
-    implementation_state: unimplemented
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/configuration.hpp
+      signature: cxxlens::result<cxxlens::configuration> cxxlens::configuration::defaults()
+      signature_fingerprint: sha256:b933b42221793f39ad34feb76f438c200fbb6291be5db53655ee171150759919
+    implementation_evidence:
+    - include/cxxlens/configuration.hpp
+    - src/config/configuration.cpp
+    - tests/unit/config/configuration_test.cpp
+    - tests/public_headers/configuration_header_test.cpp
     atomic_unit:
       id: AU-CFG-001
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-CFG-002
     symbol: configuration::{load,load_nearest}
     kind: static_factory_family
@@ -3222,20 +3229,26 @@ packages:
     - config.file-not-found
     - config.yaml-invalid
     - config.unknown-key
+    requirements:
+    - QR-008
     contract_maturity: contract-defined
-    implementation_state: unimplemented
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/configuration.hpp
+      signature: 'cxxlens::result<cxxlens::configuration> cxxlens::configuration::load(const cxxlens::path&); cxxlens::result<cxxlens::configuration> cxxlens::configuration::load_nearest(const cxxlens::path&)'
+      signature_fingerprint: sha256:f5aea8351c9add766f067af109f44526e4ee7df0fcba2ad0c28bb493caeefe12
+    implementation_evidence:
+    - include/cxxlens/configuration.hpp
+    - src/config/yaml_loader.cpp
+    - schemas/cxxlens.config.schema.yaml
+    - tests/unit/config/configuration_test.cpp
     atomic_unit:
       id: AU-CFG-002
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-CFG-003
     symbol: configuration::{with_profile,overlay}
     kind: method_family
@@ -3243,48 +3256,61 @@ packages:
     errors:
     - config.profile-not-found
     - config.overlay-conflict
+    requirements:
+    - QR-001
     contract_maturity: contract-defined
-    implementation_state: unimplemented
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/configuration.hpp
+      signature: 'cxxlens::result<cxxlens::configuration> cxxlens::configuration::with_profile(std::string_view) const; cxxlens::result<cxxlens::configuration> cxxlens::configuration::overlay(const cxxlens::configuration&) const'
+      signature_fingerprint: sha256:f75e35abeb2f727cf79e54ef6b053ec9538439d05fce841778876a2f03d1e42a
+    implementation_evidence:
+    - include/cxxlens/configuration.hpp
+    - src/config/configuration.cpp
+    - tests/unit/config/configuration_test.cpp
     atomic_unit:
       id: AU-CFG-003
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-CFG-004
     symbol: configuration::{validate,resolved_json,explain}
     kind: method_family
     phase: M0
     errors:
     - config.invalid-value
+    requirements:
+    - FR-018
+    - QR-001
     contract_maturity: contract-defined
-    implementation_state: unimplemented
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/configuration.hpp
+      signature: 'cxxlens::result<void> cxxlens::configuration::validate() const; std::string cxxlens::configuration::resolved_json() const; std::string cxxlens::configuration::explain(std::string_view) const'
+      signature_fingerprint: sha256:9b07208ddc2f1da2dd40f779a961085692c3803c222866e83d4bdbe1d7a51af8
+    implementation_evidence:
+    - include/cxxlens/configuration.hpp
+    - src/config/configuration.cpp
+    - schemas/cxxlens.config.resolved.schema.yaml
+    - schemas/cxxlens.config.explain.schema.yaml
+    - tests/config/test_configuration_process.py
     atomic_unit:
       id: AU-CFG-004
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
 summary:
   package_count: 22
   api_entry_count: 123
   atomic_unit_count: 123
   implementation_state_counts:
-    unimplemented: 120
+    unimplemented: 116
     implemented: 0
-    conformant: 3
+    conformant: 7
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.

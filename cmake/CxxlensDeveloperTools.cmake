@@ -91,6 +91,14 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-configuration-contract-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_configuration_contract.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-text-lint
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -115,6 +123,7 @@ add_custom_target(cxxlens-quality)
 add_dependencies(
   cxxlens-quality
   cxxlens-api-contract-check
+  cxxlens-configuration-contract-check
   cxxlens-design-package-check
   cxxlens-evidence-contract-check
   cxxlens-failure-contract-check

@@ -1,0 +1,120 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://schemas.cxxlens.dev/cxxlens.config.v1.json
+title: cxxlens.config.v1
+type: object
+required: [schema]
+additionalProperties: false
+properties:
+  schema: {const: cxxlens.config.v1}
+  workspace:
+    $ref: '#/$defs/workspace'
+  cache:
+    $ref: '#/$defs/cache'
+  execution:
+    $ref: '#/$defs/execution'
+  analysis:
+    $ref: '#/$defs/analysis'
+  models:
+    $ref: '#/$defs/models'
+  transform:
+    $ref: '#/$defs/transform'
+  review:
+    $ref: '#/$defs/review'
+  output:
+    $ref: '#/$defs/output'
+  secrets:
+    $ref: '#/$defs/secrets'
+  profiles:
+    type: object
+    additionalProperties:
+      $ref: '#/$defs/profile'
+$defs:
+  string_list:
+    type: array
+    items: {type: string}
+  workspace:
+    type: object
+    additionalProperties: false
+    properties:
+      root: {type: string}
+      compilation_database: {type: string}
+      compile_command_policy: {enum: [require_exact]}
+      variants: {enum: [all]}
+      generated_code:
+        type: object
+        additionalProperties: false
+        properties:
+          default: {enum: [exclude, include]}
+          patterns: {$ref: '#/$defs/string_list'}
+      system_headers: {enum: [exclude, include]}
+  cache:
+    type: object
+    additionalProperties: false
+    properties:
+      directory: {type: string}
+      backend: {enum: [memory, sqlite]}
+      mode: {enum: [off, read_only, read_write]}
+  execution:
+    type: object
+    additionalProperties: false
+    properties:
+      parallelism: {enum: [auto]}
+      memory_budget_mb: {type: integer, minimum: 64, maximum: 1048576}
+      per_tu_timeout_seconds: {type: integer, minimum: 1, maximum: 86400}
+  analysis:
+    type: object
+    additionalProperties: false
+    properties:
+      default_precision: {enum: [lexical, tu_semantic, workspace_semantic]}
+      template_policy: {enum: [patterns, patterns_and_observed_instantiations]}
+      macro_policy: {enum: [exclude, include_with_origin]}
+  models:
+    type: object
+    additionalProperties: false
+    properties:
+      files: {$ref: '#/$defs/string_list'}
+  transform:
+    type: object
+    additionalProperties: false
+    properties:
+      macro_policy: {enum: [reject]}
+      formatting: {enum: [none, changed_ranges]}
+      reparse: {enum: [affected_variants, all_variants]}
+      apply: {enum: [dry_run, apply]}
+  review:
+    type: object
+    additionalProperties: false
+    properties:
+      baseline: {type: string}
+      changed_lines_only: {type: boolean}
+      gate:
+        type: object
+        additionalProperties: false
+        properties:
+          minimum_severity: {enum: [note, warning, error, critical]}
+          minimum_confidence: {enum: [speculative, possible, probable, certain]}
+          no_new_only: {type: boolean}
+  output:
+    type: object
+    additionalProperties: false
+    properties:
+      path_style: {enum: [project_relative, absolute]}
+      deterministic: {type: boolean}
+  secrets:
+    type: object
+    additionalProperties: false
+    properties:
+      token: {type: string}
+  profile:
+    type: object
+    additionalProperties: false
+    properties:
+      workspace: {$ref: '#/$defs/workspace'}
+      cache: {$ref: '#/$defs/cache'}
+      execution: {$ref: '#/$defs/execution'}
+      analysis: {$ref: '#/$defs/analysis'}
+      models: {$ref: '#/$defs/models'}
+      transform: {$ref: '#/$defs/transform'}
+      review: {$ref: '#/$defs/review'}
+      output: {$ref: '#/$defs/output'}
+      secrets: {$ref: '#/$defs/secrets'}

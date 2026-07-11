@@ -2,6 +2,9 @@ schema: cxxlens.schema-compatibility.v1
 registry_version: 1.0.0
 semantics_version: 1.0.0
 documents:
+- {id: cxxlens.config.explain.v1, version: 1.0.0, file: cxxlens.config.explain.schema.yaml}
+- {id: cxxlens.config.resolved.v1, version: 1.0.0, file: cxxlens.config.resolved.schema.yaml}
+- {id: cxxlens.config.v1, version: 1.0.0, file: cxxlens.config.schema.yaml}
 - {id: cxxlens.coverage.v1, version: 1.0.0, file: cxxlens_coverage.schema.yaml}
 - {id: cxxlens.diagnostic.v1, version: 1.0.0, file: cxxlens_diagnostic.schema.yaml}
 - {id: cxxlens.error.v1, version: 1.0.0, file: cxxlens_error.schema.yaml}

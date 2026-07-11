@@ -56,6 +56,17 @@ cxxlens_set_project_warnings(cxxlens-public-header-schema)
 add_test(NAME public-api.schema-header COMMAND cxxlens-public-header-schema)
 set_tests_properties(public-api.schema-header PROPERTIES LABELS public-api)
 
+add_executable(cxxlens-public-header-configuration
+               public_headers/configuration_header_test.cpp)
+target_link_libraries(cxxlens-public-header-configuration
+                      PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-public-header-configuration PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-public-header-configuration)
+add_test(NAME public-api.configuration-header
+         COMMAND cxxlens-public-header-configuration)
+set_tests_properties(public-api.configuration-header PROPERTIES LABELS
+                                                                public-api)
+
 configure_file(install/run_install_test.cmake.in
                "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake" @ONLY)
 add_test(NAME install.consumer
@@ -194,3 +205,29 @@ add_test(
 set_tests_properties(
   schema.m0-serialization PROPERTIES LABELS
                                      "schema;json;golden;determinism;security")
+
+add_executable(cxxlens-unit-configuration unit/config/configuration_test.cpp)
+target_link_libraries(cxxlens-unit-configuration PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-unit-configuration
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-unit-configuration PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-configuration)
+add_test(NAME unit.configuration COMMAND cxxlens-unit-configuration)
+set_tests_properties(unit.configuration
+                     PROPERTIES LABELS "unit;config;security;determinism")
+
+add_executable(cxxlens-unit-configuration-process
+               unit/config/configuration_process_test.cpp)
+target_link_libraries(cxxlens-unit-configuration-process
+                      PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-unit-configuration-process PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-configuration-process)
+add_test(
+  NAME schema.configuration
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/config/test_configuration_process.py"
+    "$<TARGET_FILE:cxxlens-unit-configuration-process>" "${PROJECT_SOURCE_DIR}")
+set_tests_properties(
+  schema.configuration PROPERTIES LABELS
+                                  "config;schema;golden;determinism;security")

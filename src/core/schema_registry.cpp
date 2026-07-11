@@ -32,6 +32,13 @@ namespace cxxlens
 
 	schema_registry::schema_registry()
 		: entries_{
+			  descriptor(
+				  "cxxlens.config.explain.v1",
+				  {"key", "library_version", "schema", "semantics_version", "shadowed", "winner"}),
+			  descriptor(
+				  "cxxlens.config.resolved.v1",
+				  {"library_version", "provenance", "schema", "semantics_version", "values"}),
+			  descriptor("cxxlens.config.v1", {"schema"}),
 			  descriptor("cxxlens.coverage.v1",
 						 {"complete",
 						  "library_version",

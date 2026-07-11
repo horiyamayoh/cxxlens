@@ -1,0 +1,23 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://schemas.cxxlens.dev/cxxlens.config.resolved.v1.json
+title: cxxlens.config.resolved.v1
+type: object
+required: [library_version, provenance, schema, semantics_version, values]
+additionalProperties: false
+properties:
+  schema: {const: cxxlens.config.resolved.v1}
+  library_version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+  semantics_version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+  provenance:
+    type: object
+    additionalProperties:
+      enum: [built_in_default, config_default, named_profile, cli, api_option]
+  values:
+    type: object
+    additionalProperties:
+      oneOf:
+        - {type: boolean}
+        - {type: integer}
+        - {type: string}
+        - type: array
+          items: {type: string}

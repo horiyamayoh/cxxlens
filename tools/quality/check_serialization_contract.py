@@ -28,6 +28,7 @@ def main() -> int:
             failures.append(f"C++ registry missing schema: {entry['id']}")
 
     serializer_files = [
+        root / "src/config/configuration.cpp",
         root / "src/source/source_span.cpp",
         root / "src/core/evidence.cpp",
         root / "src/core/failure.cpp",
