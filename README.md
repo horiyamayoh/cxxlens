@@ -76,6 +76,7 @@ const auto product_versions = cxxlens::versions();
 - [コーディング規約](docs/development/coding-style.md)
 - [Doxygen 規約](docs/development/doxygen-style.md)
 - [M0 acceptance gate](docs/development/m0-acceptance.md)
+- [Workspace catalog contract](docs/development/workspace-catalog.md)
 - [コントリビューション](CONTRIBUTING.md)
 
 旧二層構想の設計書は `docs/design/archive/` に保存していますが、現在の仕様判断には使用しません。

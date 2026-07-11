@@ -18,7 +18,7 @@ auto main() -> int
 {
 	using namespace cxxlens;
 	schema_registry registry;
-	bool passed = check(registry.all().size() == 12U, "M0 registry is incomplete");
+	bool passed = check(registry.all().size() == 14U, "public schema registry is incomplete");
 	passed &= check(registry.find("cxxlens.config.resolved.v1", {1U, 0U, 0U, {}}).has_value(),
 					"configuration schema is not registered");
 	for (const auto& entry : registry.all())

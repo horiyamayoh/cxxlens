@@ -361,6 +361,11 @@ def validate_document(document: Any, inventory_text: str | None = None) -> dict:
         "API-TEST-002",
         "API-TEST-005",
         "API-TEST-006",
+        "API-WS-001",
+        "API-WS-002",
+        "API-WS-003",
+        "API-WS-004",
+        "API-WS-008",
     ]
     if implemented != expected_implemented:
         fail(f"implementation evidence must match the completed foundation APIs: {expected_implemented}")

@@ -119,11 +119,11 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-TF-007 | transform | <cxxlens/transform.hpp> | codemod::plan | AU-TF-007 | unimplemented |
 | API-TF-008 | transform | <cxxlens/transform.hpp> | edit_plan::preview_unified_diff | AU-TF-008 | unimplemented |
 | API-TF-009 | transform | <cxxlens/transform.hpp> | edit_plan::apply | AU-TF-009 | unimplemented |
-| API-WS-001 | workspace | <cxxlens/workspace.hpp> | workspace_options::from_compilation_database(path) | AU-WS-001 | unimplemented |
-| API-WS-002 | workspace | <cxxlens/workspace.hpp> | workspace::open(workspace_options, execution_context) | AU-WS-002 | unimplemented |
-| API-WS-003 | workspace | <cxxlens/workspace.hpp> | workspace::compile_units() | AU-WS-003 | unimplemented |
-| API-WS-004 | workspace | <cxxlens/workspace.hpp> | workspace::command_for(path) | AU-WS-004 | unimplemented |
+| API-WS-001 | workspace | <cxxlens/workspace.hpp> | workspace_options::from_compilation_database(path) | AU-WS-001 | conformant |
+| API-WS-002 | workspace | <cxxlens/workspace.hpp> | workspace::open(workspace_options, execution_context) | AU-WS-002 | conformant |
+| API-WS-003 | workspace | <cxxlens/workspace.hpp> | workspace::compile_units() | AU-WS-003 | conformant |
+| API-WS-004 | workspace | <cxxlens/workspace.hpp> | workspace::command_for(path) | AU-WS-004 | conformant |
 | API-WS-005 | workspace | <cxxlens/workspace.hpp> | workspace::ensure(fact_profile, analysis_scope, execution_context) | AU-WS-005 | unimplemented |
 | API-WS-006 | workspace | <cxxlens/workspace.hpp> | workspace::facts() | AU-WS-006 | unimplemented |
 | API-WS-007 | workspace | <cxxlens/workspace.hpp> | workspace::doctor(execution_context) | AU-WS-007 | unimplemented |
-| API-WS-008 | workspace | <cxxlens/workspace.hpp> | analysis_scope::{all,files,compile_units,changed_files,include_headers,variants} | AU-WS-008 | unimplemented |
+| API-WS-008 | workspace | <cxxlens/workspace.hpp> | analysis_scope::{all,files,compile_units,changed_files,include_headers,variants} | AU-WS-008 | conformant |

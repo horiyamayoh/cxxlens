@@ -2,6 +2,7 @@ schema: cxxlens.schema-compatibility.v1
 registry_version: 1.0.0
 semantics_version: 1.0.0
 documents:
+- {id: cxxlens.analysis-scope.v1, version: 1.0.0, file: cxxlens_analysis_scope.schema.yaml}
 - {id: cxxlens.config.explain.v1, version: 1.0.0, file: cxxlens.config.explain.schema.yaml}
 - {id: cxxlens.config.resolved.v1, version: 1.0.0, file: cxxlens.config.resolved.schema.yaml}
 - {id: cxxlens.config.v1, version: 1.0.0, file: cxxlens.config.schema.yaml}
@@ -14,6 +15,7 @@ documents:
 - {id: cxxlens.source-span.v1, version: 1.0.0, file: cxxlens_source_span.schema.yaml}
 - {id: cxxlens.testing.fixture.v1, version: 1.0.0, file: cxxlens_testing_fixture.schema.yaml}
 - {id: cxxlens.unresolved.v1, version: 1.0.0, file: cxxlens_unresolved.schema.yaml}
+- {id: cxxlens.workspace-context.v1, version: 1.0.0, file: cxxlens_workspace_context.schema.yaml}
 compatible_changes: [optional_field_added]
 rebuild_required_changes:
 - optional_field_removed

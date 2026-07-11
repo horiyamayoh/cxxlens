@@ -44,15 +44,13 @@ def validate_manifest(root: pathlib.Path, build: pathlib.Path, manifest: dict[st
     schema = yaml.safe_load((root / "schemas/cxxlens_m0_completion.schema.yaml").read_text())
     jsonschema.validate(manifest, schema)
     catalog = yaml.safe_load((root / "schemas/cxxlens_public_api_contract.yaml").read_text())
-    conformant = sorted(
-        api["id"]
-        for package in catalog["packages"]
-        for api in package["apis"]
-        if api["implementation_state"] == "conformant"
-    )
-    if manifest["conformant_catalog_ids"] != conformant:
+    catalog_by_id = {
+        api["id"]: api for package in catalog["packages"] for api in package["apis"]
+    }
+    conformant = manifest["conformant_catalog_ids"]
+    if any(catalog_by_id[api_id]["implementation_state"] != "conformant" for api_id in conformant):
         raise AssertionError(
-            f"manifest/catalog conformant API mismatch: {manifest['conformant_catalog_ids']} != {conformant}"
+            "an M0 completion API is no longer conformant in the catalog"
         )
     tests = json.loads(
         subprocess.run(
@@ -72,8 +70,9 @@ def validate_manifest(root: pathlib.Path, build: pathlib.Path, manifest: dict[st
     headers = sorted(
         path.relative_to(root).as_posix() for path in (root / "include/cxxlens").rglob("*.hpp")
     )
-    if manifest["public_headers"] != headers:
-        raise AssertionError(f"M0 public header manifest mismatch: {manifest['public_headers']} != {headers}")
+    missing_headers = set(manifest["public_headers"]) - set(headers)
+    if missing_headers:
+        raise AssertionError(f"M0 public headers are missing: {sorted(missing_headers)}")
 
 
 def compile_headers(root: pathlib.Path, compiler: str, headers: list[str]) -> None:

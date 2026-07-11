@@ -11,13 +11,15 @@ auto main() -> int
 	cxxlens::schema_registry schemas;
 	const auto fixture_schema =
 		schemas.find("cxxlens.testing.fixture.v1", cxxlens::semantic_version{1U, 0U, 0U, {}});
+	const auto scope = cxxlens::analysis_scope::files({"src/main.cpp"}).include_headers();
 	return product_versions.library.major == 0U && product_versions.llvm.major == 22U &&
 			configuration && configuration.value().validate() &&
 			!configuration.value().resolved_json().empty() && fixture &&
 			fixture.value().validate() &&
 			cxxlens::testing::assert_schema_conforms("cxxlens.testing.fixture.v1",
 													 fixture.value().to_json()) &&
-			!evidence.to_json().empty() && coverage.complete() && fixture_schema
+			!evidence.to_json().empty() && coverage.complete() && fixture_schema &&
+			!scope.to_json().empty()
 		? 0
 		: 1;
 }

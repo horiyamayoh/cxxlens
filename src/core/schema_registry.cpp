@@ -32,6 +32,15 @@ namespace cxxlens
 
 	schema_registry::schema_registry()
 		: entries_{
+			  descriptor("cxxlens.analysis-scope.v1",
+						 {"compile_units",
+						  "files",
+						  "include_headers",
+						  "kind",
+						  "library_version",
+						  "schema",
+						  "semantics_version",
+						  "variants"}),
 			  descriptor(
 				  "cxxlens.config.explain.v1",
 				  {"key", "library_version", "schema", "semantics_version", "shadowed", "winner"}),
@@ -118,6 +127,16 @@ namespace cxxlens
 						  "suggested_actions",
 						  "summary"},
 						 {"required_capability", "required_precision"}),
+			  descriptor("cxxlens.workspace-context.v1",
+						 {"compatible",
+						  "header_inference",
+						  "library_version",
+						  "query",
+						  "schema",
+						  "semantics_version",
+						  "snapshot_key",
+						  "stale_inputs",
+						  "units"}),
 		  }
 	{
 		std::ranges::sort(entries_, {}, &schema_descriptor::id);

@@ -14,8 +14,11 @@ foreach(
   ITEMS
     "${install_prefix}/include/cxxlens/cxxlens.hpp"
     "${install_prefix}/include/cxxlens/testing.hpp"
+    "${install_prefix}/include/cxxlens/workspace.hpp"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_public_api_contract.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_m0_completion.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_analysis_scope.schema.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_workspace_context.schema.yaml"
     "${install_prefix}/share/doc/cxxlens/README.md"
     "${install_prefix}/share/doc/cxxlens/SECURITY.md")
   if(NOT EXISTS "${required}")

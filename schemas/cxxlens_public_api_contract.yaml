@@ -209,6 +209,7 @@ packages:
     symbol: workspace_options::from_compilation_database(path)
     kind: static_factory
     phase: M1
+    requirements: [FR-001, QR-007]
     requires:
       facts:
       - compile_command
@@ -224,24 +225,28 @@ packages:
     errors:
     - workspace.compile-database-not-found
     - workspace.compile-database-invalid
-    contract_maturity: planned
-    implementation_state: unimplemented
+    contract_maturity: contract-defined
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/workspace.hpp
+      signature: cxxlens::workspace_options cxxlens::workspace_options::from_compilation_database(cxxlens::path)
+      signature_fingerprint: sha256:3749a527bc7c8b1bdcdd68fb1ae22a6ddd580fb11ae84a2dfe7c0a6b5286151e
+    implementation_evidence:
+    - include/cxxlens/workspace.hpp
+    - src/workspace/catalog.cpp
+    - tests/unit/workspace/workspace_catalog_test.cpp
     atomic_unit:
       id: AU-WS-001
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-WS-002
     symbol: workspace::open(workspace_options, execution_context)
     kind: static_factory
     phase: M1
+    requirements: [FR-001, FR-002, QR-001, QR-007]
     requires:
       facts:
       - compile_command
@@ -260,60 +265,72 @@ packages:
     errors:
     - workspace.compile-command-ambiguous
     - workspace.resource-dir-not-found
-    contract_maturity: planned
-    implementation_state: unimplemented
+    contract_maturity: contract-defined
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/workspace.hpp
+      signature: cxxlens::result<cxxlens::workspace> cxxlens::workspace::open(cxxlens::workspace_options, cxxlens::execution_context)
+      signature_fingerprint: sha256:d7940b317f42ce7f19da9161d748d2f7985a45483c9fc2b988dfee7f2741c60b
+    implementation_evidence:
+    - include/cxxlens/workspace.hpp
+    - src/workspace/catalog.cpp
+    - schemas/cxxlens_workspace_context.schema.yaml
+    - tests/unit/workspace/workspace_catalog_test.cpp
     atomic_unit:
       id: AU-WS-002
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-WS-003
     symbol: workspace::compile_units()
     kind: method
     phase: M1
+    requirements: [FR-002, QR-001]
     guarantees:
     - Returns canonical deterministic order.
-    contract_maturity: planned
-    implementation_state: unimplemented
+    contract_maturity: contract-defined
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/workspace.hpp
+      signature: std::vector<cxxlens::compile_unit> cxxlens::workspace::compile_units() const
+      signature_fingerprint: sha256:753a9b4d1bb989afc258d64ab87357df61b916f7af1d2a496e449742250f0756
+    implementation_evidence:
+    - include/cxxlens/workspace.hpp
+    - src/workspace/catalog.cpp
+    - tests/unit/workspace/workspace_catalog_test.cpp
     atomic_unit:
       id: AU-WS-003
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-WS-004
     symbol: workspace::command_for(path)
     kind: method
     phase: M1
+    requirements: [FR-001, FR-002]
     guarantees:
     - Returns zero, one or many commands; ambiguity is visible.
-    contract_maturity: planned
-    implementation_state: unimplemented
+    contract_maturity: contract-defined
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/workspace.hpp
+      signature: std::vector<cxxlens::compile_unit> cxxlens::workspace::command_for(cxxlens::path) const
+      signature_fingerprint: sha256:4b6fa3a1a7a0fa6e2d783b5c82b42f09fc59dac61418229be04a9271b012b650
+    implementation_evidence:
+    - include/cxxlens/workspace.hpp
+    - src/workspace/catalog.cpp
+    - tests/unit/workspace/workspace_catalog_test.cpp
     atomic_unit:
       id: AU-WS-004
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-WS-005
     symbol: workspace::ensure(fact_profile, analysis_scope, execution_context)
     kind: method
@@ -338,17 +355,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/workspace.hpp
+      signature: cxxlens::result<void> cxxlens::workspace::ensure(cxxlens::fact_profile, cxxlens::analysis_scope, cxxlens::execution_context) const
+      signature_fingerprint: sha256:5c614f83d10df4a9401230ee2f2cd91c170d6005fa37444db4ad468983eda97e
     atomic_unit:
       id: AU-WS-005
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - implementation_pending
   - id: API-WS-006
     symbol: workspace::facts()
     kind: method
@@ -356,17 +373,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/workspace.hpp
+      signature: cxxlens::fact_store cxxlens::workspace::facts() const
+      signature_fingerprint: sha256:d84d450bfea28ad01b6476388f3eea89406bcd28f8e0f03a13db5db6fbda8359
     atomic_unit:
       id: AU-WS-006
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - implementation_pending
   - id: API-WS-007
     symbol: workspace::doctor(execution_context)
     kind: method
@@ -382,35 +399,40 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/workspace.hpp
+      signature: cxxlens::result<cxxlens::doctor_report> cxxlens::workspace::doctor(cxxlens::execution_context) const
+      signature_fingerprint: sha256:eb99e571b55bd15cfb849429febe0ab41b40a638f671b4b792bad07c4cc68553
     atomic_unit:
       id: AU-WS-007
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - implementation_pending
   - id: API-WS-008
     symbol: analysis_scope::{all,files,compile_units,changed_files,include_headers,variants}
     kind: method_family
     phase: M0
+    requirements: [QR-001]
     contract_maturity: contract-defined
-    implementation_state: unimplemented
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/workspace.hpp
+      signature: 'cxxlens::analysis_scope cxxlens::analysis_scope::all(); cxxlens::analysis_scope cxxlens::analysis_scope::files(std::vector<cxxlens::path>); cxxlens::analysis_scope cxxlens::analysis_scope::compile_units(std::vector<cxxlens::compile_unit_id>); cxxlens::analysis_scope cxxlens::analysis_scope::changed_files(std::vector<cxxlens::path>); cxxlens::analysis_scope cxxlens::analysis_scope::include_headers(bool) const; cxxlens::analysis_scope cxxlens::analysis_scope::variants(std::vector<cxxlens::build_variant_id>) const; std::string cxxlens::analysis_scope::to_json() const'
+      signature_fingerprint: sha256:dade0894af26e531e563987ac02c4c44d3e843c3396c4b66fd7e60bcf684b0e0
+    implementation_evidence:
+    - include/cxxlens/workspace.hpp
+    - src/workspace/catalog.cpp
+    - schemas/cxxlens_analysis_scope.schema.yaml
+    - tests/unit/workspace/workspace_catalog_test.cpp
     atomic_unit:
       id: AU-WS-008
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
 - id: facts
   header: <cxxlens/facts.hpp>
   purpose: Immutable semantic facts and typed fact access.
@@ -3344,9 +3366,9 @@ summary:
   api_entry_count: 123
   atomic_unit_count: 123
   implementation_state_counts:
-    unimplemented: 112
+    unimplemented: 107
     implemented: 0
-    conformant: 11
+    conformant: 16
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.

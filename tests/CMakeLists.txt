@@ -75,6 +75,15 @@ cxxlens_set_project_warnings(cxxlens-public-header-testing)
 add_test(NAME public-api.testing-header COMMAND cxxlens-public-header-testing)
 set_tests_properties(public-api.testing-header PROPERTIES LABELS public-api)
 
+add_executable(cxxlens-public-header-workspace
+               public_headers/workspace_header_test.cpp)
+target_link_libraries(cxxlens-public-header-workspace PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-public-header-workspace PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-public-header-workspace)
+add_test(NAME public-api.workspace-header
+         COMMAND cxxlens-public-header-workspace)
+set_tests_properties(public-api.workspace-header PROPERTIES LABELS public-api)
+
 configure_file(install/run_install_test.cmake.in
                "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake" @ONLY)
 add_test(NAME install.consumer
@@ -278,6 +287,25 @@ add_test(
 set_tests_properties(fixtures.m0-discovery
                      PROPERTIES LABELS "testing;fixture;discovery")
 
+add_executable(cxxlens-unit-workspace-catalog
+               unit/workspace/workspace_catalog_test.cpp)
+target_link_libraries(cxxlens-unit-workspace-catalog PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-unit-workspace-catalog PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-workspace-catalog)
+add_test(NAME unit.workspace-catalog COMMAND cxxlens-unit-workspace-catalog)
+set_tests_properties(
+  unit.workspace-catalog
+  PROPERTIES LABELS "unit;workspace;schema;determinism;security;conformance")
+add_test(
+  NAME schema.workspace-catalog
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/workspace/test_workspace_process.py"
+    "$<TARGET_FILE:cxxlens-unit-workspace-catalog>" "${PROJECT_SOURCE_DIR}")
+set_tests_properties(
+  schema.workspace-catalog
+  PROPERTIES LABELS "workspace;schema;golden;determinism;security")
+
 add_custom_target(cxxlens-m0-test-binaries)
 add_dependencies(
   cxxlens-m0-test-binaries
@@ -291,6 +319,7 @@ add_dependencies(
   cxxlens-public-header-schema
   cxxlens-public-header-source
   cxxlens-public-header-testing
+  cxxlens-public-header-workspace
   cxxlens-unit-canonical-identity
   cxxlens-unit-canonical-json
   cxxlens-unit-configuration

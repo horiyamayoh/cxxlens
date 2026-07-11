@@ -9,3 +9,4 @@
 #include <cxxlens/core.hpp>
 #include <cxxlens/source.hpp>
 #include <cxxlens/testing.hpp>
+#include <cxxlens/workspace.hpp>

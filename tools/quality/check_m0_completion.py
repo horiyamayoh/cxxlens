@@ -17,15 +17,13 @@ def main() -> int:
     schema = yaml.safe_load((root / "schemas/cxxlens_m0_completion.schema.yaml").read_text())
     jsonschema.validate(manifest, schema)
     catalog = yaml.safe_load((root / "schemas/cxxlens_public_api_contract.yaml").read_text())
-    conformant = sorted(
-        api["id"]
-        for package in catalog["packages"]
-        for api in package["apis"]
-        if api["implementation_state"] == "conformant"
-    )
+    catalog_by_id = {
+        api["id"]: api for package in catalog["packages"] for api in package["apis"]
+    }
+    conformant = manifest["conformant_catalog_ids"]
     failures: list[str] = []
-    if manifest["conformant_catalog_ids"] != conformant:
-        failures.append("completion manifest does not own every conformant catalog API")
+    if any(catalog_by_id[api_id]["implementation_state"] != "conformant" for api_id in conformant):
+        failures.append("an M0 completion API is no longer conformant in the catalog")
     vector_catalog = sorted(
         catalog_id for vector in manifest["vectors"] for catalog_id in vector["catalog_ids"]
     )
@@ -40,8 +38,9 @@ def main() -> int:
     headers = sorted(
         path.relative_to(root).as_posix() for path in (root / "include/cxxlens").rglob("*.hpp")
     )
-    if manifest["public_headers"] != headers:
-        failures.append("public header manifest is stale")
+    missing_headers = set(manifest["public_headers"]) - set(headers)
+    if missing_headers:
+        failures.append(f"M0 public headers are missing: {sorted(missing_headers)}")
     tests_cmake = (root / "tests/CMakeLists.txt").read_text(encoding="utf-8")
     test_names = set(re.findall(r"\bNAME\s+([a-z0-9.-]+)", tests_cmake))
     test_names.update(
@@ -65,7 +64,7 @@ def main() -> int:
         return 1
     print(
         f"validated M0 completion manifest: {len(manifest['vectors'])} vectors, "
-        f"{len(conformant)} conformant APIs, {len(headers)} public headers"
+        f"{len(conformant)} conformant APIs, {len(manifest['public_headers'])} public headers"
     )
     return 0
 
