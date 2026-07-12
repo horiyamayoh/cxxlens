@@ -115,6 +115,14 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-m1-completion-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_m1_completion.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-workspace-contract-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -213,6 +221,7 @@ add_dependencies(
   cxxlens-finding-contract-check
   cxxlens-identity-path-check
   cxxlens-m0-completion-check
+  cxxlens-m1-completion-check
   cxxlens-public-boundary-check
   cxxlens-preprocessor-contract-check
   cxxlens-provisioning-contract-check
@@ -249,6 +258,24 @@ if(TARGET cxxlens-m0-test-binaries)
       "$<TARGET_FILE:cxxlens-unit-configuration-process>" --fixture
       "$<TARGET_FILE:cxxlens-unit-testing-fixture-process>"
     DEPENDS cxxlens-m0-test-binaries cxxlens-quality
+    USES_TERMINAL VERBATIM)
+endif()
+
+if(TARGET cxxlens-m1-test-binaries)
+  add_custom_target(
+    cxxlens-m1-acceptance
+    COMMAND "${CMAKE_CTEST_COMMAND}" --test-dir "${CMAKE_BINARY_DIR}"
+            --output-on-failure
+    COMMAND
+      "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/run_m1_acceptance.py" --root
+      "${CMAKE_CURRENT_SOURCE_DIR}" --build "${CMAKE_BINARY_DIR}" --manifest
+      "${CMAKE_CURRENT_SOURCE_DIR}/schemas/cxxlens_m1_completion.yaml" --report
+      "${CMAKE_BINARY_DIR}/m1-acceptance-report.json" --integration
+      "$<TARGET_FILE:cxxlens-m1-conformance>" --scheduler
+      "$<TARGET_FILE:cxxlens-unit-scheduler>" --provisioning
+      "$<TARGET_FILE:cxxlens-unit-provisioning>"
+    DEPENDS cxxlens-m1-test-binaries cxxlens-quality
     USES_TERMINAL VERBATIM)
 endif()
 

@@ -18,6 +18,7 @@
 #include <cxxlens/core/evidence.hpp>
 #include <cxxlens/core/schema.hpp>
 #include <cxxlens/source.hpp>
+#include <cxxlens/workspace.hpp>
 
 namespace cxxlens::testing
 {
@@ -217,6 +218,21 @@ namespace cxxlens::testing
 		 * cxxlens::testing::workspace_fixture::cpp("").add_header("s.h","").system_header("s.h").materialize()?0:1;}
 		 * @endcode */
 		[[nodiscard]] workspace_fixture system_header(path value) const;
+
+		/** @brief Fixture を production workspace path で開く。
+		 * @param[in] context Cancellation、deadline、parallelism controls。
+		 * @retval value Memory filesystem 上の immutable workspace、または structured error。
+		 * @pre Builder inputs must satisfy `fixture_bundle::validate()`。
+		 * @post Production catalog/frontend/reducer/store components are used; fake facts are not
+		 * created。
+		 * @note Source/compile database bytes remain value-owned by the workspace and no temporary
+		 * host files are created。
+		 * @code{.cpp}
+		 * #include <cxxlens/testing.hpp>
+		 * int main(){auto ws=cxxlens::testing::workspace_fixture::cpp("int main(){}")
+		 * .open();return ws && ws.value().compile_units().size()==1U?0:1;}
+		 * @endcode */
+		[[nodiscard]] result<workspace> open(execution_context context = {}) const;
 
 		/** @brief Production workspace seam 用 bundle を materialize する。
 		 * @param[in] root Synthetic workspace root。 @retval value Canonical bundle or error。

@@ -475,8 +475,11 @@ namespace cxxlens
 				for (std::size_t index = 1U; index < command.arguments.size(); ++index)
 				{
 					const auto& value = command.arguments[index];
+					path argument_path{value};
+					if (argument_path.is_relative())
+						argument_path = command.directory / argument_path;
 					if (value == "-c" ||
-						path{value}.lexically_normal() == command.file.lexically_normal())
+						argument_path.lexically_normal() == command.file.lexically_normal())
 						continue;
 					if (value == "-o" && index + 1U < command.arguments.size())
 					{

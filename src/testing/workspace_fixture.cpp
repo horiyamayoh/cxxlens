@@ -7,6 +7,8 @@
 #include <cxxlens/testing.hpp>
 
 #include "../core/canonical_json.hpp"
+#include "../runtime/filesystem_port.hpp"
+#include "../workspace/catalog_access.hpp"
 #include "workspace_fixture_data.hpp"
 
 namespace cxxlens::testing
@@ -261,23 +263,26 @@ namespace cxxlens::testing
 		sort_bundle(bundle);
 
 		json_value::array commands;
-		for (const auto& variant : bundle.variants)
-		{
-			std::vector<std::string> argv{
-				bundle.language == "c++" ? "clang++" : "clang",
-				"-std=" + bundle.standard,
-				"--target=" + bundle.target,
-			};
-			argv.insert(argv.end(), bundle.arguments.begin(), bundle.arguments.end());
-			argv.insert(argv.end(), variant.arguments.begin(), variant.arguments.end());
-			argv.push_back(normalized_path(bundle.main_file));
-			commands.emplace_back(json_value::object{
-				{"arguments", strings(argv)},
-				{"directory", "."},
-				{"file", normalized_path(bundle.main_file)},
-				{"output", "build/" + variant.name + "/main.o"},
-			});
-		}
+		for (const auto& file : bundle.files)
+			if (file.kind == fixture_file_kind::source)
+				for (const auto& variant : bundle.variants)
+				{
+					std::vector<std::string> argv{
+						bundle.language == "c++" ? "clang++" : "clang",
+						"-std=" + bundle.standard,
+						"--target=" + bundle.target,
+					};
+					argv.insert(argv.end(), bundle.arguments.begin(), bundle.arguments.end());
+					argv.insert(argv.end(), variant.arguments.begin(), variant.arguments.end());
+					argv.push_back(normalized_path(file.name));
+					commands.emplace_back(json_value::object{
+						{"arguments", strings(argv)},
+						{"directory", "."},
+						{"file", normalized_path(file.name)},
+						{"output",
+						 "build/" + variant.name + "/" + file.name.stem().generic_string() + ".o"},
+					});
+				}
 		auto database = cxxlens::detail::json::write(commands);
 		if (!database)
 			return std::move(database.error());
@@ -285,5 +290,38 @@ namespace cxxlens::testing
 		if (auto status = bundle.validate(); !status)
 			return std::move(status.error());
 		return bundle;
+	}
+
+	// The frozen public API takes its immutable execution controls by value.
+	// NOLINTNEXTLINE(performance-unnecessary-value-param)
+	result<workspace> workspace_fixture::open(execution_context context) const
+	{
+		cxxlens::detail::runtime::standard_filesystem_adapter host_files;
+		cxxlens::detail::runtime::request_context request;
+		request.operation = "testing.fixture-root.canonicalize";
+		request.cancellation = context.cancellation;
+		request.deadline = context.deadline;
+		auto host_root = host_files.canonicalize(path{"."}, request);
+		if (!host_root)
+			return fixture_error("host-root-unavailable");
+		auto materialized = materialize(host_root.value());
+		if (!materialized)
+			return std::move(materialized.error());
+		auto bundle = std::move(materialized.value());
+		auto files = std::make_shared<cxxlens::detail::runtime::memory_filesystem_adapter>();
+		files->add(bundle.root / "compile_commands.json", bundle.compilation_database_json);
+		std::vector<cxxlens::detail::frontend::virtual_source_file> virtual_files;
+		virtual_files.reserve(bundle.files.size());
+		for (const auto& file : bundle.files)
+		{
+			const auto absolute = (bundle.root / file.name).lexically_normal();
+			files->add(absolute, file.content);
+			virtual_files.push_back({absolute, file.content});
+		}
+		workspace_options options =
+			workspace_options::from_compilation_database(bundle.root / "compile_commands.json");
+		options.project_root = bundle.root;
+		return cxxlens::detail::workspace_catalog_access::open(
+			std::move(options), context, files, std::move(virtual_files));
 	}
 } // namespace cxxlens::testing

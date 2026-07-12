@@ -463,6 +463,18 @@ set_tests_properties(
     "schema;workspace;facts;coverage;incremental;capability;doctor;conformance")
 
 if(CXXLENS_CLANG22_AVAILABLE)
+  add_executable(cxxlens-m1-conformance integration/m1_conformance_test.cpp)
+  target_link_libraries(cxxlens-m1-conformance PRIVATE cxxlens::cxxlens)
+  target_compile_features(cxxlens-m1-conformance PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens-m1-conformance)
+  add_test(NAME integration.m1-conformance COMMAND cxxlens-m1-conformance)
+  set_tests_properties(
+    integration.m1-conformance
+    PROPERTIES
+      LABELS
+      "m1;integration;workspace;frontend;facts;store;interop;macro;variant;determinism;coverage;conformance"
+  )
+
   add_executable(cxxlens-clang22-semantic
                  adapter/clang22/semantic_extractor_test.cpp)
   target_link_libraries(cxxlens-clang22-semantic PRIVATE cxxlens::cxxlens)
@@ -523,6 +535,27 @@ if(CXXLENS_CLANG22_AVAILABLE)
   add_test(NAME link.clang22-closure COMMAND cxxlens-clang22-link-closure)
   set_tests_properties(link.clang22-closure PROPERTIES LABELS
                                                        "frontend;interop;link")
+
+  add_custom_target(cxxlens-m1-test-binaries)
+  add_dependencies(
+    cxxlens-m1-test-binaries
+    cxxlens-clang22-link-closure
+    cxxlens-clang22-preprocessor
+    cxxlens-clang22-semantic
+    cxxlens-m1-conformance
+    cxxlens-public-header-cxxlens
+    cxxlens-public-header-facts
+    cxxlens-public-header-interop-clang
+    cxxlens-public-header-testing
+    cxxlens-public-header-workspace
+    cxxlens-unit-fact-contract
+    cxxlens-unit-fact-reducer
+    cxxlens-unit-fact-store
+    cxxlens-unit-frontend-job
+    cxxlens-unit-provisioning
+    cxxlens-unit-scheduler
+    cxxlens-unit-testing-substrate
+    cxxlens-unit-workspace-catalog)
 endif()
 
 add_custom_target(cxxlens-m0-test-binaries)

@@ -349,6 +349,8 @@ namespace cxxlens::detail::provisioning
 	{
 		if (options.root.empty() || options.workspace_key.empty())
 			return provisioning_error("core.invalid-argument", "service-options");
+		if (!options.files)
+			options.files = std::make_shared<runtime::standard_filesystem_adapter>();
 		auto value = std::make_unique<implementation>();
 		value->options = std::move(options);
 		value->metadata.workspace_key = value->options.workspace_key;
@@ -495,7 +497,7 @@ namespace cxxlens::detail::provisioning
 			!(scoped_variants.has_value() && scoped_variants.value().empty()))
 			return provisioning_error("workspace.compile-command-missing", "empty-scope");
 
-		runtime::standard_filesystem_adapter files;
+		const auto& files = *implementation_->options.files;
 		runtime::fnv1a_hash_adapter hashes;
 		runtime::request_context request_context;
 		request_context.operation = "workspace.ensure.input-digest";
@@ -644,6 +646,7 @@ namespace cxxlens::detail::provisioning
 					? scheduling::task_priority::changed
 					: scheduling::task_priority::explicit_target;
 				task.parse.unit = requests.front().unit;
+				task.parse.files = implementation_->options.virtual_files;
 				for (const auto& needed : requests)
 					task.profile = task.profile.include(needed.kind);
 				task.snapshot_key = requests.front().input_digest;

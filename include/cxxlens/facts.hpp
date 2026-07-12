@@ -158,6 +158,12 @@ namespace cxxlens
 	class fact
 	{
 	  public:
+		/** @brief Construct an unbound detached fact handle. @pre None. @post ID is empty.
+		 * @note Stores create bound values; the default is useful for containers and error paths.
+		 * @code{.cpp}
+		 * #include <cxxlens/facts.hpp>
+		 * int main(){return cxxlens::fact{}.id().empty()?0:1;}
+		 * @endcode */
 		fact() = default;
 		/** @brief Stable fact ID. @retval value Full ID. @pre Resolved handle. @post Unchanged.
 		 * @note Adapter metadata is excluded. @code{.cpp}
@@ -313,6 +319,12 @@ namespace cxxlens
 	class symbol
 	{
 	  public:
+		/** @brief Construct an unbound detached symbol. @pre None. @post Semantic ID is empty.
+		 * @note A query result supplies canonical identity and provenance.
+		 * @code{.cpp}
+		 * #include <cxxlens/facts.hpp>
+		 * int main(){return cxxlens::symbol{}.id().empty()?0:1;}
+		 * @endcode */
 		symbol() = default;
 		/** @brief Return semantic symbol ID. @retval value Full stable ID. @pre Resolved value.
 		 * @post Unchanged. @note Names alone never form identity. @code{.cpp}
@@ -395,6 +407,12 @@ namespace cxxlens
 	class type_ref
 	{
 	  public:
+		/** @brief Construct an unbound detached structural type. @pre None. @post Type ID is empty.
+		 * @note Bound values are projected from validated structural TypeIR facts.
+		 * @code{.cpp}
+		 * #include <cxxlens/facts.hpp>
+		 * int main(){return cxxlens::type_ref{}.id().empty()?0:1;}
+		 * @endcode */
 		type_ref() = default;
 		/** @brief Return structural type ID. @retval value Full stable ID. @pre Resolved value.
 		 * @post Unchanged. @note Pretty spelling alone is forbidden identity. @code{.cpp}
@@ -478,6 +496,12 @@ namespace cxxlens
 	class reference
 	{
 	  public:
+		/** @brief Construct an unbound detached reference. @pre None. @post Fact ID is empty.
+		 * @note Bound references retain a semantic target and normalized source.
+		 * @code{.cpp}
+		 * #include <cxxlens/facts.hpp>
+		 * int main(){return cxxlens::reference{}.id().empty()?0:1;}
+		 * @endcode */
 		reference() = default;
 		/** @brief Return reference fact ID. @retval value Full stable ID. @pre Resolved value.
 		 * @post Unchanged. @note Source and target semantics form identity. @code{.cpp}
@@ -531,6 +555,12 @@ namespace cxxlens
 	class call_site
 	{
 	  public:
+		/** @brief Construct an unbound detached call site. @pre None. @post Fact ID is empty.
+		 * @note Bound calls keep direct/static/possible target dimensions separate.
+		 * @code{.cpp}
+		 * #include <cxxlens/facts.hpp>
+		 * int main(){return cxxlens::call_site{}.id().empty()?0:1;}
+		 * @endcode */
 		call_site() = default;
 		/** @brief Return call fact ID. @retval value Full stable ID. @pre Resolved value.
 		 * @post Unchanged. @note Resolution dimensions remain separate. @code{.cpp}
@@ -684,6 +714,12 @@ namespace cxxlens
 	class fact_query
 	{
 	  public:
+		/** @brief Construct the default unfiltered query value. @pre None. @post No filters exist.
+		 * @note Stores interpret it equivalently to `all()` without broadening later filters.
+		 * @code{.cpp}
+		 * #include <cxxlens/facts.hpp>
+		 * int main(){cxxlens::fact_query query;return 0;}
+		 * @endcode */
 		fact_query() = default;
 		/** @brief Select every fact. @retval value Immutable query. @pre None. @post No filters.
 		 * @note Coverage remains separately queryable. @code{.cpp}
@@ -749,6 +785,13 @@ namespace cxxlens
 	class fact_store
 	{
 	  public:
+		/** @brief Construct an unbound immutable store handle. @pre None. @post No snapshot is
+		 * pinned.
+		 * @note Querying it returns a structured projection error rather than empty success.
+		 * @code{.cpp}
+		 * #include <cxxlens/facts.hpp>
+		 * int main(){return cxxlens::fact_store{}.find(cxxlens::fact_query::all())?1:0;}
+		 * @endcode */
 		fact_store() = default;
 		/** @brief Query one immutable snapshot. @param[in] query Validated query.
 		 * @retval value Canonically ordered detached facts or structured error. @pre Store is

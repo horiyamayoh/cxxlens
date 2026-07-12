@@ -3269,6 +3269,46 @@ packages:
     readiness:
       state: complete
       blockers: []
+  - id: API-TEST-007
+    symbol: workspace_fixture::open
+    kind: method
+    phase: M1
+    requirements: [FR-001, FR-005, FR-020, QR-001, QR-002, QR-004]
+    requires:
+      capabilities:
+      - interop.clang
+      facts:
+      - compile_command
+      - file
+      apis:
+      - API-WS-002
+      - API-WS-005
+    guarantees:
+    - Uses the production catalog, frontend, reducer and store with value-owned memory filesystem
+      inputs; no semantic fact is fabricated.
+    errors:
+    - testing.fixture-invalid
+    - core.cancelled
+    - core.deadline-exceeded
+    contract_maturity: contract-defined
+    implementation_state: conformant
+    declaration:
+      status: exact
+      source: include/cxxlens/testing.hpp
+      signature: cxxlens::result<cxxlens::workspace> cxxlens::testing::workspace_fixture::open(cxxlens::execution_context) const
+      signature_fingerprint: sha256:2c8d40b0b0faf9fb1534392ff6cc46eba5e1fc5df45a2cc51fe77b4eb5d06203
+    implementation_evidence:
+    - include/cxxlens/testing.hpp
+    - src/testing/workspace_fixture.cpp
+    - src/workspace/catalog_access.hpp
+    - tests/unit/testing/testing_substrate_test.cpp
+    - tests/integration/m1_conformance_test.cpp
+    atomic_unit:
+      id: AU-TEST-007
+      indivisible: true
+    readiness:
+      state: complete
+      blockers: []
 - id: interop
   header: <cxxlens/interop/clang.hpp>
   purpose: Unstable LLVM-major-scoped raw Clang corridor.
@@ -3508,12 +3548,12 @@ packages:
       blockers: []
 summary:
   package_count: 22
-  api_entry_count: 123
-  atomic_unit_count: 123
+  api_entry_count: 124
+  atomic_unit_count: 124
   implementation_state_counts:
     unimplemented: 91
     implemented: 0
-    conformant: 32
+    conformant: 33
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.

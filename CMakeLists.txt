@@ -159,6 +159,9 @@ install(
         schemas/cxxlens_m0_acceptance_report.schema.yaml
         schemas/cxxlens_m0_completion.schema.yaml
         schemas/cxxlens_m0_completion.yaml
+        schemas/cxxlens_m1_acceptance_report.schema.yaml
+        schemas/cxxlens_m1_completion.schema.yaml
+        schemas/cxxlens_m1_completion.yaml
         schemas/cxxlens_observation.schema.yaml
         schemas/cxxlens_schema_compatibility.yaml
         schemas/cxxlens_source_span.schema.yaml

@@ -1,9 +1,9 @@
 b2b8040f6e7930bcfdc6291c6748c671a631769ebdc76cc1d22ddb94f00004be  README.md
 9cc71882db1d49797ba570b98f8f6c6e39dd6c1cff04d8f5dcb07ff9a7a8587d  VALIDATION_REPORT.md
-1d5afbd0283b5d9ab8aa1f699d1fde16e46a54c79d6c521a8242737c191b179c  cxxlens_integrated_design_ja.md
+953025eca1c25a8107978e3fa1b2b73bbfb31685541be8a760156098d64c8411  cxxlens_integrated_design_ja.md
 4af222b550f92dca10ed9e17d2adbcab6350040d3b7ce344ea34470b85b560a5  api_catalog_change_policy.md
-4e96a7e722b70e537cfed2745c302147523c623e544a1ca71690e1a3e1a9e00c  api_catalog_inventory.md
-0d7c3212dba214a435dc69cdd8dc07e3cac99e830fc332eb792c8aef62965bdd  ../../schemas/cxxlens_public_api_contract.yaml
+e03788fa98db2b10138a52da2956a34511feed0d6e9693f6b66185306e4b2b41  api_catalog_inventory.md
+731f57fe37bf7e7a36fc46059c41407b39d800b7d880dd093f008b9f7b999358  ../../schemas/cxxlens_public_api_contract.yaml
 fd50d6cdee59360023bb5d2b588d1c59a11d38890687babd40e105bc99de6299  ../../schemas/cxxlens_api_catalog.schema.yaml
 bb3cdba98e05711b765d8decb4b52a57481fac309c47bbc6f6944d5b480f4280  ../../schemas/cxxlens.config.schema.yaml
 8d1fe5a87f8312e90dfe8727bcf009ac3a4d8f9958bc87caaa54b86e2678ef73  ../../schemas/cxxlens.config.resolved.schema.yaml
@@ -26,6 +26,9 @@ e685a645c2d8399ea802fc5bf230e765ac624d6090f1c7d0a90982cc9ee1429d  ../../schemas/
 d7d4481dced50c6ac18db3631d53930bfd2ece54a8d1e2a6a919e5e05ec2d41a  ../../schemas/cxxlens_m0_completion.yaml
 f1070f6a03d357054a67e02aeff938799f83403f39af27b9202100544d1ae03c  ../../schemas/cxxlens_m0_completion.schema.yaml
 6e22b363f179e26b65c620473832c3bdd89adb6485a9fb6967191c16fec2acb3  ../../schemas/cxxlens_m0_acceptance_report.schema.yaml
+dde211ea342979820454152ca15806c2d543f01fab10ed00279ccdfe9c52fce3  ../../schemas/cxxlens_m1_completion.yaml
+21c4bb8a3a574256d2e98431feffa1e60a5a90d159e9dfe3ac45a5b73656bdf7  ../../schemas/cxxlens_m1_completion.schema.yaml
+75090d28da91a5c991668429f7e352d8a14af6e1d703811fbbca69886dd78c11  ../../schemas/cxxlens_m1_acceptance_report.schema.yaml
 5c06edebbc8508a7555ef947f87ac05f68a171170f9aa4a7afa6307d6355d19d  ../../schemas/cxxlens_analysis_scope.schema.yaml
 fe92a9754bf523fad1dfb84f8897281eb32f172dc6263ea647b4ce88a7169088  ../../schemas/cxxlens_capabilities.schema.yaml
 2e1c5becfcb1d99449e82f3029264da1fb1e11e0fa111d29b2258d59f3f3f60a  ../../schemas/cxxlens_workspace_context.schema.yaml

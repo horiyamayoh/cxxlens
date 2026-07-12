@@ -122,7 +122,15 @@ namespace cxxlens
 		std::string summary;
 		/** @brief Optional explicit reason the capability cannot be used. */
 		std::optional<std::string> limitation;
-		auto operator<=>(const capability&) const = default;
+		/** @brief Compare every authoritative capability field.
+		 * @param[in] other Capability row to compare. @retval value Lexicographic field ordering.
+		 * @pre IDs and states are valid. @post Neither row is changed. @note Summary and limitation
+		 * participate only in value ordering, never capability control flow.
+		 * @code{.cpp}
+		 * #include <cxxlens/core.hpp>
+		 * int main(){return cxxlens::capability{"a"} < cxxlens::capability{"b"}?0:1;}
+		 * @endcode */
+		auto operator<=>(const capability& other) const = default;
 	};
 
 	/** @brief Canonically ordered explicit capability registry. */
@@ -131,18 +139,34 @@ namespace cxxlens
 	  public:
 		/** @brief Test whether a capability is usable without an implicit downgrade.
 		 * @param[in] id Namespaced capability ID. @retval value True for available or experimental.
-		 * @pre None. @post Registry unchanged. @note Unknown IDs return false. */
+		 * @pre None. @post Registry unchanged. @note Unknown IDs return false.
+		 * @code{.cpp}
+		 * #include <cxxlens/core.hpp>
+		 * int main(){return cxxlens::capabilities().has("unknown")?1:0;}
+		 * @endcode */
 		[[nodiscard]] bool has(std::string_view id) const;
 		/** @brief Return the exact row, or an explicit unavailable row for an unknown ID.
 		 * @param[in] id Namespaced capability ID. @retval value Detached explicit row.
 		 * @pre None. @post Registry unchanged. @note Unknown is not represented as empty success.
-		 */
+		 * @code{.cpp}
+		 * #include <cxxlens/core.hpp>
+		 * int main(){return cxxlens::capabilities().get("unknown").id.empty()?1:0;}
+		 * @endcode */
 		[[nodiscard]] capability get(std::string_view id) const;
 		/** @brief Return all rows in stable ID order. @retval value Detached canonical rows.
-		 * @pre None. @post Registry unchanged. */
+		 * @pre None. @post Registry unchanged. @note Unavailable rows remain present and explicit.
+		 * @code{.cpp}
+		 * #include <cxxlens/core.hpp>
+		 * int main(){return cxxlens::capabilities().all().empty()?1:0;}
+		 * @endcode */
 		[[nodiscard]] std::vector<capability> all() const;
 		/** @brief Return canonical schema-versioned JSON. @retval value Capabilities v1 document.
-		 * @pre Rows were created by the registry. @post Registry unchanged. */
+		 * @pre Rows were created by the registry. @post Registry unchanged. @note Operational probe
+		 * timing is excluded.
+		 * @code{.cpp}
+		 * #include <cxxlens/core.hpp>
+		 * int main(){return cxxlens::capabilities().to_json().empty()?1:0;}
+		 * @endcode */
 		[[nodiscard]] std::string to_json() const;
 
 	  private:

@@ -110,6 +110,7 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-TEST-004 | testing | <cxxlens/testing.hpp> | generation_plan_assertion builder/check | AU-TEST-004 | unimplemented |
 | API-TEST-005 | testing | <cxxlens/testing.hpp> | testing::{check_property,check_determinism} | AU-TEST-005 | conformant |
 | API-TEST-006 | testing | <cxxlens/testing.hpp> | testing::assert_schema_conforms | AU-TEST-006 | conformant |
+| API-TEST-007 | testing | <cxxlens/testing.hpp> | workspace_fixture::open | AU-TEST-007 | conformant |
 | API-TF-001 | transform | <cxxlens/transform.hpp> | transform::replace_function_call | AU-TF-001 | unimplemented |
 | API-TF-002 | transform | <cxxlens/transform.hpp> | transform::replace_method_call | AU-TF-002 | unimplemented |
 | API-TF-003 | transform | <cxxlens/transform.hpp> | transform::rewrite_calls | AU-TF-003 | unimplemented |

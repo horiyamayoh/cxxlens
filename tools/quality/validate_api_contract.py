@@ -344,8 +344,8 @@ def validate_document(document: Any, inventory_text: str | None = None) -> dict:
             fail(f"summary.{key} does not match the catalog")
     if summary.get("implementation_state_counts") != calculated["implementation_state_counts"]:
         fail("summary.implementation_state_counts does not match the catalog")
-    if calculated["package_count"] != 22 or calculated["api_entry_count"] != 123:
-        fail("full catalog regression: expected 22 packages and 123 API entries")
+    if calculated["package_count"] != 22 or calculated["api_entry_count"] != 124:
+        fail("full catalog regression: expected 22 packages and 124 API entries")
     implemented = sorted(
         api["id"] for _, api in iter_apis(document) if api["implementation_state"] != "unimplemented"
     )
@@ -374,6 +374,7 @@ def validate_document(document: Any, inventory_text: str | None = None) -> dict:
         "API-TEST-002",
         "API-TEST-005",
         "API-TEST-006",
+        "API-TEST-007",
         "API-WS-001",
         "API-WS-002",
         "API-WS-003",

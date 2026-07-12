@@ -318,7 +318,7 @@ namespace cxxlens::detail::clang22
 
 			template <class Expression>
 			bool emit_call(const Expression& expression,
-						   std::string kind,
+						   std::string kind, // NOLINT(bugprone-easily-swappable-parameters)
 						   std::string dispatch,
 						   std::optional<detached_symbol_identity> target,
 						   std::optional<detached_type_identity> receiver,

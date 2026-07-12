@@ -22,6 +22,7 @@ namespace cxxlens
 {
 	namespace detail
 	{
+		struct workspace_catalog_access;
 		struct workspace_value_access;
 		struct workspace_provisioning_access;
 	} // namespace detail
@@ -191,6 +192,7 @@ namespace cxxlens
 		struct data;
 		explicit compile_unit(std::shared_ptr<const data> value);
 		std::shared_ptr<const data> data_;
+		friend struct detail::workspace_catalog_access;
 		friend class workspace;
 	};
 
@@ -412,6 +414,7 @@ namespace cxxlens
 		struct data;
 		explicit workspace(std::shared_ptr<const data> value);
 		std::shared_ptr<const data> data_;
+		friend struct detail::workspace_catalog_access;
 		friend struct detail::workspace_provisioning_access;
 	};
 } // namespace cxxlens

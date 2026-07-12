@@ -18,6 +18,7 @@
 #include "../core/canonical_json.hpp"
 #include "../runtime/filesystem_port.hpp"
 #include "../runtime/hash_port.hpp"
+#include "catalog_access.hpp"
 #include "provisioning.hpp"
 
 namespace cxxlens
@@ -462,6 +463,8 @@ namespace cxxlens
 		std::string configuration_digest;
 		std::map<std::string, std::string> source_digests;
 		std::string snapshot_key;
+		std::shared_ptr<detail::runtime::filesystem_port> files;
+		std::vector<detail::frontend::virtual_source_file> virtual_files;
 		std::shared_ptr<detail::provisioning::provisioning_service> provisioning;
 	};
 
@@ -625,9 +628,23 @@ namespace cxxlens
 	workspace::open(workspace_options options,
 					execution_context context) // NOLINT(performance-unnecessary-value-param)
 	{
+		return detail::workspace_catalog_access::open(
+			std::move(options),
+			context,
+			std::make_shared<detail::runtime::standard_filesystem_adapter>());
+	}
+
+	result<workspace>
+	detail::workspace_catalog_access::open(workspace_options options,
+										   const execution_context& context,
+										   const std::shared_ptr<runtime::filesystem_port>& files,
+										   std::vector<frontend::virtual_source_file> virtual_files)
+	{
 		if (context.cancellation.stop_requested())
 			return workspace_error("core.cancelled", "cancelled");
-		detail::runtime::standard_filesystem_adapter files;
+		if (!files)
+			return workspace_error("core.invalid-argument", "filesystem-port-missing");
+		const auto& filesystem = *files;
 		path database = options.compilation_database;
 		if (database.extension() != ".json")
 			database /= "compile_commands.json";
@@ -635,11 +652,11 @@ namespace cxxlens
 		request.operation = "workspace.compile-database.read";
 		request.cancellation = context.cancellation;
 		request.deadline = context.deadline;
-		auto database_path = files.canonicalize(database, request);
+		auto database_path = filesystem.canonicalize(database, request);
 		if (!database_path)
 			return workspace_error(
 				"workspace.compile-database-not-found", "database-not-found", database);
-		auto content = files.read(database_path.value(), request);
+		auto content = filesystem.read(database_path.value(), request);
 		if (!content)
 			return workspace_error(
 				"workspace.compile-database-not-found", "database-not-found", database);
@@ -651,15 +668,17 @@ namespace cxxlens
 
 		path root = options.project_root.empty() ? database_path.value().parent_path()
 												 : options.project_root;
-		auto canonical_root = files.canonicalize(root, request);
+		auto canonical_root = filesystem.canonicalize(root, request);
 		if (!canonical_root)
 			return workspace_error(
 				"workspace.compile-database-invalid", "project-root-invalid", root);
 		root = canonical_root.value();
-		auto state = std::make_shared<data>();
+		auto state = std::make_shared<workspace::data>();
 		state->project_root = root;
 		state->database = database_path.value();
 		state->options = options;
+		state->files = files;
+		state->virtual_files = std::move(virtual_files);
 		auto database_id = stable_id(
 			"snapshot", "cxxlens.compile-database-digest.v1", {{"content", content.value()}});
 		if (!database_id)
@@ -680,7 +699,7 @@ namespace cxxlens
 			path directory = directory_text.value();
 			if (directory.is_relative())
 				directory = database_path.value().parent_path() / directory;
-			auto resolved_directory = files.canonicalize(directory, request);
+			auto resolved_directory = filesystem.canonicalize(directory, request);
 			if (!resolved_directory)
 				return workspace_error(
 					"workspace.compile-database-invalid", "working-directory-invalid", directory);
@@ -715,7 +734,7 @@ namespace cxxlens
 					return std::move(command_arguments.error());
 				arguments = std::move(command_arguments.value());
 			}
-			auto expanded = expand_response_files(arguments, directory, files);
+			auto expanded = expand_response_files(arguments, directory, filesystem);
 			if (!expanded)
 				return std::move(expanded.error());
 			arguments = std::move(expanded.value());
@@ -765,7 +784,7 @@ namespace cxxlens
 			state->units.emplace_back(compile_unit{std::move(value)});
 
 			request.operation = "workspace.source.read";
-			auto source_content = files.read(source, request);
+			auto source_content = filesystem.read(source, request);
 			const auto source_payload =
 				source_content ? source_content.value() : std::string{"<missing>"};
 			auto source_digest =
@@ -793,7 +812,7 @@ namespace cxxlens
 		if (options.configuration_file)
 		{
 			request.operation = "workspace.configuration.read";
-			auto configuration = files.read(*options.configuration_file, request);
+			auto configuration = filesystem.read(*options.configuration_file, request);
 			if (!configuration)
 				return workspace_error("config.file-not-found",
 									   "workspace-configuration",
@@ -821,7 +840,9 @@ namespace cxxlens
 																state->units,
 																state->options.configuration_file,
 																state->options.cache_directory,
-																cache_key.value()});
+																cache_key.value(),
+																state->files,
+																state->virtual_files});
 		if (!provisioning)
 			return std::move(provisioning.error());
 		state->provisioning = std::move(provisioning.value());
@@ -897,7 +918,9 @@ namespace cxxlens
 	{
 		if (!data_)
 			return "{}";
-		detail::runtime::standard_filesystem_adapter files;
+		if (!data_->files)
+			return "{}";
+		const auto& files = *data_->files;
 		request_context request;
 		request.operation = "workspace.snapshot.recheck";
 		auto database = files.read(data_->database, request);

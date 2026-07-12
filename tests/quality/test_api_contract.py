@@ -36,10 +36,10 @@ class ApiContractTest(unittest.TestCase):
     def test_positive_full_catalog_and_inventory(self) -> None:
         summary = validate_document(self.document, self.inventory)
         self.assertEqual(summary["package_count"], 22)
-        self.assertEqual(summary["api_entry_count"], 123)
+        self.assertEqual(summary["api_entry_count"], 124)
         self.assertEqual(
             summary["implementation_state_counts"],
-            {"conformant": 32, "implemented": 0, "unimplemented": 91},
+            {"conformant": 33, "implemented": 0, "unimplemented": 91},
         )
 
     def test_duplicate_id_fixture(self) -> None:

@@ -10,6 +10,7 @@
 
 #include <cxxlens/facts.hpp>
 
+#include "../runtime/filesystem_port.hpp"
 #include "scheduler.hpp"
 
 namespace cxxlens::detail::provisioning
@@ -21,6 +22,8 @@ namespace cxxlens::detail::provisioning
 		std::optional<path> configuration_file;
 		std::optional<path> cache_directory;
 		std::string workspace_key;
+		std::shared_ptr<runtime::filesystem_port> files;
+		std::vector<frontend::virtual_source_file> virtual_files;
 	};
 
 	struct trace_row

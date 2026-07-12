@@ -120,7 +120,7 @@ namespace cxxlens::detail::clang22
 			const auto key = semantic_path(file_location);
 			auto id = id_for(key);
 			if (!id)
-				return id.error();
+				return std::move(id.error());
 			const auto presumed = sources.getPresumedLoc(file_location);
 			if (!presumed.isValid())
 				return source_error("invalid-presumed-point");
@@ -148,9 +148,9 @@ namespace cxxlens::detail::clang22
 			auto begin = point(begin_location);
 			auto end = point(end_location);
 			if (!begin)
-				return begin.error();
+				return std::move(begin.error());
 			if (!end)
-				return end.error();
+				return std::move(end.error());
 			file_range output{std::move(begin.value()), std::move(end.value()), kind};
 			if (output.begin.file != output.end.file ||
 				output.begin.byte_offset > output.end.byte_offset)
@@ -231,9 +231,9 @@ namespace cxxlens::detail::clang22
 		auto digest = impl_->digest_for(file_location);
 		auto id = impl_->id_for(key);
 		if (!digest)
-			return digest.error();
+			return std::move(digest.error());
 		if (!id)
-			return id.error();
+			return std::move(id.error());
 		std::uint32_t line = 1U;
 		std::uint32_t column = 1U;
 		for (const auto value : buffer)
@@ -275,10 +275,10 @@ namespace cxxlens::detail::clang22
 #else
 		auto primary = impl_->range(range, source_range_kind::token);
 		if (!primary)
-			return primary.error();
+			return std::move(primary.error());
 		auto file = file_for(range.getBegin());
 		if (!file)
-			return file.error();
+			return std::move(file.error());
 		source_span output;
 		output.primary = primary.value();
 		output.origin = file.value().whole_file.origin;
@@ -313,9 +313,9 @@ namespace cxxlens::detail::clang22
 		auto primary_range = impl_->range(primary, source_range_kind::token);
 		auto invocation_range = impl_->range(invocation, source_range_kind::token);
 		if (!primary_range)
-			return primary_range.error();
+			return std::move(primary_range.error());
 		if (!invocation_range)
-			return invocation_range.error();
+			return std::move(invocation_range.error());
 		std::optional<file_range> definition_range;
 		if (definition != nullptr && definition->isValid())
 		{
@@ -325,7 +325,7 @@ namespace cxxlens::detail::clang22
 		}
 		auto file = file_for(primary.getBegin());
 		if (!file)
-			return file.error();
+			return std::move(file.error());
 		source_span output;
 		output.primary = primary_range.value();
 		output.spelling =

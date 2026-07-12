@@ -1,0 +1,34 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://schemas.cxxlens.dev/cxxlens.m1-acceptance-report.v1.json
+title: cxxlens.m1-acceptance-report.v1
+type: object
+required:
+- schema
+- status
+- manifest
+- catalog_api_count
+- fact_kind_count
+- matrix_executions
+- vectors
+- artifact_digests
+additionalProperties: false
+properties:
+  schema: {const: cxxlens.m1-acceptance-report.v1}
+  status: {enum: [passed, failed]}
+  manifest: {const: cxxlens.m1-completion.v1}
+  catalog_api_count: {type: integer, minimum: 1}
+  fact_kind_count: {type: integer, minimum: 1}
+  matrix_executions: {type: integer, minimum: 1}
+  vectors:
+    type: array
+    items:
+      type: object
+      required: [id, status, fixture]
+      additionalProperties: false
+      properties:
+        id: {type: string}
+        status: {enum: [passed, failed]}
+        fixture: {type: string}
+  artifact_digests:
+    type: object
+    additionalProperties: {type: string, pattern: '^[0-9a-f]{64}$'}

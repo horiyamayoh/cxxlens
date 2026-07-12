@@ -186,6 +186,8 @@ namespace cxxlens::detail::clang22
 		}
 
 		[[nodiscard]] result<std::string>
+		// Prefix and domain are distinct canonical-identity protocol fields.
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 		make_id(const std::string& prefix,
 				const std::string& domain,
 				const std::vector<std::pair<std::string, std::string>>& fields)
@@ -213,7 +215,7 @@ namespace cxxlens::detail::clang22
 		}
 
 		[[nodiscard]] result<std::string>
-		declaration_source_key(const clang::NamedDecl& declaration)
+		declaration_source_key(const clang::NamedDecl& declaration) const
 		{
 			if (declaration.getLocation().isInvalid())
 				return std::string{"source:implicit"};
@@ -240,7 +242,7 @@ namespace cxxlens::detail::clang22
 			{
 				auto owner_identity = build_symbol(*owner_decl);
 				if (!owner_identity)
-					return owner_identity.error();
+					return std::move(owner_identity.error());
 				owner = std::string{owner_identity.value().id.value()};
 			}
 
@@ -253,7 +255,7 @@ namespace cxxlens::detail::clang22
 			}
 			auto location_key = declaration_source_key(*canonical);
 			if (!location_key)
-				return location_key.error();
+				return std::move(location_key.error());
 			signature += ":" + location_key.value();
 
 			std::vector<std::pair<std::string, std::string>> fields;
@@ -267,7 +269,7 @@ namespace cxxlens::detail::clang22
 			}
 			auto generated = make_id("symbol", "cxxlens.semantic-symbol.v1", fields);
 			if (!generated)
-				return generated.error();
+				return std::move(generated.error());
 
 			detached_symbol_identity output;
 			output.id = symbol_id{generated.value()};
@@ -303,7 +305,7 @@ namespace cxxlens::detail::clang22
 		{
 			auto generated = make_id("type", domain, {{"canonical_structure", structure}});
 			if (!generated)
-				return generated.error();
+				return std::move(generated.error());
 			return type_id{generated.value()};
 		}
 
@@ -327,10 +329,10 @@ namespace cxxlens::detail::clang22
 			{
 				auto nested = structure(child, depth + 1U);
 				if (!nested)
-					return nested.error();
+					return std::move(nested.error());
 				auto id = component_id(nested.value().text);
 				if (!id)
-					return id.error();
+					return std::move(id.error());
 				output.components.push_back(id.value());
 				return nested.value().text;
 			};
@@ -345,7 +347,7 @@ namespace cxxlens::detail::clang22
 			{
 				auto pointee = append_child(pointer->getPointeeType());
 				if (!pointee)
-					return pointee.error();
+					return std::move(pointee.error());
 				output.kind = "pointer";
 				output.pointer = true;
 				output.text = prefix + "pointer(" + pointee.value() + ")";
@@ -354,7 +356,7 @@ namespace cxxlens::detail::clang22
 			{
 				auto referred = append_child(reference->getPointeeType());
 				if (!referred)
-					return referred.error();
+					return std::move(referred.error());
 				output.kind = llvm::isa<clang::LValueReferenceType>(reference) ? "lvalue_reference"
 																			   : "rvalue_reference";
 				output.reference = true;
@@ -364,7 +366,7 @@ namespace cxxlens::detail::clang22
 			{
 				auto element = append_child(array->getElementType());
 				if (!element)
-					return element.error();
+					return std::move(element.error());
 				std::string extent = "unknown";
 				if (const auto* constant = llvm::dyn_cast<clang::ConstantArrayType>(array))
 					extent = llvm::toString(constant->getSize(), 10U, false);
@@ -375,14 +377,14 @@ namespace cxxlens::detail::clang22
 			{
 				auto result_type = append_child(function->getReturnType());
 				if (!result_type)
-					return result_type.error();
+					return std::move(result_type.error());
 				output.kind = "function";
 				output.text = prefix + "function(result=" + result_type.value() + ";params=[";
 				for (const auto parameter : function->param_types())
 				{
 					auto nested = append_child(parameter);
 					if (!nested)
-						return nested.error();
+						return std::move(nested.error());
 					output.text += nested.value() + ";";
 				}
 				output.text += "];variadic=" + bool_text(function->isVariadic()) +
@@ -394,7 +396,7 @@ namespace cxxlens::detail::clang22
 			{
 				auto declaration = build_symbol(*record->getDecl());
 				if (!declaration)
-					return declaration.error();
+					return std::move(declaration.error());
 				output.kind = "record";
 				output.declaration = declaration.value().id;
 				output.text = prefix + "record(" + std::string{output.declaration->value()} + ")";
@@ -403,7 +405,7 @@ namespace cxxlens::detail::clang22
 			{
 				auto declaration = build_symbol(*enumeration->getDecl());
 				if (!declaration)
-					return declaration.error();
+					return std::move(declaration.error());
 				output.kind = "enum";
 				output.declaration = declaration.value().id;
 				output.text = prefix + "enum(" + std::string{output.declaration->value()} + ")";
@@ -427,7 +429,7 @@ namespace cxxlens::detail::clang22
 			{
 				auto atom = component_id(output.text, "cxxlens.semantic-type-atom.v1");
 				if (!atom)
-					return atom.error();
+					return std::move(atom.error());
 				output.components.push_back(atom.value());
 			}
 			std::ranges::sort(output.components,
@@ -445,12 +447,12 @@ namespace cxxlens::detail::clang22
 		{
 			auto built = structure(input, 0U);
 			if (!built)
-				return built.error();
+				return std::move(built.error());
 			if (const auto found = types.find(built.value().text); found != types.end())
 				return found->second;
 			auto generated = component_id(built.value().text);
 			if (!generated)
-				return generated.error();
+				return std::move(generated.error());
 			detached_type_identity output;
 			output.id = generated.value();
 			output.type.display_spelling = input.getAsString();

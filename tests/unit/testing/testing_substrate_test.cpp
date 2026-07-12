@@ -58,6 +58,22 @@ namespace
 						"fixture traversal path was accepted");
 		passed &= check(!first.add_header("a.hpp", "different").materialize(),
 						"duplicate fixture file was accepted");
+		auto first_workspace = first.open();
+		auto second_workspace = second.open();
+		passed &= check(first_workspace && second_workspace &&
+							first_workspace.value().compile_units().size() == 4U &&
+							second_workspace.value().compile_units().size() == 4U,
+						"production-path fixture open lost a TU or build variant");
+		if (first_workspace && second_workspace)
+		{
+			const auto first_units = first_workspace.value().compile_units();
+			const auto second_units = second_workspace.value().compile_units();
+			for (std::size_t index{}; index < first_units.size(); ++index)
+				passed &= check(first_units[index].id() == second_units[index].id() &&
+									first_units[index].command_digest() ==
+										second_units[index].command_digest(),
+								"fixture insertion order changed production catalog identity");
+		}
 		return passed;
 	}
 
