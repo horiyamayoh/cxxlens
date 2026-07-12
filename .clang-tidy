@@ -3,6 +3,7 @@ Checks: >
   -*,
   clang-analyzer-*,
   bugprone-*,
+  -bugprone-derived-method-shadowing-base-method,
   -bugprone-unchecked-optional-access,
   performance-*,
   portability-*,
