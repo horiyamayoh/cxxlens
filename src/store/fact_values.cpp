@@ -603,6 +603,24 @@ namespace cxxlens
 		return data_ ? data_->why : empty;
 	}
 
+	call_site detail::fact_store_access::enrich_call(const call_site& value,
+													 std::optional<symbol_id> static_target,
+													 std::vector<symbol_id> possible_targets,
+													 const confidence certainty,
+													 const result_guarantee guarantee,
+													 evidence why)
+	{
+		if (!value.data_)
+			return {};
+		auto data = std::make_shared<call_site::data>(*value.data_);
+		data->direct_callee = std::move(static_target);
+		data->possible_callees = std::move(possible_targets);
+		data->certainty = certainty;
+		data->guarantee = guarantee;
+		data->why = std::move(why);
+		return call_site{std::move(data)};
+	}
+
 	fact_query::fact_query(std::shared_ptr<const data> value) : data_{std::move(value)} {}
 	fact_query fact_query::all()
 	{

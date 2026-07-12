@@ -1423,6 +1423,30 @@ Traceability: `src/query/query_plan.*`、`src/query/query_executor.*`、
 `schemas/cxxlens_query_*.schema.yaml`、`schemas/cxxlens_virtual_candidate_resolution.schema.yaml`、
 `tests/unit/query/`、`tests/query/test_query_process.py`。
 
+### 15.5 M2 public search/report contract freeze
+
+API-SRCH-003〜007 と API-EXP-002 は `search.hpp` / `explain.hpp` の宣言を exact contract とする。
+`search_report<T>` の authoritative rows が accessor、canonical JSON、Markdown の唯一の source of truth であり、
+coverage、unresolved、guarantee、precision、predicate accounting を projection ごとに再計算しない。
+call row は static/direct target、possible virtual candidates、per-variant candidates を別 field で保持する。
+open-world virtual target、coverage failure、result limit は stable unresolved と guarantee downgrade を伴い、
+`strict_coverage` のときだけ incomplete coverage を `search.required-facts-unavailable` として拒否する。
+
+API-EXP-001 と API-EXP-003 は indivisible family であるため、M2 subset の `selector`、`finding`、
+`coverage`、`for_selector` を実装しても、edit/generation/rule/codemod member が揃うまでは catalog 上
+unresolved/unimplemented のままとする。API-EXP-002 `why_not_matched` は独立 atomic unit として、matched、
+predicate-rejected、unresolved prerequisite の count と bounded example を返す。
+
+規範 schema は `cxxlens.search-report.v1`、`cxxlens.explanation.v1`、
+`cxxlens.agent-task-card.v1`。flagship acceptance は multi-TU、macro origin、multiple variants、
+unrelated same-name negative、open world、one-TU failure、jobs 1/2/8、root/order/backend/warm/cold の
+canonical equivalence を検証する。
+
+Traceability: `include/cxxlens/search.hpp`、`include/cxxlens/explain.hpp`、`src/search/`、`src/explain/`、
+`schemas/cxxlens_search_report.schema.yaml`、`schemas/cxxlens_explanation.schema.yaml`、
+`schemas/cxxlens_agent_task_card.schema.yaml`、`tests/unit/search/`、`tests/search/test_search_process.py`、
+`tests/integration/m2_search_conformance_test.cpp`。
+
 ---
 
 ## 16. Graph 詳細設計
@@ -3247,6 +3271,10 @@ cmake --build --preset m1-acceptance --target cxxlens-m1-acceptance
 
 Symbol/type/call selectors、resolver、class/override graph、method call/virtual candidate semantics、query planner/executor、report/evidence/coverage、why-not-matched、CLI search calls。
 
+M2 public search slice は API-SRCH-003〜007 と API-EXP-002 を exact/conformant とし、flagship の
+authoritative report、JSON/Markdown、reason accounting、production-path fixture を §15.5 の traceability で
+固定する。M2 integration/CLI completion は後続 gate が所有する。
+
 ### M3 — General semantic search and graphs
 
 Symbols/references/conversions/constructors/operators/macros/includes、call/include/impact graph、selector JSON、models。
@@ -3544,8 +3572,8 @@ typed fact/capability/API/expression dependency、atomic unit、readiness、guar
 | API-SRCH-003 | `search::calls` | general call search |
 | API-SRCH-004 | `search::calls_to_function` | canonical function calls |
 | API-SRCH-005 | `search::calls_to_method` | receiver-type method calls |
-| API-SRCH-006 | `search::inheritance/overrides` | relations |
-| API-SRCH-007 | `search::includes/macros/conversions` | PP/conversion searches |
+| API-SRCH-006 | `search::inheritance` | inheritance relations |
+| API-SRCH-007 | `search::overrides` | override relations |
 | API-GRAPH-001 | graph builders | call/class/override/include graph |
 | API-GRAPH-002 | `impact_query` | reverse impact traversal |
 

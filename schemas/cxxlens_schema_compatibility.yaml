@@ -2,6 +2,7 @@ schema: cxxlens.schema-compatibility.v1
 registry_version: 1.0.0
 semantics_version: 1.0.0
 documents:
+- {id: cxxlens.agent-task-card.v1, version: 1.0.0, file: cxxlens_agent_task_card.schema.yaml}
 - {id: cxxlens.analysis-scope.v1, version: 1.0.0, file: cxxlens_analysis_scope.schema.yaml}
 - {id: cxxlens.capabilities.v1, version: 1.0.0, file: cxxlens_capabilities.schema.yaml}
 - {id: cxxlens.config.explain.v1, version: 1.0.0, file: cxxlens.config.explain.schema.yaml}
@@ -12,6 +13,7 @@ documents:
 - {id: cxxlens.diagnostic.v1, version: 1.0.0, file: cxxlens_diagnostic.schema.yaml}
 - {id: cxxlens.error.v1, version: 1.0.0, file: cxxlens_error.schema.yaml}
 - {id: cxxlens.evidence.v1, version: 1.0.0, file: cxxlens_evidence.schema.yaml}
+- {id: cxxlens.explanation.v1, version: 1.0.0, file: cxxlens_explanation.schema.yaml}
 - {id: cxxlens.fact-profile.v1, version: 1.0.0, file: cxxlens_fact_profile.schema.yaml}
 - {id: cxxlens.fact-requirement.v1, version: 1.0.0, file: cxxlens_fact_requirement.schema.yaml}
 - {id: cxxlens.fact.v1, version: 1.0.0, file: cxxlens_fact.schema.yaml}
@@ -21,6 +23,7 @@ documents:
 - {id: cxxlens.observation.v1, version: 1.0.0, file: cxxlens_observation.schema.yaml}
 - {id: cxxlens.provisioning-trace.v1, version: 1.0.0, file: cxxlens_provisioning_trace.schema.yaml}
 - {id: cxxlens.scheduler-trace.v1, version: 1.0.0, file: cxxlens_scheduler_trace.schema.yaml}
+- {id: cxxlens.search-report.v1, version: 1.0.0, file: cxxlens_search_report.schema.yaml}
 - {id: cxxlens.selector.v1, version: 1.0.0, file: cxxlens_selector.schema.yaml}
 - {id: cxxlens.source-span.v1, version: 1.0.0, file: cxxlens_source_span.schema.yaml}
 - {id: cxxlens.testing.fixture.v1, version: 1.0.0, file: cxxlens_testing_fixture.schema.yaml}

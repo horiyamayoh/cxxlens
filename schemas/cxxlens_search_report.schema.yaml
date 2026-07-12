@@ -1,0 +1,104 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.search-report.v1.schema.yaml
+title: cxxlens semantic search report v1
+type: object
+additionalProperties: false
+required: [schema, semantics_version, library_version, result_kind, matches, accounting, coverage, unresolved, guarantee, precision, reasons, query_explanation]
+properties:
+  schema: {const: cxxlens.search-report.v1}
+  semantics_version: {const: 1.0.0}
+  library_version: {type: string, minLength: 1}
+  result_kind: {enum: [call, inheritance, override]}
+  matches: {type: array}
+  accounting:
+    type: object
+    additionalProperties: false
+    required: [considered, matched, rejected, unresolved]
+    properties:
+      considered: {type: integer, minimum: 0}
+      matched: {type: integer, minimum: 0}
+      rejected: {type: integer, minimum: 0}
+      unresolved: {type: integer, minimum: 0}
+  coverage: {type: object}
+  unresolved: {type: array, items: {type: object}}
+  guarantee:
+    enum: [exact_within_coverage, sound_over_approximation, sound_under_approximation, best_effort, heuristic]
+  precision:
+    enum: [ast_structural, local_semantic, workspace_semantic, local_flow, interprocedural_summary, path_sensitive, dynamic_observation]
+  reasons:
+    type: array
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [reason_code, outcome, count]
+      properties:
+        reason_code: {type: string, minLength: 1}
+        outcome: {enum: [matched, rejected, unresolved]}
+        count: {type: integer, minimum: 1}
+  query_explanation: {type: string}
+allOf:
+  - if: {properties: {result_kind: {const: call}}}
+    then: {properties: {matches: {items: {$ref: '#/$defs/call_match'}}}}
+  - if: {properties: {result_kind: {const: inheritance}}}
+    then: {properties: {matches: {items: {$ref: '#/$defs/inheritance_match'}}}}
+  - if: {properties: {result_kind: {const: override}}}
+    then: {properties: {matches: {items: {$ref: '#/$defs/override_match'}}}}
+$defs:
+  symbol_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
+  call_match:
+    type: object
+    additionalProperties: false
+    required: [call_id, caller, certainty, dispatch, evidence, guarantee, kind, location, per_variant, possible_targets, receiver, static_target, unresolved]
+    properties:
+      call_id: {type: string, minLength: 1}
+      caller: {type: [string, 'null']}
+      certainty: {enum: [speculative, possible, probable, high, certain]}
+      dispatch: {enum: [direct_exact, static_member_target, virtual_candidate_set, indirect_candidate_set, modeled_candidate_set, unresolved]}
+      evidence: {type: object}
+      guarantee: {enum: [exact_within_coverage, sound_over_approximation, sound_under_approximation, best_effort, heuristic]}
+      kind: {enum: [direct_function, member, virtual_member, constructor, destructor, overloaded_operator, builtin_operator, function_pointer, callback, modeled, unknown]}
+      location: {type: object}
+      per_variant:
+        type: array
+        uniqueItems: true
+        items:
+          type: object
+          additionalProperties: false
+          required: [variant, candidates]
+          properties:
+            variant: {type: string, minLength: 1}
+            candidates: {$ref: '#/$defs/symbol_ids'}
+      possible_targets: {$ref: '#/$defs/symbol_ids'}
+      receiver:
+        oneOf:
+          - {type: 'null'}
+          - type: object
+            additionalProperties: false
+            required: [canonical, id, spelling]
+            properties:
+              canonical: {type: string, minLength: 1}
+              id: {type: string, minLength: 1}
+              spelling: {type: string, minLength: 1}
+      static_target: {type: [string, 'null']}
+      unresolved: {type: array, items: {type: object}}
+  inheritance_match:
+    type: object
+    additionalProperties: false
+    required: [access, base, derived, evidence, source, virtual]
+    properties:
+      access: {enum: [none, public, protected, private]}
+      base: {type: string, minLength: 1}
+      derived: {type: string, minLength: 1}
+      evidence: {type: object}
+      source: {type: object}
+      virtual: {type: boolean}
+  override_match:
+    type: object
+    additionalProperties: false
+    required: [evidence, overridden, overriding, source]
+    properties:
+      evidence: {type: object}
+      overridden: {type: string, minLength: 1}
+      overriding: {type: string, minLength: 1}
+      source: {type: object}

@@ -18,7 +18,7 @@ auto main() -> int
 {
 	using namespace cxxlens;
 	schema_registry registry;
-	bool passed = check(registry.all().size() == 25U, "public schema registry is incomplete");
+	bool passed = check(registry.all().size() == 28U, "public schema registry is incomplete");
 	passed &= check(registry.find("cxxlens.config.resolved.v1", {1U, 0U, 0U, {}}).has_value(),
 					"configuration schema is not registered");
 	passed &= check(registry.find("cxxlens.scheduler-trace.v1", {1U, 0U, 0U, {}}).has_value(),
@@ -27,6 +27,10 @@ auto main() -> int
 					"provisioning trace schema is not registered");
 	passed &= check(registry.find("cxxlens.selector.v1", {1U, 0U, 0U, {}}).has_value(),
 					"selector schema is not registered");
+	passed &= check(registry.find("cxxlens.search-report.v1", {1U, 0U, 0U, {}}).has_value(),
+					"search report schema is not registered");
+	passed &= check(registry.find("cxxlens.explanation.v1", {1U, 0U, 0U, {}}).has_value(),
+					"explanation schema is not registered");
 	for (const auto& entry : registry.all())
 	{
 		passed &= check(registry.find(entry.id, entry.version).has_value(),

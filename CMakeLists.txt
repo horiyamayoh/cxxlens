@@ -55,6 +55,7 @@ add_library(
   src/core/json_projections.cpp
   src/core/schema_registry.cpp
   src/core/version.cpp
+  src/explain/explain.cpp
   src/facts/fact_contract.cpp
   src/facts/fact_profile.cpp
   src/facts/reducer.cpp
@@ -74,6 +75,9 @@ add_library(
   src/runtime/time_adapter.cpp
   src/query/query_executor.cpp
   src/query/query_plan.cpp
+  src/query/predicate_evaluator.cpp
+  src/search/search.cpp
+  src/search/search_report.cpp
   src/select/selector.cpp
   src/select/selector_json.cpp
   src/source/source_span.cpp
@@ -142,6 +146,7 @@ install(
   FILES schemas/cxxlens.config.explain.schema.yaml
         schemas/cxxlens.config.resolved.schema.yaml
         schemas/cxxlens.config.schema.yaml
+        schemas/cxxlens_agent_task_card.schema.yaml
         schemas/cxxlens_public_api_contract.yaml
         schemas/cxxlens_api_catalog.schema.yaml
         schemas/cxxlens_coverage.schema.yaml
@@ -149,6 +154,7 @@ install(
         schemas/cxxlens_error.schema.yaml
         schemas/cxxlens_evidence_coverage_contract.yaml
         schemas/cxxlens_evidence.schema.yaml
+        schemas/cxxlens_explanation.schema.yaml
         schemas/cxxlens_fact.schema.yaml
         schemas/cxxlens_fact_contract.yaml
         schemas/cxxlens_fact_contract.schema.yaml
@@ -186,6 +192,7 @@ install(
         schemas/cxxlens_query_trace.schema.yaml
         schemas/cxxlens_selector.schema.yaml
         schemas/cxxlens_selector_reason_codes.yaml
+        schemas/cxxlens_search_report.schema.yaml
         schemas/cxxlens_virtual_candidate_resolution.schema.yaml
         schemas/cxxlens_workspace_doctor.schema.yaml
         schemas/cxxlens_workspace_context.schema.yaml

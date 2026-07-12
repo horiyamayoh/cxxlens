@@ -30,11 +30,7 @@ namespace cxxlens::detail::query
 			bool include_derived{};
 		};
 
-		struct evaluation
-		{
-			predicate_outcome outcome{predicate_outcome::unresolved};
-			std::string reason_code;
-		};
+		using evaluation = predicate_evaluation;
 
 		[[nodiscard]] error query_error(std::string code, std::string reason)
 		{
@@ -92,16 +88,6 @@ namespace cxxlens::detail::query
 			return false;
 		}
 
-		[[nodiscard]] std::string_view symbol_kind_name(const symbol_kind value)
-		{
-			constexpr std::array names{
-				"namespace",	 "record",		"class",	  "struct",	  "union",	 "function",
-				"method",		 "constructor", "destructor", "variable", "field",	 "enum_type",
-				"enum_constant", "typedef",		"type_alias", "template", "concept", "macro",
-				"module",		 "parameter",	"unknown"};
-			return names.at(static_cast<std::size_t>(value));
-		}
-
 		[[nodiscard]] std::string_view call_kind_name(const call_kind value)
 		{
 			constexpr std::array names{"direct_function",
@@ -153,10 +139,6 @@ namespace cxxlens::detail::query
 			return {value ? predicate_outcome::matched : predicate_outcome::rejected,
 					node->reason_code};
 		}
-
-		[[nodiscard]] evaluation evaluate_symbol(const node_ptr& node,
-												 const std::optional<symbol_id>& id,
-												 const evaluation_context& context);
 
 		[[nodiscard]] evaluation evaluate_type(const node_ptr& node,
 											   const std::optional<type_ref>& type,
@@ -229,69 +211,8 @@ namespace cxxlens::detail::query
 			if (node->predicate == "type.any_cvref" || node->predicate == "type.including_derived")
 				return boolean_evaluation(node, true);
 			if (node->predicate == "type.declared_as" && !node->operands.empty())
-				return evaluate_symbol(node->operands.front(), type->declaration(), context);
-			return unresolved_evaluation(node);
-		}
-
-		[[nodiscard]] evaluation evaluate_symbol(const node_ptr& node,
-												 const std::optional<symbol_id>& id,
-												 const evaluation_context& context)
-		{
-			if (node->operation == node_operation::constant)
-				return boolean_evaluation(node, node->constant);
-			if (node->operation == node_operation::negate)
-			{
-				auto result = evaluate_symbol(node->operands.front(), id, context);
-				if (result.outcome == predicate_outcome::matched)
-					result.outcome = predicate_outcome::rejected;
-				else if (result.outcome == predicate_outcome::rejected)
-					result.outcome = predicate_outcome::matched;
-				return result;
-			}
-			if (node->operation == node_operation::all || node->operation == node_operation::any)
-			{
-				const bool conjunction = node->operation == node_operation::all;
-				std::optional<evaluation> unresolved_result;
-				for (const auto& operand : node->operands)
-				{
-					auto result = evaluate_symbol(operand, id, context);
-					if (conjunction && result.outcome == predicate_outcome::rejected)
-						return result;
-					if (!conjunction && result.outcome == predicate_outcome::matched)
-						return result;
-					if (result.outcome == predicate_outcome::unresolved && !unresolved_result)
-						unresolved_result = std::move(result);
-				}
-				if (unresolved_result)
-					return *unresolved_result;
-				return {conjunction ? predicate_outcome::matched : predicate_outcome::rejected,
-						conjunction ? "select.all" : "select.any"};
-			}
-			if (node->predicate == "symbol.any" || node->predicate == "symbol.macro_policy" ||
-				node->predicate == "symbol.variant_policy")
-				return boolean_evaluation(node, id.has_value());
-			if (!id)
-				return unresolved_evaluation(node);
-			const auto found = context.symbols.find(std::string{id->value()});
-			if (found == context.symbols.end())
-				return unresolved_evaluation(node);
-			const auto& symbol = found->second;
-			if (node->predicate == "symbol.kinds")
-				return boolean_evaluation(
-					node, contains_csv(argument(node, "values"), symbol_kind_name(symbol.kind())));
-			if (node->predicate == "symbol.name")
-			{
-				const auto policy = argument(node, "policy");
-				const auto expected = argument(node, "value");
-				if (policy == "unqualified_exact")
-					return boolean_evaluation(node, symbol.name() == expected);
-				if (policy == "glob")
-					return unresolved_evaluation(node);
-				return boolean_evaluation(node, symbol.qualified_name() == expected);
-			}
-			if (node->predicate == "symbol.defined")
-				return boolean_evaluation(
-					node, symbol.definition().has_value() == (argument(node, "value") == "true"));
+				return evaluate_symbol_predicate(
+					node->operands.front(), type->declaration(), context.symbols);
 			return unresolved_evaluation(node);
 		}
 
@@ -313,7 +234,7 @@ namespace cxxlens::detail::query
 				return boolean_evaluation(node, exact || virtual_is_member);
 			}
 			if (node->predicate == "call.callee" && !node->operands.empty())
-				return evaluate_symbol(node->operands.front(), direct, context);
+				return evaluate_symbol_predicate(node->operands.front(), direct, context.symbols);
 			if (node->predicate == "call.method_name" || node->predicate == "call.function_name")
 			{
 				if (!direct)
@@ -337,7 +258,8 @@ namespace cxxlens::detail::query
 				return evaluate_type(
 					node->operands.front(), context.call.receiver_static_type(), context);
 			if (node->predicate == "call.inside" && !node->operands.empty())
-				return evaluate_symbol(node->operands.front(), context.call.caller(), context);
+				return evaluate_symbol_predicate(
+					node->operands.front(), context.call.caller(), context.symbols);
 			if (node->predicate == "call.in_file")
 				return node->operands.size() == 1U &&
 						node->operands.front()->operation == node_operation::predicate &&
@@ -797,6 +719,7 @@ namespace cxxlens::detail::query
 			canonicalize_unresolved(resolved.unresolved_items);
 			raw_call_match match;
 			match.call = call.id();
+			match.site = call;
 			match.static_target = resolved.static_target;
 			match.possible_targets = std::move(resolved.possible_targets);
 			match.per_variant = std::move(resolved.per_variant);

@@ -39,7 +39,7 @@ class ApiContractTest(unittest.TestCase):
         self.assertEqual(summary["api_entry_count"], 124)
         self.assertEqual(
             summary["implementation_state_counts"],
-            {"conformant": 41, "implemented": 0, "unimplemented": 83},
+            {"conformant": 47, "implemented": 0, "unimplemented": 77},
         )
 
     def test_duplicate_id_fixture(self) -> None:

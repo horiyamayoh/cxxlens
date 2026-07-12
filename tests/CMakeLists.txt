@@ -39,6 +39,17 @@ add_test(NAME public-header.select COMMAND cxxlens-public-header-select)
 set_tests_properties(public-header.select PROPERTIES LABELS
                                                      "public-header;select")
 
+foreach(header IN ITEMS search explain)
+  set(target_name "cxxlens-public-header-${header}")
+  add_executable(${target_name} "public_headers/${header}_header_test.cpp")
+  target_link_libraries(${target_name} PRIVATE cxxlens::cxxlens)
+  target_compile_features(${target_name} PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(${target_name})
+  add_test(NAME "public-api.${header}-header" COMMAND ${target_name})
+  set_tests_properties("public-api.${header}-header"
+                       PROPERTIES LABELS "public-api;search;explain")
+endforeach()
+
 foreach(header IN ITEMS core source cxxlens)
   set(target_name "cxxlens-public-header-${header}")
   add_executable(${target_name} "public_headers/${header}_header_test.cpp")
@@ -529,7 +540,52 @@ set_tests_properties(
   PROPERTIES LABELS
              "query;planner;executor;graph;schema;golden;determinism;coverage")
 
+add_executable(cxxlens-unit-search unit/search/search_test.cpp)
+target_link_libraries(cxxlens-unit-search PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-unit-search
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-unit-search PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-search)
+add_test(NAME unit.search COMMAND cxxlens-unit-search)
+set_tests_properties(
+  unit.search
+  PROPERTIES
+    LABELS
+    "unit;search;explain;report;schema;coverage;variant;determinism;conformance"
+)
+
+add_executable(cxxlens-search-process unit/search/search_process.cpp)
+target_link_libraries(cxxlens-search-process PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-search-process
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-search-process PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-search-process)
+add_test(
+  NAME schema.search-process
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/search/test_search_process.py"
+    "${PROJECT_SOURCE_DIR}" "$<TARGET_FILE:cxxlens-search-process>")
+set_tests_properties(
+  schema.search-process
+  PROPERTIES LABELS
+             "search;explain;report;schema;golden;determinism;coverage;variant")
+
 if(CXXLENS_CLANG22_AVAILABLE)
+  add_executable(cxxlens-m2-search-conformance
+                 integration/m2_search_conformance_test.cpp)
+  target_link_libraries(cxxlens-m2-search-conformance PRIVATE cxxlens::cxxlens)
+  target_compile_features(cxxlens-m2-search-conformance PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens-m2-search-conformance)
+  add_test(NAME integration.m2-search-conformance
+           COMMAND cxxlens-m2-search-conformance)
+  set_tests_properties(
+    integration.m2-search-conformance
+    PROPERTIES
+      LABELS
+      "m2;integration;search;explain;frontend;facts;macro;variant;coverage;determinism;conformance"
+  )
+
   add_executable(cxxlens-m1-conformance integration/m1_conformance_test.cpp)
   target_link_libraries(cxxlens-m1-conformance PRIVATE cxxlens::cxxlens)
   target_compile_features(cxxlens-m1-conformance PRIVATE cxx_std_23)

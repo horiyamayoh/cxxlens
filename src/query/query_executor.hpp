@@ -11,18 +11,12 @@
 #include <cxxlens/workspace.hpp>
 
 #include "../graph/virtual_candidate_resolver.hpp"
+#include "predicate_evaluator.hpp"
 #include "query_plan.hpp"
 #include "refinement_port.hpp"
 
 namespace cxxlens::detail::query
 {
-	enum class predicate_outcome : std::uint8_t
-	{
-		matched,
-		rejected,
-		unresolved
-	};
-
 	struct reason_count
 	{
 		std::string reason_code;
@@ -46,6 +40,7 @@ namespace cxxlens::detail::query
 	struct raw_call_match
 	{
 		fact_id call;
+		call_site site;
 		std::optional<symbol_id> static_target;
 		std::vector<symbol_id> possible_targets;
 		std::vector<graph::per_variant_candidates> per_variant;

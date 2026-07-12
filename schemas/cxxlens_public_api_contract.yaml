@@ -1388,20 +1388,28 @@ packages:
     - Direct and possible targets are distinct; unresolved targets are not silently omitted.
     errors:
     - search.refinement-failed
-    contract_maturity: planned
-    implementation_state: unimplemented
+    requirements: [FR-007, FR-008, FR-009, QR-001, QR-002]
+    contract_maturity: stable
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/search.hpp
+      signature: cxxlens::result<cxxlens::search_report<cxxlens::call_site>> cxxlens::search::calls(const cxxlens::workspace&,cxxlens::select::call_selector,cxxlens::search_options)
+      signature_fingerprint: sha256:daf1c6cf5399279ca599a5727382d6d6b5861b5c15819beb68a78ea431033539
+    implementation_evidence:
+    - include/cxxlens/search.hpp
+    - src/search/search.cpp
+    - src/search/search_report.cpp
+    - schemas/cxxlens_search_report.schema.yaml
+    - tests/unit/search/search_test.cpp
+    - tests/search/test_search_process.py
+    - tests/integration/m2_search_conformance_test.cpp
     atomic_unit:
       id: AU-SRCH-003
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-SRCH-004
     symbol: search::calls_to_function
     kind: free_function
@@ -1414,20 +1422,25 @@ packages:
       - symbol
       minimum_precision: local_semantic
       apis: []
-    contract_maturity: planned
-    implementation_state: unimplemented
+    requirements: [FR-007, FR-008, QR-001]
+    contract_maturity: stable
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/search.hpp
+      signature: cxxlens::result<cxxlens::search_report<cxxlens::call_site>> cxxlens::search::calls_to_function(const cxxlens::workspace&,std::string,cxxlens::search_options)
+      signature_fingerprint: sha256:45b5a52a7be28140b2f44610111c8b92a74ed020f06a559a87e38994745e16b4
+    implementation_evidence:
+    - include/cxxlens/search.hpp
+    - src/search/search.cpp
+    - tests/unit/search/search_test.cpp
+    - tests/public_headers/search_header_test.cpp
     atomic_unit:
       id: AU-SRCH-004
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-SRCH-005
     symbol: search::calls_to_method
     kind: free_function
@@ -1442,20 +1455,26 @@ packages:
       - type
       minimum_precision: workspace_semantic
       apis: []
-    contract_maturity: planned
-    implementation_state: unimplemented
+    requirements: [FR-007, FR-008, FR-009, QR-001, QR-002]
+    contract_maturity: stable
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/search.hpp
+      signature: cxxlens::result<cxxlens::search_report<cxxlens::call_site>> cxxlens::search::calls_to_method(const cxxlens::workspace&,std::string,std::string,cxxlens::search_options)
+      signature_fingerprint: sha256:d4e1b61a3d37e843311b01d14c62826df7844a5e00eab2e931098685dccc49e9
+    implementation_evidence:
+    - include/cxxlens/search.hpp
+    - src/search/search.cpp
+    - schemas/cxxlens_search_report.schema.yaml
+    - tests/unit/search/search_test.cpp
+    - tests/integration/m2_search_conformance_test.cpp
     atomic_unit:
       id: AU-SRCH-005
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-SRCH-006
     symbol: search::inheritance
     kind: free_function
@@ -1471,20 +1490,26 @@ packages:
       - clangAST
       primary_apis:
       - CXXRecordDecl::bases
-    contract_maturity: planned
-    implementation_state: unimplemented
+    requirements: [FR-008, FR-009, QR-001]
+    contract_maturity: stable
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/search.hpp
+      signature: cxxlens::result<cxxlens::search_report<cxxlens::inheritance_edge>> cxxlens::search::inheritance(const cxxlens::workspace&,cxxlens::select::symbol_selector,bool,cxxlens::search_options)
+      signature_fingerprint: sha256:f4fb15563a0488bebd88fbddff5129a4741cee335522f0e65ae36b36dafac685
+    implementation_evidence:
+    - include/cxxlens/search.hpp
+    - src/search/search.cpp
+    - src/query/predicate_evaluator.cpp
+    - tests/unit/search/search_test.cpp
+    - tests/integration/m2_search_conformance_test.cpp
     atomic_unit:
       id: AU-SRCH-006
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-SRCH-007
     symbol: search::overrides
     kind: free_function
@@ -1500,20 +1525,26 @@ packages:
       - clangAST
       primary_apis:
       - CXXMethodDecl::overridden_methods
-    contract_maturity: planned
-    implementation_state: unimplemented
+    requirements: [FR-008, FR-009, QR-001]
+    contract_maturity: stable
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/search.hpp
+      signature: cxxlens::result<cxxlens::search_report<cxxlens::override_edge>> cxxlens::search::overrides(const cxxlens::workspace&,cxxlens::select::symbol_selector,bool,cxxlens::search_options)
+      signature_fingerprint: sha256:db6d878297da8b91adbb9f4f5beded715425b6daecc4b444d5adcc15881bede3
+    implementation_evidence:
+    - include/cxxlens/search.hpp
+    - src/search/search.cpp
+    - src/query/predicate_evaluator.cpp
+    - tests/unit/search/search_test.cpp
+    - tests/integration/m2_search_conformance_test.cpp
     atomic_unit:
       id: AU-SRCH-007
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-SRCH-008
     symbol: search::includes
     kind: free_function
@@ -3169,20 +3200,26 @@ packages:
       apis: []
     guarantees:
     - Reports predicate rejection counts and unresolved prerequisites.
-    contract_maturity: planned
-    implementation_state: unimplemented
+    requirements: [FR-008, FR-018, QR-001]
+    contract_maturity: stable
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/explain.hpp
+      signature: cxxlens::result<cxxlens::explain::explanation> cxxlens::explain::why_not_matched(const cxxlens::workspace&,cxxlens::select::semantic_selector,cxxlens::analysis_scope,cxxlens::explain::detail_level,cxxlens::execution_context)
+      signature_fingerprint: sha256:e9ed782086cceba6787a9693bf1fa1ad103adb0bc4098fab9febb6c5421f5308
+    implementation_evidence:
+    - include/cxxlens/explain.hpp
+    - src/explain/explain.cpp
+    - schemas/cxxlens_explanation.schema.yaml
+    - tests/unit/search/search_test.cpp
+    - tests/search/test_search_process.py
     atomic_unit:
       id: AU-EXP-002
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-EXP-003
     symbol: explain::{for_selector,for_rule,for_codemod,for_generation}
     kind: free_function_family
@@ -3665,9 +3702,9 @@ summary:
   api_entry_count: 124
   atomic_unit_count: 124
   implementation_state_counts:
-    unimplemented: 83
+    unimplemented: 77
     implemented: 0
-    conformant: 41
+    conformant: 47
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.
@@ -3914,3 +3951,5 @@ migrations:
   notes:
   - API-SEL-001/002/003/006/008/009/010/011 declarations are frozen by the M2 selector contract.
   - M3 selector families API-SEL-004/005/007 remain unresolved and unimplemented.
+  - API-SRCH-003/004/005/006/007 and API-EXP-002 are frozen by the M2 public search contract.
+  - API-EXP-001/003 remain unresolved indivisible families until every declared member is implemented.
