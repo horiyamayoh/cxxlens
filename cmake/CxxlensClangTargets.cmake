@@ -21,7 +21,9 @@ function(cxxlens_configure_clang22 target)
 
   find_package(LLVM 22.1 CONFIG QUIET)
   if(LLVM_FOUND AND LLVM_VERSION_MAJOR EQUAL 22)
-    get_filename_component(_cxxlens_llvm_cmake_root "${LLVM_DIR}" DIRECTORY)
+    get_filename_component(_cxxlens_llvm_cmake_dir "${LLVM_CMAKE_DIR}" REALPATH)
+    get_filename_component(_cxxlens_llvm_cmake_root
+                           "${_cxxlens_llvm_cmake_dir}" DIRECTORY)
     find_package(Clang CONFIG QUIET PATHS "${_cxxlens_llvm_cmake_root}/clang"
                  NO_DEFAULT_PATH)
   endif()

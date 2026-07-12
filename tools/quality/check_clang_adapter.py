@@ -55,6 +55,7 @@ if re.search(r"(^|\s)clang-cpp($|\s)", cmake):
     raise SystemExit("monolithic clang-cpp link hides component closure")
 for marker in (
     "CXXLENS_CLANG_ADAPTER",
+    "LLVM_CMAKE_DIR",
     "LLVM_VERSION_MAJOR EQUAL 22",
     "CXXLENS_HAS_CLANG22=0",
     "CXXLENS_HAS_CLANG22=1",
