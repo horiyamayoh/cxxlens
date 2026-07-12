@@ -356,6 +356,32 @@ set_tests_properties(
   PROPERTIES
     LABELS
     "unit;facts;reducer;identity;variant;coverage;determinism;conformance")
+
+add_executable(cxxlens-unit-fact-store unit/store/fact_store_test.cpp)
+target_link_libraries(cxxlens-unit-fact-store PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-unit-fact-store
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_definitions(
+  cxxlens-unit-fact-store
+  PRIVATE CXXLENS_STORE_TEST_DIRECTORY="${CMAKE_CURRENT_BINARY_DIR}")
+target_compile_features(cxxlens-unit-fact-store PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-fact-store)
+add_test(NAME unit.fact-store COMMAND cxxlens-unit-fact-store)
+set_tests_properties(
+  unit.fact-store
+  PROPERTIES
+    LABELS
+    "unit;facts;store;sqlite;transaction;coverage;determinism;conformance")
+add_test(
+  NAME determinism.fact-store-process
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/unit/store/test_fact_store_process.py"
+    "$<TARGET_FILE:cxxlens-unit-fact-store>"
+    "${PROJECT_SOURCE_DIR}/tests/golden/store/snapshot_binary_v1.txt")
+set_tests_properties(
+  determinism.fact-store-process
+  PROPERTIES LABELS "facts;store;sqlite;binary;golden;determinism;conformance")
 add_test(
   NAME determinism.fact-reducer-process
   COMMAND

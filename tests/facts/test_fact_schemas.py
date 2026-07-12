@@ -72,6 +72,15 @@ assert contract["collections"]["duplicates"] == "reject"
 assert contract["relations"]["inheritance"] == "direct_edge_only"
 assert contract["relations"]["override"] == "direct_edge_only"
 
+store_contract = yaml.safe_load((root / "schemas/cxxlens_sqlite_store_contract.yaml").read_text())
+store_contract_schema = yaml.safe_load(
+    (root / "schemas/cxxlens_sqlite_store_contract.schema.yaml").read_text()
+)
+jsonschema.validate(store_contract, store_contract_schema)
+assert store_contract["policies"]["persistence"] == "versioned_canonical_binary"
+assert store_contract["policies"]["mismatch"] == "explicit_rebuild_required"
+assert store_contract["policies"]["corruption"] == "preserve_and_diagnose"
+
 catalog = yaml.safe_load((root / "schemas/cxxlens_public_api_contract.yaml").read_text())
 dependencies = {
     fact

@@ -7,6 +7,7 @@
 #include <thread>
 #include <vector>
 
+#include "runtime/dynamic_library_port.hpp"
 #include "runtime/filesystem_port.hpp"
 #include "runtime/hash_port.hpp"
 #include "runtime/process_port.hpp"
@@ -58,11 +59,22 @@ namespace
 		passed &= check(!is_within_root("root", "root/../escape"), "traversal path accepted");
 		passed &= check(forward.read("root/a.cpp", context("fs.read")).value_or("") == "a",
 						"memory read failed");
+		passed &= check(forward.remove("root/a.cpp", context("fs.remove")).value_or(false) &&
+							!forward.stat("root/a.cpp", context("fs.stat-removed")).value().exists,
+						"filesystem remove port failed");
 		auto expired = context("fs.expired");
 		expired.deadline = std::chrono::steady_clock::time_point::min();
 		passed &=
 			check(forward.read("root/a.cpp", expired).error().status == runtime_status::timed_out,
 				  "filesystem deadline did not propagate");
+		std::stop_source cancellation;
+		cancellation.request_stop();
+		auto cancelled_library = context("dynamic-library.cancelled");
+		cancelled_library.cancellation = cancellation.get_token();
+		system_dynamic_library_adapter libraries;
+		passed &= check(libraries.open({"not-loaded"}, cancelled_library).error().status ==
+							runtime_status::cancelled,
+						"dynamic-library cancellation did not propagate");
 		standard_filesystem_adapter standard;
 		const std::filesystem::path this_file{__FILE__};
 		const auto production_read = standard.read(this_file, context("fs.production.read"));

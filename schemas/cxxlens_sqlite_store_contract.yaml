@@ -1,0 +1,34 @@
+schema: cxxlens.sqlite-store-contract.v1
+store_schema: cxxlens.sqlite-fact-store.v1
+binary_schema: cxxlens.fact-snapshot.binary.v1
+tables:
+- cxxlens_store_metadata
+- cxxlens_snapshots
+- cxxlens_fact_index
+- cxxlens_edge_index
+- cxxlens_coverage_index
+- cxxlens_current_snapshot
+indexes:
+- cxxlens_fact_kind_order
+- cxxlens_fact_owner_order
+- cxxlens_fact_file_order
+- cxxlens_edge_forward_order
+- cxxlens_edge_reverse_order
+metadata_axes:
+- workspace_key
+- schema_version
+- semantics_version
+- adapter_id
+- adapter_version
+- extractor_versions
+- generation
+- coverage
+policies:
+  persistence: versioned_canonical_binary
+  readers: immutable_committed_snapshot
+  writers: single_writer
+  commit: atomic_publish_or_prior_snapshot
+  mismatch: explicit_rebuild_required
+  corruption: preserve_and_diagnose
+  migration: rebuild_instead_of_unsafe_migration
+  ordering: kind_stable_key_fact_id

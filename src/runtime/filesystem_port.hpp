@@ -30,6 +30,8 @@ namespace cxxlens::detail::runtime
 		stat(const std::filesystem::path& path, const request_context& context) const = 0;
 		[[nodiscard]] virtual runtime_result<std::filesystem::path>
 		canonicalize(const std::filesystem::path& path, const request_context& context) const = 0;
+		[[nodiscard]] virtual runtime_result<bool> remove(const std::filesystem::path& path,
+														  const request_context& context) = 0;
 	};
 
 	class standard_filesystem_adapter final : public filesystem_port
@@ -44,6 +46,8 @@ namespace cxxlens::detail::runtime
 		[[nodiscard]] runtime_result<std::filesystem::path>
 		canonicalize(const std::filesystem::path& path,
 					 const request_context& context) const override;
+		[[nodiscard]] runtime_result<bool> remove(const std::filesystem::path& path,
+												  const request_context& context) override;
 	};
 
 	class memory_filesystem_adapter final : public filesystem_port
@@ -62,6 +66,8 @@ namespace cxxlens::detail::runtime
 		[[nodiscard]] runtime_result<std::filesystem::path>
 		canonicalize(const std::filesystem::path& path,
 					 const request_context& context) const override;
+		[[nodiscard]] runtime_result<bool> remove(const std::filesystem::path& path,
+												  const request_context& context) override;
 
 	  private:
 		std::map<std::filesystem::path, std::string> files_;

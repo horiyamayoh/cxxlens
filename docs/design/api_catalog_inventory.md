@@ -21,15 +21,15 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-EXP-003 | explain | <cxxlens/explain.hpp> | explain::{for_selector,for_rule,for_codemod,for_generation} | AU-EXP-003 | unimplemented |
 | API-EXP-004 | explain | <cxxlens/explain.hpp> | explain::api_catalog_json | AU-EXP-004 | unimplemented |
 | API-FACT-001 | facts | <cxxlens/facts.hpp> | fact_profile::{minimal,semantic_search,refactor,generation,flow,full,include,exclude,precision} | AU-FACT-001 | conformant |
-| API-FACT-002 | facts | <cxxlens/facts.hpp> | fact_store::find(fact_query) | AU-FACT-002 | unimplemented |
-| API-FACT-003 | facts | <cxxlens/facts.hpp> | fact_store::symbols() | AU-FACT-003 | unimplemented |
-| API-FACT-004 | facts | <cxxlens/facts.hpp> | fact_store::references(symbol_id) | AU-FACT-004 | unimplemented |
-| API-FACT-005 | facts | <cxxlens/facts.hpp> | fact_store::calls() | AU-FACT-005 | unimplemented |
-| API-FACT-006 | facts | <cxxlens/facts.hpp> | fact_store::inheritance() | AU-FACT-006 | unimplemented |
-| API-FACT-007 | facts | <cxxlens/facts.hpp> | fact_store::overrides() | AU-FACT-007 | unimplemented |
-| API-FACT-008 | facts | <cxxlens/facts.hpp> | fact_store::includes() | AU-FACT-008 | unimplemented |
-| API-FACT-009 | facts | <cxxlens/facts.hpp> | fact_store::macros() | AU-FACT-009 | unimplemented |
-| API-FACT-010 | facts | <cxxlens/facts.hpp> | fact_store::coverage(fact_profile,analysis_scope) | AU-FACT-010 | unimplemented |
+| API-FACT-002 | facts | <cxxlens/facts.hpp> | fact_store::find(fact_query) | AU-FACT-002 | conformant |
+| API-FACT-003 | facts | <cxxlens/facts.hpp> | fact_store::symbols() | AU-FACT-003 | conformant |
+| API-FACT-004 | facts | <cxxlens/facts.hpp> | fact_store::references(symbol_id) | AU-FACT-004 | conformant |
+| API-FACT-005 | facts | <cxxlens/facts.hpp> | fact_store::calls() | AU-FACT-005 | conformant |
+| API-FACT-006 | facts | <cxxlens/facts.hpp> | fact_store::inheritance() | AU-FACT-006 | conformant |
+| API-FACT-007 | facts | <cxxlens/facts.hpp> | fact_store::overrides() | AU-FACT-007 | conformant |
+| API-FACT-008 | facts | <cxxlens/facts.hpp> | fact_store::includes() | AU-FACT-008 | conformant |
+| API-FACT-009 | facts | <cxxlens/facts.hpp> | fact_store::macros() | AU-FACT-009 | conformant |
+| API-FACT-010 | facts | <cxxlens/facts.hpp> | fact_store::coverage(fact_profile,analysis_scope) | AU-FACT-010 | conformant |
 | API-FLOW-001 | flow | <cxxlens/flow.hpp> | source_model factories | AU-FLOW-001 | unimplemented |
 | API-FLOW-002 | flow | <cxxlens/flow.hpp> | sink_model factories | AU-FLOW-002 | unimplemented |
 | API-FLOW-003 | flow | <cxxlens/flow.hpp> | barrier_model factories | AU-FLOW-003 | unimplemented |

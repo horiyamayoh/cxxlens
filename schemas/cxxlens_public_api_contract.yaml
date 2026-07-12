@@ -481,20 +481,30 @@ packages:
     phase: M1
     guarantees:
     - Queries one immutable fact snapshot.
-    contract_maturity: planned
-    implementation_state: unimplemented
+    requirements:
+    - FR-005
+    - QR-001
+    contract_maturity: contract-defined
+    implementation_state: conformant
     declaration:
       status: exact
       source: include/cxxlens/facts.hpp
       signature: cxxlens::result<std::vector<cxxlens::fact>> cxxlens::fact_store::find(cxxlens::fact_query) const
       signature_fingerprint: sha256:cadc83bc7a1ddd6071b40569dbfafa45bbfed70e8463dc35763a18ff1a1ace50
+    implementation_evidence:
+    - include/cxxlens/facts.hpp
+    - src/store/fact_values.cpp
+    - src/store/store_port.hpp
+    - src/store/in_memory/in_memory_store.cpp
+    - src/store/sqlite/sqlite_store.cpp
+    - schemas/cxxlens_sqlite_store_contract.yaml
+    - tests/unit/store/fact_store_test.cpp
     atomic_unit:
       id: AU-FACT-002
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - implementation_pending
+      state: complete
+      blockers: []
   - id: API-FACT-003
     symbol: fact_store::symbols()
     kind: method
@@ -505,20 +515,30 @@ packages:
       apis: []
     guarantees:
     - Results are detached from AST lifetime and deterministically ordered.
-    contract_maturity: planned
-    implementation_state: unimplemented
+    requirements:
+    - FR-005
+    - QR-001
+    contract_maturity: contract-defined
+    implementation_state: conformant
     declaration:
       status: exact
       source: include/cxxlens/facts.hpp
       signature: cxxlens::result<std::vector<cxxlens::symbol>> cxxlens::fact_store::symbols() const
       signature_fingerprint: sha256:0056e80277d8a79ecbff47bed0bbd283ca5a1667f25ae4c64731eb6502901aa5
+    implementation_evidence:
+    - include/cxxlens/facts.hpp
+    - src/store/fact_values.cpp
+    - src/store/store_port.hpp
+    - src/store/in_memory/in_memory_store.cpp
+    - src/store/sqlite/sqlite_store.cpp
+    - schemas/cxxlens_sqlite_store_contract.yaml
+    - tests/unit/store/fact_store_test.cpp
     atomic_unit:
       id: AU-FACT-003
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - implementation_pending
+      state: complete
+      blockers: []
   - id: API-FACT-004
     symbol: fact_store::references(symbol_id)
     kind: method
@@ -529,20 +549,30 @@ packages:
       apis: []
     guarantees:
     - Results are detached from AST lifetime and deterministically ordered.
-    contract_maturity: planned
-    implementation_state: unimplemented
+    requirements:
+    - FR-005
+    - QR-001
+    contract_maturity: contract-defined
+    implementation_state: conformant
     declaration:
       status: exact
       source: include/cxxlens/facts.hpp
       signature: cxxlens::result<std::vector<cxxlens::reference>> cxxlens::fact_store::references(cxxlens::symbol_id) const
       signature_fingerprint: sha256:4a09fe12bbd8c5ea03b789a3400ce36ac76178d020dde1a8a78462921bf28f49
+    implementation_evidence:
+    - include/cxxlens/facts.hpp
+    - src/store/fact_values.cpp
+    - src/store/store_port.hpp
+    - src/store/in_memory/in_memory_store.cpp
+    - src/store/sqlite/sqlite_store.cpp
+    - schemas/cxxlens_sqlite_store_contract.yaml
+    - tests/unit/store/fact_store_test.cpp
     atomic_unit:
       id: AU-FACT-004
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - implementation_pending
+      state: complete
+      blockers: []
   - id: API-FACT-005
     symbol: fact_store::calls()
     kind: method
@@ -553,20 +583,31 @@ packages:
       apis: []
     guarantees:
     - Results are detached from AST lifetime and deterministically ordered.
-    contract_maturity: planned
-    implementation_state: unimplemented
+    requirements:
+    - FR-005
+    - FR-009
+    - QR-001
+    contract_maturity: contract-defined
+    implementation_state: conformant
     declaration:
       status: exact
       source: include/cxxlens/facts.hpp
       signature: cxxlens::result<std::vector<cxxlens::call_site>> cxxlens::fact_store::calls() const
       signature_fingerprint: sha256:602bb1506fdd68665990546957767a6506cc40a3e1155e3fef5180e128910cdb
+    implementation_evidence:
+    - include/cxxlens/facts.hpp
+    - src/store/fact_values.cpp
+    - src/store/store_port.hpp
+    - src/store/in_memory/in_memory_store.cpp
+    - src/store/sqlite/sqlite_store.cpp
+    - schemas/cxxlens_sqlite_store_contract.yaml
+    - tests/unit/store/fact_store_test.cpp
     atomic_unit:
       id: AU-FACT-005
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - implementation_pending
+      state: complete
+      blockers: []
   - id: API-FACT-006
     symbol: fact_store::inheritance()
     kind: method
@@ -577,20 +618,30 @@ packages:
       apis: []
     guarantees:
     - Results are detached from AST lifetime and deterministically ordered.
-    contract_maturity: planned
-    implementation_state: unimplemented
+    requirements:
+    - FR-005
+    - QR-001
+    contract_maturity: contract-defined
+    implementation_state: conformant
     declaration:
       status: exact
       source: include/cxxlens/facts.hpp
       signature: cxxlens::result<std::vector<cxxlens::inheritance_edge>> cxxlens::fact_store::inheritance() const
       signature_fingerprint: sha256:734ba3cda2f9efe70ea962229e311359aad515d669f8dfb13143d67f4e393bf1
+    implementation_evidence:
+    - include/cxxlens/facts.hpp
+    - src/store/fact_values.cpp
+    - src/store/store_port.hpp
+    - src/store/in_memory/in_memory_store.cpp
+    - src/store/sqlite/sqlite_store.cpp
+    - schemas/cxxlens_sqlite_store_contract.yaml
+    - tests/unit/store/fact_store_test.cpp
     atomic_unit:
       id: AU-FACT-006
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - implementation_pending
+      state: complete
+      blockers: []
   - id: API-FACT-007
     symbol: fact_store::overrides()
     kind: method
@@ -601,20 +652,30 @@ packages:
       apis: []
     guarantees:
     - Results are detached from AST lifetime and deterministically ordered.
-    contract_maturity: planned
-    implementation_state: unimplemented
+    requirements:
+    - FR-005
+    - QR-001
+    contract_maturity: contract-defined
+    implementation_state: conformant
     declaration:
       status: exact
       source: include/cxxlens/facts.hpp
       signature: cxxlens::result<std::vector<cxxlens::override_edge>> cxxlens::fact_store::overrides() const
       signature_fingerprint: sha256:8c555f51a821e623795eb7b6277730ca00ae432c42a33f41ae992b27fb9ffebe
+    implementation_evidence:
+    - include/cxxlens/facts.hpp
+    - src/store/fact_values.cpp
+    - src/store/store_port.hpp
+    - src/store/in_memory/in_memory_store.cpp
+    - src/store/sqlite/sqlite_store.cpp
+    - schemas/cxxlens_sqlite_store_contract.yaml
+    - tests/unit/store/fact_store_test.cpp
     atomic_unit:
       id: AU-FACT-007
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - implementation_pending
+      state: complete
+      blockers: []
   - id: API-FACT-008
     symbol: fact_store::includes()
     kind: method
@@ -625,20 +686,30 @@ packages:
       apis: []
     guarantees:
     - Results are detached from AST lifetime and deterministically ordered.
-    contract_maturity: planned
-    implementation_state: unimplemented
+    requirements:
+    - FR-005
+    - QR-001
+    contract_maturity: contract-defined
+    implementation_state: conformant
     declaration:
       status: exact
       source: include/cxxlens/facts.hpp
       signature: cxxlens::result<std::vector<cxxlens::include_relation>> cxxlens::fact_store::includes() const
       signature_fingerprint: sha256:08c62b7f7fb5a2cbf8400ea26bd79d20284cde66f4c274fe5e665d2f7c277a3f
+    implementation_evidence:
+    - include/cxxlens/facts.hpp
+    - src/store/fact_values.cpp
+    - src/store/store_port.hpp
+    - src/store/in_memory/in_memory_store.cpp
+    - src/store/sqlite/sqlite_store.cpp
+    - schemas/cxxlens_sqlite_store_contract.yaml
+    - tests/unit/store/fact_store_test.cpp
     atomic_unit:
       id: AU-FACT-008
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - implementation_pending
+      state: complete
+      blockers: []
   - id: API-FACT-009
     symbol: fact_store::macros()
     kind: method
@@ -649,20 +720,31 @@ packages:
       apis: []
     guarantees:
     - Results are detached from AST lifetime and deterministically ordered.
-    contract_maturity: planned
-    implementation_state: unimplemented
+    requirements:
+    - FR-003
+    - FR-005
+    - QR-001
+    contract_maturity: contract-defined
+    implementation_state: conformant
     declaration:
       status: exact
       source: include/cxxlens/facts.hpp
       signature: cxxlens::result<std::vector<cxxlens::macro_expansion>> cxxlens::fact_store::macros() const
       signature_fingerprint: sha256:f05fe2a00a73a36bc0715f6deb2ca4af38dab246cca0ef57cd389f42e221b84e
+    implementation_evidence:
+    - include/cxxlens/facts.hpp
+    - src/store/fact_values.cpp
+    - src/store/store_port.hpp
+    - src/store/in_memory/in_memory_store.cpp
+    - src/store/sqlite/sqlite_store.cpp
+    - schemas/cxxlens_sqlite_store_contract.yaml
+    - tests/unit/store/fact_store_test.cpp
     atomic_unit:
       id: AU-FACT-009
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - implementation_pending
+      state: complete
+      blockers: []
   - id: API-FACT-010
     symbol: fact_store::coverage(fact_profile,analysis_scope)
     kind: method
@@ -673,20 +755,30 @@ packages:
       apis: []
     guarantees:
     - Results are detached from AST lifetime and deterministically ordered.
-    contract_maturity: planned
-    implementation_state: unimplemented
+    requirements:
+    - FR-008
+    - QR-001
+    contract_maturity: contract-defined
+    implementation_state: conformant
     declaration:
       status: exact
       source: include/cxxlens/facts.hpp
       signature: cxxlens::coverage_report cxxlens::fact_store::coverage(cxxlens::fact_profile, cxxlens::analysis_scope) const
       signature_fingerprint: sha256:b57198f6c82c99bbe496b390ec3e65bc37115a2ded8014ce55e8efffa897d89b
+    implementation_evidence:
+    - include/cxxlens/facts.hpp
+    - src/store/fact_values.cpp
+    - src/store/store_port.hpp
+    - src/store/in_memory/in_memory_store.cpp
+    - src/store/sqlite/sqlite_store.cpp
+    - schemas/cxxlens_sqlite_store_contract.yaml
+    - tests/unit/store/fact_store_test.cpp
     atomic_unit:
       id: AU-FACT-010
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - implementation_pending
+      state: complete
+      blockers: []
 - id: models
   header: <cxxlens/models.hpp>
   purpose: Versioned project API effects, replacements and flow models.
@@ -3389,9 +3481,9 @@ summary:
   api_entry_count: 123
   atomic_unit_count: 123
   implementation_state_counts:
-    unimplemented: 104
+    unimplemented: 95
     implemented: 0
-    conformant: 19
+    conformant: 28
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.

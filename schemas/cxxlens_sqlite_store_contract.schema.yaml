@@ -1,0 +1,40 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://schemas.cxxlens.dev/cxxlens.sqlite-store-contract.v1.json
+title: cxxlens SQLite fact store contract
+type: object
+additionalProperties: false
+required: [schema, store_schema, binary_schema, tables, indexes, metadata_axes, policies]
+properties:
+  schema: {const: cxxlens.sqlite-store-contract.v1}
+  store_schema: {const: cxxlens.sqlite-fact-store.v1}
+  binary_schema: {const: cxxlens.fact-snapshot.binary.v1}
+  tables:
+    type: array
+    minItems: 4
+    uniqueItems: true
+    items: {type: string, pattern: '^cxxlens_[a-z_]+$'}
+  indexes:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {type: string, pattern: '^cxxlens_[a-z_]+$'}
+  metadata_axes:
+    type: array
+    minItems: 6
+    uniqueItems: true
+    items:
+      enum: [workspace_key, schema_version, semantics_version, adapter_id, adapter_version,
+             extractor_versions, generation, coverage]
+  policies:
+    type: object
+    additionalProperties: false
+    required: [persistence, readers, writers, commit, mismatch, corruption, migration, ordering]
+    properties:
+      persistence: {const: versioned_canonical_binary}
+      readers: {const: immutable_committed_snapshot}
+      writers: {const: single_writer}
+      commit: {const: atomic_publish_or_prior_snapshot}
+      mismatch: {const: explicit_rebuild_required}
+      corruption: {const: preserve_and_diagnose}
+      migration: {const: rebuild_instead_of_unsafe_migration}
+      ordering: {const: kind_stable_key_fact_id}

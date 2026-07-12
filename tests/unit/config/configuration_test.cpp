@@ -43,6 +43,14 @@ namespace
 		{
 			return path.lexically_normal();
 		}
+
+		[[nodiscard]] cxxlens::detail::runtime::runtime_result<bool>
+		remove(const std::filesystem::path&,
+			   const cxxlens::detail::runtime::request_context&) override
+		{
+			using namespace cxxlens::detail::runtime;
+			return unexpected{{runtime_status::permission_denied, "configuration.remove", 13}};
+		}
 	};
 
 	[[nodiscard]] bool check(const bool condition, const std::string& message)

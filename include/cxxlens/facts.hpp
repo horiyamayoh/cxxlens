@@ -3,6 +3,7 @@
 /** @file facts.hpp @brief LLVM-free immutable fact and observation-facing value contracts. */
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -14,6 +15,10 @@
 
 namespace cxxlens
 {
+	namespace detail
+	{
+		struct fact_store_access;
+	} // namespace detail
 	/** @brief Persistable semantic fact kinds fixed by the v1 fact schema. */
 	enum class fact_kind : std::uint16_t // NOLINT(performance-enum-size)
 	{
@@ -151,6 +156,7 @@ namespace cxxlens
 	class fact
 	{
 	  public:
+		fact() = default;
 		/** @brief Stable fact ID. @retval value Full ID. @pre Resolved handle. @post Unchanged.
 		 * @note Adapter metadata is excluded. @code{.cpp}
 		 * #include <cxxlens/facts.hpp>
@@ -191,6 +197,12 @@ namespace cxxlens
 		 * int main(){return 0;}
 		 * @endcode */
 		[[nodiscard]] std::string to_json() const;
+
+	  private:
+		struct data;
+		explicit fact(std::shared_ptr<const data> value);
+		std::shared_ptr<const data> data_;
+		friend struct detail::fact_store_access;
 	};
 
 	/** @brief Semantic declaration category. */
@@ -299,6 +311,7 @@ namespace cxxlens
 	class symbol
 	{
 	  public:
+		symbol() = default;
 		/** @brief Return semantic symbol ID. @retval value Full stable ID. @pre Resolved value.
 		 * @post Unchanged. @note Names alone never form identity. @code{.cpp}
 		 * #include <cxxlens/facts.hpp>
@@ -367,12 +380,20 @@ namespace cxxlens
 		 * int main(){return 0;}
 		 * @endcode */
 		[[nodiscard]] std::string display_name() const;
+
+	  private:
+		struct data;
+		explicit symbol(std::shared_ptr<const data> value);
+		std::shared_ptr<const data> data_;
+		friend struct detail::fact_store_access;
+		friend class fact_store;
 	};
 
 	/** @brief Detached structural type value. */
 	class type_ref
 	{
 	  public:
+		type_ref() = default;
 		/** @brief Return structural type ID. @retval value Full stable ID. @pre Resolved value.
 		 * @post Unchanged. @note Pretty spelling alone is forbidden identity. @code{.cpp}
 		 * #include <cxxlens/facts.hpp>
@@ -442,12 +463,20 @@ namespace cxxlens
 		 * int main(){return 0;}
 		 * @endcode */
 		[[nodiscard]] std::vector<type_ref> template_arguments() const;
+
+	  private:
+		struct data;
+		explicit type_ref(std::shared_ptr<const data> value);
+		std::shared_ptr<const data> data_;
+		friend struct detail::fact_store_access;
+		friend class fact_store;
 	};
 
 	/** @brief Detached reference fact. */
 	class reference
 	{
 	  public:
+		reference() = default;
 		/** @brief Return reference fact ID. @retval value Full stable ID. @pre Resolved value.
 		 * @post Unchanged. @note Source and target semantics form identity. @code{.cpp}
 		 * #include <cxxlens/facts.hpp>
@@ -487,12 +516,20 @@ namespace cxxlens
 		 * int main(){return 0;}
 		 * @endcode */
 		[[nodiscard]] const evidence& why() const noexcept;
+
+	  private:
+		struct data;
+		explicit reference(std::shared_ptr<const data> value);
+		std::shared_ptr<const data> data_;
+		friend struct detail::fact_store_access;
+		friend class fact_store;
 	};
 
 	/** @brief Detached call fact preserving resolution dimensions separately. */
 	class call_site
 	{
 	  public:
+		call_site() = default;
 		/** @brief Return call fact ID. @retval value Full stable ID. @pre Resolved value.
 		 * @post Unchanged. @note Resolution dimensions remain separate. @code{.cpp}
 		 * #include <cxxlens/facts.hpp>
@@ -567,6 +604,13 @@ namespace cxxlens
 		 * int main(){return 0;}
 		 * @endcode */
 		[[nodiscard]] const evidence& why() const noexcept;
+
+	  private:
+		struct data;
+		explicit call_site(std::shared_ptr<const data> value);
+		std::shared_ptr<const data> data_;
+		friend struct detail::fact_store_access;
+		friend class fact_store;
 	};
 
 	/** @brief Direct inheritance edge; never a transitive closure row. */
@@ -638,6 +682,7 @@ namespace cxxlens
 	class fact_query
 	{
 	  public:
+		fact_query() = default;
 		/** @brief Select every fact. @retval value Immutable query. @pre None. @post No filters.
 		 * @note Coverage remains separately queryable. @code{.cpp}
 		 * #include <cxxlens/facts.hpp>
@@ -689,16 +734,24 @@ namespace cxxlens
 		 * int main(){return 0;}
 		 * @endcode */
 		[[nodiscard]] fact_query custom(std::string key, std::string value) const;
+
+	  private:
+		struct data;
+		explicit fact_query(std::shared_ptr<const data> value);
+		std::shared_ptr<const data> data_;
+		friend struct detail::fact_store_access;
+		friend class fact_store;
 	};
 
-	/** @brief Immutable fact snapshot query handle; backend implementation is owned by #20. */
+	/** @brief Immutable detached query handle over one atomically published fact snapshot. */
 	class fact_store
 	{
 	  public:
+		fact_store() = default;
 		/** @brief Query one immutable snapshot. @param[in] query Validated query.
 		 * @retval value Canonically ordered detached facts or structured error. @pre Store is
 		 * bound.
-		 * @post Snapshot unchanged. @note Backend implementation is owned by #20.
+		 * @post Snapshot unchanged. @note Ordering is kind, stable key, then full fact ID.
 		 * @code{.cpp}
 		 * #include <cxxlens/facts.hpp>
 		 * int main(){return 0;}
@@ -769,5 +822,11 @@ namespace cxxlens
 		 * int main(){return 0;}
 		 * @endcode */
 		[[nodiscard]] std::string to_json(fact_query query = fact_query::all()) const;
+
+	  private:
+		struct data;
+		explicit fact_store(std::shared_ptr<const data> value);
+		std::shared_ptr<const data> data_;
+		friend struct detail::fact_store_access;
 	};
 } // namespace cxxlens

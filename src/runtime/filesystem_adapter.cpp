@@ -143,6 +143,18 @@ namespace cxxlens::detail::runtime
 		return result;
 	}
 
+	runtime_result<bool> standard_filesystem_adapter::remove(const std::filesystem::path& path,
+															 const request_context& context)
+	{
+		if (auto failure = preflight(context))
+			return unexpected{std::move(*failure)};
+		std::error_code error;
+		const bool removed = std::filesystem::remove(path, error);
+		if (error)
+			return unexpected{map_error(context.operation, error)};
+		return removed;
+	}
+
 	memory_filesystem_adapter::memory_filesystem_adapter(fault_plan faults)
 		: faults_{std::move(faults)}
 	{
@@ -241,6 +253,16 @@ namespace cxxlens::detail::runtime
 			return unexpected{*failure};
 		}
 		return normalized(path);
+	}
+
+	runtime_result<bool> memory_filesystem_adapter::remove(const std::filesystem::path& path,
+														   const request_context& context)
+	{
+		if (auto failure = preflight(context))
+			return unexpected{std::move(*failure)};
+		if (const auto* failure = faults_.match(context))
+			return unexpected{*failure};
+		return files_.erase(normalized(path)) != 0U;
 	}
 
 	std::vector<std::filesystem::path>

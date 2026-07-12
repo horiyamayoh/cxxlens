@@ -66,11 +66,18 @@ add_library(
   src/llvm/clang22/source_map_adapter.cpp
   src/llvm/clang22/symbol_type_extractor.cpp
   src/runtime/fault_plan.cpp
+  src/runtime/dynamic_library_adapter.cpp
   src/runtime/filesystem_adapter.cpp
   src/runtime/hash_adapter.cpp
   src/runtime/process_adapter.cpp
   src/runtime/time_adapter.cpp
   src/source/source_span.cpp
+  src/store/binary_codec.cpp
+  src/store/fact_values.cpp
+  src/store/in_memory/in_memory_store.cpp
+  src/store/sqlite/sqlite_api.cpp
+  src/store/sqlite/sqlite_store.cpp
+  src/store/store_port.cpp
   src/testing/fault_plan.cpp
   src/testing/json_parser.cpp
   src/testing/result_assertion.cpp
@@ -155,6 +162,8 @@ install(
         schemas/cxxlens_schema_compatibility.yaml
         schemas/cxxlens_source_span.schema.yaml
         schemas/cxxlens_scheduler_trace.schema.yaml
+        schemas/cxxlens_sqlite_store_contract.schema.yaml
+        schemas/cxxlens_sqlite_store_contract.yaml
         schemas/cxxlens_testing_fixture.schema.yaml
         schemas/cxxlens_unresolved.schema.yaml
         schemas/cxxlens_analysis_scope.schema.yaml
