@@ -24,8 +24,15 @@ function(cxxlens_configure_clang22 target)
     get_filename_component(_cxxlens_llvm_cmake_dir "${LLVM_CMAKE_DIR}" REALPATH)
     get_filename_component(_cxxlens_llvm_cmake_root
                            "${_cxxlens_llvm_cmake_dir}" DIRECTORY)
-    find_package(Clang CONFIG QUIET PATHS "${_cxxlens_llvm_cmake_root}/clang"
-                 NO_DEFAULT_PATH)
+    find_library(
+      _cxxlens_clang_basic_library
+      NAMES clangBasic
+      PATHS ${LLVM_LIBRARY_DIRS}
+      NO_DEFAULT_PATH NO_CACHE)
+    if(_cxxlens_clang_basic_library)
+      find_package(Clang CONFIG QUIET PATHS "${_cxxlens_llvm_cmake_root}/clang"
+                   NO_DEFAULT_PATH)
+    endif()
   endif()
 
   if(NOT LLVM_FOUND

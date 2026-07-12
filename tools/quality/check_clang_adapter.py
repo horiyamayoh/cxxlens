@@ -56,6 +56,7 @@ if re.search(r"(^|\s)clang-cpp($|\s)", cmake):
 for marker in (
     "CXXLENS_CLANG_ADAPTER",
     "LLVM_CMAKE_DIR",
+    "_cxxlens_clang_basic_library",
     "LLVM_VERSION_MAJOR EQUAL 22",
     "CXXLENS_HAS_CLANG22=0",
     "CXXLENS_HAS_CLANG22=1",
