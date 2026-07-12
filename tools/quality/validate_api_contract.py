@@ -357,6 +357,7 @@ def validate_document(document: Any, inventory_text: str | None = None) -> dict:
         "API-CORE-001",
         "API-CORE-003",
         "API-CORE-004",
+        "API-FACT-001",
         "API-TEST-001",
         "API-TEST-002",
         "API-TEST-005",

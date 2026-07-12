@@ -61,7 +61,7 @@ def main() -> int:
     if failures:
         print("serialization contract quality check failed:\n" + "\n".join(failures), file=sys.stderr)
         return 1
-    print(f"validated common writer and {len(document_ids)} registered M0 schemas")
+    print(f"validated common writer and {len(document_ids)} registered public schemas")
     return 0
 
 

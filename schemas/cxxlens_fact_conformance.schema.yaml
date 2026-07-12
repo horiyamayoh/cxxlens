@@ -1,0 +1,18 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://schemas.cxxlens.dev/cxxlens.fact-conformance.v1.json
+title: cxxlens.fact-conformance.v1
+type: object
+required: [schema, vectors]
+additionalProperties: false
+properties:
+  schema: {const: cxxlens.fact-conformance.v1}
+  vectors:
+    type: array
+    minItems: 8
+    items:
+      type: object
+      required: [id, expected]
+      properties:
+        id: {type: string, pattern: '^FACT-[A-Z0-9-]+$'}
+        expected: {enum: [valid, invalid]}
+      additionalProperties: true

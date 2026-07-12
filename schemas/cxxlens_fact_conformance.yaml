@@ -1,0 +1,45 @@
+schema: cxxlens.fact-conformance.v1
+vectors:
+- id: FACT-NAME-USR
+  expected: valid
+  identity: {display_qualified_name: ns::f, usr: 'c:@N@ns@F@f#'}
+- id: FACT-NAME-STRUCTURAL
+  expected: valid
+  identity:
+    display_qualified_name: ns::f
+    semantic_owner: 'symbol_owner'
+    declaration_kind: function
+    signature_structure: 'fn(i32)->void'
+- id: FACT-NAME-PRETTY-ONLY
+  expected: invalid
+  reason: qualified-name-only
+  identity: {display_qualified_name: ns::f}
+- id: FACT-TYPE-STRUCTURAL
+  expected: valid
+  type:
+    display_spelling: 'const T*'
+    canonical_structure: 'ptr(const(record))'
+    builtin: false
+    components: ['type_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa']
+- id: FACT-TYPE-PRETTY-ONLY
+  expected: invalid
+  reason: pretty-string-only
+  type: {display_spelling: 'const T*', canonical_structure: '', builtin: false, components: []}
+- id: FACT-OBSERVATION-POINTER
+  expected: invalid
+  reason: native-lifetime-payload
+  payload_field: clang_ast_pointer
+- id: FACT-CALL-VIRTUAL
+  expected: valid
+  required_fields:
+  - direct_callee
+  - possible_callees
+  - receiver_static_type
+  - dispatch
+  - confidence
+  - guarantee
+  - evidence
+- id: FACT-RELATION-DIRECT
+  expected: valid
+  inheritance: direct_edge_only
+  override: direct_edge_only

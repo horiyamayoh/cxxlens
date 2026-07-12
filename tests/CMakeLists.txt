@@ -84,6 +84,13 @@ add_test(NAME public-api.workspace-header
          COMMAND cxxlens-public-header-workspace)
 set_tests_properties(public-api.workspace-header PROPERTIES LABELS public-api)
 
+add_executable(cxxlens-public-header-facts public_headers/facts_header_test.cpp)
+target_link_libraries(cxxlens-public-header-facts PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-public-header-facts PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-public-header-facts)
+add_test(NAME public-api.facts-header COMMAND cxxlens-public-header-facts)
+set_tests_properties(public-api.facts-header PROPERTIES LABELS public-api)
+
 configure_file(install/run_install_test.cmake.in
                "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake" @ONLY)
 add_test(NAME install.consumer
@@ -306,6 +313,26 @@ set_tests_properties(
   schema.workspace-catalog
   PROPERTIES LABELS "workspace;schema;golden;determinism;security")
 
+add_executable(cxxlens-unit-fact-contract unit/facts/fact_contract_test.cpp)
+target_link_libraries(cxxlens-unit-fact-contract PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-unit-fact-contract
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-unit-fact-contract PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-fact-contract)
+add_test(NAME unit.fact-contract COMMAND cxxlens-unit-fact-contract)
+set_tests_properties(
+  unit.fact-contract
+  PROPERTIES LABELS "unit;facts;schema;identity;determinism;conformance")
+add_test(
+  NAME schema.fact-contract
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/facts/test_fact_schemas.py"
+    "$<TARGET_FILE:cxxlens-unit-fact-contract>" "${PROJECT_SOURCE_DIR}")
+set_tests_properties(
+  schema.fact-contract
+  PROPERTIES LABELS "facts;schema;golden;determinism;security;conformance")
+
 add_custom_target(cxxlens-m0-test-binaries)
 add_dependencies(
   cxxlens-m0-test-binaries
@@ -313,6 +340,7 @@ add_dependencies(
   cxxlens-public-header-core
   cxxlens-public-header-cxxlens
   cxxlens-public-header-evidence
+  cxxlens-public-header-facts
   cxxlens-public-header-failure
   cxxlens-public-header-finding
   cxxlens-public-header-identity
@@ -320,11 +348,13 @@ add_dependencies(
   cxxlens-public-header-source
   cxxlens-public-header-testing
   cxxlens-public-header-workspace
+  cxxlens-public-header-workspace
   cxxlens-unit-canonical-identity
   cxxlens-unit-canonical-json
   cxxlens-unit-configuration
   cxxlens-unit-configuration-process
   cxxlens-unit-evidence-coverage
+  cxxlens-unit-fact-contract
   cxxlens-unit-failure-contract
   cxxlens-unit-finding-contract
   cxxlens-unit-m0-serialization
@@ -334,3 +364,4 @@ add_dependencies(
   cxxlens-unit-testing-fixture-process
   cxxlens-unit-testing-substrate
   cxxlens-unit-version)
+add_dependencies(cxxlens-m0-test-binaries cxxlens-unit-workspace-catalog)

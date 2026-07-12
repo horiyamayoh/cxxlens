@@ -10,8 +10,11 @@ documents:
 - {id: cxxlens.diagnostic.v1, version: 1.0.0, file: cxxlens_diagnostic.schema.yaml}
 - {id: cxxlens.error.v1, version: 1.0.0, file: cxxlens_error.schema.yaml}
 - {id: cxxlens.evidence.v1, version: 1.0.0, file: cxxlens_evidence.schema.yaml}
+- {id: cxxlens.fact-profile.v1, version: 1.0.0, file: cxxlens_fact_profile.schema.yaml}
+- {id: cxxlens.fact.v1, version: 1.0.0, file: cxxlens_fact.schema.yaml}
 - {id: cxxlens.finding-set.v1, version: 1.0.0, file: cxxlens_finding_set.schema.yaml}
 - {id: cxxlens.finding.v1, version: 1.0.0, file: cxxlens_finding.schema.yaml}
+- {id: cxxlens.observation.v1, version: 1.0.0, file: cxxlens_observation.schema.yaml}
 - {id: cxxlens.source-span.v1, version: 1.0.0, file: cxxlens_source_span.schema.yaml}
 - {id: cxxlens.testing.fixture.v1, version: 1.0.0, file: cxxlens_testing_fixture.schema.yaml}
 - {id: cxxlens.unresolved.v1, version: 1.0.0, file: cxxlens_unresolved.schema.yaml}

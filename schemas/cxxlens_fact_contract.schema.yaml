@@ -1,0 +1,41 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://schemas.cxxlens.dev/cxxlens.fact-contract.v1.json
+title: cxxlens.fact-contract.v1
+type: object
+required:
+- schema
+- semantics_version
+- public_fact_kinds
+- dependency_aliases
+- profiles
+- identity
+- collections
+- relations
+- observation
+additionalProperties: false
+properties:
+  schema: {const: cxxlens.fact-contract.v1}
+  semantics_version: {const: 1.0.0}
+  public_fact_kinds:
+    type: array
+    items: {type: string}
+    minItems: 1
+    uniqueItems: true
+  dependency_aliases:
+    type: object
+    additionalProperties:
+      type: array
+      items: {type: string}
+      minItems: 1
+      uniqueItems: true
+  profiles:
+    type: object
+    required: [minimal, semantic_search]
+    additionalProperties:
+      type: array
+      items: {type: string}
+      uniqueItems: true
+  identity: {type: object}
+  collections: {type: object}
+  relations: {type: object}
+  observation: {type: object}

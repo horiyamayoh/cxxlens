@@ -1,0 +1,120 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://schemas.cxxlens.dev/cxxlens.fact.v1.json
+title: cxxlens.fact.v1
+type: object
+required: [schema, id, kind, stable_key, provenance, payload]
+additionalProperties: false
+properties:
+  schema: {const: cxxlens.fact.v1}
+  id: {type: string, pattern: '^fact_[0-9a-f]{64}$'}
+  kind: {type: string}
+  stable_key: {type: string, minLength: 1}
+  source:
+    oneOf:
+    - {$ref: cxxlens_source_span.schema.yaml}
+    - {type: 'null'}
+  provenance:
+    type: object
+    required: [compile_units, variants, extractor_id, extractor_version]
+    additionalProperties: false
+    properties:
+      compile_units:
+        type: array
+        items: {type: string, pattern: '^cu_[0-9a-f]{64}$'}
+        uniqueItems: true
+      variants:
+        type: array
+        items: {type: string, pattern: '^variant_[0-9a-f]{64}$'}
+        uniqueItems: true
+      extractor_id: {type: string, minLength: 1}
+      extractor_version: {type: string, minLength: 1}
+  payload:
+    type: object
+    required: [version, fields]
+    additionalProperties: false
+    properties:
+      version: {type: integer, minimum: 1}
+      fields:
+        type: object
+        propertyNames:
+          pattern: '^(?!(?:.*(?:clang|llvm|ast|pointer|address|source_manager|compiler_instance|qual_type|decl_ptr)))[a-z][a-z0-9_.-]*$'
+        additionalProperties: {$ref: '#/$defs/safe_value'}
+  name_identity: {$ref: '#/$defs/name_identity'}
+  type_identity: {$ref: '#/$defs/type_identity'}
+  call:
+    type: object
+    required:
+    - kind
+    - direct_callee
+    - possible_callees
+    - receiver_static_type
+    - dispatch
+    - confidence
+    - guarantee
+    - evidence
+    additionalProperties: false
+    properties:
+      kind: {type: string}
+      direct_callee: {type: [string, 'null']}
+      possible_callees:
+        type: array
+        items: {type: string, pattern: '^symbol_[0-9a-f]{64}$'}
+        uniqueItems: true
+      receiver_static_type: {type: [string, 'null']}
+      dispatch:
+        enum:
+        - direct_exact
+        - static_member_target
+        - virtual_candidate_set
+        - indirect_candidate_set
+        - modeled_candidate_set
+        - unresolved
+      confidence: {type: string}
+      guarantee: {type: string}
+      evidence: {type: object}
+$defs:
+  safe_value:
+    oneOf:
+    - type: string
+      pattern: '^(?!.*(?:clang::|llvm::|0x[0-9A-Fa-f]{6,})).*$'
+    - {type: number}
+    - {type: boolean}
+    - {type: 'null'}
+    - type: array
+      items: {$ref: '#/$defs/safe_value'}
+    - type: object
+      propertyNames:
+        pattern: '^(?!(?:.*(?:clang|llvm|ast|pointer|address|source_manager|compiler_instance|qual_type|decl_ptr)))[a-z][a-z0-9_.-]*$'
+      additionalProperties: {$ref: '#/$defs/safe_value'}
+  name_identity:
+    type: object
+    required: [display_qualified_name]
+    additionalProperties: false
+    properties:
+      display_qualified_name: {type: string}
+      usr: {type: string, minLength: 1}
+      semantic_owner: {type: string, minLength: 1}
+      declaration_kind: {type: string, minLength: 1}
+      signature_structure: {type: string, minLength: 1}
+    anyOf:
+    - required: [usr]
+    - required: [semantic_owner, declaration_kind, signature_structure]
+  type_identity:
+    type: object
+    required: [display_spelling, canonical_structure, builtin, components]
+    additionalProperties: false
+    properties:
+      display_spelling: {type: string}
+      canonical_structure: {type: string, minLength: 1}
+      declaration_id: {type: string, pattern: '^symbol_[0-9a-f]{64}$'}
+      builtin: {type: boolean}
+      components:
+        type: array
+        items: {type: string, pattern: '^type_[0-9a-f]{64}$'}
+        uniqueItems: true
+    allOf:
+    - if: {properties: {builtin: {const: false}}}
+      then:
+        anyOf:
+        - required: [declaration_id]
+        - properties: {components: {minItems: 1}}

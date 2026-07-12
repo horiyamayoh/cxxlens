@@ -53,6 +53,8 @@ add_library(
   src/core/json_projections.cpp
   src/core/schema_registry.cpp
   src/core/version.cpp
+  src/facts/fact_contract.cpp
+  src/facts/fact_profile.cpp
   src/runtime/fault_plan.cpp
   src/runtime/filesystem_adapter.cpp
   src/runtime/hash_adapter.cpp
@@ -121,6 +123,12 @@ install(
         schemas/cxxlens_error.schema.yaml
         schemas/cxxlens_evidence_coverage_contract.yaml
         schemas/cxxlens_evidence.schema.yaml
+        schemas/cxxlens_fact.schema.yaml
+        schemas/cxxlens_fact_contract.yaml
+        schemas/cxxlens_fact_contract.schema.yaml
+        schemas/cxxlens_fact_conformance.yaml
+        schemas/cxxlens_fact_conformance.schema.yaml
+        schemas/cxxlens_fact_profile.schema.yaml
         schemas/cxxlens_failure_contract.yaml
         schemas/cxxlens_finding_contract.yaml
         schemas/cxxlens_finding.schema.yaml
@@ -129,6 +137,7 @@ install(
         schemas/cxxlens_m0_acceptance_report.schema.yaml
         schemas/cxxlens_m0_completion.schema.yaml
         schemas/cxxlens_m0_completion.yaml
+        schemas/cxxlens_observation.schema.yaml
         schemas/cxxlens_schema_compatibility.yaml
         schemas/cxxlens_source_span.schema.yaml
         schemas/cxxlens_testing_fixture.schema.yaml
