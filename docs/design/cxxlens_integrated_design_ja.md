@@ -3278,7 +3278,7 @@ selector/query/search semantics を再実装しない。
 
 M2 completion の規範 manifest は `cxxlens_m2_completion.yaml` とし、#23〜#26 の exact/deferred API、
 requirement、invariant、test、fixture ownership を一対一に追跡する。M0/M1 completion manifest と合わせて
-#2〜#26 の owner が連続し、unresolved indivisible family は blocker として明示する。clean checkout から
+issue #2〜#26 の owner が連続し、unresolved indivisible family は blocker として明示する。clean checkout から
 installed package、実 Clang 22、multi-TU/macro/multi-variant、memory/SQLite cold/warm、partial failure、
 performance trace を実行する単一 gate は次である。
 
