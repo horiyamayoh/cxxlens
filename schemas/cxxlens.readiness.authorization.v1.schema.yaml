@@ -1,0 +1,353 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.readiness.authorization.v1.schema.yaml
+title: cxxlens parallel-wave readiness authorization v1
+type: object
+additionalProperties: false
+required:
+  - schema
+  - policy
+  - input_fingerprints
+  - foundation_gates
+  - catalog_audit
+  - infrastructure_audit
+  - dry_runs
+  - units
+  - apis
+  - authorization
+  - summary
+  - checks
+  - semantic_digest
+properties:
+  schema: {const: cxxlens.readiness.authorization.v1}
+  policy:
+    type: object
+    additionalProperties: false
+    required: [waivers_allowed, dispatch_scope, rollback_triggers]
+    properties:
+      waivers_allowed: {const: false}
+      dispatch_scope: {const: manifest_ready_units_only}
+      rollback_triggers: {$ref: '#/$defs/string_list'}
+  input_fingerprints:
+    type: object
+    additionalProperties: {$ref: '#/$defs/digest'}
+    required:
+      - catalog
+      - task_packets
+      - ownership
+      - ready_report
+      - dependency_requests
+      - m0
+      - m1
+      - m2
+      - design_package
+      - quality_workflow
+      - build_gates
+      - audit_policy
+  foundation_gates:
+    type: array
+    minItems: 3
+    uniqueItems: true
+    items: {$ref: '#/$defs/foundation_gate'}
+  catalog_audit:
+    type: object
+    additionalProperties: false
+    required:
+      - package_count
+      - api_count
+      - exact_declaration_count
+      - unresolved_declaration_count
+      - duplicate_api_count
+      - dangling_api_dependency_count
+      - unresolved_ready_signature_count
+      - evidence_free_conformant_count
+    properties:
+      package_count: {type: integer, minimum: 1}
+      api_count: {type: integer, minimum: 1}
+      exact_declaration_count: {type: integer, minimum: 0}
+      unresolved_declaration_count: {type: integer, minimum: 0}
+      duplicate_api_count: {const: 0}
+      dangling_api_dependency_count: {const: 0}
+      unresolved_ready_signature_count: {const: 0}
+      evidence_free_conformant_count: {const: 0}
+  infrastructure_audit:
+    type: object
+    additionalProperties: false
+    required:
+      - atomic_unit_count
+      - packet_count
+      - tracked_path_count
+      - reserved_path_count
+      - dependency_edge_count
+      - package_integration_shard_count
+      - write_overlap_count
+      - unowned_path_count
+      - cycle_count
+      - dangling_edge_count
+      - provider_ambiguity_count
+    properties:
+      atomic_unit_count: {type: integer, minimum: 1}
+      packet_count: {type: integer, minimum: 1}
+      tracked_path_count: {type: integer, minimum: 1}
+      reserved_path_count: {type: integer, minimum: 1}
+      dependency_edge_count: {type: integer, minimum: 0}
+      package_integration_shard_count: {type: integer, minimum: 1}
+      write_overlap_count: {const: 0}
+      unowned_path_count: {const: 0}
+      cycle_count: {const: 0}
+      dangling_edge_count: {const: 0}
+      provider_ambiguity_count: {const: 0}
+  dry_runs:
+    type: object
+    additionalProperties: false
+    required:
+      - prompts
+      - unknown_prompt
+      - blocked_prompt
+      - unauthorized_edit
+      - dependency_request
+    properties:
+      prompts:
+        type: array
+        minItems: 5
+        uniqueItems: true
+        items: {$ref: '#/$defs/prompt_run'}
+      unknown_prompt: {$ref: '#/$defs/refusal'}
+      blocked_prompt: {$ref: '#/$defs/refusal'}
+      unauthorized_edit: {$ref: '#/$defs/refusal'}
+      dependency_request:
+        type: object
+        additionalProperties: false
+        required:
+          - request_id
+          - atomic_unit_id
+          - transition_order
+          - open_blocker_observed
+          - resolved_blocker_removed
+          - report_reissued
+        properties:
+          request_id: {type: string, minLength: 1}
+          atomic_unit_id: {$ref: '#/$defs/unit_id'}
+          transition_order:
+            type: array
+            prefixItems:
+              - {const: pending}
+              - {const: accepted}
+              - {const: resolved}
+            minItems: 3
+            maxItems: 3
+          open_blocker_observed: {const: true}
+          resolved_blocker_removed: {const: true}
+          report_reissued: {const: true}
+  units:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {$ref: '#/$defs/unit'}
+  apis:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {$ref: '#/$defs/api'}
+  authorization:
+    type: object
+    additionalProperties: false
+    required:
+      - decision
+      - reason_code
+      - ready_unit_ids
+      - ready_waves
+      - validity
+    properties:
+      decision: {enum: [authorized, denied]}
+      reason_code: {enum: [ready-wave-available, no-ready-incomplete-unit]}
+      ready_unit_ids:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/unit_id'}
+      ready_waves:
+        type: array
+        items:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {$ref: '#/$defs/unit_id'}
+      validity:
+        type: object
+        additionalProperties: false
+        required: [state, basis, expires_on, fingerprint_digest]
+        properties:
+          state: {const: current}
+          basis: {const: input_fingerprints}
+          expires_on: {const: any_relevant_input_drift}
+          fingerprint_digest: {$ref: '#/$defs/digest'}
+  summary:
+    type: object
+    additionalProperties: false
+    required: [package_count, api_count, unit_count, api_state_counts, unit_state_counts]
+    properties:
+      package_count: {type: integer, minimum: 1}
+      api_count: {type: integer, minimum: 1}
+      unit_count: {type: integer, minimum: 1}
+      api_state_counts: {$ref: '#/$defs/state_counts'}
+      unit_state_counts: {$ref: '#/$defs/state_counts'}
+  checks: {$ref: '#/$defs/string_list'}
+  semantic_digest: {$ref: '#/$defs/digest'}
+$defs:
+  digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  api_id:
+    type: string
+    pattern: '^API-[A-Z]+-[0-9]{3}$'
+  unit_id:
+    type: string
+    pattern: '^AU-[A-Z]+-[0-9]{3}$'
+  string_list:
+    type: array
+    uniqueItems: true
+    items: {type: string, minLength: 1}
+  command:
+    type: object
+    additionalProperties: false
+    required: [argv, environment]
+    properties:
+      argv:
+        type: array
+        minItems: 1
+        items: {type: string, minLength: 1}
+      environment:
+        type: object
+        additionalProperties: {type: string}
+  foundation_gate:
+    type: object
+    additionalProperties: false
+    required:
+      - id
+      - issue
+      - required_ci_job
+      - required_status
+      - completion_manifest
+      - replay_commands
+      - evidence
+    properties:
+      id: {enum: [M0, M1, M2]}
+      issue: {enum: [12, 22, 26]}
+      required_ci_job: {type: string, minLength: 1}
+      required_status: {const: success}
+      completion_manifest: {type: string, minLength: 1}
+      replay_commands:
+        type: array
+        minItems: 2
+        items: {$ref: '#/$defs/command'}
+      evidence: {$ref: '#/$defs/string_list'}
+  blocker:
+    type: object
+    additionalProperties: false
+    required: [code, subject, steward, resolution_issue, chain]
+    properties:
+      code: {type: string, minLength: 1}
+      subject: {type: string, minLength: 1}
+      steward: {type: string, minLength: 1}
+      resolution_issue: {type: integer, minimum: 1}
+      chain: {$ref: '#/$defs/string_list'}
+  prompt_run:
+    type: object
+    additionalProperties: false
+    required:
+      - api_id
+      - kind
+      - phase
+      - atomic_unit_id
+      - state
+      - start_authorized
+      - packet_digest
+      - shard_digest
+      - acceptance_argv
+    properties:
+      api_id: {$ref: '#/$defs/api_id'}
+      kind: {type: string, minLength: 1}
+      phase: {type: string, minLength: 1}
+      atomic_unit_id: {$ref: '#/$defs/unit_id'}
+      state: {enum: [blocked, complete, ready]}
+      start_authorized: {type: boolean}
+      packet_digest: {$ref: '#/$defs/digest'}
+      shard_digest: {$ref: '#/$defs/digest'}
+      acceptance_argv:
+        type: array
+        minItems: 1
+        items: {type: string, minLength: 1}
+  refusal:
+    type: object
+    additionalProperties: false
+    required: [code, before_compilation]
+    properties:
+      code: {type: string, minLength: 1}
+      before_compilation: {const: true}
+  unit:
+    type: object
+    additionalProperties: false
+    required:
+      - atomic_unit_id
+      - package_id
+      - api_ids
+      - state
+      - topological_wave
+      - dispatch_authorized
+      - shard_id
+      - shard_digest
+      - package_integration_shard_id
+      - blockers
+    properties:
+      atomic_unit_id: {$ref: '#/$defs/unit_id'}
+      package_id: {type: string, pattern: '^[a-z][a-z0-9_]*$'}
+      api_ids:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {$ref: '#/$defs/api_id'}
+      state: {enum: [blocked, complete, ready]}
+      topological_wave: {type: integer, minimum: 0}
+      dispatch_authorized: {type: boolean}
+      shard_id: {type: string, minLength: 1}
+      shard_digest: {$ref: '#/$defs/digest'}
+      package_integration_shard_id: {type: string, minLength: 1}
+      blockers:
+        type: array
+        items: {$ref: '#/$defs/blocker'}
+  api:
+    type: object
+    additionalProperties: false
+    required:
+      - api_id
+      - atomic_unit_id
+      - package_id
+      - kind
+      - phase
+      - declaration_status
+      - implementation_state
+      - state
+      - dispatch_authorized
+      - task_packet_digest
+      - blockers
+    properties:
+      api_id: {$ref: '#/$defs/api_id'}
+      atomic_unit_id: {$ref: '#/$defs/unit_id'}
+      package_id: {type: string, pattern: '^[a-z][a-z0-9_]*$'}
+      kind: {type: string, minLength: 1}
+      phase: {type: string, minLength: 1}
+      declaration_status: {enum: [exact, unresolved]}
+      implementation_state: {enum: [conformant, unimplemented]}
+      state: {enum: [blocked, complete, ready]}
+      dispatch_authorized: {type: boolean}
+      task_packet_digest: {$ref: '#/$defs/digest'}
+      blockers:
+        type: array
+        items: {$ref: '#/$defs/blocker'}
+  state_counts:
+    type: object
+    additionalProperties: false
+    required: [blocked, complete, ready]
+    properties:
+      blocked: {type: integer, minimum: 0}
+      complete: {type: integer, minimum: 0}
+      ready: {type: integer, minimum: 0}

@@ -1,0 +1,21 @@
+cases:
+  - id: catalog_duplicate
+    expected_code: task_packet.catalog-invalid
+  - id: signature_drift
+    expected_code: task_packet.signature-drift
+  - id: task_omission
+    expected_code: task_packet.omitted-api
+  - id: ownership_omission
+    expected_code: ownership.path-coverage
+  - id: dangling_dag_edge
+    expected_code: ready.dangling-edge
+  - id: maturity_only_ready
+    expected_code: ready.maturity-not-readiness
+  - id: authorization_api_omission
+    expected_code: readiness.api-coverage
+  - id: authorization_without_blocker
+    expected_code: readiness.blocker-missing
+  - id: false_authorization
+    expected_code: readiness.false-authorization
+  - id: expired_on_input_drift
+    expected_code: readiness.input-drift

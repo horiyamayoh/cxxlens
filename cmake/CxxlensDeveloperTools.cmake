@@ -48,6 +48,18 @@ add_custom_target(
 add_dependencies(cxxlens-ready-check cxxlens-ownership-check)
 
 add_custom_target(
+  cxxlens-readiness-audit-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/agent/readiness_audit.py" check --root
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/agent/readiness/test_readiness_audit.py"
+  VERBATIM)
+add_dependencies(cxxlens-readiness-audit-check cxxlens-ready-check)
+
+add_custom_target(
   cxxlens-api-contract-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -270,6 +282,7 @@ add_dependencies(
   cxxlens-public-boundary-check
   cxxlens-preprocessor-contract-check
   cxxlens-provisioning-contract-check
+  cxxlens-readiness-audit-check
   cxxlens-runtime-port-check
   cxxlens-scheduler-contract-check
   cxxlens-semantic-extractor-contract-check

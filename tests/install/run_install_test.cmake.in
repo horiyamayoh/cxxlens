@@ -31,6 +31,8 @@ foreach(
     "${install_prefix}/share/cxxlens/schemas/cxxlens.api-ready.report.v1.json"
     "${install_prefix}/share/cxxlens/schemas/cxxlens.api-ready.run-manifest.v1.schema.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens.api-ready.v1.schema.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens.readiness.authorization.v1.json"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens.readiness.authorization.v1.schema.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_m0_completion.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_m1_completion.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_m1_completion.schema.yaml"
