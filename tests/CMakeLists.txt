@@ -365,6 +365,28 @@ set_tests_properties(
   schema.frontend-batch
   PROPERTIES LABELS "frontend;interop;schema;security;conformance")
 
+add_executable(cxxlens-unit-scheduler unit/workspace/scheduler_test.cpp)
+target_link_libraries(cxxlens-unit-scheduler PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-unit-scheduler
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-unit-scheduler PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-scheduler)
+add_test(NAME unit.scheduler COMMAND cxxlens-unit-scheduler)
+set_tests_properties(
+  unit.scheduler
+  PROPERTIES LABELS
+             "unit;scheduler;determinism;concurrency;cancellation;coverage")
+add_test(
+  NAME determinism.scheduler-process
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/scheduler/test_scheduler_process.py"
+    "$<TARGET_FILE:cxxlens-unit-scheduler>" "${PROJECT_SOURCE_DIR}"
+    "${PROJECT_SOURCE_DIR}/tests/golden/scheduler/canonical_v1.json")
+set_tests_properties(
+  determinism.scheduler-process
+  PROPERTIES LABELS "scheduler;determinism;schema;golden;concurrency;coverage")
+
 if(CXXLENS_CLANG22_AVAILABLE)
   add_executable(cxxlens-clang22-link-closure
                  link/clang22_link_closure_test.cpp)
@@ -404,6 +426,7 @@ add_dependencies(
   cxxlens-unit-frontend-job
   cxxlens-unit-m0-serialization
   cxxlens-unit-runtime-ports
+  cxxlens-unit-scheduler
   cxxlens-unit-schema-registry
   cxxlens-unit-source-span
   cxxlens-unit-testing-fixture-process

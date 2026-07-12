@@ -115,6 +115,7 @@ namespace cxxlens
 						  "schema",
 						  "semantics_version",
 						  "spelling"}),
+			  descriptor("cxxlens.scheduler-trace.v1", {"coverage", "schema", "tasks", "trace"}),
 			  descriptor("cxxlens.testing.fixture.v1",
 						 {"arguments",
 						  "compilation_database",

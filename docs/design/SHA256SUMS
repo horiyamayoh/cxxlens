@@ -20,7 +20,7 @@ dd43cd4cda1d4de3dd496616fc378efd6fda7bc1ab4862fe778aef0861833c2d  ../../schemas/
 f98cab24235a2d6024f620fb2edcaef8ebde1056705bd06674a68a0e64bf710a  ../../schemas/cxxlens_diagnostic.schema.yaml
 e685a645c2d8399ea802fc5bf230e765ac624d6090f1c7d0a90982cc9ee1429d  ../../schemas/cxxlens_finding.schema.yaml
 2a6954c9227f2f15dfa7439bcc7ad4604a51cc0cf5ca60244aa2beb629eb2d34  ../../schemas/cxxlens_finding_set.schema.yaml
-94b68200ad56d57231dbbb9a705640298cfcfa7b9ab796482700beff85617a4f  ../../schemas/cxxlens_schema_compatibility.yaml
+5e3ebfc57296c4408d2f2ad5a05b691dcba85aa50faec015a0d68dae1f2fb58d  ../../schemas/cxxlens_schema_compatibility.yaml
 4881fb67968f4ddce1cbf0e694fdf11d0a8c3ceb1cde40f1ad91e88ff8f486dd  ../../schemas/cxxlens_testing_fixture.schema.yaml
 d7d4481dced50c6ac18db3631d53930bfd2ece54a8d1e2a6a919e5e05ec2d41a  ../../schemas/cxxlens_m0_completion.yaml
 f1070f6a03d357054a67e02aeff938799f83403f39af27b9202100544d1ae03c  ../../schemas/cxxlens_m0_completion.schema.yaml
@@ -35,3 +35,4 @@ f1ca99f4439123775ede841c8b038efe33919f9c6f51188d862f600d79ad90d9  ../../schemas/
 79660a35ae2e3b10695befc65019614771c24dabcf707fc4232253336403f208  ../../schemas/cxxlens_fact_conformance.yaml
 36b22829e0d5e15498b37ac3e29807ad2bd3f6f053509635e7fb0a26c23d70b8  ../../schemas/cxxlens_fact_conformance.schema.yaml
 02c4b431846cc25353c682c7ee3e96771d73e702ba95453e0563eb4076a8220a  ../../schemas/cxxlens_frontend_batch.schema.yaml
+da47adc9cd5f0b27be1148a8d666dcbed7e6b687c0eeb841f0764a3bdc39afbe  ../../schemas/cxxlens_scheduler_trace.schema.yaml

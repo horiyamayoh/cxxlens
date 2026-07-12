@@ -16,6 +16,7 @@ documents:
 - {id: cxxlens.finding.v1, version: 1.0.0, file: cxxlens_finding.schema.yaml}
 - {id: cxxlens.frontend-batch.v1, version: 1.0.0, file: cxxlens_frontend_batch.schema.yaml}
 - {id: cxxlens.observation.v1, version: 1.0.0, file: cxxlens_observation.schema.yaml}
+- {id: cxxlens.scheduler-trace.v1, version: 1.0.0, file: cxxlens_scheduler_trace.schema.yaml}
 - {id: cxxlens.source-span.v1, version: 1.0.0, file: cxxlens_source_span.schema.yaml}
 - {id: cxxlens.testing.fixture.v1, version: 1.0.0, file: cxxlens_testing_fixture.schema.yaml}
 - {id: cxxlens.unresolved.v1, version: 1.0.0, file: cxxlens_unresolved.schema.yaml}

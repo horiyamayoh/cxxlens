@@ -70,7 +70,9 @@ add_library(
   src/testing/json_parser.cpp
   src/testing/result_assertion.cpp
   src/testing/workspace_fixture.cpp
-  src/workspace/catalog.cpp)
+  src/workspace/catalog.cpp
+  src/workspace/frontend_scheduler_worker.cpp
+  src/workspace/scheduler.cpp)
 add_library(cxxlens::cxxlens ALIAS cxxlens)
 
 target_compile_features(cxxlens PUBLIC cxx_std_23)
@@ -147,6 +149,7 @@ install(
         schemas/cxxlens_observation.schema.yaml
         schemas/cxxlens_schema_compatibility.yaml
         schemas/cxxlens_source_span.schema.yaml
+        schemas/cxxlens_scheduler_trace.schema.yaml
         schemas/cxxlens_testing_fixture.schema.yaml
         schemas/cxxlens_unresolved.schema.yaml
         schemas/cxxlens_analysis_scope.schema.yaml
