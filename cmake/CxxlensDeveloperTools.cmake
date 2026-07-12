@@ -147,6 +147,14 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-preprocessor-contract-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_preprocessor_extractor.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-text-lint
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -181,6 +189,7 @@ add_dependencies(
   cxxlens-identity-path-check
   cxxlens-m0-completion-check
   cxxlens-public-boundary-check
+  cxxlens-preprocessor-contract-check
   cxxlens-runtime-port-check
   cxxlens-scheduler-contract-check
   cxxlens-serialization-contract-check

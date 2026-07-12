@@ -14,6 +14,7 @@
 
 #include "../../runtime/time_port.hpp"
 #include "../common/borrowed_lifetime.hpp"
+#include "preprocessor_extractor.hpp"
 
 #ifndef CXXLENS_HAS_CLANG22
 #define CXXLENS_HAS_CLANG22 0
@@ -333,52 +334,91 @@ namespace cxxlens
 			class borrowed_action final : public clang::ASTFrontendAction
 			{
 			  public:
-				borrowed_action(const compile_unit& unit,
+				borrowed_action(const frontend::parse_task& task,
 								interop::clang_tu_callback* callback,
 								std::optional<error>& callback_error,
-								bool& callback_invoked)
-					: unit_{unit}, callback_{callback}, callback_error_{callback_error},
-					  callback_invoked_{callback_invoked}
+								bool& callback_invoked,
+								std::optional<error>& extraction_error,
+								std::vector<facts::observation_record>& observations)
+					: task_{task}, callback_{callback}, callback_error_{callback_error},
+					  callback_invoked_{callback_invoked}, extraction_error_{extraction_error},
+					  observations_{observations}
 				{
+				}
+
+				bool BeginSourceFileAction(clang::CompilerInstance& compiler) override
+				{
+					auto attached =
+						attach_preprocessor_extractor(compiler, task_.unit, task_.files);
+					if (!attached)
+					{
+						extraction_error_ = std::move(attached.error());
+						return false;
+					}
+					extraction_ = std::move(attached.value());
+					return true;
 				}
 
 				std::unique_ptr<clang::ASTConsumer>
 				CreateASTConsumer(clang::CompilerInstance& compiler, llvm::StringRef) override
 				{
 					return std::make_unique<borrowed_consumer>(
-						compiler, unit_, callback_, callback_error_, callback_invoked_);
+						compiler, task_.unit, callback_, callback_error_, callback_invoked_);
+				}
+
+				void EndSourceFileAction() override
+				{
+					if (!extraction_)
+						return;
+					auto extracted = extraction_->take();
+					if (!extracted)
+						extraction_error_ = std::move(extracted.error());
+					else
+						observations_ = std::move(extracted.value());
 				}
 
 			  private:
-				const compile_unit& unit_;
+				const frontend::parse_task& task_;
 				interop::clang_tu_callback* callback_;
 				std::optional<error>& callback_error_;
 				bool& callback_invoked_;
+				std::optional<error>& extraction_error_;
+				std::vector<facts::observation_record>& observations_;
+				std::unique_ptr<preprocessor_extraction_session> extraction_;
 			};
 
 			class borrowed_action_factory final : public clang::tooling::FrontendActionFactory
 			{
 			  public:
-				borrowed_action_factory(const compile_unit& unit,
+				borrowed_action_factory(const frontend::parse_task& task,
 										interop::clang_tu_callback* callback,
 										std::optional<error>& callback_error,
-										bool& callback_invoked)
-					: unit_{unit}, callback_{callback}, callback_error_{callback_error},
-					  callback_invoked_{callback_invoked}
+										bool& callback_invoked,
+										std::optional<error>& extraction_error,
+										std::vector<facts::observation_record>& observations)
+					: task_{task}, callback_{callback}, callback_error_{callback_error},
+					  callback_invoked_{callback_invoked}, extraction_error_{extraction_error},
+					  observations_{observations}
 				{
 				}
 
 				std::unique_ptr<clang::FrontendAction> create() override
 				{
-					return std::make_unique<borrowed_action>(
-						unit_, callback_, callback_error_, callback_invoked_);
+					return std::make_unique<borrowed_action>(task_,
+															 callback_,
+															 callback_error_,
+															 callback_invoked_,
+															 extraction_error_,
+															 observations_);
 				}
 
 			  private:
-				const compile_unit& unit_;
+				const frontend::parse_task& task_;
 				interop::clang_tu_callback* callback_;
 				std::optional<error>& callback_error_;
 				bool& callback_invoked_;
+				std::optional<error>& extraction_error_;
+				std::vector<facts::observation_record>& observations_;
 			};
 
 			[[nodiscard]] std::vector<std::string> tool_arguments(const compile_command& command)
@@ -460,11 +500,18 @@ namespace cxxlens
 			diagnostic_bridge diagnostics{command.directory};
 			tool.setDiagnosticConsumer(&diagnostics);
 			std::optional<error> callback_error;
+			std::optional<error> extraction_error;
+			std::vector<facts::observation_record> observations;
 			bool callback_invoked = false;
-			borrowed_action_factory factory{
-				task.unit, callback ? &callback : nullptr, callback_error, callback_invoked};
+			borrowed_action_factory factory{task,
+											callback ? &callback : nullptr,
+											callback_error,
+											callback_invoked,
+											extraction_error,
+											observations};
 			const auto status = tool.run(&factory);
 			batch.diagnostics = diagnostics.take();
+			batch.observations = std::move(observations);
 			if (context.cancellation.stop_requested())
 				return frontend_error("core.cancelled", "stop-requested-during-parse");
 			runtime::real_time_adapter clock;
@@ -472,6 +519,8 @@ namespace cxxlens
 				return frontend_error("parse.timeout", "deadline-exceeded-during-parse");
 			if (callback_error)
 				return std::move(*callback_error);
+			if (extraction_error)
+				return std::move(*extraction_error);
 			if (callback && !callback_invoked)
 				return frontend_error("parse.frontend-failed", "callback-not-invoked");
 			if (status == 0)

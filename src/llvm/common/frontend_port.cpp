@@ -32,6 +32,37 @@ namespace cxxlens::detail::frontend
 			}
 			return "fatal";
 		}
+
+		[[nodiscard]] std::string observation_key(const facts::observation_record& value)
+		{
+			const auto semantic = value.payload.find("semantic_key");
+			return std::to_string(static_cast<std::uint16_t>(value.kind)) + ":" +
+				(semantic == value.payload.end() ? std::string{} : semantic->second);
+		}
+
+		void append_framed(std::string& output, const std::string_view value)
+		{
+			output += std::to_string(value.size()) + ":";
+			output.append(value);
+		}
+
+		[[nodiscard]] std::string_view coverage_name(const coverage_state value) noexcept
+		{
+			switch (value)
+			{
+				case coverage_state::covered:
+					return "covered";
+				case coverage_state::excluded:
+					return "excluded";
+				case coverage_state::failed:
+					return "failed";
+				case coverage_state::unresolved:
+					return "unresolved";
+				case coverage_state::not_applicable:
+					return "not_applicable";
+			}
+			return "unresolved";
+		}
 	} // namespace
 
 	result<void> observation_batch::validate() const
@@ -53,6 +84,9 @@ namespace cxxlens::detail::frontend
 			if (auto checked = facts::validate(observation); !checked)
 				return invalid_batch("observation-schema");
 		}
+		if (!std::ranges::is_sorted(observations, {}, observation_key) ||
+			std::ranges::adjacent_find(observations, {}, observation_key) != observations.end())
+			return invalid_batch("observation-order");
 		if (!std::ranges::is_sorted(diagnostics))
 			return invalid_batch("diagnostic-order");
 		if (std::ranges::adjacent_find(diagnostics) != diagnostics.end())
@@ -77,6 +111,26 @@ namespace cxxlens::detail::frontend
 			output += "|diagnostic=" + diagnostic.id + ":" + severity_name(diagnostic.severity) +
 				":" + diagnostic.file + ":" + std::to_string(diagnostic.line) + ":" +
 				std::to_string(diagnostic.column) + ":" + diagnostic.message;
+		}
+		for (const auto& observation : observations)
+		{
+			output +=
+				"|observation=" + std::to_string(static_cast<std::uint16_t>(observation.kind)) +
+				":";
+			append_framed(output,
+						  observation.source ? observation.source->to_canonical_json() : "");
+			for (const auto& [key, value] : observation.payload)
+			{
+				append_framed(output, key);
+				append_framed(output, value);
+			}
+			for (const auto& contribution : observation.coverage_contributions)
+			{
+				append_framed(output, contribution.kind);
+				append_framed(output, contribution.id);
+				append_framed(output, coverage_name(contribution.state));
+				append_framed(output, contribution.reason.value_or(""));
+			}
 		}
 		return output;
 	}

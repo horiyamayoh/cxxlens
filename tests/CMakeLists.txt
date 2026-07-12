@@ -388,6 +388,31 @@ set_tests_properties(
   PROPERTIES LABELS "scheduler;determinism;schema;golden;concurrency;coverage")
 
 if(CXXLENS_CLANG22_AVAILABLE)
+  add_executable(cxxlens-clang22-preprocessor
+                 adapter/clang22/preprocessor_extractor_test.cpp)
+  target_link_libraries(cxxlens-clang22-preprocessor PRIVATE cxxlens::cxxlens)
+  target_include_directories(cxxlens-clang22-preprocessor
+                             PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens-clang22-preprocessor PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens-clang22-preprocessor)
+  add_test(NAME adapter.clang22-preprocessor
+           COMMAND cxxlens-clang22-preprocessor)
+  set_tests_properties(
+    adapter.clang22-preprocessor
+    PROPERTIES
+      LABELS
+      "adapter;frontend;source;macro;include;schema;determinism;coverage")
+  add_test(
+    NAME determinism.clang22-preprocessor-process
+    COMMAND
+      "${Python3_EXECUTABLE}"
+      "${PROJECT_SOURCE_DIR}/tests/adapter/clang22/test_preprocessor_process.py"
+      "$<TARGET_FILE:cxxlens-clang22-preprocessor>" "${PROJECT_SOURCE_DIR}"
+      "${PROJECT_SOURCE_DIR}/tests/golden/clang22/preprocessor_v1.txt")
+  set_tests_properties(
+    determinism.clang22-preprocessor-process
+    PROPERTIES LABELS "adapter;source;macro;include;schema;golden;determinism")
+
   add_executable(cxxlens-clang22-link-closure
                  link/clang22_link_closure_test.cpp)
   target_link_libraries(cxxlens-clang22-link-closure PRIVATE cxxlens::cxxlens)

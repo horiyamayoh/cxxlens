@@ -183,8 +183,12 @@ int main()
 	auto second = cxxlens::detail::clang22::execute(cpp_task);
 	require(second && first.value().debug_context_identity != second.value().debug_context_identity,
 			"fresh frontend context identity was reused");
-	require(first.value().semantic_representation() == second.value().semantic_representation(),
-			"repeated frontend batches were nondeterministic");
+	if (first.value().semantic_representation() != second.value().semantic_representation())
+	{
+		std::cerr << "first: " << first.value().semantic_representation() << '\n';
+		std::cerr << "second: " << second.value().semantic_representation() << '\n';
+		require(false, "repeated frontend batches were nondeterministic");
+	}
 
 	std::filesystem::create_directories(base / "c");
 	auto c_workspace = make_workspace(base / "c", "main.c", "clang-22");
