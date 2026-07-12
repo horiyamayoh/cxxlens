@@ -154,6 +154,9 @@ install(
         schemas/cxxlens.agent-ownership.v1.schema.yaml
         schemas/cxxlens.dependency-request.examples.v1.json
         schemas/cxxlens.dependency-request.v1.schema.yaml
+        schemas/cxxlens.api-ready.report.v1.json
+        schemas/cxxlens.api-ready.run-manifest.v1.schema.yaml
+        schemas/cxxlens.api-ready.v1.schema.yaml
         schemas/cxxlens_agent_task_card.schema.yaml
         schemas/cxxlens_public_api_contract.yaml
         schemas/cxxlens_api_catalog.schema.yaml

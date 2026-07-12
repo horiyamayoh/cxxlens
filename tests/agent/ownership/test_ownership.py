@@ -23,6 +23,7 @@ from ownership_generator import (  # noqa: E402
     digest,
     generate_manifest,
     repository_paths,
+    reserved_policy,
     transition_request,
     validate_changed_paths,
     validate_dependency_request,
@@ -81,19 +82,22 @@ class OwnershipTest(unittest.TestCase):
 
     def test_full_manifest_schema_coverage_and_frozen_skeletons(self) -> None:
         generated = generate_manifest(self.corpus, self.paths)
+        baseline_paths = [path for path in self.paths if reserved_policy(path) is None]
         self.assertEqual(generated, self.manifest)
         self.assertNotIn(str(ROOT), json.dumps(generated, sort_keys=True))
         validate_manifest(generated, self.corpus, self.paths, self.schema)
         jsonschema.Draft202012Validator(self.schema).validate(generated)
         self.assertEqual(generated["summary"]["unit_count"], 124)
-        self.assertEqual(generated["summary"]["tracked_path_count"], len(self.paths))
+        self.assertEqual(
+            generated["summary"]["tracked_path_count"], len(baseline_paths)
+        )
         self.assertEqual(generated["summary"]["reserved_path_count"], 10)
         self.assertEqual(
             generated["summary"]["skeleton_state_counts"],
             {"blocked": 77, "frozen": 47},
         )
         tracked = [item["path"] for item in generated["tracked_paths"]]
-        self.assertEqual(tracked, sorted(self.paths))
+        self.assertEqual(tracked, sorted(baseline_paths))
         self.assertEqual(len(tracked), len(set(tracked)))
         self.assertEqual(
             {item["api_id"] for item in generated["skeletons"]},

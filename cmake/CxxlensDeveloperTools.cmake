@@ -37,6 +37,17 @@ add_custom_target(
 add_dependencies(cxxlens-ownership-check cxxlens-task-packet-check)
 
 add_custom_target(
+  cxxlens-ready-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/agent/ready_evaluator.py" check --root
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tests/agent/runner/test_runner.py"
+  VERBATIM)
+add_dependencies(cxxlens-ready-check cxxlens-ownership-check)
+
+add_custom_target(
   cxxlens-api-contract-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -49,6 +60,7 @@ add_custom_target(
   VERBATIM)
 add_dependencies(cxxlens-api-contract-check cxxlens-task-packet-check)
 add_dependencies(cxxlens-api-contract-check cxxlens-ownership-check)
+add_dependencies(cxxlens-api-contract-check cxxlens-ready-check)
 
 add_custom_target(
   cxxlens-design-package-check
