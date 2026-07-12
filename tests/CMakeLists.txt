@@ -704,29 +704,40 @@ add_dependencies(
   cxxlens-public-header-core
   cxxlens-public-header-cxxlens
   cxxlens-public-header-evidence
+  cxxlens-public-header-explain
   cxxlens-public-header-facts
   cxxlens-public-header-failure
   cxxlens-public-header-finding
   cxxlens-public-header-identity
   cxxlens-public-header-interop-clang
   cxxlens-public-header-schema
+  cxxlens-public-header-search
+  cxxlens-public-header-select
   cxxlens-public-header-source
   cxxlens-public-header-testing
   cxxlens-public-header-workspace
-  cxxlens-public-header-workspace
+  cxxlens-query-process
+  cxxlens-search-process
+  cxxlens-selector-process
   cxxlens-unit-canonical-identity
   cxxlens-unit-canonical-json
   cxxlens-unit-configuration
   cxxlens-unit-configuration-process
   cxxlens-unit-evidence-coverage
   cxxlens-unit-fact-contract
+  cxxlens-unit-fact-reducer
+  cxxlens-unit-fact-store
   cxxlens-unit-failure-contract
   cxxlens-unit-finding-contract
   cxxlens-unit-frontend-job
   cxxlens-unit-m0-serialization
+  cxxlens-unit-provisioning
+  cxxlens-unit-query-engine
   cxxlens-unit-runtime-ports
   cxxlens-unit-scheduler
   cxxlens-unit-schema-registry
+  cxxlens-unit-search
+  cxxlens-unit-selectors
   cxxlens-unit-source-span
   cxxlens-unit-testing-fixture-process
   cxxlens-unit-testing-substrate

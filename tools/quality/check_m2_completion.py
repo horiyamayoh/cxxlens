@@ -86,6 +86,29 @@ def main() -> int:
         failures.append("M2 matrix execution count does not equal its declared Cartesian axes")
 
     tests_cmake = (root / "tests/CMakeLists.txt").read_text(encoding="utf-8")
+    m0_dependencies = re.search(
+        r"add_dependencies\(\s*cxxlens-m0-test-binaries(?P<body>.*?)\)",
+        tests_cmake,
+        re.DOTALL,
+    )
+    cumulative_non_adapter_targets = {
+        "cxxlens-public-header-explain",
+        "cxxlens-public-header-search",
+        "cxxlens-public-header-select",
+        "cxxlens-query-process",
+        "cxxlens-search-process",
+        "cxxlens-selector-process",
+        "cxxlens-unit-fact-reducer",
+        "cxxlens-unit-fact-store",
+        "cxxlens-unit-provisioning",
+        "cxxlens-unit-query-engine",
+        "cxxlens-unit-search",
+        "cxxlens-unit-selectors",
+    }
+    if m0_dependencies is None or not cumulative_non_adapter_targets.issubset(
+        set(m0_dependencies.group("body").split())
+    ):
+        failures.append("M0 acceptance does not build every non-adapter test binary")
     for milestone, dependency in (("m1", "m0"), ("m2", "m1")):
         marker = (
             f"add_dependencies(cxxlens-{milestone}-test-binaries "
