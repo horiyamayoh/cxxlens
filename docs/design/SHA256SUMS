@@ -1,6 +1,6 @@
 b2b8040f6e7930bcfdc6291c6748c671a631769ebdc76cc1d22ddb94f00004be  README.md
 9cc71882db1d49797ba570b98f8f6c6e39dd6c1cff04d8f5dcb07ff9a7a8587d  VALIDATION_REPORT.md
-a779538ed6fdd359247bba842886eb23e85ec5cda89f32d830f7db00672d79fd  cxxlens_integrated_design_ja.md
+fb52d45461c915efbf79e39ef57c57b30ca8c42f2ddbb5a41949aa452231ac3d  cxxlens_integrated_design_ja.md
 4af222b550f92dca10ed9e17d2adbcab6350040d3b7ce344ea34470b85b560a5  api_catalog_change_policy.md
 059c247acf18861248de7330b562eedb02da128281e34d8cf993c8c97ee650fc  api_catalog_inventory.md
 07e121f9581f30c2417bf60383ce44cb2d8b893c22e154347462eabbc762ec6d  ../../schemas/cxxlens_public_api_contract.yaml
@@ -49,3 +49,7 @@ da47adc9cd5f0b27be1148a8d666dcbed7e6b687c0eeb841f0764a3bdc39afbe  ../../schemas/
 a79be13b312210ce664d02b8a95ceaf2788ef36b453457ae44c5b4e4f729616c  ../../schemas/cxxlens_sqlite_store_contract.yaml
 79d0064c50d815cabdc26ff31c8e588b39c8288b922002762afa30c5bb398d5c  ../../schemas/cxxlens_workspace_doctor.schema.yaml
 796cb0dbdc80b01bba5dbfd050c2a7cc923ccc8de0c5c09dccb3fe83c761892f  ../../schemas/cxxlens_incremental_provisioning_contract.yaml
+a7f8f5991a623c8eaedf08e95a49ee9840fc7586f8d7aeb899c2a006bca83ca9  ../../schemas/cxxlens_query_plan.schema.yaml
+6de782da87fabb66491588d258c55a3aef643a555631067b12a396893e9b5af1  ../../schemas/cxxlens_query_execution.schema.yaml
+58b96f84f5526d908d096d1026fbe9d9ce2cefd024cf642590f242ff564662c4  ../../schemas/cxxlens_query_trace.schema.yaml
+f36e64318d0434b3971b5d98b38ea3c587b37c786a0685c6dfb2c0d973ef4aa7  ../../schemas/cxxlens_virtual_candidate_resolution.schema.yaml

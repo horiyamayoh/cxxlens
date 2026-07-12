@@ -58,6 +58,7 @@ add_library(
   src/facts/fact_contract.cpp
   src/facts/fact_profile.cpp
   src/facts/reducer.cpp
+  src/graph/virtual_candidate_resolver.cpp
   src/llvm/common/borrowed_lifetime.cpp
   src/llvm/common/frontend_port.cpp
   src/llvm/clang22/frontend_job.cpp
@@ -71,6 +72,8 @@ add_library(
   src/runtime/hash_adapter.cpp
   src/runtime/process_adapter.cpp
   src/runtime/time_adapter.cpp
+  src/query/query_executor.cpp
+  src/query/query_plan.cpp
   src/select/selector.cpp
   src/select/selector_json.cpp
   src/source/source_span.cpp
@@ -178,8 +181,12 @@ install(
         schemas/cxxlens_fact_requirement.schema.yaml
         schemas/cxxlens_incremental_provisioning_contract.yaml
         schemas/cxxlens_provisioning_trace.schema.yaml
+        schemas/cxxlens_query_plan.schema.yaml
+        schemas/cxxlens_query_execution.schema.yaml
+        schemas/cxxlens_query_trace.schema.yaml
         schemas/cxxlens_selector.schema.yaml
         schemas/cxxlens_selector_reason_codes.yaml
+        schemas/cxxlens_virtual_candidate_resolution.schema.yaml
         schemas/cxxlens_workspace_doctor.schema.yaml
         schemas/cxxlens_workspace_context.schema.yaml
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")

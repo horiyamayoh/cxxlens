@@ -1395,6 +1395,34 @@ conversions(const workspace&, select::conversion_selector,
 
 文字列 `start` の grep や class name substring だけで実装してはならない。
 
+### 15.4 M2 internal query execution contract
+
+Issue #24 で public search surface より先に、`detail` の planner/executor と virtual candidate
+resolver を実装した。public API catalog の API-SRCH-003〜007 はこの段階では planned/unresolved
+のままとし、公開署名を先取りしない。
+
+- planner は正規化済み call selector、scope、snapshot key、operator ごとの required facts、cost、
+  candidate/refinement/result budget を immutable DAG に固定する。selector requirements と operator
+  dependency（symbol resolution を含む）の和だけを `workspace::ensure` し、warm coverage は再 parse
+  しない。
+- executor は fact scan、variant join、hierarchy/override closure、predicate accounting、必要な TU だけの
+  refinement、confidence/evidence、deduplicate/sort/limit の順を保持する。`considered = matched +
+  rejected + unresolved` を trace validator が独立に検証する。
+- virtual candidate resolver は static target と possible target を分離し、override edge ID から closure
+  を作る。direct/nonvirtual/qualified/final は expansion せず、indirect/dependent、open world、coverage
+  不足、variant disagreement、budget/cancellation は stable unresolved と guarantee downgrade を伴う。
+- snapshot key は full canonical fact rows（provenance/variant を含む）と scoped coverage から port 越しに
+  hash する。unordered iteration、root、seed、worker completion order は semantic output に入れない。
+- internal wire contracts は `cxxlens.query-plan.v1`、`cxxlens.query-trace.v1`、
+  `cxxlens.virtual-candidate-resolution.v1` とする。schema/golden acceptance は Base/Derived flagship、
+  unrelated same-name negative、qualified/final、override diamond、coverage/variant、cold/warm、
+  budget/cancel/refinement failure、jobs 1/2/8、memory/SQLite、root/order/seed determinism を検証する。
+
+Traceability: `src/query/query_plan.*`、`src/query/query_executor.*`、
+`src/query/refinement_port.hpp`、`src/graph/virtual_candidate_resolver.*`、
+`schemas/cxxlens_query_*.schema.yaml`、`schemas/cxxlens_virtual_candidate_resolution.schema.yaml`、
+`tests/unit/query/`、`tests/query/test_query_process.py`。
+
 ---
 
 ## 16. Graph 詳細設計

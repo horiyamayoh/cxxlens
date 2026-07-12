@@ -495,6 +495,40 @@ set_tests_properties(
     LABELS
     "schema;workspace;facts;coverage;incremental;capability;doctor;conformance")
 
+add_executable(cxxlens-unit-query-engine unit/query/query_engine_test.cpp)
+target_link_libraries(cxxlens-unit-query-engine PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-unit-query-engine
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_definitions(
+  cxxlens-unit-query-engine
+  PRIVATE CXXLENS_QUERY_TEST_DIRECTORY="${CMAKE_CURRENT_BINARY_DIR}")
+target_compile_features(cxxlens-unit-query-engine PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-query-engine)
+add_test(NAME unit.query-engine COMMAND cxxlens-unit-query-engine)
+set_tests_properties(
+  unit.query-engine
+  PROPERTIES
+    LABELS
+    "unit;query;planner;executor;graph;variant;coverage;budget;cancellation;determinism;conformance"
+)
+
+add_executable(cxxlens-query-process unit/query/query_process.cpp)
+target_link_libraries(cxxlens-query-process PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-query-process
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-query-process PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-query-process)
+add_test(
+  NAME schema.query-process
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/query/test_query_process.py"
+    "${PROJECT_SOURCE_DIR}" "$<TARGET_FILE:cxxlens-query-process>")
+set_tests_properties(
+  schema.query-process
+  PROPERTIES LABELS
+             "query;planner;executor;graph;schema;golden;determinism;coverage")
+
 if(CXXLENS_CLANG22_AVAILABLE)
   add_executable(cxxlens-m1-conformance integration/m1_conformance_test.cpp)
   target_link_libraries(cxxlens-m1-conformance PRIVATE cxxlens::cxxlens)

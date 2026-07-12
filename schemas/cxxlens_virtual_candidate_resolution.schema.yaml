@@ -1,0 +1,44 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.virtual-candidate-resolution.v1.schema.yaml
+title: cxxlens virtual candidate resolution v1
+type: object
+additionalProperties: false
+required:
+- schema
+- semantics_version
+- library_version
+- call_key
+- static_target
+- possible_targets
+- per_variant
+- status
+- certainty
+- guarantee
+- evidence
+- unresolved
+properties:
+  schema: {const: cxxlens.virtual-candidate-resolution.v1}
+  semantics_version: {const: 1.0.0}
+  library_version: {type: string}
+  call_key: {type: string, minLength: 1}
+  static_target: {type: [string, 'null']}
+  possible_targets: {type: array, uniqueItems: true, items: {type: string}}
+  per_variant:
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required: [variant, candidates]
+      properties:
+        variant: {type: string}
+        candidates: {type: array, uniqueItems: true, items: {type: string}}
+  status: {enum: [exact, partial, unresolved]}
+  certainty: {enum: [speculative, possible, probable, high, certain]}
+  guarantee:
+    enum: [exact_within_coverage, sound_over_approximation, sound_under_approximation, best_effort, heuristic]
+  evidence: {type: object}
+  unresolved:
+    type: array
+    items:
+      type: object
+      required: [kind, stable_code, missing_inputs]

@@ -1,0 +1,48 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.query-trace.v1.schema.yaml
+title: cxxlens internal query execution trace v1
+type: object
+additionalProperties: false
+required:
+- schema
+- semantics_version
+- library_version
+- snapshot_key
+- accounting
+- reasons
+- refinements_requested
+- refinements_succeeded
+- refinements_failed
+- cancelled
+- budget_exhausted
+- output_limited
+properties:
+  schema: {const: cxxlens.query-trace.v1}
+  semantics_version: {const: 1.0.0}
+  library_version: {type: string}
+  snapshot_key: {type: string, minLength: 1}
+  accounting:
+    type: object
+    additionalProperties: false
+    required: [considered, matched, rejected, unresolved]
+    properties:
+      considered: {type: integer, minimum: 0}
+      matched: {type: integer, minimum: 0}
+      rejected: {type: integer, minimum: 0}
+      unresolved: {type: integer, minimum: 0}
+  reasons:
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required: [reason_code, outcome, count]
+      properties:
+        reason_code: {type: string, minLength: 1}
+        outcome: {enum: [matched, rejected, unresolved]}
+        count: {type: integer, minimum: 1}
+  refinements_requested: {type: integer, minimum: 0}
+  refinements_succeeded: {type: integer, minimum: 0}
+  refinements_failed: {type: integer, minimum: 0}
+  cancelled: {type: boolean}
+  budget_exhausted: {type: boolean}
+  output_limited: {type: boolean}
