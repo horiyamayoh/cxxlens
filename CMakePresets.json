@@ -65,6 +65,16 @@
       }
     },
     {
+      "name": "tsan",
+      "inherits": "base",
+      "displayName": "ThreadSanitizer",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CXXLENS_ENABLE_TSAN": "ON",
+        "CXXLENS_WARNINGS_AS_ERRORS": "ON"
+      }
+    },
+    {
       "name": "m0-acceptance",
       "inherits": "base",
       "displayName": "M0 semantic kernel acceptance",
@@ -81,6 +91,7 @@
     { "name": "docs", "configurePreset": "docs", "jobs": 4 },
     { "name": "asan-ubsan", "configurePreset": "asan-ubsan", "jobs": 4 },
     { "name": "install-check", "configurePreset": "install-check", "jobs": 4 },
+    { "name": "tsan", "configurePreset": "tsan", "jobs": 4 },
     { "name": "m0-acceptance", "configurePreset": "m0-acceptance", "jobs": 4 }
   ],
   "testPresets": [
@@ -88,6 +99,7 @@
     { "name": "ci-quick", "configurePreset": "ci-quick", "output": { "outputOnFailure": true } },
     { "name": "asan-ubsan", "configurePreset": "asan-ubsan", "output": { "outputOnFailure": true } },
     { "name": "install-check", "configurePreset": "install-check", "output": { "outputOnFailure": true } },
+    { "name": "tsan", "configurePreset": "tsan", "output": { "outputOnFailure": true } },
     { "name": "m0-acceptance", "configurePreset": "m0-acceptance", "output": { "outputOnFailure": true } }
   ]
 }

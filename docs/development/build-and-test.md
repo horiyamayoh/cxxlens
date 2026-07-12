@@ -8,6 +8,7 @@
 | `ci-quick` | CI の warnings-as-errors build |
 | `docs` | Doxygen HTML/XML と契約検査 |
 | `asan-ubsan` | Address/UndefinedBehavior Sanitizer |
+| `tsan` | Thread Sanitizer と borrowed lifetime test |
 | `install-check` | Release build と install consumer test |
 
 ```sh
@@ -18,8 +19,9 @@ cmake --build --preset dev-clang
 ctest --preset dev-clang
 ```
 
-Clang 22 が導入された CI では `CXX=clang++-22` を使用する。M0 の library 自体は LLVM library を
-リンクしないため、ローカルでは C++23 対応 Clang/GCC でも基盤を検証できる。
+Clang 22 が導入された CI では `CXX=clang++-22` を使用する。`CXXLENS_CLANG_ADAPTER=AUTO` は
+exact LLVM/Clang 22 development package だけを受理し、隣接 major へ fallback しない。
+`ON` は exact package がなければ configure error、`OFF` は明示的 unavailable build になる。
 
 ## Test labels
 

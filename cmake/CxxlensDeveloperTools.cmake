@@ -131,6 +131,14 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-clang-adapter-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_clang_adapter.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-text-lint
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -155,6 +163,7 @@ add_custom_target(cxxlens-quality)
 add_dependencies(
   cxxlens-quality
   cxxlens-api-contract-check
+  cxxlens-clang-adapter-check
   cxxlens-configuration-contract-check
   cxxlens-design-package-check
   cxxlens-evidence-contract-check
@@ -205,6 +214,8 @@ if(CXXLENS_BUILD_DOCS)
 
   add_custom_target(
     docs
+    COMMAND "${CMAKE_COMMAND}" -E remove_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/doxygen"
     COMMAND "${DOXYGEN_EXECUTABLE}" "${CMAKE_CURRENT_BINARY_DIR}/Doxyfile"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     VERBATIM)

@@ -5,8 +5,8 @@
 evidence、coverage、unresolved、保証レベルを伴うユースケース指向 API を提供します。
 
 > [!WARNING]
-> 現在は pre-alpha です。実装済みなのは LLVM 非依存の最小 M0 基盤だけで、解析 API と
-> LLVM adapter はまだ利用できません。また、ライセンスは未決定です。
+> 現在は pre-alpha です。M0 基盤と Clang 22 frontend corridor までが実装済みで、上位の
+> fact extraction/query API はまだ利用できません。また、ライセンスは未決定です。
 
 ## 要件
 
@@ -16,8 +16,8 @@ evidence、coverage、unresolved、保証レベルを伴うユースケース指
 - Doxygen 1.9.8 以上（ドキュメント生成時のみ）
 - Python 3.10 以上（品質検査時のみ）
 
-LLVM/Clang 22.1.8 は設計上の初期 baseline です。現在の M0 target は LLVM library を
-リンクしません。
+LLVM/Clang 22.1.8 は設計上の初期 baseline です。exact major が見つかれば adapter をリンクし、
+見つからなければ通常 API を削除せず structured unavailable を返します。
 
 ## ビルドとテスト
 
@@ -78,6 +78,7 @@ const auto product_versions = cxxlens::versions();
 - [M0 acceptance gate](docs/development/m0-acceptance.md)
 - [Workspace catalog contract](docs/development/workspace-catalog.md)
 - [Observation and immutable fact contract](docs/development/fact-contract.md)
+- [Clang 22 frontend adapter contract](docs/development/clang-adapter.md)
 - [コントリビューション](CONTRIBUTING.md)
 
 旧二層構想の設計書は `docs/design/archive/` に保存していますが、現在の仕様判断には使用しません。

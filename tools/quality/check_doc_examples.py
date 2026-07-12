@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import pathlib
 import re
 import subprocess
@@ -25,6 +26,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--compiler", required=True)
     parser.add_argument("--include", type=pathlib.Path, required=True)
+    parser.add_argument("--jobs", type=int, default=8)
     parser.add_argument("headers", type=pathlib.Path)
     args = parser.parse_args()
 
@@ -37,9 +39,16 @@ def main() -> int:
         return 1
 
     with tempfile.TemporaryDirectory(prefix="cxxlens-doc-examples-") as temporary:
+        work: list[tuple[pathlib.Path, pathlib.Path, str]] = []
         for index, (header, example) in enumerate(examples):
             source = pathlib.Path(temporary) / f"example_{index}.cpp"
             source.write_text(example, encoding="utf-8")
+            work.append((source, header, example))
+
+        def check(
+            item: tuple[pathlib.Path, pathlib.Path, str],
+        ) -> subprocess.CompletedProcess[str]:
+            source, _, _ = item
             command = [
                 args.compiler,
                 "-std=c++23",
@@ -47,10 +56,19 @@ def main() -> int:
                 f"-I{args.include}",
                 str(source),
             ]
-            result = subprocess.run(command, check=False, text=True, capture_output=True)
-            if result.returncode != 0:
-                print(f"example from {header} failed:\n{example}\n{result.stderr}", file=sys.stderr)
-                return result.returncode
+            return subprocess.run(command, check=False, text=True, capture_output=True)
+
+        if args.jobs < 1:
+            parser.error("--jobs must be positive")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor:
+            results = executor.map(check, work)
+            for (_, header, example), result in zip(work, results, strict=True):
+                if result.returncode != 0:
+                    print(
+                        f"example from {header} failed:\n{example}\n{result.stderr}",
+                        file=sys.stderr,
+                    )
+                    return result.returncode
     print(f"syntax-checked {len(examples)} Doxygen examples")
     return 0
 

@@ -3160,28 +3160,34 @@ packages:
     symbol: interop::linked_clang_version
     kind: free_function
     phase: M1
+    requirements: [FR-018, QR-003, QR-010]
     requires:
       capabilities:
       - interop.clang
       apis: []
-    contract_maturity: planned
-    implementation_state: unimplemented
+    contract_maturity: contract-defined
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/interop/clang.hpp
+      signature: cxxlens::interop::clang_api_version cxxlens::interop::linked_clang_version() noexcept
+      signature_fingerprint: sha256:f078c5614cdbe609d5b954134b6758a2e42a1ba06150909fe5e2a0e55e6470a3
+    implementation_evidence:
+    - include/cxxlens/interop/clang.hpp
+    - cmake/CxxlensClangTargets.cmake
+    - src/llvm/clang22/frontend_job.cpp
+    - tests/link/clang22_link_closure_test.cpp
     atomic_unit:
       id: AU-INT-001
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-INT-002
     symbol: interop::with_translation_unit
     kind: free_function
     phase: M1
+    requirements: [FR-004, FR-019, FR-020, QR-001, QR-002, QR-003, QR-004, QR-005, QR-006, QR-010]
     requires:
       capabilities:
       - interop.clang
@@ -3200,20 +3206,32 @@ packages:
     - Borrowed objects are valid only during the callback.
     errors:
     - interop.borrowed-lifetime-violation
-    contract_maturity: planned
-    implementation_state: unimplemented
+    - core.capability-unavailable
+    - core.cancelled
+    - core.deadline-exceeded
+    - core.invalid-argument
+    - parse.frontend-failed
+    - parse.timeout
+    contract_maturity: contract-defined
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/interop/clang.hpp
+      signature: cxxlens::result<void> cxxlens::interop::with_translation_unit(cxxlens::workspace&, cxxlens::compile_unit_id, cxxlens::interop::clang_tu_callback, cxxlens::execution_context)
+      signature_fingerprint: sha256:a4c0d049f7ee4e1c144fdcba162df5ff4eea7834fc6a6b519e03a8d927dd2e23
+    implementation_evidence:
+    - include/cxxlens/interop/clang.hpp
+    - src/llvm/common/borrowed_lifetime.cpp
+    - src/llvm/common/frontend_port.cpp
+    - src/llvm/clang22/frontend_job.cpp
+    - schemas/cxxlens_frontend_batch.schema.yaml
+    - tests/unit/llvm/frontend_job_test.cpp
     atomic_unit:
       id: AU-INT-002
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-INT-003
     symbol: fact_sink::{emit,emit_custom,emit_evidence,mark_partial}
     kind: method_family
@@ -3371,9 +3389,9 @@ summary:
   api_entry_count: 123
   atomic_unit_count: 123
   implementation_state_counts:
-    unimplemented: 106
+    unimplemented: 104
     implemented: 0
-    conformant: 17
+    conformant: 19
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.

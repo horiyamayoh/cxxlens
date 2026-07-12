@@ -25,12 +25,14 @@ option(CXXLENS_ENABLE_IWYU "Run include-what-you-use while compiling cxxlens"
        OFF)
 option(CXXLENS_ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(CXXLENS_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
+option(CXXLENS_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(CXXLENS_BUILD_DOCS "Enable Doxygen documentation targets" OFF)
 option(CXXLENS_BUILD_QUALITY_TOOLS "Enable local quality targets" ON)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CxxlensWarnings)
 include(CxxlensSanitizers)
+include(CxxlensClangTargets)
 
 if(CXXLENS_BUILD_SHARED)
   set(CXXLENS_LIBRARY_TYPE SHARED)
@@ -55,6 +57,9 @@ add_library(
   src/core/version.cpp
   src/facts/fact_contract.cpp
   src/facts/fact_profile.cpp
+  src/llvm/common/borrowed_lifetime.cpp
+  src/llvm/common/frontend_port.cpp
+  src/llvm/clang22/frontend_job.cpp
   src/runtime/fault_plan.cpp
   src/runtime/filesystem_adapter.cpp
   src/runtime/hash_adapter.cpp
@@ -81,6 +86,7 @@ set_target_properties(
 
 cxxlens_set_project_warnings(cxxlens)
 cxxlens_enable_sanitizers(cxxlens)
+cxxlens_configure_clang22(cxxlens)
 
 if(CXXLENS_ENABLE_CLANG_TIDY)
   find_program(CXXLENS_CLANG_TIDY NAMES clang-tidy-22 clang-tidy REQUIRED)
@@ -129,6 +135,7 @@ install(
         schemas/cxxlens_fact_conformance.yaml
         schemas/cxxlens_fact_conformance.schema.yaml
         schemas/cxxlens_fact_profile.schema.yaml
+        schemas/cxxlens_frontend_batch.schema.yaml
         schemas/cxxlens_failure_contract.yaml
         schemas/cxxlens_finding_contract.yaml
         schemas/cxxlens_finding.schema.yaml

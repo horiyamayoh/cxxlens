@@ -10,12 +10,13 @@ public use-case API
       -> LLVM-major-specific adapters
 ```
 
-M0 では `core` と `source` の LLVM 非依存契約だけを構築する。LLVM/Clang の discovery、link、
-frontend worker は M1 で導入し、`src/llvm/clang22/` へ隔離する。
+Clang-free port は `src/llvm/common/`、native adapter は `src/llvm/clang22/` に隔離する。
+通常 public header は LLVM-free で、raw access は明示的な `interop/clang.hpp` callback 内だけに
+限定する。
 
 ## Dependency rules
 
-- `include/cxxlens/` は標準ライブラリ以外の型を公開しない。
+- `include/cxxlens/interop/clang.hpp` 以外の public header は Clang/LLVM 型を公開しない。
 - stable API は LLVM major や patch version の型レイアウトに依存しない。
 - service handle は将来 pImpl とし、semantic result/plan は immutable value とする。
 - public expected failure は `std::expected<T, error>` で表す。

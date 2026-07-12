@@ -1,5 +1,11 @@
 @PACKAGE_INIT@
 
+include(CMakeFindDependencyMacro)
+if(@CXXLENS_CLANG22_AVAILABLE@)
+  find_dependency(LLVM 22.1 CONFIG)
+  find_dependency(Clang 22.1 CONFIG)
+endif()
+
 include("${CMAKE_CURRENT_LIST_DIR}/cxxlensTargets.cmake")
 
 check_required_components(cxxlens)

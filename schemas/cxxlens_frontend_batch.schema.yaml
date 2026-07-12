@@ -1,0 +1,50 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://schemas.cxxlens.dev/cxxlens.frontend-batch.v1.json
+title: cxxlens.frontend-batch.v1
+type: object
+required:
+- schema
+- adapter
+- compile_unit_id
+- variant_id
+- observations
+- diagnostics
+- coverage
+additionalProperties: false
+properties:
+  schema: {const: cxxlens.frontend-batch.v1}
+  adapter:
+    type: object
+    required: [id, version, llvm_major]
+    additionalProperties: false
+    properties:
+      id: {const: clang22.frontend}
+      version: {type: string, minLength: 1}
+      llvm_major: {const: 22}
+  compile_unit_id: {type: string, pattern: '^cu_[0-9a-f]{64}$'}
+  variant_id: {type: string, pattern: '^variant_[0-9a-f]{64}$'}
+  observations:
+    type: array
+    items: {$ref: cxxlens_observation.schema.yaml}
+  diagnostics:
+    type: array
+    items:
+      type: object
+      required: [id, severity, file, line, column, message]
+      additionalProperties: false
+      properties:
+        id: {type: string, pattern: '^clang\.diagnostic\.[0-9]+$'}
+        severity: {enum: [note, warning, error, fatal]}
+        file: {type: string}
+        line: {type: integer, minimum: 0}
+        column: {type: integer, minimum: 0}
+        message: {type: string, pattern: '^[^\u001b]*$'}
+  coverage:
+    type: object
+    required: [requested, parsed, failed, cancelled]
+    additionalProperties: false
+    properties:
+      requested: {const: 1}
+      parsed: {type: integer, minimum: 0, maximum: 1}
+      failed: {type: integer, minimum: 0, maximum: 1}
+      cancelled: {type: integer, minimum: 0, maximum: 1}

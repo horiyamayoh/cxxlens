@@ -91,6 +91,17 @@ cxxlens_set_project_warnings(cxxlens-public-header-facts)
 add_test(NAME public-api.facts-header COMMAND cxxlens-public-header-facts)
 set_tests_properties(public-api.facts-header PROPERTIES LABELS public-api)
 
+add_executable(cxxlens-public-header-interop-clang
+               public_headers/interop_clang_header_test.cpp)
+target_link_libraries(cxxlens-public-header-interop-clang
+                      PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-public-header-interop-clang PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-public-header-interop-clang)
+add_test(NAME public-api.interop-clang-header
+         COMMAND cxxlens-public-header-interop-clang)
+set_tests_properties(public-api.interop-clang-header PROPERTIES LABELS
+                                                                public-api)
+
 configure_file(install/run_install_test.cmake.in
                "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake" @ONLY)
 add_test(NAME install.consumer
@@ -333,6 +344,38 @@ set_tests_properties(
   schema.fact-contract
   PROPERTIES LABELS "facts;schema;golden;determinism;security;conformance")
 
+add_executable(cxxlens-unit-frontend-job unit/llvm/frontend_job_test.cpp)
+target_link_libraries(cxxlens-unit-frontend-job PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-unit-frontend-job
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-unit-frontend-job PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-frontend-job)
+add_test(NAME unit.frontend-job COMMAND cxxlens-unit-frontend-job)
+set_tests_properties(
+  unit.frontend-job
+  PROPERTIES LABELS
+             "unit;frontend;interop;lifetime;determinism;security;conformance")
+add_test(
+  NAME schema.frontend-batch
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/frontend/test_frontend_schema.py"
+    "${PROJECT_SOURCE_DIR}")
+set_tests_properties(
+  schema.frontend-batch
+  PROPERTIES LABELS "frontend;interop;schema;security;conformance")
+
+if(CXXLENS_CLANG22_AVAILABLE)
+  add_executable(cxxlens-clang22-link-closure
+                 link/clang22_link_closure_test.cpp)
+  target_link_libraries(cxxlens-clang22-link-closure PRIVATE cxxlens::cxxlens)
+  target_compile_features(cxxlens-clang22-link-closure PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens-clang22-link-closure)
+  add_test(NAME link.clang22-closure COMMAND cxxlens-clang22-link-closure)
+  set_tests_properties(link.clang22-closure PROPERTIES LABELS
+                                                       "frontend;interop;link")
+endif()
+
 add_custom_target(cxxlens-m0-test-binaries)
 add_dependencies(
   cxxlens-m0-test-binaries
@@ -344,6 +387,7 @@ add_dependencies(
   cxxlens-public-header-failure
   cxxlens-public-header-finding
   cxxlens-public-header-identity
+  cxxlens-public-header-interop-clang
   cxxlens-public-header-schema
   cxxlens-public-header-source
   cxxlens-public-header-testing
@@ -357,6 +401,7 @@ add_dependencies(
   cxxlens-unit-fact-contract
   cxxlens-unit-failure-contract
   cxxlens-unit-finding-contract
+  cxxlens-unit-frontend-job
   cxxlens-unit-m0-serialization
   cxxlens-unit-runtime-ports
   cxxlens-unit-schema-registry

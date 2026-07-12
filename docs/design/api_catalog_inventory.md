@@ -49,8 +49,8 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-GRAPH-004 | graph | <cxxlens/graph.hpp> | graph::include_graph | AU-GRAPH-004 | unimplemented |
 | API-GRAPH-005 | graph | <cxxlens/graph.hpp> | impact_query builder and run | AU-GRAPH-005 | unimplemented |
 | API-GRAPH-006 | graph | <cxxlens/graph.hpp> | semantic_graph::{subgraph,to_json,to_dot} | AU-GRAPH-006 | unimplemented |
-| API-INT-001 | interop | <cxxlens/interop/clang.hpp> | interop::linked_clang_version | AU-INT-001 | unimplemented |
-| API-INT-002 | interop | <cxxlens/interop/clang.hpp> | interop::with_translation_unit | AU-INT-002 | unimplemented |
+| API-INT-001 | interop | <cxxlens/interop/clang.hpp> | interop::linked_clang_version | AU-INT-001 | conformant |
+| API-INT-002 | interop | <cxxlens/interop/clang.hpp> | interop::with_translation_unit | AU-INT-002 | conformant |
 | API-INT-003 | interop | <cxxlens/interop/clang.hpp> | fact_sink::{emit,emit_custom,emit_evidence,mark_partial} | AU-INT-003 | unimplemented |
 | API-INT-004 | interop | <cxxlens/interop/clang.hpp> | interop::{register_extractor,unregister_extractor} | AU-INT-004 | unimplemented |
 | API-METHOD-001 | method_harness | <cxxlens/generate.hpp> | method_harness::parse_method_spec | AU-METHOD-001 | unimplemented |
