@@ -248,6 +248,14 @@ if(TARGET cxxlens-clang-tidy)
   add_dependencies(cxxlens-quality cxxlens-clang-tidy)
 endif()
 
+set(CXXLENS_ACCEPTANCE_TEST_BINARIES cxxlens-m0-test-binaries)
+if(TARGET cxxlens-m1-test-binaries)
+  set(CXXLENS_ACCEPTANCE_TEST_BINARIES cxxlens-m1-test-binaries)
+endif()
+if(TARGET cxxlens-m2-test-binaries)
+  set(CXXLENS_ACCEPTANCE_TEST_BINARIES cxxlens-m2-test-binaries)
+endif()
+
 if(TARGET cxxlens-m0-test-binaries)
   add_custom_target(
     cxxlens-m0-acceptance
@@ -266,7 +274,7 @@ if(TARGET cxxlens-m0-test-binaries)
       "$<TARGET_FILE:cxxlens-unit-m0-serialization>" --configuration
       "$<TARGET_FILE:cxxlens-unit-configuration-process>" --fixture
       "$<TARGET_FILE:cxxlens-unit-testing-fixture-process>"
-    DEPENDS cxxlens-m0-test-binaries cxxlens-quality
+    DEPENDS ${CXXLENS_ACCEPTANCE_TEST_BINARIES} cxxlens-quality
     USES_TERMINAL VERBATIM)
 endif()
 
@@ -284,7 +292,7 @@ if(TARGET cxxlens-m1-test-binaries)
       "$<TARGET_FILE:cxxlens-m1-conformance>" --scheduler
       "$<TARGET_FILE:cxxlens-unit-scheduler>" --provisioning
       "$<TARGET_FILE:cxxlens-unit-provisioning>"
-    DEPENDS cxxlens-m1-test-binaries cxxlens-quality
+    DEPENDS ${CXXLENS_ACCEPTANCE_TEST_BINARIES} cxxlens-quality
     USES_TERMINAL VERBATIM)
 endif()
 
@@ -303,7 +311,7 @@ if(TARGET cxxlens-m2-test-binaries)
       "$<TARGET_FILE:cxxlens-m2-search-conformance>" --scheduler
       "$<TARGET_FILE:cxxlens-unit-scheduler>" --example-source
       "${CMAKE_CURRENT_SOURCE_DIR}/examples/m2-flagship"
-    DEPENDS cxxlens-m2-test-binaries cxxlens-quality
+    DEPENDS ${CXXLENS_ACCEPTANCE_TEST_BINARIES} cxxlens-quality
     USES_TERMINAL VERBATIM)
 endif()
 
