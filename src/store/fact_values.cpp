@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <set>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -12,6 +13,7 @@
 
 #include "../core/canonical_json.hpp"
 #include "../core/json_projections.hpp"
+#include "../workspace/value_access.hpp"
 #include "fact_store_access.hpp"
 
 namespace cxxlens
@@ -39,6 +41,51 @@ namespace cxxlens
 		[[nodiscard]] bool boolean(const std::string_view value)
 		{
 			return value == "true";
+		}
+
+		[[nodiscard]] std::map<std::string, std::string> coverage_fields(const std::string_view id)
+		{
+			std::map<std::string, std::string> fields;
+			std::size_t begin{};
+			while (begin <= id.size())
+			{
+				const auto end = id.find(';', begin);
+				const auto field = id.substr(
+					begin, end == std::string_view::npos ? id.size() - begin : end - begin);
+				const auto separator = field.find('=');
+				if (separator != std::string_view::npos)
+					fields.emplace(std::string{field.substr(0U, separator)},
+								   std::string{field.substr(separator + 1U)});
+				if (end == std::string_view::npos)
+					break;
+				begin = end + 1U;
+			}
+			return fields;
+		}
+
+		[[nodiscard]] std::optional<std::string> decode_hex(const std::string_view input)
+		{
+			if ((input.size() % 2U) != 0U)
+				return std::nullopt;
+			auto nibble = [](const char value) -> std::optional<unsigned char>
+			{
+				if (value >= '0' && value <= '9')
+					return static_cast<unsigned char>(value - '0');
+				if (value >= 'a' && value <= 'f')
+					return static_cast<unsigned char>(value - 'a' + 10);
+				return std::nullopt;
+			};
+			std::string output;
+			output.reserve(input.size() / 2U);
+			for (std::size_t index{}; index < input.size(); index += 2U)
+			{
+				const auto high = nibble(input[index]);
+				const auto low = nibble(input[index + 1U]);
+				if (!high || !low)
+					return std::nullopt;
+				output.push_back(static_cast<char>((*high << 4U) | *low));
+			}
+			return output;
 		}
 
 		[[nodiscard]] std::string_view kind_name(const fact_kind kind)
@@ -298,6 +345,7 @@ namespace cxxlens
 	struct fact_store::data
 	{
 		std::shared_ptr<const detail::store::snapshot_data> snapshot;
+		path workspace_root;
 	};
 
 	fact::fact(std::shared_ptr<const data> value) : data_{std::move(value)} {}
@@ -613,10 +661,12 @@ namespace cxxlens
 		} // namespace
 
 		fact_store
-		fact_store_access::make_store(std::shared_ptr<const store::snapshot_data> snapshot)
+		fact_store_access::make_store(std::shared_ptr<const store::snapshot_data> snapshot,
+									  path workspace_root)
 		{
 			auto data = std::make_shared<fact_store::data>();
 			data->snapshot = std::move(snapshot);
+			data->workspace_root = std::move(workspace_root);
 			return fact_store{std::move(data)};
 		}
 
@@ -924,9 +974,85 @@ namespace cxxlens
 
 	// The frozen public API intentionally takes both immutable filter values by value.
 	// NOLINTBEGIN(performance-unnecessary-value-param)
-	coverage_report fact_store::coverage(fact_profile, analysis_scope) const
+	coverage_report fact_store::coverage(fact_profile profile, analysis_scope scope) const
 	{
-		return data_ && data_->snapshot ? data_->snapshot->coverage : coverage_report{};
+		if (!data_ || !data_->snapshot)
+			return {};
+		const auto has_fact_units = std::ranges::any_of(data_->snapshot->coverage.requested(),
+														[](const coverage_request& request)
+														{
+															return request.kind == "fact-unit";
+														});
+		if (!has_fact_units)
+			return data_->snapshot->coverage;
+		std::set<std::uint16_t> kinds;
+		for (const auto kind : detail::fact_profile_access::kinds(profile))
+			kinds.insert(static_cast<std::uint16_t>(kind));
+		coverage_report output;
+		const auto requests = data_->snapshot->coverage.requested();
+		const auto units = data_->snapshot->coverage.units();
+		for (std::size_t index{}; index < requests.size(); ++index)
+		{
+			const auto& request = requests[index];
+			const auto fields = coverage_fields(request.id);
+			if (!fields.contains("f") || !fields.contains("u") || !fields.contains("v") ||
+				!fields.contains("k") || !fields.contains("p"))
+				continue;
+			std::uint16_t kind{};
+			std::uint8_t precision{};
+			try
+			{
+				kind = static_cast<std::uint16_t>(std::stoul(fields.at("k")));
+				precision = static_cast<std::uint8_t>(std::stoul(fields.at("p")));
+			}
+			catch (const std::exception&)
+			{
+				continue;
+			}
+			if (!kinds.contains(kind) ||
+				precision !=
+					static_cast<std::uint8_t>(detail::fact_profile_access::precision(profile)))
+				continue;
+			bool selected = detail::workspace_value_access::kind(scope) ==
+				detail::workspace_value_access::scope_kind::all;
+			if (detail::workspace_value_access::kind(scope) ==
+				detail::workspace_value_access::scope_kind::compile_units)
+				selected = std::ranges::any_of(detail::workspace_value_access::units(scope),
+											   [&](const compile_unit_id& value)
+											   {
+												   return value.value() == fields.at("u");
+											   });
+			else if (detail::workspace_value_access::kind(scope) ==
+						 detail::workspace_value_access::scope_kind::files ||
+					 detail::workspace_value_access::kind(scope) ==
+						 detail::workspace_value_access::scope_kind::changed_files)
+			{
+				const auto file = decode_hex(fields.at("f"));
+				selected = file &&
+					std::ranges::any_of(
+							   detail::workspace_value_access::files(scope),
+							   [&](const path& value)
+							   {
+								   path normalized = value;
+								   if (normalized.is_absolute() && !data_->workspace_root.empty())
+									   normalized =
+										   normalized.lexically_relative(data_->workspace_root);
+								   return normalized.lexically_normal().generic_string() == *file;
+							   });
+			}
+			const auto& scoped_variants = detail::workspace_value_access::variants(scope);
+			if (selected && scoped_variants.has_value())
+				selected = std::ranges::any_of(scoped_variants.value(),
+											   [&](const build_variant_id& value)
+											   {
+												   return value.value() == fields.at("v");
+											   });
+			if (!selected)
+				continue;
+			output.request(request);
+			output.classify(units[index]);
+		}
+		return output;
 	}
 	// NOLINTEND(performance-unnecessary-value-param)
 

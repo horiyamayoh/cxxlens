@@ -355,6 +355,7 @@ def validate_document(document: Any, inventory_text: str | None = None) -> dict:
         "API-CFG-003",
         "API-CFG-004",
         "API-CORE-001",
+        "API-CORE-002",
         "API-CORE-003",
         "API-CORE-004",
         "API-FACT-001",
@@ -377,6 +378,9 @@ def validate_document(document: Any, inventory_text: str | None = None) -> dict:
         "API-WS-002",
         "API-WS-003",
         "API-WS-004",
+        "API-WS-005",
+        "API-WS-006",
+        "API-WS-007",
         "API-WS-008",
     ]
     if implemented != expected_implemented:

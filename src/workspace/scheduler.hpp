@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <stop_token>
 #include <string>
 #include <vector>
@@ -78,6 +79,7 @@ namespace cxxlens::detail::scheduling
 		std::vector<frontend::normalized_diagnostic> diagnostics;
 		frontend::parse_coverage frontend_coverage;
 		std::string semantic_batch;
+		std::shared_ptr<const frontend::observation_batch> observation_batch;
 	};
 
 	struct scheduler_coverage

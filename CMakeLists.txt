@@ -84,6 +84,7 @@ add_library(
   src/testing/workspace_fixture.cpp
   src/workspace/catalog.cpp
   src/workspace/frontend_scheduler_worker.cpp
+  src/workspace/provisioning.cpp
   src/workspace/scheduler.cpp)
 add_library(cxxlens::cxxlens ALIAS cxxlens)
 
@@ -167,6 +168,12 @@ install(
         schemas/cxxlens_testing_fixture.schema.yaml
         schemas/cxxlens_unresolved.schema.yaml
         schemas/cxxlens_analysis_scope.schema.yaml
+        schemas/cxxlens_capabilities.schema.yaml
+        schemas/cxxlens_coverage_delta.schema.yaml
+        schemas/cxxlens_fact_requirement.schema.yaml
+        schemas/cxxlens_incremental_provisioning_contract.yaml
+        schemas/cxxlens_provisioning_trace.schema.yaml
+        schemas/cxxlens_workspace_doctor.schema.yaml
         schemas/cxxlens_workspace_context.schema.yaml
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
 install(FILES README.md SECURITY.md

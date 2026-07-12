@@ -14,11 +14,17 @@
 #include <string_view>
 #include <vector>
 
+#include <cxxlens/core.hpp>
 #include <cxxlens/core/failure.hpp>
 #include <cxxlens/core/finding.hpp>
 
 namespace cxxlens
 {
+	namespace detail
+	{
+		struct workspace_value_access;
+		struct workspace_provisioning_access;
+	} // namespace detail
 	/** @brief Missing command handling policy. */
 	enum class compile_command_policy : std::uint8_t
 	{
@@ -264,11 +270,11 @@ namespace cxxlens
 		std::vector<compile_unit_id> units_;
 		std::optional<std::vector<build_variant_id>> variants_;
 		bool include_headers_{};
+		friend struct detail::workspace_value_access;
 	};
 
 	class fact_profile;
 	class fact_store;
-	class capability_set;
 	/** @brief Structured workspace health projection. */
 	class doctor_report
 	{
@@ -359,7 +365,7 @@ namespace cxxlens
 		 * @param[in] scope Immutable universe. @param[in] context Execution controls. @retval value
 		 * Status.
 		 * @pre Facts package is available. @post Partial failures remain represented.
-		 * @note Implementation is owned by the M1 provisioning issue.
+		 * @note A warm request with equivalent input coverage schedules no frontend work.
 		 * @code{.cpp}
 		 * #include <cxxlens/workspace.hpp>
 		 * int main(){return 0;}
@@ -369,7 +375,7 @@ namespace cxxlens
 										  execution_context context = {}) const;
 		/** @brief Return the immutable fact-store handle. @retval value Snapshot handle. @pre
 		 * Workspace open.
-		 * @post No state changes. @note Implementation is owned by the fact-store issue.
+		 * @post No state changes. @note The returned handle pins one immutable snapshot.
 		 * @code{.cpp}
 		 * #include <cxxlens/workspace.hpp>
 		 * int main(){return 0;}
@@ -406,5 +412,6 @@ namespace cxxlens
 		struct data;
 		explicit workspace(std::shared_ptr<const data> value);
 		std::shared_ptr<const data> data_;
+		friend struct detail::workspace_provisioning_access;
 	};
 } // namespace cxxlens

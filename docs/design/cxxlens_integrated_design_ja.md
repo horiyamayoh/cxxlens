@@ -781,6 +781,24 @@ Header inference は evidence と候補 score を保持し、mutation では str
 
 Operation 開始時に compile DB digest、source catalog digest、config/model/extractor digests、LLVM/schema version を固定する。read-only search 中に source が変われば `stale_source` unresolved、apply は拒否。
 
+### 11.4 Incremental fact provisioning
+
+`workspace::ensure` は要求を `semantic file × compile unit × variant × fact kind × precision × input digest`
+の coverage universe へ展開する。input digest は compile command、source、configuration、extractor semantics
+から作り、絶対 root、task order、jobs 数を含めない。同じ input digest の terminal coverage または再利用可能な
+extractor batch があれば frontend task を作らない。source/command/configuration の変更時は一致しない contributor
+だけを無効化し、同じ source の複数 command は全 variant を保持する。
+
+Provisioning は frontend → extractor batch → reducer → independent snapshot validator → staged transaction の順で
+実行する。TU 単位の parse failure は成功 sibling の facts と failed coverage を commit できるが、cancellation、
+deadline、budget stop、invalid observation/reduction は以前の immutable snapshot を保持する。unsupported capability は
+`capability` と `action` attribute を持つ structured error と unresolved coverage の組で表現する。
+
+`workspace::facts` は commit 済み snapshot を pin する。`workspace::doctor` は catalog、frontend capability、cache、
+failed/unresolved coverage を stable diagnostic code へ射影し、parse、cache rebuild、filesystem mutation を行わない。
+規範 schema は `cxxlens_fact_requirement.schema.yaml`、`cxxlens_coverage_delta.schema.yaml`、
+`cxxlens_provisioning_trace.schema.yaml`、`cxxlens_workspace_doctor.schema.yaml` とする。
+
 ---
 
 ## 12. Immutable fact model / store 詳細設計
@@ -3446,9 +3464,9 @@ typed fact/capability/API/expression dependency、atomic unit、readiness、guar
 | API-CORE-001 | `versions()` | library/schema/LLVM versions |
 | API-CORE-002 | `capabilities()` | runtime/build feature negotiation |
 | API-WS-001 | `workspace::open` | compile DBからworkspace snapshot |
-| API-WS-002 | `workspace::ensure` | required fact profileを範囲限定構築 |
-| API-WS-003 | `workspace::facts` | immutable fact store handle |
-| API-WS-004 | `workspace::doctor` | build/resource/cache/capability diagnostics |
+| API-WS-005 | `workspace::ensure` | required fact profileを範囲限定差分構築 |
+| API-WS-006 | `workspace::facts` | immutable fact store snapshot handle |
+| API-WS-007 | `workspace::doctor` | side-effect-free build/cache/capability diagnostics |
 | API-FACT-001 | `fact_profile::*` | extraction profile |
 | API-FACT-002 | `fact_store::find` | generic fact query |
 | API-FACT-003 | `fact_store::{symbols,references,calls,...}` | typed fact access |

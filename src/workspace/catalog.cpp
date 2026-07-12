@@ -18,6 +18,7 @@
 #include "../core/canonical_json.hpp"
 #include "../runtime/filesystem_port.hpp"
 #include "../runtime/hash_port.hpp"
+#include "provisioning.hpp"
 
 namespace cxxlens
 {
@@ -461,6 +462,7 @@ namespace cxxlens
 		std::string configuration_digest;
 		std::map<std::string, std::string> source_digests;
 		std::string snapshot_key;
+		std::shared_ptr<detail::provisioning::provisioning_service> provisioning;
 	};
 
 	workspace_options workspace_options::from_compilation_database(path build_or_json)
@@ -485,9 +487,13 @@ namespace cxxlens
 	}
 	std::string doctor_report::to_json() const
 	{
+		constexpr std::array level_names{"note", "info", "warning", "error", "fatal"};
 		json_value::array rows;
 		for (const auto& value : diagnostics_)
-			rows.emplace_back(json_value::object{{"id", value.id}, {"message", value.message}});
+			rows.emplace_back(json_value::object{
+				{"id", value.id},
+				{"message", value.message},
+				{"severity", level_names.at(static_cast<std::size_t>(value.level))}});
 		json_value document{detail::json::envelope(
 			{"cxxlens.workspace-doctor.v1"},
 			{{"diagnostics", json_value{std::move(rows)}}, {"healthy", healthy()}})};
@@ -805,6 +811,20 @@ namespace cxxlens
 		if (!snapshot)
 			return std::move(snapshot.error());
 		state->snapshot_key = snapshot.value();
+		auto cache_key = stable_id("snapshot",
+								   "cxxlens.workspace-cache.v1",
+								   {{"database", semantic_path(root, database_path.value())}});
+		if (!cache_key)
+			return std::move(cache_key.error());
+		auto provisioning =
+			detail::provisioning::provisioning_service::create({state->project_root,
+																state->units,
+																state->options.configuration_file,
+																state->options.cache_directory,
+																cache_key.value()});
+		if (!provisioning)
+			return std::move(provisioning.error());
+		state->provisioning = std::move(provisioning.value());
 		return workspace{std::move(state)};
 	}
 
@@ -836,6 +856,40 @@ namespace cxxlens
 		for (const auto& unit : data_->units)
 			if (unit.command().file.stem() == file.stem())
 				output.push_back(unit);
+		return output;
+	}
+
+	// The frozen public API takes immutable request values by value.
+	// NOLINTBEGIN(performance-unnecessary-value-param)
+	result<void>
+	workspace::ensure(fact_profile profile, analysis_scope scope, execution_context context) const
+	{
+		if (!data_ || !data_->provisioning)
+			return workspace_error("core.invalid-argument", "unbound-workspace");
+		return data_->provisioning->ensure(profile, scope, std::move(context));
+	}
+	// NOLINTEND(performance-unnecessary-value-param)
+
+	fact_store workspace::facts() const
+	{
+		return data_ && data_->provisioning ? data_->provisioning->facts() : fact_store{};
+	}
+
+	capability_set workspace::capabilities() const
+	{
+		return data_ && data_->provisioning ? data_->provisioning->capabilities()
+											: cxxlens::capabilities();
+	}
+
+	result<doctor_report> workspace::doctor(execution_context context) const
+	{
+		if (!data_ || !data_->provisioning)
+			return workspace_error("core.invalid-argument", "unbound-workspace");
+		auto diagnostics = data_->provisioning->diagnose(std::move(context));
+		if (!diagnostics)
+			return std::move(diagnostics.error());
+		doctor_report output;
+		output.diagnostics_ = std::move(diagnostics.value());
 		return output;
 	}
 
@@ -948,5 +1002,22 @@ namespace cxxlens
 		json_value document{
 			detail::json::envelope({"cxxlens.workspace-context.v1"}, std::move(fields))};
 		return detail::json::write(document).value();
+	}
+
+	void detail::workspace_provisioning_access::set_worker(
+		workspace& value,
+		std::shared_ptr<detail::scheduling::worker_port> worker,
+		const bool requires_clang_capability)
+	{
+		if (value.data_ && value.data_->provisioning)
+			value.data_->provisioning->set_worker(std::move(worker), requires_clang_capability);
+	}
+
+	detail::provisioning::provisioning_trace
+	detail::workspace_provisioning_access::last_trace(const workspace& value)
+	{
+		return value.data_ && value.data_->provisioning
+			? value.data_->provisioning->last_trace()
+			: detail::provisioning::provisioning_trace{};
 	}
 } // namespace cxxlens

@@ -1,0 +1,30 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://schemas.cxxlens.dev/cxxlens.provisioning-trace.v1.json
+title: cxxlens.provisioning-trace.v1
+type: object
+required: [schema, semantics_version, library_version, requested, warm, scheduled,
+           covered, failed, unresolved, rows]
+additionalProperties: false
+properties:
+  schema: {const: cxxlens.provisioning-trace.v1}
+  semantics_version: {const: 1.0.0}
+  library_version: {type: string}
+  requested: {type: integer, minimum: 0}
+  warm: {type: integer, minimum: 0}
+  scheduled: {type: integer, minimum: 0}
+  covered: {type: integer, minimum: 0}
+  failed: {type: integer, minimum: 0}
+  unresolved: {type: integer, minimum: 0}
+  rows:
+    type: array
+    items:
+      type: object
+      required: [requirement_id, state, reason_code]
+      additionalProperties: false
+      properties:
+        requirement_id:
+          type: string
+          pattern: '^f=[0-9a-f]+;u=cu_[0-9a-f]{64};v=variant_[0-9a-f]{64};k=[0-9]+;p=[0-9]+;i=[0-9a-f]{16,64}$'
+        state: {enum: [covered, failed, unresolved]}
+        reason_code: {type: string, minLength: 1}
+    uniqueItems: true

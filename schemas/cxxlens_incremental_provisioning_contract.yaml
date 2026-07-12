@@ -1,0 +1,22 @@
+schema: cxxlens.incremental-provisioning-contract.v1
+semantics_version: 1.0.0
+requirement_identity:
+  dimensions: [semantic_file, compile_unit, variant, fact_kind, precision, input_digest]
+  input_digest: [compile_command, source_content, configuration, extractor_semantics]
+coverage_accounting:
+  equation: requested = covered + failed + unresolved
+  terminal_rows_are_authoritative: true
+  empty_is_not_unresolved: true
+incremental:
+  warm_equivalent_request_schedules: 0
+  source_change_invalidates: contributing_compile_unit_variants
+  added_fact_kind_reuses_compatible_extractor_batch: true
+transaction:
+  sequence: [reduce, independent_validate, stage, validate, commit]
+  invalid_batch_commits: false
+  cancellation_preserves_previous_snapshot: true
+determinism:
+  semantic_projection_independent_of: [jobs, task_order, workspace_root, cache_backend]
+doctor:
+  behavior_control: stable_diagnostic_code
+  uncontrolled_side_effects: false

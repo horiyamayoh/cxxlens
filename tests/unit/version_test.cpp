@@ -1,5 +1,7 @@
+#include <algorithm>
 #include <compare>
 #include <iostream>
+#include <ranges>
 #include <string>
 
 #include <cxxlens/core.hpp>
@@ -42,6 +44,19 @@ auto main() -> int
 					"generation plan schema version missing");
 	passed &= check(product_versions.llvm == cxxlens::semantic_version{22U, 1U, 8U, {}},
 					"LLVM baseline mismatch");
+	const auto capability_registry = cxxlens::capabilities();
+	passed &= check(capability_registry.has("workspace.incremental-provisioning"),
+					"incremental provisioning capability is missing");
+	passed &= check(!capability_registry.has("unknown.capability") &&
+						capability_registry.get("unknown.capability").state ==
+							cxxlens::capability_state::disabled_at_build &&
+						capability_registry.get("unknown.capability").limitation.has_value(),
+					"unknown capability became an empty or available success");
+	passed &= check(std::ranges::is_sorted(capability_registry.all(), {}, &cxxlens::capability::id),
+					"capabilities are not canonically ordered");
+	passed &=
+		check(capability_registry.to_json().find("cxxlens.capabilities.v1") != std::string::npos,
+			  "capability schema projection is missing");
 
 	return passed ? 0 : 1;
 }

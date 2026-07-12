@@ -1,0 +1,22 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://schemas.cxxlens.dev/cxxlens.workspace-doctor.v1.json
+title: cxxlens.workspace-doctor.v1
+type: object
+required: [schema, semantics_version, library_version, healthy, diagnostics]
+additionalProperties: false
+properties:
+  schema: {const: cxxlens.workspace-doctor.v1}
+  semantics_version: {const: 1.0.0}
+  library_version: {type: string}
+  healthy: {type: boolean}
+  diagnostics:
+    type: array
+    items:
+      type: object
+      required: [id, message, severity]
+      additionalProperties: false
+      properties:
+        id: {type: string, pattern: '^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)+$'}
+        message: {type: string}
+        severity: {enum: [note, info, warning, error, fatal]}
+    uniqueItems: true

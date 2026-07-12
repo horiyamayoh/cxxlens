@@ -437,6 +437,31 @@ set_tests_properties(
   determinism.scheduler-process
   PROPERTIES LABELS "scheduler;determinism;schema;golden;concurrency;coverage")
 
+add_executable(cxxlens-unit-provisioning unit/workspace/provisioning_test.cpp)
+target_link_libraries(cxxlens-unit-provisioning PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-unit-provisioning
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-unit-provisioning PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-provisioning)
+add_test(NAME unit.provisioning COMMAND cxxlens-unit-provisioning)
+set_tests_properties(
+  unit.provisioning
+  PROPERTIES
+    LABELS
+    "unit;workspace;facts;coverage;incremental;sqlite;determinism;cancellation;capability;doctor;conformance"
+)
+add_test(
+  NAME schema.provisioning
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/workspace/test_provisioning_contract.py"
+    "$<TARGET_FILE:cxxlens-unit-provisioning>" "${PROJECT_SOURCE_DIR}")
+set_tests_properties(
+  schema.provisioning
+  PROPERTIES
+    LABELS
+    "schema;workspace;facts;coverage;incremental;capability;doctor;conformance")
+
 if(CXXLENS_CLANG22_AVAILABLE)
   add_executable(cxxlens-clang22-semantic
                  adapter/clang22/semantic_extractor_test.cpp)

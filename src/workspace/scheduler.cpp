@@ -213,6 +213,9 @@ namespace cxxlens::detail::scheduling
 				return scheduler_error("core.internal-invariant-violation", "task-shape");
 			if (task.state == task_state::succeeded && task.reason_code != "ok")
 				return scheduler_error("core.internal-invariant-violation", "success-reason");
+			if (task.state == task_state::succeeded && !task.observation_batch)
+				return scheduler_error("core.internal-invariant-violation",
+									   "success-batch-missing");
 			if (task.frontend_coverage.requested !=
 				task.frontend_coverage.parsed + task.frontend_coverage.failed +
 					task.frontend_coverage.cancelled)
@@ -488,6 +491,8 @@ namespace cxxlens::detail::scheduling
 						result.semantic_batch = outcome.value().semantic_representation();
 						result.diagnostics = outcome.value().diagnostics;
 						result.frontend_coverage = outcome.value().coverage;
+						result.observation_batch = std::make_shared<frontend::observation_batch>(
+							std::move(outcome.value()));
 						std::size_t payload_bytes = result.semantic_batch.size();
 						for (const auto& diagnostic : result.diagnostics)
 							payload_bytes += diagnostic.id.size() + diagnostic.file.size() +
@@ -497,6 +502,7 @@ namespace cxxlens::detail::scheduling
 						{
 							result.semantic_batch.clear();
 							result.diagnostics.clear();
+							result.observation_batch.reset();
 							result.state = task_state::output_limited;
 							result.reason_code = "core.budget-exhausted";
 						}

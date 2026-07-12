@@ -18,6 +18,7 @@ namespace cxxlens
 	namespace detail
 	{
 		struct fact_store_access;
+		struct fact_profile_access;
 	} // namespace detail
 	/** @brief Persistable semantic fact kinds fixed by the v1 fact schema. */
 	enum class fact_kind : std::uint16_t // NOLINT(performance-enum-size)
@@ -137,6 +138,7 @@ namespace cxxlens
 	  private:
 		std::vector<fact_kind> kinds_;
 		precision_level precision_{precision_level::ast_structural};
+		friend struct detail::fact_profile_access;
 	};
 
 	/** @brief Canonical contributors for a detached fact. */

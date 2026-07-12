@@ -11,7 +11,7 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-COPY-001 | copy | <cxxlens/generate.hpp> | copy::public_surface | AU-COPY-001 | unimplemented |
 | API-COPY-002 | copy | <cxxlens/generate.hpp> | copy::required_types | AU-COPY-002 | unimplemented |
 | API-CORE-001 | core | <cxxlens/core.hpp> | versions() | AU-CORE-001 | conformant |
-| API-CORE-002 | core | <cxxlens/core.hpp> | capabilities() | AU-CORE-002 | unimplemented |
+| API-CORE-002 | core | <cxxlens/core.hpp> | capabilities() | AU-CORE-002 | conformant |
 | API-CORE-003 | core | <cxxlens/core.hpp> | evidence::{add,items,to_json,to_markdown} | AU-CORE-003 | conformant |
 | API-CORE-004 | core | <cxxlens/core.hpp> | coverage_report::{complete,units,to_json,to_markdown} | AU-CORE-004 | conformant |
 | API-CORE-005 | core | <cxxlens/core.hpp> | finding::{id,why,unresolved_items,explain,to_json} | AU-CORE-005 | unimplemented |
@@ -123,7 +123,7 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-WS-002 | workspace | <cxxlens/workspace.hpp> | workspace::open(workspace_options, execution_context) | AU-WS-002 | conformant |
 | API-WS-003 | workspace | <cxxlens/workspace.hpp> | workspace::compile_units() | AU-WS-003 | conformant |
 | API-WS-004 | workspace | <cxxlens/workspace.hpp> | workspace::command_for(path) | AU-WS-004 | conformant |
-| API-WS-005 | workspace | <cxxlens/workspace.hpp> | workspace::ensure(fact_profile, analysis_scope, execution_context) | AU-WS-005 | unimplemented |
-| API-WS-006 | workspace | <cxxlens/workspace.hpp> | workspace::facts() | AU-WS-006 | unimplemented |
-| API-WS-007 | workspace | <cxxlens/workspace.hpp> | workspace::doctor(execution_context) | AU-WS-007 | unimplemented |
+| API-WS-005 | workspace | <cxxlens/workspace.hpp> | workspace::ensure(fact_profile, analysis_scope, execution_context) | AU-WS-005 | conformant |
+| API-WS-006 | workspace | <cxxlens/workspace.hpp> | workspace::facts() | AU-WS-006 | conformant |
+| API-WS-007 | workspace | <cxxlens/workspace.hpp> | workspace::doctor(execution_context) | AU-WS-007 | conformant |
 | API-WS-008 | workspace | <cxxlens/workspace.hpp> | analysis_scope::{all,files,compile_units,changed_files,include_headers,variants} | AU-WS-008 | conformant |

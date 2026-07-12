@@ -39,7 +39,7 @@ class ApiContractTest(unittest.TestCase):
         self.assertEqual(summary["api_entry_count"], 123)
         self.assertEqual(
             summary["implementation_state_counts"],
-            {"conformant": 28, "implemented": 0, "unimplemented": 95},
+            {"conformant": 32, "implemented": 0, "unimplemented": 91},
         )
 
     def test_duplicate_id_fixture(self) -> None:
@@ -76,14 +76,24 @@ class ApiContractTest(unittest.TestCase):
 
     def test_ready_signature_missing_fixture(self) -> None:
         document = self.mutated()
-        api = document["packages"][0]["apis"][1]
+        api = next(
+            api
+            for api in document["packages"][0]["apis"]
+            if api["declaration"]["status"] == "unresolved"
+        )
         api["readiness"] = {"state": "ready", "blockers": []}
         self.assert_invalid(document, "unresolved declaration cannot be ready")
 
     def test_atomic_unit_split_fixture(self) -> None:
         document = self.mutated()
-        first, second = document["packages"][0]["apis"][:2]
+        first = document["packages"][0]["apis"][0]
+        second = next(
+            api
+            for api in document["packages"][0]["apis"]
+            if api["readiness"]["state"] == "blocked"
+        )
         second["atomic_unit"]["id"] = first["atomic_unit"]["id"]
+        document["summary"]["atomic_unit_count"] -= 1
         self.assert_invalid(document, "split readiness")
 
     def test_api_dependency_cycle_fixture(self) -> None:

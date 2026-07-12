@@ -10,10 +10,17 @@
 
 #include <compare>
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace cxxlens
 {
+	namespace detail
+	{
+		struct capability_set_access;
+	} // namespace detail
 
 	/**
 	 * @brief Semantic Versioning 形式の version 値。
@@ -93,6 +100,56 @@ namespace cxxlens
 		semantic_version llvm;
 	};
 
+	/** @brief Availability state for one optional or required service capability.
+	 * @note Enum values are serialized by stable names, never ordinal prose. */
+	enum class capability_state : std::uint8_t
+	{
+		available,
+		experimental,
+		disabled_at_build,
+		unavailable_for_llvm,
+		unavailable_for_platform,
+	};
+
+	/** @brief Stable capability row; summary text is never a control-flow input. */
+	struct capability
+	{
+		/** @brief Namespaced stable capability ID. */
+		std::string id;
+		/** @brief Machine-readable availability state. */
+		capability_state state{capability_state::disabled_at_build};
+		/** @brief Human-readable description excluded from control flow. */
+		std::string summary;
+		/** @brief Optional explicit reason the capability cannot be used. */
+		std::optional<std::string> limitation;
+		auto operator<=>(const capability&) const = default;
+	};
+
+	/** @brief Canonically ordered explicit capability registry. */
+	class capability_set
+	{
+	  public:
+		/** @brief Test whether a capability is usable without an implicit downgrade.
+		 * @param[in] id Namespaced capability ID. @retval value True for available or experimental.
+		 * @pre None. @post Registry unchanged. @note Unknown IDs return false. */
+		[[nodiscard]] bool has(std::string_view id) const;
+		/** @brief Return the exact row, or an explicit unavailable row for an unknown ID.
+		 * @param[in] id Namespaced capability ID. @retval value Detached explicit row.
+		 * @pre None. @post Registry unchanged. @note Unknown is not represented as empty success.
+		 */
+		[[nodiscard]] capability get(std::string_view id) const;
+		/** @brief Return all rows in stable ID order. @retval value Detached canonical rows.
+		 * @pre None. @post Registry unchanged. */
+		[[nodiscard]] std::vector<capability> all() const;
+		/** @brief Return canonical schema-versioned JSON. @retval value Capabilities v1 document.
+		 * @pre Rows were created by the registry. @post Registry unchanged. */
+		[[nodiscard]] std::string to_json() const;
+
+	  private:
+		std::vector<capability> values_;
+		friend struct detail::capability_set_access;
+	};
+
 	/**
 	 * @brief 現在の product と schema の version 群を取得する。
 	 * @retval value library、schema、LLVM baseline の version 群。
@@ -109,5 +166,14 @@ namespace cxxlens
 	 * @endcode
 	 */
 	[[nodiscard]] api_versions versions();
+
+	/** @brief Return build-wide capabilities with unavailable states preserved explicitly.
+	 * @retval value Canonically ordered capability registry. @pre None. @post No side effects.
+	 * @note Runtime operations still recheck operation-specific capability requirements.
+	 * @code{.cpp}
+	 * #include <cxxlens/core.hpp>
+	 * int main(){return cxxlens::capabilities().has("workspace.incremental-provisioning")?0:1;}
+	 * @endcode */
+	[[nodiscard]] capability_set capabilities();
 
 } // namespace cxxlens
