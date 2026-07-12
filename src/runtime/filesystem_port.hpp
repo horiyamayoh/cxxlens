@@ -30,6 +30,8 @@ namespace cxxlens::detail::runtime
 		stat(const std::filesystem::path& path, const request_context& context) const = 0;
 		[[nodiscard]] virtual runtime_result<std::filesystem::path>
 		canonicalize(const std::filesystem::path& path, const request_context& context) const = 0;
+		[[nodiscard]] virtual runtime_result<bool>
+		create_directories(const std::filesystem::path& path, const request_context& context) = 0;
 		[[nodiscard]] virtual runtime_result<bool> remove(const std::filesystem::path& path,
 														  const request_context& context) = 0;
 	};
@@ -46,6 +48,9 @@ namespace cxxlens::detail::runtime
 		[[nodiscard]] runtime_result<std::filesystem::path>
 		canonicalize(const std::filesystem::path& path,
 					 const request_context& context) const override;
+		[[nodiscard]] runtime_result<bool>
+		create_directories(const std::filesystem::path& path,
+						   const request_context& context) override;
 		[[nodiscard]] runtime_result<bool> remove(const std::filesystem::path& path,
 												  const request_context& context) override;
 	};
@@ -66,6 +71,9 @@ namespace cxxlens::detail::runtime
 		[[nodiscard]] runtime_result<std::filesystem::path>
 		canonicalize(const std::filesystem::path& path,
 					 const request_context& context) const override;
+		[[nodiscard]] runtime_result<bool>
+		create_directories(const std::filesystem::path& path,
+						   const request_context& context) override;
 		[[nodiscard]] runtime_result<bool> remove(const std::filesystem::path& path,
 												  const request_context& context) override;
 

@@ -155,6 +155,19 @@ namespace cxxlens::detail::runtime
 		return removed;
 	}
 
+	runtime_result<bool>
+	standard_filesystem_adapter::create_directories(const std::filesystem::path& path,
+													const request_context& context)
+	{
+		if (auto failure = preflight(context))
+			return unexpected{std::move(*failure)};
+		std::error_code error;
+		const bool created = std::filesystem::create_directories(path, error);
+		if (error)
+			return unexpected{map_error(context.operation, error)};
+		return created || std::filesystem::is_directory(path);
+	}
+
 	memory_filesystem_adapter::memory_filesystem_adapter(fault_plan faults)
 		: faults_{std::move(faults)}
 	{
@@ -263,6 +276,17 @@ namespace cxxlens::detail::runtime
 		if (const auto* failure = faults_.match(context))
 			return unexpected{*failure};
 		return files_.erase(normalized(path)) != 0U;
+	}
+
+	runtime_result<bool>
+	memory_filesystem_adapter::create_directories(const std::filesystem::path&,
+												  const request_context& context)
+	{
+		if (auto failure = preflight(context))
+			return unexpected{std::move(*failure)};
+		if (const auto* failure = faults_.match(context))
+			return unexpected{*failure};
+		return true;
 	}
 
 	std::vector<std::filesystem::path>

@@ -137,8 +137,12 @@ namespace
 			second.push_back(
 				observation(kind, key, unit_b, variant_a, {{"domain.value", "equal"}}));
 		}
-		first.push_back(symbol_observation(unit_a, variant_a, symbol_a, "c:@F@same#"));
-		second.push_back(symbol_observation(unit_b, variant_a, symbol_a, "c:@F@same#"));
+		auto declared_symbol = symbol_observation(unit_a, variant_a, symbol_a, "c:@F@same#");
+		declared_symbol.payload.emplace("symbol.definition", "false");
+		first.push_back(std::move(declared_symbol));
+		auto defined_symbol = symbol_observation(unit_b, variant_a, symbol_a, "c:@F@same#");
+		defined_symbol.payload.emplace("symbol.definition", "true");
+		second.push_back(std::move(defined_symbol));
 		first.push_back(observation(
 			fact_kind::definition,
 			"definition:fixture-a",

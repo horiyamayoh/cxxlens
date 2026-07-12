@@ -73,6 +73,20 @@ namespace cxxlens::detail::query
 			return std::nullopt;
 		}
 
+		[[nodiscard]] std::optional<std::string> find_conjunctive_argument(
+			const node_ptr& node, const std::string_view predicate, const std::string_view key)
+		{
+			if (node->operation == node_operation::predicate)
+				return node->predicate == predicate ? std::optional{argument(node, key)}
+													: std::nullopt;
+			if (node->operation != node_operation::all)
+				return std::nullopt;
+			for (const auto& operand : node->operands)
+				if (auto value = find_conjunctive_argument(operand, predicate, key))
+					return value;
+			return std::nullopt;
+		}
+
 		[[nodiscard]] bool contains_csv(const std::string_view csv, const std::string_view expected)
 		{
 			std::size_t begin{};
@@ -577,6 +591,17 @@ namespace cxxlens::detail::query
 		auto calls = store.calls();
 		if (!calls)
 			return std::move(calls.error());
+		if (const auto requested = find_conjunctive_argument(root, "call.kinds", "values"))
+			std::erase_if(calls.value(),
+						  [&](const call_site& call)
+						  {
+							  const bool exact =
+								  contains_csv(*requested, call_kind_name(call.kind()));
+							  const bool virtual_is_member =
+								  call.kind() == call_kind::virtual_member &&
+								  contains_csv(*requested, "member");
+							  return !exact && !virtual_is_member;
+						  });
 		auto symbols = store.symbols();
 		if (!symbols)
 			return std::move(symbols.error());

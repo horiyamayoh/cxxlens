@@ -77,6 +77,7 @@ namespace
 		require(direct.value().matches().size() == 2U,
 				"flagship search did not return exactly two direct call sites");
 		const auto store = workspace.facts();
+		const auto base_record = symbol_named(store, "Base");
 		const auto base_step = symbol_named(store, "Base::step");
 		const auto derived_step = symbol_named(store, "Derived::step");
 		const auto other_step = symbol_named(store, "Other::step");
@@ -90,7 +91,7 @@ namespace
 					!std::ranges::contains(base_call->possible_callees(), other_step),
 				"static and possible virtual targets are not semantically separated");
 		require(base_call->receiver_static_type().has_value() &&
-					base_call->receiver_static_type()->canonical_spelling() == "Base" &&
+					base_call->receiver_static_type()->declaration() == base_record &&
 					!base_call->why().items().empty(),
 				"receiver type or why-matched evidence is missing");
 		require(direct.value().guarantee() == result_guarantee::best_effort &&

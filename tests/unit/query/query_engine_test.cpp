@@ -338,6 +338,46 @@ namespace
 					!value.to_json().empty() && !value.trace.to_json().empty(),
 				"complete closed-world query lost its guarantee or trace");
 
+		auto mixed_snapshot = std::make_shared<store::snapshot_data>(*snapshot());
+		mixed_snapshot->facts.push_back(
+			cxxlens::test::query_fixture::fact(fact_kind::call,
+											   15U,
+											   "call:builtin-operator",
+											   {{"call.kind", "builtin_operator"},
+												{"call.direct_callee", "unresolved"},
+												{"call.possible_callees", ""},
+												{"call.receiver_static_type", "none"},
+												{"call.dispatch", "unresolved"}},
+											   span(15U)));
+		std::ranges::sort(mixed_snapshot->facts,
+						  [](const auto& left, const auto& right)
+						  {
+							  return std::tuple{left.kind, left.stable_key, left.id.value()} <
+								  std::tuple{right.kind, right.stable_key, right.id.value()};
+						  });
+		const auto mixed_store = fact_store_access::make_store(mixed_snapshot);
+		auto indexed = query::execute(plan(), mixed_store, options);
+		require(indexed && indexed.value().trace.accounting.considered == 3U &&
+					indexed.value().trace.accounting.rejected == 1U,
+				"fact index scan admitted a call kind excluded by the selector");
+
+		const auto call_domain = select::detail::selector_domain::call;
+		auto kind_disjunction = select::detail::selector_access::semantic(select::detail::any_node(
+			call_domain,
+			{select::detail::predicate_node(call_domain, "call.kinds", {{"values", "member"}}),
+			 select::detail::predicate_node(
+				 call_domain, "call.kinds", {{"values", "builtin_operator"}})}));
+		query::compile_options disjunction_options;
+		disjunction_options.candidate_budget = options.candidate_budget;
+		disjunction_options.refinement_budget = options.refinement_budget;
+		auto disjunction_plan =
+			query::compile(kind_disjunction, disjunction_options, "snapshot:fixture");
+		require(disjunction_plan.has_value(), "call-kind disjunction plan compilation failed");
+		auto disjunction = query::execute(disjunction_plan.value(), mixed_store, options);
+		require(disjunction && disjunction.value().trace.accounting.considered == 4U &&
+					disjunction.value().trace.accounting.matched == 4U,
+				"fact index scan unsafely narrowed a disjunctive call-kind selector");
+
 		auto open_world_options = options;
 		open_world_options.closed_world = false;
 		auto open_world = query::execute(plan(), fact_store_fixture(), open_world_options);

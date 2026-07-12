@@ -360,6 +360,17 @@ namespace cxxlens::detail::provisioning
 											  {"workspace-catalog", "1.0.0"}};
 		const auto sqlite_database =
 			value->options.cache_directory.value_or(path{}) / "facts.sqlite3";
+		if (value->options.cache_directory)
+		{
+			runtime::request_context context;
+			context.operation = "workspace.cache-directory.create";
+			auto created =
+				value->options.files->create_directories(*value->options.cache_directory, context);
+			if (!created || !created.value())
+				return provisioning_error("facts.backend-unavailable",
+										  "cache-directory-create-failed",
+										  failure_scope::workspace);
+		}
 		result<std::shared_ptr<store::fact_store_port>> opened = value->options.cache_directory
 			? store::open_sqlite_store(sqlite_database, value->metadata)
 			: store::make_in_memory_store(value->metadata);

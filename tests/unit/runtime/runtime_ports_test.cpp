@@ -76,6 +76,14 @@ namespace
 							runtime_status::cancelled,
 						"dynamic-library cancellation did not propagate");
 		standard_filesystem_adapter standard;
+		const auto directory =
+			std::filesystem::temp_directory_path() / "cxxlens-runtime-port-directory" / "nested";
+		std::filesystem::remove_all(directory.parent_path());
+		passed &= check(standard.create_directories(directory, context("fs.production.mkdir"))
+								.value_or(false) &&
+							std::filesystem::is_directory(directory),
+						"production filesystem directory creation failed");
+		std::filesystem::remove_all(directory.parent_path());
 		const std::filesystem::path this_file{__FILE__};
 		const auto production_read = standard.read(this_file, context("fs.production.read"));
 		passed &= check(production_read &&

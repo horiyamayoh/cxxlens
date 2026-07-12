@@ -305,6 +305,47 @@ namespace cxxlens
 			return value;
 		}
 
+		struct variant_argument_paths
+		{
+			const path& directory;
+			const path& source;
+		};
+
+		[[nodiscard]] std::vector<std::string>
+		variant_arguments(const std::vector<std::string>& arguments,
+						  const variant_argument_paths paths)
+		{
+			std::vector<std::string> output;
+			for (std::size_t index = 0U; index < arguments.size(); ++index)
+			{
+				const auto& argument = arguments[index];
+				if (argument == "-c")
+					continue;
+				if (argument == "-o" || argument == "--output" || argument == "-MF" ||
+					argument == "-MT" || argument == "-MQ" || argument == "-MJ")
+				{
+					if (index + 1U < arguments.size())
+						++index;
+					continue;
+				}
+				if ((argument.starts_with("-o") && argument.size() > 2U) ||
+					argument.starts_with("--output=") || argument.starts_with("-MF=") ||
+					argument.starts_with("-MT=") || argument.starts_with("-MQ=") ||
+					argument.starts_with("-MJ="))
+					continue;
+				if (!argument.empty() && argument.front() != '-')
+				{
+					path candidate = argument;
+					if (candidate.is_relative())
+						candidate = paths.directory / candidate;
+					if (candidate.lexically_normal() == paths.source.lexically_normal())
+						continue;
+				}
+				output.push_back(argument);
+			}
+			return output;
+		}
+
 		[[nodiscard]] result<std::string>
 		stable_id(const std::string& prefix, // NOLINT(bugprone-easily-swappable-parameters)
 				  const std::string& domain,
@@ -743,9 +784,10 @@ namespace cxxlens
 			if (unsafe_driver_flags(arguments))
 				return workspace_error("workspace.driver-not-allowed", "plugin-or-load-flag");
 
+			const auto variant_inputs = variant_arguments(arguments, {directory, source});
 			std::vector<std::string> semantic_arguments;
-			semantic_arguments.reserve(arguments.size());
-			for (const auto& argument : arguments)
+			semantic_arguments.reserve(variant_inputs.size());
+			for (const auto& argument : variant_inputs)
 				semantic_arguments.push_back(semantic_argument(root, argument));
 			std::string joined;
 			for (const auto& argument : semantic_arguments)

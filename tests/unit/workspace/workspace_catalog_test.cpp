@@ -160,6 +160,23 @@ int main(int argc, char** argv)
 				arguments_form.value().compile_units().front().command_digest() ==
 					command_form.value().compile_units().front().command_digest(),
 			"arguments and equivalent command normalized differently");
+	write(negative / "other.cpp", "int other;\n");
+	write(negative / "shared-variant.json",
+		  "[{\"directory\":\"" + directory +
+			  "\",\"file\":\"source.cpp\",\"arguments\":[\"clang++\",\"-std=c++23\","
+			  "\"-DMODE=1\",\"-c\",\"source.cpp\",\"-o\",\"source.o\"]},"
+			  "{\"directory\":\"" +
+			  directory +
+			  "\",\"file\":\"other.cpp\",\"arguments\":[\"clang++\",\"-std=c++23\","
+			  "\"-DMODE=1\",\"-c\",\"other.cpp\",\"-o\",\"other.o\"]}]");
+	const auto shared_variant = cxxlens::workspace::open(
+		cxxlens::workspace_options::from_compilation_database(negative / "shared-variant.json"));
+	require(shared_variant && shared_variant.value().compile_units().size() == 2U &&
+				shared_variant.value().compile_units()[0].variant_id() ==
+					shared_variant.value().compile_units()[1].variant_id() &&
+				shared_variant.value().compile_units()[0].id() !=
+					shared_variant.value().compile_units()[1].id(),
+			"source and output paths leaked into the build-variant identity");
 	write(negative / "plugin.json",
 		  "[{\"directory\":\"" + directory +
 			  "\",\"file\":\"source.cpp\",\"arguments\":[\"clang++\",\"-Xclang\",\"-load\",\"evil."

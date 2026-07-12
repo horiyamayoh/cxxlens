@@ -123,7 +123,8 @@ namespace cxxlens::detail::facts
 					frame(observation.source ? observation.source->to_canonical_json() : "");
 			for (const auto& [key, value] : observation.payload)
 			{
-				if (operational_key(key))
+				if (operational_key(key) ||
+					(observation.kind == fact_kind::symbol && key == "symbol.definition"))
 					continue;
 				output += "|" + frame(key) + frame(value);
 			}
@@ -292,7 +293,8 @@ namespace cxxlens::detail::facts
 			output.origin.extractor_version = representative.adapter_version;
 			output.payload_version = representative.payload_version;
 			for (const auto& [name, value] : representative.payload)
-				if (!operational_key(name))
+				if (!operational_key(name) &&
+					(representative.kind != fact_kind::symbol || name != "symbol.definition"))
 					output.payload.emplace(name, value);
 			output.name = representative.name;
 			output.type = representative.type;

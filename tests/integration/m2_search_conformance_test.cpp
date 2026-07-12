@@ -65,8 +65,12 @@ int Other::step() { return MODE + 2; }
 				"search fixture lost the multi-TU x multi-variant universe");
 
 		auto direct = search::calls_to_method(workspace, "Base", "step");
-		require(direct.has_value() && direct.value().matches().size() == 2U,
-				"flagship search did not isolate Base and Derived direct spelling calls");
+		if (!direct.has_value())
+			throw std::runtime_error{"flagship direct search failed"};
+		if (direct.value().matches().size() != 2U)
+			throw std::runtime_error{
+				"flagship search did not isolate Base and Derived direct spelling calls: matches=" +
+				std::to_string(direct.value().matches().size())};
 		require(direct.value().coverage().complete() &&
 					direct.value().guarantee() == result_guarantee::best_effort,
 				"open-world virtual search lost coverage or overstated exactness");
@@ -103,9 +107,15 @@ int Other::step() { return MODE + 2; }
 					override_report.has_value() && override_report.value().matches().size() == 1U,
 				"production hierarchy/override search lost semantic edges");
 		auto why = explain::why_not_matched(workspace, select::semantic(include_macro_selector));
-		require(why.has_value() && why.value().properties.at("matched") == "3" &&
-					why.value().properties.at("rejected") == "1",
-				"production why-not accounting is incomplete");
+		if (!why.has_value())
+			throw std::runtime_error{"production why-not accounting failed"};
+		if (why.value().properties.at("matched") != "3" ||
+			why.value().properties.at("rejected") != "1")
+			throw std::runtime_error{"production why-not accounting is incomplete: considered=" +
+									 why.value().properties.at("considered") +
+									 " matched=" + why.value().properties.at("matched") +
+									 " rejected=" + why.value().properties.at("rejected") +
+									 " unresolved=" + why.value().properties.at("unresolved")};
 
 		const auto cold = direct.value().to_json();
 		auto warm = search::calls_to_method(workspace, "Base", "step");

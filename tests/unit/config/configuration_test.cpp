@@ -45,6 +45,14 @@ namespace
 		}
 
 		[[nodiscard]] cxxlens::detail::runtime::runtime_result<bool>
+		create_directories(const std::filesystem::path&,
+						   const cxxlens::detail::runtime::request_context&) override
+		{
+			using namespace cxxlens::detail::runtime;
+			return unexpected{{runtime_status::permission_denied, "configuration.create", 13}};
+		}
+
+		[[nodiscard]] cxxlens::detail::runtime::runtime_result<bool>
 		remove(const std::filesystem::path&,
 			   const cxxlens::detail::runtime::request_context&) override
 		{
