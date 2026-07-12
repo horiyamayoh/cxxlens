@@ -60,8 +60,10 @@ add_library(
   src/llvm/common/borrowed_lifetime.cpp
   src/llvm/common/frontend_port.cpp
   src/llvm/clang22/frontend_job.cpp
+  src/llvm/clang22/call_relation_extractor.cpp
   src/llvm/clang22/preprocessor_extractor.cpp
   src/llvm/clang22/source_map_adapter.cpp
+  src/llvm/clang22/symbol_type_extractor.cpp
   src/runtime/fault_plan.cpp
   src/runtime/filesystem_adapter.cpp
   src/runtime/hash_adapter.cpp

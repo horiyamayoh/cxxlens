@@ -388,6 +388,33 @@ set_tests_properties(
   PROPERTIES LABELS "scheduler;determinism;schema;golden;concurrency;coverage")
 
 if(CXXLENS_CLANG22_AVAILABLE)
+  add_executable(cxxlens-clang22-semantic
+                 adapter/clang22/semantic_extractor_test.cpp)
+  target_link_libraries(cxxlens-clang22-semantic PRIVATE cxxlens::cxxlens)
+  target_include_directories(cxxlens-clang22-semantic
+                             PRIVATE "${PROJECT_SOURCE_DIR}/src")
+  target_compile_features(cxxlens-clang22-semantic PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens-clang22-semantic)
+  add_test(NAME adapter.clang22-semantic COMMAND cxxlens-clang22-semantic)
+  set_tests_properties(
+    adapter.clang22-semantic
+    PROPERTIES
+      LABELS
+      "adapter;frontend;symbol;type;call;inheritance;override;schema;determinism;coverage"
+  )
+  add_test(
+    NAME determinism.clang22-semantic-process
+    COMMAND
+      "${Python3_EXECUTABLE}"
+      "${PROJECT_SOURCE_DIR}/tests/adapter/clang22/test_semantic_process.py"
+      "$<TARGET_FILE:cxxlens-clang22-semantic>"
+      "${PROJECT_SOURCE_DIR}/tests/golden/clang22/semantic_v1.txt")
+  set_tests_properties(
+    determinism.clang22-semantic-process
+    PROPERTIES
+      LABELS
+      "adapter;symbol;type;call;inheritance;override;schema;golden;determinism")
+
   add_executable(cxxlens-clang22-preprocessor
                  adapter/clang22/preprocessor_extractor_test.cpp)
   target_link_libraries(cxxlens-clang22-preprocessor PRIVATE cxxlens::cxxlens)

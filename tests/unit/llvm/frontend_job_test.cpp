@@ -135,7 +135,7 @@ int main()
 	const auto capability = cxxlens::detail::clang22::capability();
 	require(std::ranges::is_sorted(capability.explicit_components),
 			"component map is not canonical");
-	require(capability.explicit_components.size() == 12U, "component map is incomplete");
+	require(capability.explicit_components.size() == 13U, "component map is incomplete");
 	require(std::ranges::find(capability.explicit_components, "clang-cpp") ==
 				capability.explicit_components.end(),
 			"monolithic transitive Clang dependency accepted");

@@ -15,6 +15,7 @@
 #include "../../runtime/time_port.hpp"
 #include "../common/borrowed_lifetime.hpp"
 #include "preprocessor_extractor.hpp"
+#include "symbol_type_extractor.hpp"
 
 #ifndef CXXLENS_HAS_CLANG22
 #define CXXLENS_HAS_CLANG22 0
@@ -181,7 +182,7 @@ namespace cxxlens
 		namespace
 		{
 			constexpr std::string_view adapter_version = "1.0.0";
-			constexpr std::array<std::string_view, 12U> component_names{
+			constexpr std::array<std::string_view, 13U> component_names{
 				"LLVMOption",
 				"LLVMSupport",
 				"clangAST",
@@ -189,6 +190,7 @@ namespace cxxlens
 				"clangDriver",
 				"clangFrontend",
 				"clangFrontendTool",
+				"clangIndex",
 				"clangLex",
 				"clangOptions",
 				"clangSerialization",
@@ -307,14 +309,26 @@ namespace cxxlens
 								  const compile_unit& unit,
 								  interop::clang_tu_callback* callback,
 								  std::optional<error>& callback_error,
-								  bool& callback_invoked)
+								  bool& callback_invoked,
+								  semantic_extraction_session* semantic,
+								  std::optional<error>& extraction_error)
 					: compiler_{compiler}, unit_{unit}, callback_{callback},
-					  callback_error_{callback_error}, callback_invoked_{callback_invoked}
+					  callback_error_{callback_error}, callback_invoked_{callback_invoked},
+					  semantic_{semantic}, extraction_error_{extraction_error}
 				{
 				}
 
-				void HandleTranslationUnit(clang::ASTContext&) override
+				void HandleTranslationUnit(clang::ASTContext& context) override
 				{
+					if (semantic_ != nullptr)
+					{
+						auto extracted = semantic_->consume(context);
+						if (!extracted)
+						{
+							extraction_error_ = std::move(extracted.error());
+							return;
+						}
+					}
 					if (callback_ == nullptr || !*callback_)
 						return;
 					callback_invoked_ = true;
@@ -329,6 +343,8 @@ namespace cxxlens
 				interop::clang_tu_callback* callback_;
 				std::optional<error>& callback_error_;
 				bool& callback_invoked_;
+				semantic_extraction_session* semantic_;
+				std::optional<error>& extraction_error_;
 			};
 
 			class borrowed_action final : public clang::ASTFrontendAction
@@ -356,25 +372,56 @@ namespace cxxlens
 						return false;
 					}
 					extraction_ = std::move(attached.value());
+					auto semantic = make_semantic_extractor(compiler, task_.unit, task_.files);
+					if (!semantic)
+					{
+						extraction_error_ = std::move(semantic.error());
+						return false;
+					}
+					semantic_ = std::move(semantic.value());
 					return true;
 				}
 
 				std::unique_ptr<clang::ASTConsumer>
 				CreateASTConsumer(clang::CompilerInstance& compiler, llvm::StringRef) override
 				{
-					return std::make_unique<borrowed_consumer>(
-						compiler, task_.unit, callback_, callback_error_, callback_invoked_);
+					return std::make_unique<borrowed_consumer>(compiler,
+															   task_.unit,
+															   callback_,
+															   callback_error_,
+															   callback_invoked_,
+															   semantic_.get(),
+															   extraction_error_);
 				}
 
 				void EndSourceFileAction() override
 				{
-					if (!extraction_)
+					if (!extraction_ || !semantic_ || extraction_error_)
 						return;
-					auto extracted = extraction_->take();
-					if (!extracted)
-						extraction_error_ = std::move(extracted.error());
-					else
-						observations_ = std::move(extracted.value());
+					auto preprocessor = extraction_->take();
+					if (!preprocessor)
+					{
+						extraction_error_ = std::move(preprocessor.error());
+						return;
+					}
+					auto semantic = semantic_->take();
+					if (!semantic)
+					{
+						extraction_error_ = std::move(semantic.error());
+						return;
+					}
+					observations_ = std::move(preprocessor.value());
+					observations_.insert(observations_.end(),
+										 std::make_move_iterator(semantic.value().begin()),
+										 std::make_move_iterator(semantic.value().end()));
+					const auto key = [](const facts::observation_record& observation)
+					{
+						return std::to_string(static_cast<std::uint16_t>(observation.kind)) + ":" +
+							observation.payload.at("semantic_key");
+					};
+					std::ranges::sort(observations_, {}, key);
+					const auto duplicate = std::ranges::unique(observations_, {}, key);
+					observations_.erase(duplicate.begin(), duplicate.end());
 				}
 
 			  private:
@@ -385,6 +432,7 @@ namespace cxxlens
 				std::optional<error>& extraction_error_;
 				std::vector<facts::observation_record>& observations_;
 				std::unique_ptr<preprocessor_extraction_session> extraction_;
+				std::unique_ptr<semantic_extraction_session> semantic_;
 			};
 
 			class borrowed_action_factory final : public clang::tooling::FrontendActionFactory

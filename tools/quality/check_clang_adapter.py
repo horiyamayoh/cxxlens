@@ -41,6 +41,7 @@ expected_components = {
     "clangDriver",
     "clangFrontend",
     "clangFrontendTool",
+    "clangIndex",
     "clangLex",
     "clangOptions",
     "clangSerialization",

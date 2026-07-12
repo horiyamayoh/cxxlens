@@ -155,6 +155,14 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-semantic-extractor-contract-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_semantic_extractor.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-text-lint
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -192,6 +200,7 @@ add_dependencies(
   cxxlens-preprocessor-contract-check
   cxxlens-runtime-port-check
   cxxlens-scheduler-contract-check
+  cxxlens-semantic-extractor-contract-check
   cxxlens-serialization-contract-check
   cxxlens-testing-contract-check
   cxxlens-workspace-contract-check

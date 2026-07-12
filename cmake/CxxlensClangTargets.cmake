@@ -54,6 +54,7 @@ function(cxxlens_configure_clang22 target)
       clangDriver
       clangFrontend
       clangFrontendTool
+      clangIndex
       clangLex
       clangOptions
       clangSerialization
