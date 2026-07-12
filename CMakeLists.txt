@@ -57,6 +57,7 @@ add_library(
   src/core/version.cpp
   src/facts/fact_contract.cpp
   src/facts/fact_profile.cpp
+  src/facts/reducer.cpp
   src/llvm/common/borrowed_lifetime.cpp
   src/llvm/common/frontend_port.cpp
   src/llvm/clang22/frontend_job.cpp

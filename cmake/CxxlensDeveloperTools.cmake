@@ -131,6 +131,14 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-fact-reducer-contract-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_fact_reducer.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-clang-adapter-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -193,6 +201,7 @@ add_dependencies(
   cxxlens-evidence-contract-check
   cxxlens-failure-contract-check
   cxxlens-fact-contract-check
+  cxxlens-fact-reducer-contract-check
   cxxlens-finding-contract-check
   cxxlens-identity-path-check
   cxxlens-m0-completion-check

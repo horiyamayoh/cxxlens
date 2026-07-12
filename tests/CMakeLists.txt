@@ -344,6 +344,30 @@ set_tests_properties(
   schema.fact-contract
   PROPERTIES LABELS "facts;schema;golden;determinism;security;conformance")
 
+add_executable(cxxlens-unit-fact-reducer unit/facts/reducer/reducer_test.cpp)
+target_link_libraries(cxxlens-unit-fact-reducer PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-unit-fact-reducer
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-unit-fact-reducer PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-fact-reducer)
+add_test(NAME unit.fact-reducer COMMAND cxxlens-unit-fact-reducer)
+set_tests_properties(
+  unit.fact-reducer
+  PROPERTIES
+    LABELS
+    "unit;facts;reducer;identity;variant;coverage;determinism;conformance")
+add_test(
+  NAME determinism.fact-reducer-process
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/unit/facts/reducer/test_reducer_process.py"
+    "$<TARGET_FILE:cxxlens-unit-fact-reducer>"
+    "${PROJECT_SOURCE_DIR}/tests/golden/facts/reducer_v1.json"
+    "${PROJECT_SOURCE_DIR}/schemas/cxxlens_reduction_trace.schema.yaml")
+set_tests_properties(
+  determinism.fact-reducer-process
+  PROPERTIES LABELS "facts;reducer;schema;golden;determinism;coverage")
+
 add_executable(cxxlens-unit-frontend-job unit/llvm/frontend_job_test.cpp)
 target_link_libraries(cxxlens-unit-frontend-job PRIVATE cxxlens::cxxlens)
 target_include_directories(cxxlens-unit-frontend-job
