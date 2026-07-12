@@ -1,6 +1,6 @@
 # cxxlens 設計成果物検証レポート
 
-検証日: 2026-07-11
+検証日: 2026-07-12
 
 ## 統合設計書
 
@@ -16,16 +16,16 @@
 ## 公開 API 契約 YAML
 
 - YAML parse: PASS
-- schema: `cxxlens.api-catalog.v1`
+- schema: `cxxlens.api-catalog.v2`
 - package 数: 22
-- API entry 数: 123
+- API entry 数: 124
 - package ID 一意性: PASS
 - API ID 一意性: PASS
 - package 必須フィールド: PASS
 - API 必須フィールド: PASS
 - phase 分布:
   - M0: 17
-  - M1: 20
+  - M1: 21
   - M2: 18
   - M3: 16
   - M4: 16
@@ -33,9 +33,14 @@
   - M6: 10
   - M7: 8
   - M8: 9
-- maturity:
-  - `contract-defined`: 17
-  - `planned`: 106
+- contract maturity:
+  - `contract-defined`: 36
+  - `planned`: 74
+  - `stable`: 14
+- implementation state:
+  - `conformant`: 47
+  - `implemented`: 0
+  - `unimplemented`: 77
 
 ## パッケージ別 API 数
 

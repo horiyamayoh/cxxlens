@@ -173,6 +173,9 @@ install(
         schemas/cxxlens_m1_acceptance_report.schema.yaml
         schemas/cxxlens_m1_completion.schema.yaml
         schemas/cxxlens_m1_completion.yaml
+        schemas/cxxlens_m2_acceptance_report.schema.yaml
+        schemas/cxxlens_m2_completion.schema.yaml
+        schemas/cxxlens_m2_completion.yaml
         schemas/cxxlens_observation.schema.yaml
         schemas/cxxlens_schema_compatibility.yaml
         schemas/cxxlens_source_span.schema.yaml
@@ -199,6 +202,8 @@ install(
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
 install(FILES README.md SECURITY.md
         DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cxxlens")
+install(DIRECTORY examples/m2-flagship
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cxxlens/examples")
 
 configure_package_config_file(
   cmake/CxxlensConfig.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/cxxlensConfig.cmake"

@@ -94,6 +94,17 @@
         "CXXLENS_WARNINGS_AS_ERRORS": "ON",
         "CXXLENS_CLANG_ADAPTER": "ON"
       }
+    },
+    {
+      "name": "m2-acceptance",
+      "inherits": "base",
+      "displayName": "M2 flagship search conformance",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CXXLENS_BUILD_DOCS": "ON",
+        "CXXLENS_WARNINGS_AS_ERRORS": "ON",
+        "CXXLENS_CLANG_ADAPTER": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -104,7 +115,8 @@
     { "name": "install-check", "configurePreset": "install-check", "jobs": 4 },
     { "name": "tsan", "configurePreset": "tsan", "jobs": 4 },
     { "name": "m0-acceptance", "configurePreset": "m0-acceptance", "jobs": 4 },
-    { "name": "m1-acceptance", "configurePreset": "m1-acceptance", "jobs": 4 }
+    { "name": "m1-acceptance", "configurePreset": "m1-acceptance", "jobs": 4 },
+    { "name": "m2-acceptance", "configurePreset": "m2-acceptance", "jobs": 4 }
   ],
   "testPresets": [
     { "name": "dev-clang", "configurePreset": "dev-clang", "output": { "outputOnFailure": true } },
@@ -113,6 +125,7 @@
     { "name": "install-check", "configurePreset": "install-check", "output": { "outputOnFailure": true } },
     { "name": "tsan", "configurePreset": "tsan", "output": { "outputOnFailure": true } },
     { "name": "m0-acceptance", "configurePreset": "m0-acceptance", "output": { "outputOnFailure": true } },
-    { "name": "m1-acceptance", "configurePreset": "m1-acceptance", "output": { "outputOnFailure": true } }
+    { "name": "m1-acceptance", "configurePreset": "m1-acceptance", "output": { "outputOnFailure": true } },
+    { "name": "m2-acceptance", "configurePreset": "m2-acceptance", "output": { "outputOnFailure": true } }
   ]
 }

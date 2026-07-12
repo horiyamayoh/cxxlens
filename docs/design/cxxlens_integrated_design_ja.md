@@ -3273,7 +3273,24 @@ Symbol/type/call selectors、resolver、class/override graph、method call/virtu
 
 M2 public search slice は API-SRCH-003〜007 と API-EXP-002 を exact/conformant とし、flagship の
 authoritative report、JSON/Markdown、reason accounting、production-path fixture を §15.5 の traceability で
-固定する。M2 integration/CLI completion は後続 gate が所有する。
+固定する。M2 integration gate は package/installation/CI と completion manifest の接続だけを所有し、
+selector/query/search semantics を再実装しない。
+
+M2 completion の規範 manifest は `cxxlens_m2_completion.yaml` とし、#23〜#26 の exact/deferred API、
+requirement、invariant、test、fixture ownership を一対一に追跡する。M0/M1 completion manifest と合わせて
+#2〜#26 の owner が連続し、unresolved indivisible family は blocker として明示する。clean checkout から
+installed package、実 Clang 22、multi-TU/macro/multi-variant、memory/SQLite cold/warm、partial failure、
+performance trace を実行する単一 gate は次である。
+
+```sh
+CXX=clang++-22 cmake --preset m2-acceptance
+cmake --build --preset m2-acceptance --target cxxlens-m2-acceptance
+```
+
+Gate の規範 report は `cxxlens.m2-acceptance-report.v1`。installed example の semantic JSON/Markdown、
+scheduler perturbation、production integration trace の digest と、cold/warm scheduled task、fact candidate、
+refinement count を記録する。root/order/backend/cache/job/seed の比較で除去できるのは宣言済み runtime
+metadata だけで、semantic ID、range、variant、reason code は正規化しない。
 
 ### M3 — General semantic search and graphs
 

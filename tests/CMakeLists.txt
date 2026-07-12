@@ -575,6 +575,8 @@ if(CXXLENS_CLANG22_AVAILABLE)
   add_executable(cxxlens-m2-search-conformance
                  integration/m2_search_conformance_test.cpp)
   target_link_libraries(cxxlens-m2-search-conformance PRIVATE cxxlens::cxxlens)
+  target_include_directories(cxxlens-m2-search-conformance
+                             PRIVATE "${PROJECT_SOURCE_DIR}/src")
   target_compile_features(cxxlens-m2-search-conformance PRIVATE cxx_std_23)
   cxxlens_set_project_warnings(cxxlens-m2-search-conformance)
   add_test(NAME integration.m2-search-conformance
@@ -679,6 +681,20 @@ if(CXXLENS_CLANG22_AVAILABLE)
     cxxlens-unit-scheduler
     cxxlens-unit-testing-substrate
     cxxlens-unit-workspace-catalog)
+
+  add_custom_target(cxxlens-m2-test-binaries)
+  add_dependencies(
+    cxxlens-m2-test-binaries
+    cxxlens-m2-search-conformance
+    cxxlens-public-header-cxxlens
+    cxxlens-public-header-explain
+    cxxlens-public-header-search
+    cxxlens-query-process
+    cxxlens-search-process
+    cxxlens-unit-provisioning
+    cxxlens-unit-query-engine
+    cxxlens-unit-scheduler
+    cxxlens-unit-search)
 endif()
 
 add_custom_target(cxxlens-m0-test-binaries)

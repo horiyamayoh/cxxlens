@@ -10,6 +10,9 @@
 #include <cxxlens/search.hpp>
 #include <cxxlens/testing.hpp>
 
+#include "query/query_executor.hpp"
+#include "workspace/provisioning.hpp"
+
 namespace
 {
 	using namespace cxxlens;
@@ -67,6 +70,9 @@ int Other::step() { return MODE + 2; }
 		require(direct.value().coverage().complete() &&
 					direct.value().guarantee() == result_guarantee::best_effort,
 				"open-world virtual search lost coverage or overstated exactness");
+		const auto cold_trace = detail::workspace_provisioning_access::last_trace(workspace);
+		require(cold_trace.scheduled == workspace.compile_units().size(),
+				"cold flagship search repeated or omitted a compile-unit parse task");
 		require(std::ranges::all_of(direct.value().matches(),
 									[](const call_site& call)
 									{
@@ -105,14 +111,38 @@ int Other::step() { return MODE + 2; }
 		auto warm = search::calls_to_method(workspace, "Base", "step");
 		require(warm.has_value() && warm.value().to_json() == cold,
 				"warm production search changed canonical report bytes");
-		return cold + "\n" + why.value().to_json() + "\n";
+		const auto warm_trace = detail::workspace_provisioning_access::last_trace(workspace);
+		require(warm_trace.scheduled == 0U,
+				"warm flagship search scheduled duplicate parse/traversal work");
+		detail::query::execution_options query_options;
+		query_options.execution = context;
+		auto internal_trace = detail::query::provision_compile_execute(
+			workspace,
+			select::semantic(select::calls_to_method("Base", "step")
+								 .include_derived_types()
+								 .include_virtual_overrides()
+								 .dispatch(select::dispatch_policy::static_and_virtual_candidates)),
+			query_options);
+		require(internal_trace.has_value() &&
+					internal_trace.value().trace.accounting.considered == 4U &&
+					internal_trace.value().trace.refinements_requested == 0U,
+				"flagship fact scan/refinement performance trace exceeded its bounded fixture");
+		return cold + "\n" + why.value().to_json() + "\n" + cold_trace.to_json() + "\n" +
+			warm_trace.to_json() + "\n" + internal_trace.value().trace.to_json() + "\n";
 	}
 } // namespace
 
-int main()
+int main(const int count, const char* const* arguments)
 {
 	try
 	{
+		if (count >= 2 && std::string_view{arguments[1]} == "--emit")
+		{
+			const auto jobs = count >= 3 ? static_cast<std::size_t>(std::stoul(arguments[2])) : 1U;
+			const bool reverse = count >= 4 && std::string_view{arguments[3]} == "reverse";
+			std::cout << execute(jobs, reverse);
+			return EXIT_SUCCESS;
+		}
 		const auto canonical = execute(1U, false);
 		for (const auto jobs : {2U, 8U})
 			for (const bool reverse : {false, true})

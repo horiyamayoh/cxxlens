@@ -13,6 +13,8 @@ foreach(
   required IN
   ITEMS
     "${install_prefix}/include/cxxlens/cxxlens.hpp"
+    "${install_prefix}/include/cxxlens/explain.hpp"
+    "${install_prefix}/include/cxxlens/search.hpp"
     "${install_prefix}/include/cxxlens/testing.hpp"
     "${install_prefix}/include/cxxlens/workspace.hpp"
     "${install_prefix}/include/cxxlens/facts.hpp"
@@ -22,11 +24,18 @@ foreach(
     "${install_prefix}/share/cxxlens/schemas/cxxlens_m1_completion.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_m1_completion.schema.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_m1_acceptance_report.schema.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_m2_completion.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_m2_completion.schema.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_m2_acceptance_report.schema.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_analysis_scope.schema.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_workspace_context.schema.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_fact.schema.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_frontend_batch.schema.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_observation.schema.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_search_report.schema.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_explanation.schema.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_agent_task_card.schema.yaml"
+    "${install_prefix}/share/doc/cxxlens/examples/m2-flagship/main.cpp"
     "${install_prefix}/share/doc/cxxlens/README.md"
     "${install_prefix}/share/doc/cxxlens/SECURITY.md")
   if(NOT EXISTS "${required}")

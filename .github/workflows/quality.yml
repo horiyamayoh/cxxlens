@@ -210,3 +210,32 @@ jobs:
         with:
           name: m1-acceptance
           path: build/m1-acceptance/m1-acceptance-report.json
+
+  m2-acceptance:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install exact Clang 22 quality tools
+        run: |
+          wget --quiet https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install --yes clang-tidy-22 doxygen ninja-build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install acceptance dependencies
+        run: |
+          python -m pip install --requirement tools/quality/requirements.txt
+          npm install --global markdownlint-cli2@0.18.1
+      - name: Configure M2 acceptance
+        env:
+          CXX: clang++-22
+        run: cmake --preset m2-acceptance
+      - name: Run installed flagship acceptance
+        run: cmake --build --preset m2-acceptance --target cxxlens-m2-acceptance
+      - name: Upload deterministic M2 report
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-acceptance
+          path: build/m2-acceptance/m2-acceptance-report.json

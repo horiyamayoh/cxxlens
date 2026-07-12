@@ -10,7 +10,7 @@
 - `cxxlens_integrated_design_ja.md`
   - 要求分析、要件定義、ユースケース、公開 API、LLVM/Clang 対応、内部アーキテクチャ、詳細処理、非機能要件、テスト、実装ロードマップを統合した規範設計書。
 - `../../schemas/cxxlens_public_api_contract.yaml`
-  - 22パッケージ・123公開 API エントリの機械可読カタログ。実装 issue、header skeleton、schema、conformance test の生成元として利用する。
+  - 22パッケージ・124公開 API エントリの機械可読カタログ。実装 issue、header skeleton、schema、conformance test の生成元として利用する。
 - `VALIDATION_REPORT.md`
   - 構文・構造・重複・必須概念に対する検証結果。
 - `SHA256SUMS`

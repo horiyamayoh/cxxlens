@@ -39,3 +39,6 @@ plus stable reason codes. Never branch on its prose; use the structured properti
 The canonical report, explanation, and task-card schemas are installed as
 `cxxlens_search_report.schema.yaml`, `cxxlens_explanation.schema.yaml`, and
 `cxxlens_agent_task_card.schema.yaml`.
+
+For a complete installed-package example and clean-checkout acceptance command, see
+[`m2-acceptance.md`](m2-acceptance.md) and `examples/m2-flagship`.

@@ -10,6 +10,9 @@
 | `asan-ubsan` | Address/UndefinedBehavior Sanitizer |
 | `tsan` | Thread Sanitizer と borrowed lifetime test |
 | `install-check` | Release build と install consumer test |
+| `m0-acceptance` | M0 semantic kernel completion gate |
+| `m1-acceptance` | M1 exact Clang 22 production-path gate |
+| `m2-acceptance` | M2 installed flagship search gate |
 
 ```sh
 python3 -m pip install --requirement tools/quality/requirements.txt

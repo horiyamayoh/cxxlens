@@ -1,0 +1,73 @@
+schema: cxxlens.m2-completion.v1
+acceptance_command: CXX=clang++-22 cmake --preset m2-acceptance && cmake --build --preset m2-acceptance --target cxxlens-m2-acceptance
+foundation_manifests:
+- schemas/cxxlens_m0_completion.yaml
+- schemas/cxxlens_m1_completion.yaml
+conformant_catalog_ids:
+- API-EXP-002
+- API-SEL-001
+- API-SEL-002
+- API-SEL-003
+- API-SEL-006
+- API-SEL-008
+- API-SEL-009
+- API-SEL-010
+- API-SEL-011
+- API-SRCH-003
+- API-SRCH-004
+- API-SRCH-005
+- API-SRCH-006
+- API-SRCH-007
+deferred_catalog:
+- {id: API-EXP-001, blocker: exact_declaration_unresolved}
+- {id: API-EXP-003, blocker: exact_declaration_unresolved}
+- {id: API-GRAPH-001, blocker: exact_declaration_unresolved}
+- {id: API-GRAPH-002, blocker: exact_declaration_unresolved}
+stable_public_headers:
+- include/cxxlens/cxxlens.hpp
+- include/cxxlens/explain.hpp
+- include/cxxlens/search.hpp
+- include/cxxlens/select.hpp
+matrix:
+  jobs: [1, 2, 8]
+  scheduler_seeds: [0, 1, 816926]
+  orders: [forward, reverse]
+  roots: [workspace-a, relocated/workspace-b]
+  repeats: 2
+  backends: [memory, sqlite]
+  cache_states: [cold, warm]
+  expected_executions: 288
+performance_limits:
+  maximum_cold_scheduled_tasks: 4
+  maximum_warm_scheduled_tasks: 0
+  maximum_fact_candidates: 4
+  maximum_refinements: 0
+vectors:
+- id: M2-SELECTOR-QUERY
+  owner_issue: 23
+  catalog_ids: [API-SEL-001, API-SEL-002, API-SEL-003, API-SEL-006, API-SEL-008, API-SEL-009, API-SEL-010, API-SEL-011]
+  requirements: [FR-006, FR-007, FR-009, FR-018, QR-001, QR-002, QR-005]
+  invariants: [typed-normalized-selector, exact-requirement-union, balanced-candidate-accounting]
+  tests: [unit.selectors, schema.selector-process, unit.query-engine, schema.query-process]
+  fixture: tests/golden/query/canonical_v1.sha256
+- id: M2-VIRTUAL-RESOLUTION
+  owner_issue: 24
+  catalog_ids: []
+  requirements: [FR-006, FR-008, FR-009, QR-001, QR-005]
+  invariants: [static-possible-target-separation, open-world-downgrade, variant-candidate-provenance]
+  tests: [unit.query-engine, schema.query-process]
+  fixture: schemas/cxxlens_virtual_candidate_resolution.schema.yaml
+- id: M2-PUBLIC-SEARCH
+  owner_issue: 25
+  catalog_ids: [API-EXP-002, API-SRCH-003, API-SRCH-004, API-SRCH-005, API-SRCH-006, API-SRCH-007]
+  requirements: [FR-007, FR-008, FR-009, FR-018, QR-001, QR-002, QR-005, QR-009]
+  invariants: [authoritative-report-rows, pure-json-markdown-projections, explicit-partial-coverage]
+  tests: [unit.search, schema.search-process, integration.m2-search-conformance, public-api.search-header, public-api.explain-header]
+  fixture: tests/golden/search/canonical_v1.sha256
+- id: M2-INTEGRATION
+  owner_issue: 26
+  catalog_ids: []
+  requirements: [FR-001, FR-002, FR-003, FR-004, FR-005, FR-006, FR-007, FR-008, FR-009, FR-010, FR-018, FR-020, QR-001, QR-002, QR-003, QR-004, QR-005, QR-006, QR-007, QR-008, QR-009, QR-010, QR-011, QR-012]
+  invariants: [installed-production-path, full-perturbation-matrix, bounded-warm-provisioning, m0-m1-m2-traceability]
+  tests: [integration.m2-search-conformance, public-api.cxxlens-header, install.consumer]
+  fixture: examples/m2-flagship/main.cpp
