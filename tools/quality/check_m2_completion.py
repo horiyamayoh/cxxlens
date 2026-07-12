@@ -86,6 +86,16 @@ def main() -> int:
         failures.append("M2 matrix execution count does not equal its declared Cartesian axes")
 
     tests_cmake = (root / "tests/CMakeLists.txt").read_text(encoding="utf-8")
+    for milestone, dependency in (("m1", "m0"), ("m2", "m1")):
+        marker = (
+            f"add_dependencies(cxxlens-{milestone}-test-binaries "
+            f"cxxlens-{dependency}-test-binaries)"
+        )
+        if marker not in tests_cmake:
+            failures.append(
+                f"{milestone.upper()} acceptance does not build cumulative "
+                f"{dependency.upper()} test binaries"
+            )
     test_names = set(re.findall(r"\bNAME\s+([a-z0-9.-]+)", tests_cmake))
     test_names.update(
         f"public-api.{header}-header" for header in ("cxxlens", "explain", "search")

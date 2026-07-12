@@ -732,3 +732,10 @@ add_dependencies(
   cxxlens-unit-testing-substrate
   cxxlens-unit-version)
 add_dependencies(cxxlens-m0-test-binaries cxxlens-unit-workspace-catalog)
+
+if(TARGET cxxlens-m1-test-binaries)
+  add_dependencies(cxxlens-m1-test-binaries cxxlens-m0-test-binaries)
+endif()
+if(TARGET cxxlens-m2-test-binaries)
+  add_dependencies(cxxlens-m2-test-binaries cxxlens-m1-test-binaries)
+endif()
