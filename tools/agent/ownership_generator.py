@@ -192,6 +192,16 @@ ROLE_DEFINITIONS: dict[str, tuple[str, str, str]] = {
         "#28",
         "Ownership, frozen skeleton, dependency request, and diff-audit contracts.",
     ),
+    "steward.runner": (
+        "generator",
+        "#29",
+        "Ready DAG, prompt resolution, API shard generation, and agent runner contracts.",
+    ),
+    "steward.readiness": (
+        "generator",
+        "#30",
+        "Independent readiness audit, authorization, rollback, and re-audit contracts.",
+    ),
 }
 
 
@@ -202,6 +212,76 @@ GENERATED_PATHS = {
     "schemas/cxxlens.agent-ownership.v1.json": "steward.ownership",
     "schemas/cxxlens.dependency-request.examples.v1.json": "steward.ownership",
 }
+
+RESERVED_PATHS = [
+    {
+        "prefix": ".github/workflows/api-unit",
+        "owner_role": "steward.runner",
+        "access": "exclusive_write",
+        "purpose": "API and atomic-unit reusable CI workflows owned by issue #29.",
+    },
+    {
+        "prefix": "docs/agent_runner",
+        "owner_role": "steward.runner",
+        "access": "exclusive_write",
+        "purpose": "Agent runner operational documentation owned by issue #29.",
+    },
+    {
+        "prefix": "docs/readiness_audit",
+        "owner_role": "steward.readiness",
+        "access": "exclusive_write",
+        "purpose": "Readiness authorization documentation owned by issue #30.",
+    },
+    {
+        "prefix": "schemas/cxxlens.api-ready.",
+        "owner_role": "steward.runner",
+        "access": "exclusive_write",
+        "purpose": "Ready DAG, shard, and run manifests owned by issue #29.",
+    },
+    {
+        "prefix": "schemas/cxxlens.readiness.",
+        "owner_role": "steward.readiness",
+        "access": "exclusive_write",
+        "purpose": "Readiness audit and authorization manifests owned by issue #30.",
+    },
+    {
+        "prefix": "tests/agent/readiness/",
+        "owner_role": "steward.readiness",
+        "access": "exclusive_write",
+        "purpose": "Readiness corruption and authorization fixtures owned by issue #30.",
+    },
+    {
+        "prefix": "tests/agent/runner/",
+        "owner_role": "steward.runner",
+        "access": "exclusive_write",
+        "purpose": "Ready evaluator, prompt, shard, and runner fixtures owned by issue #29.",
+    },
+    {
+        "prefix": "tools/agent/api_task",
+        "owner_role": "steward.runner",
+        "access": "exclusive_write",
+        "purpose": "API task prompt, preflight, and runner tooling owned by issue #29.",
+    },
+    {
+        "prefix": "tools/agent/readiness_audit",
+        "owner_role": "steward.readiness",
+        "access": "exclusive_write",
+        "purpose": "Independent readiness audit tooling owned by issue #30.",
+    },
+    {
+        "prefix": "tools/agent/ready_evaluator",
+        "owner_role": "steward.runner",
+        "access": "exclusive_write",
+        "purpose": "Dependency DAG and ready predicate tooling owned by issue #29.",
+    },
+]
+
+
+def reserved_policy(path: str) -> dict[str, str] | None:
+    matches = [item for item in RESERVED_PATHS if path.startswith(item["prefix"])]
+    if len(matches) > 1:
+        fail("ownership.overlap", f"{path}: matches multiple reserved ownership prefixes")
+    return matches[0] if matches else None
 
 
 def repository_paths(root: pathlib.Path) -> list[str]:
@@ -253,6 +333,9 @@ def classify_domain(path: str) -> str:
 def owner_for_path(
     path: str, packages: set[str], units: list[dict[str, Any]]
 ) -> str:
+    reserved = reserved_policy(path)
+    if reserved is not None:
+        return reserved["owner_role"]
     unit_owners = [
         unit["unit_owner_role"]
         for unit in units
@@ -406,8 +489,9 @@ def generate_manifest(corpus: dict[str, Any], paths: list[str]) -> dict[str, Any
     units = make_units(corpus)
     roles = roles_for(packages, units)
     role_ids = {role["id"] for role in roles}
+    baseline_paths = [path for path in sorted(paths) if reserved_policy(path) is None]
     tracked_paths = []
-    for path in sorted(paths):
+    for path in baseline_paths:
         owner = owner_for_path(path, packages, units)
         if owner not in role_ids:
             fail("ownership.missing-role", f"{path}: classified to unknown role {owner}")
@@ -426,14 +510,18 @@ def generate_manifest(corpus: dict[str, Any], paths: list[str]) -> dict[str, Any
     manifest: dict[str, Any] = {
         "schema": OWNERSHIP_SCHEMA,
         "task_packet_digest": corpus["semantic_digest"],
-        "repository_paths_digest": digest(sorted(paths)),
+        "repository_paths_digest": digest(
+            {"baseline_paths": baseline_paths, "reserved_paths": RESERVED_PATHS}
+        ),
         "roles": roles,
         "tracked_paths": tracked_paths,
+        "reserved_paths": RESERVED_PATHS,
         "units": units,
         "skeletons": skeletons,
         "summary": {
             "role_count": len(roles),
             "tracked_path_count": len(tracked_paths),
+            "reserved_path_count": len(RESERVED_PATHS),
             "unit_count": len(units),
             "skeleton_state_counts": {
                 "blocked": skeleton_counts.get("blocked", 0),
@@ -501,7 +589,20 @@ def validate_manifest(
     tracked_names = [item["path"] for item in tracked]
     if len(tracked_names) != len(set(tracked_names)):
         fail("ownership.overlap", "a tracked path has multiple write owners")
-    missing = sorted(set(paths) - set(tracked_names))
+    reserved = manifest.get("reserved_paths", [])
+    for item in reserved:
+        _safe_path(item["prefix"])
+        if item["owner_role"] not in role_ids:
+            fail("ownership.missing-role", f"{item['prefix']}: reserved owner is missing")
+    reserved_prefixes = [item["prefix"] for item in reserved]
+    for index, prefix in enumerate(reserved_prefixes):
+        if any(
+            prefix.startswith(other) or other.startswith(prefix)
+            for other in reserved_prefixes[index + 1 :]
+        ):
+            fail("ownership.overlap", f"reserved prefix overlaps: {prefix}")
+    baseline_paths = [path for path in paths if reserved_policy(path) is None]
+    missing = sorted(set(baseline_paths) - set(tracked_names))
     extra = sorted(set(tracked_names) - set(paths))
     if missing or extra:
         fail("ownership.path-coverage", f"missing={missing}, extra={extra}")
@@ -587,6 +688,23 @@ def validate_changed_paths(
     for path in sorted(set(changed_paths)):
         _safe_path(path)
         policy = tracked.get(path)
+        if policy is None:
+            reserved = next(
+                (
+                    item
+                    for item in manifest["reserved_paths"]
+                    if path.startswith(item["prefix"])
+                ),
+                None,
+            )
+            if reserved is not None:
+                policy = {
+                    "path": path,
+                    "owner_role": reserved["owner_role"],
+                    "access": reserved["access"],
+                    "generated": False,
+                    "generator_role": None,
+                }
         if requester in unit_by_id:
             unit = unit_by_id[requester]
             if any(path.startswith(prefix) for prefix in unit["allowed_write_prefixes"]):

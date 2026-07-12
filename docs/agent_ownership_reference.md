@@ -4,7 +4,9 @@
 after task-packet generation. It gives every tracked repository path one exclusive shared steward,
 generator, or package-integration role. Each atomic implementation unit receives three disjoint
 write prefixes for implementation, unit tests, and semantic fixtures. All existing shared files are
-read-only to implementation units.
+read-only to implementation units. Reserved non-overlapping prefixes assign the #29 runner and #30
+readiness artifacts before those downstream Issues add files, so their authorized additions do not
+require rewriting this manifest.
 
 Exact task-packet declarations produce frozen skeleton records. Unresolved declarations remain
 blocked and cannot acquire a usable skeleton from contract maturity alone. Signature, declaration

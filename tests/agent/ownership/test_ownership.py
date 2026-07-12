@@ -87,6 +87,7 @@ class OwnershipTest(unittest.TestCase):
         jsonschema.Draft202012Validator(self.schema).validate(generated)
         self.assertEqual(generated["summary"]["unit_count"], 124)
         self.assertEqual(generated["summary"]["tracked_path_count"], len(self.paths))
+        self.assertEqual(generated["summary"]["reserved_path_count"], 10)
         self.assertEqual(
             generated["summary"]["skeleton_state_counts"],
             {"blocked": 77, "frozen": 47},
@@ -202,6 +203,20 @@ class OwnershipTest(unittest.TestCase):
     def test_order_process_and_cli_determinism(self) -> None:
         baseline = self.manifest["semantic_digest"]
         self.assertEqual(generate_manifest(self.corpus, list(reversed(self.paths))), self.manifest)
+        future_paths = self.paths + [
+            "tools/agent/ready_evaluator.py",
+            "schemas/cxxlens.api-ready.report.v1.json",
+            "tests/agent/readiness/test_readiness.py",
+        ]
+        self.assertEqual(generate_manifest(self.corpus, future_paths), self.manifest)
+        self.assertEqual(
+            validate_changed_paths(
+                self.manifest,
+                "steward.runner",
+                ["tools/agent/ready_evaluator.py"],
+            )["status"],
+            "passed",
+        )
         with concurrent.futures.ProcessPoolExecutor(max_workers=2) as executor:
             futures = [
                 executor.submit(process_manifest_digest, self.corpus, self.paths) for _ in range(2)

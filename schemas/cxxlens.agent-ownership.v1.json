@@ -1,5 +1,67 @@
 {
-  "repository_paths_digest": "sha256:e7258017c02549f96a3799bdda27c29aba173c35e340c74004c2fce9ef3f80dd",
+  "repository_paths_digest": "sha256:41e11c2935f9ee6d511f37fa093b70b789d8d9929e7b2671eecc58d92ede9147",
+  "reserved_paths": [
+    {
+      "access": "exclusive_write",
+      "owner_role": "steward.runner",
+      "prefix": ".github/workflows/api-unit",
+      "purpose": "API and atomic-unit reusable CI workflows owned by issue #29."
+    },
+    {
+      "access": "exclusive_write",
+      "owner_role": "steward.runner",
+      "prefix": "docs/agent_runner",
+      "purpose": "Agent runner operational documentation owned by issue #29."
+    },
+    {
+      "access": "exclusive_write",
+      "owner_role": "steward.readiness",
+      "prefix": "docs/readiness_audit",
+      "purpose": "Readiness authorization documentation owned by issue #30."
+    },
+    {
+      "access": "exclusive_write",
+      "owner_role": "steward.runner",
+      "prefix": "schemas/cxxlens.api-ready.",
+      "purpose": "Ready DAG, shard, and run manifests owned by issue #29."
+    },
+    {
+      "access": "exclusive_write",
+      "owner_role": "steward.readiness",
+      "prefix": "schemas/cxxlens.readiness.",
+      "purpose": "Readiness audit and authorization manifests owned by issue #30."
+    },
+    {
+      "access": "exclusive_write",
+      "owner_role": "steward.readiness",
+      "prefix": "tests/agent/readiness/",
+      "purpose": "Readiness corruption and authorization fixtures owned by issue #30."
+    },
+    {
+      "access": "exclusive_write",
+      "owner_role": "steward.runner",
+      "prefix": "tests/agent/runner/",
+      "purpose": "Ready evaluator, prompt, shard, and runner fixtures owned by issue #29."
+    },
+    {
+      "access": "exclusive_write",
+      "owner_role": "steward.runner",
+      "prefix": "tools/agent/api_task",
+      "purpose": "API task prompt, preflight, and runner tooling owned by issue #29."
+    },
+    {
+      "access": "exclusive_write",
+      "owner_role": "steward.readiness",
+      "prefix": "tools/agent/readiness_audit",
+      "purpose": "Independent readiness audit tooling owned by issue #30."
+    },
+    {
+      "access": "exclusive_write",
+      "owner_role": "steward.runner",
+      "prefix": "tools/agent/ready_evaluator",
+      "purpose": "Dependency DAG and ready predicate tooling owned by issue #29."
+    }
+  ],
   "roles": [
     {
       "id": "generator.catalog",
@@ -230,6 +292,12 @@
       "responsibility": "Query planning, execution, refinement, and virtual candidate resolution."
     },
     {
+      "id": "steward.readiness",
+      "kind": "generator",
+      "owner_issue": "#30",
+      "responsibility": "Independent readiness audit, authorization, rollback, and re-audit contracts."
+    },
+    {
       "id": "steward.reducer",
       "kind": "shared_steward",
       "owner_issue": "#19",
@@ -240,6 +308,12 @@
       "kind": "shared_steward",
       "owner_issue": "#28",
       "responsibility": "Repository-wide policy files not delegated to another steward."
+    },
+    {
+      "id": "steward.runner",
+      "kind": "generator",
+      "owner_issue": "#29",
+      "responsibility": "Ready DAG, prompt resolution, API shard generation, and agent runner contracts."
     },
     {
       "id": "steward.runtime",
@@ -1053,7 +1127,7 @@
     }
   ],
   "schema": "cxxlens.agent-ownership.v1",
-  "semantic_digest": "sha256:c2c1f4a54fddc270bdf14ad697fae0bdc5389da8ab702760f21595dcee66b53f",
+  "semantic_digest": "sha256:104d0a6fa432b10dfa9ff41074a4f3e1c4ccc39269b9cd1c6258c2c4e7d64dd9",
   "skeletons": [
     {
       "api_id": "API-CFG-001",
@@ -2576,7 +2650,8 @@
   ],
   "summary": {
     "generated_path_count": 5,
-    "role_count": 175,
+    "reserved_path_count": 10,
+    "role_count": 177,
     "skeleton_state_counts": {
       "blocked": 77,
       "frozen": 47

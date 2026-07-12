@@ -10,6 +10,7 @@ required:
   - semantic_digest
   - roles
   - tracked_paths
+  - reserved_paths
   - units
   - skeletons
   - summary
@@ -32,6 +33,11 @@ properties:
     minItems: 1
     items:
       $ref: '#/$defs/tracked_path'
+  reserved_paths:
+    type: array
+    minItems: 1
+    items:
+      $ref: '#/$defs/reserved_path'
   units:
     type: array
     minItems: 1
@@ -48,12 +54,14 @@ properties:
     required:
       - role_count
       - tracked_path_count
+      - reserved_path_count
       - unit_count
       - skeleton_state_counts
       - generated_path_count
     properties:
       role_count: {type: integer, minimum: 1}
       tracked_path_count: {type: integer, minimum: 1}
+      reserved_path_count: {type: integer, minimum: 1}
       unit_count: {type: integer, minimum: 1}
       skeleton_state_counts:
         $ref: '#/$defs/count_map'
@@ -92,6 +100,15 @@ $defs:
       generated: {type: boolean}
       generator_role:
         type: [string, 'null']
+  reserved_path:
+    type: object
+    additionalProperties: false
+    required: [prefix, owner_role, access, purpose]
+    properties:
+      prefix: {type: string, minLength: 1}
+      owner_role: {type: string, pattern: '^[a-z0-9_.-]+$'}
+      access: {const: exclusive_write}
+      purpose: {type: string, minLength: 1}
   unit:
     type: object
     additionalProperties: false
