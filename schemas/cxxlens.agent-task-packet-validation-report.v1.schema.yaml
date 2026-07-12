@@ -1,0 +1,47 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.agent-task-packet-validation-report.v1.schema.yaml
+title: cxxlens agent task packet validation report v1
+type: object
+additionalProperties: false
+required:
+  - schema
+  - status
+  - catalog_fingerprint
+  - corpus_semantic_digest
+  - api_count
+  - atomic_unit_count
+  - generation_state_counts
+  - blocker_counts
+  - checks
+properties:
+  schema:
+    const: cxxlens.agent-task-packet-validation-report.v1
+  status:
+    const: passed
+  catalog_fingerprint:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  corpus_semantic_digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  api_count:
+    type: integer
+    minimum: 1
+  atomic_unit_count:
+    type: integer
+    minimum: 1
+  generation_state_counts:
+    type: object
+    additionalProperties:
+      type: integer
+      minimum: 0
+  blocker_counts:
+    type: object
+    additionalProperties:
+      type: integer
+      minimum: 0
+  checks:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {type: string, minLength: 1}

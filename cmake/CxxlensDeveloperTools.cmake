@@ -15,6 +15,17 @@ else()
 endif()
 
 add_custom_target(
+  cxxlens-task-packet-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/agent/task_packet_generator.py" check
+    --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/agent/task_packet/test_task_packet.py"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-api-contract-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -25,6 +36,7 @@ add_custom_target(
   COMMAND "${Python3_EXECUTABLE}"
           "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_api_contract.py"
   VERBATIM)
+add_dependencies(cxxlens-api-contract-check cxxlens-task-packet-check)
 
 add_custom_target(
   cxxlens-design-package-check

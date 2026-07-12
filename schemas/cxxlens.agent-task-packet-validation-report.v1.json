@@ -1,0 +1,24 @@
+{
+  "api_count": 124,
+  "atomic_unit_count": 124,
+  "blocker_counts": {
+    "exact_declaration_unresolved": 77
+  },
+  "catalog_fingerprint": "sha256:f15210027efab175410e651b45c9a80feada443719c56732ed94663b82da7d8e",
+  "checks": [
+    "atomic-unit-exactly-once",
+    "catalog-and-source-fingerprint",
+    "family-indivisibility",
+    "root-order-process-determinism",
+    "schema-and-semantic-digest",
+    "typed-dependency-resolution"
+  ],
+  "corpus_semantic_digest": "sha256:02a75b8c49a1e55b4be4e68334166b4f4f0dc42ee85b6e124fcc31f278f7b4f7",
+  "generation_state_counts": {
+    "blocked": 77,
+    "complete": 47,
+    "ready": 0
+  },
+  "schema": "cxxlens.agent-task-packet-validation-report.v1",
+  "status": "passed"
+}

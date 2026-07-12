@@ -1,0 +1,310 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.agent-task-packet.v1.schema.yaml
+title: cxxlens agent task packet corpus v1
+type: object
+additionalProperties: false
+required:
+  - schema
+  - catalog_fingerprint
+  - semantic_digest
+  - summary
+  - atomic_units
+  - packets
+properties:
+  schema:
+    const: cxxlens.agent-task-packet-corpus.v1
+  catalog_fingerprint:
+    $ref: '#/$defs/digest'
+  semantic_digest:
+    $ref: '#/$defs/digest'
+  summary:
+    type: object
+    additionalProperties: false
+    required:
+      - package_count
+      - api_count
+      - atomic_unit_count
+      - generation_state_counts
+      - declaration_state_counts
+      - blocker_counts
+    properties:
+      package_count: {type: integer, minimum: 1}
+      api_count: {type: integer, minimum: 1}
+      atomic_unit_count: {type: integer, minimum: 1}
+      generation_state_counts:
+        $ref: '#/$defs/count_map'
+      declaration_state_counts:
+        $ref: '#/$defs/count_map'
+      blocker_counts:
+        $ref: '#/$defs/count_map'
+  atomic_units:
+    type: array
+    minItems: 1
+    items:
+      $ref: '#/$defs/atomic_unit'
+  packets:
+    type: array
+    minItems: 1
+    items:
+      $ref: '#/$defs/packet'
+$defs:
+  digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  string_list:
+    type: array
+    uniqueItems: true
+    items: {type: string, minLength: 1}
+  count_map:
+    type: object
+    additionalProperties:
+      type: integer
+      minimum: 0
+  declaration:
+    type: object
+    additionalProperties: false
+    required:
+      - status
+      - source
+      - signature
+      - signature_fingerprint
+      - source_fingerprint
+      - contract_fingerprint
+    properties:
+      status:
+        enum: [exact, unresolved]
+      source: {type: string, minLength: 1}
+      signature:
+        type: [string, 'null']
+      signature_fingerprint:
+        oneOf:
+          - $ref: '#/$defs/digest'
+          - type: 'null'
+      source_fingerprint:
+        $ref: '#/$defs/digest'
+      contract_fingerprint:
+        $ref: '#/$defs/digest'
+  dependency_expression:
+    type: object
+    additionalProperties: false
+    required: [id, expands_to]
+    properties:
+      id: {type: string, minLength: 1}
+      expands_to:
+        $ref: '#/$defs/string_list'
+  dependencies:
+    type: object
+    additionalProperties: false
+    required:
+      - facts
+      - capabilities
+      - expressions
+      - minimum_precision
+      - apis
+      - atomic_units
+    properties:
+      facts:
+        $ref: '#/$defs/string_list'
+      capabilities:
+        $ref: '#/$defs/string_list'
+      expressions:
+        type: array
+        items:
+          $ref: '#/$defs/dependency_expression'
+      minimum_precision:
+        type: [string, 'null']
+      apis:
+        $ref: '#/$defs/string_list'
+      atomic_units:
+        $ref: '#/$defs/string_list'
+  fixture_requirement:
+    type: object
+    additionalProperties: false
+    required: [category, required, contract_reference, evidence_candidates]
+    properties:
+      category:
+        enum: [positive, negative, ambiguous]
+      required:
+        const: true
+      contract_reference: {type: string, minLength: 1}
+      evidence_candidates:
+        $ref: '#/$defs/string_list'
+  command:
+    type: object
+    additionalProperties: false
+    required: [id, argv, environment]
+    properties:
+      id: {type: string, minLength: 1}
+      argv:
+        type: array
+        minItems: 1
+        items: {type: string, minLength: 1}
+      environment:
+        type: object
+        additionalProperties: {type: string}
+  obligation:
+    type: object
+    additionalProperties: false
+    required: [required, contract_reference]
+    properties:
+      required: {const: true}
+      contract_reference: {type: string, minLength: 1}
+  packet:
+    type: object
+    additionalProperties: false
+    required:
+      - schema
+      - api_id
+      - atomic_unit_id
+      - package
+      - symbol
+      - kind
+      - phase
+      - contract_maturity
+      - implementation_state
+      - declaration
+      - family_contract
+      - dependencies
+      - traceability
+      - behavior
+      - implementation_evidence
+      - quality_obligations
+      - fixtures
+      - acceptance_commands
+      - coordination
+      - generation
+      - semantic_digest
+    properties:
+      schema:
+        const: cxxlens.agent-task-packet.v1
+      api_id:
+        pattern: '^API-[A-Z]+-[0-9]{3}$'
+      atomic_unit_id:
+        pattern: '^AU-[A-Z]+-[0-9]{3}$'
+      package:
+        type: object
+        additionalProperties: false
+        required: [id, header]
+        properties:
+          id: {type: string, minLength: 1}
+          header: {type: string, minLength: 1}
+      symbol: {type: string, minLength: 1}
+      kind: {type: string, minLength: 1}
+      phase: {pattern: '^M[0-9]+$'}
+      contract_maturity: {type: string, minLength: 1}
+      implementation_state: {type: string, minLength: 1}
+      declaration:
+        $ref: '#/$defs/declaration'
+      family_contract:
+        type: object
+        additionalProperties: false
+        required: [mode, indivisible, surface_members]
+        properties:
+          mode:
+            enum: [single_operation, coherent_family]
+          indivisible: {const: true}
+          surface_members:
+            type: array
+            minItems: 1
+            uniqueItems: true
+            items: {type: string, minLength: 1}
+      dependencies:
+        $ref: '#/$defs/dependencies'
+      traceability:
+        type: object
+        additionalProperties: false
+        required: [use_cases, requirements]
+        properties:
+          use_cases:
+            $ref: '#/$defs/string_list'
+          requirements:
+            $ref: '#/$defs/string_list'
+      behavior:
+        type: object
+        additionalProperties: false
+        required: [errors, guarantees, side_effects]
+        properties:
+          errors:
+            $ref: '#/$defs/string_list'
+          guarantees:
+            $ref: '#/$defs/string_list'
+          side_effects:
+            $ref: '#/$defs/string_list'
+      implementation_evidence:
+        $ref: '#/$defs/string_list'
+      quality_obligations:
+        type: object
+        additionalProperties: false
+        required: [evidence, coverage, unresolved, invariant_schema]
+        properties:
+          evidence:
+            $ref: '#/$defs/obligation'
+          coverage:
+            $ref: '#/$defs/obligation'
+          unresolved:
+            $ref: '#/$defs/obligation'
+          invariant_schema:
+            $ref: '#/$defs/obligation'
+      fixtures:
+        type: array
+        minItems: 3
+        maxItems: 3
+        items:
+          $ref: '#/$defs/fixture_requirement'
+      acceptance_commands:
+        type: array
+        minItems: 4
+        items:
+          $ref: '#/$defs/command'
+      coordination:
+        type: object
+        additionalProperties: false
+        required:
+          - ownership_contract
+          - ownership_provider_issue
+          - shared_contract_steward_refs
+        properties:
+          ownership_contract: {const: cxxlens.agent-ownership.v1}
+          ownership_provider_issue: {const: '#28'}
+          shared_contract_steward_refs:
+            type: array
+            maxItems: 1
+            uniqueItems: true
+            items: {type: string, minLength: 1}
+      generation:
+        type: object
+        additionalProperties: false
+        required: [state, block_reasons]
+        properties:
+          state:
+            enum: [complete, ready, blocked]
+          block_reasons:
+            $ref: '#/$defs/string_list'
+      semantic_digest:
+        $ref: '#/$defs/digest'
+  atomic_unit:
+    type: object
+    additionalProperties: false
+    required:
+      - id
+      - indivisible
+      - member_api_ids
+      - family_surface_members
+      - readiness_state
+      - generation_state
+    properties:
+      id:
+        pattern: '^AU-[A-Z]+-[0-9]{3}$'
+      indivisible: {const: true}
+      member_api_ids:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          pattern: '^API-[A-Z]+-[0-9]{3}$'
+      family_surface_members:
+        $ref: '#/$defs/string_list'
+      readiness_state:
+        enum: [complete, ready, blocked]
+      generation_state:
+        enum: [complete, ready, blocked]
