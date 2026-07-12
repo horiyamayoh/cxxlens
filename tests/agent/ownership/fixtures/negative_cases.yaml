@@ -1,0 +1,16 @@
+schema: cxxlens.agent-ownership-negative-cases.v1
+cases:
+  - id: overlapping_unit_prefix
+    expected_code: ownership.overlap
+  - id: missing_tracked_owner
+    expected_code: ownership.path-coverage
+  - id: unauthorized_shared_edit
+    expected_code: ownership.unauthorized-path
+  - id: generated_direct_edit
+    expected_code: ownership.generated-direct-edit
+  - id: skeleton_signature_drift
+    expected_code: ownership.skeleton-drift
+  - id: invalid_request_transition
+    expected_code: dependency_request.invalid-transition
+  - id: request_api_unit_mismatch
+    expected_code: dependency_request.api-unit-mismatch

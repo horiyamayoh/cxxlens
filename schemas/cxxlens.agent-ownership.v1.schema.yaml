@@ -1,0 +1,159 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.agent-ownership.v1.schema.yaml
+title: cxxlens agent ownership and frozen skeleton manifest v1
+type: object
+additionalProperties: false
+required:
+  - schema
+  - task_packet_digest
+  - repository_paths_digest
+  - semantic_digest
+  - roles
+  - tracked_paths
+  - units
+  - skeletons
+  - summary
+properties:
+  schema:
+    const: cxxlens.agent-ownership.v1
+  task_packet_digest:
+    $ref: '#/$defs/digest'
+  repository_paths_digest:
+    $ref: '#/$defs/digest'
+  semantic_digest:
+    $ref: '#/$defs/digest'
+  roles:
+    type: array
+    minItems: 1
+    items:
+      $ref: '#/$defs/role'
+  tracked_paths:
+    type: array
+    minItems: 1
+    items:
+      $ref: '#/$defs/tracked_path'
+  units:
+    type: array
+    minItems: 1
+    items:
+      $ref: '#/$defs/unit'
+  skeletons:
+    type: array
+    minItems: 1
+    items:
+      $ref: '#/$defs/skeleton'
+  summary:
+    type: object
+    additionalProperties: false
+    required:
+      - role_count
+      - tracked_path_count
+      - unit_count
+      - skeleton_state_counts
+      - generated_path_count
+    properties:
+      role_count: {type: integer, minimum: 1}
+      tracked_path_count: {type: integer, minimum: 1}
+      unit_count: {type: integer, minimum: 1}
+      skeleton_state_counts:
+        $ref: '#/$defs/count_map'
+      generated_path_count: {type: integer, minimum: 1}
+$defs:
+  digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  string_list:
+    type: array
+    uniqueItems: true
+    items: {type: string, minLength: 1}
+  count_map:
+    type: object
+    additionalProperties:
+      type: integer
+      minimum: 0
+  role:
+    type: object
+    additionalProperties: false
+    required: [id, kind, owner_issue, responsibility]
+    properties:
+      id: {type: string, pattern: '^[a-z0-9_.-]+$'}
+      kind:
+        enum: [atomic_unit, shared_steward, package_integration, generator]
+      owner_issue: {type: string, pattern: '^#[0-9]+$'}
+      responsibility: {type: string, minLength: 1}
+  tracked_path:
+    type: object
+    additionalProperties: false
+    required: [path, owner_role, access, generated, generator_role]
+    properties:
+      path: {type: string, minLength: 1}
+      owner_role: {type: string, pattern: '^[a-z0-9_.-]+$'}
+      access: {const: exclusive_write}
+      generated: {type: boolean}
+      generator_role:
+        type: [string, 'null']
+  unit:
+    type: object
+    additionalProperties: false
+    required:
+      - atomic_unit_id
+      - package_id
+      - member_api_ids
+      - unit_owner_role
+      - allowed_write_prefixes
+      - read_only_shared_inputs
+      - package_integration_role
+      - dependency_request_contract
+    properties:
+      atomic_unit_id: {pattern: '^AU-[A-Z]+-[0-9]{3}$'}
+      package_id: {type: string, minLength: 1}
+      member_api_ids:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {pattern: '^API-[A-Z]+-[0-9]{3}$'}
+      unit_owner_role: {type: string, pattern: '^unit[.]au-[a-z]+-[0-9]{3}$'}
+      allowed_write_prefixes:
+        type: array
+        minItems: 3
+        uniqueItems: true
+        items: {type: string, minLength: 1}
+      read_only_shared_inputs:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {type: string, minLength: 1}
+      package_integration_role: {type: string, pattern: '^integration[.]package[.]'}
+      dependency_request_contract:
+        const: cxxlens.dependency-request.v1
+  skeleton:
+    type: object
+    additionalProperties: false
+    required:
+      - api_id
+      - atomic_unit_id
+      - state
+      - declaration_source
+      - signature
+      - signature_fingerprint
+      - source_fingerprint
+      - skeleton_fingerprint
+      - block_reasons
+    properties:
+      api_id: {pattern: '^API-[A-Z]+-[0-9]{3}$'}
+      atomic_unit_id: {pattern: '^AU-[A-Z]+-[0-9]{3}$'}
+      state:
+        enum: [frozen, blocked]
+      declaration_source: {type: string, minLength: 1}
+      signature:
+        type: [string, 'null']
+      signature_fingerprint:
+        oneOf:
+          - $ref: '#/$defs/digest'
+          - type: 'null'
+      source_fingerprint:
+        $ref: '#/$defs/digest'
+      skeleton_fingerprint:
+        $ref: '#/$defs/digest'
+      block_reasons:
+        $ref: '#/$defs/string_list'

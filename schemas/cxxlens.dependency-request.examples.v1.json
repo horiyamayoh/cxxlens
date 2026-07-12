@@ -1,0 +1,28 @@
+{
+  "requests": [
+    {
+      "acceptance_criteria": [
+        "The declaration has a source-bound signature fingerprint and regenerated task packet."
+      ],
+      "blocked_api_ids": [
+        "API-COPY-001"
+      ],
+      "evidence": [
+        "API-COPY-001:exact_declaration_unresolved",
+        "sha256:6aa0a2d711015c826d7d3e8e722ff8199f83abbc90dfac1ccdc3cb0cda380f7a"
+      ],
+      "kind": "missing_contract",
+      "request_id": "DR-AU-COPY-001-001",
+      "requested_behavior": [
+        "Publish an exact declaration through the authoritative API catalog change process."
+      ],
+      "requesting_atomic_unit": "AU-COPY-001",
+      "resolution": null,
+      "schema": "cxxlens.dependency-request.v1",
+      "semantic_digest": "sha256:ebc175e11f0a7da708b68c70225bf2883774cde26cb5bd5955ebda3b56cec8ea",
+      "state": "pending",
+      "steward_target": "generator.catalog"
+    }
+  ],
+  "schema": "cxxlens.dependency-request-examples.v1"
+}

@@ -1,0 +1,102 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.dependency-request.v1.schema.yaml
+title: cxxlens shared-contract dependency request v1
+type: object
+additionalProperties: false
+required:
+  - schema
+  - request_id
+  - state
+  - requesting_atomic_unit
+  - blocked_api_ids
+  - kind
+  - steward_target
+  - evidence
+  - requested_behavior
+  - acceptance_criteria
+  - resolution
+  - semantic_digest
+properties:
+  schema:
+    const: cxxlens.dependency-request.v1
+  request_id:
+    type: string
+    pattern: '^DR-AU-[A-Z]+-[0-9]{3}-[0-9]{3}$'
+  state:
+    enum: [pending, accepted, resolved, rejected]
+  requesting_atomic_unit:
+    pattern: '^AU-[A-Z]+-[0-9]{3}$'
+  blocked_api_ids:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {pattern: '^API-[A-Z]+-[0-9]{3}$'}
+  kind:
+    enum:
+      - missing_contract
+      - missing_fact
+      - missing_capability
+      - missing_port
+      - missing_query_primitive
+      - missing_schema
+      - missing_fixture
+  steward_target:
+    type: string
+    pattern: '^[a-z0-9_.-]+$'
+  evidence:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {type: string, minLength: 1}
+  requested_behavior:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {type: string, minLength: 1}
+  acceptance_criteria:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {type: string, minLength: 1}
+  resolution:
+    oneOf:
+      - type: 'null'
+      - type: object
+        additionalProperties: false
+        required:
+          - outcome
+          - evidence
+          - affected_packet_ids
+          - reissue_fingerprint
+        properties:
+          outcome:
+            enum: [resolved, rejected]
+          evidence:
+            type: array
+            minItems: 1
+            uniqueItems: true
+            items: {type: string, minLength: 1}
+          affected_packet_ids:
+            type: array
+            minItems: 1
+            uniqueItems: true
+            items: {pattern: '^API-[A-Z]+-[0-9]{3}$'}
+          reissue_fingerprint:
+            type: string
+            pattern: '^sha256:[0-9a-f]{64}$'
+  semantic_digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+allOf:
+  - if:
+      properties:
+        state: {enum: [pending, accepted]}
+    then:
+      properties:
+        resolution: {type: 'null'}
+  - if:
+      properties:
+        state: {enum: [resolved, rejected]}
+    then:
+      properties:
+        resolution: {type: object}

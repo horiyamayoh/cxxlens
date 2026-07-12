@@ -150,6 +150,10 @@ install(
         schemas/cxxlens.agent-task-packet-validation-report.v1.json
         schemas/cxxlens.agent-task-packet-validation-report.v1.schema.yaml
         schemas/cxxlens.agent-task-packet.v1.schema.yaml
+        schemas/cxxlens.agent-ownership.v1.json
+        schemas/cxxlens.agent-ownership.v1.schema.yaml
+        schemas/cxxlens.dependency-request.examples.v1.json
+        schemas/cxxlens.dependency-request.v1.schema.yaml
         schemas/cxxlens_agent_task_card.schema.yaml
         schemas/cxxlens_public_api_contract.yaml
         schemas/cxxlens_api_catalog.schema.yaml

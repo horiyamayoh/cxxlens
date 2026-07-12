@@ -26,6 +26,17 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-ownership-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/agent/ownership_generator.py" check
+    --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tests/agent/ownership/test_ownership.py"
+  VERBATIM)
+add_dependencies(cxxlens-ownership-check cxxlens-task-packet-check)
+
+add_custom_target(
   cxxlens-api-contract-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -37,6 +48,7 @@ add_custom_target(
           "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_api_contract.py"
   VERBATIM)
 add_dependencies(cxxlens-api-contract-check cxxlens-task-packet-check)
+add_dependencies(cxxlens-api-contract-check cxxlens-ownership-check)
 
 add_custom_target(
   cxxlens-design-package-check
