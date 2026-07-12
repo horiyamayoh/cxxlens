@@ -16,6 +16,7 @@ auto main() -> int
 		schemas.find("cxxlens.testing.fixture.v1", cxxlens::semantic_version{1U, 0U, 0U, {}});
 	const auto scope = cxxlens::analysis_scope::files({"src/main.cpp"}).include_headers();
 	const auto facts = cxxlens::fact_profile::semantic_search();
+	const auto selector = cxxlens::select::calls_to_method("Base", "start").include_derived_types();
 	const auto linked_clang = cxxlens::interop::linked_clang_version();
 	return product_versions.library.major == 0U && product_versions.llvm.major == 22U &&
 			configuration && configuration.value().validate() &&
@@ -25,7 +26,7 @@ auto main() -> int
 			cxxlens::testing::assert_schema_conforms("cxxlens.testing.fixture.v1",
 													 fixture.value().to_json()) &&
 			!evidence.to_json().empty() && coverage.complete() && fixture_schema &&
-			!scope.to_json().empty() && !facts.to_json().empty() &&
+			!scope.to_json().empty() && !facts.to_json().empty() && !selector.to_json().empty() &&
 			(linked_clang.llvm_major == 0U || linked_clang.llvm_major == 22U)
 		? 0
 		: 1;

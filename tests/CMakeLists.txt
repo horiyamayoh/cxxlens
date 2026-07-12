@@ -1,9 +1,43 @@
+find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
+
 add_executable(cxxlens-unit-version unit/version_test.cpp)
 target_link_libraries(cxxlens-unit-version PRIVATE cxxlens::cxxlens)
 target_compile_features(cxxlens-unit-version PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens-unit-version)
 add_test(NAME unit.version COMMAND cxxlens-unit-version)
 set_tests_properties(unit.version PROPERTIES LABELS unit)
+
+add_executable(cxxlens-unit-selectors unit/select/selector_test.cpp)
+target_link_libraries(cxxlens-unit-selectors PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-unit-selectors
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-unit-selectors PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-selectors)
+add_test(NAME unit.selectors COMMAND cxxlens-unit-selectors)
+set_tests_properties(
+  unit.selectors PROPERTIES LABELS "unit;select;property;schema;determinism")
+
+add_executable(cxxlens-selector-process unit/select/selector_process.cpp)
+target_link_libraries(cxxlens-selector-process PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-selector-process PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-selector-process)
+add_test(
+  NAME schema.selector-process
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/select/test_selector_process.py"
+    "${PROJECT_SOURCE_DIR}" "$<TARGET_FILE:cxxlens-selector-process>")
+set_tests_properties(schema.selector-process
+                     PROPERTIES LABELS "select;schema;determinism;golden")
+
+add_executable(cxxlens-public-header-select
+               public_headers/select_header_test.cpp)
+target_link_libraries(cxxlens-public-header-select PRIVATE cxxlens::cxxlens)
+target_compile_features(cxxlens-public-header-select PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-public-header-select)
+add_test(NAME public-header.select COMMAND cxxlens-public-header-select)
+set_tests_properties(public-header.select PROPERTIES LABELS
+                                                     "public-header;select")
 
 foreach(header IN ITEMS core source cxxlens)
   set(target_name "cxxlens-public-header-${header}")
@@ -131,7 +165,6 @@ cxxlens_set_project_warnings(cxxlens-unit-source-span)
 add_test(NAME unit.source-span COMMAND cxxlens-unit-source-span)
 set_tests_properties(unit.source-span PROPERTIES LABELS "unit;source;schema")
 
-find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
 add_test(
   NAME schema.source-span
   COMMAND

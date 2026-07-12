@@ -10,7 +10,9 @@ import sys
 
 FORBIDDEN = {
     "direct filesystem": re.compile(r"std::filesystem::"),
-    "command shell": re.compile(r"\b(?:system|popen)\s*\("),
+    # A public domain method may legitimately be named `system()` (for example,
+    # file_selector::system). Only unqualified C process entry points are ambient services.
+    "command shell": re.compile(r"(?<![:.\w])(?:system|popen)\s*\("),
     "ambient wall clock": re.compile(r"std::chrono::system_clock::now\s*\("),
     "ambient steady clock": re.compile(r"std::chrono::steady_clock::now\s*\("),
     "ambient standard hash": re.compile(r"std::hash\s*<"),

@@ -83,17 +83,17 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-RV-003 | review | <cxxlens/review.hpp> | gate_policy factory/builder family | AU-RV-003 | unimplemented |
 | API-RV-004 | review | <cxxlens/review.hpp> | review::workflow builder family | AU-RV-004 | unimplemented |
 | API-RV-005 | review | <cxxlens/review.hpp> | review::workflow::run | AU-RV-005 | unimplemented |
-| API-SEL-001 | select | <cxxlens/select.hpp> | file_selector builder family | AU-SEL-001 | unimplemented |
-| API-SEL-002 | select | <cxxlens/select.hpp> | symbol_selector builder family | AU-SEL-002 | unimplemented |
-| API-SEL-003 | select | <cxxlens/select.hpp> | type_selector builder family | AU-SEL-003 | unimplemented |
+| API-SEL-001 | select | <cxxlens/select.hpp> | file_selector builder family | AU-SEL-001 | conformant |
+| API-SEL-002 | select | <cxxlens/select.hpp> | symbol_selector builder family | AU-SEL-002 | conformant |
+| API-SEL-003 | select | <cxxlens/select.hpp> | type_selector builder family | AU-SEL-003 | conformant |
 | API-SEL-004 | select | <cxxlens/select.hpp> | expression_selector builder family | AU-SEL-004 | unimplemented |
 | API-SEL-005 | select | <cxxlens/select.hpp> | reference_selector builder family | AU-SEL-005 | unimplemented |
-| API-SEL-006 | select | <cxxlens/select.hpp> | call_selector builder family | AU-SEL-006 | unimplemented |
+| API-SEL-006 | select | <cxxlens/select.hpp> | call_selector builder family | AU-SEL-006 | conformant |
 | API-SEL-007 | select | <cxxlens/select.hpp> | conversion/include/macro selector families | AU-SEL-007 | unimplemented |
-| API-SEL-008 | select | <cxxlens/select.hpp> | any_symbol/function/method/record/variable/macro/type helpers | AU-SEL-008 | unimplemented |
-| API-SEL-009 | select | <cxxlens/select.hpp> | calls_to/calls_to_function/calls_to_method helpers | AU-SEL-009 | unimplemented |
-| API-SEL-010 | select | <cxxlens/select.hpp> | semantic_selector::{from_json,requirements,explain,to_json} | AU-SEL-010 | unimplemented |
-| API-SEL-011 | select | <cxxlens/select.hpp> | semantic(typed_selector) | AU-SEL-011 | unimplemented |
+| API-SEL-008 | select | <cxxlens/select.hpp> | any_symbol/function/method/record/variable/macro/type helpers | AU-SEL-008 | conformant |
+| API-SEL-009 | select | <cxxlens/select.hpp> | calls_to/calls_to_function/calls_to_method helpers | AU-SEL-009 | conformant |
+| API-SEL-010 | select | <cxxlens/select.hpp> | semantic_selector::{from_json,requirements,explain,to_json} | AU-SEL-010 | conformant |
+| API-SEL-011 | select | <cxxlens/select.hpp> | semantic(typed_selector) | AU-SEL-011 | conformant |
 | API-SRCH-001 | search | <cxxlens/search.hpp> | search::symbols | AU-SRCH-001 | unimplemented |
 | API-SRCH-002 | search | <cxxlens/search.hpp> | search::references | AU-SRCH-002 | unimplemented |
 | API-SRCH-003 | search | <cxxlens/search.hpp> | search::calls | AU-SRCH-003 | unimplemented |

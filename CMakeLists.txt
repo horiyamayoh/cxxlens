@@ -71,6 +71,8 @@ add_library(
   src/runtime/hash_adapter.cpp
   src/runtime/process_adapter.cpp
   src/runtime/time_adapter.cpp
+  src/select/selector.cpp
+  src/select/selector_json.cpp
   src/source/source_span.cpp
   src/store/binary_codec.cpp
   src/store/fact_values.cpp
@@ -176,6 +178,8 @@ install(
         schemas/cxxlens_fact_requirement.schema.yaml
         schemas/cxxlens_incremental_provisioning_contract.yaml
         schemas/cxxlens_provisioning_trace.schema.yaml
+        schemas/cxxlens_selector.schema.yaml
+        schemas/cxxlens_selector_reason_codes.yaml
         schemas/cxxlens_workspace_doctor.schema.yaml
         schemas/cxxlens_workspace_context.schema.yaml
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")

@@ -1,0 +1,62 @@
+schema: cxxlens.selector-reason-codes.v1
+normalization_version: 1
+structural_identity: canonical_selector_json
+truth_values: [matched, not_matched, ambiguous]
+truth_tables:
+  negate:
+    matched: not_matched
+    not_matched: matched
+    ambiguous: ambiguous
+  all: conservative_kleene_conjunction
+  any: conservative_kleene_disjunction
+migrations:
+- from: cxxlens.selector.v0
+  to: cxxlens.selector.v1
+  behavior: add canonical version envelope and normalize expression
+predicates:
+- {name: file.any, reason_code: select.file.any, domain: file}
+- {name: file.generated, reason_code: select.file.generated, domain: file}
+- {name: file.path_exact, reason_code: select.file.path-exact, domain: file}
+- {name: file.path_glob, reason_code: select.file.path-glob, domain: file}
+- {name: file.system, reason_code: select.file.system, domain: file}
+- {name: symbol.any, reason_code: select.symbol.any, domain: symbol}
+- {name: symbol.declared_in, reason_code: select.symbol.declared-in, domain: symbol}
+- {name: symbol.defined, reason_code: select.symbol.defined, domain: symbol}
+- {name: symbol.derived_from, reason_code: select.symbol.derived-from, domain: symbol}
+- {name: symbol.kinds, reason_code: select.symbol.kinds, domain: symbol}
+- {name: symbol.macro_policy, reason_code: select.symbol.macro-policy, domain: symbol}
+- {name: symbol.member_of, reason_code: select.symbol.member-of, domain: symbol}
+- {name: symbol.name, reason_code: select.symbol.name, domain: symbol}
+- {name: symbol.overrides, reason_code: select.symbol.overrides, domain: symbol}
+- {name: symbol.public_surface, reason_code: select.symbol.public-surface, domain: symbol}
+- {name: symbol.variant_policy, reason_code: select.symbol.variant-policy, domain: symbol}
+- {name: type.any, reason_code: select.type.any, domain: type}
+- {name: type.any_cvref, reason_code: select.type.any-cvref, domain: type}
+- {name: type.canonical, reason_code: select.type.canonical, domain: type}
+- {name: type.const_qualified, reason_code: select.type.const-qualified, domain: type}
+- {name: type.convertible_to, reason_code: select.type.convertible-to, domain: type}
+- {name: type.declared_as, reason_code: select.type.declared-as, domain: type}
+- {name: type.derived_from, reason_code: select.type.derived-from, domain: type}
+- {name: type.including_derived, reason_code: select.type.including-derived, domain: type}
+- {name: type.pointer_to, reason_code: select.type.pointer-to, domain: type}
+- {name: type.reference_to, reason_code: select.type.reference-to, domain: type}
+- {name: type.specialization_of, reason_code: select.type.specialization-of, domain: type}
+- {name: type.spelling, reason_code: select.type.spelling, domain: type}
+- {name: call.any, reason_code: select.call.any, domain: call}
+- {name: call.argument_type, reason_code: select.call.argument-type, domain: call}
+- {name: call.callee, reason_code: select.call.callee, domain: call}
+- {name: call.callee_name, reason_code: select.call.callee-name, domain: call}
+- {name: call.dispatch, reason_code: select.call.dispatch, domain: call}
+- {name: call.function_name, reason_code: select.call.function-name, domain: call}
+- {name: call.implicit_policy, reason_code: select.call.implicit-policy, domain: call}
+- {name: call.in_file, reason_code: select.call.in-file, domain: call}
+- {name: call.include_derived_types, reason_code: select.call.include-derived-types, domain: call}
+- {name: call.include_virtual_overrides, reason_code: select.call.include-virtual-overrides, domain: call}
+- {name: call.inside, reason_code: select.call.inside, domain: call}
+- {name: call.kinds, reason_code: select.call.kinds, domain: call}
+- {name: call.macro_policy, reason_code: select.call.macro-policy, domain: call}
+- {name: call.method_name, reason_code: select.call.method-name, domain: call}
+- {name: call.precision, reason_code: select.call.precision, domain: call}
+- {name: call.receiver_type, reason_code: select.call.receiver-type, domain: call}
+- {name: call.template_policy, reason_code: select.call.template-policy, domain: call}
+- {name: call.variant_policy, reason_code: select.call.variant-policy, domain: call}

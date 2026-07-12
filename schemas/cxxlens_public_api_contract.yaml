@@ -1,7 +1,7 @@
 schema: cxxlens.api-catalog.v2
 document_id: CXXLENS-SRAD-001
-document_version: 2.0.0-draft
-generated_on: '2026-07-11'
+document_version: 2.1.0-draft
+generated_on: '2026-07-12'
 language: C++23
 llvm_baseline:
   major: 22
@@ -922,28 +922,40 @@ packages:
     symbol: file_selector builder family
     kind: builder_family
     phase: M2
+    requirements: [FR-007, QR-001]
     requires:
       facts:
       - file
       apis: []
-    contract_maturity: planned
-    implementation_state: unimplemented
+    contract_maturity: stable
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/select.hpp
+      signature: >-
+        cxxlens::select::file_selector cxxlens::select::file_selector::path_exact(cxxlens::path) const;
+        cxxlens::select::file_selector cxxlens::select::file_selector::path_glob(std::string) const;
+        cxxlens::select::file_selector cxxlens::select::file_selector::generated(bool) const;
+        cxxlens::select::file_selector cxxlens::select::file_selector::system(bool) const;
+        cxxlens::select::file_selector cxxlens::select::file_selector::any_of(std::vector<cxxlens::select::file_selector>) const;
+        cxxlens::select::file_selector cxxlens::select::file_selector::negate() const;
+        std::string cxxlens::select::file_selector::to_json() const
+      signature_fingerprint: sha256:c8e9429700291df9ab577ec71058f1f97b92daf1666943e0d5aa3c996df03ae7
+    implementation_evidence:
+    - include/cxxlens/select.hpp
+    - src/select/selector.cpp
+    - tests/unit/select/selector_test.cpp
     atomic_unit:
       id: AU-SEL-001
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-SEL-002
     symbol: symbol_selector builder family
     kind: builder_family
     phase: M2
+    requirements: [FR-006, FR-007, QR-001]
     requires:
       facts:
       - inheritance
@@ -951,24 +963,45 @@ packages:
       - symbol
       minimum_precision: workspace_semantic
       apis: []
-    contract_maturity: planned
-    implementation_state: unimplemented
+    contract_maturity: stable
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/select.hpp
+      signature: >-
+        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::kind(cxxlens::symbol_kind) const;
+        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::kinds(std::vector<cxxlens::symbol_kind>) const;
+        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::name(std::string,cxxlens::select::name_match) const;
+        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::declared_in(cxxlens::select::file_selector) const;
+        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::defined(bool) const;
+        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::member_of(cxxlens::select::symbol_selector) const;
+        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::derived_from(cxxlens::select::symbol_selector) const;
+        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::overrides(cxxlens::select::symbol_selector) const;
+        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::public_surface(bool) const;
+        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::macro(cxxlens::select::macro_match_policy) const;
+        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::variants(cxxlens::select::variant_match_policy) const;
+        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::any_of(std::vector<cxxlens::select::symbol_selector>) const;
+        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::all_of(std::vector<cxxlens::select::symbol_selector>) const;
+        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::negate() const;
+        cxxlens::select::selector_requirements cxxlens::select::symbol_selector::requirements() const;
+        std::string cxxlens::select::symbol_selector::explain() const;
+        std::string cxxlens::select::symbol_selector::to_json() const
+      signature_fingerprint: sha256:158597f7269a10fa3f3916151f97d1ba3757d1e354dd52ba08a969d8337ae82b
+    implementation_evidence:
+    - include/cxxlens/select.hpp
+    - src/select/selector.cpp
+    - tests/unit/select/selector_test.cpp
     atomic_unit:
       id: AU-SEL-002
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-SEL-003
     symbol: type_selector builder family
     kind: builder_family
     phase: M2
+    requirements: [FR-006, FR-007, QR-001]
     requires:
       facts:
       - conversion
@@ -976,20 +1009,37 @@ packages:
       - type
       minimum_precision: local_semantic
       apis: []
-    contract_maturity: planned
-    implementation_state: unimplemented
+    contract_maturity: stable
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/select.hpp
+      signature: >-
+        cxxlens::select::type_selector cxxlens::select::type_selector::canonical(std::string) const;
+        cxxlens::select::type_selector cxxlens::select::type_selector::spelling(std::string) const;
+        cxxlens::select::type_selector cxxlens::select::type_selector::declared_as(cxxlens::select::symbol_selector) const;
+        cxxlens::select::type_selector cxxlens::select::type_selector::pointer_to(cxxlens::select::type_selector) const;
+        cxxlens::select::type_selector cxxlens::select::type_selector::reference_to(cxxlens::select::type_selector) const;
+        cxxlens::select::type_selector cxxlens::select::type_selector::const_qualified(bool) const;
+        cxxlens::select::type_selector cxxlens::select::type_selector::derived_from(cxxlens::select::symbol_selector) const;
+        cxxlens::select::type_selector cxxlens::select::type_selector::including_derived(bool) const;
+        cxxlens::select::type_selector cxxlens::select::type_selector::convertible_to(cxxlens::select::type_selector) const;
+        cxxlens::select::type_selector cxxlens::select::type_selector::specialization_of(std::string) const;
+        cxxlens::select::type_selector cxxlens::select::type_selector::any_cvref() const;
+        cxxlens::select::selector_requirements cxxlens::select::type_selector::requirements() const;
+        std::string cxxlens::select::type_selector::explain() const;
+        std::string cxxlens::select::type_selector::to_json() const
+      signature_fingerprint: sha256:236427d43aa49d9ef3c4e94cde81905da7902d6951ea72b24bc225b4e8a1aad4
+    implementation_evidence:
+    - include/cxxlens/select.hpp
+    - src/select/selector.cpp
+    - tests/unit/select/selector_test.cpp
     atomic_unit:
       id: AU-SEL-003
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-SEL-004
     symbol: expression_selector builder family
     kind: builder_family
@@ -1044,6 +1094,7 @@ packages:
     symbol: call_selector builder family
     kind: builder_family
     phase: M2
+    requirements: [FR-007, FR-009, QR-001]
     use_cases:
     - UC-SR-001
     - UC-SR-002
@@ -1055,20 +1106,45 @@ packages:
       - type
       minimum_precision: workspace_semantic
       apis: []
-    contract_maturity: planned
-    implementation_state: unimplemented
+    contract_maturity: stable
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/select.hpp
+      signature: >-
+        cxxlens::select::call_selector cxxlens::select::call_selector::kind(cxxlens::call_kind) const;
+        cxxlens::select::call_selector cxxlens::select::call_selector::kinds(std::vector<cxxlens::call_kind>) const;
+        cxxlens::select::call_selector cxxlens::select::call_selector::callee(cxxlens::select::symbol_selector) const;
+        cxxlens::select::call_selector cxxlens::select::call_selector::callee_name(std::string) const;
+        cxxlens::select::call_selector cxxlens::select::call_selector::function_name(std::string) const;
+        cxxlens::select::call_selector cxxlens::select::call_selector::method_name(std::string) const;
+        cxxlens::select::call_selector cxxlens::select::call_selector::receiver_type(cxxlens::select::type_selector) const;
+        cxxlens::select::call_selector cxxlens::select::call_selector::include_derived_types(bool) const;
+        cxxlens::select::call_selector cxxlens::select::call_selector::include_virtual_overrides(bool) const;
+        cxxlens::select::call_selector cxxlens::select::call_selector::dispatch(cxxlens::select::dispatch_policy) const;
+        cxxlens::select::call_selector cxxlens::select::call_selector::argument_type(std::size_t,cxxlens::select::type_selector) const;
+        cxxlens::select::call_selector cxxlens::select::call_selector::inside(cxxlens::select::symbol_selector) const;
+        cxxlens::select::call_selector cxxlens::select::call_selector::in_file(cxxlens::select::file_selector) const;
+        cxxlens::select::call_selector cxxlens::select::call_selector::implicit(cxxlens::select::implicit_node_policy) const;
+        cxxlens::select::call_selector cxxlens::select::call_selector::macro(cxxlens::select::macro_match_policy) const;
+        cxxlens::select::call_selector cxxlens::select::call_selector::templates(cxxlens::select::template_selection_policy) const;
+        cxxlens::select::call_selector cxxlens::select::call_selector::variants(cxxlens::select::variant_match_policy) const;
+        cxxlens::select::call_selector cxxlens::select::call_selector::precision(cxxlens::precision_level) const;
+        cxxlens::select::selector_requirements cxxlens::select::call_selector::requirements() const;
+        std::string cxxlens::select::call_selector::explain() const;
+        std::string cxxlens::select::call_selector::to_json() const
+      signature_fingerprint: sha256:a0c75263dd8d5dd8d4afbed31930224f235bbd918660010b5f8be4e779c81572
+    implementation_evidence:
+    - include/cxxlens/select.hpp
+    - src/select/selector.cpp
+    - schemas/cxxlens_selector.schema.yaml
+    - tests/unit/select/selector_test.cpp
     atomic_unit:
       id: AU-SEL-006
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-SEL-007
     symbol: conversion/include/macro selector families
     kind: builder_family
@@ -1095,81 +1171,119 @@ packages:
     symbol: any_symbol/function/method/record/variable/macro/type helpers
     kind: free_function_family
     phase: M2
-    contract_maturity: planned
-    implementation_state: unimplemented
+    requirements: [FR-006, FR-007]
+    contract_maturity: stable
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/select.hpp
+      signature: >-
+        cxxlens::select::symbol_selector cxxlens::select::any_symbol();
+        cxxlens::select::symbol_selector cxxlens::select::function(std::string);
+        cxxlens::select::symbol_selector cxxlens::select::method(std::string);
+        cxxlens::select::symbol_selector cxxlens::select::record(std::string);
+        cxxlens::select::symbol_selector cxxlens::select::variable(std::string);
+        cxxlens::select::symbol_selector cxxlens::select::macro(std::string);
+        cxxlens::select::type_selector cxxlens::select::type(std::string);
+        cxxlens::select::call_selector cxxlens::select::any_call()
+      signature_fingerprint: sha256:db4ff4d614eafb8b8d0a4170224cfaa5e77d6a98752d60aa3e9b71eba41e3f7f
+    implementation_evidence:
+    - include/cxxlens/select.hpp
+    - src/select/selector.cpp
+    - tests/unit/select/selector_test.cpp
     atomic_unit:
       id: AU-SEL-008
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-SEL-009
     symbol: calls_to/calls_to_function/calls_to_method helpers
     kind: free_function_family
     phase: M2
+    requirements: [FR-007, FR-009]
     use_cases:
     - UC-SR-001
     - UC-SR-002
-    contract_maturity: planned
-    implementation_state: unimplemented
+    contract_maturity: stable
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/select.hpp
+      signature: >-
+        cxxlens::select::call_selector cxxlens::select::calls_to(cxxlens::select::symbol_selector);
+        cxxlens::select::call_selector cxxlens::select::calls_to_function(std::string);
+        cxxlens::select::call_selector cxxlens::select::calls_to_method(std::string,std::string)
+      signature_fingerprint: sha256:248934c1db65198944f397f629dc9177a5e5bcde6e2c93ee5129b786a1e02121
+    implementation_evidence:
+    - include/cxxlens/select.hpp
+    - src/select/selector.cpp
+    - tests/unit/select/selector_test.cpp
     atomic_unit:
       id: AU-SEL-009
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-SEL-010
     symbol: semantic_selector::{from_json,requirements,explain,to_json}
     kind: method_family
     phase: M2
+    requirements: [FR-007, FR-018, QR-001]
     errors:
     - select.invalid-expression
     - select.type-mismatch
-    contract_maturity: planned
-    implementation_state: unimplemented
+    contract_maturity: stable
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/select.hpp
+      signature: >-
+        cxxlens::result<cxxlens::select::semantic_selector> cxxlens::select::semantic_selector::from_json(std::string_view);
+        cxxlens::select::selector_requirements cxxlens::select::semantic_selector::requirements() const;
+        std::string cxxlens::select::semantic_selector::explain() const;
+        std::string cxxlens::select::semantic_selector::to_json() const
+      signature_fingerprint: sha256:5a9c31955dd08d580ea2d68ab9b3c3d864a50a8081545bfff5bf6d7db15b6580
+    implementation_evidence:
+    - include/cxxlens/select.hpp
+    - src/select/selector.cpp
+    - src/select/selector_json.cpp
+    - schemas/cxxlens_selector.schema.yaml
+    - tests/unit/select/selector_test.cpp
+    - tests/select/test_selector_process.py
     atomic_unit:
       id: AU-SEL-010
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
   - id: API-SEL-011
     symbol: semantic(typed_selector)
     kind: free_function_family
     phase: M2
+    requirements: [FR-007]
     notes: Type-erases a typed selector without changing its semantics.
-    contract_maturity: planned
-    implementation_state: unimplemented
+    contract_maturity: stable
+    implementation_state: conformant
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: include/cxxlens/select.hpp
+      signature: >-
+        cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::file_selector);
+        cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::symbol_selector);
+        cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::type_selector);
+        cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::call_selector)
+      signature_fingerprint: sha256:af3bea8d8ebde60611cc1f9d96793fc4f262ffcac39e6ac073ba7b8f60c235cf
+    implementation_evidence:
+    - include/cxxlens/select.hpp
+    - src/select/selector.cpp
+    - tests/unit/select/selector_test.cpp
     atomic_unit:
       id: AU-SEL-011
       indivisible: true
     readiness:
-      state: blocked
-      blockers:
-      - exact_declaration_unresolved
+      state: complete
+      blockers: []
 - id: search
   header: <cxxlens/search.hpp>
   purpose: Semantic grep over facts with targeted AST/CFG refinement.
@@ -3551,9 +3665,9 @@ summary:
   api_entry_count: 124
   atomic_unit_count: 124
   implementation_state_counts:
-    unimplemented: 91
+    unimplemented: 83
     implemented: 0
-    conformant: 33
+    conformant: 41
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.
@@ -3793,3 +3907,10 @@ migrations:
   - All 123 API IDs and symbols are preserved.
   - maturity is renamed to contract_maturity; implementation_state is independent.
   - Placeholder fact names are migrated to typed dependency expressions.
+- from_schema: cxxlens.api-catalog.v2
+  to_schema: cxxlens.api-catalog.v2
+  api_id_changes: []
+  symbol_changes: []
+  notes:
+  - API-SEL-001/002/003/006/008/009/010/011 declarations are frozen by the M2 selector contract.
+  - M3 selector families API-SEL-004/005/007 remain unresolved and unimplemented.

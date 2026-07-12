@@ -1275,6 +1275,21 @@ public:
 } // namespace cxxlens::select
 ```
 
+### 14.1 M2 selector contract freeze
+
+M2 では `file_selector`、`symbol_selector`、`type_selector`、`call_selector` と対応 helper、
+4 typed selector の `semantic_selector` type erasure を exact contract とする。規範 wire schema は
+`cxxlens.selector.v1`、normalization version は 1、predicate/reason registry は
+`cxxlens_selector_reason_codes.yaml` である。canonical normalized JSON bytes が structural identity であり、
+normalizer は commutative operand の sort/unique、constant folding、double-negation elimination を行う。
+requirements は全 branch と nested selector の concrete fact/precision/capability union で、default policy も
+JSON と explanation に明示する。legacy `cxxlens.selector.v0` input は v1 へ normalize し、unknown schema、
+policy、predicate は `select.invalid-expression`、nested domain mismatch は `select.type-mismatch` で fail closed
+する。
+
+M3 の `expression_selector`、`reference_selector`、`conversion_selector`、`include_selector`、
+`macro_selector` は API-SEL-004/005/007 の unresolved contract のままとし、M2 実装が署名を推測しない。
+
 Exact name は regex でなく canonical resolver を使う。regex は明示 optional presentation/filter predicate とし、semantic identity の主手段にしない。
 
 ---

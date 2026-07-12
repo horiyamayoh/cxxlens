@@ -1,0 +1,55 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.selector.v1.schema.yaml
+title: cxxlens normalized semantic selector v1
+type: object
+additionalProperties: false
+required:
+- schema
+- semantics_version
+- library_version
+- normalization_version
+- domain
+- expression
+properties:
+  schema: {const: cxxlens.selector.v1}
+  semantics_version: {const: 1.0.0}
+  library_version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+  normalization_version: {const: 1}
+  domain: {enum: [file, symbol, type, call]}
+  expression: {$ref: '#/$defs/expression'}
+$defs:
+  expression:
+    oneOf:
+    - type: object
+      additionalProperties: false
+      required: [op, value]
+      properties:
+        op: {const: constant}
+        value: {type: boolean}
+    - type: object
+      additionalProperties: false
+      required: [op, name, reason_code, arguments, operands]
+      properties:
+        op: {const: predicate}
+        name: {type: string, pattern: '^(file|symbol|type|call)\.[a-z0-9_]+$'}
+        reason_code: {type: string, pattern: '^select\.[a-z0-9.-]+$'}
+        arguments:
+          type: object
+          additionalProperties: {type: string}
+        operands:
+          type: array
+          items: {$ref: '#/$defs/expression'}
+    - type: object
+      additionalProperties: false
+      required: [op, operands]
+      properties:
+        op: {enum: [all, any]}
+        operands:
+          type: array
+          items: {$ref: '#/$defs/expression'}
+    - type: object
+      additionalProperties: false
+      required: [op, operand]
+      properties:
+        op: {const: negate}
+        operand: {$ref: '#/$defs/expression'}
