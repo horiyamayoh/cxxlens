@@ -23,6 +23,8 @@
   - Issue #46 が所有する graph の規範的 Contract Candidate と決定表。
 - `package_contract_47.md`
   - Issue #47 が所有する rules・report の規範的 Contract Candidate と決定表。
+- `package_contract_48.md`
+  - Issue #48 が所有する transform の規範的 Contract Candidate と decision/state machine。
 - `../../schemas/cxxlens_package_contract_candidates.yaml`
   - #43〜#51 の package candidate、exact declaration、意味契約、owner、acceptance の機械可読 authority。
 - `SHA256SUMS`

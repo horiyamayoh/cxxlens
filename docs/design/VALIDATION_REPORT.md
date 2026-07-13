@@ -69,18 +69,18 @@
 | interop | 4 |
 | configuration | 4 |
 
-## Phase B package Contract Candidates (#43–#47)
+## Phase B package Contract Candidates (#43–#48)
 
-- candidate group: 5
-- candidate packages: `configuration`, `core`, `explain`, `facts`, `graph`, `interop`, `report`, `rules`, `search`, `select`, `testing`, `workspace`（12）
-- assigned API: 79、exact declaration: 79、unresolved declaration: 0
-- implementation state: `conformant` 47、`unimplemented` 32（変更なし）
-- policy record: 27、各 record の result outcome 6種: 完全
-- positive / negative / ambiguous acceptance: 各 API 1件、計237件
-- public type 192 / shared component 66 / provider subject 24 / schema 65: owner 一意、dangling 0
+- candidate group: 6
+- candidate packages: `configuration`, `core`, `explain`, `facts`, `graph`, `interop`, `report`, `rules`, `search`, `select`, `testing`, `transform`, `workspace`（13）
+- assigned API: 88、exact declaration: 88、unresolved declaration: 0
+- implementation state: `conformant` 47、`unimplemented` 41（変更なし）
+- policy record: 31、各 record の result outcome 6種: 完全
+- positive / negative / ambiguous acceptance: 各 API 1件、計264件
+- public type 205 / shared component 66 / provider subject 24 / schema 68: owner 一意、dangling 0
 - registry owner and entry overlap: 0
-- candidate C++23 syntax usage: 6/6 PASS
-- package candidate validator/test: 13/13 PASS
+- candidate C++23 syntax usage: 7/7 PASS
+- package candidate validator/test: 14/14 PASS
 - production implementation / public install integration / final freeze: 未主張（#53 / #54 owner を維持）
 
 ### Issue #43 core・configuration・testing
@@ -153,3 +153,17 @@
 - report format/options/envelope、redaction、UTF-8/LF、record-boundary budget truncation: 完全
 - candidate C++23 syntax usage: 1/1 PASS
 - candidate fingerprint: `sha256:a7d7d2ef4dc907b517ead76a54d36ba067fcc0f1aa5da405eebef30e1d6d8143`
+
+### Issue #48 transform
+
+- candidate packages: `transform`（1）
+- assigned API: 9、exact declaration: 9、unresolved declaration: 0
+- implementation state: `unimplemented` 9（変更なし）
+- policy record: 4、各 record の result outcome 6種: 完全
+- positive / negative / ambiguous acceptance: 各 API 1件、計27件
+- immutable codemod/edit plan、canonical edit ID/order/dedup、precondition と stale digest: 完全
+- default dry-run、macro spelling origin、variant agreement、format/reparse fail-closed: 完全
+- multi-file prepare/commit/rollback、partial commit 禁止、rollback failure/recovery evidence: 完全
+- #49 writer reuse、#52 spike 境界、production implementation 非変更: 明示
+- candidate C++23 syntax usage: 1/1 PASS
+- candidate fingerprint: `sha256:6d209dd7b50a01718969b32c75fa1536ef946ccd9a6c71f603878fc13dc67d75`

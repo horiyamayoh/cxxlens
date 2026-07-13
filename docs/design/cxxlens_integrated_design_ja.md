@@ -3672,6 +3672,18 @@ suppressed row と coverage/provenance を消去しない。
 omitted count、typed unresolved、downgraded guarantee を伴う。#52 が実装可能性、#53 が public header
 統合、#54 が frozen 遷移を所有する。
 
+### 39.19 transform package candidate
+
+Issue #48 の規範契約は `docs/design/package_contract_48.md` と
+`schemas/cxxlens_package_contract_candidates.yaml#issue-48` である。全操作は immutable edit plan を
+生成し、planning/preview/apply default dry-run は filesystem を変更しない。edit は source digest、file
+identity、catalog/fact snapshot、全 verified variants、macro origin と evidence を所有する。
+
+write mode は authorization/path/stale/conflict/variant/macro/format/reparse を全て write 前に再検証し、
+one-writer multi-file transaction で commit する。partial commit と silent offset rebase を禁止し、任意の
+failure/cancel/post-write validation failure は rollback、rollback failure は recovery artifact 付き typed
+terminal state とする。#52 が高リスク検証、#53 が header 統合、#54 が frozen 遷移を所有する。
+
 ---
 
 ## 40. Public API inventory

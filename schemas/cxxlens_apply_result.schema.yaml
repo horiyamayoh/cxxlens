@@ -1,0 +1,28 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.apply-result.v1.schema.yaml
+title: cxxlens transform apply result v1
+type: object
+additionalProperties: false
+required: [schema, transaction_id, mode, state, committed, files, diagnostics, unresolved, coverage]
+properties:
+  schema: {const: cxxlens.apply-result.v1}
+  transaction_id: {type: string, pattern: '^transaction_[0-9a-f]{64}$'}
+  mode: {enum: [dry_run, write_files]}
+  state: {enum: [dry_run_validated, prepared, committed, rolled_back, rollback_failed]}
+  committed: {type: boolean}
+  files:
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required: [file, state, before_digest, after_digest, recovery_artifact, diagnostics]
+      properties:
+        file: {type: string, minLength: 1}
+        state: {enum: [unchanged, prepared, committed, rolled_back, recovery_required]}
+        before_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        after_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        recovery_artifact: {type: [string, 'null']}
+        diagnostics: {type: array, items: {type: object}}
+  diagnostics: {type: array, items: {type: object}}
+  unresolved: {type: array, items: {$ref: cxxlens_unresolved.schema.yaml}}
+  coverage: {$ref: cxxlens_coverage.schema.yaml}

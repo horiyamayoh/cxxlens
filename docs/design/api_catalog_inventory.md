@@ -111,15 +111,15 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-TEST-005 | testing | <cxxlens/testing.hpp> | testing::{check_property,check_determinism} | AU-TEST-005 | conformant | candidate |
 | API-TEST-006 | testing | <cxxlens/testing.hpp> | testing::assert_schema_conforms | AU-TEST-006 | conformant | candidate |
 | API-TEST-007 | testing | <cxxlens/testing.hpp> | workspace_fixture::open | AU-TEST-007 | conformant | candidate |
-| API-TF-001 | transform | <cxxlens/transform.hpp> | transform::replace_function_call | AU-TF-001 | unimplemented | unresolved |
-| API-TF-002 | transform | <cxxlens/transform.hpp> | transform::replace_method_call | AU-TF-002 | unimplemented | unresolved |
-| API-TF-003 | transform | <cxxlens/transform.hpp> | transform::rewrite_calls | AU-TF-003 | unimplemented | unresolved |
-| API-TF-004 | transform | <cxxlens/transform.hpp> | transform::rename_symbol | AU-TF-004 | unimplemented | unresolved |
-| API-TF-005 | transform | <cxxlens/transform.hpp> | transform::add_include_where_needed | AU-TF-005 | unimplemented | unresolved |
-| API-TF-006 | transform | <cxxlens/transform.hpp> | transform::remove_unused_includes | AU-TF-006 | unimplemented | unresolved |
-| API-TF-007 | transform | <cxxlens/transform.hpp> | codemod::plan | AU-TF-007 | unimplemented | unresolved |
-| API-TF-008 | transform | <cxxlens/transform.hpp> | edit_plan::preview_unified_diff | AU-TF-008 | unimplemented | unresolved |
-| API-TF-009 | transform | <cxxlens/transform.hpp> | edit_plan::apply | AU-TF-009 | unimplemented | unresolved |
+| API-TF-001 | transform | <cxxlens/transform.hpp> | transform::replace_function_call | AU-TF-001 | unimplemented | candidate |
+| API-TF-002 | transform | <cxxlens/transform.hpp> | transform::replace_method_call | AU-TF-002 | unimplemented | candidate |
+| API-TF-003 | transform | <cxxlens/transform.hpp> | transform::rewrite_calls | AU-TF-003 | unimplemented | candidate |
+| API-TF-004 | transform | <cxxlens/transform.hpp> | transform::rename_symbol | AU-TF-004 | unimplemented | candidate |
+| API-TF-005 | transform | <cxxlens/transform.hpp> | transform::add_include_where_needed | AU-TF-005 | unimplemented | candidate |
+| API-TF-006 | transform | <cxxlens/transform.hpp> | transform::remove_unused_includes | AU-TF-006 | unimplemented | candidate |
+| API-TF-007 | transform | <cxxlens/transform.hpp> | codemod::plan | AU-TF-007 | unimplemented | candidate |
+| API-TF-008 | transform | <cxxlens/transform.hpp> | edit_plan::preview_unified_diff | AU-TF-008 | unimplemented | candidate |
+| API-TF-009 | transform | <cxxlens/transform.hpp> | edit_plan::apply | AU-TF-009 | unimplemented | candidate |
 | API-WS-001 | workspace | <cxxlens/workspace.hpp> | workspace_options::from_compilation_database(path) | AU-WS-001 | conformant | candidate |
 | API-WS-002 | workspace | <cxxlens/workspace.hpp> | workspace::open(workspace_options, execution_context) | AU-WS-002 | conformant | candidate |
 | API-WS-003 | workspace | <cxxlens/workspace.hpp> | workspace::compile_units() | AU-WS-003 | conformant | candidate |

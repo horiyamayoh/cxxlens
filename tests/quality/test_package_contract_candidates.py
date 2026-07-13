@@ -179,6 +179,27 @@ class PackageContractCandidateTest(unittest.TestCase):
         self.assertEqual(report_options["properties"]["output_budget_bytes"]["minimum"], 1)
         self.assertNotIn("absolute", report_options["properties"]["paths"]["enum"])
 
+    def test_positive_issue_48_candidate_and_transaction_contract(self) -> None:
+        group = next(row for row in self.manifest["groups"] if row["issue"] == "#48")
+        self.assertEqual(group["packages"], ["transform"])
+        self.assertEqual(len(group["api_contracts"]), 9)
+        self.assertFalse(group["production_implementation_changed"])
+        for name in (
+            "cxxlens_transform_options.schema.yaml",
+            "cxxlens_edit_plan.schema.yaml",
+            "cxxlens_apply_result.schema.yaml",
+        ):
+            jsonschema.Draft202012Validator.check_schema(load(name))
+        options = load("cxxlens_transform_options.schema.yaml")
+        self.assertEqual(options["properties"]["apply_mode"]["const"], "dry_run")
+        transaction = load("cxxlens_transform_transaction.yaml")
+        self.assertFalse(transaction["partial_commit_allowed"])
+        self.assertFalse(transaction["silent_rebase_allowed"])
+        self.assertIn("rollback_failed", transaction["terminal_states"])
+        plan = load("cxxlens_edit_plan.schema.yaml")
+        required = set(plan["$defs"]["edit"]["properties"]["precondition"]["required"])
+        self.assertTrue({"source_digest", "file_identity", "catalog_version", "fact_snapshot_id", "verified_variants"} <= required)
+
     def test_missing_assigned_api_is_rejected(self) -> None:
         document = copy.deepcopy(self.manifest)
         group = document["groups"][0]

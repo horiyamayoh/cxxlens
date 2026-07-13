@@ -6268,3 +6268,1046 @@ groups:
         expected: Preserved authority plus provenance, typed unresolved/coverage/truncation, and downgraded guarantee.
   production_implementation_changed: false
   candidate_fingerprint: sha256:a7d7d2ef4dc907b517ead76a54d36ba067fcc0f1aa5da405eebef30e1d6d8143
+- issue: '#48'
+  state: candidate
+  packages:
+  - transform
+  normative_document: docs/design/package_contract_48.md
+  candidate_headers:
+  - contracts/candidates/48/transform.hpp
+  usage_examples:
+  - contracts/candidates/48/transform_usage.cpp
+  policies:
+  - id: transform.operation-construction.v1
+    ownership_and_lifetime:
+    - Transform operation construction uses detached immutable value state and stores no AST/backend pointer or caller view.
+    - Plan/result spans borrow only while immutable shared backing lives; transactions retain only canonical paths/digests/state.
+    const_noexcept_thread_safety:
+    - Planning/preview are logically const and safe concurrently; apply requires the one workspace writer lock.
+    - Noexcept accessors allocate nothing; failures never leave partially mutated public values.
+    callback_and_exception:
+    - No callback is retained; formatter/frontend/filesystem ports catch failures at adapter boundaries.
+    - Expected stale/conflict/macro/variant/format/reparse/transaction outcomes use result and stable codes.
+    execution_context_and_budgets:
+    - Selection, formatting, reparse, preview, prepare, commit, and rollback bind cancellation/deadline/output budgets.
+    - External effects use structured filesystem/process ports; shell command concatenation is forbidden.
+    result_semantics:
+      empty_success: Zero edits is success only with complete coverage and uniquely resolved zero matches.
+      unresolved: Missing facts/variants, unsafe macro/generated origin, and unavailable tools remain typed plan rows.
+      unsupported: Unsupported construct/schema/tool policy is structured failure without best-effort mutation.
+      ambiguous: All semantic targets/variants/conflicts remain explicit; no name-only, first-wins, or offset rebase.
+      partial: Valid planning rows may survive partial analysis, but an incomplete/invalid plan is never write-eligible.
+      failure: Invalid input/path/range/conflict/stale/reparse/transaction/rollback state fails closed with no false commit.
+    evidence_coverage_guarantee:
+    - Each edit/conflict/file result preserves evidence, coverage, diagnostics, variants, digests, and guarantee.
+    - Any unresolved/partial/truncation/recovery state forbids a committed/exact claim.
+    ordering_duplicates_variants:
+    - Files/edits/conflicts/results use canonical semantic path/range/kind/full-ID order, never discovery/container order.
+    - Equal edits deduplicate with provenance; overlap/lifecycle/variant conflict rejects and contradictory variants never
+      merge.
+    schema_and_versioning:
+    - edit-plan, transform-options, apply-result, and transaction v1 are exact independent authorities.
+    - Unknown semantic/schema/tool versions reject or require explicit replan/migration; preview is non-authoritative projection.
+    change_policy:
+    - Identity, editability, dry-run, stale/conflict, formatter/reparse, transaction/rollback, ordering, owner, or schema
+      changes invalidate fingerprint.
+  - id: transform.validated-plan.v1
+    ownership_and_lifetime:
+    - Edit planning and preview uses detached immutable value state and stores no AST/backend pointer or caller view.
+    - Plan/result spans borrow only while immutable shared backing lives; transactions retain only canonical paths/digests/state.
+    const_noexcept_thread_safety:
+    - Planning/preview are logically const and safe concurrently; apply requires the one workspace writer lock.
+    - Noexcept accessors allocate nothing; failures never leave partially mutated public values.
+    callback_and_exception:
+    - No callback is retained; formatter/frontend/filesystem ports catch failures at adapter boundaries.
+    - Expected stale/conflict/macro/variant/format/reparse/transaction outcomes use result and stable codes.
+    execution_context_and_budgets:
+    - Selection, formatting, reparse, preview, prepare, commit, and rollback bind cancellation/deadline/output budgets.
+    - External effects use structured filesystem/process ports; shell command concatenation is forbidden.
+    result_semantics:
+      empty_success: Zero edits is success only with complete coverage and uniquely resolved zero matches.
+      unresolved: Missing facts/variants, unsafe macro/generated origin, and unavailable tools remain typed plan rows.
+      unsupported: Unsupported construct/schema/tool policy is structured failure without best-effort mutation.
+      ambiguous: All semantic targets/variants/conflicts remain explicit; no name-only, first-wins, or offset rebase.
+      partial: Valid planning rows may survive partial analysis, but an incomplete/invalid plan is never write-eligible.
+      failure: Invalid input/path/range/conflict/stale/reparse/transaction/rollback state fails closed with no false commit.
+    evidence_coverage_guarantee:
+    - Each edit/conflict/file result preserves evidence, coverage, diagnostics, variants, digests, and guarantee.
+    - Any unresolved/partial/truncation/recovery state forbids a committed/exact claim.
+    ordering_duplicates_variants:
+    - Files/edits/conflicts/results use canonical semantic path/range/kind/full-ID order, never discovery/container order.
+    - Equal edits deduplicate with provenance; overlap/lifecycle/variant conflict rejects and contradictory variants never
+      merge.
+    schema_and_versioning:
+    - edit-plan, transform-options, apply-result, and transaction v1 are exact independent authorities.
+    - Unknown semantic/schema/tool versions reject or require explicit replan/migration; preview is non-authoritative projection.
+    change_policy:
+    - Identity, editability, dry-run, stale/conflict, formatter/reparse, transaction/rollback, ordering, owner, or schema
+      changes invalidate fingerprint.
+  - id: transform.safety-validation.v1
+    ownership_and_lifetime:
+    - Macro/variant/format/reparse validation uses detached immutable value state and stores no AST/backend pointer or caller
+      view.
+    - Plan/result spans borrow only while immutable shared backing lives; transactions retain only canonical paths/digests/state.
+    const_noexcept_thread_safety:
+    - Planning/preview are logically const and safe concurrently; apply requires the one workspace writer lock.
+    - Noexcept accessors allocate nothing; failures never leave partially mutated public values.
+    callback_and_exception:
+    - No callback is retained; formatter/frontend/filesystem ports catch failures at adapter boundaries.
+    - Expected stale/conflict/macro/variant/format/reparse/transaction outcomes use result and stable codes.
+    execution_context_and_budgets:
+    - Selection, formatting, reparse, preview, prepare, commit, and rollback bind cancellation/deadline/output budgets.
+    - External effects use structured filesystem/process ports; shell command concatenation is forbidden.
+    result_semantics:
+      empty_success: Zero edits is success only with complete coverage and uniquely resolved zero matches.
+      unresolved: Missing facts/variants, unsafe macro/generated origin, and unavailable tools remain typed plan rows.
+      unsupported: Unsupported construct/schema/tool policy is structured failure without best-effort mutation.
+      ambiguous: All semantic targets/variants/conflicts remain explicit; no name-only, first-wins, or offset rebase.
+      partial: Valid planning rows may survive partial analysis, but an incomplete/invalid plan is never write-eligible.
+      failure: Invalid input/path/range/conflict/stale/reparse/transaction/rollback state fails closed with no false commit.
+    evidence_coverage_guarantee:
+    - Each edit/conflict/file result preserves evidence, coverage, diagnostics, variants, digests, and guarantee.
+    - Any unresolved/partial/truncation/recovery state forbids a committed/exact claim.
+    ordering_duplicates_variants:
+    - Files/edits/conflicts/results use canonical semantic path/range/kind/full-ID order, never discovery/container order.
+    - Equal edits deduplicate with provenance; overlap/lifecycle/variant conflict rejects and contradictory variants never
+      merge.
+    schema_and_versioning:
+    - edit-plan, transform-options, apply-result, and transaction v1 are exact independent authorities.
+    - Unknown semantic/schema/tool versions reject or require explicit replan/migration; preview is non-authoritative projection.
+    change_policy:
+    - Identity, editability, dry-run, stale/conflict, formatter/reparse, transaction/rollback, ordering, owner, or schema
+      changes invalidate fingerprint.
+  - id: transform.fail-closed-transaction.v1
+    ownership_and_lifetime:
+    - Apply transaction uses detached immutable value state and stores no AST/backend pointer or caller view.
+    - Plan/result spans borrow only while immutable shared backing lives; transactions retain only canonical paths/digests/state.
+    const_noexcept_thread_safety:
+    - Planning/preview are logically const and safe concurrently; apply requires the one workspace writer lock.
+    - Noexcept accessors allocate nothing; failures never leave partially mutated public values.
+    callback_and_exception:
+    - No callback is retained; formatter/frontend/filesystem ports catch failures at adapter boundaries.
+    - Expected stale/conflict/macro/variant/format/reparse/transaction outcomes use result and stable codes.
+    execution_context_and_budgets:
+    - Selection, formatting, reparse, preview, prepare, commit, and rollback bind cancellation/deadline/output budgets.
+    - External effects use structured filesystem/process ports; shell command concatenation is forbidden.
+    result_semantics:
+      empty_success: Zero edits is success only with complete coverage and uniquely resolved zero matches.
+      unresolved: Missing facts/variants, unsafe macro/generated origin, and unavailable tools remain typed plan rows.
+      unsupported: Unsupported construct/schema/tool policy is structured failure without best-effort mutation.
+      ambiguous: All semantic targets/variants/conflicts remain explicit; no name-only, first-wins, or offset rebase.
+      partial: Valid planning rows may survive partial analysis, but an incomplete/invalid plan is never write-eligible.
+      failure: Invalid input/path/range/conflict/stale/reparse/transaction/rollback state fails closed with no false commit.
+    evidence_coverage_guarantee:
+    - Each edit/conflict/file result preserves evidence, coverage, diagnostics, variants, digests, and guarantee.
+    - Any unresolved/partial/truncation/recovery state forbids a committed/exact claim.
+    ordering_duplicates_variants:
+    - Files/edits/conflicts/results use canonical semantic path/range/kind/full-ID order, never discovery/container order.
+    - Equal edits deduplicate with provenance; overlap/lifecycle/variant conflict rejects and contradictory variants never
+      merge.
+    schema_and_versioning:
+    - edit-plan, transform-options, apply-result, and transaction v1 are exact independent authorities.
+    - Unknown semantic/schema/tool versions reject or require explicit replan/migration; preview is non-authoritative projection.
+    change_policy:
+    - Identity, editability, dry-run, stale/conflict, formatter/reparse, transaction/rollback, ordering, owner, or schema
+      changes invalidate fingerprint.
+  registry_owners:
+  - id: registry.transform.errors
+    kind: error_registry
+    owner_atomic_unit: AU-TF-007
+    steward: integration.package.transform
+    entries:
+    - transform.commit-failed
+    - transform.conflict
+    - transform.format-failed
+    - transform.macro-edit-rejected
+    - transform.path-unsafe
+    - transform.reparse-failed
+    - transform.rollback-failed
+    - transform.source-stale
+    - transform.target-ambiguous
+    - transform.variant-divergence
+    - transform.writer-lock-conflict
+    behavior: Every safety/transaction failure is typed; diagnostic prose and tool output are not control inputs.
+  - id: registry.transform.schemas
+    kind: schema_registry
+    owner_atomic_unit: AU-TF-008
+    steward: steward.schema
+    entries:
+    - cxxlens.apply-result.v1
+    - cxxlens.edit-plan.v1
+    - cxxlens.transform-options.v1
+    - cxxlens.transform-transaction.v1
+    behavior: Plan/options/apply/transaction state require exact versions and independent validation.
+  - id: registry.transform.capabilities
+    kind: capability_registry
+    owner_atomic_unit: AU-TF-007
+    steward: integration.package.transform
+    entries:
+    - transform.atomic-multifile-write
+    - transform.overlay-reparse
+    - transform.range-format
+    behavior: Unavailable mutation capabilities remain explicit and cannot silently weaken validation.
+  consumer_boundaries:
+  - owner_package: workspace
+    consumer_package: transform
+    shared_types:
+    - workspace
+    - analysis_scope
+    - fact snapshot
+    - filesystem/process ports
+    access: const_reference
+    rule: 'Transform binds #44 snapshots/variants and routes all effects through authorized ports.'
+  - owner_package: select
+    consumer_package: transform
+    shared_types:
+    - semantic_selector
+    - call_selector
+    - symbol_selector
+    access: value_copy
+    rule: '#45 owns semantic target identity; transform cannot select by display name or reinterpret selectors.'
+  - owner_package: core
+    consumer_package: transform
+    shared_types:
+    - plan_id
+    - evidence
+    - coverage_report
+    - diagnostic
+    - unresolved
+    access: value_copy
+    rule: '#43 core identity/evidence/coverage remains authoritative across plans/results.'
+  - owner_package: transform
+    consumer_package: report
+    shared_types:
+    - edit_plan
+    - apply_result
+    access: const_reference
+    rule: '#47 report projects immutable plans/results and never executes apply.'
+  - owner_package: transform
+    consumer_package: testing
+    shared_types:
+    - edit_plan
+    - codemod
+    access: const_reference
+    rule: Testing assertions use overlay dry-run and cannot mutate source.
+  - owner_package: transform
+    consumer_package: generate
+    shared_types:
+    - edit
+    - edit_plan
+    - transaction writer
+    access: read_only
+    rule: '#49 reuses #48 stale/path/conflict/reparse/transaction authority and cannot define a second source writer.'
+  api_contracts:
+  - api_id: API-TF-001
+    atomic_unit: AU-TF-001
+    package: transform
+    policy: transform.operation-construction.v1
+    declaration:
+      source: contracts/candidates/48/transform.hpp
+      signature: cxxlens::transform::codemod cxxlens::transform::replace_function_call(std::string,std::string)
+      signature_fingerprint: sha256:05bdc3ef3e541c3f30a7bffd6ef1120f33325a047ab35ace02621dae83f303a5
+    family_members:
+    - cxxlens::transform::replace_function_call
+    semantics:
+    - function call replacement follows transform.operation-construction.v1 with default dry-run and one immutable catalog/fact
+      snapshot.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-write-eligible, and failure outcomes remain
+      distinct.
+    - Stale/path/macro/variant/format/reparse/transaction state, canonical ordering, evidence, coverage, and guarantee are
+      authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:typed_id<T>
+      - public-type:core:result<T>
+      - public-type:core:unresolved
+      - public-type:select:call_selector
+      - public-type:select:semantic_selector
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:apply_options
+      - public-type:transform:apply_result
+      - public-type:transform:codemod
+      - public-type:transform:conflict_kind
+      - public-type:transform:edit
+      - public-type:transform:edit_conflict
+      - public-type:transform:edit_kind
+      - public-type:transform:edit_plan
+      - public-type:transform:edit_precondition
+      - public-type:transform:file_apply_result
+      - public-type:transform:file_apply_state
+      - public-type:transform:format_policy
+      - public-type:transform:generated_code_policy
+      - public-type:transform:macro_edit_policy
+      - public-type:transform:plan_options
+      - public-type:transform:preview_options
+      - public-type:transform:preview_result
+      - public-type:transform:reparse_policy
+      - public-type:transform:replacement_template
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.transform.package_internal_engine
+      - shared.package.transform.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:call
+      - provider.fact.frontend:symbol
+      schemas:
+      - schema:schemas/cxxlens_apply_result.schema.yaml
+      - schema:schemas/cxxlens_edit_plan.schema.yaml
+      - schema:schemas/cxxlens_transform_options.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-TF-001
+      design_sections:
+      - '19'
+      - '39.19'
+      doxygen_obligation: Document immutable lifetime/identity, default dry-run and side effects, zero/unresolved/ambiguous/partial/failure,
+        stale/path/macro/variant/conflict, format/reparse, transaction/rollback/recovery, ordering/dedup, evidence/coverage,
+        ports, schema/version.
+    acceptance:
+      positive:
+        id: API-TF-001.positive
+        expression: Plan/preview/dry-run or transact function call replacement with complete exact-version inputs and all
+          variants agreeing.
+        expected: Canonical validated plan/result; writes only for explicit write mode after all gates.
+      negative:
+        id: API-TF-001.negative
+        expression: Use invalid range/path, stale digest, root escape, unsafe macro, conflict, formatter/reparse failure,
+          or rollback injection.
+        expected: Fail closed with no partial commit; rollback/recovery state and stable evidence remain explicit.
+      ambiguous:
+        id: API-TF-001.ambiguous
+        expression: Use overload ambiguity, variant divergence, missing facts/tools, generated source, partial reparse, or
+          preview budget.
+        expected: Preserved rows plus conflicts/unresolved/coverage/truncation and no write eligibility.
+  - api_id: API-TF-002
+    atomic_unit: AU-TF-002
+    package: transform
+    policy: transform.operation-construction.v1
+    declaration:
+      source: contracts/candidates/48/transform.hpp
+      signature: cxxlens::transform::codemod cxxlens::transform::replace_method_call(std::string,std::string,std::string)
+      signature_fingerprint: sha256:4051af4cf30ea174f0c6c8eade51905b67d42d07c209e3806cd2ac1dfdae91d0
+    family_members:
+    - cxxlens::transform::replace_method_call
+    semantics:
+    - method call replacement follows transform.operation-construction.v1 with default dry-run and one immutable catalog/fact
+      snapshot.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-write-eligible, and failure outcomes remain
+      distinct.
+    - Stale/path/macro/variant/format/reparse/transaction state, canonical ordering, evidence, coverage, and guarantee are
+      authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:typed_id<T>
+      - public-type:core:result<T>
+      - public-type:core:unresolved
+      - public-type:select:call_selector
+      - public-type:select:semantic_selector
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:apply_options
+      - public-type:transform:apply_result
+      - public-type:transform:codemod
+      - public-type:transform:conflict_kind
+      - public-type:transform:edit
+      - public-type:transform:edit_conflict
+      - public-type:transform:edit_kind
+      - public-type:transform:edit_plan
+      - public-type:transform:edit_precondition
+      - public-type:transform:file_apply_result
+      - public-type:transform:file_apply_state
+      - public-type:transform:format_policy
+      - public-type:transform:generated_code_policy
+      - public-type:transform:macro_edit_policy
+      - public-type:transform:plan_options
+      - public-type:transform:preview_options
+      - public-type:transform:preview_result
+      - public-type:transform:reparse_policy
+      - public-type:transform:replacement_template
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.transform.package_internal_engine
+      - shared.package.transform.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:call
+      - provider.fact.frontend:inheritance
+      - provider.fact.frontend:override_relation
+      - provider.fact.frontend:type
+      schemas:
+      - schema:schemas/cxxlens_apply_result.schema.yaml
+      - schema:schemas/cxxlens_edit_plan.schema.yaml
+      - schema:schemas/cxxlens_transform_options.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-TF-002
+      design_sections:
+      - '19'
+      - '39.19'
+      doxygen_obligation: Document immutable lifetime/identity, default dry-run and side effects, zero/unresolved/ambiguous/partial/failure,
+        stale/path/macro/variant/conflict, format/reparse, transaction/rollback/recovery, ordering/dedup, evidence/coverage,
+        ports, schema/version.
+    acceptance:
+      positive:
+        id: API-TF-002.positive
+        expression: Plan/preview/dry-run or transact method call replacement with complete exact-version inputs and all variants
+          agreeing.
+        expected: Canonical validated plan/result; writes only for explicit write mode after all gates.
+      negative:
+        id: API-TF-002.negative
+        expression: Use invalid range/path, stale digest, root escape, unsafe macro, conflict, formatter/reparse failure,
+          or rollback injection.
+        expected: Fail closed with no partial commit; rollback/recovery state and stable evidence remain explicit.
+      ambiguous:
+        id: API-TF-002.ambiguous
+        expression: Use overload ambiguity, variant divergence, missing facts/tools, generated source, partial reparse, or
+          preview budget.
+        expected: Preserved rows plus conflicts/unresolved/coverage/truncation and no write eligibility.
+  - api_id: API-TF-003
+    atomic_unit: AU-TF-003
+    package: transform
+    policy: transform.operation-construction.v1
+    declaration:
+      source: contracts/candidates/48/transform.hpp
+      signature: cxxlens::transform::codemod cxxlens::transform::rewrite_calls(cxxlens::select::call_selector,cxxlens::transform::replacement_template)
+      signature_fingerprint: sha256:7be8f7aed6f6a5d9526c6f1a95bbabdaa880b7f05b4012466461eebcd319bffa
+    family_members:
+    - cxxlens::transform::rewrite_calls
+    semantics:
+    - typed call rewrite follows transform.operation-construction.v1 with default dry-run and one immutable catalog/fact snapshot.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-write-eligible, and failure outcomes remain
+      distinct.
+    - Stale/path/macro/variant/format/reparse/transaction state, canonical ordering, evidence, coverage, and guarantee are
+      authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:typed_id<T>
+      - public-type:core:result<T>
+      - public-type:core:unresolved
+      - public-type:select:call_selector
+      - public-type:select:semantic_selector
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:apply_options
+      - public-type:transform:apply_result
+      - public-type:transform:codemod
+      - public-type:transform:conflict_kind
+      - public-type:transform:edit
+      - public-type:transform:edit_conflict
+      - public-type:transform:edit_kind
+      - public-type:transform:edit_plan
+      - public-type:transform:edit_precondition
+      - public-type:transform:file_apply_result
+      - public-type:transform:file_apply_state
+      - public-type:transform:format_policy
+      - public-type:transform:generated_code_policy
+      - public-type:transform:macro_edit_policy
+      - public-type:transform:plan_options
+      - public-type:transform:preview_options
+      - public-type:transform:preview_result
+      - public-type:transform:reparse_policy
+      - public-type:transform:replacement_template
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.transform.package_internal_engine
+      - shared.package.transform.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:call
+      schemas:
+      - schema:schemas/cxxlens_apply_result.schema.yaml
+      - schema:schemas/cxxlens_edit_plan.schema.yaml
+      - schema:schemas/cxxlens_transform_options.schema.yaml
+    dependency_apis:
+    - API-SEL-006
+    traceability:
+      requirements_or_use_cases:
+      - QR-001
+      design_sections:
+      - '19'
+      - '39.19'
+      doxygen_obligation: Document immutable lifetime/identity, default dry-run and side effects, zero/unresolved/ambiguous/partial/failure,
+        stale/path/macro/variant/conflict, format/reparse, transaction/rollback/recovery, ordering/dedup, evidence/coverage,
+        ports, schema/version.
+    acceptance:
+      positive:
+        id: API-TF-003.positive
+        expression: Plan/preview/dry-run or transact typed call rewrite with complete exact-version inputs and all variants
+          agreeing.
+        expected: Canonical validated plan/result; writes only for explicit write mode after all gates.
+      negative:
+        id: API-TF-003.negative
+        expression: Use invalid range/path, stale digest, root escape, unsafe macro, conflict, formatter/reparse failure,
+          or rollback injection.
+        expected: Fail closed with no partial commit; rollback/recovery state and stable evidence remain explicit.
+      ambiguous:
+        id: API-TF-003.ambiguous
+        expression: Use overload ambiguity, variant divergence, missing facts/tools, generated source, partial reparse, or
+          preview budget.
+        expected: Preserved rows plus conflicts/unresolved/coverage/truncation and no write eligibility.
+  - api_id: API-TF-004
+    atomic_unit: AU-TF-004
+    package: transform
+    policy: transform.operation-construction.v1
+    declaration:
+      source: contracts/candidates/48/transform.hpp
+      signature: cxxlens::transform::codemod cxxlens::transform::rename_symbol(cxxlens::select::symbol_selector,std::string)
+      signature_fingerprint: sha256:64001973cf1e87a92cc541e35c8f1297f3f324970d7c0cf145ada7e7a4f16ff3
+    family_members:
+    - cxxlens::transform::rename_symbol
+    semantics:
+    - semantic rename follows transform.operation-construction.v1 with default dry-run and one immutable catalog/fact snapshot.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-write-eligible, and failure outcomes remain
+      distinct.
+    - Stale/path/macro/variant/format/reparse/transaction state, canonical ordering, evidence, coverage, and guarantee are
+      authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:typed_id<T>
+      - public-type:core:result<T>
+      - public-type:core:unresolved
+      - public-type:select:call_selector
+      - public-type:select:semantic_selector
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:apply_options
+      - public-type:transform:apply_result
+      - public-type:transform:codemod
+      - public-type:transform:conflict_kind
+      - public-type:transform:edit
+      - public-type:transform:edit_conflict
+      - public-type:transform:edit_kind
+      - public-type:transform:edit_plan
+      - public-type:transform:edit_precondition
+      - public-type:transform:file_apply_result
+      - public-type:transform:file_apply_state
+      - public-type:transform:format_policy
+      - public-type:transform:generated_code_policy
+      - public-type:transform:macro_edit_policy
+      - public-type:transform:plan_options
+      - public-type:transform:preview_options
+      - public-type:transform:preview_result
+      - public-type:transform:reparse_policy
+      - public-type:transform:replacement_template
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.transform.package_internal_engine
+      - shared.package.transform.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:override_relation
+      - provider.fact.frontend:reference
+      - provider.fact.frontend:symbol
+      schemas:
+      - schema:schemas/cxxlens_apply_result.schema.yaml
+      - schema:schemas/cxxlens_edit_plan.schema.yaml
+      - schema:schemas/cxxlens_transform_options.schema.yaml
+    dependency_apis:
+    - API-SEL-003
+    traceability:
+      requirements_or_use_cases:
+      - UC-TF-004
+      design_sections:
+      - '19'
+      - '39.19'
+      doxygen_obligation: Document immutable lifetime/identity, default dry-run and side effects, zero/unresolved/ambiguous/partial/failure,
+        stale/path/macro/variant/conflict, format/reparse, transaction/rollback/recovery, ordering/dedup, evidence/coverage,
+        ports, schema/version.
+    acceptance:
+      positive:
+        id: API-TF-004.positive
+        expression: Plan/preview/dry-run or transact semantic rename with complete exact-version inputs and all variants agreeing.
+        expected: Canonical validated plan/result; writes only for explicit write mode after all gates.
+      negative:
+        id: API-TF-004.negative
+        expression: Use invalid range/path, stale digest, root escape, unsafe macro, conflict, formatter/reparse failure,
+          or rollback injection.
+        expected: Fail closed with no partial commit; rollback/recovery state and stable evidence remain explicit.
+      ambiguous:
+        id: API-TF-004.ambiguous
+        expression: Use overload ambiguity, variant divergence, missing facts/tools, generated source, partial reparse, or
+          preview budget.
+        expected: Preserved rows plus conflicts/unresolved/coverage/truncation and no write eligibility.
+  - api_id: API-TF-005
+    atomic_unit: AU-TF-005
+    package: transform
+    policy: transform.operation-construction.v1
+    declaration:
+      source: contracts/candidates/48/transform.hpp
+      signature: cxxlens::transform::codemod cxxlens::transform::add_include_where_needed(std::string,cxxlens::select::symbol_selector)
+      signature_fingerprint: sha256:22bf4d3cf4b121d9064928e0be27211522db3e73ad79dde21d3a3cf0abfb45fb
+    family_members:
+    - cxxlens::transform::add_include_where_needed
+    semantics:
+    - include insertion follows transform.operation-construction.v1 with default dry-run and one immutable catalog/fact snapshot.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-write-eligible, and failure outcomes remain
+      distinct.
+    - Stale/path/macro/variant/format/reparse/transaction state, canonical ordering, evidence, coverage, and guarantee are
+      authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:typed_id<T>
+      - public-type:core:result<T>
+      - public-type:core:unresolved
+      - public-type:select:call_selector
+      - public-type:select:semantic_selector
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:apply_options
+      - public-type:transform:apply_result
+      - public-type:transform:codemod
+      - public-type:transform:conflict_kind
+      - public-type:transform:edit
+      - public-type:transform:edit_conflict
+      - public-type:transform:edit_kind
+      - public-type:transform:edit_plan
+      - public-type:transform:edit_precondition
+      - public-type:transform:file_apply_result
+      - public-type:transform:file_apply_state
+      - public-type:transform:format_policy
+      - public-type:transform:generated_code_policy
+      - public-type:transform:macro_edit_policy
+      - public-type:transform:plan_options
+      - public-type:transform:preview_options
+      - public-type:transform:preview_result
+      - public-type:transform:reparse_policy
+      - public-type:transform:replacement_template
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.transform.package_internal_engine
+      - shared.package.transform.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:include_relation
+      - provider.fact.frontend:symbol
+      schemas:
+      - schema:schemas/cxxlens_apply_result.schema.yaml
+      - schema:schemas/cxxlens_edit_plan.schema.yaml
+      - schema:schemas/cxxlens_transform_options.schema.yaml
+    dependency_apis:
+    - API-SEL-003
+    traceability:
+      requirements_or_use_cases:
+      - UC-TF-005
+      design_sections:
+      - '19'
+      - '39.19'
+      doxygen_obligation: Document immutable lifetime/identity, default dry-run and side effects, zero/unresolved/ambiguous/partial/failure,
+        stale/path/macro/variant/conflict, format/reparse, transaction/rollback/recovery, ordering/dedup, evidence/coverage,
+        ports, schema/version.
+    acceptance:
+      positive:
+        id: API-TF-005.positive
+        expression: Plan/preview/dry-run or transact include insertion with complete exact-version inputs and all variants
+          agreeing.
+        expected: Canonical validated plan/result; writes only for explicit write mode after all gates.
+      negative:
+        id: API-TF-005.negative
+        expression: Use invalid range/path, stale digest, root escape, unsafe macro, conflict, formatter/reparse failure,
+          or rollback injection.
+        expected: Fail closed with no partial commit; rollback/recovery state and stable evidence remain explicit.
+      ambiguous:
+        id: API-TF-005.ambiguous
+        expression: Use overload ambiguity, variant divergence, missing facts/tools, generated source, partial reparse, or
+          preview budget.
+        expected: Preserved rows plus conflicts/unresolved/coverage/truncation and no write eligibility.
+  - api_id: API-TF-006
+    atomic_unit: AU-TF-006
+    package: transform
+    policy: transform.operation-construction.v1
+    declaration:
+      source: contracts/candidates/48/transform.hpp
+      signature: cxxlens::transform::codemod cxxlens::transform::remove_unused_includes()
+      signature_fingerprint: sha256:ad713f776a4f49954cd9e9b2b351b87dd1064e213a242b6feea2778ddc535b02
+    family_members:
+    - cxxlens::transform::remove_unused_includes
+    semantics:
+    - unused include removal follows transform.operation-construction.v1 with default dry-run and one immutable catalog/fact
+      snapshot.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-write-eligible, and failure outcomes remain
+      distinct.
+    - Stale/path/macro/variant/format/reparse/transaction state, canonical ordering, evidence, coverage, and guarantee are
+      authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:typed_id<T>
+      - public-type:core:result<T>
+      - public-type:core:unresolved
+      - public-type:select:call_selector
+      - public-type:select:semantic_selector
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:apply_options
+      - public-type:transform:apply_result
+      - public-type:transform:codemod
+      - public-type:transform:conflict_kind
+      - public-type:transform:edit
+      - public-type:transform:edit_conflict
+      - public-type:transform:edit_kind
+      - public-type:transform:edit_plan
+      - public-type:transform:edit_precondition
+      - public-type:transform:file_apply_result
+      - public-type:transform:file_apply_state
+      - public-type:transform:format_policy
+      - public-type:transform:generated_code_policy
+      - public-type:transform:macro_edit_policy
+      - public-type:transform:plan_options
+      - public-type:transform:preview_options
+      - public-type:transform:preview_result
+      - public-type:transform:reparse_policy
+      - public-type:transform:replacement_template
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.transform.package_internal_engine
+      - shared.package.transform.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:include_relation
+      - provider.fact.frontend:reference
+      schemas:
+      - schema:schemas/cxxlens_apply_result.schema.yaml
+      - schema:schemas/cxxlens_edit_plan.schema.yaml
+      - schema:schemas/cxxlens_transform_options.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-TF-005
+      design_sections:
+      - '19'
+      - '39.19'
+      doxygen_obligation: Document immutable lifetime/identity, default dry-run and side effects, zero/unresolved/ambiguous/partial/failure,
+        stale/path/macro/variant/conflict, format/reparse, transaction/rollback/recovery, ordering/dedup, evidence/coverage,
+        ports, schema/version.
+    acceptance:
+      positive:
+        id: API-TF-006.positive
+        expression: Plan/preview/dry-run or transact unused include removal with complete exact-version inputs and all variants
+          agreeing.
+        expected: Canonical validated plan/result; writes only for explicit write mode after all gates.
+      negative:
+        id: API-TF-006.negative
+        expression: Use invalid range/path, stale digest, root escape, unsafe macro, conflict, formatter/reparse failure,
+          or rollback injection.
+        expected: Fail closed with no partial commit; rollback/recovery state and stable evidence remain explicit.
+      ambiguous:
+        id: API-TF-006.ambiguous
+        expression: Use overload ambiguity, variant divergence, missing facts/tools, generated source, partial reparse, or
+          preview budget.
+        expected: Preserved rows plus conflicts/unresolved/coverage/truncation and no write eligibility.
+  - api_id: API-TF-007
+    atomic_unit: AU-TF-007
+    package: transform
+    policy: transform.validated-plan.v1
+    declaration:
+      source: contracts/candidates/48/transform.hpp
+      signature: std::string_view cxxlens::transform::codemod::id() const noexcept; cxxlens::result<cxxlens::transform::edit_plan>
+        cxxlens::transform::codemod::plan(cxxlens::workspace&,cxxlens::transform::plan_options) const; std::string cxxlens::transform::codemod::explain()
+        const
+      signature_fingerprint: sha256:cfa0deee9ecb4fc340c38ea5a9b75a8828deee4a5c6f4eef08975cfeee802947
+    family_members:
+    - cxxlens::transform::codemod::id
+    - cxxlens::transform::codemod::plan
+    - cxxlens::transform::codemod::explain
+    semantics:
+    - codemod planning follows transform.validated-plan.v1 with default dry-run and one immutable catalog/fact snapshot.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-write-eligible, and failure outcomes remain
+      distinct.
+    - Stale/path/macro/variant/format/reparse/transaction state, canonical ordering, evidence, coverage, and guarantee are
+      authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:typed_id<T>
+      - public-type:core:result<T>
+      - public-type:core:unresolved
+      - public-type:select:call_selector
+      - public-type:select:semantic_selector
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:apply_options
+      - public-type:transform:apply_result
+      - public-type:transform:codemod
+      - public-type:transform:conflict_kind
+      - public-type:transform:edit
+      - public-type:transform:edit_conflict
+      - public-type:transform:edit_kind
+      - public-type:transform:edit_plan
+      - public-type:transform:edit_precondition
+      - public-type:transform:file_apply_result
+      - public-type:transform:file_apply_state
+      - public-type:transform:format_policy
+      - public-type:transform:generated_code_policy
+      - public-type:transform:macro_edit_policy
+      - public-type:transform:plan_options
+      - public-type:transform:preview_options
+      - public-type:transform:preview_result
+      - public-type:transform:reparse_policy
+      - public-type:transform:replacement_template
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.transform.package_internal_engine
+      - shared.package.transform.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_apply_result.schema.yaml
+      - schema:schemas/cxxlens_edit_plan.schema.yaml
+      - schema:schemas/cxxlens_transform_options.schema.yaml
+    dependency_apis:
+    - API-SEL-010
+    traceability:
+      requirements_or_use_cases:
+      - UC-TF-003
+      design_sections:
+      - '19'
+      - '39.19'
+      doxygen_obligation: Document immutable lifetime/identity, default dry-run and side effects, zero/unresolved/ambiguous/partial/failure,
+        stale/path/macro/variant/conflict, format/reparse, transaction/rollback/recovery, ordering/dedup, evidence/coverage,
+        ports, schema/version.
+    acceptance:
+      positive:
+        id: API-TF-007.positive
+        expression: Plan/preview/dry-run or transact codemod planning with complete exact-version inputs and all variants
+          agreeing.
+        expected: Canonical validated plan/result; writes only for explicit write mode after all gates.
+      negative:
+        id: API-TF-007.negative
+        expression: Use invalid range/path, stale digest, root escape, unsafe macro, conflict, formatter/reparse failure,
+          or rollback injection.
+        expected: Fail closed with no partial commit; rollback/recovery state and stable evidence remain explicit.
+      ambiguous:
+        id: API-TF-007.ambiguous
+        expression: Use overload ambiguity, variant divergence, missing facts/tools, generated source, partial reparse, or
+          preview budget.
+        expected: Preserved rows plus conflicts/unresolved/coverage/truncation and no write eligibility.
+  - api_id: API-TF-008
+    atomic_unit: AU-TF-008
+    package: transform
+    policy: transform.safety-validation.v1
+    declaration:
+      source: contracts/candidates/48/transform.hpp
+      signature: cxxlens::plan_id cxxlens::transform::edit_plan::id() const noexcept; bool cxxlens::transform::edit_plan::valid()
+        const noexcept; std::span<const cxxlens::transform::edit> cxxlens::transform::edit_plan::edits() const noexcept; std::span<const
+        cxxlens::transform::edit_conflict> cxxlens::transform::edit_plan::conflicts() const noexcept; std::span<const cxxlens::diagnostic>
+        cxxlens::transform::edit_plan::diagnostics() const noexcept; std::span<const cxxlens::unresolved> cxxlens::transform::edit_plan::unresolved_items()
+        const noexcept; const cxxlens::coverage_report& cxxlens::transform::edit_plan::coverage() const noexcept; cxxlens::result<cxxlens::transform::preview_result>
+        cxxlens::transform::edit_plan::preview_unified_diff(cxxlens::transform::preview_options) const; std::string cxxlens::transform::edit_plan::to_json()
+        const
+      signature_fingerprint: sha256:aa6e97e03c70f4b7407ff629aa67061fb876c77bd733b464f41d197ed8413e82
+    family_members:
+    - cxxlens::transform::edit_plan::id
+    - cxxlens::transform::edit_plan::valid
+    - cxxlens::transform::edit_plan::edits
+    - cxxlens::transform::edit_plan::conflicts
+    - cxxlens::transform::edit_plan::diagnostics
+    - cxxlens::transform::edit_plan::unresolved_items
+    - cxxlens::transform::edit_plan::coverage
+    - cxxlens::transform::edit_plan::preview_unified_diff
+    - cxxlens::transform::edit_plan::to_json
+    semantics:
+    - plan inspection and preview follows transform.safety-validation.v1 with default dry-run and one immutable catalog/fact
+      snapshot.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-write-eligible, and failure outcomes remain
+      distinct.
+    - Stale/path/macro/variant/format/reparse/transaction state, canonical ordering, evidence, coverage, and guarantee are
+      authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:typed_id<T>
+      - public-type:core:result<T>
+      - public-type:core:unresolved
+      - public-type:select:call_selector
+      - public-type:select:semantic_selector
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:apply_options
+      - public-type:transform:apply_result
+      - public-type:transform:codemod
+      - public-type:transform:conflict_kind
+      - public-type:transform:edit
+      - public-type:transform:edit_conflict
+      - public-type:transform:edit_kind
+      - public-type:transform:edit_plan
+      - public-type:transform:edit_precondition
+      - public-type:transform:file_apply_result
+      - public-type:transform:file_apply_state
+      - public-type:transform:format_policy
+      - public-type:transform:generated_code_policy
+      - public-type:transform:macro_edit_policy
+      - public-type:transform:plan_options
+      - public-type:transform:preview_options
+      - public-type:transform:preview_result
+      - public-type:transform:reparse_policy
+      - public-type:transform:replacement_template
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.transform.package_internal_engine
+      - shared.package.transform.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_apply_result.schema.yaml
+      - schema:schemas/cxxlens_edit_plan.schema.yaml
+      - schema:schemas/cxxlens_transform_options.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - QR-001
+      design_sections:
+      - '19'
+      - '39.19'
+      doxygen_obligation: Document immutable lifetime/identity, default dry-run and side effects, zero/unresolved/ambiguous/partial/failure,
+        stale/path/macro/variant/conflict, format/reparse, transaction/rollback/recovery, ordering/dedup, evidence/coverage,
+        ports, schema/version.
+    acceptance:
+      positive:
+        id: API-TF-008.positive
+        expression: Plan/preview/dry-run or transact plan inspection and preview with complete exact-version inputs and all
+          variants agreeing.
+        expected: Canonical validated plan/result; writes only for explicit write mode after all gates.
+      negative:
+        id: API-TF-008.negative
+        expression: Use invalid range/path, stale digest, root escape, unsafe macro, conflict, formatter/reparse failure,
+          or rollback injection.
+        expected: Fail closed with no partial commit; rollback/recovery state and stable evidence remain explicit.
+      ambiguous:
+        id: API-TF-008.ambiguous
+        expression: Use overload ambiguity, variant divergence, missing facts/tools, generated source, partial reparse, or
+          preview budget.
+        expected: Preserved rows plus conflicts/unresolved/coverage/truncation and no write eligibility.
+  - api_id: API-TF-009
+    atomic_unit: AU-TF-009
+    package: transform
+    policy: transform.fail-closed-transaction.v1
+    declaration:
+      source: contracts/candidates/48/transform.hpp
+      signature: cxxlens::result<cxxlens::transform::apply_result> cxxlens::transform::edit_plan::apply(cxxlens::workspace&,cxxlens::transform::apply_options)
+        const; cxxlens::transform::transaction_state cxxlens::transform::apply_result::state() const noexcept; bool cxxlens::transform::apply_result::committed()
+        const noexcept; std::string_view cxxlens::transform::apply_result::transaction_id() const noexcept; std::span<const
+        cxxlens::transform::file_apply_result> cxxlens::transform::apply_result::files() const noexcept; std::span<const cxxlens::diagnostic>
+        cxxlens::transform::apply_result::diagnostics() const noexcept; std::span<const cxxlens::unresolved> cxxlens::transform::apply_result::unresolved_items()
+        const noexcept; const cxxlens::coverage_report& cxxlens::transform::apply_result::coverage() const noexcept; std::string
+        cxxlens::transform::apply_result::to_json() const
+      signature_fingerprint: sha256:f09493e3022346b1974f8141f069826604fcb2ef3d55f2929a89345c6d917112
+    family_members:
+    - cxxlens::transform::edit_plan::apply
+    - cxxlens::transform::apply_result::state
+    - cxxlens::transform::apply_result::committed
+    - cxxlens::transform::apply_result::transaction_id
+    - cxxlens::transform::apply_result::files
+    - cxxlens::transform::apply_result::diagnostics
+    - cxxlens::transform::apply_result::unresolved_items
+    - cxxlens::transform::apply_result::coverage
+    - cxxlens::transform::apply_result::to_json
+    semantics:
+    - dry-run/transaction apply follows transform.fail-closed-transaction.v1 with default dry-run and one immutable catalog/fact
+      snapshot.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-write-eligible, and failure outcomes remain
+      distinct.
+    - Stale/path/macro/variant/format/reparse/transaction state, canonical ordering, evidence, coverage, and guarantee are
+      authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:typed_id<T>
+      - public-type:core:result<T>
+      - public-type:core:unresolved
+      - public-type:select:call_selector
+      - public-type:select:semantic_selector
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:apply_options
+      - public-type:transform:apply_result
+      - public-type:transform:codemod
+      - public-type:transform:conflict_kind
+      - public-type:transform:edit
+      - public-type:transform:edit_conflict
+      - public-type:transform:edit_kind
+      - public-type:transform:edit_plan
+      - public-type:transform:edit_precondition
+      - public-type:transform:file_apply_result
+      - public-type:transform:file_apply_state
+      - public-type:transform:format_policy
+      - public-type:transform:generated_code_policy
+      - public-type:transform:macro_edit_policy
+      - public-type:transform:plan_options
+      - public-type:transform:preview_options
+      - public-type:transform:preview_result
+      - public-type:transform:reparse_policy
+      - public-type:transform:replacement_template
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.transform.package_internal_engine
+      - shared.package.transform.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_apply_result.schema.yaml
+      - schema:schemas/cxxlens_edit_plan.schema.yaml
+      - schema:schemas/cxxlens_transform_options.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - QR-001
+      design_sections:
+      - '19'
+      - '39.19'
+      doxygen_obligation: Document immutable lifetime/identity, default dry-run and side effects, zero/unresolved/ambiguous/partial/failure,
+        stale/path/macro/variant/conflict, format/reparse, transaction/rollback/recovery, ordering/dedup, evidence/coverage,
+        ports, schema/version.
+    acceptance:
+      positive:
+        id: API-TF-009.positive
+        expression: Plan/preview/dry-run or transact dry-run/transaction apply with complete exact-version inputs and all
+          variants agreeing.
+        expected: Canonical validated plan/result; writes only for explicit write mode after all gates.
+      negative:
+        id: API-TF-009.negative
+        expression: Use invalid range/path, stale digest, root escape, unsafe macro, conflict, formatter/reparse failure,
+          or rollback injection.
+        expected: Fail closed with no partial commit; rollback/recovery state and stable evidence remain explicit.
+      ambiguous:
+        id: API-TF-009.ambiguous
+        expression: Use overload ambiguity, variant divergence, missing facts/tools, generated source, partial reparse, or
+          preview budget.
+        expected: Preserved rows plus conflicts/unresolved/coverage/truncation and no write eligibility.
+  production_implementation_changed: false
+  candidate_fingerprint: sha256:6d209dd7b50a01718969b32c75fa1536ef946ccd9a6c71f603878fc13dc67d75

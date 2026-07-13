@@ -1,0 +1,14 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.transform-options.v1.schema.yaml
+title: cxxlens transform options v1
+type: object
+additionalProperties: false
+required: [schema, macro_policy, generated_policy, format_policy, reparse_policy, reject_new_diagnostics]
+properties:
+  schema: {const: cxxlens.transform-options.v1}
+  macro_policy: {enum: [reject, allow_argument_spelling, allow_definition_with_explicit_opt_in]}
+  generated_policy: {enum: [read_only, allow_declared_generated_root]}
+  format_policy: {enum: [none, changed_ranges, whole_changed_file]}
+  reparse_policy: {enum: [changed_main_files, affected_variants, all_variants]}
+  reject_new_diagnostics: {const: true}
+  apply_mode: {const: dry_run}

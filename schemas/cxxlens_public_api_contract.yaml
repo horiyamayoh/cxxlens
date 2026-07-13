@@ -2373,21 +2373,36 @@ packages:
       - exact_declaration_unresolved
 - id: transform
   contract:
-    state: unresolved
+    state: candidate
     owner_issue: '#48'
-    transition_issue: '#42'
+    transition_issue: '#48'
     conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-48
+    candidate_fingerprint: sha256:6d209dd7b50a01718969b32c75fa1536ef946ccd9a6c71f603878fc13dc67d75
   header: <cxxlens/transform.hpp>
   purpose: Immutable edit plans, validation, formatting, reparsing and transactional apply.
   public_types:
-  - edit_kind
-  - edit_precondition
-  - edit
-  - plan_options
-  - edit_plan
+  - apply_mode
+  - apply_options
   - apply_result
-  - replacement_template
   - codemod
+  - conflict_kind
+  - edit
+  - edit_conflict
+  - edit_kind
+  - edit_plan
+  - edit_precondition
+  - file_apply_result
+  - file_apply_state
+  - format_policy
+  - generated_code_policy
+  - macro_edit_policy
+  - plan_options
+  - preview_options
+  - preview_result
+  - reparse_policy
+  - replacement_template
+  - transaction_state
   apis:
   - id: API-TF-001
     symbol: transform::replace_function_call
@@ -2404,17 +2419,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/48/transform.hpp
+      signature: cxxlens::transform::codemod cxxlens::transform::replace_function_call(std::string,std::string)
+      signature_fingerprint: sha256:05bdc3ef3e541c3f30a7bffd6ef1120f33325a047ab35ace02621dae83f303a5
     atomic_unit:
       id: AU-TF-001
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-TF-002
     symbol: transform::replace_method_call
     kind: free_function
@@ -2432,17 +2447,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/48/transform.hpp
+      signature: cxxlens::transform::codemod cxxlens::transform::replace_method_call(std::string,std::string,std::string)
+      signature_fingerprint: sha256:4051af4cf30ea174f0c6c8eade51905b67d42d07c209e3806cd2ac1dfdae91d0
     atomic_unit:
       id: AU-TF-002
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-TF-003
     symbol: transform::rewrite_calls
     kind: free_function
@@ -2451,21 +2466,22 @@ packages:
       facts:
       - call
       minimum_precision: local_semantic
-      apis: []
+      apis:
+      - API-SEL-006
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/48/transform.hpp
+      signature: cxxlens::transform::codemod cxxlens::transform::rewrite_calls(cxxlens::select::call_selector,cxxlens::transform::replacement_template)
+      signature_fingerprint: sha256:7be8f7aed6f6a5d9526c6f1a95bbabdaa880b7f05b4012466461eebcd319bffa
     atomic_unit:
       id: AU-TF-003
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-TF-004
     symbol: transform::rename_symbol
     kind: free_function
@@ -2478,21 +2494,22 @@ packages:
       - reference
       - symbol
       minimum_precision: workspace_semantic
-      apis: []
+      apis:
+      - API-SEL-003
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/48/transform.hpp
+      signature: cxxlens::transform::codemod cxxlens::transform::rename_symbol(cxxlens::select::symbol_selector,std::string)
+      signature_fingerprint: sha256:64001973cf1e87a92cc541e35c8f1297f3f324970d7c0cf145ada7e7a4f16ff3
     atomic_unit:
       id: AU-TF-004
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-TF-005
     symbol: transform::add_include_where_needed
     kind: free_function
@@ -2503,21 +2520,22 @@ packages:
       facts:
       - include_relation
       - symbol
-      apis: []
+      apis:
+      - API-SEL-003
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/48/transform.hpp
+      signature: cxxlens::transform::codemod cxxlens::transform::add_include_where_needed(std::string,cxxlens::select::symbol_selector)
+      signature_fingerprint: sha256:22bf4d3cf4b121d9064928e0be27211522db3e73ad79dde21d3a3cf0abfb45fb
     atomic_unit:
       id: AU-TF-005
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-TF-006
     symbol: transform::remove_unused_includes
     kind: free_function
@@ -2534,17 +2552,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/48/transform.hpp
+      signature: cxxlens::transform::codemod cxxlens::transform::remove_unused_includes()
+      signature_fingerprint: sha256:ad713f776a4f49954cd9e9b2b351b87dd1064e213a242b6feea2778ddc535b02
     atomic_unit:
       id: AU-TF-006
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-TF-007
     symbol: codemod::plan
     kind: method
@@ -2554,7 +2572,8 @@ packages:
     requires:
       expressions:
       - recipe_dependent
-      apis: []
+      apis:
+      - API-SEL-010
     llvm:
       components:
       - clangToolingRefactoring
@@ -2573,17 +2592,19 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/48/transform.hpp
+      signature: std::string_view cxxlens::transform::codemod::id() const noexcept; cxxlens::result<cxxlens::transform::edit_plan>
+        cxxlens::transform::codemod::plan(cxxlens::workspace&,cxxlens::transform::plan_options) const; std::string cxxlens::transform::codemod::explain()
+        const
+      signature_fingerprint: sha256:cfa0deee9ecb4fc340c38ea5a9b75a8828deee4a5c6f4eef08975cfeee802947
     atomic_unit:
       id: AU-TF-007
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-TF-008
     symbol: edit_plan::preview_unified_diff
     kind: method
@@ -2593,17 +2614,25 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/48/transform.hpp
+      signature: cxxlens::plan_id cxxlens::transform::edit_plan::id() const noexcept; bool cxxlens::transform::edit_plan::valid()
+        const noexcept; std::span<const cxxlens::transform::edit> cxxlens::transform::edit_plan::edits() const noexcept; std::span<const
+        cxxlens::transform::edit_conflict> cxxlens::transform::edit_plan::conflicts() const noexcept; std::span<const cxxlens::diagnostic>
+        cxxlens::transform::edit_plan::diagnostics() const noexcept; std::span<const cxxlens::unresolved> cxxlens::transform::edit_plan::unresolved_items()
+        const noexcept; const cxxlens::coverage_report& cxxlens::transform::edit_plan::coverage() const noexcept; cxxlens::result<cxxlens::transform::preview_result>
+        cxxlens::transform::edit_plan::preview_unified_diff(cxxlens::transform::preview_options) const; std::string cxxlens::transform::edit_plan::to_json()
+        const
+      signature_fingerprint: sha256:aa6e97e03c70f4b7407ff629aa67061fb876c77bd733b464f41d197ed8413e82
     atomic_unit:
       id: AU-TF-008
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
+    requires:
+      apis: []
   - id: API-TF-009
     symbol: edit_plan::apply
     kind: method
@@ -2618,17 +2647,25 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/48/transform.hpp
+      signature: cxxlens::result<cxxlens::transform::apply_result> cxxlens::transform::edit_plan::apply(cxxlens::workspace&,cxxlens::transform::apply_options)
+        const; cxxlens::transform::transaction_state cxxlens::transform::apply_result::state() const noexcept; bool cxxlens::transform::apply_result::committed()
+        const noexcept; std::string_view cxxlens::transform::apply_result::transaction_id() const noexcept; std::span<const
+        cxxlens::transform::file_apply_result> cxxlens::transform::apply_result::files() const noexcept; std::span<const cxxlens::diagnostic>
+        cxxlens::transform::apply_result::diagnostics() const noexcept; std::span<const cxxlens::unresolved> cxxlens::transform::apply_result::unresolved_items()
+        const noexcept; const cxxlens::coverage_report& cxxlens::transform::apply_result::coverage() const noexcept; std::string
+        cxxlens::transform::apply_result::to_json() const
+      signature_fingerprint: sha256:f09493e3022346b1974f8141f069826604fcb2ef3d55f2929a89345c6d917112
     atomic_unit:
       id: AU-TF-009
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
+    requires:
+      apis: []
 - id: generate
   contract:
     state: unresolved
@@ -4149,8 +4186,8 @@ summary:
     implemented: 0
     conformant: 47
   contract_state_counts:
-    candidate: 12
-    unresolved: 10
+    candidate: 13
+    unresolved: 9
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.

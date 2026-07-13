@@ -10192,6 +10192,74 @@
       "via_api_ids": [
         "API-TEST-007"
       ]
+    },
+    {
+      "component_id": null,
+      "from": "AU-TF-003",
+      "kind": "api_dependency",
+      "owner": {
+        "atomic_unit_id": "AU-SEL-006",
+        "steward": "steward.atomic.au-sel-006"
+      },
+      "reason": "API-TF-003 requires API-SEL-006",
+      "required_semantics_version": null,
+      "scope": "readiness",
+      "source_contract": "schemas/cxxlens_public_api_contract.yaml",
+      "to": "AU-SEL-006",
+      "via_api_ids": [
+        "API-TF-003"
+      ]
+    },
+    {
+      "component_id": null,
+      "from": "AU-TF-004",
+      "kind": "api_dependency",
+      "owner": {
+        "atomic_unit_id": "AU-SEL-003",
+        "steward": "steward.atomic.au-sel-003"
+      },
+      "reason": "API-TF-004 requires API-SEL-003",
+      "required_semantics_version": null,
+      "scope": "readiness",
+      "source_contract": "schemas/cxxlens_public_api_contract.yaml",
+      "to": "AU-SEL-003",
+      "via_api_ids": [
+        "API-TF-004"
+      ]
+    },
+    {
+      "component_id": null,
+      "from": "AU-TF-005",
+      "kind": "api_dependency",
+      "owner": {
+        "atomic_unit_id": "AU-SEL-003",
+        "steward": "steward.atomic.au-sel-003"
+      },
+      "reason": "API-TF-005 requires API-SEL-003",
+      "required_semantics_version": null,
+      "scope": "readiness",
+      "source_contract": "schemas/cxxlens_public_api_contract.yaml",
+      "to": "AU-SEL-003",
+      "via_api_ids": [
+        "API-TF-005"
+      ]
+    },
+    {
+      "component_id": null,
+      "from": "AU-TF-007",
+      "kind": "api_dependency",
+      "owner": {
+        "atomic_unit_id": "AU-SEL-010",
+        "steward": "steward.atomic.au-sel-010"
+      },
+      "reason": "API-TF-007 requires API-SEL-010",
+      "required_semantics_version": null,
+      "scope": "readiness",
+      "source_contract": "schemas/cxxlens_public_api_contract.yaml",
+      "to": "AU-SEL-010",
+      "via_api_ids": [
+        "API-TF-007"
+      ]
     }
   ],
   "global_gates": [
@@ -10286,14 +10354,14 @@
     }
   ],
   "input_fingerprints": {
-    "contract_ownership_registry": "sha256:536afbf39a7654c11e6a28adac5e526b676dfea11ac1158f7a4bcc4aebf5655d",
-    "dependency_requests": "sha256:3a8db3b2e480f4944fc076ea5a49d23082e9676eb8ebe3c92816449754724e97",
+    "contract_ownership_registry": "sha256:8423d70e3cc78ed216c2aa77300d5e8051354ccc0df32fdaf7e80235716c2810",
+    "dependency_requests": "sha256:2b5d8d4dc72511fd2d32c4b03ba03d2475d66c16bea1cd8a81a11f4c2689da81",
     "global_contract_conventions": "sha256:cdf3166db0b38fb9230602ff5ba273baf9e7e253d61d6c2fc75d21f0fea1238c",
     "m0": "sha256:9e32e99675512405e1247fd92b8cfcbc5c6e99ab9dc0378833482541c0538f19",
     "m1": "sha256:330670610fc393f8fd9a79493477b28f45c22f863fddaa35dae8a074a4deb567",
     "m2": "sha256:7f2d5d01ef9c074e1bfdc7920c51ea60d2520ae5e6b878467f94c670c144df27",
-    "ownership": "sha256:6327e2cf3cfbfad07fccd4a18e9019583328285d3cd67ec0f87b8d884cf1f3ed",
-    "task_packets": "sha256:d052d369b084e77855081769761192eca2a4d701d2a84438bfd65fc385cb1107"
+    "ownership": "sha256:0f5b8d0889e2838a3638acdd7fc139dfd7cda0d39c4001e6f43e3196ba0936e8",
+    "task_packets": "sha256:98d7789eb3231a39642f3f5dfdccb3499e80ebb84434f3b7c9fd87056bfe38b7"
   },
   "nodes": [
     {
@@ -16377,7 +16445,7 @@
           "chain": [
             "AU-REPORT-002",
             "AU-TF-008",
-            "contract-candidate-missing:AU-TF-008"
+            "candidate_declaration_not_integrated:API-TF-008"
           ],
           "code": "dependency-not-complete",
           "steward": "steward.atomic.au-tf-008",
@@ -16782,7 +16850,7 @@
           "chain": [
             "AU-RULE-002",
             "AU-TF-007",
-            "contract-candidate-missing:AU-TF-007"
+            "candidate_declaration_not_integrated:API-TF-007"
           ],
           "code": "dependency-not-complete",
           "steward": "steward.atomic.au-tf-007",
@@ -19166,7 +19234,7 @@
           "chain": [
             "AU-TEST-003",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "dependency-not-complete",
           "steward": "steward.atomic.au-tf-001",
@@ -19176,7 +19244,7 @@
           "chain": [
             "AU-TEST-003",
             "AU-TF-002",
-            "contract-candidate-missing:AU-TF-002"
+            "candidate_declaration_not_integrated:API-TF-002"
           ],
           "code": "dependency-not-complete",
           "steward": "steward.atomic.au-tf-002",
@@ -19186,7 +19254,7 @@
           "chain": [
             "AU-TEST-003",
             "AU-TF-003",
-            "contract-candidate-missing:AU-TF-003"
+            "candidate_declaration_not_integrated:API-TF-003"
           ],
           "code": "dependency-not-complete",
           "steward": "steward.atomic.au-tf-003",
@@ -19196,7 +19264,7 @@
           "chain": [
             "AU-TEST-003",
             "AU-TF-004",
-            "contract-candidate-missing:AU-TF-004"
+            "candidate_declaration_not_integrated:API-TF-004"
           ],
           "code": "dependency-not-complete",
           "steward": "steward.atomic.au-tf-004",
@@ -19206,7 +19274,7 @@
           "chain": [
             "AU-TEST-003",
             "AU-TF-005",
-            "contract-candidate-missing:AU-TF-005"
+            "candidate_declaration_not_integrated:API-TF-005"
           ],
           "code": "dependency-not-complete",
           "steward": "steward.atomic.au-tf-005",
@@ -19523,11 +19591,11 @@
         {
           "chain": [
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-TF-001"
+          "subject": "API-TF-001"
         },
         {
           "chain": [
@@ -19541,37 +19609,10 @@
         {
           "chain": [
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-TF-001"
-        },
-        {
-          "chain": [
-            "AU-TF-001",
-            "exact_declaration_unresolved:API-TF-001"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-TF-001"
-        },
-        {
-          "chain": [
-            "AU-TF-001",
             "fixtures-missing:AU-TF-001"
           ],
           "code": "fixtures-missing",
           "steward": "steward.testing",
-          "subject": "AU-TF-001"
-        },
-        {
-          "chain": [
-            "AU-TF-001",
-            "frozen-skeleton-missing:AU-TF-001"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
           "subject": "AU-TF-001"
         }
       ],
@@ -19585,12 +19626,12 @@
         "M4"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -19622,11 +19663,11 @@
         {
           "chain": [
             "AU-TF-002",
-            "contract-candidate-missing:AU-TF-002"
+            "candidate_declaration_not_integrated:API-TF-002"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-TF-002"
+          "subject": "API-TF-002"
         },
         {
           "chain": [
@@ -19640,24 +19681,6 @@
         {
           "chain": [
             "AU-TF-002",
-            "exact-contract-missing:AU-TF-002"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-TF-002"
-        },
-        {
-          "chain": [
-            "AU-TF-002",
-            "exact_declaration_unresolved:API-TF-002"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-TF-002"
-        },
-        {
-          "chain": [
-            "AU-TF-002",
             "fixtures-missing:AU-TF-002"
           ],
           "code": "fixtures-missing",
@@ -19667,18 +19690,9 @@
         {
           "chain": [
             "AU-TF-002",
-            "frozen-skeleton-missing:AU-TF-002"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-TF-002"
-        },
-        {
-          "chain": [
-            "AU-TF-002",
             "shared.package.transform.package_internal_engine",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -19689,7 +19703,7 @@
             "AU-TF-002",
             "shared.package.transform.schema_fixture_contract",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -19700,7 +19714,7 @@
             "AU-TF-002",
             "shared.package.transform.shared_public_type",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -19721,12 +19735,12 @@
         "M4"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": false,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -19762,11 +19776,11 @@
         {
           "chain": [
             "AU-TF-003",
-            "contract-candidate-missing:AU-TF-003"
+            "candidate_declaration_not_integrated:API-TF-003"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-TF-003"
+          "subject": "API-TF-003"
         },
         {
           "chain": [
@@ -19780,24 +19794,6 @@
         {
           "chain": [
             "AU-TF-003",
-            "exact-contract-missing:AU-TF-003"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-TF-003"
-        },
-        {
-          "chain": [
-            "AU-TF-003",
-            "exact_declaration_unresolved:API-TF-003"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-TF-003"
-        },
-        {
-          "chain": [
-            "AU-TF-003",
             "fixtures-missing:AU-TF-003"
           ],
           "code": "fixtures-missing",
@@ -19807,18 +19803,9 @@
         {
           "chain": [
             "AU-TF-003",
-            "frozen-skeleton-missing:AU-TF-003"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-TF-003"
-        },
-        {
-          "chain": [
-            "AU-TF-003",
             "shared.package.transform.package_internal_engine",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -19829,7 +19816,7 @@
             "AU-TF-003",
             "shared.package.transform.schema_fixture_contract",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -19840,7 +19827,7 @@
             "AU-TF-003",
             "shared.package.transform.shared_public_type",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -19848,10 +19835,12 @@
         }
       ],
       "dependencies": [
+        "AU-SEL-006",
         "AU-TF-001",
         "AU-WS-005"
       ],
       "dependency_kinds": [
+        "api_dependency",
         "fact_provider_implementation",
         "package_internal_engine",
         "schema_fixture_contract",
@@ -19861,12 +19850,12 @@
         "M4"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": false,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -19896,11 +19885,11 @@
         {
           "chain": [
             "AU-TF-004",
-            "contract-candidate-missing:AU-TF-004"
+            "candidate_declaration_not_integrated:API-TF-004"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-TF-004"
+          "subject": "API-TF-004"
         },
         {
           "chain": [
@@ -19914,24 +19903,6 @@
         {
           "chain": [
             "AU-TF-004",
-            "exact-contract-missing:AU-TF-004"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-TF-004"
-        },
-        {
-          "chain": [
-            "AU-TF-004",
-            "exact_declaration_unresolved:API-TF-004"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-TF-004"
-        },
-        {
-          "chain": [
-            "AU-TF-004",
             "fixtures-missing:AU-TF-004"
           ],
           "code": "fixtures-missing",
@@ -19941,18 +19912,9 @@
         {
           "chain": [
             "AU-TF-004",
-            "frozen-skeleton-missing:AU-TF-004"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-TF-004"
-        },
-        {
-          "chain": [
-            "AU-TF-004",
             "shared.package.transform.package_internal_engine",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -19963,7 +19925,7 @@
             "AU-TF-004",
             "shared.package.transform.schema_fixture_contract",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -19974,7 +19936,7 @@
             "AU-TF-004",
             "shared.package.transform.shared_public_type",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -19982,10 +19944,12 @@
         }
       ],
       "dependencies": [
+        "AU-SEL-003",
         "AU-TF-001",
         "AU-WS-005"
       ],
       "dependency_kinds": [
+        "api_dependency",
         "fact_provider_implementation",
         "package_internal_engine",
         "schema_fixture_contract",
@@ -19995,12 +19959,12 @@
         "M4"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": false,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -20034,11 +19998,11 @@
         {
           "chain": [
             "AU-TF-005",
-            "contract-candidate-missing:AU-TF-005"
+            "candidate_declaration_not_integrated:API-TF-005"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-TF-005"
+          "subject": "API-TF-005"
         },
         {
           "chain": [
@@ -20052,24 +20016,6 @@
         {
           "chain": [
             "AU-TF-005",
-            "exact-contract-missing:AU-TF-005"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-TF-005"
-        },
-        {
-          "chain": [
-            "AU-TF-005",
-            "exact_declaration_unresolved:API-TF-005"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-TF-005"
-        },
-        {
-          "chain": [
-            "AU-TF-005",
             "fixtures-missing:AU-TF-005"
           ],
           "code": "fixtures-missing",
@@ -20079,18 +20025,9 @@
         {
           "chain": [
             "AU-TF-005",
-            "frozen-skeleton-missing:AU-TF-005"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-TF-005"
-        },
-        {
-          "chain": [
-            "AU-TF-005",
             "shared.package.transform.package_internal_engine",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -20101,7 +20038,7 @@
             "AU-TF-005",
             "shared.package.transform.schema_fixture_contract",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -20112,7 +20049,7 @@
             "AU-TF-005",
             "shared.package.transform.shared_public_type",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -20120,10 +20057,12 @@
         }
       ],
       "dependencies": [
+        "AU-SEL-003",
         "AU-TF-001",
         "AU-WS-005"
       ],
       "dependency_kinds": [
+        "api_dependency",
         "fact_provider_implementation",
         "package_internal_engine",
         "schema_fixture_contract",
@@ -20133,12 +20072,12 @@
         "M4"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": false,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -20170,20 +20109,20 @@
         {
           "chain": [
             "AU-TF-006",
+            "candidate_declaration_not_integrated:API-TF-006"
+          ],
+          "code": "candidate_declaration_not_integrated",
+          "steward": "generator.catalog",
+          "subject": "API-TF-006"
+        },
+        {
+          "chain": [
+            "AU-TF-006",
             "capability-provider-unavailable:include.cleaner"
           ],
           "code": "capability-provider-unavailable",
           "steward": "steward.repository",
           "subject": "include.cleaner"
-        },
-        {
-          "chain": [
-            "AU-TF-006",
-            "contract-candidate-missing:AU-TF-006"
-          ],
-          "code": "contract-candidate-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-TF-006"
         },
         {
           "chain": [
@@ -20197,24 +20136,6 @@
         {
           "chain": [
             "AU-TF-006",
-            "exact-contract-missing:AU-TF-006"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-TF-006"
-        },
-        {
-          "chain": [
-            "AU-TF-006",
-            "exact_declaration_unresolved:API-TF-006"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-TF-006"
-        },
-        {
-          "chain": [
-            "AU-TF-006",
             "fixtures-missing:AU-TF-006"
           ],
           "code": "fixtures-missing",
@@ -20224,18 +20145,9 @@
         {
           "chain": [
             "AU-TF-006",
-            "frozen-skeleton-missing:AU-TF-006"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-TF-006"
-        },
-        {
-          "chain": [
-            "AU-TF-006",
             "shared.package.transform.package_internal_engine",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -20246,7 +20158,7 @@
             "AU-TF-006",
             "shared.package.transform.schema_fixture_contract",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -20257,7 +20169,7 @@
             "AU-TF-006",
             "shared.package.transform.shared_public_type",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -20279,12 +20191,12 @@
         "M4"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": false,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -20319,11 +20231,11 @@
         {
           "chain": [
             "AU-TF-007",
-            "contract-candidate-missing:AU-TF-007"
+            "candidate_declaration_not_integrated:API-TF-007"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-TF-007"
+          "subject": "API-TF-007"
         },
         {
           "chain": [
@@ -20337,24 +20249,6 @@
         {
           "chain": [
             "AU-TF-007",
-            "exact-contract-missing:AU-TF-007"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-TF-007"
-        },
-        {
-          "chain": [
-            "AU-TF-007",
-            "exact_declaration_unresolved:API-TF-007"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-TF-007"
-        },
-        {
-          "chain": [
-            "AU-TF-007",
             "fixtures-missing:AU-TF-007"
           ],
           "code": "fixtures-missing",
@@ -20364,18 +20258,9 @@
         {
           "chain": [
             "AU-TF-007",
-            "frozen-skeleton-missing:AU-TF-007"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-TF-007"
-        },
-        {
-          "chain": [
-            "AU-TF-007",
             "shared.package.transform.package_internal_engine",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -20386,7 +20271,7 @@
             "AU-TF-007",
             "shared.package.transform.schema_fixture_contract",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -20397,7 +20282,7 @@
             "AU-TF-007",
             "shared.package.transform.shared_public_type",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -20405,10 +20290,12 @@
         }
       ],
       "dependencies": [
+        "AU-SEL-010",
         "AU-TF-001",
         "AU-WS-005"
       ],
       "dependency_kinds": [
+        "api_dependency",
         "fact_provider_implementation",
         "package_internal_engine",
         "schema_fixture_contract",
@@ -20418,12 +20305,12 @@
         "M4"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": false,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -20459,11 +20346,11 @@
         {
           "chain": [
             "AU-TF-008",
-            "contract-candidate-missing:AU-TF-008"
+            "candidate_declaration_not_integrated:API-TF-008"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-TF-008"
+          "subject": "API-TF-008"
         },
         {
           "chain": [
@@ -20477,24 +20364,6 @@
         {
           "chain": [
             "AU-TF-008",
-            "exact-contract-missing:AU-TF-008"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-TF-008"
-        },
-        {
-          "chain": [
-            "AU-TF-008",
-            "exact_declaration_unresolved:API-TF-008"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-TF-008"
-        },
-        {
-          "chain": [
-            "AU-TF-008",
             "fixtures-missing:AU-TF-008"
           ],
           "code": "fixtures-missing",
@@ -20504,18 +20373,9 @@
         {
           "chain": [
             "AU-TF-008",
-            "frozen-skeleton-missing:AU-TF-008"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-TF-008"
-        },
-        {
-          "chain": [
-            "AU-TF-008",
             "shared.package.transform.package_internal_engine",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -20526,7 +20386,7 @@
             "AU-TF-008",
             "shared.package.transform.schema_fixture_contract",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -20537,7 +20397,7 @@
             "AU-TF-008",
             "shared.package.transform.shared_public_type",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -20556,12 +20416,12 @@
         "M4"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": false,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -20588,11 +20448,11 @@
         {
           "chain": [
             "AU-TF-009",
-            "contract-candidate-missing:AU-TF-009"
+            "candidate_declaration_not_integrated:API-TF-009"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-TF-009"
+          "subject": "API-TF-009"
         },
         {
           "chain": [
@@ -20606,24 +20466,6 @@
         {
           "chain": [
             "AU-TF-009",
-            "exact-contract-missing:AU-TF-009"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-TF-009"
-        },
-        {
-          "chain": [
-            "AU-TF-009",
-            "exact_declaration_unresolved:API-TF-009"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-TF-009"
-        },
-        {
-          "chain": [
-            "AU-TF-009",
             "fixtures-missing:AU-TF-009"
           ],
           "code": "fixtures-missing",
@@ -20633,18 +20475,9 @@
         {
           "chain": [
             "AU-TF-009",
-            "frozen-skeleton-missing:AU-TF-009"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-TF-009"
-        },
-        {
-          "chain": [
-            "AU-TF-009",
             "shared.package.transform.package_internal_engine",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -20655,7 +20488,7 @@
             "AU-TF-009",
             "shared.package.transform.schema_fixture_contract",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -20666,7 +20499,7 @@
             "AU-TF-009",
             "shared.package.transform.shared_public_type",
             "AU-TF-001",
-            "contract-candidate-missing:AU-TF-001"
+            "candidate_declaration_not_integrated:API-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -20685,12 +20518,12 @@
         "M4"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": false,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -26313,7 +26146,7 @@
     ]
   },
   "schema": "cxxlens.api-ready.v1",
-  "semantic_digest": "sha256:fe2dbd0e7ffe108fd8bbb56ec9669aeeb23deff9165279caf2caa95514bca8b6",
+  "semantic_digest": "sha256:fe0314f61c014539c2520c09df524b88890e439be693275ee04cbbac6234c977",
   "shards": [
     {
       "acceptance_command": {
@@ -60648,9 +60481,9 @@
   ],
   "summary": {
     "api_count": 124,
-    "edge_count": 599,
+    "edge_count": 603,
     "edge_kind_counts": {
-      "api_dependency": 29,
+      "api_dependency": 33,
       "capability_provider_implementation": 5,
       "fact_provider_implementation": 135,
       "package_integration_prerequisite": 124,
@@ -60659,7 +60492,7 @@
       "shared_public_type": 102
     },
     "package_count": 22,
-    "readiness_edge_count": 475,
+    "readiness_edge_count": 479,
     "ready_waves": [],
     "state_counts": {
       "blocked": 77,
@@ -60784,26 +60617,26 @@
       "AU-SRCH-010",
       "AU-TEST-007",
       "AU-TF-002",
-      "AU-TF-003",
-      "AU-TF-004",
-      "AU-TF-005",
       "AU-TF-006",
-      "AU-TF-007",
       "AU-TF-008",
       "AU-TF-009"
     ],
     [
       "AU-GRAPH-005",
       "AU-REPORT-001",
-      "AU-RULE-002",
       "AU-RULE-003",
-      "AU-TEST-003"
+      "AU-TF-003",
+      "AU-TF-004",
+      "AU-TF-005",
+      "AU-TF-007"
     ],
     [
       "AU-REPORT-002",
       "AU-REPORT-003",
       "AU-REPORT-004",
-      "AU-RULE-004"
+      "AU-RULE-002",
+      "AU-RULE-004",
+      "AU-TEST-003"
     ]
   ]
 }

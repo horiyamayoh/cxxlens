@@ -1241,6 +1241,20 @@ public_types:
   owner_atomic_unit: AU-TEST-001
   steward: integration.package.testing
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-testing
+- id: public-type:transform:apply_mode
+  type: apply_mode
+  package: transform
+  header: <cxxlens/transform.hpp>
+  owner_atomic_unit: AU-TF-001
+  steward: integration.package.transform
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform
+- id: public-type:transform:apply_options
+  type: apply_options
+  package: transform
+  header: <cxxlens/transform.hpp>
+  owner_atomic_unit: AU-TF-001
+  steward: integration.package.transform
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform
 - id: public-type:transform:apply_result
   type: apply_result
   package: transform
@@ -1255,8 +1269,22 @@ public_types:
   owner_atomic_unit: AU-TF-001
   steward: integration.package.transform
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform
+- id: public-type:transform:conflict_kind
+  type: conflict_kind
+  package: transform
+  header: <cxxlens/transform.hpp>
+  owner_atomic_unit: AU-TF-001
+  steward: integration.package.transform
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform
 - id: public-type:transform:edit
   type: edit
+  package: transform
+  header: <cxxlens/transform.hpp>
+  owner_atomic_unit: AU-TF-001
+  steward: integration.package.transform
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform
+- id: public-type:transform:edit_conflict
+  type: edit_conflict
   package: transform
   header: <cxxlens/transform.hpp>
   owner_atomic_unit: AU-TF-001
@@ -1283,6 +1311,41 @@ public_types:
   owner_atomic_unit: AU-TF-001
   steward: integration.package.transform
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform
+- id: public-type:transform:file_apply_result
+  type: file_apply_result
+  package: transform
+  header: <cxxlens/transform.hpp>
+  owner_atomic_unit: AU-TF-001
+  steward: integration.package.transform
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform
+- id: public-type:transform:file_apply_state
+  type: file_apply_state
+  package: transform
+  header: <cxxlens/transform.hpp>
+  owner_atomic_unit: AU-TF-001
+  steward: integration.package.transform
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform
+- id: public-type:transform:format_policy
+  type: format_policy
+  package: transform
+  header: <cxxlens/transform.hpp>
+  owner_atomic_unit: AU-TF-001
+  steward: integration.package.transform
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform
+- id: public-type:transform:generated_code_policy
+  type: generated_code_policy
+  package: transform
+  header: <cxxlens/transform.hpp>
+  owner_atomic_unit: AU-TF-001
+  steward: integration.package.transform
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform
+- id: public-type:transform:macro_edit_policy
+  type: macro_edit_policy
+  package: transform
+  header: <cxxlens/transform.hpp>
+  owner_atomic_unit: AU-TF-001
+  steward: integration.package.transform
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform
 - id: public-type:transform:plan_options
   type: plan_options
   package: transform
@@ -1290,8 +1353,36 @@ public_types:
   owner_atomic_unit: AU-TF-001
   steward: integration.package.transform
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform
+- id: public-type:transform:preview_options
+  type: preview_options
+  package: transform
+  header: <cxxlens/transform.hpp>
+  owner_atomic_unit: AU-TF-001
+  steward: integration.package.transform
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform
+- id: public-type:transform:preview_result
+  type: preview_result
+  package: transform
+  header: <cxxlens/transform.hpp>
+  owner_atomic_unit: AU-TF-001
+  steward: integration.package.transform
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform
+- id: public-type:transform:reparse_policy
+  type: reparse_policy
+  package: transform
+  header: <cxxlens/transform.hpp>
+  owner_atomic_unit: AU-TF-001
+  steward: integration.package.transform
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform
 - id: public-type:transform:replacement_template
   type: replacement_template
+  package: transform
+  header: <cxxlens/transform.hpp>
+  owner_atomic_unit: AU-TF-001
+  steward: integration.package.transform
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform
+- id: public-type:transform:transaction_state
+  type: transaction_state
   package: transform
   header: <cxxlens/transform.hpp>
   owner_atomic_unit: AU-TF-001
@@ -2088,6 +2179,11 @@ schemas:
   owner_atomic_unit: AU-CORE-001
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_apply_result.schema.yaml
+  path: schemas/cxxlens_apply_result.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
 - id: schema:schemas/cxxlens_capabilities.schema.yaml
   path: schemas/cxxlens_capabilities.schema.yaml
   owner_atomic_unit: AU-CORE-001
@@ -2115,6 +2211,11 @@ schemas:
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
 - id: schema:schemas/cxxlens_diagnostic.schema.yaml
   path: schemas/cxxlens_diagnostic.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_edit_plan.schema.yaml
+  path: schemas/cxxlens_edit_plan.schema.yaml
   owner_atomic_unit: AU-CORE-001
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
@@ -2308,6 +2409,11 @@ schemas:
   owner_atomic_unit: AU-CORE-001
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_transform_options.schema.yaml
+  path: schemas/cxxlens_transform_options.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
 - id: schema:schemas/cxxlens_unresolved.schema.yaml
   path: schemas/cxxlens_unresolved.schema.yaml
   owner_atomic_unit: AU-CORE-001
@@ -2329,8 +2435,8 @@ schemas:
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
 summary:
-  public_type_count: 192
+  public_type_count: 205
   shared_component_count: 66
   provider_subject_count: 24
-  schema_count: 65
-semantic_digest: sha256:1c7c2e728d01190342ed9aaf52d96e9b5e22b1d51cd42655507b22113bbc27a8
+  schema_count: 68
+semantic_digest: sha256:c3b6f09c49d3794550f0f5228c380bbb01d983a2ba1a77320af7d6294b30ed09

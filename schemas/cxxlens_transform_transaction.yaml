@@ -1,0 +1,23 @@
+schema: cxxlens.transform-transaction.v1
+write_preconditions:
+  - authorization_valid
+  - writer_lock_acquired
+  - paths_within_workspace
+  - source_digests_current
+  - file_identity_current
+  - catalog_and_snapshot_current
+  - conflicts_empty
+  - variants_agree
+  - macro_origins_editable
+  - formatter_complete
+  - reparse_complete_all_affected_variants
+transitions:
+  - {from: planned, event: dry_run, to: dry_run_validated, writes: false}
+  - {from: planned, event: prepare_all, to: prepared, writes: false}
+  - {from: prepared, event: commit_all, to: committed, writes: true}
+  - {from: prepared, event: failure_or_cancel, to: rolled_back, writes: false}
+  - {from: committed, event: post_write_failure, to: rolled_back, writes: true}
+  - {from: rolled_back, event: rollback_failure, to: rollback_failed, writes: true}
+terminal_states: [dry_run_validated, committed, rolled_back, rollback_failed]
+partial_commit_allowed: false
+silent_rebase_allowed: false
