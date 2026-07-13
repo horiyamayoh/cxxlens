@@ -26,6 +26,7 @@ properties:
     - executable_test_coverage
     - executable_test_coverage_report
     - global_contract_conventions
+    - package_contract_candidates
     - contract_ownership_registry
   registries:
     type: object
@@ -69,6 +70,10 @@ properties:
             owner_issue: {pattern: '^#(43|44|45|46|47|48|49|50|51)$'}
             transition_issue: {pattern: '^#(42|43|44|45|46|47|48|49|50|51|54)$'}
             conventions: {const: cxxlens.global-contract-conventions.v1}
+            candidate_manifest:
+              type: string
+              pattern: '^schemas/cxxlens_package_contract_candidates[.]yaml#issue-(43|44|45|46|47|48|49|50|51)$'
+            candidate_fingerprint: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
         apis:
           type: array
           items:

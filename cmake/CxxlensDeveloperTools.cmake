@@ -75,6 +75,27 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-package-contract-candidates-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_package_contract_candidates.py"
+    --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_package_contract_candidates.py"
+  COMMAND
+    "${CMAKE_CXX_COMPILER}" -std=c++23 -fsyntax-only
+    "-I${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "-I${CMAKE_CURRENT_SOURCE_DIR}/contracts/candidates/43"
+    "${CMAKE_CURRENT_SOURCE_DIR}/contracts/candidates/43/core_findings_usage.cpp"
+  COMMAND
+    "${CMAKE_CXX_COMPILER}" -std=c++23 -fsyntax-only
+    "-I${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "-I${CMAKE_CURRENT_SOURCE_DIR}/contracts/candidates/43"
+    "${CMAKE_CURRENT_SOURCE_DIR}/contracts/candidates/43/testing_plan_assertions_usage.cpp"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-api-contract-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -96,6 +117,8 @@ add_dependencies(cxxlens-api-contract-check cxxlens-ownership-check)
 add_dependencies(cxxlens-api-contract-check cxxlens-ready-check)
 add_dependencies(cxxlens-api-contract-check
                  cxxlens-global-contract-conventions-check)
+add_dependencies(cxxlens-api-contract-check
+                 cxxlens-package-contract-candidates-check)
 
 add_custom_target(
   cxxlens-design-package-check
@@ -309,6 +332,7 @@ add_dependencies(
   cxxlens-fact-reducer-contract-check
   cxxlens-finding-contract-check
   cxxlens-global-contract-conventions-check
+  cxxlens-package-contract-candidates-check
   cxxlens-identity-path-check
   cxxlens-m0-completion-check
   cxxlens-m1-completion-check

@@ -13,6 +13,10 @@
   - 22パッケージ・124公開 API エントリの機械可読カタログ。実装 issue、header skeleton、schema、conformance test の生成元として利用する。
 - `VALIDATION_REPORT.md`
   - 構文・構造・重複・必須概念に対する検証結果。
+- `package_contract_43.md`
+  - Issue #43 が所有する core・configuration・testing の規範的 Contract Candidate と決定表。
+- `../../schemas/cxxlens_package_contract_candidates.yaml`
+  - #43〜#51 の package candidate、exact declaration、意味契約、owner、acceptance の機械可読 authority。
 - `SHA256SUMS`
   - 本パッケージ内ファイルの SHA-256。
 
@@ -37,3 +41,4 @@ API 契約、accepted ADR の順に参照し、履歴資料から契約を復活
 3. 担当パッケージの詳細設計章。
 4. YAML カタログ内の対応 API ID、LLVM components、error/guarantee/phase。
 5. 「36. テスト戦略」と対象 vertical slice の acceptance criteria。
+6. Phase B では担当 Issue の `package_contract_*.md` と package candidate manifest record。

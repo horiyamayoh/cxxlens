@@ -4,18 +4,18 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 
 | API ID | Package | Header | Symbol | Atomic unit | Implementation state | Contract state |
 |---|---|---|---|---|---|---|
-| API-CFG-001 | configuration | <cxxlens/configuration.hpp> | configuration::defaults | AU-CFG-001 | conformant | draft |
-| API-CFG-002 | configuration | <cxxlens/configuration.hpp> | configuration::{load,load_nearest} | AU-CFG-002 | conformant | draft |
-| API-CFG-003 | configuration | <cxxlens/configuration.hpp> | configuration::{with_profile,overlay} | AU-CFG-003 | conformant | draft |
-| API-CFG-004 | configuration | <cxxlens/configuration.hpp> | configuration::{validate,resolved_json,explain} | AU-CFG-004 | conformant | draft |
+| API-CFG-001 | configuration | <cxxlens/configuration.hpp> | configuration::defaults | AU-CFG-001 | conformant | candidate |
+| API-CFG-002 | configuration | <cxxlens/configuration.hpp> | configuration::{load,load_nearest} | AU-CFG-002 | conformant | candidate |
+| API-CFG-003 | configuration | <cxxlens/configuration.hpp> | configuration::{with_profile,overlay} | AU-CFG-003 | conformant | candidate |
+| API-CFG-004 | configuration | <cxxlens/configuration.hpp> | configuration::{validate,resolved_json,explain} | AU-CFG-004 | conformant | candidate |
 | API-COPY-001 | copy | <cxxlens/generate.hpp> | copy::public_surface | AU-COPY-001 | unimplemented | unresolved |
 | API-COPY-002 | copy | <cxxlens/generate.hpp> | copy::required_types | AU-COPY-002 | unimplemented | unresolved |
-| API-CORE-001 | core | <cxxlens/core.hpp> | versions() | AU-CORE-001 | conformant | unresolved |
-| API-CORE-002 | core | <cxxlens/core.hpp> | capabilities() | AU-CORE-002 | conformant | unresolved |
-| API-CORE-003 | core | <cxxlens/core.hpp> | evidence::{add,items,to_json,to_markdown} | AU-CORE-003 | conformant | unresolved |
-| API-CORE-004 | core | <cxxlens/core.hpp> | coverage_report::{complete,units,to_json,to_markdown} | AU-CORE-004 | conformant | unresolved |
-| API-CORE-005 | core | <cxxlens/core.hpp> | finding::{id,why,unresolved_items,explain,to_json} | AU-CORE-005 | unimplemented | unresolved |
-| API-CORE-006 | core | <cxxlens/core.hpp> | finding_set::{minimum_confidence,minimum_severity,to_json,to_markdown,to_sarif} | AU-CORE-006 | unimplemented | unresolved |
+| API-CORE-001 | core | <cxxlens/core.hpp> | versions() | AU-CORE-001 | conformant | candidate |
+| API-CORE-002 | core | <cxxlens/core.hpp> | capabilities() | AU-CORE-002 | conformant | candidate |
+| API-CORE-003 | core | <cxxlens/core.hpp> | evidence::{add,items,to_json,to_markdown} | AU-CORE-003 | conformant | candidate |
+| API-CORE-004 | core | <cxxlens/core.hpp> | coverage_report::{complete,units,to_json,to_markdown} | AU-CORE-004 | conformant | candidate |
+| API-CORE-005 | core | <cxxlens/core.hpp> | finding::{id,why,unresolved_items,explain,to_json} | AU-CORE-005 | unimplemented | candidate |
+| API-CORE-006 | core | <cxxlens/core.hpp> | finding_set::{minimum_confidence,minimum_severity,to_json,to_markdown,to_sarif} | AU-CORE-006 | unimplemented | candidate |
 | API-EXP-001 | explain | <cxxlens/explain.hpp> | explain::{selector,finding,coverage,edit_plan,generation_plan} | AU-EXP-001 | unimplemented | unresolved |
 | API-EXP-002 | explain | <cxxlens/explain.hpp> | explain::why_not_matched | AU-EXP-002 | conformant | unresolved |
 | API-EXP-003 | explain | <cxxlens/explain.hpp> | explain::{for_selector,for_rule,for_codemod,for_generation} | AU-EXP-003 | unimplemented | unresolved |
@@ -104,13 +104,13 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-SRCH-008 | search | <cxxlens/search.hpp> | search::includes | AU-SRCH-008 | unimplemented | unresolved |
 | API-SRCH-009 | search | <cxxlens/search.hpp> | search::macros | AU-SRCH-009 | unimplemented | unresolved |
 | API-SRCH-010 | search | <cxxlens/search.hpp> | search::conversions | AU-SRCH-010 | unimplemented | unresolved |
-| API-TEST-001 | testing | <cxxlens/testing.hpp> | workspace_fixture::{cpp,c,main_file,add_file,add_header,add_variant,standard,target,argument,generated,system_header,materialize}; fault_plan::{make,probe} | AU-TEST-001 | conformant | unresolved |
-| API-TEST-002 | testing | <cxxlens/testing.hpp> | result_assertion builder/check | AU-TEST-002 | conformant | unresolved |
-| API-TEST-003 | testing | <cxxlens/testing.hpp> | edit_plan_assertion builder/check | AU-TEST-003 | unimplemented | unresolved |
-| API-TEST-004 | testing | <cxxlens/testing.hpp> | generation_plan_assertion builder/check | AU-TEST-004 | unimplemented | unresolved |
-| API-TEST-005 | testing | <cxxlens/testing.hpp> | testing::{check_property,check_determinism} | AU-TEST-005 | conformant | unresolved |
-| API-TEST-006 | testing | <cxxlens/testing.hpp> | testing::assert_schema_conforms | AU-TEST-006 | conformant | unresolved |
-| API-TEST-007 | testing | <cxxlens/testing.hpp> | workspace_fixture::open | AU-TEST-007 | conformant | unresolved |
+| API-TEST-001 | testing | <cxxlens/testing.hpp> | workspace_fixture::{cpp,c,main_file,add_file,add_header,add_variant,standard,target,argument,generated,system_header,materialize}; fault_plan::{make,probe} | AU-TEST-001 | conformant | candidate |
+| API-TEST-002 | testing | <cxxlens/testing.hpp> | result_assertion builder/check | AU-TEST-002 | conformant | candidate |
+| API-TEST-003 | testing | <cxxlens/testing.hpp> | edit_plan_assertion builder/check | AU-TEST-003 | unimplemented | candidate |
+| API-TEST-004 | testing | <cxxlens/testing.hpp> | generation_plan_assertion builder/check | AU-TEST-004 | unimplemented | candidate |
+| API-TEST-005 | testing | <cxxlens/testing.hpp> | testing::{check_property,check_determinism} | AU-TEST-005 | conformant | candidate |
+| API-TEST-006 | testing | <cxxlens/testing.hpp> | testing::assert_schema_conforms | AU-TEST-006 | conformant | candidate |
+| API-TEST-007 | testing | <cxxlens/testing.hpp> | workspace_fixture::open | AU-TEST-007 | conformant | candidate |
 | API-TF-001 | transform | <cxxlens/transform.hpp> | transform::replace_function_call | AU-TF-001 | unimplemented | unresolved |
 | API-TF-002 | transform | <cxxlens/transform.hpp> | transform::replace_method_call | AU-TF-002 | unimplemented | unresolved |
 | API-TF-003 | transform | <cxxlens/transform.hpp> | transform::rewrite_calls | AU-TF-003 | unimplemented | unresolved |

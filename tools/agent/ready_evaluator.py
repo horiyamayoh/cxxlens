@@ -297,11 +297,12 @@ def blocker(
     unit_id: str,
     chain: list[str] | None = None,
 ) -> dict[str, Any]:
+    resolved_chain = list(dict.fromkeys(chain or [unit_id, f"{code}:{subject}"]))
     return {
         "code": code,
         "subject": subject,
         "steward": steward,
-        "chain": chain or [unit_id, f"{code}:{subject}"],
+        "chain": resolved_chain,
     }
 
 

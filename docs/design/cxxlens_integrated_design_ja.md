@@ -3612,6 +3612,17 @@ public schema の owner を exactly one で保持する。task packet、ownershi
 conventions と ownership registry の digest および package contract state を伝播し、signature、semantics、
 owner、dependency、schema、decision table、evidence の drift で既存 authorization を失効させる。
 
+### 39.14 core・configuration・testing package candidate
+
+Issue #43 の規範的 package contract は `package_contract_43.md` と
+`cxxlens_package_contract_candidates.yaml#issue-43` である。`core` は shared result/error/unresolved、
+version/capability、evidence/coverage、finding/finding_set の identity・owner・projection を持つ。
+`configuration` は API > CLI > profile > config > built-in の immutable precedence と provenance、
+root/symlink/environment/redaction/version failure を持つ。`testing` は production-path fixture、result/plan
+assertion、property/determinism、exact schema lookup を持ち、transform/generate plan は forward-declared
+consumer として参照するだけで再所有しない。candidate fragment の public/install 統合は #53、freeze は
+#54 の authority とする。
+
 ---
 
 ## 40. Public API inventory

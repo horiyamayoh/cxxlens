@@ -13,7 +13,7 @@ stability:
   all_result_operations_require_coverage: true
 packages:
 - id: core
-  contract: {state: unresolved, owner_issue: '#43', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract: {state: candidate, owner_issue: '#43', transition_issue: '#43', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-43', candidate_fingerprint: 'sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584'}
   header: <cxxlens/core.hpp>
   purpose: Version, capability, IDs, errors, evidence, coverage and findings.
   public_types:
@@ -170,38 +170,47 @@ packages:
     phase: M0
     guarantees:
     - Stable identity does not depend on message text or absolute checkout root.
+    requires:
+      apis: [API-CORE-003, API-CORE-004]
+    errors:
+    - core.internal-invariant-violation
+    - core.schema-validation-failed
     contract_maturity: contract-defined
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/43/core_findings.hpp
+      signature: 'cxxlens::result<cxxlens::finding> cxxlens::finding::make(cxxlens::finding_input,const cxxlens::finding_validation_context&); cxxlens::finding_id cxxlens::finding::id() const; std::string_view cxxlens::finding::rule_or_recipe() const noexcept; cxxlens::severity cxxlens::finding::level() const noexcept; cxxlens::confidence cxxlens::finding::certainty() const noexcept; cxxlens::result_guarantee cxxlens::finding::guarantee() const noexcept; const cxxlens::source_span& cxxlens::finding::primary_location() const noexcept; std::string_view cxxlens::finding::message() const noexcept; const cxxlens::evidence& cxxlens::finding::why() const noexcept; std::span<const cxxlens::unresolved> cxxlens::finding::unresolved_items() const noexcept; const cxxlens::coverage_report& cxxlens::finding::coverage() const noexcept; cxxlens::finding_explanation_input cxxlens::finding::explanation_input() const noexcept; cxxlens::result<void> cxxlens::finding::validate(const cxxlens::finding_validation_context&) const; std::string cxxlens::finding::semantic_representation() const; std::string cxxlens::finding::to_json() const'
+      signature_fingerprint: sha256:6003d07f3ed009d442c160c73b728c82c1b2bddc21a731698c9c2aeaba061655
     atomic_unit:
       id: AU-CORE-005
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-CORE-006
     symbol: finding_set::{minimum_confidence,minimum_severity,to_json,to_markdown,to_sarif}
     kind: method_family
     phase: M0
+    requires:
+      apis: [API-CORE-005]
+    errors:
+    - core.internal-invariant-violation
     contract_maturity: contract-defined
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/43/core_findings.hpp
+      signature: 'cxxlens::result<void> cxxlens::finding_set::add(cxxlens::finding); std::size_t cxxlens::finding_set::size() const noexcept; bool cxxlens::finding_set::empty() const noexcept; std::span<const cxxlens::finding> cxxlens::finding_set::all() const noexcept; cxxlens::finding_set cxxlens::finding_set::minimum_confidence(cxxlens::confidence) const; cxxlens::finding_set cxxlens::finding_set::minimum_severity(cxxlens::severity) const; std::string cxxlens::finding_set::to_json() const; std::string cxxlens::finding_set::to_markdown() const; std::string cxxlens::finding_set::to_sarif() const'
+      signature_fingerprint: sha256:b111c53789436fc32aa3d7a496ef19725abd7beae0490df4ad0e33cde9509ca4
     atomic_unit:
       id: AU-CORE-006
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
 - id: workspace
   contract: {state: draft, owner_issue: '#44', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/workspace.hpp>
@@ -3296,7 +3305,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: testing
-  contract: {state: unresolved, owner_issue: '#43', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract: {state: candidate, owner_issue: '#43', transition_issue: '#43', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-43', candidate_fingerprint: 'sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584'}
   header: <cxxlens/testing.hpp>
   purpose: Production-path fixtures, assertions, schema and determinism checks.
   public_types:
@@ -3352,6 +3361,8 @@ packages:
     symbol: result_assertion builder/check
     kind: method_family
     phase: M0
+    requires:
+      apis: [API-CORE-003, API-CORE-004]
     requirements:
     - FR-008
     errors:
@@ -3377,42 +3388,56 @@ packages:
     symbol: edit_plan_assertion builder/check
     kind: method_family
     phase: M4
+    requires:
+      apis: [API-TF-001, API-TF-002, API-TF-003, API-TF-004, API-TF-005]
+    errors:
+    - testing.assertion-failed
+    side_effects: dry-run overlay validation only; never applies source edits
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/43/testing_plan_assertions.hpp
+      signature: 'cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::valid() const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::changes_file(cxxlens::path) const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::diff_matches(cxxlens::path) const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::reparses() const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::idempotent(cxxlens::transform::codemod) const; cxxlens::result<void> cxxlens::testing::edit_plan_assertion::check(const cxxlens::workspace&,const cxxlens::transform::edit_plan&) const'
+      signature_fingerprint: sha256:4fceea615289412b759940a951c527fb01d093154a8347b8ba4741bee7f45b4b
     atomic_unit:
       id: AU-TEST-003
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
+      - dependency_contract_not_candidate
   - id: API-TEST-004
     symbol: generation_plan_assertion builder/check
     kind: method_family
     phase: M5
+    requires:
+      apis: [API-GEN-001, API-GEN-002]
+    errors:
+    - testing.assertion-failed
+    side_effects: dry-run overlay validation only; never emits artifacts
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/43/testing_plan_assertions.hpp
+      signature: 'cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::valid() const; cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::census_complete() const; cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::no_unknown_decisions() const; cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::artifacts_reparse() const; cxxlens::result<void> cxxlens::testing::generation_plan_assertion::check(const cxxlens::workspace&,const cxxlens::generate::generation_plan&) const'
+      signature_fingerprint: sha256:cf24f7cb4f920ad1d50201849e6c46c4873abb75d881c52594fa42f3204975cf
     atomic_unit:
       id: AU-TEST-004
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
+      - dependency_contract_not_candidate
   - id: API-TEST-005
     symbol: testing::{check_property,check_determinism}
     kind: function_template
     phase: M0
+    requires:
+      apis: [API-TEST-001]
     guarantees:
     - Compares semantic outputs across parallelism, order and root relocation.
     requirements:
@@ -3437,6 +3462,8 @@ packages:
     symbol: testing::assert_schema_conforms
     kind: free_function
     phase: M0
+    requires:
+      apis: [API-CORE-001]
     requirements:
     - QR-009
     errors:
@@ -3628,7 +3655,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: configuration
-  contract: {state: draft, owner_issue: '#43', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract: {state: candidate, owner_issue: '#43', transition_issue: '#43', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-43', candidate_fingerprint: 'sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584'}
   header: <cxxlens/configuration.hpp>
   purpose: Typed configuration loading, overlay and explanation.
   public_types:
@@ -3691,6 +3718,8 @@ packages:
     symbol: configuration::{with_profile,overlay}
     kind: method_family
     phase: M0
+    requires:
+      apis: [API-CFG-001]
     errors:
     - config.profile-not-found
     - config.overlay-conflict
@@ -3717,6 +3746,8 @@ packages:
     symbol: configuration::{validate,resolved_json,explain}
     kind: method_family
     phase: M0
+    requires:
+      apis: [API-CFG-001, API-CFG-003]
     errors:
     - config.invalid-value
     requirements:
@@ -3750,8 +3781,9 @@ summary:
     implemented: 0
     conformant: 47
   contract_state_counts:
-    draft: 3
-    unresolved: 19
+    candidate: 3
+    draft: 2
+    unresolved: 17
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.
@@ -3764,6 +3796,7 @@ authority:
   human_inventory: docs/design/api_catalog_inventory.md
   change_policy: docs/design/api_catalog_change_policy.md
   global_contract_conventions: schemas/cxxlens_global_contract_conventions.yaml
+  package_contract_candidates: schemas/cxxlens_package_contract_candidates.yaml
   contract_ownership_registry: schemas/cxxlens_contract_ownership.yaml
   executable_test_coverage: schemas/cxxlens_api_test_coverage.yaml
   executable_test_coverage_report: schemas/cxxlens_api_test_coverage_report.json

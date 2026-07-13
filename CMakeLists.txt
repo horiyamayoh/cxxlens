@@ -179,6 +179,8 @@ install(
         schemas/cxxlens_api_test_coverage_report.schema.yaml
         schemas/cxxlens_global_contract_conventions.yaml
         schemas/cxxlens_global_contract_conventions.schema.yaml
+        schemas/cxxlens_package_contract_candidates.yaml
+        schemas/cxxlens_package_contract_candidates.schema.yaml
         schemas/cxxlens_contract_ownership.yaml
         schemas/cxxlens_contract_ownership.schema.yaml
         schemas/cxxlens_coverage.schema.yaml

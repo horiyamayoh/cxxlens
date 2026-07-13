@@ -94,11 +94,11 @@ class OwnershipTest(unittest.TestCase):
         self.assertEqual(generated["summary"]["reserved_path_count"], 11)
         self.assertEqual(
             generated["summary"]["skeleton_state_counts"],
-            {"blocked": 77, "frozen": 47},
+            {"blocked": 73, "frozen": 51},
         )
         self.assertEqual(
             generated["summary"]["contract_state_counts"],
-            {"draft": 22, "unresolved": 102},
+            {"candidate": 17, "draft": 18, "unresolved": 89},
         )
         self.assertEqual(
             generated["global_contract_fingerprints"],

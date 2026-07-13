@@ -41,7 +41,10 @@ class ApiContractTest(unittest.TestCase):
             summary["implementation_state_counts"],
             {"conformant": 47, "implemented": 0, "unimplemented": 77},
         )
-        self.assertEqual(summary["contract_state_counts"], {"draft": 3, "unresolved": 19})
+        self.assertEqual(
+            summary["contract_state_counts"],
+            {"candidate": 3, "draft": 2, "unresolved": 17},
+        )
 
     def test_duplicate_id_fixture(self) -> None:
         document = self.mutated()
@@ -79,7 +82,8 @@ class ApiContractTest(unittest.TestCase):
         document = self.mutated()
         api = next(
             api
-            for api in document["packages"][0]["apis"]
+            for package in document["packages"]
+            for api in package["apis"]
             if api["declaration"]["status"] == "unresolved"
         )
         api["readiness"] = {"state": "ready", "blockers": []}

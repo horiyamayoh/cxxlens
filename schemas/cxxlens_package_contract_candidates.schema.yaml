@@ -1,0 +1,187 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.package-contract-candidates.v1.schema.yaml
+title: cxxlens package public-contract candidates v1
+type: object
+additionalProperties: false
+required: [schema, document_version, conventions, catalog, groups]
+properties:
+  schema: {const: cxxlens.package-contract-candidates.v1}
+  document_version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+  conventions: {const: schemas/cxxlens_global_contract_conventions.yaml}
+  catalog: {const: schemas/cxxlens_public_api_contract.yaml}
+  groups:
+    type: array
+    minItems: 1
+    items: {$ref: '#/$defs/group'}
+$defs:
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  nonempty_strings:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {type: string, minLength: 1}
+  group:
+    type: object
+    additionalProperties: false
+    required:
+      - issue
+      - state
+      - packages
+      - normative_document
+      - candidate_headers
+      - usage_examples
+      - policies
+      - registry_owners
+      - consumer_boundaries
+      - api_contracts
+      - production_implementation_changed
+      - candidate_fingerprint
+    properties:
+      issue: {pattern: '^#(43|44|45|46|47|48|49|50|51)$'}
+      state: {const: candidate}
+      packages: {$ref: '#/$defs/nonempty_strings'}
+      normative_document: {type: string, minLength: 1}
+      candidate_headers: {$ref: '#/$defs/nonempty_strings'}
+      usage_examples: {$ref: '#/$defs/nonempty_strings'}
+      policies:
+        type: array
+        minItems: 1
+        items: {$ref: '#/$defs/policy'}
+      registry_owners:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          additionalProperties: false
+          required: [id, kind, owner_atomic_unit, steward, entries, behavior]
+          properties:
+            id: {type: string, minLength: 1}
+            kind: {enum: [error_registry, schema_registry, capability_registry]}
+            owner_atomic_unit: {pattern: '^AU-[A-Z]+-[0-9]{3}$'}
+            steward: {type: string, minLength: 1}
+            entries: {$ref: '#/$defs/nonempty_strings'}
+            behavior: {type: string, minLength: 1}
+      consumer_boundaries:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          additionalProperties: false
+          required: [owner_package, consumer_package, shared_types, access, rule]
+          properties:
+            owner_package: {type: string, minLength: 1}
+            consumer_package: {type: string, minLength: 1}
+            shared_types: {$ref: '#/$defs/nonempty_strings'}
+            access: {enum: [read_only, const_reference, value_copy, forward_declaration]}
+            rule: {type: string, minLength: 1}
+      api_contracts:
+        type: array
+        minItems: 1
+        items: {$ref: '#/$defs/api_contract'}
+      production_implementation_changed: {const: false}
+      candidate_fingerprint: {$ref: '#/$defs/digest'}
+  policy:
+    type: object
+    additionalProperties: false
+    required:
+      - id
+      - ownership_and_lifetime
+      - const_noexcept_thread_safety
+      - callback_and_exception
+      - execution_context_and_budgets
+      - result_semantics
+      - evidence_coverage_guarantee
+      - ordering_duplicates_variants
+      - schema_and_versioning
+      - change_policy
+    properties:
+      id: {type: string, minLength: 1}
+      ownership_and_lifetime: {$ref: '#/$defs/nonempty_strings'}
+      const_noexcept_thread_safety: {$ref: '#/$defs/nonempty_strings'}
+      callback_and_exception: {$ref: '#/$defs/nonempty_strings'}
+      execution_context_and_budgets: {$ref: '#/$defs/nonempty_strings'}
+      result_semantics:
+        type: object
+        additionalProperties: false
+        required: [empty_success, unresolved, unsupported, ambiguous, partial, failure]
+        properties:
+          empty_success: {type: string, minLength: 1}
+          unresolved: {type: string, minLength: 1}
+          unsupported: {type: string, minLength: 1}
+          ambiguous: {type: string, minLength: 1}
+          partial: {type: string, minLength: 1}
+          failure: {type: string, minLength: 1}
+      evidence_coverage_guarantee: {$ref: '#/$defs/nonempty_strings'}
+      ordering_duplicates_variants: {$ref: '#/$defs/nonempty_strings'}
+      schema_and_versioning: {$ref: '#/$defs/nonempty_strings'}
+      change_policy: {$ref: '#/$defs/nonempty_strings'}
+  api_contract:
+    type: object
+    additionalProperties: false
+    required:
+      - api_id
+      - atomic_unit
+      - package
+      - policy
+      - declaration
+      - family_members
+      - semantics
+      - ownership_refs
+      - dependency_apis
+      - traceability
+      - acceptance
+    properties:
+      api_id: {pattern: '^API-[A-Z]+-[0-9]{3}$'}
+      atomic_unit: {pattern: '^AU-[A-Z]+-[0-9]{3}$'}
+      package: {type: string, minLength: 1}
+      policy: {type: string, minLength: 1}
+      declaration:
+        type: object
+        additionalProperties: false
+        required: [source, signature, signature_fingerprint]
+        properties:
+          source: {type: string, minLength: 1}
+          signature: {type: string, minLength: 1}
+          signature_fingerprint: {$ref: '#/$defs/digest'}
+      family_members: {$ref: '#/$defs/nonempty_strings'}
+      semantics: {$ref: '#/$defs/nonempty_strings'}
+      ownership_refs:
+        type: object
+        additionalProperties: false
+        required: [public_types, shared_components, providers, schemas]
+        properties:
+          public_types: {$ref: '#/$defs/nonempty_strings'}
+          shared_components: {$ref: '#/$defs/nonempty_strings'}
+          providers:
+            type: array
+            uniqueItems: true
+            items: {type: string, minLength: 1}
+          schemas: {$ref: '#/$defs/nonempty_strings'}
+      dependency_apis:
+        type: array
+        uniqueItems: true
+        items: {pattern: '^API-[A-Z]+-[0-9]{3}$'}
+      traceability:
+        type: object
+        additionalProperties: false
+        required: [requirements_or_use_cases, design_sections, doxygen_obligation]
+        properties:
+          requirements_or_use_cases: {$ref: '#/$defs/nonempty_strings'}
+          design_sections: {$ref: '#/$defs/nonempty_strings'}
+          doxygen_obligation: {type: string, minLength: 1}
+      acceptance:
+        type: object
+        additionalProperties: false
+        required: [positive, negative, ambiguous]
+        properties:
+          positive: {$ref: '#/$defs/case'}
+          negative: {$ref: '#/$defs/case'}
+          ambiguous: {$ref: '#/$defs/case'}
+  case:
+    type: object
+    additionalProperties: false
+    required: [id, expression, expected]
+    properties:
+      id: {type: string, minLength: 1}
+      expression: {type: string, minLength: 1}
+      expected: {type: string, minLength: 1}

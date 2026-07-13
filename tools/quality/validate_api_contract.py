@@ -20,6 +20,9 @@ ATOMIC_UNIT_ID = re.compile(r"AU-[A-Z]+-[0-9]{3}$")
 PHASE = re.compile(r"M[0-9]+$")
 HEADER = re.compile(r"<cxxlens/[a-z0-9_/]+\.hpp>$")
 FINGERPRINT = re.compile(r"sha256:[0-9a-f]{64}$")
+CANDIDATE_MANIFEST = re.compile(
+    r"schemas/cxxlens_package_contract_candidates[.]yaml#issue-(43|44|45|46|47|48|49|50|51)$"
+)
 MATURITIES = {"contract-defined", "planned", "experimental", "stable", "deprecated"}
 CONTRACT_STATES = {"draft", "unresolved", "candidate", "frozen"}
 PACKAGE_CONTRACT_OWNERS = {
@@ -272,6 +275,21 @@ def validate_document(document: Any, inventory_text: str | None = None) -> dict:
             fail(f"package {package_id}: candidate transition requires its package owner issue")
         if contract["state"] == "frozen" and transition_issue != "#54":
             fail(f"package {package_id}: only #54 may freeze a public contract")
+        candidate_manifest = contract.get("candidate_manifest")
+        candidate_fingerprint = contract.get("candidate_fingerprint")
+        if contract["state"] in {"candidate", "frozen"}:
+            if not isinstance(candidate_manifest, str) or not CANDIDATE_MANIFEST.fullmatch(
+                candidate_manifest
+            ):
+                fail(f"package {package_id}: candidate contract requires its manifest")
+            if candidate_manifest.rsplit("-", 1)[-1] != contract["owner_issue"].removeprefix("#"):
+                fail(f"package {package_id}: candidate manifest owner differs")
+            if not isinstance(candidate_fingerprint, str) or not FINGERPRINT.fullmatch(
+                candidate_fingerprint
+            ):
+                fail(f"package {package_id}: candidate contract requires its fingerprint")
+        elif candidate_manifest is not None or candidate_fingerprint is not None:
+            fail(f"package {package_id}: non-candidate contract cannot claim a candidate manifest")
         if not isinstance(package["header"], str) or not HEADER.fullmatch(package["header"]):
             fail(f"package {package_id}: invalid public header")
         _unique_strings(package["public_types"], f"package {package_id}.public_types")

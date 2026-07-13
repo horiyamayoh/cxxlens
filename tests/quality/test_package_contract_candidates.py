@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""Positive and fail-closed tests for package Contract Candidate records."""
+
+from __future__ import annotations
+
+import copy
+import pathlib
+import sys
+import unittest
+
+import yaml
+
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tools" / "quality"))
+
+from check_package_contract_candidates import (  # noqa: E402
+    CandidateError,
+    digest,
+    validate_candidates,
+)
+
+
+def load(name: str) -> dict:
+    return yaml.safe_load((ROOT / "schemas" / name).read_text(encoding="utf-8"))
+
+
+class PackageContractCandidateTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.manifest = load("cxxlens_package_contract_candidates.yaml")
+        cls.schema = load("cxxlens_package_contract_candidates.schema.yaml")
+        cls.catalog = load("cxxlens_public_api_contract.yaml")
+        cls.conventions = load("cxxlens_global_contract_conventions.yaml")
+        cls.ownership = load("cxxlens_contract_ownership.yaml")
+
+    def assert_invalid(self, manifest: dict, pattern: str) -> None:
+        catalog = copy.deepcopy(self.catalog)
+        fingerprints = {
+            group["issue"]: group["candidate_fingerprint"]
+            for group in manifest["groups"]
+        }
+        for package in catalog["packages"]:
+            issue = package["contract"]["owner_issue"]
+            if package["contract"]["state"] == "candidate" and issue in fingerprints:
+                package["contract"]["candidate_fingerprint"] = fingerprints[issue]
+        with self.assertRaisesRegex(CandidateError, pattern):
+            validate_candidates(
+                manifest,
+                self.schema,
+                catalog,
+                self.conventions,
+                self.ownership,
+                ROOT,
+            )
+
+    @staticmethod
+    def resign(group: dict) -> None:
+        unsigned = copy.deepcopy(group)
+        unsigned.pop("candidate_fingerprint", None)
+        group["candidate_fingerprint"] = digest(unsigned)
+
+    def test_positive_issue_43_candidate(self) -> None:
+        validate_candidates(
+            self.manifest,
+            self.schema,
+            self.catalog,
+            self.conventions,
+            self.ownership,
+            ROOT,
+        )
+        group = self.manifest["groups"][0]
+        self.assertEqual(group["issue"], "#43")
+        self.assertEqual(len(group["packages"]), 3)
+        self.assertEqual(len(group["api_contracts"]), 17)
+        self.assertFalse(group["production_implementation_changed"])
+
+    def test_missing_assigned_api_is_rejected(self) -> None:
+        document = copy.deepcopy(self.manifest)
+        group = document["groups"][0]
+        group["api_contracts"].pop()
+        self.resign(group)
+        self.assert_invalid(document, "API coverage differs")
+
+    def test_duplicate_api_is_rejected(self) -> None:
+        document = copy.deepcopy(self.manifest)
+        group = document["groups"][0]
+        group["api_contracts"].append(copy.deepcopy(group["api_contracts"][0]))
+        self.resign(group)
+        self.assert_invalid(document, "duplicate API contract")
+
+    def test_signature_drift_is_rejected(self) -> None:
+        document = copy.deepcopy(self.manifest)
+        group = document["groups"][0]
+        group["api_contracts"][0]["declaration"]["signature"] += " noexcept"
+        self.resign(group)
+        self.assert_invalid(document, "exact declaration differs")
+
+    def test_missing_result_outcome_is_rejected(self) -> None:
+        document = copy.deepcopy(self.manifest)
+        group = document["groups"][0]
+        del group["policies"][0]["result_semantics"]["ambiguous"]
+        self.resign(group)
+        self.assert_invalid(document, "schema validation failed")
+
+    def test_dangling_public_type_owner_is_rejected(self) -> None:
+        document = copy.deepcopy(self.manifest)
+        group = document["groups"][0]
+        group["api_contracts"][0]["ownership_refs"]["public_types"] = [
+            "public-type:none:none"
+        ]
+        self.resign(group)
+        self.assert_invalid(document, "dangling public type owner")
+
+    def test_duplicated_registry_owner_is_rejected(self) -> None:
+        document = copy.deepcopy(self.manifest)
+        group = document["groups"][0]
+        duplicate = copy.deepcopy(group["registry_owners"][0])
+        duplicate["id"] += ".duplicate"
+        group["registry_owners"].append(duplicate)
+        self.resign(group)
+        self.assert_invalid(document, "multiple owners")
+
+    def test_public_header_preemption_is_rejected(self) -> None:
+        document = copy.deepcopy(self.manifest)
+        group = document["groups"][0]
+        group["candidate_headers"][0] = "include/cxxlens/core.hpp"
+        self.resign(group)
+        self.assert_invalid(document, "cannot pre-empt #53")
+
+    def test_candidate_fingerprint_drift_is_rejected(self) -> None:
+        document = copy.deepcopy(self.manifest)
+        document["groups"][0]["candidate_fingerprint"] = "sha256:" + "0" * 64
+        self.assert_invalid(document, "candidate fingerprint mismatch")
+
+
+if __name__ == "__main__":
+    unittest.main()

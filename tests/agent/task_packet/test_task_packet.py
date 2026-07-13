@@ -113,7 +113,7 @@ class TaskPacketTest(unittest.TestCase):
         )
         self.assertEqual(
             generated["summary"]["declaration_state_counts"],
-            {"exact": 47, "unresolved": 77},
+            {"exact": 51, "unresolved": 73},
         )
         self.assertEqual(
             set(generated["global_contract_fingerprints"]),
@@ -179,7 +179,7 @@ class TaskPacketTest(unittest.TestCase):
 
     def test_contract_state_drift_is_rejected(self) -> None:
         corpus = self.generated()
-        corpus["packets"][0]["contract"]["state"] = "candidate"
+        corpus["packets"][0]["contract"]["state"] = "draft"
         self.resign(corpus, (corpus["packets"][0]["api_id"],))
         self.assert_code(corpus, "task_packet.contract-state-drift")
 

@@ -34,6 +34,7 @@ from ownership_generator import (  # noqa: E402
 )
 from ready_evaluator import (  # noqa: E402
     ReadyError,
+    blocker,
     generate_report,
     parse_prompt,
     resolve_api,
@@ -110,12 +111,14 @@ class RunnerTest(unittest.TestCase):
             generated["input_fingerprints"]["contract_ownership_registry"],
             self.corpus["global_contract_fingerprints"]["ownership_registry"],
         )
+        candidate_nodes = [
+            node
+            for node in generated["nodes"]
+            if node["prerequisites"]["contract_candidate"]
+        ]
+        self.assertEqual(len(candidate_nodes), 17)
         self.assertTrue(
-            all(
-                not node["prerequisites"]["contract_candidate"]
-                and not node["prerequisites"]["contract_frozen"]
-                for node in generated["nodes"]
-            )
+            all(not node["prerequisites"]["contract_frozen"] for node in generated["nodes"])
         )
         wave_units = [unit for wave in generated["topological_waves"] for unit in wave]
         node_units = [node["atomic_unit_id"] for node in generated["nodes"]]
@@ -159,6 +162,19 @@ class RunnerTest(unittest.TestCase):
             for blocker in node["blockers"]:
                 self.assertEqual(blocker["chain"][0], node["atomic_unit_id"])
                 self.assertTrue(blocker["steward"])
+
+    def test_recursive_dependency_blocker_chain_is_unique(self) -> None:
+        value = blocker(
+            "dependency-not-complete",
+            "AU-CORE-005",
+            "integration.package.core",
+            "AU-CORE-006",
+            ["AU-CORE-006", "AU-CORE-005", "AU-CORE-005", "catalog-blocker"],
+        )
+        self.assertEqual(
+            value["chain"],
+            ["AU-CORE-006", "AU-CORE-005", "catalog-blocker"],
+        )
 
     def test_shared_components_providers_and_topology_fail_closed(self) -> None:
         engine_edges = [

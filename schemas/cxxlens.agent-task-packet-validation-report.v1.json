@@ -2,9 +2,11 @@
   "api_count": 124,
   "atomic_unit_count": 124,
   "blocker_counts": {
-    "exact_declaration_unresolved": 77
+    "candidate_declaration_not_integrated": 4,
+    "dependency_contract_not_candidate": 2,
+    "exact_declaration_unresolved": 73
   },
-  "catalog_fingerprint": "sha256:9889fcaa2d5184df90ee6bce76c982be4f147d837580d695eb4f1a0189229354",
+  "catalog_fingerprint": "sha256:79350ec6a6ac759d9e61267fe9c8461b75b6ec83c2b7bda697ca80496ee461ea",
   "checks": [
     "atomic-unit-exactly-once",
     "catalog-and-source-fingerprint",
@@ -16,7 +18,7 @@
     "shared-implementation-dependency-closure",
     "typed-dependency-resolution"
   ],
-  "corpus_semantic_digest": "sha256:a20f4049690102142ade8c1ea5ef20aa94b5d1bf193f6b09b20f2b32b3951013",
+  "corpus_semantic_digest": "sha256:8b63cc737209b88d07f05930255472802fe611c27defab75fde2318b062ee274",
   "generation_state_counts": {
     "blocked": 77,
     "complete": 47,
@@ -24,7 +26,7 @@
   },
   "global_contract_fingerprints": {
     "conventions": "sha256:cdf3166db0b38fb9230602ff5ba273baf9e7e253d61d6c2fc75d21f0fea1238c",
-    "ownership_registry": "sha256:ddc993a6279db3afa1dbd866f43847ad11d629ba4e8f8bd53ec63e53ce5d5949"
+    "ownership_registry": "sha256:6bb5f3ee1de558ff2645d8a4983d222c7faf3a90b207a66082e9111206f76157"
   },
   "schema": "cxxlens.agent-task-packet-validation-report.v1",
   "status": "passed"
