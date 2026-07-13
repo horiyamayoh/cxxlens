@@ -3050,6 +3050,16 @@ Source、compile DB/response files、config/model/rule、diff/baseline、externa
 - QA processはexecutable/environment allowlist、cwd root、timeout、memory/CPU/output limit、network policy。
 - `shell_allowed=false`既定。
 
+Production process port の supported launch baseline は Linux + glibc とする。parent thread で argv と
+継承 environment snapshot + validated override を構築し、`posix_spawnp()`、
+`posix_spawn_file_actions_addchdir_np()`、`POSIX_SPAWN_SETPGROUP` を用いる。`fork()` 後の C++/allocator/libc
+処理を持たない。Linux 以外は current adapter が `ENOTSUP` の structured platform failure を返し、silent
+fallback しない。pipe は `pipe2(O_CLOEXEC)` で作成し、read end の `O_NONBLOCK` 設定を検査する。
+timeout/cancellation/output-limit/read/poll failure は process group を kill して leader を必ず reap する。
+stdout/stderr は単一 output budget を共有し、child exit 後の final drain も同じ limit/read-error policy で
+fail closed にする。cwd file-action、environment name/NUL、exec setup failure は parent に platform/invalid
+evidence として返す。
+
 ### 34.3 Filesystem safety
 
 Write前に lexical normalization、root containment、canonical ancestor/symlink、case/Unicode collision、reserved names、special file、overwrite、source/output alias、same-filesystem stagingを検査。User-controlled qualified nameをpathへ直書きせずsanitized stem + stable hash。

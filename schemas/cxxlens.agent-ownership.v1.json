@@ -1,5 +1,5 @@
 {
-  "repository_paths_digest": "sha256:a254ad23b2728c89e6a99e2d1c35b872ac1b0e8a590717572a75bb05ebd8a97d",
+  "repository_paths_digest": "sha256:d6955b59fe648e865133bf44455edcefa0b82b24c72f291dfb45cf488307b8ab",
   "reserved_paths": [
     {
       "access": "exclusive_write",
@@ -1133,7 +1133,7 @@
     }
   ],
   "schema": "cxxlens.agent-ownership.v1",
-  "semantic_digest": "sha256:325a7ceb36a2e2e99d88283dc054ea7aa838b78418c689a2d455529f96776439",
+  "semantic_digest": "sha256:d6f2741c68f9c12639e6d8af1e2a5e1606b84069fe0c3c9befa2b4e7e52a07f6",
   "skeletons": [
     {
       "api_id": "API-CFG-001",
@@ -1188,8 +1188,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:96a2ad2012ebcd0f8abce2e3b083987018f491356ebc8a34439b45c33afb43a0",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:daceecf8751198256f417cba4c1f8c0fab5c6f271f56c92fcf61fff3304387fa",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1201,8 +1201,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:b7c336cdf6acb4f6780ee3b04aa861507f11d5c2c454db8a659342e353feb823",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:ac50f8cf83c4b7121a4673da601913a144ba903f01a38c58967f8cdb0ff8f1b2",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1258,8 +1258,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:50d71a25bef5ea77a55de50976ba3ab4ecd0f5b1fbf7242f5bc45351fafd54bc",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:218579aa68272b91a84b7380b507975728cc77997eacc82bda526a1d98cc5ec1",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1271,8 +1271,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:fd97557df5e3bce40db5b51f717dd175e63ab76c6a75512f5891c685a32fc257",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:8efb15082561d72670bf51dadda9bd1ed7e54ae735e1aa0f75fc8e58e192d1b7",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1284,8 +1284,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:4c02cf47cd88dd412929e8176cb7dadc45559b07ee27797ad1d8b5edc03dfe3d",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:d93ccabdcd0fa75b57c7d0d989e324439468f8d58c856414d58704c89944195e",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1308,8 +1308,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:f41f73c75cb0c978a97e3f117e7ac9dadf24d36d4d4aaa07bde539b1fc325ae7",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:35bb53bb4d4a760fd49860177bf22b911e968bfab75f5b478ccd6c24a49e7a6f",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1321,8 +1321,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:07a5487a2b8dd535f26abec454cb300defa99d982a5540fcb7cb6b48eca12dda",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:3b22da7437401c16d9429ed90c595b71c768a133695fc62fe22804367f1bffbf",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1444,8 +1444,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:69d60ffa74a62fd989a241aef40e947215b53e2205959c1afbf8f2566258934c",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:15abca1b0728bfb8877eff7daecbad8d88c0b37f682626f7a287615d00842373",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1457,8 +1457,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:6516c0910aba9e77396263c1c3cb6bab9ecc935d75b852b2acaf18e39928c3df",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:1fc391b1ac4873f7f99f3c1195e91a200814bfd429d3a295820c0cf9189964cb",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1470,8 +1470,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:8b4d3a0e618c52fe80e63038732b741aace7738108fc284f68be9e26fea47dd2",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:606f37fdf0e91615ee2aa4c010958c7dbe5d2e1ec7880ffd19b45e281842f08c",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1483,8 +1483,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:148df7acca7dc7ff93ae5110b6c5c9ca1dcd0881f60b8c90f424ebb8fb141719",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:418a1f59213eedca4c8e28cfa0005836428f67750ec7a76a587feba334076a80",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1496,8 +1496,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:a3a4872816071dae20116762f58efde84593a6057622d009631013c2492a5a4b",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:9f2e39e5e32d15fdf018ce73e26acd93b33e557272e34ac79fcf5aa9bea076e0",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1509,8 +1509,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:6a79b95eea8c8051b2b17cfbed8792524592f6493707a3617b36d509baa7a8e6",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:d49033be63c123898fea7f6a2bbb6d4bbd78d98e036e92f56c3a0cf86a499f2a",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1522,8 +1522,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:f247d9bda38f01b374dd6399fe3d0f2ffafea0a058334385aa536e13e0350ea3",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:fcb68448e47114268ef6e6fd0b9ec060f7e051b8ec8b7f6cc505df62113e3149",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1535,8 +1535,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:61a77c9d9e509625ab59fd3585b9cade9995ab58225e31a5788b1e2b8c8a0182",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:f54bdb0aaa42efe7144bdf85a69f4239fe4e8887c702eeb3f0fc92ad4ef97a90",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1548,8 +1548,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:5e7f93e22ab12f746942e3c00a30ffe514fd44a4805ab6d1cbc5a5869ffefbd1",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:b8a72092e0ce7a03dacb80027ed704562f0da01274b6388d27fe4df5768dca00",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1561,8 +1561,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:baa61d031137fccdee5684cdeae33a9a6aa9a84ae9bf4d027b220ab3ce83f0df",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:5bc71d3e106e6d59fc0027dfac9a9d92138862d11453c98d8facc067a7f5f20a",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1574,8 +1574,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:9aaf1dfaed008f7c976897e05411fa585cc1fa563feee125d4ee5605d89514ee",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:5dca6e116a698d6a20bb8c77174cc672ffa1829e06280006e97588a325fa4e10",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1587,8 +1587,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:1fe4a7f79b5bfbd2d610de9388703e179d66e140ca6fec60fc6799f2ff4fd970",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:90bb068a168ad1b4205aa355e12531d972f6f08966eeb1e31da80e6e42b613c0",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1600,8 +1600,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:94c52129d996e770dbcc2a509fc056ef9ab1e47813080a623d97a40289327134",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:48a09cf252518976c2ee2c7cf29845fb93ceb89cd3486041f5a88972ad1bda71",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1613,8 +1613,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:340085c8f2486300534f90bda67e16b2d9882537585c9a63f36d5ae728686c5f",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:b2b539428152cf90d09fcee1e86c1f4617259df13102e0c3c9ee346a1ae13ac2",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1626,8 +1626,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:5585dbff9dd1d5f643c4e0c321d9e81cac39967ece0fd0ae86c667cee6cb4e4c",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:b313ade62878a1ef8d6f226e91d5089c8f3b8b672c344984f696ca49705972e1",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1639,8 +1639,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:6ee26f0a3a87fb8bd7ab0f21ce523119720b6ffb77242f436dec651979752d2f",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:a89ecba2e50e4273716da61511d8b238b663a0dc12fbd1597ad6e677451f2bcd",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1652,8 +1652,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:353b8cdd987c56298ba84af48feeab510d3cb0d9398c4e7ea929b7d820602184",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:570803a45732dcf9752e75ae15da1fae5af1f0f284df8e2449b8cc7edc511fc7",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1665,8 +1665,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:83f520ffcb2528671d5e84b0d2b901b50acfdff96cfe16594ca4976f6ed91fd4",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:3f23d3880152829d4eb0abad3cd3060b876f2ca34978114ba9f0a78a03f7db58",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1678,8 +1678,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:2ca64b810f45eb62d041ff5949a0a235c300ac212f3f525a279e5b2e09a3f4e4",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:342d06a8a8873610decc52faa1e79b4f1d4dc5396ddc77e89446c8c84d7237c8",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1713,8 +1713,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:673fb3afe9c575ba632ee76f6340bd3c147de17cfa87ec37266c341a32c7a369",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:ec39fddf2b35d81b202ef056cb8894b9f1f26e06b88f1854aa6c45bfa9b21e9d",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1726,8 +1726,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:cd23c43c5f888bf84f34592b75133d670e024efc9f31282f4a2a5b76ba135382",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:e5f5a515996c25809078e199b84d99d4a23642f743dc272c175a4f35ee306d2a",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1739,8 +1739,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:d5199df13ef310d990f21bb71b1d27567484abf82c593c2556bb085805a97aa9",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:a22dcd394d3eea36ee92652897e0e21758e58c1fb4ca654bce2ba07fd05a195d",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1752,8 +1752,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:ef90f53d41df4c210b88da942c8efc4adb48b4ee2529320b7d1cbe41064809a3",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:6816e8a5a4132f6404acd1a1a16a031e3cecf1e660cc536531a1a848cc473781",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1765,8 +1765,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:ea6c8a25733425d3ae9ee4df68eef0d3cb7036db268d053e5865a95075a685b2",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:7a2c91f90800ce22f111e6ae551342d6807550603fcf34a0f6c80e12bde119f4",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1778,8 +1778,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:9e04de0aaf3f93af5b86b0004b30260085245ff3d2980e627e32cdbba9e3e62f",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:25bc049bb4d454446b85a45f98ce28d9674db2f73c92100391d46b57aa644f28",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1791,8 +1791,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:6c714475fe145d5b0b3e16bc3443bed4b77131eba8fb38b7c3a089f76f4b19de",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:ab573977965188311d87c0f839def94539278470192c23c88b5fa2d929d8ed74",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1804,8 +1804,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:5bb56defa2361470facec7b48d0948c05e9a1ba80c8b45a9d0787c3934fe5039",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:9f1a32717de1e2fa96133f282bdaa6c3a091588159cd49db556c1cdd5a41bfed",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1817,8 +1817,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:c5091f4736e9c0cd1adbaa4c669909021f994947e7566695c697eb239c244eae",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:a6b35375ec1c9527c89ffe7ddc5bb9ea54ed95ff473550cb89bbaca656c4c32c",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1830,8 +1830,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:4b447077c471bfc29a158e2778504af2d8b053159c6b4b62f45149e6e1fa1b0b",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:509d3b9a6851db16808f4409d314aae7ddd46ad829e827ed6503d69e1058bae9",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1843,8 +1843,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:241a62213436ad6cccceb218b02a60991b9e86d1637f983c73785a5abd222666",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:ccd6ed3650163ebfb5dc4f608af1563758abb376537867dadbf4561e342bf70e",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1856,8 +1856,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:fe095eb140aaede665a208551c9ca4edde05e9deab0f4524f3965ffa1ba16c45",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:c96ccd8241764d2a01c398166bff960b01acfbd2ef94cc4fa67eeb1286024a58",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1869,8 +1869,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:cf0d7de11c2975ca89c7be5ab478a4f8d1f26ca6b1979d2e942cce35e0cbe639",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:4355e44ee6050dd036263ab67781772f551ab62ea001437cda47ce06087a4ddd",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1882,8 +1882,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:8236f8f5adb01cd21116d4c38d1c8573bd38cfcfc8db9a782db2e2d8fa85b329",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:00b93f8d24fc41b0f2807e0b4e8b35c5ce04cdc013f1e15bc87d5f2c2417ebfc",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1895,8 +1895,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:77a3afa69af7a3c45a185c9f6688a6efbcf6c4579efad95ae7d105f837c52ce5",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:53d69a7d39d895e0126db3749bc2c541375900d3fd8ef1b6b01318a8774440db",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1908,8 +1908,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:b2f4ef6bab7db31d0fc2e57c46b4bf33fdf95edcbe13ab393893080a7c96c41f",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:06ca234a1f2b93fd96dfa7f09f3f22b891cfa39b9db665dd515dc4e681c3a35b",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1921,8 +1921,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:e2f4e024c747d383936380b7ce70d710fd30aae1dd7489cd0efc0ce698fb7362",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:9bd25b9c6efe31cd116de79bd985edd25128b9482ecdc6991fd70218c115437b",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1934,8 +1934,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:e9b7eb2fdffbadfcb5b511c5bb7b345cc514d8a69a1eade06d7b6aa875af5633",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:3d08db80ec0e225e25cc0fefc0ac67978be1c50e2540381ddd204f8c0fab8473",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1947,8 +1947,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:f3ba26bd4087bfb9fc37250964521700d22394adc765969c64127f657d7a9b4a",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:fb33e3b272c5f2982b87a13db6213e74d6185da14c448a4d9dd9bf7bbf8e75de",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1960,8 +1960,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:c2e210a6983ad604fa655ff0e59dcec2439226e474c251101f4ca9d812c2939b",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:abfde1dbcff507a754456286dd668cac4fe6ea88ffc68a4ef24d5c0847958ad7",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1973,8 +1973,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:d4e8885f06e1560200aa883d87b4f2baade8a43855b97d364fe62c01e0786eb3",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:7370c23cef21282a5bc057ebf4a7276466cca043297b32b5043ec93820421047",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1986,8 +1986,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:49901e3571b98ca656c4c0055ee6e51100d55a28f339dffb43b838ff0942e515",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:ee9fd7da0a504881f3f2b2ebf340694dbe2b50ead5acd3e5d1aa90cfca3ce216",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -1999,8 +1999,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:4a7bc350b05fb71f80f96c42c1d79d5655a0f3cf422fe0417992a4ef2138011c",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:07d289c73c62bb9288dc2b0bd32faf74938a15a565874f09cfdbc707169ebb87",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2012,8 +2012,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:6c6c968f2dad67cc0b6259527425423bbf6c77ee4d9f98dea0f3db6b45ca9910",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:e8601fd2a310292c2c6bfd1dc276f21740588ba255706b86546729e8cefeaeb5",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2025,8 +2025,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:10527efdcf1604ccef54856ce164d54ba60aa9747579eae8c94814ba135fa02a",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:767b0df4a040b96b7e54838b135f9728b845081a15d4d5edad78f392f165a0e2",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2038,8 +2038,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:1faab7f5797d28e41d4f26405da6bfd2680253a82867df265202b5a62c23d27e",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:17c33e8626843c02ab6b01c774100e3247097657dbc333ac2e7e1ce9c190cf71",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2051,8 +2051,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:f5ff3eaa30bcec936d027f51cc6d28731c96fbf34ec55b170ef50d376aea2ec1",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:79fa343780bb2381f9f97fd72a9736e042372bf03a02d71016cc22153308dc16",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2064,8 +2064,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:f3e6068e59163e629acaf4d99edff33b35496ae5773b9c1f7cc21ae855b02ada",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:8752a70bed880286649b1c0b2df6ff7207279f92599f14127cc7855071c1de82",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2077,8 +2077,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:75120c6ad5a0c89f63fa22e313e46c54055bc40187eba3299ed47df00646e067",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:c5efde488c5d2aea3dfa1b8d51b4f6eafc46cff18b05a39e995cabcf7b6d8187",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2090,8 +2090,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:a9c0912b44a345a558de41afdcc910399f18e320a900ad6a18f91cb472ae1d82",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:5c74ebfe3de3c0b5d3a8c997a4a65da337b7746040866f47e554e3a0330588cb",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2103,8 +2103,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:9795902afa1b1bd2e33674b90b4d758d22596383375d1d54c6af61df428b8aef",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:1abb8dbfcf8c6c4d7a0766ca8d44e5ad151bdc509ce2b2eaea94c44b67643b19",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2116,8 +2116,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:4b5b0db260d0a264109817b8deada5e063c468dff6a55b1a85e3d5b7fa83835b",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:51fbcde570e376ee312423ab2a35ed013f9a75ecca752b31ce2856b6cd6e609b",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2162,8 +2162,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:c527d8b01e9c706393626eb69dd9d7209ca83a2e0c0781c2864aaaf8755bf3df",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:f864809722acd87a8ec317a79c69d9cfced2a4ed6e3b4a8e9d4a9bcc309ff158",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2175,8 +2175,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:0173bbefaab5320282349b456b1495ba28748ca3a5623875c3ce0b31688d2aa9",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:914d8f53fca6fc5db18b8c050d58f84b44a710d28208144b5abaee514f96ef9d",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2199,8 +2199,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:a5e6a011005d70ed2bfc2748335073898c3280b78948c966efeb4c5a27cb5e8e",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:c74111a1c485b5cdaf0c6cbc0df51975a0bb7b09931cbb6e4c763d48cd727ff8",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2256,8 +2256,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:2d34fd294706f441764e8b7d43f585446cc83e2dcab39210319180de6490b9f5",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:2f71e6bc3da01a047da48428eaaaa1dfe76c54d68347a94f744d164550cdae66",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2269,8 +2269,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:7c183aef0954f9fefedf71ff9d89cb20908a479d9d8d51563c50d8872668881e",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:ea619efa1408380d901744851807dacd73d0b14369525a05a4e26290d2403701",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2337,8 +2337,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:b4ddd0c31160e026352af80a155b7faa9aeb3478275643193d5edcfbfb1eb7e3",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:571a9d56c3105e86dced3d69c52099b470e6da8e49becd0114294cf113a89954",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2350,8 +2350,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:f730f9e377d59f3f5a4713a4d3c30f81661e9b5ac9cd59878593d647a1b232a8",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:5950c5ce9a3c737eac28370b4913ec625e16f37b82d28ec80e1d72bacacfb840",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2363,8 +2363,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:85aec4ab7f75d28dcc1948971a13436550d865aefb0c26d64c5569ae10ca0c71",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:6d99bb467845dbb998993987b6e48901fffadf0fadab395b37fe57a98f72c849",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2398,8 +2398,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:8ab1b8aee6c2950cdc628bf59ebaa3878ca66423432c265d0ea993c8223fa8ea",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:68c5dca39117532e487b9ff6a001a7529305b017237b75bc42e4a5a6827e1de5",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2411,8 +2411,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:5976cab580a8213530ef251b41820dc3b57519d5e277136e078147045c731f64",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:8c0d6cd62216e7341b9fa758b1193ac8994c268e6c750178f656b9233ddd0303",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2457,8 +2457,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:0ffbfb2274852427fb8b63d6ddcf99a294894469f6aa9b7235e26fbbbe47f6f7",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:687f2aa7ef7bd4a05cb3dde4d450153053c9505fb8ddd824e480416a92195ae0",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2470,8 +2470,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:fd4586555a35b0bbf2c3dcd7e7c05f5d81c02e3fe59d19d20250457830d44f97",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:0f870774fe038dbb5d173c6a8741ad37eb4e1d55c523682d0ee1ddd695b5efa3",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2483,8 +2483,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:319d96d0e6bb6e2df004862bb36dbe4de0c63d777db3fda4bb98099d137ebf4c",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:30bbeb5fb1e69f6709b50998ee682a870a9309f83bd3f68ee417a5ce7e636501",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2496,8 +2496,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:cfded5130625d86e0ca4da471dce9ccc241aecca2f1c3297adfef6536073ab4f",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:c935b869332a245524d205dd08fa16fe136358ea7b2e97f7a2aae28fd977e433",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2509,8 +2509,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:e65dd66ceae57e64c463c845d242945c98de9c5d76d09dfd83639ff66dbe5a8f",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:34b03ad65435ad6cc7929aa5541666561e04c2a3c70d0eb04c8d7aecf4832cef",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2522,8 +2522,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:236f568b593dd798aaa3498a48093ed6023f6653a2a4b390b421157ee9b9d62c",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:9a06769ce8531d2c7af017522ebfdee4a1d04dc15fcc0973b94e0218a74fe456",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2535,8 +2535,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:7cc236f000e40c1313b1ca6e1bc154f2bbea490225df4857a907631351e269a0",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:f3948f9239297b92f7b1b34203116edc75bc8a84e9a2e948c690e101079c6025",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2548,8 +2548,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:9fccad7af0627e095926db35ef04b6d6126ad8a08555be95ae58b6f153ede406",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:ab2cefd8403fef805b053fa2633bb84cdde0ea796915add3e877cf152dcab0c5",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2561,8 +2561,8 @@
       "declaration_source": "docs/design/cxxlens_integrated_design_ja.md",
       "signature": null,
       "signature_fingerprint": null,
-      "skeleton_fingerprint": "sha256:b5477ef738db613fe2ec87b04304066457f9e2c4e6829bc6814fd5a61c49b39c",
-      "source_fingerprint": "sha256:42bba832b7d4e28bca70fde02cc8b159a096818179fec44b5910de7bba9e56c8",
+      "skeleton_fingerprint": "sha256:03be408e92c2ea7a8a1f176b015a627b9b06ef59c730d56f0fdf984e25b70778",
+      "source_fingerprint": "sha256:57f4ed6ab7fbd6caf251fefd1d8213263a115866ea6c202a5f33bfee008de51f",
       "state": "blocked"
     },
     {
@@ -2662,10 +2662,10 @@
       "blocked": 77,
       "frozen": 47
     },
-    "tracked_path_count": 360,
+    "tracked_path_count": 361,
     "unit_count": 124
   },
-  "task_packet_digest": "sha256:83a154ddbd0dd711235b3c1d85689b9d6ff511f09344cfb2c2f6dd5cbf692ccf",
+  "task_packet_digest": "sha256:23361bf09dbefd8066a72afa5d0c9f569da353490dcaa61537164033bd9e74b4",
   "tracked_paths": [
     {
       "access": "exclusive_write",
@@ -4255,6 +4255,13 @@
       "generator_role": null,
       "owner_role": "steward.scheduler",
       "path": "src/workspace/scheduler.hpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.workspace",
+      "path": "src/workspace/semantic_path.hpp"
     },
     {
       "access": "exclusive_write",

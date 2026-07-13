@@ -9,7 +9,7 @@
       ],
       "evidence": [
         "API-COPY-001:exact_declaration_unresolved",
-        "sha256:96a2ad2012ebcd0f8abce2e3b083987018f491356ebc8a34439b45c33afb43a0"
+        "sha256:daceecf8751198256f417cba4c1f8c0fab5c6f271f56c92fcf61fff3304387fa"
       ],
       "kind": "missing_contract",
       "request_id": "DR-AU-COPY-001-001",
@@ -19,7 +19,7 @@
       "requesting_atomic_unit": "AU-COPY-001",
       "resolution": null,
       "schema": "cxxlens.dependency-request.v1",
-      "semantic_digest": "sha256:b298c005df1d46f4d3da846b118c38b0e153445a9bee9c0f6e4d3e4f6987b114",
+      "semantic_digest": "sha256:58a204f5051c73f0bb49479b758ed46daad8553ab42e9b993e60339efb9174cc",
       "state": "pending",
       "steward_target": "generator.catalog"
     }

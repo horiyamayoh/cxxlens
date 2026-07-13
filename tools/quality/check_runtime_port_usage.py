@@ -33,6 +33,31 @@ def main() -> int:
             for match in pattern.finditer(text):
                 line = text.count("\n", 0, match.start()) + 1
                 failures.append(f"{path}:{line}: {name} must use a runtime port")
+    process = (source_root / "runtime/process_adapter.cpp").read_text(encoding="utf-8")
+    runtime_tests = (
+        source_root.parent / "tests/unit/runtime/runtime_ports_test.cpp"
+    ).read_text(encoding="utf-8")
+    if "::fork(" in process:
+        failures.append("process adapter retains a multithread-unsafe fork child path")
+    for marker in (
+        "::posix_spawnp",
+        "POSIX_SPAWN_SETPGROUP",
+        "::pipe2",
+        "set_nonblocking",
+        "drain_failure",
+        "terminate_group_and_reap",
+    ):
+        if marker not in process:
+            failures.append(f"process adapter fail-closed marker missing: {marker}")
+    for fixture in (
+        "final drain output limit was accepted",
+        "stdout and stderr did not share an output limit",
+        "nonblocking setup failure was accepted",
+        "concurrent production launches were not reliable",
+        "timeout/cancellation left a live descendant",
+    ):
+        if fixture not in runtime_tests:
+            failures.append(f"production process regression fixture missing: {fixture}")
     if failures:
         print("\n".join(failures), file=sys.stderr)
         return 1
