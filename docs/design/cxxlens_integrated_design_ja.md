@@ -3726,6 +3726,17 @@ budget/cancel/provider failure は pass や empty success に縮退させず、v
 association engineを所有する。process/filesystem/time/hash は runtime port 越しとし、shell文字列連結を禁止する。
 本候補は production public header を先取りせず、#52 の feasibility spike、#53 の統合、#54 の freeze を必要とする。
 
+### 39.23 high-risk candidate validation（Issue #52）
+
+Issue #52 の規範結果は `docs/design/high_risk_contract_validation.md` と
+`schemas/cxxlens_high_risk_contract_validation.yaml` である。#43〜#51 の9 candidate fingerprintを固定し、
+graph、flow/resource、transform transaction、generation surface、review/gate、QA process/coverage、interop
+extractorの7領域をtest-only bounded spikeで検証する。各領域はpositive/negative/ambiguous fixture、有限
+time/memory/path/state/output budget、provider/port、未検証範囲、argv command、evidence digest、retention/
+deletion条件を持つ。結果は7/7 `validated`、candidate変更0であり、production `include/` / `src/` / install /
+exportへのspike混入は0である。この結果はimplementation conformanceを主張せず、#53は
+`cxxlens-high-risk-contract-validation-check` を必須gateとして利用する。
+
 ---
 
 ## 40. Public API inventory

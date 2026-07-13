@@ -30,6 +30,16 @@ set_tests_properties(
   agent.readiness
   PROPERTIES LABELS "agent;readiness;schema;determinism;security;acceptance")
 
+add_test(
+  NAME contract.high-risk-validation
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/contract_spikes/test_high_risk_contract_validation.py"
+)
+set_tests_properties(
+  contract.high-risk-validation
+  PROPERTIES LABELS "contract;spike;schema;determinism;security;acceptance")
+
 add_executable(cxxlens-unit-version unit/version_test.cpp)
 target_link_libraries(cxxlens-unit-version PRIVATE cxxlens::cxxlens)
 target_compile_features(cxxlens-unit-version PRIVATE cxx_std_23)

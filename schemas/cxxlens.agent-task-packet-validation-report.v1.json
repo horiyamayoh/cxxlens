@@ -17,7 +17,7 @@
     "shared-implementation-dependency-closure",
     "typed-dependency-resolution"
   ],
-  "corpus_semantic_digest": "sha256:4c83bb4d4c94a50c05a508f081f4a702dd51dd0a094e2c877212f97ff489b889",
+  "corpus_semantic_digest": "sha256:08583e55824ac16d601dfbd8fe6c045ee7af654f7fba26537736a34b0fe342ac",
   "generation_state_counts": {
     "blocked": 77,
     "complete": 47,
@@ -25,7 +25,7 @@
   },
   "global_contract_fingerprints": {
     "conventions": "sha256:cdf3166db0b38fb9230602ff5ba273baf9e7e253d61d6c2fc75d21f0fea1238c",
-    "ownership_registry": "sha256:05d1cfc4e5b59a75824286667f35529bd87187f1b6a5701fd58277928255c31b"
+    "ownership_registry": "sha256:49ae7011b11d5da85ba79cdedb1223ad3a4a1ca698795355c9cc0e84db407ede"
   },
   "schema": "cxxlens.agent-task-packet-validation-report.v1",
   "status": "passed"

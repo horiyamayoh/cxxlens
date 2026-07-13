@@ -99,3 +99,9 @@ preserved; migrations require a declared source/target path and cannot silently 
 
 Every API record has exact declaration/fingerprint, positive/negative/ambiguous acceptance, typed ownership,
 provider/schema dependencies, and Doxygen obligations.
+
+## Issue #52 validation backlink
+
+Validated by `docs/design/high_risk_contract_validation.md#decisions`: seven CFG availability states,
+recursive fixpoint/non-convergence, representative taint path and resource use-after-release counterexample
+were bounded and dependency-acyclic. Fingerprint `sha256:2cbc4efec8cc4784fe10df0d4ac5048d943b73ff5d3d677afc6991d7c7a569ad` was unchanged.

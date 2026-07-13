@@ -1,0 +1,162 @@
+{
+  "results": {
+    "flow_resource": {
+      "assertions": {
+        "model_effect_dependency_acyclic": true,
+        "non_convergence_explicit": true,
+        "recursive_fixpoint_bounded": true,
+        "sink_label_reached": true,
+        "unknown_external_call_unresolved": true,
+        "use_after_release_counterexample": true
+      },
+      "metrics": {
+        "cfg_states": [
+          "available",
+          "absent",
+          "unsupported",
+          "failed",
+          "partial",
+          "stale",
+          "variant_divergent"
+        ],
+        "counterexample_steps": 4,
+        "fixpoint_iterations": 3,
+        "non_convergent_iterations": 3,
+        "representative_path_steps": 4
+      },
+      "result": "validated"
+    },
+    "generation_surface": {
+      "assertions": {
+        "artifact_collision_explicit": true,
+        "surface_census_conserved": true,
+        "type_cycle_bounded": true,
+        "unsafe_default_absent": true,
+        "zero_one_many_resolution": true
+      },
+      "metrics": {
+        "accounted_surfaces": 6,
+        "ambiguous": 1,
+        "requested_surfaces": 6,
+        "supported": 4,
+        "type_closure_nodes": 3,
+        "unsupported": 1
+      },
+      "result": "validated"
+    },
+    "graph": {
+      "assertions": {
+        "bounded_materialization": true,
+        "canonical_order_independent": true,
+        "cycle_is_explicit": true,
+        "open_world_retained": true
+      },
+      "metrics": {
+        "cycle_rows": 1,
+        "edge_count": 7,
+        "input_nodes": 6,
+        "materialized_nodes": 5,
+        "omitted_nodes": 1,
+        "truncated": true
+      },
+      "result": "validated"
+    },
+    "interop_extractor": {
+      "assertions": {
+        "borrow_scope_thread_affinity": true,
+        "callback_exception_isolated": true,
+        "duplicate_reduction_deterministic": true,
+        "partial_contribution_explicit": true,
+        "schema_failure_isolated": true,
+        "unregister_waits_for_in_flight": true
+      },
+      "metrics": {
+        "input_facts": 3,
+        "lifecycle_states": 4,
+        "reduced_facts": 2
+      },
+      "result": "validated"
+    },
+    "qa_process_coverage": {
+      "assertions": {
+        "argv_literal_not_shell": true,
+        "association_ambiguity_retained": true,
+        "coverage_mismatch_states_explicit": true,
+        "output_limit_distinct": true,
+        "runtime_process_port_projection": true,
+        "signal_distinct": true,
+        "timeout_distinct": true,
+        "unavailable_distinct": true
+      },
+      "metrics": {
+        "ambiguous_associations": 1,
+        "coverage_states": [
+          "mapped",
+          "stale_checksum",
+          "partial",
+          "corrupt",
+          "unknown_file"
+        ],
+        "process_cases": 5,
+        "unmatched_associations": 1
+      },
+      "result": "validated"
+    },
+    "review_gate": {
+      "assertions": {
+        "all_baseline_states_representable": true,
+        "ambiguity_not_first_wins": true,
+        "diagnostics_bounded_deterministic": true,
+        "partial_never_passes": true,
+        "rename_root_relocation_uses_semantic_key": true,
+        "rules_report_version_explicit": true
+      },
+      "metrics": {
+        "baseline_states": [
+          "exact",
+          "equivalent",
+          "changed",
+          "new",
+          "resolved",
+          "ambiguous"
+        ],
+        "diagnostic_budget": 2,
+        "emitted_diagnostics": 2
+      },
+      "result": "validated"
+    },
+    "transform_transaction": {
+      "assertions": {
+        "default_dry_run_has_no_write": true,
+        "mid_write_failure_atomic": true,
+        "overlap_rejected": true,
+        "rollback_failure_recoverable": true,
+        "stage_order": [
+          "validate",
+          "format",
+          "revalidate",
+          "reparse",
+          "prepare",
+          "commit",
+          "rollback"
+        ],
+        "stale_digest_rejected": true
+      },
+      "metrics": {
+        "files": 2,
+        "recovery_rows": 1,
+        "rollback_rows": 2,
+        "writes_before_failure": 2
+      },
+      "result": "validated"
+    }
+  },
+  "schema": "cxxlens.high-risk-validation-evidence.v1",
+  "semantic_digest": "sha256:c9336e6a2bd18ffc319088b6870c5f3761f2b0d6240175f8767a6d411d393922",
+  "spike_count": 7,
+  "summary": {
+    "rejected": 0,
+    "validated": 7,
+    "validated_with_change": 0
+  }
+}

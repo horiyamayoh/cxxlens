@@ -170,3 +170,9 @@ owners, three bounded acceptance categories per API, non-public candidate header
 fingerprint integrity. Task packets, ownership, readiness, and authorization artifacts are
 regenerated after every catalog transition so the candidate state, dependency DAG, declaration
 source, and fingerprint are propagated.
+
+## Issue #52 validation backlink
+
+Validated by `docs/design/high_risk_contract_validation.md#decisions`: the QA/process domain exercises
+core result/evidence/coverage/schema values and finite failure projection. Fingerprint
+`sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584` was unchanged; this is not implementation evidence.

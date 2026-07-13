@@ -85,3 +85,9 @@ source schema, bytes, unresolved, and guarantee. Rendering has no filesystem sid
 
 Positive, negative, and ambiguous fixtures for every API bind these rules to exact signatures,
 owner/provider/schema edges, and Doxygen obligations.
+
+## Issue #52 validation backlink
+
+Validated by `docs/design/high_risk_contract_validation.md#decisions`: review/rule/report compatibility,
+six-state baseline classification, bounded diagnostics and indeterminate partial gate were reproduced.
+Fingerprint `sha256:a7d7d2ef4dc907b517ead76a54d36ba067fcc0f1aa5da405eebef30e1d6d8143` was unchanged.

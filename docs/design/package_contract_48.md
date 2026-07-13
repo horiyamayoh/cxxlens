@@ -87,3 +87,9 @@ states.
 
 Every API record includes positive, negative, and ambiguous acceptance, exact signature, owner/
 provider/schema dependencies, and Doxygen obligations.
+
+## Issue #52 validation backlink
+
+Validated by `docs/design/high_risk_contract_validation.md#decisions`: stale/overlap rejection, default dry-run,
+two-file mid-write rollback and explicit rollback-failure recovery were reproduced. Fingerprint
+`sha256:6d209dd7b50a01718969b32c75fa1536ef946ccd9a6c71f603878fc13dc67d75` was unchanged.

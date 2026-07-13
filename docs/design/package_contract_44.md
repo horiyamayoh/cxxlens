@@ -95,3 +95,9 @@ references, dependency APIs, Doxygen obligation, and positive/negative/ambiguous
 The package candidate validator rejects missing API rows, signature drift, duplicate registry
 owners, dangling ownership/dependency/trace references, public-header pre-emption, and fingerprint
 drift. C++23 syntax checks compile the candidate usage without linking a production implementation.
+
+## Issue #52 validation backlink
+
+Validated by `docs/design/high_risk_contract_validation.md#decisions`: the interop/extractor domain covers
+borrowed lifetime, thread affinity, in-flight unregister, schema/duplicate reduction and partial failure.
+Fingerprint `sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601` was unchanged.

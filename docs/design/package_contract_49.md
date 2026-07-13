@@ -118,3 +118,9 @@ semantic validity or safety.
 
 Every API record has exact declaration/fingerprint, positive/negative/ambiguous acceptance, ownership,
 provider/schema dependencies, and Doxygen obligations.
+
+## Issue #52 validation backlink
+
+Validated by `docs/design/high_risk_contract_validation.md#decisions`: 6/6 surface census, cv/ref/noexcept,
+zero/one/many resolution, cyclic type closure and artifact collision remained finite typed decisions.
+Fingerprint `sha256:8ce8f299252b71f361407b41774291a97ef78dfaee1a74797ca4e9b41dace163` was unchanged.

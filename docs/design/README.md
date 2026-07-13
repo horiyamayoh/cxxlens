@@ -31,6 +31,8 @@
   - Issue #50 が所有する flow・models の規範的 Contract Candidate と availability/fixpoint 決定表。
 - `package_contract_51.md`
   - Issue #51 が所有する review・qa の規範的 Contract Candidate と diff/baseline/gate/process/coverage 決定表。
+- `high_risk_contract_validation.md`
+  - Issue #52 の7領域 technical spike、candidate fingerprint binding、bounded evidence、#53 fail-closed gate。
 - `../../schemas/cxxlens_package_contract_candidates.yaml`
   - #43〜#51 の package candidate、exact declaration、意味契約、owner、acceptance の機械可読 authority。
 - `SHA256SUMS`

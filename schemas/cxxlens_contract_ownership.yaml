@@ -2510,6 +2510,11 @@ schemas:
   owner_atomic_unit: AU-CORE-001
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_high_risk_contract_validation.schema.yaml
+  path: schemas/cxxlens_high_risk_contract_validation.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
 - id: schema:schemas/cxxlens_m0_acceptance_report.schema.yaml
   path: schemas/cxxlens_m0_acceptance_report.schema.yaml
   owner_atomic_unit: AU-CORE-001
@@ -2699,5 +2704,5 @@ summary:
   public_type_count: 230
   shared_component_count: 66
   provider_subject_count: 26
-  schema_count: 82
-semantic_digest: sha256:c2b9b1c8288465b365cdccd96be6e1d180f227bbf9d96a5c610e2ae4739fc5c3
+  schema_count: 83
+semantic_digest: sha256:080cceda822876d34c8d3a282c52405025378840373e7ef0d4f372383fa87f62

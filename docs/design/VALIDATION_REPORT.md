@@ -77,7 +77,7 @@
 - implementation state: `conformant` 47、`unimplemented` 77（変更なし）
 - policy record: 47、各 record の result outcome 6種: 完全
 - positive / negative / ambiguous acceptance: 各 API 1件、計372件
-- public type 230 / shared component 66 / provider subject 26 / schema 82: owner 一意、dangling 0
+- public type 230 / shared component 66 / provider subject 26 / schema 83: owner 一意、dangling 0
 - registry owner and entry overlap: 0
 - candidate C++23 syntax usage: 10/10 PASS
 - package candidate validator/test: 17/17 PASS
@@ -212,3 +212,21 @@
 - #43 findings/coverage・#47 rules/report・runtime ports・#52 spike・#53 integration 境界: 明示
 - candidate C++23 syntax usage: 1/1 PASS
 - candidate fingerprint: `sha256:e6173e94b9d36c3c746b7fc8aa9690a3b9c7aa2967155cd500ec4214bf7a23ad`
+
+## Phase B high-risk validation（Issue #52）
+
+- current candidate snapshot: #43〜#51 の9 fingerprint、drift 0
+- validation domain: graph、flow/resource、transform transaction、generation surface、review/gate、QA process/coverage、interop extractor（7/7 `validated`）
+- fixture: 各領域 positive / negative / ambiguous、計21件
+- boundedness: 全領域に time / memory / path / state / output 上限あり
+- graph: 6 node中5 materialize、1 omitted、cycle/open-world/truncation明示
+- flow/resource: fixpoint 3/8 iteration、non-convergence 3 iteration、4-step counterexample
+- transform: 2-file mid-write failureを全rollback、rollback failure recovery row 1件
+- generation: requested/accounted surface 6/6、ambiguous 1、unsupported 1、type closure 3 node
+- review/gate: baseline state 6/6、diagnostic 2/2 budget、partial は `indeterminate`
+- QA: argv/timeout/output/unavailable/signal 5 case、coverage state 5種、ambiguous/unmatched association各1
+- interop: lifecycle 4 state、fact 3→2 deterministic reduction、thread/schema/exception isolation
+- evidence semantic digest: `sha256:c9336e6a2bd18ffc319088b6870c5f3761f2b0d6240175f8767a6d411d393922`
+- candidate contract change / reopen: 0
+- production implementation / public API / installed target / export へのspike混入: 0
+- high-risk gate test: 7/7 PASS、#53 fail-closed dependency: 設定済み
