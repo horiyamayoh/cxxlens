@@ -23,5 +23,7 @@ namespace cxxlens::detail
 																	compile_command command,
 																	target_context target,
 																	std::string command_digest);
+		[[nodiscard]] static std::vector<frontend::virtual_source_file>
+		frontend_files(const workspace& value);
 	};
 } // namespace cxxlens::detail

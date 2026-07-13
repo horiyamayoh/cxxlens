@@ -11,6 +11,7 @@
 #include <thread>
 
 #include <cxxlens/interop/clang.hpp>
+#include <cxxlens/testing.hpp>
 
 #include "llvm/common/borrowed_lifetime.hpp"
 #include "llvm/common/frontend_worker_ipc.hpp"
@@ -261,6 +262,21 @@ int main()
 			return {};
 		});
 	require(public_result && public_callback, "public borrowed corridor failed");
+
+	auto memory_workspace =
+		cxxlens::testing::workspace_fixture::cpp("int memory_public_value(){return 2;}\n").open();
+	require(memory_workspace.has_value(), "memory frontend workspace did not open");
+	bool memory_callback = false;
+	auto memory_result = cxxlens::interop::with_translation_unit(
+		memory_workspace.value(),
+		memory_workspace.value().compile_units().front().id(),
+		[&memory_callback](cxxlens::interop::borrowed_clang_tu&) -> cxxlens::result<void>
+		{
+			memory_callback = true;
+			return {};
+		});
+	require(memory_result && memory_callback,
+			"public borrowed corridor discarded the workspace VFS snapshot");
 	std::filesystem::remove_all(base);
 	return 0;
 }

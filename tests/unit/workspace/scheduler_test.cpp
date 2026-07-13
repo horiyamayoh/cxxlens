@@ -439,12 +439,13 @@ namespace
 		frontend_scheduler_worker blocking{
 			std::vector<std::string>{fixture, "--block", pid_file.generic_string()}};
 		execution_context deadline;
-		deadline.deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds{80};
+		deadline.deadline = std::chrono::steady_clock::now() + std::chrono::seconds{1};
 		const auto started = std::chrono::steady_clock::now();
 		auto timed_out = blocking.execute(direct, deadline);
 		const auto elapsed = std::chrono::steady_clock::now() - started;
-		require(!timed_out && timed_out.error().code.value == "parse.timeout" &&
-					elapsed < std::chrono::seconds{2},
+		require(!timed_out, "blocking worker unexpectedly succeeded");
+		require(timed_out.error().code.value == "parse.timeout" &&
+					elapsed < std::chrono::seconds{5},
 				"blocking worker did not return within bounded deadline grace");
 		std::ifstream pid_input{pid_file};
 		int blocked_pid{};

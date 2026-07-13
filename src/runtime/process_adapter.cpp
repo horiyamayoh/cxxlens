@@ -467,6 +467,8 @@ namespace cxxlens::detail::runtime
 			return invalid(context);
 		if (context.cancelled())
 			return unexpected{runtime_failure{runtime_status::cancelled, context.operation, 0}};
+		if (context.deadline && std::chrono::steady_clock::now() >= *context.deadline)
+			return unexpected{runtime_failure{runtime_status::timed_out, context.operation, 0}};
 		const auto standard_input_descriptor = make_standard_input(request.standard_input);
 		if (standard_input_descriptor < 0)
 			return platform_failure(context, -standard_input_descriptor);
@@ -502,6 +504,10 @@ namespace cxxlens::detail::runtime
 		if (const auto error = configure_process_group(attributes); error != 0)
 			return platform_failure(context, error);
 		auto input = make_spawn_input(request);
+		if (context.cancelled())
+			return unexpected{runtime_failure{runtime_status::cancelled, context.operation, 0}};
+		if (context.deadline && std::chrono::steady_clock::now() >= *context.deadline)
+			return unexpected{runtime_failure{runtime_status::timed_out, context.operation, 0}};
 		pid_t child{};
 		const auto spawn_error = ::posix_spawnp(&child,
 												request.argv.front().c_str(),

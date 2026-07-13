@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "../../runtime/time_port.hpp"
+#include "../../workspace/catalog_access.hpp"
 #include "../common/borrowed_lifetime.hpp"
 #include "preprocessor_extractor.hpp"
 #include "symbol_type_extractor.hpp"
@@ -618,7 +619,8 @@ namespace cxxlens
 			}
 			if (!selected)
 				return frontend_error("core.invalid-argument", "compile-unit-not-found");
-			detail::frontend::parse_task task{*selected, {}};
+			detail::frontend::parse_task task{
+				*selected, detail::workspace_catalog_access::frontend_files(workspace)};
 			auto batch =
 				detail::clang22::execute(std::move(task), std::move(context), std::move(callback));
 			if (!batch)

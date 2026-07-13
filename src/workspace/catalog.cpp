@@ -1242,6 +1242,12 @@ namespace cxxlens
 		return workspace{std::move(state)};
 	}
 
+	std::vector<detail::frontend::virtual_source_file>
+	detail::workspace_catalog_access::frontend_files(const workspace& value)
+	{
+		return value.data_->virtual_files;
+	}
+
 	compile_unit
 	detail::workspace_catalog_access::reconstitute_compile_unit(compile_unit_id unit,
 																build_variant_id variant,

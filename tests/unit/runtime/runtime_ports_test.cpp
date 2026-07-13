@@ -221,6 +221,11 @@ namespace
 		const auto timed = process.run(sleeping, context("process.timeout"));
 		passed &= check(!timed && timed.error().status == runtime_status::timed_out,
 						"process timeout did not propagate");
+		auto expired_context = context("process.expired");
+		expired_context.deadline = std::chrono::steady_clock::time_point::min();
+		const auto expired = process.run(make_process_request({"/bin/true"}), expired_context);
+		passed &= check(!expired && expired.error().status == runtime_status::timed_out,
+						"expired process deadline spawned work");
 		process_result huge_result;
 		huge_result.standard_output = std::string(64U, 'x');
 		fake_process_adapter huge{huge_result};
