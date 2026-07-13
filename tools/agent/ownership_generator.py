@@ -547,26 +547,63 @@ def generate_manifest(corpus: dict[str, Any], paths: list[str]) -> dict[str, Any
     return manifest
 
 
-def make_dependency_request_example(manifest: dict[str, Any]) -> dict[str, Any]:
-    skeleton = next(item for item in manifest["skeletons"] if item["state"] == "blocked")
+def make_dependency_request_example(
+    manifest: dict[str, Any], corpus: dict[str, Any]
+) -> dict[str, Any]:
+    skeleton = next(
+        (item for item in manifest["skeletons"] if item["state"] == "blocked"),
+        None,
+    )
+    if skeleton is None:
+        blocked_api_id = next(
+            packet["api_id"]
+            for packet in corpus["packets"]
+            if packet["generation"]["state"] == "blocked"
+        )
+        skeleton = next(
+            item for item in manifest["skeletons"] if item["api_id"] == blocked_api_id
+        )
+        unit = next(
+            item
+            for item in manifest["units"]
+            if item["atomic_unit_id"] == skeleton["atomic_unit_id"]
+        )
+        kind = "missing_fixture"
+        steward_target = unit["package_integration_role"]
+        evidence = [
+            f"{skeleton['api_id']}:candidate_declaration_not_integrated",
+            skeleton["skeleton_fingerprint"],
+        ]
+        requested_behavior = [
+            "Publish the positive, negative and ambiguous integration fixtures for the exact declaration."
+        ]
+        acceptance_criteria = [
+            "The candidate declaration is compiled through its public package boundary with regenerated readiness evidence."
+        ]
+    else:
+        kind = "missing_contract"
+        steward_target = "generator.catalog"
+        evidence = [
+            f"{skeleton['api_id']}:exact_declaration_unresolved",
+            skeleton["skeleton_fingerprint"],
+        ]
+        requested_behavior = [
+            "Publish an exact declaration through the authoritative API catalog change process."
+        ]
+        acceptance_criteria = [
+            "The declaration has a source-bound signature fingerprint and regenerated task packet."
+        ]
     request = {
         "schema": REQUEST_SCHEMA,
         "request_id": f"DR-{skeleton['atomic_unit_id']}-001",
         "state": "pending",
         "requesting_atomic_unit": skeleton["atomic_unit_id"],
         "blocked_api_ids": [skeleton["api_id"]],
-        "kind": "missing_contract",
-        "steward_target": "generator.catalog",
-        "evidence": [
-            f"{skeleton['api_id']}:exact_declaration_unresolved",
-            skeleton["skeleton_fingerprint"],
-        ],
-        "requested_behavior": [
-            "Publish an exact declaration through the authoritative API catalog change process."
-        ],
-        "acceptance_criteria": [
-            "The declaration has a source-bound signature fingerprint and regenerated task packet."
-        ],
+        "kind": kind,
+        "steward_target": steward_target,
+        "evidence": evidence,
+        "requested_behavior": requested_behavior,
+        "acceptance_criteria": acceptance_criteria,
         "resolution": None,
     }
     request["semantic_digest"] = digest(request)
@@ -892,7 +929,7 @@ def main() -> int:
     examples_path = resolve(root, args.request_examples)
     paths = repository_paths(root)
     generated = generate_manifest(corpus, paths)
-    examples = make_dependency_request_example(generated)
+    examples = make_dependency_request_example(generated, corpus)
     _schema_validate(generated, schema, "generated ownership manifest")
     for request in examples["requests"]:
         validate_dependency_request(request, generated, request_schema)

@@ -43,7 +43,7 @@ class ApiContractTest(unittest.TestCase):
         )
         self.assertEqual(
             summary["contract_state_counts"],
-            {"candidate": 20, "unresolved": 2},
+            {"candidate": 22},
         )
 
     def test_duplicate_id_fixture(self) -> None:
@@ -80,12 +80,10 @@ class ApiContractTest(unittest.TestCase):
 
     def test_ready_signature_missing_fixture(self) -> None:
         document = self.mutated()
-        api = next(
-            api
-            for package in document["packages"]
-            for api in package["apis"]
-            if api["declaration"]["status"] == "unresolved"
-        )
+        api = document["packages"][0]["apis"][0]
+        api["declaration"]["status"] = "unresolved"
+        api["declaration"]["signature"] = None
+        api["declaration"]["signature_fingerprint"] = None
         api["readiness"] = {"state": "ready", "blockers": []}
         self.assert_invalid(document, "unresolved declaration cannot be ready")
 

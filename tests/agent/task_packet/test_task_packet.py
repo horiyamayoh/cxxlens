@@ -113,7 +113,7 @@ class TaskPacketTest(unittest.TestCase):
         )
         self.assertEqual(
             generated["summary"]["declaration_state_counts"],
-            {"exact": 115, "unresolved": 9},
+            {"exact": 124, "unresolved": 0},
         )
         self.assertEqual(
             set(generated["global_contract_fingerprints"]),
@@ -356,8 +356,8 @@ class TaskPacketTest(unittest.TestCase):
         packet = next(
             packet
             for packet in corpus["packets"]
-            if packet["declaration"]["status"] == "unresolved"
-            and packet["contract_maturity"] == "planned"
+            if packet["contract_maturity"] == "planned"
+            and packet["generation"]["state"] == "blocked"
         )
         packet["generation"] = {"state": "ready", "block_reasons": []}
 

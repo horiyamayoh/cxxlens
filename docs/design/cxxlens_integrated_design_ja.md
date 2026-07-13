@@ -3713,6 +3713,19 @@ evidence、resource finding は counterexample path、effect summary は model/c
 必要とする。model pack merge/load/save は conflict/precedence/trust/unknown version を fail-closed に扱い、
 first-wins や暗黙 migration を禁止する。#52 が高リスク検証、#53 が header 統合、#54 が freeze を所有する。
 
+### 39.22 review・qa package candidate
+
+Issue #51 の規範契約は `docs/design/package_contract_51.md` と
+`schemas/cxxlens_package_contract_candidates.yaml#issue-51` である。候補契約は repository/commit/dirty/tool/
+build identity、before/after diff coordinate、baseline equivalence、pass/warn/fail/indeterminate gate、argv-only
+process policy、coverage mismatch/partial、many-to-many associationを型付きで保持する。partial/unsupported/
+budget/cancel/provider failure は pass や empty success に縮退させず、valid row、evidence、coverage、guarantee
+を保存する。
+
+`review` は diff parser、baseline matcher、gate evaluatorを所有し、`qa` は profile/workflow、coverage parser、
+association engineを所有する。process/filesystem/time/hash は runtime port 越しとし、shell文字列連結を禁止する。
+本候補は production public header を先取りせず、#52 の feasibility spike、#53 の統合、#54 の freeze を必要とする。
+
 ---
 
 ## 40. Public API inventory

@@ -10639,3 +10639,988 @@ groups:
         expected: All candidates/conflicts/partial rows remain explicit; first-wins and false convergence are forbidden.
   production_implementation_changed: false
   candidate_fingerprint: sha256:2cbc4efec8cc4784fe10df0d4ac5048d943b73ff5d3d677afc6991d7c7a569ad
+- issue: '#51'
+  state: candidate
+  packages:
+  - qa
+  - review
+  normative_document: docs/design/package_contract_51.md
+  candidate_headers:
+  - contracts/candidates/51/qa.hpp
+  - contracts/candidates/51/review.hpp
+  usage_examples:
+  - contracts/candidates/51/review_qa_usage.cpp
+  policies:
+  - id: qa.profile-process.v1
+    ownership_and_lifetime:
+    - Diffs, baselines, profiles, policies, coverage and reports are immutable detached values bound to explicit repository/workspace/tool
+      snapshots; AST and process handles never escape.
+    const_noexcept_thread_safety:
+    - Const observers permit concurrent reads; Git/process/coverage operations are isolated per execution context and return
+      detached canonical evidence.
+    callback_and_exception:
+    - Provider/parser callbacks are capability-gated; exceptions, signals and crashes become stable failure or unresolved
+      rows and cannot cross the API boundary.
+    execution_context_and_budgets:
+    - Diff/input/output/process/time/retry/parallel/coverage/association budgets are finite typed inputs with cancellation
+      and omitted-row accounting.
+    result_semantics:
+      empty_success: Complete zero changes/findings/steps/coverage rows is success only with resolved inputs, available providers
+        and conserved coverage.
+      unresolved: Missing Git/tool/baseline/build identity, source mapping or association target remains typed unresolved.
+      unsupported: Combined diff, tool/version/coverage format or requested execution policy that is unsupported remains explicit.
+      ambiguous: Rename/equivalence/path/tool/association/variant conflicts retain all candidates and never use first-wins.
+      partial: Stage/provider/budget/cancellation partiality retains valid rows, evidence, coverage and downgraded guarantee;
+        a gate becomes indeterminate.
+      failure: Invalid input/policy, stale identity, forbidden process, parser/I/O/crash or required-step failure is typed
+        and cannot become pass.
+    evidence_coverage_guarantee:
+    - Commit/tool/build/config identities, stage/association evidence, coverage and guarantee are conserved across filtering,
+      baseline and gate projection.
+    ordering_duplicates_variants:
+    - Canonical path/coordinate/finding/step/association ordering, equal-row provenance merge, unequal conflict rejection
+      and explicit variant state are mandatory.
+    schema_and_versioning:
+    - C++ API, diff/baseline/report/profile/coverage schemas and Git/tool/provider semantics versions evolve independently
+      and invalidate stale caches.
+    change_policy:
+    - '#51 owns candidate semantics only; #52 feasibility/cost, #53 integration and #54 freeze remain separate authorities.'
+  - id: qa.coverage-association.v1
+    ownership_and_lifetime:
+    - Diffs, baselines, profiles, policies, coverage and reports are immutable detached values bound to explicit repository/workspace/tool
+      snapshots; AST and process handles never escape.
+    const_noexcept_thread_safety:
+    - Const observers permit concurrent reads; Git/process/coverage operations are isolated per execution context and return
+      detached canonical evidence.
+    callback_and_exception:
+    - Provider/parser callbacks are capability-gated; exceptions, signals and crashes become stable failure or unresolved
+      rows and cannot cross the API boundary.
+    execution_context_and_budgets:
+    - Diff/input/output/process/time/retry/parallel/coverage/association budgets are finite typed inputs with cancellation
+      and omitted-row accounting.
+    result_semantics:
+      empty_success: Complete zero changes/findings/steps/coverage rows is success only with resolved inputs, available providers
+        and conserved coverage.
+      unresolved: Missing Git/tool/baseline/build identity, source mapping or association target remains typed unresolved.
+      unsupported: Combined diff, tool/version/coverage format or requested execution policy that is unsupported remains explicit.
+      ambiguous: Rename/equivalence/path/tool/association/variant conflicts retain all candidates and never use first-wins.
+      partial: Stage/provider/budget/cancellation partiality retains valid rows, evidence, coverage and downgraded guarantee;
+        a gate becomes indeterminate.
+      failure: Invalid input/policy, stale identity, forbidden process, parser/I/O/crash or required-step failure is typed
+        and cannot become pass.
+    evidence_coverage_guarantee:
+    - Commit/tool/build/config identities, stage/association evidence, coverage and guarantee are conserved across filtering,
+      baseline and gate projection.
+    ordering_duplicates_variants:
+    - Canonical path/coordinate/finding/step/association ordering, equal-row provenance merge, unequal conflict rejection
+      and explicit variant state are mandatory.
+    schema_and_versioning:
+    - C++ API, diff/baseline/report/profile/coverage schemas and Git/tool/provider semantics versions evolve independently
+      and invalidate stale caches.
+    change_policy:
+    - '#51 owns candidate semantics only; #52 feasibility/cost, #53 integration and #54 freeze remain separate authorities.'
+  - id: review.diff-baseline.v1
+    ownership_and_lifetime:
+    - Diffs, baselines, profiles, policies, coverage and reports are immutable detached values bound to explicit repository/workspace/tool
+      snapshots; AST and process handles never escape.
+    const_noexcept_thread_safety:
+    - Const observers permit concurrent reads; Git/process/coverage operations are isolated per execution context and return
+      detached canonical evidence.
+    callback_and_exception:
+    - Provider/parser callbacks are capability-gated; exceptions, signals and crashes become stable failure or unresolved
+      rows and cannot cross the API boundary.
+    execution_context_and_budgets:
+    - Diff/input/output/process/time/retry/parallel/coverage/association budgets are finite typed inputs with cancellation
+      and omitted-row accounting.
+    result_semantics:
+      empty_success: Complete zero changes/findings/steps/coverage rows is success only with resolved inputs, available providers
+        and conserved coverage.
+      unresolved: Missing Git/tool/baseline/build identity, source mapping or association target remains typed unresolved.
+      unsupported: Combined diff, tool/version/coverage format or requested execution policy that is unsupported remains explicit.
+      ambiguous: Rename/equivalence/path/tool/association/variant conflicts retain all candidates and never use first-wins.
+      partial: Stage/provider/budget/cancellation partiality retains valid rows, evidence, coverage and downgraded guarantee;
+        a gate becomes indeterminate.
+      failure: Invalid input/policy, stale identity, forbidden process, parser/I/O/crash or required-step failure is typed
+        and cannot become pass.
+    evidence_coverage_guarantee:
+    - Commit/tool/build/config identities, stage/association evidence, coverage and guarantee are conserved across filtering,
+      baseline and gate projection.
+    ordering_duplicates_variants:
+    - Canonical path/coordinate/finding/step/association ordering, equal-row provenance merge, unequal conflict rejection
+      and explicit variant state are mandatory.
+    schema_and_versioning:
+    - C++ API, diff/baseline/report/profile/coverage schemas and Git/tool/provider semantics versions evolve independently
+      and invalidate stale caches.
+    change_policy:
+    - '#51 owns candidate semantics only; #52 feasibility/cost, #53 integration and #54 freeze remain separate authorities.'
+  - id: review.gate-workflow.v1
+    ownership_and_lifetime:
+    - Diffs, baselines, profiles, policies, coverage and reports are immutable detached values bound to explicit repository/workspace/tool
+      snapshots; AST and process handles never escape.
+    const_noexcept_thread_safety:
+    - Const observers permit concurrent reads; Git/process/coverage operations are isolated per execution context and return
+      detached canonical evidence.
+    callback_and_exception:
+    - Provider/parser callbacks are capability-gated; exceptions, signals and crashes become stable failure or unresolved
+      rows and cannot cross the API boundary.
+    execution_context_and_budgets:
+    - Diff/input/output/process/time/retry/parallel/coverage/association budgets are finite typed inputs with cancellation
+      and omitted-row accounting.
+    result_semantics:
+      empty_success: Complete zero changes/findings/steps/coverage rows is success only with resolved inputs, available providers
+        and conserved coverage.
+      unresolved: Missing Git/tool/baseline/build identity, source mapping or association target remains typed unresolved.
+      unsupported: Combined diff, tool/version/coverage format or requested execution policy that is unsupported remains explicit.
+      ambiguous: Rename/equivalence/path/tool/association/variant conflicts retain all candidates and never use first-wins.
+      partial: Stage/provider/budget/cancellation partiality retains valid rows, evidence, coverage and downgraded guarantee;
+        a gate becomes indeterminate.
+      failure: Invalid input/policy, stale identity, forbidden process, parser/I/O/crash or required-step failure is typed
+        and cannot become pass.
+    evidence_coverage_guarantee:
+    - Commit/tool/build/config identities, stage/association evidence, coverage and guarantee are conserved across filtering,
+      baseline and gate projection.
+    ordering_duplicates_variants:
+    - Canonical path/coordinate/finding/step/association ordering, equal-row provenance merge, unequal conflict rejection
+      and explicit variant state are mandatory.
+    schema_and_versioning:
+    - C++ API, diff/baseline/report/profile/coverage schemas and Git/tool/provider semantics versions evolve independently
+      and invalidate stale caches.
+    change_policy:
+    - '#51 owns candidate semantics only; #52 feasibility/cost, #53 integration and #54 freeze remain separate authorities.'
+  registry_owners:
+  - id: registry.qa.errors.v1
+    kind: error_registry
+    owner_atomic_unit: AU-QA-003
+    steward: steward.qa
+    entries:
+    - qa.build-failed
+    - qa.process-crashed
+    - qa.process-not-allowed
+    - qa.process-timeout
+    - qa.report-parse-failed
+    - qa.tool-unavailable
+    behavior: Policy, availability, execution and parser failures use stable codes and never diagnostic prose.
+  - id: registry.qa.schemas.v1
+    kind: schema_registry
+    owner_atomic_unit: AU-QA-004
+    steward: steward.qa
+    entries:
+    - cxxlens.qa-profile.v1
+    - cxxlens.qa-report.v1
+    behavior: QA profile/report schemas canonically project steps, evidence, coverage, association and guarantee.
+  - id: registry.review.errors.v1
+    kind: error_registry
+    owner_atomic_unit: AU-RV-005
+    steward: steward.review
+    entries:
+    - review.baseline-ambiguous
+    - review.baseline-invalid
+    - review.diff-invalid
+    - review.git-drift
+    - review.git-unavailable
+    - review.gate-failed
+    - review.gate-indeterminate
+    behavior: Diff, baseline, drift and gate outcomes use stable codes; indeterminate is never pass.
+  - id: registry.review.schemas.v1
+    kind: schema_registry
+    owner_atomic_unit: AU-RV-005
+    steward: steward.review
+    entries:
+    - cxxlens.review-baseline.v1
+    - cxxlens.review-diff.v1
+    - cxxlens.review-report.v1
+    behavior: Review schemas canonically project repository identity, classification, stage, gate, evidence and guarantee.
+  - id: registry.review.capabilities.v1
+    kind: capability_registry
+    owner_atomic_unit: AU-RV-001
+    steward: steward.review
+    entries:
+    - review.git
+    behavior: Git executable/version/root and repository state are explicit and drift invalidates the view.
+  consumer_boundaries:
+  - owner_package: core
+    consumer_package: review
+    shared_types:
+    - finding
+    - finding_set
+    - coverage_report
+    access: const_reference
+    rule: '#43 owns finding and coverage semantics; review classifies and gates authoritative rows without redefining identity.'
+  - owner_package: rules
+    consumer_package: review
+    shared_types:
+    - rule_pack
+    access: value_copy
+    rule: '#47 owns rule execution contract; review binds a versioned pack to one snapshot and records partial rule failure.'
+  - owner_package: workspace
+    consumer_package: review
+    shared_types:
+    - workspace
+    - execution_context
+    access: const_reference
+    rule: '#44 owns workspace snapshot and providers; review rejects repository/workspace drift.'
+  - owner_package: core
+    consumer_package: qa
+    shared_types:
+    - finding_set
+    - coverage_report
+    access: const_reference
+    rule: '#43 owns findings and coverage values; QA imports evidence and associations without changing their identity.'
+  - owner_package: workspace
+    consumer_package: qa
+    shared_types:
+    - workspace
+    - execution_context
+    access: const_reference
+    rule: '#44 owns project snapshot while QA executes only under an explicit process/root policy.'
+  - owner_package: qa
+    consumer_package: review
+    shared_types:
+    - dynamic_report
+    - coverage_data
+    access: const_reference
+    rule: Review may consume QA evidence but cannot reinterpret tool failure, partial coverage or association ambiguity as
+      pass.
+  api_contracts:
+  - api_id: API-QA-001
+    atomic_unit: AU-QA-001
+    package: qa
+    policy: qa.profile-process.v1
+    declaration:
+      source: contracts/candidates/51/qa.hpp
+      signature: cxxlens::qa::profile cxxlens::qa::profile::memory(); cxxlens::qa::profile cxxlens::qa::profile::concurrency();
+        cxxlens::qa::profile cxxlens::qa::profile::undefined_behavior(); cxxlens::qa::profile cxxlens::qa::profile::coverage();
+        cxxlens::qa::profile cxxlens::qa::profile::sanitizer(cxxlens::qa::sanitizer_kind) const; cxxlens::qa::profile cxxlens::qa::profile::coverage_mode_(cxxlens::qa::coverage_mode)
+        const; cxxlens::qa::profile cxxlens::qa::profile::build_target(std::string,cxxlens::qa::step_requirement) const; cxxlens::qa::profile
+        cxxlens::qa::profile::test_argv(std::vector<std::string>,cxxlens::qa::step_requirement) const; cxxlens::qa::profile
+        cxxlens::qa::profile::environment(std::string,std::string) const; cxxlens::qa::profile cxxlens::qa::profile::timeout(std::chrono::seconds)
+        const; cxxlens::qa::profile cxxlens::qa::profile::retry_limit(std::size_t) const; cxxlens::result<void> cxxlens::qa::profile::validate()
+        const
+      signature_fingerprint: sha256:803f929d1b97e408b10c9b50f5127fd6a7b600048b9398bab90920ffc5161ac8
+    family_members:
+    - cxxlens::qa::memory
+    - cxxlens::qa::concurrency
+    - cxxlens::qa::undefined_behavior
+    - cxxlens::qa::coverage
+    - cxxlens::qa::sanitizer
+    - cxxlens::qa::coverage_mode_
+    - cxxlens::qa::build_target
+    - cxxlens::qa::test_argv
+    - cxxlens::qa::environment
+    - cxxlens::qa::timeout
+    - cxxlens::qa::retry_limit
+    - cxxlens::qa::validate
+    semantics:
+    - Repository/workspace/tool/build identities and immutable snapshots are explicit; unavailable or partial providers never
+      become clean empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/indeterminate and failure outcomes remain distinct.
+    - Canonical IDs/order, argv-only security, evidence/coverage/guarantee, budgets, cancellation and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:execution_context
+      - public-type:core:finding
+      - public-type:core:finding_set
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:severity
+      - public-type:core:unresolved
+      - public-type:qa:coverage_data
+      - public-type:qa:coverage_import_options
+      - public-type:qa:coverage_mode
+      - public-type:qa:dynamic_report
+      - public-type:qa:process_policy
+      - public-type:qa:qa::profile
+      - public-type:qa:qa::workflow
+      - public-type:qa:sanitizer_kind
+      - public-type:qa:step_requirement
+      - public-type:qa:step_state
+      - public-type:workspace:workspace
+      shared_components: &id003
+      - shared.package.core.package_internal_engine
+      - shared.package.qa.package_internal_engine
+      - shared.package.review.package_internal_engine
+      - shared.package.rules.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers:
+      - provider.capability.qa-coverage:qa.coverage
+      - provider.capability.qa-sanitizers:qa.sanitizers
+      schemas: &id004
+      - schema:schemas/cxxlens_qa_profile.schema.yaml
+      - schema:schemas/cxxlens_qa_report.schema.yaml
+      - schema:schemas/cxxlens_review_baseline.schema.yaml
+      - schema:schemas/cxxlens_review_diff.schema.yaml
+      - schema:schemas/cxxlens_review_report.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-QA-001
+      - UC-QA-002
+      - QR-004
+      - QR-008
+      design_sections:
+      - §24 QA workflow
+      - §36.7 QA tests
+      - §39.22 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, root/commit/tool/build identity, partial/indeterminate
+        outcomes, argv/process security, evidence/coverage/guarantee, ordering, budgets and schema/version behavior with a
+        public example.
+    acceptance:
+      positive:
+        id: API-QA-001.positive
+        expression: Use a complete deterministic fixture with resolved repository/workspace/tool/build identity and available
+          providers.
+        expected: Exact canonical rows, conserved evidence/coverage, stable identity/order and complete guarantee.
+      negative:
+        id: API-QA-001.negative
+        expression: Use invalid/stale input, missing or unsupported provider/tool, forbidden process, timeout/crash, corrupt
+          coverage or required-stage failure.
+        expected: Typed error/unresolved/indeterminate state with no pass, clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-QA-001.ambiguous
+        expression: Use rename/equivalence/root/path/tool/association/variant conflicts or budget-limited candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false pass are forbidden.
+  - api_id: API-QA-002
+    atomic_unit: AU-QA-002
+    package: qa
+    policy: qa.profile-process.v1
+    declaration:
+      source: contracts/candidates/51/qa.hpp
+      signature: cxxlens::qa::workflow cxxlens::qa::workflow::for_project(const cxxlens::workspace&); cxxlens::qa::workflow
+        cxxlens::qa::workflow::use(cxxlens::qa::profile) const; cxxlens::qa::workflow cxxlens::qa::workflow::process_policy_(cxxlens::qa::process_policy)
+        const; cxxlens::qa::workflow cxxlens::qa::workflow::import_coverage(bool) const; cxxlens::qa::workflow cxxlens::qa::workflow::associate_with(cxxlens::finding_set)
+        const; cxxlens::qa::workflow cxxlens::qa::workflow::continue_on_optional_failure(bool) const
+      signature_fingerprint: sha256:fe69c17adf8d7e12cc77d48488ae9c20a7683b3e86e52036941e501dca941b30
+    family_members:
+    - cxxlens::qa::for_project
+    - cxxlens::qa::use
+    - cxxlens::qa::process_policy_
+    - cxxlens::qa::import_coverage
+    - cxxlens::qa::associate_with
+    - cxxlens::qa::continue_on_optional_failure
+    semantics:
+    - Repository/workspace/tool/build identities and immutable snapshots are explicit; unavailable or partial providers never
+      become clean empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/indeterminate and failure outcomes remain distinct.
+    - Canonical IDs/order, argv-only security, evidence/coverage/guarantee, budgets, cancellation and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:execution_context
+      - public-type:core:finding
+      - public-type:core:finding_set
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:severity
+      - public-type:core:unresolved
+      - public-type:qa:coverage_data
+      - public-type:qa:coverage_import_options
+      - public-type:qa:coverage_mode
+      - public-type:qa:dynamic_report
+      - public-type:qa:process_policy
+      - public-type:qa:qa::profile
+      - public-type:qa:qa::workflow
+      - public-type:qa:sanitizer_kind
+      - public-type:qa:step_requirement
+      - public-type:qa:step_state
+      - public-type:workspace:workspace
+      shared_components: *id003
+      providers:
+      - provider.capability.qa-coverage:qa.coverage
+      - provider.capability.qa-sanitizers:qa.sanitizers
+      schemas: *id004
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-QA-001
+      - UC-QA-002
+      - QR-004
+      - QR-008
+      design_sections:
+      - §24 QA workflow
+      - §36.7 QA tests
+      - §39.22 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, root/commit/tool/build identity, partial/indeterminate
+        outcomes, argv/process security, evidence/coverage/guarantee, ordering, budgets and schema/version behavior with a
+        public example.
+    acceptance:
+      positive:
+        id: API-QA-002.positive
+        expression: Use a complete deterministic fixture with resolved repository/workspace/tool/build identity and available
+          providers.
+        expected: Exact canonical rows, conserved evidence/coverage, stable identity/order and complete guarantee.
+      negative:
+        id: API-QA-002.negative
+        expression: Use invalid/stale input, missing or unsupported provider/tool, forbidden process, timeout/crash, corrupt
+          coverage or required-stage failure.
+        expected: Typed error/unresolved/indeterminate state with no pass, clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-QA-002.ambiguous
+        expression: Use rename/equivalence/root/path/tool/association/variant conflicts or budget-limited candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false pass are forbidden.
+  - api_id: API-QA-003
+    atomic_unit: AU-QA-003
+    package: qa
+    policy: qa.profile-process.v1
+    declaration:
+      source: contracts/candidates/51/qa.hpp
+      signature: cxxlens::result<cxxlens::qa::dynamic_report> cxxlens::qa::workflow::run(cxxlens::execution_context) const
+      signature_fingerprint: sha256:92a8be0f146613a1cb94d936d13b4f541660d8b9b6c0ffacde0d95f671e83994
+    family_members:
+    - cxxlens::qa::workflow::run
+    semantics:
+    - Repository/workspace/tool/build identities and immutable snapshots are explicit; unavailable or partial providers never
+      become clean empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/indeterminate and failure outcomes remain distinct.
+    - Canonical IDs/order, argv-only security, evidence/coverage/guarantee, budgets, cancellation and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:execution_context
+      - public-type:core:finding
+      - public-type:core:finding_set
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:severity
+      - public-type:core:unresolved
+      - public-type:qa:coverage_data
+      - public-type:qa:coverage_import_options
+      - public-type:qa:coverage_mode
+      - public-type:qa:dynamic_report
+      - public-type:qa:process_policy
+      - public-type:qa:qa::profile
+      - public-type:qa:qa::workflow
+      - public-type:qa:sanitizer_kind
+      - public-type:qa:step_requirement
+      - public-type:qa:step_state
+      - public-type:workspace:workspace
+      shared_components: *id003
+      providers:
+      - provider.capability.qa-coverage:qa.coverage
+      - provider.capability.qa-sanitizers:qa.sanitizers
+      schemas: *id004
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-QA-001
+      - UC-QA-002
+      - QR-004
+      - QR-008
+      design_sections:
+      - §24 QA workflow
+      - §36.7 QA tests
+      - §39.22 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, root/commit/tool/build identity, partial/indeterminate
+        outcomes, argv/process security, evidence/coverage/guarantee, ordering, budgets and schema/version behavior with a
+        public example.
+    acceptance:
+      positive:
+        id: API-QA-003.positive
+        expression: Use a complete deterministic fixture with resolved repository/workspace/tool/build identity and available
+          providers.
+        expected: Exact canonical rows, conserved evidence/coverage, stable identity/order and complete guarantee.
+      negative:
+        id: API-QA-003.negative
+        expression: Use invalid/stale input, missing or unsupported provider/tool, forbidden process, timeout/crash, corrupt
+          coverage or required-stage failure.
+        expected: Typed error/unresolved/indeterminate state with no pass, clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-QA-003.ambiguous
+        expression: Use rename/equivalence/root/path/tool/association/variant conflicts or budget-limited candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false pass are forbidden.
+  - api_id: API-QA-004
+    atomic_unit: AU-QA-004
+    package: qa
+    policy: qa.coverage-association.v1
+    declaration:
+      source: contracts/candidates/51/qa.hpp
+      signature: cxxlens::result<cxxlens::qa::coverage_data> cxxlens::qa::import_source_coverage(const cxxlens::workspace&,cxxlens::qa::coverage_import_options,cxxlens::execution_context)
+      signature_fingerprint: sha256:e3f46387620bff5172039554fbc902a665319b6a2eaa2c6960bb379df6bedc87
+    family_members:
+    - cxxlens::qa::import_source_coverage
+    semantics:
+    - Repository/workspace/tool/build identities and immutable snapshots are explicit; unavailable or partial providers never
+      become clean empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/indeterminate and failure outcomes remain distinct.
+    - Canonical IDs/order, argv-only security, evidence/coverage/guarantee, budgets, cancellation and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:execution_context
+      - public-type:core:finding
+      - public-type:core:finding_set
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:severity
+      - public-type:core:unresolved
+      - public-type:qa:coverage_data
+      - public-type:qa:coverage_import_options
+      - public-type:qa:coverage_mode
+      - public-type:qa:dynamic_report
+      - public-type:qa:process_policy
+      - public-type:qa:qa::profile
+      - public-type:qa:qa::workflow
+      - public-type:qa:sanitizer_kind
+      - public-type:qa:step_requirement
+      - public-type:qa:step_state
+      - public-type:workspace:workspace
+      shared_components: *id003
+      providers:
+      - provider.capability.qa-coverage:qa.coverage
+      - provider.capability.qa-sanitizers:qa.sanitizers
+      schemas: *id004
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-QA-001
+      - UC-QA-002
+      - QR-004
+      - QR-008
+      design_sections:
+      - §24 QA workflow
+      - §36.7 QA tests
+      - §39.22 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, root/commit/tool/build identity, partial/indeterminate
+        outcomes, argv/process security, evidence/coverage/guarantee, ordering, budgets and schema/version behavior with a
+        public example.
+    acceptance:
+      positive:
+        id: API-QA-004.positive
+        expression: Use a complete deterministic fixture with resolved repository/workspace/tool/build identity and available
+          providers.
+        expected: Exact canonical rows, conserved evidence/coverage, stable identity/order and complete guarantee.
+      negative:
+        id: API-QA-004.negative
+        expression: Use invalid/stale input, missing or unsupported provider/tool, forbidden process, timeout/crash, corrupt
+          coverage or required-stage failure.
+        expected: Typed error/unresolved/indeterminate state with no pass, clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-QA-004.ambiguous
+        expression: Use rename/equivalence/root/path/tool/association/variant conflicts or budget-limited candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false pass are forbidden.
+  - api_id: API-RV-001
+    atomic_unit: AU-RV-001
+    package: review
+    policy: review.diff-baseline.v1
+    declaration:
+      source: contracts/candidates/51/review.hpp
+      signature: cxxlens::result<cxxlens::review::diff_view> cxxlens::review::diff_view::from_unified_diff(std::string_view,cxxlens::path,cxxlens::review::diff_options);
+        cxxlens::result<cxxlens::review::diff_view> cxxlens::review::diff_view::from_git(cxxlens::path,std::string,cxxlens::review::diff_options,cxxlens::execution_context);
+        bool cxxlens::review::diff_view::contains(const cxxlens::source_span&,cxxlens::review::diff_side) const; std::span<const
+        cxxlens::path> cxxlens::review::diff_view::changed_files() const noexcept; std::string_view cxxlens::review::diff_view::identity()
+        const noexcept; std::span<const cxxlens::diagnostic> cxxlens::review::diff_view::diagnostics() const noexcept; std::span<const
+        cxxlens::unresolved> cxxlens::review::diff_view::unresolved_items() const noexcept; std::string cxxlens::review::diff_view::to_json()
+        const
+      signature_fingerprint: sha256:0e2ddfb5ad219127112c61c98b8cfdf8a94c15d69fbff97eb23262f8e4176253
+    family_members:
+    - cxxlens::review::from_unified_diff
+    - cxxlens::review::from_git
+    - cxxlens::review::contains
+    - cxxlens::review::changed_files
+    - cxxlens::review::identity
+    - cxxlens::review::diagnostics
+    - cxxlens::review::unresolved_items
+    - cxxlens::review::to_json
+    semantics:
+    - Repository/workspace/tool/build identities and immutable snapshots are explicit; unavailable or partial providers never
+      become clean empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/indeterminate and failure outcomes remain distinct.
+    - Canonical IDs/order, argv-only security, evidence/coverage/guarantee, budgets, cancellation and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:execution_context
+      - public-type:core:finding
+      - public-type:core:finding_set
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:severity
+      - public-type:core:unresolved
+      - public-type:review:baseline
+      - public-type:review:baseline_match_state
+      - public-type:review:baseline_options
+      - public-type:review:diff_options
+      - public-type:review:diff_side
+      - public-type:review:diff_view
+      - public-type:review:file_change_kind
+      - public-type:review:gate_policy
+      - public-type:review:gate_state
+      - public-type:review:review::workflow
+      - public-type:review:review_report
+      - public-type:workspace:workspace
+      shared_components: *id003
+      providers: []
+      schemas: *id004
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-RV-001
+      - UC-RV-002
+      - QR-004
+      - QR-008
+      design_sections:
+      - §25 diff/baseline/review
+      - §36.8 review tests
+      - §39.22 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, root/commit/tool/build identity, partial/indeterminate
+        outcomes, argv/process security, evidence/coverage/guarantee, ordering, budgets and schema/version behavior with a
+        public example.
+    acceptance:
+      positive:
+        id: API-RV-001.positive
+        expression: Use a complete deterministic fixture with resolved repository/workspace/tool/build identity and available
+          providers.
+        expected: Exact canonical rows, conserved evidence/coverage, stable identity/order and complete guarantee.
+      negative:
+        id: API-RV-001.negative
+        expression: Use invalid/stale input, missing or unsupported provider/tool, forbidden process, timeout/crash, corrupt
+          coverage or required-stage failure.
+        expected: Typed error/unresolved/indeterminate state with no pass, clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-RV-001.ambiguous
+        expression: Use rename/equivalence/root/path/tool/association/variant conflicts or budget-limited candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false pass are forbidden.
+  - api_id: API-RV-002
+    atomic_unit: AU-RV-002
+    package: review
+    policy: review.diff-baseline.v1
+    declaration:
+      source: contracts/candidates/51/review.hpp
+      signature: cxxlens::result<cxxlens::review::baseline> cxxlens::review::baseline::load(cxxlens::path,cxxlens::review::baseline_options);
+        cxxlens::result<void> cxxlens::review::baseline::save(cxxlens::path,cxxlens::review::baseline_options) const; cxxlens::review::baseline_match_state
+        cxxlens::review::baseline::compare(const cxxlens::finding&) const; bool cxxlens::review::baseline::contains_equivalent(const
+        cxxlens::finding&) const; std::string_view cxxlens::review::baseline::id() const noexcept; cxxlens::semantic_version
+        cxxlens::review::baseline::version() const noexcept; std::span<const cxxlens::diagnostic> cxxlens::review::baseline::diagnostics()
+        const noexcept; std::span<const cxxlens::unresolved> cxxlens::review::baseline::unresolved_items() const noexcept;
+        std::string cxxlens::review::baseline::to_json() const
+      signature_fingerprint: sha256:1f39724e417c6fbd5a129d35b3db0a1bd1815ee0dff51fb053feefff0a71bc8b
+    family_members:
+    - cxxlens::review::load
+    - cxxlens::review::save
+    - cxxlens::review::compare
+    - cxxlens::review::contains_equivalent
+    - cxxlens::review::id
+    - cxxlens::review::version
+    - cxxlens::review::diagnostics
+    - cxxlens::review::unresolved_items
+    - cxxlens::review::to_json
+    semantics:
+    - Repository/workspace/tool/build identities and immutable snapshots are explicit; unavailable or partial providers never
+      become clean empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/indeterminate and failure outcomes remain distinct.
+    - Canonical IDs/order, argv-only security, evidence/coverage/guarantee, budgets, cancellation and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:execution_context
+      - public-type:core:finding
+      - public-type:core:finding_set
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:severity
+      - public-type:core:unresolved
+      - public-type:review:baseline
+      - public-type:review:baseline_match_state
+      - public-type:review:baseline_options
+      - public-type:review:diff_options
+      - public-type:review:diff_side
+      - public-type:review:diff_view
+      - public-type:review:file_change_kind
+      - public-type:review:gate_policy
+      - public-type:review:gate_state
+      - public-type:review:review::workflow
+      - public-type:review:review_report
+      - public-type:workspace:workspace
+      shared_components: *id003
+      providers: []
+      schemas: *id004
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-RV-001
+      - UC-RV-002
+      - QR-004
+      - QR-008
+      design_sections:
+      - §25 diff/baseline/review
+      - §36.8 review tests
+      - §39.22 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, root/commit/tool/build identity, partial/indeterminate
+        outcomes, argv/process security, evidence/coverage/guarantee, ordering, budgets and schema/version behavior with a
+        public example.
+    acceptance:
+      positive:
+        id: API-RV-002.positive
+        expression: Use a complete deterministic fixture with resolved repository/workspace/tool/build identity and available
+          providers.
+        expected: Exact canonical rows, conserved evidence/coverage, stable identity/order and complete guarantee.
+      negative:
+        id: API-RV-002.negative
+        expression: Use invalid/stale input, missing or unsupported provider/tool, forbidden process, timeout/crash, corrupt
+          coverage or required-stage failure.
+        expected: Typed error/unresolved/indeterminate state with no pass, clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-RV-002.ambiguous
+        expression: Use rename/equivalence/root/path/tool/association/variant conflicts or budget-limited candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false pass are forbidden.
+  - api_id: API-RV-003
+    atomic_unit: AU-RV-003
+    package: review
+    policy: review.gate-workflow.v1
+    declaration:
+      source: contracts/candidates/51/review.hpp
+      signature: cxxlens::review::gate_policy cxxlens::review::gate_policy::no_new_errors(); cxxlens::review::gate_policy
+        cxxlens::review::gate_policy::no_high_confidence_security_findings(); cxxlens::review::gate_policy cxxlens::review::gate_policy::minimum_severity(cxxlens::severity)
+        const; cxxlens::review::gate_policy cxxlens::review::gate_policy::minimum_confidence(cxxlens::confidence) const; cxxlens::review::gate_policy
+        cxxlens::review::gate_policy::changed_lines_only(bool) const; cxxlens::review::gate_policy cxxlens::review::gate_policy::no_new_only(bool)
+        const; cxxlens::review::gate_policy cxxlens::review::gate_policy::maximum_unresolved(std::size_t) const; cxxlens::review::gate_policy
+        cxxlens::review::gate_policy::minimum_coverage(double) const; cxxlens::result<void> cxxlens::review::gate_policy::validate()
+        const
+      signature_fingerprint: sha256:4d0ce52b810dde462f736f361416e24211716f629f1b13eb1373bf20cff9420d
+    family_members:
+    - cxxlens::review::no_new_errors
+    - cxxlens::review::no_high_confidence_security_findings
+    - cxxlens::review::minimum_severity
+    - cxxlens::review::minimum_confidence
+    - cxxlens::review::changed_lines_only
+    - cxxlens::review::no_new_only
+    - cxxlens::review::maximum_unresolved
+    - cxxlens::review::minimum_coverage
+    - cxxlens::review::validate
+    semantics:
+    - Repository/workspace/tool/build identities and immutable snapshots are explicit; unavailable or partial providers never
+      become clean empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/indeterminate and failure outcomes remain distinct.
+    - Canonical IDs/order, argv-only security, evidence/coverage/guarantee, budgets, cancellation and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:execution_context
+      - public-type:core:finding
+      - public-type:core:finding_set
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:severity
+      - public-type:core:unresolved
+      - public-type:review:baseline
+      - public-type:review:baseline_match_state
+      - public-type:review:baseline_options
+      - public-type:review:diff_options
+      - public-type:review:diff_side
+      - public-type:review:diff_view
+      - public-type:review:file_change_kind
+      - public-type:review:gate_policy
+      - public-type:review:gate_state
+      - public-type:review:review::workflow
+      - public-type:review:review_report
+      - public-type:workspace:workspace
+      shared_components: *id003
+      providers: []
+      schemas: *id004
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-RV-001
+      - UC-RV-002
+      - QR-004
+      - QR-008
+      design_sections:
+      - §25 diff/baseline/review
+      - §36.8 review tests
+      - §39.22 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, root/commit/tool/build identity, partial/indeterminate
+        outcomes, argv/process security, evidence/coverage/guarantee, ordering, budgets and schema/version behavior with a
+        public example.
+    acceptance:
+      positive:
+        id: API-RV-003.positive
+        expression: Use a complete deterministic fixture with resolved repository/workspace/tool/build identity and available
+          providers.
+        expected: Exact canonical rows, conserved evidence/coverage, stable identity/order and complete guarantee.
+      negative:
+        id: API-RV-003.negative
+        expression: Use invalid/stale input, missing or unsupported provider/tool, forbidden process, timeout/crash, corrupt
+          coverage or required-stage failure.
+        expected: Typed error/unresolved/indeterminate state with no pass, clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-RV-003.ambiguous
+        expression: Use rename/equivalence/root/path/tool/association/variant conflicts or budget-limited candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false pass are forbidden.
+  - api_id: API-RV-004
+    atomic_unit: AU-RV-004
+    package: review
+    policy: review.gate-workflow.v1
+    declaration:
+      source: contracts/candidates/51/review.hpp
+      signature: cxxlens::review::workflow cxxlens::review::workflow::for_diff(cxxlens::review::diff_view); cxxlens::review::workflow
+        cxxlens::review::workflow::add(cxxlens::rules::rule_pack) const; cxxlens::review::workflow cxxlens::review::workflow::add_findings(cxxlens::finding_set)
+        const; cxxlens::review::workflow cxxlens::review::workflow::baseline_(cxxlens::review::baseline) const; cxxlens::review::workflow
+        cxxlens::review::workflow::gate(cxxlens::review::gate_policy) const; cxxlens::review::workflow cxxlens::review::workflow::propose_fixes(bool)
+        const; cxxlens::review::workflow cxxlens::review::workflow::affected_context(bool) const
+      signature_fingerprint: sha256:f0456adae5a0849fa78d70321c1900bdd549d04905dd54cd8e11cb5827c5bdf6
+    family_members:
+    - cxxlens::review::for_diff
+    - cxxlens::review::add
+    - cxxlens::review::add_findings
+    - cxxlens::review::baseline_
+    - cxxlens::review::gate
+    - cxxlens::review::propose_fixes
+    - cxxlens::review::affected_context
+    semantics:
+    - Repository/workspace/tool/build identities and immutable snapshots are explicit; unavailable or partial providers never
+      become clean empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/indeterminate and failure outcomes remain distinct.
+    - Canonical IDs/order, argv-only security, evidence/coverage/guarantee, budgets, cancellation and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:execution_context
+      - public-type:core:finding
+      - public-type:core:finding_set
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:severity
+      - public-type:core:unresolved
+      - public-type:review:baseline
+      - public-type:review:baseline_match_state
+      - public-type:review:baseline_options
+      - public-type:review:diff_options
+      - public-type:review:diff_side
+      - public-type:review:diff_view
+      - public-type:review:file_change_kind
+      - public-type:review:gate_policy
+      - public-type:review:gate_state
+      - public-type:review:review::workflow
+      - public-type:review:review_report
+      - public-type:workspace:workspace
+      shared_components: *id003
+      providers: []
+      schemas: *id004
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-RV-001
+      - UC-RV-002
+      - QR-004
+      - QR-008
+      design_sections:
+      - §25 diff/baseline/review
+      - §36.8 review tests
+      - §39.22 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, root/commit/tool/build identity, partial/indeterminate
+        outcomes, argv/process security, evidence/coverage/guarantee, ordering, budgets and schema/version behavior with a
+        public example.
+    acceptance:
+      positive:
+        id: API-RV-004.positive
+        expression: Use a complete deterministic fixture with resolved repository/workspace/tool/build identity and available
+          providers.
+        expected: Exact canonical rows, conserved evidence/coverage, stable identity/order and complete guarantee.
+      negative:
+        id: API-RV-004.negative
+        expression: Use invalid/stale input, missing or unsupported provider/tool, forbidden process, timeout/crash, corrupt
+          coverage or required-stage failure.
+        expected: Typed error/unresolved/indeterminate state with no pass, clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-RV-004.ambiguous
+        expression: Use rename/equivalence/root/path/tool/association/variant conflicts or budget-limited candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false pass are forbidden.
+  - api_id: API-RV-005
+    atomic_unit: AU-RV-005
+    package: review
+    policy: review.gate-workflow.v1
+    declaration:
+      source: contracts/candidates/51/review.hpp
+      signature: cxxlens::result<cxxlens::review::review_report> cxxlens::review::workflow::run(const cxxlens::workspace&,cxxlens::execution_context)
+        const
+      signature_fingerprint: sha256:4db9ffbb52a800af72b493ac93a0be3e68ce4052b9c617e5c5a0fe6c9d4a30a7
+    family_members:
+    - cxxlens::review::workflow::run
+    semantics:
+    - Repository/workspace/tool/build identities and immutable snapshots are explicit; unavailable or partial providers never
+      become clean empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/indeterminate and failure outcomes remain distinct.
+    - Canonical IDs/order, argv-only security, evidence/coverage/guarantee, budgets, cancellation and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:execution_context
+      - public-type:core:finding
+      - public-type:core:finding_set
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:severity
+      - public-type:core:unresolved
+      - public-type:review:baseline
+      - public-type:review:baseline_match_state
+      - public-type:review:baseline_options
+      - public-type:review:diff_options
+      - public-type:review:diff_side
+      - public-type:review:diff_view
+      - public-type:review:file_change_kind
+      - public-type:review:gate_policy
+      - public-type:review:gate_state
+      - public-type:review:review::workflow
+      - public-type:review:review_report
+      - public-type:workspace:workspace
+      shared_components: *id003
+      providers: []
+      schemas: *id004
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-RV-001
+      - UC-RV-002
+      - QR-004
+      - QR-008
+      design_sections:
+      - §25 diff/baseline/review
+      - §36.8 review tests
+      - §39.22 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, root/commit/tool/build identity, partial/indeterminate
+        outcomes, argv/process security, evidence/coverage/guarantee, ordering, budgets and schema/version behavior with a
+        public example.
+    acceptance:
+      positive:
+        id: API-RV-005.positive
+        expression: Use a complete deterministic fixture with resolved repository/workspace/tool/build identity and available
+          providers.
+        expected: Exact canonical rows, conserved evidence/coverage, stable identity/order and complete guarantee.
+      negative:
+        id: API-RV-005.negative
+        expression: Use invalid/stale input, missing or unsupported provider/tool, forbidden process, timeout/crash, corrupt
+          coverage or required-stage failure.
+        expected: Typed error/unresolved/indeterminate state with no pass, clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-RV-005.ambiguous
+        expression: Use rename/equivalence/root/path/tool/association/variant conflicts or budget-limited candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false pass are forbidden.
+  production_implementation_changed: false
+  candidate_fingerprint: sha256:e6173e94b9d36c3c746b7fc8aa9690a3b9c7aa2967155cd500ec4214bf7a23ad

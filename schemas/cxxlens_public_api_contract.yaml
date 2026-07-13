@@ -3283,20 +3283,25 @@ packages:
       - candidate_declaration_not_integrated
 - id: qa
   contract:
-    state: unresolved
+    state: candidate
     owner_issue: '#51'
-    transition_issue: '#42'
+    transition_issue: '#51'
     conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-51
+    candidate_fingerprint: sha256:e6173e94b9d36c3c746b7fc8aa9690a3b9c7aa2967155cd500ec4214bf7a23ad
   header: <cxxlens/qa.hpp>
   purpose: Sanitizer, coverage and external QA workflows.
   public_types:
-  - sanitizer_kind
-  - coverage_mode
-  - qa::profile
-  - process_policy
-  - dynamic_report
-  - qa::workflow
+  - coverage_data
   - coverage_import_options
+  - coverage_mode
+  - dynamic_report
+  - process_policy
+  - qa::profile
+  - qa::workflow
+  - sanitizer_kind
+  - step_requirement
+  - step_state
   apis:
   - id: API-QA-001
     symbol: qa::profile factory/builder family
@@ -3308,17 +3313,24 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/51/qa.hpp
+      signature: cxxlens::qa::profile cxxlens::qa::profile::memory(); cxxlens::qa::profile cxxlens::qa::profile::concurrency();
+        cxxlens::qa::profile cxxlens::qa::profile::undefined_behavior(); cxxlens::qa::profile cxxlens::qa::profile::coverage();
+        cxxlens::qa::profile cxxlens::qa::profile::sanitizer(cxxlens::qa::sanitizer_kind) const; cxxlens::qa::profile cxxlens::qa::profile::coverage_mode_(cxxlens::qa::coverage_mode)
+        const; cxxlens::qa::profile cxxlens::qa::profile::build_target(std::string,cxxlens::qa::step_requirement) const; cxxlens::qa::profile
+        cxxlens::qa::profile::test_argv(std::vector<std::string>,cxxlens::qa::step_requirement) const; cxxlens::qa::profile
+        cxxlens::qa::profile::environment(std::string,std::string) const; cxxlens::qa::profile cxxlens::qa::profile::timeout(std::chrono::seconds)
+        const; cxxlens::qa::profile cxxlens::qa::profile::retry_limit(std::size_t) const; cxxlens::result<void> cxxlens::qa::profile::validate()
+        const
+      signature_fingerprint: sha256:803f929d1b97e408b10c9b50f5127fd6a7b600048b9398bab90920ffc5161ac8
     atomic_unit:
       id: AU-QA-001
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-QA-002
     symbol: qa::workflow::{for_project,use,process_policy_,import_coverage,associate_with}
     kind: builder_family
@@ -3326,17 +3338,20 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/51/qa.hpp
+      signature: cxxlens::qa::workflow cxxlens::qa::workflow::for_project(const cxxlens::workspace&); cxxlens::qa::workflow
+        cxxlens::qa::workflow::use(cxxlens::qa::profile) const; cxxlens::qa::workflow cxxlens::qa::workflow::process_policy_(cxxlens::qa::process_policy)
+        const; cxxlens::qa::workflow cxxlens::qa::workflow::import_coverage(bool) const; cxxlens::qa::workflow cxxlens::qa::workflow::associate_with(cxxlens::finding_set)
+        const; cxxlens::qa::workflow cxxlens::qa::workflow::continue_on_optional_failure(bool) const
+      signature_fingerprint: sha256:fe69c17adf8d7e12cc77d48488ae9c20a7683b3e86e52036941e501dca941b30
     atomic_unit:
       id: AU-QA-002
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-QA-003
     symbol: qa::workflow::run
     kind: method
@@ -3357,17 +3372,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/51/qa.hpp
+      signature: cxxlens::result<cxxlens::qa::dynamic_report> cxxlens::qa::workflow::run(cxxlens::execution_context) const
+      signature_fingerprint: sha256:92a8be0f146613a1cb94d936d13b4f541660d8b9b6c0ffacde0d95f671e83994
     atomic_unit:
       id: AU-QA-003
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-QA-004
     symbol: qa::import_source_coverage
     kind: free_function
@@ -3387,31 +3402,39 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/51/qa.hpp
+      signature: cxxlens::result<cxxlens::qa::coverage_data> cxxlens::qa::import_source_coverage(const cxxlens::workspace&,cxxlens::qa::coverage_import_options,cxxlens::execution_context)
+      signature_fingerprint: sha256:e3f46387620bff5172039554fbc902a665319b6a2eaa2c6960bb379df6bedc87
     atomic_unit:
       id: AU-QA-004
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
 - id: review
   contract:
-    state: unresolved
+    state: candidate
     owner_issue: '#51'
-    transition_issue: '#42'
+    transition_issue: '#51'
     conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-51
+    candidate_fingerprint: sha256:e6173e94b9d36c3c746b7fc8aa9690a3b9c7aa2967155cd500ec4214bf7a23ad
   header: <cxxlens/review.hpp>
   purpose: Diff scope, baseline, gate and review workflow.
   public_types:
-  - diff_view
   - baseline
+  - baseline_match_state
+  - baseline_options
+  - diff_options
+  - diff_side
+  - diff_view
+  - file_change_kind
   - gate_policy
-  - review_report
+  - gate_state
   - review::workflow
+  - review_report
   apis:
   - id: API-RV-001
     symbol: diff_view::{from_unified_diff,from_git,contains,changed_files,to_json}
@@ -3424,17 +3447,23 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/51/review.hpp
+      signature: cxxlens::result<cxxlens::review::diff_view> cxxlens::review::diff_view::from_unified_diff(std::string_view,cxxlens::path,cxxlens::review::diff_options);
+        cxxlens::result<cxxlens::review::diff_view> cxxlens::review::diff_view::from_git(cxxlens::path,std::string,cxxlens::review::diff_options,cxxlens::execution_context);
+        bool cxxlens::review::diff_view::contains(const cxxlens::source_span&,cxxlens::review::diff_side) const; std::span<const
+        cxxlens::path> cxxlens::review::diff_view::changed_files() const noexcept; std::string_view cxxlens::review::diff_view::identity()
+        const noexcept; std::span<const cxxlens::diagnostic> cxxlens::review::diff_view::diagnostics() const noexcept; std::span<const
+        cxxlens::unresolved> cxxlens::review::diff_view::unresolved_items() const noexcept; std::string cxxlens::review::diff_view::to_json()
+        const
+      signature_fingerprint: sha256:0e2ddfb5ad219127112c61c98b8cfdf8a94c15d69fbff97eb23262f8e4176253
     atomic_unit:
       id: AU-RV-001
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-RV-002
     symbol: baseline::{load,save,contains_equivalent,to_json}
     kind: method_family
@@ -3446,17 +3475,23 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/51/review.hpp
+      signature: cxxlens::result<cxxlens::review::baseline> cxxlens::review::baseline::load(cxxlens::path,cxxlens::review::baseline_options);
+        cxxlens::result<void> cxxlens::review::baseline::save(cxxlens::path,cxxlens::review::baseline_options) const; cxxlens::review::baseline_match_state
+        cxxlens::review::baseline::compare(const cxxlens::finding&) const; bool cxxlens::review::baseline::contains_equivalent(const
+        cxxlens::finding&) const; std::string_view cxxlens::review::baseline::id() const noexcept; cxxlens::semantic_version
+        cxxlens::review::baseline::version() const noexcept; std::span<const cxxlens::diagnostic> cxxlens::review::baseline::diagnostics()
+        const noexcept; std::span<const cxxlens::unresolved> cxxlens::review::baseline::unresolved_items() const noexcept;
+        std::string cxxlens::review::baseline::to_json() const
+      signature_fingerprint: sha256:1f39724e417c6fbd5a129d35b3db0a1bd1815ee0dff51fb053feefff0a71bc8b
     atomic_unit:
       id: AU-RV-002
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-RV-003
     symbol: gate_policy factory/builder family
     kind: builder_family
@@ -3466,17 +3501,23 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/51/review.hpp
+      signature: cxxlens::review::gate_policy cxxlens::review::gate_policy::no_new_errors(); cxxlens::review::gate_policy
+        cxxlens::review::gate_policy::no_high_confidence_security_findings(); cxxlens::review::gate_policy cxxlens::review::gate_policy::minimum_severity(cxxlens::severity)
+        const; cxxlens::review::gate_policy cxxlens::review::gate_policy::minimum_confidence(cxxlens::confidence) const; cxxlens::review::gate_policy
+        cxxlens::review::gate_policy::changed_lines_only(bool) const; cxxlens::review::gate_policy cxxlens::review::gate_policy::no_new_only(bool)
+        const; cxxlens::review::gate_policy cxxlens::review::gate_policy::maximum_unresolved(std::size_t) const; cxxlens::review::gate_policy
+        cxxlens::review::gate_policy::minimum_coverage(double) const; cxxlens::result<void> cxxlens::review::gate_policy::validate()
+        const
+      signature_fingerprint: sha256:4d0ce52b810dde462f736f361416e24211716f629f1b13eb1373bf20cff9420d
     atomic_unit:
       id: AU-RV-003
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-RV-004
     symbol: review::workflow builder family
     kind: builder_family
@@ -3484,17 +3525,21 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/51/review.hpp
+      signature: cxxlens::review::workflow cxxlens::review::workflow::for_diff(cxxlens::review::diff_view); cxxlens::review::workflow
+        cxxlens::review::workflow::add(cxxlens::rules::rule_pack) const; cxxlens::review::workflow cxxlens::review::workflow::add_findings(cxxlens::finding_set)
+        const; cxxlens::review::workflow cxxlens::review::workflow::baseline_(cxxlens::review::baseline) const; cxxlens::review::workflow
+        cxxlens::review::workflow::gate(cxxlens::review::gate_policy) const; cxxlens::review::workflow cxxlens::review::workflow::propose_fixes(bool)
+        const; cxxlens::review::workflow cxxlens::review::workflow::affected_context(bool) const
+      signature_fingerprint: sha256:f0456adae5a0849fa78d70321c1900bdd549d04905dd54cd8e11cb5827c5bdf6
     atomic_unit:
       id: AU-RV-004
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-RV-005
     symbol: review::workflow::run
     kind: method
@@ -3515,17 +3560,18 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/51/review.hpp
+      signature: cxxlens::result<cxxlens::review::review_report> cxxlens::review::workflow::run(const cxxlens::workspace&,cxxlens::execution_context)
+        const
+      signature_fingerprint: sha256:4db9ffbb52a800af72b493ac93a0be3e68ce4052b9c617e5c5a0fe6c9d4a30a7
     atomic_unit:
       id: AU-RV-005
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
 - id: report
   contract:
     state: candidate
@@ -4311,13 +4357,195 @@ summary:
   package_count: 22
   api_entry_count: 124
   atomic_unit_count: 124
+  phase_counts:
+    M0: 17
+    M1: 21
+    M2: 18
+    M3: 16
+    M4: 16
+    M5: 9
+    M6: 10
+    M7: 8
+    M8: 9
+  contract_maturity_counts:
+    contract-defined: 36
+    planned: 74
+    stable: 14
+  kind_counts:
+    builder_family: 19
+    builder_operation: 1
+    free_function: 39
+    free_function_family: 7
+    function_template: 1
+    method: 27
+    method_family: 20
+    static_factory: 5
+    static_factory_family: 5
   implementation_state_counts:
-    unimplemented: 77
-    implemented: 0
     conformant: 47
+    implemented: 0
+    unimplemented: 77
   contract_state_counts:
-    candidate: 20
-    unresolved: 2
+    candidate: 22
+  dependency_graph:
+    API-CFG-001: []
+    API-CFG-002: []
+    API-CFG-003:
+    - API-CFG-001
+    API-CFG-004:
+    - API-CFG-001
+    - API-CFG-003
+    API-COPY-001: []
+    API-COPY-002: []
+    API-CORE-001: []
+    API-CORE-002: []
+    API-CORE-003: []
+    API-CORE-004: []
+    API-CORE-005:
+    - API-CORE-003
+    - API-CORE-004
+    API-CORE-006:
+    - API-CORE-005
+    API-EXP-001: []
+    API-EXP-002: []
+    API-EXP-003: []
+    API-EXP-004: []
+    API-FACT-001: []
+    API-FACT-002: []
+    API-FACT-003: []
+    API-FACT-004: []
+    API-FACT-005: []
+    API-FACT-006: []
+    API-FACT-007: []
+    API-FACT-008: []
+    API-FACT-009: []
+    API-FACT-010: []
+    API-FLOW-001: []
+    API-FLOW-002: []
+    API-FLOW-003: []
+    API-FLOW-004: []
+    API-FLOW-005: []
+    API-FLOW-006: []
+    API-FLOW-007: []
+    API-FLOW-008: []
+    API-FUZZ-001: []
+    API-FUZZ-002: []
+    API-FUZZ-003: []
+    API-GEN-001: []
+    API-GEN-002:
+    - API-TF-009
+    API-GRAPH-001: []
+    API-GRAPH-002: []
+    API-GRAPH-003: []
+    API-GRAPH-004: []
+    API-GRAPH-005:
+    - API-SEL-010
+    API-GRAPH-006: []
+    API-INT-001: []
+    API-INT-002: []
+    API-INT-003: []
+    API-INT-004: []
+    API-METHOD-001: []
+    API-METHOD-002: []
+    API-METHOD-003: []
+    API-METHOD-004: []
+    API-METHOD-005: []
+    API-MOCK-001: []
+    API-MOCK-002: []
+    API-MOCK-003: []
+    API-MODEL-001: []
+    API-MODEL-002: []
+    API-MODEL-003: []
+    API-MODEL-004: []
+    API-QA-001: []
+    API-QA-002: []
+    API-QA-003: []
+    API-QA-004: []
+    API-REPORT-001:
+    - API-CORE-006
+    API-REPORT-002:
+    - API-TF-008
+    API-REPORT-003:
+    - API-GEN-001
+    API-REPORT-004:
+    - API-RV-005
+    API-RULE-001: []
+    API-RULE-002:
+    - API-SEL-010
+    - API-TF-007
+    API-RULE-003:
+    - API-CORE-006
+    - API-SEL-010
+    API-RULE-004:
+    - API-RULE-003
+    API-RULE-005: []
+    API-RV-001: []
+    API-RV-002: []
+    API-RV-003: []
+    API-RV-004: []
+    API-RV-005: []
+    API-SEL-001: []
+    API-SEL-002: []
+    API-SEL-003: []
+    API-SEL-004: []
+    API-SEL-005: []
+    API-SEL-006: []
+    API-SEL-007: []
+    API-SEL-008: []
+    API-SEL-009: []
+    API-SEL-010: []
+    API-SEL-011: []
+    API-SRCH-001: []
+    API-SRCH-002: []
+    API-SRCH-003: []
+    API-SRCH-004: []
+    API-SRCH-005: []
+    API-SRCH-006: []
+    API-SRCH-007: []
+    API-SRCH-008: []
+    API-SRCH-009: []
+    API-SRCH-010: []
+    API-TEST-001: []
+    API-TEST-002:
+    - API-CORE-003
+    - API-CORE-004
+    API-TEST-003:
+    - API-TF-001
+    - API-TF-002
+    - API-TF-003
+    - API-TF-004
+    - API-TF-005
+    API-TEST-004:
+    - API-GEN-001
+    - API-GEN-002
+    API-TEST-005:
+    - API-TEST-001
+    API-TEST-006:
+    - API-CORE-001
+    API-TEST-007:
+    - API-WS-002
+    - API-WS-005
+    API-TF-001: []
+    API-TF-002: []
+    API-TF-003:
+    - API-SEL-006
+    API-TF-004:
+    - API-SEL-003
+    API-TF-005:
+    - API-SEL-003
+    API-TF-006: []
+    API-TF-007:
+    - API-SEL-010
+    API-TF-008: []
+    API-TF-009: []
+    API-WS-001: []
+    API-WS-002: []
+    API-WS-003: []
+    API-WS-004: []
+    API-WS-005: []
+    API-WS-006: []
+    API-WS-007: []
+    API-WS-008: []
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.

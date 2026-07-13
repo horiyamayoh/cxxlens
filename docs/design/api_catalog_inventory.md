@@ -65,10 +65,10 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-MODEL-002 | models | <cxxlens/models.hpp> | api_model_pack::{function,method,replacement,source,sink,barrier} | AU-MODEL-002 | unimplemented | candidate |
 | API-MODEL-003 | models | <cxxlens/models.hpp> | api_model_pack::merge | AU-MODEL-003 | unimplemented | candidate |
 | API-MODEL-004 | models | <cxxlens/models.hpp> | api_model_pack::{load,save,to_json} | AU-MODEL-004 | unimplemented | candidate |
-| API-QA-001 | qa | <cxxlens/qa.hpp> | qa::profile factory/builder family | AU-QA-001 | unimplemented | unresolved |
-| API-QA-002 | qa | <cxxlens/qa.hpp> | qa::workflow::{for_project,use,process_policy_,import_coverage,associate_with} | AU-QA-002 | unimplemented | unresolved |
-| API-QA-003 | qa | <cxxlens/qa.hpp> | qa::workflow::run | AU-QA-003 | unimplemented | unresolved |
-| API-QA-004 | qa | <cxxlens/qa.hpp> | qa::import_source_coverage | AU-QA-004 | unimplemented | unresolved |
+| API-QA-001 | qa | <cxxlens/qa.hpp> | qa::profile factory/builder family | AU-QA-001 | unimplemented | candidate |
+| API-QA-002 | qa | <cxxlens/qa.hpp> | qa::workflow::{for_project,use,process_policy_,import_coverage,associate_with} | AU-QA-002 | unimplemented | candidate |
+| API-QA-003 | qa | <cxxlens/qa.hpp> | qa::workflow::run | AU-QA-003 | unimplemented | candidate |
+| API-QA-004 | qa | <cxxlens/qa.hpp> | qa::import_source_coverage | AU-QA-004 | unimplemented | candidate |
 | API-REPORT-001 | report | <cxxlens/report.hpp> | report::render(finding_set) | AU-REPORT-001 | unimplemented | candidate |
 | API-REPORT-002 | report | <cxxlens/report.hpp> | report::render(edit_plan) | AU-REPORT-002 | unimplemented | candidate |
 | API-REPORT-003 | report | <cxxlens/report.hpp> | report::render(generation_plan) | AU-REPORT-003 | unimplemented | candidate |
@@ -78,11 +78,11 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-RULE-003 | rules | <cxxlens/rules.hpp> | rule::run | AU-RULE-003 | unimplemented | candidate |
 | API-RULE-004 | rules | <cxxlens/rules.hpp> | rule_pack::{add,enable,disable,run} | AU-RULE-004 | unimplemented | candidate |
 | API-RULE-005 | rules | <cxxlens/rules.hpp> | suppression_policy builder family | AU-RULE-005 | unimplemented | candidate |
-| API-RV-001 | review | <cxxlens/review.hpp> | diff_view::{from_unified_diff,from_git,contains,changed_files,to_json} | AU-RV-001 | unimplemented | unresolved |
-| API-RV-002 | review | <cxxlens/review.hpp> | baseline::{load,save,contains_equivalent,to_json} | AU-RV-002 | unimplemented | unresolved |
-| API-RV-003 | review | <cxxlens/review.hpp> | gate_policy factory/builder family | AU-RV-003 | unimplemented | unresolved |
-| API-RV-004 | review | <cxxlens/review.hpp> | review::workflow builder family | AU-RV-004 | unimplemented | unresolved |
-| API-RV-005 | review | <cxxlens/review.hpp> | review::workflow::run | AU-RV-005 | unimplemented | unresolved |
+| API-RV-001 | review | <cxxlens/review.hpp> | diff_view::{from_unified_diff,from_git,contains,changed_files,to_json} | AU-RV-001 | unimplemented | candidate |
+| API-RV-002 | review | <cxxlens/review.hpp> | baseline::{load,save,contains_equivalent,to_json} | AU-RV-002 | unimplemented | candidate |
+| API-RV-003 | review | <cxxlens/review.hpp> | gate_policy factory/builder family | AU-RV-003 | unimplemented | candidate |
+| API-RV-004 | review | <cxxlens/review.hpp> | review::workflow builder family | AU-RV-004 | unimplemented | candidate |
+| API-RV-005 | review | <cxxlens/review.hpp> | review::workflow::run | AU-RV-005 | unimplemented | candidate |
 | API-SEL-001 | select | <cxxlens/select.hpp> | file_selector builder family | AU-SEL-001 | conformant | candidate |
 | API-SEL-002 | select | <cxxlens/select.hpp> | symbol_selector builder family | AU-SEL-002 | conformant | candidate |
 | API-SEL-003 | select | <cxxlens/select.hpp> | type_selector builder family | AU-SEL-003 | conformant | candidate |

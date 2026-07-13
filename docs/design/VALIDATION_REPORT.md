@@ -69,18 +69,18 @@
 | interop | 4 |
 | configuration | 4 |
 
-## Phase B package Contract Candidates (#43–#50)
+## Phase B package Contract Candidates (#43–#51)
 
-- candidate group: 8
-- candidate packages: `configuration`, `copy`, `core`, `explain`, `facts`, `flow`, `fuzz`, `generate`, `graph`, `interop`, `method_harness`, `mock`, `models`, `report`, `rules`, `search`, `select`, `testing`, `transform`, `workspace`（20）
-- assigned API: 115、exact declaration: 115、unresolved declaration: 0
-- implementation state: `conformant` 47、`unimplemented` 68（変更なし）
-- policy record: 43、各 record の result outcome 6種: 完全
-- positive / negative / ambiguous acceptance: 各 API 1件、計345件
-- public type 221 / shared component 66 / provider subject 26 / schema 77: owner 一意、dangling 0
+- candidate group: 9
+- candidate packages: `configuration`, `copy`, `core`, `explain`, `facts`, `flow`, `fuzz`, `generate`, `graph`, `interop`, `method_harness`, `mock`, `models`, `qa`, `report`, `review`, `rules`, `search`, `select`, `testing`, `transform`, `workspace`（22）
+- assigned API: 124、exact declaration: 124、unresolved declaration: 0
+- implementation state: `conformant` 47、`unimplemented` 77（変更なし）
+- policy record: 47、各 record の result outcome 6種: 完全
+- positive / negative / ambiguous acceptance: 各 API 1件、計372件
+- public type 230 / shared component 66 / provider subject 26 / schema 82: owner 一意、dangling 0
 - registry owner and entry overlap: 0
-- candidate C++23 syntax usage: 9/9 PASS
-- package candidate validator/test: 16/16 PASS
+- candidate C++23 syntax usage: 10/10 PASS
+- package candidate validator/test: 17/17 PASS
 - production implementation / public install integration / final freeze: 未主張（#53 / #54 owner を維持）
 
 ### Issue #43 core・configuration・testing
@@ -197,3 +197,18 @@
 - #46 graph・#49 generation・#52 spike・#53 integration 境界、production implementation 非変更: 明示
 - candidate C++23 syntax usage: 1/1 PASS
 - candidate fingerprint: `sha256:2cbc4efec8cc4784fe10df0d4ac5048d943b73ff5d3d677afc6991d7c7a569ad`
+
+### Issue #51 review・qa
+
+- candidate packages: `qa`, `review`（2）
+- assigned API: 9、exact declaration: 9、unresolved declaration: 0
+- implementation state: `unimplemented` 9（変更なし）
+- policy record: 4、各 record の result outcome 6種: 完全
+- positive / negative / ambiguous acceptance: 各 API 1件、計27件
+- diff base/head/dirty/path/range/rename/binary と baseline exact/equivalent/changed/new/resolved/ambiguous: 完全
+- gate pass/warn/fail/indeterminate、partial/unsupported/budget/cancel/provider failure の fail-closed 集約: 完全
+- argv-only process root/env/redaction/timeout/output/exit/signal/crash と required/optional QA step: 完全
+- coverage format/build/path mismatch/merge と finding/test/artifact many-to-many association: 完全
+- #43 findings/coverage・#47 rules/report・runtime ports・#52 spike・#53 integration 境界: 明示
+- candidate C++23 syntax usage: 1/1 PASS
+- candidate fingerprint: `sha256:e6173e94b9d36c3c746b7fc8aa9690a3b9c7aa2967155cd500ec4214bf7a23ad`

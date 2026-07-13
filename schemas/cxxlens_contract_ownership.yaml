@@ -954,6 +954,13 @@ public_types:
   owner_atomic_unit: AU-MODEL-001
   steward: integration.package.models
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-models
+- id: public-type:qa:coverage_data
+  type: coverage_data
+  package: qa
+  header: <cxxlens/qa.hpp>
+  owner_atomic_unit: AU-QA-001
+  steward: integration.package.qa
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-qa
 - id: public-type:qa:coverage_import_options
   type: coverage_import_options
   package: qa
@@ -1003,6 +1010,20 @@ public_types:
   owner_atomic_unit: AU-QA-001
   steward: integration.package.qa
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-qa
+- id: public-type:qa:step_requirement
+  type: step_requirement
+  package: qa
+  header: <cxxlens/qa.hpp>
+  owner_atomic_unit: AU-QA-001
+  steward: integration.package.qa
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-qa
+- id: public-type:qa:step_state
+  type: step_state
+  package: qa
+  header: <cxxlens/qa.hpp>
+  owner_atomic_unit: AU-QA-001
+  steward: integration.package.qa
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-qa
 - id: public-type:report:report::format
   type: report::format
   package: report
@@ -1038,6 +1059,34 @@ public_types:
   owner_atomic_unit: AU-RV-001
   steward: integration.package.review
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-review
+- id: public-type:review:baseline_match_state
+  type: baseline_match_state
+  package: review
+  header: <cxxlens/review.hpp>
+  owner_atomic_unit: AU-RV-001
+  steward: integration.package.review
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-review
+- id: public-type:review:baseline_options
+  type: baseline_options
+  package: review
+  header: <cxxlens/review.hpp>
+  owner_atomic_unit: AU-RV-001
+  steward: integration.package.review
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-review
+- id: public-type:review:diff_options
+  type: diff_options
+  package: review
+  header: <cxxlens/review.hpp>
+  owner_atomic_unit: AU-RV-001
+  steward: integration.package.review
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-review
+- id: public-type:review:diff_side
+  type: diff_side
+  package: review
+  header: <cxxlens/review.hpp>
+  owner_atomic_unit: AU-RV-001
+  steward: integration.package.review
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-review
 - id: public-type:review:diff_view
   type: diff_view
   package: review
@@ -1045,8 +1094,22 @@ public_types:
   owner_atomic_unit: AU-RV-001
   steward: integration.package.review
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-review
+- id: public-type:review:file_change_kind
+  type: file_change_kind
+  package: review
+  header: <cxxlens/review.hpp>
+  owner_atomic_unit: AU-RV-001
+  steward: integration.package.review
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-review
 - id: public-type:review:gate_policy
   type: gate_policy
+  package: review
+  header: <cxxlens/review.hpp>
+  owner_atomic_unit: AU-RV-001
+  steward: integration.package.review
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-review
+- id: public-type:review:gate_state
+  type: gate_state
   package: review
   header: <cxxlens/review.hpp>
   owner_atomic_unit: AU-RV-001
@@ -2497,6 +2560,16 @@ schemas:
   owner_atomic_unit: AU-CORE-001
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_qa_profile.schema.yaml
+  path: schemas/cxxlens_qa_profile.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_qa_report.schema.yaml
+  path: schemas/cxxlens_qa_report.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
 - id: schema:schemas/cxxlens_query_execution.schema.yaml
   path: schemas/cxxlens_query_execution.schema.yaml
   owner_atomic_unit: AU-CORE-001
@@ -2529,6 +2602,21 @@ schemas:
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
 - id: schema:schemas/cxxlens_resource_report.schema.yaml
   path: schemas/cxxlens_resource_report.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_review_baseline.schema.yaml
+  path: schemas/cxxlens_review_baseline.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_review_diff.schema.yaml
+  path: schemas/cxxlens_review_diff.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_review_report.schema.yaml
+  path: schemas/cxxlens_review_report.schema.yaml
   owner_atomic_unit: AU-CORE-001
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
@@ -2608,8 +2696,8 @@ schemas:
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
 summary:
-  public_type_count: 221
+  public_type_count: 230
   shared_component_count: 66
   provider_subject_count: 26
-  schema_count: 77
-semantic_digest: sha256:bcd461d6af290ff065bd626cda126d4cb21ac5ddf32479d81b70ea9a943190ba
+  schema_count: 82
+semantic_digest: sha256:c2b9b1c8288465b365cdccd96be6e1d180f227bbf9d96a5c610e2ae4739fc5c3

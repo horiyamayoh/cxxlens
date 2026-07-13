@@ -29,6 +29,8 @@
   - Issue #49 が所有する generation・mock・method harness・copy・fuzz の規範的 Contract Candidate。
 - `package_contract_50.md`
   - Issue #50 が所有する flow・models の規範的 Contract Candidate と availability/fixpoint 決定表。
+- `package_contract_51.md`
+  - Issue #51 が所有する review・qa の規範的 Contract Candidate と diff/baseline/gate/process/coverage 決定表。
 - `../../schemas/cxxlens_package_contract_candidates.yaml`
   - #43〜#51 の package candidate、exact declaration、意味契約、owner、acceptance の機械可読 authority。
 - `SHA256SUMS`

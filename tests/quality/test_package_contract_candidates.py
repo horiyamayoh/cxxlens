@@ -242,6 +242,33 @@ class PackageContractCandidateTest(unittest.TestCase):
         pack = load("cxxlens_api_model_pack.schema.yaml")
         self.assertEqual(pack["properties"]["compatibility"]["properties"]["unknown_kind_policy"]["const"], "reject")
 
+    def test_positive_issue_51_candidate_and_review_qa_schemas(self) -> None:
+        group = next(row for row in self.manifest["groups"] if row["issue"] == "#51")
+        self.assertEqual(group["packages"], ["qa", "review"])
+        self.assertEqual(len(group["api_contracts"]), 9)
+        self.assertFalse(group["production_implementation_changed"])
+        for name in (
+            "cxxlens_review_diff.schema.yaml",
+            "cxxlens_review_baseline.schema.yaml",
+            "cxxlens_review_report.schema.yaml",
+            "cxxlens_qa_profile.schema.yaml",
+            "cxxlens_qa_report.schema.yaml",
+        ):
+            jsonschema.Draft202012Validator.check_schema(load(name))
+        review = load("cxxlens_review_report.schema.yaml")
+        self.assertEqual(
+            set(review["properties"]["gate"]["properties"]["state"]["enum"]),
+            {"pass", "warn", "fail", "indeterminate"},
+        )
+        profile = load("cxxlens_qa_profile.schema.yaml")
+        self.assertEqual(
+            set(profile["properties"]["steps"]["items"]["properties"]["requirement"]["enum"]),
+            {"required", "optional"},
+        )
+        report = load("cxxlens_qa_report.schema.yaml")
+        states = set(report["properties"]["steps"]["items"]["properties"]["state"]["enum"])
+        self.assertTrue({"unavailable", "unsupported", "timed_out", "crashed", "partial"} <= states)
+
     def test_missing_assigned_api_is_rejected(self) -> None:
         document = copy.deepcopy(self.manifest)
         group = document["groups"][0]

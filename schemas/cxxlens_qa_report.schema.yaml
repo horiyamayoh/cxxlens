@@ -1,0 +1,31 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.qa-report.v1.schema.yaml
+title: cxxlens QA report v1
+type: object
+additionalProperties: false
+required: [schema, identity, project, toolchain, steps, findings, coverage, associations, diagnostics, unresolved, guarantee]
+properties:
+  schema: {const: cxxlens.qa-report.v1}
+  identity: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  project: {type: object}
+  toolchain: {type: object}
+  steps:
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, state, executable, argv_digest, stdout_digest, stderr_digest, evidence]
+      properties:
+        id: {type: string, minLength: 1}
+        state: {enum: [passed, failed, skipped, unavailable, unsupported, cancelled, timed_out, crashed, partial]}
+        executable: {type: object}
+        argv_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        stdout_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        stderr_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        evidence: {type: array, items: {type: object}}
+  findings: {type: array, items: {type: object}}
+  coverage: {type: object}
+  associations: {type: array, items: {type: object}}
+  diagnostics: {type: array, items: {type: object}}
+  unresolved: {type: array, items: {type: object}}
+  guarantee: {enum: [complete, bounded, partial, none]}

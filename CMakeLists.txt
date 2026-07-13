@@ -252,6 +252,11 @@ install(
         schemas/cxxlens_resource_report.schema.yaml
         schemas/cxxlens_effect_summary.schema.yaml
         schemas/cxxlens_api_model_pack.schema.yaml
+        schemas/cxxlens_review_diff.schema.yaml
+        schemas/cxxlens_review_baseline.schema.yaml
+        schemas/cxxlens_review_report.schema.yaml
+        schemas/cxxlens_qa_profile.schema.yaml
+        schemas/cxxlens_qa_report.schema.yaml
         schemas/cxxlens_virtual_candidate_resolution.schema.yaml
         schemas/cxxlens_workspace_doctor.schema.yaml
         schemas/cxxlens_workspace_context.schema.yaml
