@@ -5877,15 +5877,16 @@
     }
   ],
   "authorization": {
+    "candidate_ready_unit_ids": [],
     "decision": "denied",
     "ready_unit_ids": [],
     "ready_waves": [],
     "reason_code": "no-ready-incomplete-unit",
     "validity": {
-      "basis": "input_fingerprints",
-      "expires_on": "any_relevant_input_drift",
-      "fingerprint_digest": "sha256:24481d4911161958a1df6c00834dca643b9b1f8e6e5f96cd2e4bd3fdaf6029c2",
-      "state": "current"
+      "basis": "exact-source-and-observed-gates",
+      "expires_on": "source-workflow-gate-or-input-drift",
+      "fingerprint_digest": "sha256:8586bb0dcf46908efb4041f6402532f04d976fd9db1b1df1e074e30984fb1725",
+      "state": "unverified"
     }
   },
   "catalog_audit": {
@@ -5903,6 +5904,7 @@
     "catalog-chapter40-and-schema",
     "dependency-request-block-resolve-reissue",
     "foundation-completion-and-ci-linkage",
+    "gate-evidence-exact-source-and-result",
     "input-drift-auto-expiry",
     "ownership-and-package-integration",
     "prompt-and-shard-dry-run",
@@ -6040,12 +6042,43 @@
       ],
       "id": "M0",
       "issue": 12,
+      "observed_execution": {
+        "declaration_digest": "sha256:c06dc960dc885179610895846dc9beb24a05afb8f661176e5f44a7b3ada51232",
+        "executions": [],
+        "provider": null,
+        "source_sha": null,
+        "status": "missing",
+        "tree_sha": null
+      },
       "replay_commands": [
         {
           "argv": [
             "cmake",
             "--preset",
-            "m0-acceptance"
+            "m0-acceptance",
+            "-DCXXLENS_BUILD_SHARED=OFF"
+          ],
+          "environment": {
+            "CXX": "clang++-22"
+          }
+        },
+        {
+          "argv": [
+            "cmake",
+            "--build",
+            "--preset",
+            "m0-acceptance",
+            "--target",
+            "cxxlens-m0-acceptance"
+          ],
+          "environment": {}
+        },
+        {
+          "argv": [
+            "cmake",
+            "--preset",
+            "m0-acceptance",
+            "-DCXXLENS_BUILD_SHARED=ON"
           ],
           "environment": {
             "CXX": "clang++-22"
@@ -6063,7 +6096,10 @@
           "environment": {}
         }
       ],
-      "required_ci_job": "m0-acceptance (ON/OFF)",
+      "required_ci_jobs": [
+        "m0-acceptance (OFF)",
+        "m0-acceptance (ON)"
+      ],
       "required_status": "success"
     },
     {
@@ -6076,6 +6112,14 @@
       ],
       "id": "M1",
       "issue": 22,
+      "observed_execution": {
+        "declaration_digest": "sha256:e631006acf8712cd53ed5583de3994e6e62df2d6323dbe7a45835d20d18d40cb",
+        "executions": [],
+        "provider": null,
+        "source_sha": null,
+        "status": "missing",
+        "tree_sha": null
+      },
       "replay_commands": [
         {
           "argv": [
@@ -6099,7 +6143,9 @@
           "environment": {}
         }
       ],
-      "required_ci_job": "m1-acceptance",
+      "required_ci_jobs": [
+        "m1-acceptance"
+      ],
       "required_status": "success"
     },
     {
@@ -6112,6 +6158,14 @@
       ],
       "id": "M2",
       "issue": 26,
+      "observed_execution": {
+        "declaration_digest": "sha256:8fb69de045348ff1d4d28fb0245ef53531b9c4ca674000185dddfa60b4487d80",
+        "executions": [],
+        "provider": null,
+        "source_sha": null,
+        "status": "missing",
+        "tree_sha": null
+      },
       "replay_commands": [
         {
           "argv": [
@@ -6135,10 +6189,105 @@
           "environment": {}
         }
       ],
-      "required_ci_job": "m2-acceptance",
+      "required_ci_jobs": [
+        "m2-acceptance"
+      ],
       "required_status": "success"
     }
   ],
+  "gate_evidence": {
+    "bundle_digest": null,
+    "provider": null,
+    "status": "missing"
+  },
+  "global_gate": {
+    "evidence": [
+      ".github/workflows/quality.yml",
+      "CMakePresets.json",
+      "cmake/CxxlensDeveloperTools.cmake",
+      "schemas/cxxlens.api-ready.report.v1.json"
+    ],
+    "id": "GLOBAL",
+    "observed_execution": {
+      "declaration_digest": "sha256:d404fc45bd95560ff61eb3d88a8ae1536b29964198451ecbd07e3cd22f6dc20d",
+      "executions": [],
+      "provider": null,
+      "source_sha": null,
+      "status": "missing",
+      "tree_sha": null
+    },
+    "replay_commands": [
+      {
+        "argv": [
+          "python3",
+          "tools/agent/task_packet_generator.py",
+          "check",
+          "--root",
+          "."
+        ],
+        "environment": {}
+      },
+      {
+        "argv": [
+          "python3",
+          "tools/agent/ownership_generator.py",
+          "check",
+          "--root",
+          "."
+        ],
+        "environment": {}
+      },
+      {
+        "argv": [
+          "cmake",
+          "--preset",
+          "dev-clang"
+        ],
+        "environment": {
+          "CXX": "clang++"
+        }
+      },
+      {
+        "argv": [
+          "cmake",
+          "--build",
+          "--preset",
+          "dev-clang"
+        ],
+        "environment": {}
+      },
+      {
+        "argv": [
+          "ctest",
+          "--preset",
+          "dev-clang",
+          "--output-on-failure"
+        ],
+        "environment": {}
+      },
+      {
+        "argv": [
+          "cmake",
+          "--build",
+          "--preset",
+          "dev-clang",
+          "--target",
+          "cxxlens-quality"
+        ],
+        "environment": {}
+      }
+    ],
+    "required_ci_jobs": [
+      "build-test-clang22",
+      "contracts-docs",
+      "format-lint",
+      "gcc-header-compat",
+      "install-consumer",
+      "public-api",
+      "static-analysis"
+    ],
+    "required_status": "success"
+  },
   "infrastructure_audit": {
     "atomic_unit_count": 124,
     "cycle_count": 0,
@@ -6153,7 +6302,7 @@
     "write_overlap_count": 0
   },
   "input_fingerprints": {
-    "audit_policy": "sha256:e669a13381ddc744fdbf9c219386990da3adab05abe2d15cbcd56c1d9bd74a2c",
+    "audit_policy": "sha256:822908a7964cb07984bf1fd6b23cd591333a393fdf7ce8ccf3d3fdcddc8804c9",
     "build_gates": "sha256:865881c80d8147246e1f7b3242b068f287540a8d6e3b5245d81196663cefdee2",
     "catalog": "sha256:9e2b2e760221cc1a976400059280468b12d4d2bc8aa9dbf8a8881d82228cf3f6",
     "dependency_requests": "sha256:f18373d5ca144b3680bf3d7c39fa5758cd978647334327e8021c0890c3b948df",
@@ -6163,7 +6312,7 @@
     "m2": "sha256:448a5141f4c6e1045b5ff0ddae6126054be2a0cb261cfd2b227b1e1ce741e9c7",
     "ownership": "sha256:ab9edce389f50c4d5448b6fea3905ae4396bc66b5ddd9eceb94afc9d9cbd1af5",
     "quality_workflow": "sha256:f8fc4c3623c6ff6c81204823ee49dcb1fc457de5a7dcffbc0a8d9957cac743b5",
-    "ready_report": "sha256:1a506fdd2e04d7e90f7a7fc99293d135e381870cf53a14d15cba5dd807bedc9c",
+    "ready_report": "sha256:07fc7ccf983d08f063c7de2d681586173a70ebf545720ea4bc893072a6cf9718",
     "task_packets": "sha256:4b4c7c6b57a14a79d5390f9621a51256dcd879e9f63d38de41acb8d4a84ef20e"
   },
   "policy": {
@@ -6172,13 +6321,21 @@
       "catalog-or-signature-drift",
       "completion-or-foundation-gate-failure",
       "dependency-or-provider-drift",
+      "exact-source-or-observed-gate-drift",
       "ownership-or-shared-contract-drift",
       "schema-task-packet-or-shard-drift"
     ],
     "waivers_allowed": false
   },
   "schema": "cxxlens.readiness.authorization.v1",
-  "semantic_digest": "sha256:cb353ada65f71172e26cfc8a225d160ee6e33a48f174ebd95f41b23516ae589a",
+  "semantic_digest": "sha256:417b09686353aabf534302d6ac482f2985f26c97d82e4064c88156471b53d44b",
+  "source_identity": {
+    "binding": "unbound",
+    "commit_sha": null,
+    "dirty": true,
+    "repository": "horiyamayoh/cxxlens",
+    "tree_sha": null
+  },
   "summary": {
     "api_count": 124,
     "api_state_counts": {

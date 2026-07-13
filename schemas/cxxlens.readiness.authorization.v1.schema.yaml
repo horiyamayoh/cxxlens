@@ -7,6 +7,9 @@ required:
   - schema
   - policy
   - input_fingerprints
+  - source_identity
+  - gate_evidence
+  - global_gate
   - foundation_gates
   - catalog_audit
   - infrastructure_audit
@@ -43,6 +46,21 @@ properties:
       - quality_workflow
       - build_gates
       - audit_policy
+  source_identity: {$ref: '#/$defs/source_identity'}
+  gate_evidence:
+    type: object
+    additionalProperties: false
+    required: [status, provider, bundle_digest]
+    properties:
+      status: {enum: [missing, failed, success]}
+      provider:
+        type: [string, 'null']
+        enum: [github-actions, local-replay, null]
+      bundle_digest:
+        anyOf:
+          - {$ref: '#/$defs/digest'}
+          - {type: 'null'}
+  global_gate: {$ref: '#/$defs/global_gate'}
   foundation_gates:
     type: array
     minItems: 3
@@ -154,12 +172,22 @@ properties:
     required:
       - decision
       - reason_code
+      - candidate_ready_unit_ids
       - ready_unit_ids
       - ready_waves
       - validity
     properties:
       decision: {enum: [authorized, denied]}
-      reason_code: {enum: [ready-wave-available, no-ready-incomplete-unit]}
+      reason_code:
+        enum:
+          - ready-wave-available
+          - no-ready-incomplete-unit
+          - gate-evidence-missing
+          - gate-evidence-failed
+      candidate_ready_unit_ids:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/unit_id'}
       ready_unit_ids:
         type: array
         uniqueItems: true
@@ -176,9 +204,9 @@ properties:
         additionalProperties: false
         required: [state, basis, expires_on, fingerprint_digest]
         properties:
-          state: {const: current}
-          basis: {const: input_fingerprints}
-          expires_on: {const: any_relevant_input_drift}
+          state: {enum: [current, unverified]}
+          basis: {const: exact-source-and-observed-gates}
+          expires_on: {const: source-workflow-gate-or-input-drift}
           fingerprint_digest: {$ref: '#/$defs/digest'}
   summary:
     type: object
@@ -196,6 +224,9 @@ $defs:
   digest:
     type: string
     pattern: '^sha256:[0-9a-f]{64}$'
+  git_sha:
+    type: string
+    pattern: '^[0-9a-f]{40}$'
   api_id:
     type: string
     pattern: '^API-[A-Z]+-[0-9]{3}$'
@@ -218,21 +249,135 @@ $defs:
       environment:
         type: object
         additionalProperties: {type: string}
+  source_identity:
+    type: object
+    additionalProperties: false
+    required: [binding, repository, commit_sha, tree_sha, dirty]
+    properties:
+      binding: {enum: [unbound, exact-git-object]}
+      repository: {type: string, pattern: '^[^/]+/[^/]+$'}
+      commit_sha:
+        anyOf:
+          - {$ref: '#/$defs/git_sha'}
+          - {type: 'null'}
+      tree_sha:
+        anyOf:
+          - {$ref: '#/$defs/git_sha'}
+          - {type: 'null'}
+      dirty: {type: boolean}
+  execution:
+    type: object
+    additionalProperties: false
+    required:
+      - identity
+      - provider_run_id
+      - provider_check_id
+      - source_sha
+      - tree_sha
+      - conclusion
+      - exit_status
+      - started_at
+      - completed_at
+      - command_fingerprint
+      - environment_fingerprint
+      - toolchain_fingerprint
+      - artifact_log_digest
+      - provider_record_digest
+      - artifact_record_digest
+    properties:
+      identity: {type: string, minLength: 1}
+      provider_run_id:
+        type: [string, 'null']
+      provider_check_id:
+        type: [string, 'null']
+      source_sha: {$ref: '#/$defs/git_sha'}
+      tree_sha: {$ref: '#/$defs/git_sha'}
+      conclusion:
+        enum:
+          - success
+          - failure
+          - cancelled
+          - skipped
+          - timed_out
+          - action_required
+          - neutral
+          - stale
+          - in_progress
+      exit_status:
+        type: [integer, 'null']
+        minimum: 0
+      started_at: {type: string, minLength: 1}
+      completed_at: {type: string, minLength: 1}
+      command_fingerprint: {$ref: '#/$defs/digest'}
+      environment_fingerprint: {$ref: '#/$defs/digest'}
+      toolchain_fingerprint: {$ref: '#/$defs/digest'}
+      artifact_log_digest: {$ref: '#/$defs/digest'}
+      provider_record_digest: {$ref: '#/$defs/digest'}
+      artifact_record_digest: {$ref: '#/$defs/digest'}
+  observation:
+    type: object
+    additionalProperties: false
+    required:
+      - status
+      - provider
+      - source_sha
+      - tree_sha
+      - declaration_digest
+      - executions
+    properties:
+      status: {enum: [missing, failed, success]}
+      provider:
+        type: [string, 'null']
+        enum: [github-actions, local-replay, null]
+      source_sha:
+        anyOf:
+          - {$ref: '#/$defs/git_sha'}
+          - {type: 'null'}
+      tree_sha:
+        anyOf:
+          - {$ref: '#/$defs/git_sha'}
+          - {type: 'null'}
+      declaration_digest: {$ref: '#/$defs/digest'}
+      executions:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/execution'}
+  global_gate:
+    type: object
+    additionalProperties: false
+    required:
+      - id
+      - required_ci_jobs
+      - required_status
+      - replay_commands
+      - evidence
+      - observed_execution
+    properties:
+      id: {const: GLOBAL}
+      required_ci_jobs: {$ref: '#/$defs/string_list'}
+      required_status: {const: success}
+      replay_commands:
+        type: array
+        minItems: 1
+        items: {$ref: '#/$defs/command'}
+      evidence: {$ref: '#/$defs/string_list'}
+      observed_execution: {$ref: '#/$defs/observation'}
   foundation_gate:
     type: object
     additionalProperties: false
     required:
       - id
       - issue
-      - required_ci_job
+      - required_ci_jobs
       - required_status
       - completion_manifest
       - replay_commands
       - evidence
+      - observed_execution
     properties:
       id: {enum: [M0, M1, M2]}
       issue: {enum: [12, 22, 26]}
-      required_ci_job: {type: string, minLength: 1}
+      required_ci_jobs: {$ref: '#/$defs/string_list'}
       required_status: {const: success}
       completion_manifest: {type: string, minLength: 1}
       replay_commands:
@@ -240,6 +385,7 @@ $defs:
         minItems: 2
         items: {$ref: '#/$defs/command'}
       evidence: {$ref: '#/$defs/string_list'}
+      observed_execution: {$ref: '#/$defs/observation'}
   blocker:
     type: object
     additionalProperties: false

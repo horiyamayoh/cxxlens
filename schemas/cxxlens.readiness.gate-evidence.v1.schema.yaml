@@ -1,0 +1,119 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.readiness.gate-evidence.v1.schema.yaml
+title: cxxlens observed readiness gate evidence v1
+type: object
+additionalProperties: false
+required:
+  - schema
+  - provider
+  - repository
+  - workflow_identity
+  - source
+  - workflow_fingerprint
+  - issued_at
+  - gates
+  - semantic_digest
+properties:
+  schema: {const: cxxlens.readiness.gate-evidence.v1}
+  provider: {enum: [github-actions, local-replay]}
+  repository: {type: string, pattern: '^[^/]+/[^/]+$'}
+  workflow_identity: {const: .github/workflows/quality.yml}
+  source: {$ref: '#/$defs/source'}
+  workflow_fingerprint: {$ref: '#/$defs/digest'}
+  issued_at: {type: string, minLength: 1}
+  gates:
+    type: array
+    minItems: 4
+    maxItems: 4
+    uniqueItems: true
+    items: {$ref: '#/$defs/gate'}
+  semantic_digest: {$ref: '#/$defs/digest'}
+$defs:
+  digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  git_sha:
+    type: string
+    pattern: '^[0-9a-f]{40}$'
+  source:
+    type: object
+    additionalProperties: false
+    required: [binding, repository, commit_sha, tree_sha, dirty]
+    properties:
+      binding: {const: exact-git-object}
+      repository: {type: string, pattern: '^[^/]+/[^/]+$'}
+      commit_sha: {$ref: '#/$defs/git_sha'}
+      tree_sha: {$ref: '#/$defs/git_sha'}
+      dirty: {const: false}
+  gate:
+    type: object
+    additionalProperties: false
+    required:
+      - gate_id
+      - gate_kind
+      - provider
+      - required_status
+      - observed_status
+      - declaration_digest
+      - executions
+    properties:
+      gate_id: {enum: [GLOBAL, M0, M1, M2]}
+      gate_kind: {enum: [global, foundation]}
+      provider: {enum: [github-actions, local-replay]}
+      required_status: {const: success}
+      observed_status: {enum: [success, failed]}
+      declaration_digest: {$ref: '#/$defs/digest'}
+      executions:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {$ref: '#/$defs/execution'}
+  execution:
+    type: object
+    additionalProperties: false
+    required:
+      - identity
+      - provider_run_id
+      - provider_check_id
+      - source_sha
+      - tree_sha
+      - conclusion
+      - exit_status
+      - started_at
+      - completed_at
+      - command_fingerprint
+      - environment_fingerprint
+      - toolchain_fingerprint
+      - artifact_log_digest
+      - provider_record_digest
+      - artifact_record_digest
+    properties:
+      identity: {type: string, minLength: 1}
+      provider_run_id:
+        type: [string, 'null']
+      provider_check_id:
+        type: [string, 'null']
+      source_sha: {$ref: '#/$defs/git_sha'}
+      tree_sha: {$ref: '#/$defs/git_sha'}
+      conclusion:
+        enum:
+          - success
+          - failure
+          - cancelled
+          - skipped
+          - timed_out
+          - action_required
+          - neutral
+          - stale
+          - in_progress
+      exit_status:
+        type: [integer, 'null']
+        minimum: 0
+      started_at: {type: string, minLength: 1}
+      completed_at: {type: string, minLength: 1}
+      command_fingerprint: {$ref: '#/$defs/digest'}
+      environment_fingerprint: {$ref: '#/$defs/digest'}
+      toolchain_fingerprint: {$ref: '#/$defs/digest'}
+      artifact_log_digest: {$ref: '#/$defs/digest'}
+      provider_record_digest: {$ref: '#/$defs/digest'}
+      artifact_record_digest: {$ref: '#/$defs/digest'}

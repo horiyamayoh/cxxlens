@@ -95,7 +95,7 @@ def global_gates() -> list[dict[str, Any]]:
     return [
         {
             "id": command_id,
-            "state": "satisfied",
+            "state": "required",
             "command": {"id": command_id, "argv": argv, "environment": environment},
         }
         for command_id, argv, environment in commands
@@ -758,7 +758,8 @@ def generate_report(
                     "provider_availability": provider_availability,
                     "provider_semantics": provider_semantics,
                     "dependencies": dependencies_ready,
-                    "global_gates": True,
+                    "global_gate_declarations": True,
+                    "observed_global_gates": False,
                 },
                 "blockers": unique_blockers(blockers),
                 "shard_id": f"shard.{unit_id.lower()}",

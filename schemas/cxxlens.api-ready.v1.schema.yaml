@@ -191,7 +191,7 @@ $defs:
     required: [id, state, command]
     properties:
       id: {type: string, minLength: 1}
-      state: {const: satisfied}
+      state: {const: required}
       command: {$ref: '#/$defs/command'}
   blocker:
     type: object
@@ -240,6 +240,9 @@ $defs:
       prerequisites:
         type: object
         additionalProperties: {type: boolean}
+        properties:
+          global_gate_declarations: {const: true}
+          observed_global_gates: {const: false}
         required:
           - exact_contract
           - frozen_skeleton
@@ -249,7 +252,8 @@ $defs:
           - provider_availability
           - provider_semantics
           - dependencies
-          - global_gates
+          - global_gate_declarations
+          - observed_global_gates
       blockers:
         type: array
         items: {$ref: '#/$defs/blocker'}
