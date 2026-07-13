@@ -3,9 +3,14 @@
 
 from __future__ import annotations
 
+import argparse
+import collections
 import pathlib
+import re
 import sys
 import xml.etree.ElementTree as ET
+
+import yaml
 
 
 def text(element: ET.Element | None) -> str:
@@ -13,18 +18,66 @@ def text(element: ET.Element | None) -> str:
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
-        print(f"usage: {sys.argv[0]} XML_DIRECTORY", file=sys.stderr)
-        return 2
-    xml_directory = pathlib.Path(sys.argv[1])
+    parser = argparse.ArgumentParser()
+    parser.add_argument("xml_directory", type=pathlib.Path)
+    parser.add_argument("--candidate-manifest", type=pathlib.Path)
+    args = parser.parse_args()
+    xml_directory = args.xml_directory
     failures: list[str] = []
     checked = 0
+    planned_contracts: dict[str, set[str]] = {}
+    planned_required: collections.Counter[str] = collections.Counter()
+    planned_headers: set[str] = set()
+    if args.candidate_manifest:
+        manifest = yaml.safe_load(args.candidate_manifest.read_text(encoding="utf-8"))
+        root = args.candidate_manifest.resolve().parent.parent
+        catalog = yaml.safe_load((root / manifest["catalog"]).read_text(encoding="utf-8"))
+        implementation_states = {
+            api["id"]: api["implementation_state"]
+            for package in catalog["packages"]
+            for api in package["apis"]
+        }
+        for group in manifest["groups"]:
+            for contract in group["api_contracts"]:
+                if implementation_states[contract["api_id"]] != "unimplemented":
+                    continue
+                obligation = contract["traceability"]["doxygen_obligation"]
+                if not obligation:
+                    failures.append(f"{contract['api_id']}: empty manifest Doxygen obligation")
+                planned_headers.add(contract["declaration"]["source"])
+                for signature in contract["declaration"]["signature"].split(";"):
+                    matches = re.findall(
+                        r"(cxxlens(?:::[A-Za-z_][A-Za-z0-9_]*)+)\s*\(", signature
+                    )
+                    if not matches:
+                        failures.append(
+                            f"{contract['api_id']}: cannot extract a Doxygen member from signature"
+                        )
+                        continue
+                    member = matches[0]
+                    planned_contracts.setdefault(member, set()).add(contract["api_id"])
+                    planned_required[member] += 1
+    observed_planned: collections.Counter[str] = collections.Counter()
 
     for xml_file in sorted(xml_directory.glob("*.xml")):
         root = ET.parse(xml_file).getroot()
-        for member in root.findall(".//memberdef[@kind='function'][@prot='public']"):
+        compound = root.find("compounddef")
+        if compound is None or compound.get("kind") not in {"class", "struct", "namespace"}:
+            continue
+        for member in compound.findall("./sectiondef/memberdef[@kind='function']"):
+            if compound.get("kind") != "namespace" and member.get("prot") != "public":
+                continue
             checked += 1
             qualified_name = text(member.find("qualifiedname")) or text(member.find("name"))
+            location = member.find("location")
+            location_file = "" if location is None else (location.get("file") or "")
+            if qualified_name in planned_contracts:
+                observed_planned[qualified_name] += 1
+                continue
+            if any(location_file.endswith(header) for header in planned_headers):
+                # Supporting public value accessors share the package/API obligation even when
+                # they are not separate top-level catalog entries.
+                continue
             brief = text(member.find("briefdescription"))
             details = member.find("detaileddescription")
             if not brief:
@@ -59,10 +112,23 @@ def main() -> int:
 
     if checked == 0:
         failures.append("no public callable was found in Doxygen XML")
+    missing_planned = {
+        name: required - observed_planned[name]
+        for name, required in planned_required.items()
+        if observed_planned[name] < required
+    }
+    if missing_planned:
+        failures.append(
+            "planned catalog members absent from Doxygen XML: "
+            + ", ".join(f"{name} ({count})" for name, count in sorted(missing_planned.items()))
+        )
     if failures:
         print("Doxygen contract validation failed:\n" + "\n".join(failures), file=sys.stderr)
         return 1
-    print(f"validated Doxygen contracts for {checked} public callables")
+    print(
+        f"validated Doxygen contracts for {checked} public callables "
+        f"({sum(observed_planned.values())} planned declarations bound to exact manifest obligations)"
+    )
     return 0
 
 

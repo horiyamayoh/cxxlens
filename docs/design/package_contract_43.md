@@ -4,7 +4,7 @@ This document is normative for the `core`, `configuration`, and `testing` packag
 exclusively by Issue #43. The machine-readable authority is
 `schemas/cxxlens_package_contract_candidates.yaml#issue-43`; global meaning and transition rules
 come from `cxxlens.global-contract-conventions.v1`. The candidate fingerprint is
-`sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584`.
+`sha256:12ff14d27a96a78edb062e7263f4221f8b602e7347dc556c549715d3cd12cb4c`.
 
 The state is `candidate`, not `frozen`. Issue #54 alone may freeze it. Candidate declaration
 fragments under `contracts/candidates/43/` are non-installed inputs for Issue #53. No production
@@ -175,4 +175,4 @@ source, and fingerprint are propagated.
 
 Validated by `docs/design/high_risk_contract_validation.md#decisions`: the QA/process domain exercises
 core result/evidence/coverage/schema values and finite failure projection. Fingerprint
-`sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584` was unchanged; this is not implementation evidence.
+`sha256:12ff14d27a96a78edb062e7263f4221f8b602e7347dc556c549715d3cd12cb4c` was unchanged; this is not implementation evidence.

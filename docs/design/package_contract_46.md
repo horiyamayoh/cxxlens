@@ -109,4 +109,4 @@ exact declarations, owner/provider/schema edges, Doxygen obligations, and #52 sp
 
 Validated by `docs/design/high_risk_contract_validation.md#decisions`: a cyclic/open-world graph was bounded
 at five materialized nodes with an omitted count and deterministic seven-edge projection. Fingerprint
-`sha256:3c8f4fec0bb55eae81842b2dc4dec84c5efcfc236621f4b9e73888736de9f940` was unchanged.
+`sha256:6993968a9393a4f465aa9038b8ff58d236a44f0a5d7d3aa438882fdfa6a400e2` was unchanged.

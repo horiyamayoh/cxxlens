@@ -10405,14 +10405,14 @@
     }
   ],
   "input_fingerprints": {
-    "contract_ownership_registry": "sha256:49ae7011b11d5da85ba79cdedb1223ad3a4a1ca698795355c9cc0e84db407ede",
-    "dependency_requests": "sha256:bc5ec28d7f3a9d4187398170ba4d44d7643e88ede4e2fe30fdc3c8dc477ed2f0",
+    "contract_ownership_registry": "sha256:61e9a56c983501e89a58c45d878e991c59053d321621fac8d8bfefb2160e9b60",
+    "dependency_requests": "sha256:001abefa43b2036fc9cfc6e5afe7a95247cc6b434646a80481e976f0fbac10ff",
     "global_contract_conventions": "sha256:cdf3166db0b38fb9230602ff5ba273baf9e7e253d61d6c2fc75d21f0fea1238c",
     "m0": "sha256:9e32e99675512405e1247fd92b8cfcbc5c6e99ab9dc0378833482541c0538f19",
     "m1": "sha256:330670610fc393f8fd9a79493477b28f45c22f863fddaa35dae8a074a4deb567",
     "m2": "sha256:7f2d5d01ef9c074e1bfdc7920c51ea60d2520ae5e6b878467f94c670c144df27",
-    "ownership": "sha256:72645743a10096e7890c3ca521300902c7b499013866b70c40c18efd35174149",
-    "task_packets": "sha256:08583e55824ac16d601dfbd8fe6c045ee7af654f7fba26537736a34b0fe342ac"
+    "ownership": "sha256:e167c3b540838f04b1054026f51ebb706bd8ca4c41874d68db42f2d3657a0702",
+    "task_packets": "sha256:8b676982e6d984428483960de5be51fe6b1997ba3cb5ff2349e841595b187ab4"
   },
   "nodes": [
     {
@@ -21212,7 +21212,9 @@
         "environment": {},
         "id": "package-integration-acceptance"
       },
-      "allowed_write_paths": [],
+      "allowed_write_paths": [
+        "include/cxxlens/flow.hpp"
+      ],
       "blocked_atomic_units": [
         "AU-FLOW-001",
         "AU-FLOW-002",
@@ -21406,7 +21408,7 @@
       ],
       "package_id": "flow",
       "package_integration_role": "integration.package.flow",
-      "semantic_digest": "sha256:5ce4d81d1c73416441738e108cae9d11e176cf4c3be2419a4b0aa855fc826f13",
+      "semantic_digest": "sha256:bc8e2e6f8b7945d453331f8755b552d98980ccc7a0c17c6a61553d6ed580be26",
       "state": "blocked"
     },
     {
@@ -21627,7 +21629,9 @@
         "environment": {},
         "id": "package-integration-acceptance"
       },
-      "allowed_write_paths": [],
+      "allowed_write_paths": [
+        "include/cxxlens/generate.hpp"
+      ],
       "blocked_atomic_units": [
         "AU-GEN-001",
         "AU-GEN-002"
@@ -21815,7 +21819,7 @@
       ],
       "package_id": "generate",
       "package_integration_role": "integration.package.generate",
-      "semantic_digest": "sha256:671d53016f25f4606310ece69d2faeefa05e6d26ec70a3e395ecbb5ba71795b7",
+      "semantic_digest": "sha256:3a56c2237102bd050b6589e55eb9065e992c7403d4e4272580202d984c73c554",
       "state": "blocked"
     },
     {
@@ -21831,7 +21835,9 @@
         "environment": {},
         "id": "package-integration-acceptance"
       },
-      "allowed_write_paths": [],
+      "allowed_write_paths": [
+        "include/cxxlens/graph.hpp"
+      ],
       "blocked_atomic_units": [
         "AU-GRAPH-001",
         "AU-GRAPH-002",
@@ -22023,7 +22029,7 @@
       ],
       "package_id": "graph",
       "package_integration_role": "integration.package.graph",
-      "semantic_digest": "sha256:1806596b821e5d15b5a8f15c834c25108f91c3d5020c6e29dd46f960984a0477",
+      "semantic_digest": "sha256:34a401241df87341086bbec40d00f0f33580310a9526b29e918fd371843c2e64",
       "state": "blocked"
     },
     {
@@ -22670,7 +22676,9 @@
         "environment": {},
         "id": "package-integration-acceptance"
       },
-      "allowed_write_paths": [],
+      "allowed_write_paths": [
+        "include/cxxlens/models.hpp"
+      ],
       "blocked_atomic_units": [
         "AU-MODEL-001",
         "AU-MODEL-002",
@@ -22860,7 +22868,7 @@
       ],
       "package_id": "models",
       "package_integration_role": "integration.package.models",
-      "semantic_digest": "sha256:4ed50328809370d64229a684ce9783b4a096eff1d0af3f433fbbaea4b4b8b568",
+      "semantic_digest": "sha256:0c3b40d46547d6377ed2599838b7ea71c059d53bc6d272d4b1a90c9bc8f116c0",
       "state": "blocked"
     },
     {
@@ -22876,7 +22884,9 @@
         "environment": {},
         "id": "package-integration-acceptance"
       },
-      "allowed_write_paths": [],
+      "allowed_write_paths": [
+        "include/cxxlens/qa.hpp"
+      ],
       "blocked_atomic_units": [
         "AU-QA-001",
         "AU-QA-002",
@@ -23066,7 +23076,7 @@
       ],
       "package_id": "qa",
       "package_integration_role": "integration.package.qa",
-      "semantic_digest": "sha256:9b12fc863b9cffa9892d410e9b0706bab490f97c1b9e358ef5eb7a1648fdf1aa",
+      "semantic_digest": "sha256:6ab1eb258a3c41012e6fb6b8ba0152d300e257d6c4e198b67b99db0516f6cd6d",
       "state": "blocked"
     },
     {
@@ -23082,7 +23092,9 @@
         "environment": {},
         "id": "package-integration-acceptance"
       },
-      "allowed_write_paths": [],
+      "allowed_write_paths": [
+        "include/cxxlens/report.hpp"
+      ],
       "blocked_atomic_units": [
         "AU-REPORT-001",
         "AU-REPORT-002",
@@ -23272,7 +23284,7 @@
       ],
       "package_id": "report",
       "package_integration_role": "integration.package.report",
-      "semantic_digest": "sha256:1f99817d8f799efafdda7a3949de7833a3995e0efa81c683c8fa4afdeba28bf0",
+      "semantic_digest": "sha256:139c54b06ae817adbbc47ff89974bd21890c1018e839254f986fa4229bfcff2c",
       "state": "blocked"
     },
     {
@@ -23288,7 +23300,9 @@
         "environment": {},
         "id": "package-integration-acceptance"
       },
-      "allowed_write_paths": [],
+      "allowed_write_paths": [
+        "include/cxxlens/review.hpp"
+      ],
       "blocked_atomic_units": [
         "AU-RV-001",
         "AU-RV-002",
@@ -23479,7 +23493,7 @@
       ],
       "package_id": "review",
       "package_integration_role": "integration.package.review",
-      "semantic_digest": "sha256:9e44145eb1d6e46fbdf4ffd96df26c2ec1091f526e1310e5d0273a12577ab022",
+      "semantic_digest": "sha256:27fbd09464d49240448286213b7e45040c5fea9e121382c77e163e1a79fac066",
       "state": "blocked"
     },
     {
@@ -23495,7 +23509,9 @@
         "environment": {},
         "id": "package-integration-acceptance"
       },
-      "allowed_write_paths": [],
+      "allowed_write_paths": [
+        "include/cxxlens/rules.hpp"
+      ],
       "blocked_atomic_units": [
         "AU-RULE-001",
         "AU-RULE-002",
@@ -23686,7 +23702,7 @@
       ],
       "package_id": "rules",
       "package_integration_role": "integration.package.rules",
-      "semantic_digest": "sha256:33b5eafb41ec1a9322815ae5d020c2f31dfcb4137eaf9c0c4427b028c0ca381e",
+      "semantic_digest": "sha256:5c5bd169cec31bec7a5dfa777ad896fa796f5958245d0593330a8de767cd53c5",
       "state": "blocked"
     },
     {
@@ -24453,7 +24469,9 @@
         "environment": {},
         "id": "package-integration-acceptance"
       },
-      "allowed_write_paths": [],
+      "allowed_write_paths": [
+        "include/cxxlens/transform.hpp"
+      ],
       "blocked_atomic_units": [
         "AU-TF-001",
         "AU-TF-002",
@@ -24648,7 +24666,7 @@
       ],
       "package_id": "transform",
       "package_integration_role": "integration.package.transform",
-      "semantic_digest": "sha256:cf88a0bd570462ac7430cebebd6bfcefe1f4ae661b87b2a1dba3c19df1cc83e3",
+      "semantic_digest": "sha256:5dbe3b9d67f8de6e964ee754d4264f0b327ee1741fa7069e4fd999b6ad9633f9",
       "state": "blocked"
     },
     {
@@ -25344,7 +25362,7 @@
     ]
   },
   "schema": "cxxlens.api-ready.v1",
-  "semantic_digest": "sha256:4e84ce61acb7ad9400afe26a216e0fcc590508f41e688e1add4468a7e70e5e2a",
+  "semantic_digest": "sha256:b01d48c2662180196ec0f8ccf772e6c74cb46cb7cf1b8338f7f49bc5c42a8f21",
   "shards": [
     {
       "acceptance_command": {

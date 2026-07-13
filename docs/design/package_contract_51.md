@@ -77,4 +77,4 @@ provider/schema dependencies and Doxygen obligations.
 Validated by `docs/design/high_risk_contract_validation.md#decisions`: review covers all six baseline states
 and fail-closed indeterminate gates; QA covers argv literals, timeout/output/unavailable/signal states, five
 coverage mapping states and ambiguous/unmatched associations. Fingerprint
-`sha256:e6173e94b9d36c3c746b7fc8aa9690a3b9c7aa2967155cd500ec4214bf7a23ad` was unchanged.
+`sha256:34e502b3aa40015c99bbb1f351831fe4d0f7313f6f2e1ce6ecb4121ec3e59b79` was unchanged.

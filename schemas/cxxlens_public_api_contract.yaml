@@ -19,7 +19,7 @@ packages:
     transition_issue: '#43'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-43
-    candidate_fingerprint: sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584
+    candidate_fingerprint: sha256:12ff14d27a96a78edb062e7263f4221f8b602e7347dc556c549715d3cd12cb4c
   header: <cxxlens/core.hpp>
   purpose: Version, capability, IDs, errors, evidence, coverage and findings.
   public_types:
@@ -192,7 +192,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/43/core_findings.hpp
+      source: include/cxxlens/core/finding.hpp
       signature: cxxlens::result<cxxlens::finding> cxxlens::finding::make(cxxlens::finding_input,const cxxlens::finding_validation_context&);
         cxxlens::finding_id cxxlens::finding::id() const; std::string_view cxxlens::finding::rule_or_recipe() const noexcept;
         cxxlens::severity cxxlens::finding::level() const noexcept; cxxlens::confidence cxxlens::finding::certainty() const
@@ -223,7 +223,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/43/core_findings.hpp
+      source: include/cxxlens/core/finding.hpp
       signature: cxxlens::result<void> cxxlens::finding_set::add(cxxlens::finding); std::size_t cxxlens::finding_set::size()
         const noexcept; bool cxxlens::finding_set::empty() const noexcept; std::span<const cxxlens::finding> cxxlens::finding_set::all()
         const noexcept; cxxlens::finding_set cxxlens::finding_set::minimum_confidence(cxxlens::confidence) const; cxxlens::finding_set
@@ -244,7 +244,7 @@ packages:
     transition_issue: '#44'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-44
-    candidate_fingerprint: sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601
+    candidate_fingerprint: sha256:11b9a004c59d3895821ecf302cfcd08d7ec2ef5cbcb1fffaf722e7843c058a5c
   header: <cxxlens/workspace.hpp>
   purpose: Compilation database, build variants, snapshots and fact provisioning.
   public_types:
@@ -556,7 +556,7 @@ packages:
     transition_issue: '#44'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-44
-    candidate_fingerprint: sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601
+    candidate_fingerprint: sha256:11b9a004c59d3895821ecf302cfcd08d7ec2ef5cbcb1fffaf722e7843c058a5c
   header: <cxxlens/facts.hpp>
   purpose: Immutable semantic facts and typed fact access.
   public_types:
@@ -918,7 +918,7 @@ packages:
     transition_issue: '#50'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-50
-    candidate_fingerprint: sha256:2cbc4efec8cc4784fe10df0d4ac5048d943b73ff5d3d677afc6991d7c7a569ad
+    candidate_fingerprint: sha256:ff9d40744eeff0c0d6d866875fb78fb40a359df61b38ed5c7f0742a6b715ba29
   header: <cxxlens/models.hpp>
   purpose: Versioned project API effects, replacements and flow models.
   public_types:
@@ -938,7 +938,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/50/models.hpp
+      source: include/cxxlens/models.hpp
       signature: cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::empty(std::string,cxxlens::semantic_version)
       signature_fingerprint: sha256:b8df1aee884666c26f1cbe61c1f55d850adc76ac4f62bd008e7f5a4b28d8eeed
     atomic_unit:
@@ -963,7 +963,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/50/models.hpp
+      source: include/cxxlens/models.hpp
       signature: cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::function(std::string,cxxlens::models::api_effects)
         const; cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::method(std::string,std::string,cxxlens::models::api_effects)
         const; cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::replacement(std::string,std::string)
@@ -989,7 +989,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/50/models.hpp
+      source: include/cxxlens/models.hpp
       signature: cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::merge(const cxxlens::models::api_model_pack&,cxxlens::models::model_precedence)
         const
       signature_fingerprint: sha256:ff1b159316602b9d0c333dc7a15ff5b7cf55a2100907395fdc35e400e26c5cc4
@@ -1011,7 +1011,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/50/models.hpp
+      source: include/cxxlens/models.hpp
       signature: cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::load(cxxlens::path,cxxlens::models::model_pack_options);
         cxxlens::result<void> cxxlens::models::api_model_pack::save(cxxlens::path,cxxlens::models::model_pack_options) const;
         std::string_view cxxlens::models::api_model_pack::id() const noexcept; cxxlens::semantic_version cxxlens::models::api_model_pack::version()
@@ -1033,7 +1033,7 @@ packages:
     transition_issue: '#45'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-45
-    candidate_fingerprint: sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024
+    candidate_fingerprint: sha256:9bb0cb68c4121996a9dd550df67e070c1d0c04d3609e1399d777c2705b5f7008
   header: <cxxlens/select.hpp>
   purpose: Immutable serializable semantic selector DSL.
   public_types:
@@ -1184,7 +1184,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/45/select_search_explain.hpp
+      source: include/cxxlens/select.hpp
       signature: cxxlens::select::expression_selector cxxlens::select::expression_selector::type_is(cxxlens::select::type_selector)
         const; cxxlens::select::expression_selector cxxlens::select::expression_selector::refers_to(cxxlens::select::symbol_selector)
         const; cxxlens::select::expression_selector cxxlens::select::expression_selector::is_null_pointer() const; cxxlens::select::expression_selector
@@ -1217,7 +1217,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/45/select_search_explain.hpp
+      source: include/cxxlens/select.hpp
       signature: cxxlens::select::reference_selector cxxlens::select::reference_selector::target(cxxlens::select::symbol_selector)
         const; cxxlens::select::reference_selector cxxlens::select::reference_selector::kind(cxxlens::reference_kind) const;
         cxxlens::select::reference_selector cxxlens::select::reference_selector::kinds(std::vector<cxxlens::reference_kind>)
@@ -1300,7 +1300,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/45/select_search_explain.hpp
+      source: include/cxxlens/select.hpp
       signature: cxxlens::select::conversion_selector cxxlens::select::conversion_selector::kind(std::string) const; cxxlens::select::conversion_selector
         cxxlens::select::conversion_selector::from(cxxlens::select::type_selector) const; cxxlens::select::conversion_selector
         cxxlens::select::conversion_selector::to(cxxlens::select::type_selector) const; cxxlens::select::conversion_selector
@@ -1446,7 +1446,7 @@ packages:
     transition_issue: '#45'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-45
-    candidate_fingerprint: sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024
+    candidate_fingerprint: sha256:9bb0cb68c4121996a9dd550df67e070c1d0c04d3609e1399d777c2705b5f7008
   header: <cxxlens/search.hpp>
   purpose: Semantic grep over facts with targeted AST/CFG refinement.
   public_types:
@@ -1479,7 +1479,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/45/select_search_explain.hpp
+      source: include/cxxlens/search.hpp
       signature: cxxlens::result<cxxlens::search_report<cxxlens::symbol>> cxxlens::search::symbols(const cxxlens::workspace&,cxxlens::select::symbol_selector,cxxlens::search_options)
       signature_fingerprint: sha256:b96eb750e20a847cade5cfb28f7baa0f472533f05cc70397e0119f3e61e8487b
     atomic_unit:
@@ -1514,7 +1514,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/45/select_search_explain.hpp
+      source: include/cxxlens/search.hpp
       signature: cxxlens::result<cxxlens::search_report<cxxlens::reference>> cxxlens::search::references(const cxxlens::workspace&,cxxlens::select::reference_selector,cxxlens::search_options)
       signature_fingerprint: sha256:9bfea1820f9e8bbff568c40f2c55e37a31e5f3fb28276f3dcd152e1679feaebd
     atomic_unit:
@@ -1747,7 +1747,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/45/select_search_explain.hpp
+      source: include/cxxlens/search.hpp
       signature: cxxlens::result<cxxlens::search_report<cxxlens::include_relation>> cxxlens::search::includes(const cxxlens::workspace&,cxxlens::select::include_selector,cxxlens::search_options)
       signature_fingerprint: sha256:125d6fced9b72bc7d75cfc5c1a38967d6d8440c2380bf22bc80ebc77d375b5d3
     atomic_unit:
@@ -1776,7 +1776,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/45/select_search_explain.hpp
+      source: include/cxxlens/search.hpp
       signature: cxxlens::result<cxxlens::search_report<cxxlens::macro_expansion>> cxxlens::search::macros(const cxxlens::workspace&,cxxlens::select::macro_selector,cxxlens::search_options)
       signature_fingerprint: sha256:c281593aa30a769f783052201fef0533f0830c15cd5aa7e184335f3bc417cdc5
     atomic_unit:
@@ -1805,7 +1805,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/45/select_search_explain.hpp
+      source: include/cxxlens/search.hpp
       signature: cxxlens::result<cxxlens::search_report<cxxlens::fact>> cxxlens::search::conversions(const cxxlens::workspace&,cxxlens::select::conversion_selector,cxxlens::search_options)
       signature_fingerprint: sha256:f0fd1deb433ea736c422d98579cb2c9351d3032c8153dab1c1209ba0d8d54fcd
     atomic_unit:
@@ -1822,7 +1822,7 @@ packages:
     transition_issue: '#46'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-46
-    candidate_fingerprint: sha256:3c8f4fec0bb55eae81842b2dc4dec84c5efcfc236621f4b9e73888736de9f940
+    candidate_fingerprint: sha256:6993968a9393a4f465aa9038b8ff58d236a44f0a5d7d3aa438882fdfa6a400e2
   header: <cxxlens/graph.hpp>
   purpose: Call, hierarchy, override, include and impact graphs.
   public_types:
@@ -1856,7 +1856,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/46/graph.hpp
+      source: include/cxxlens/graph.hpp
       signature: cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::class_hierarchy(const cxxlens::workspace&,cxxlens::graph::graph_options)
       signature_fingerprint: sha256:57a0c6e8a8d1c3cc056e54ca27cf90c0c5196c21df5a69254e6d9724c21d1161
     atomic_unit:
@@ -1881,7 +1881,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/46/graph.hpp
+      source: include/cxxlens/graph.hpp
       signature: cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::override_graph(const cxxlens::workspace&,cxxlens::graph::graph_options)
       signature_fingerprint: sha256:680f964c6e7a97502882cd1a07c481098a8aa591f321651df52d21b677a87f58
     atomic_unit:
@@ -1906,7 +1906,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/46/graph.hpp
+      source: include/cxxlens/graph.hpp
       signature: cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::call_graph(const cxxlens::workspace&,cxxlens::graph::graph_options)
       signature_fingerprint: sha256:94731d48a2f4483281f98c39318c474c24bd14bb65c9535c0b6559f7f3af2b95
     atomic_unit:
@@ -1931,7 +1931,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/46/graph.hpp
+      source: include/cxxlens/graph.hpp
       signature: cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::include_graph(const cxxlens::workspace&,cxxlens::graph::graph_options)
       signature_fingerprint: sha256:8fb4444b60a610e06f27614784f009a1253121342645aec4a5ecae91f57f60bb
     atomic_unit:
@@ -1959,7 +1959,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/46/graph.hpp
+      source: include/cxxlens/graph.hpp
       signature: cxxlens::graph::impact_query cxxlens::graph::impact_query::changed_symbols(std::vector<cxxlens::symbol_id>);
         cxxlens::graph::impact_query cxxlens::graph::impact_query::matching(cxxlens::select::semantic_selector); cxxlens::graph::impact_query
         cxxlens::graph::impact_query::relations(std::vector<cxxlens::graph::graph_edge_kind>) const; cxxlens::graph::impact_query
@@ -1986,7 +1986,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/46/graph.hpp
+      source: include/cxxlens/graph.hpp
       signature: cxxlens::graph::graph_kind cxxlens::graph::semantic_graph::kind() const noexcept; std::span<const cxxlens::graph::graph_node>
         cxxlens::graph::semantic_graph::nodes() const noexcept; std::span<const cxxlens::graph::graph_edge> cxxlens::graph::semantic_graph::edges()
         const noexcept; std::span<const cxxlens::graph::graph_path> cxxlens::graph::semantic_graph::paths() const noexcept;
@@ -2010,7 +2010,7 @@ packages:
     transition_issue: '#47'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-47
-    candidate_fingerprint: sha256:a7d7d2ef4dc907b517ead76a54d36ba067fcc0f1aa5da405eebef30e1d6d8143
+    candidate_fingerprint: sha256:139632fb5016e56fbf7085ca6a93e7cc23e40bdfd0063ce18b2910e5e742c956
   header: <cxxlens/rules.hpp>
   purpose: Declarative rules, suppressions and shared execution.
   public_types:
@@ -2036,7 +2036,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/47/rules_report.hpp
+      source: include/cxxlens/rules.hpp
       signature: cxxlens::rules::rule_builder cxxlens::rules::make_rule(std::string,cxxlens::semantic_version)
       signature_fingerprint: sha256:f6a0083dc0b03d5f9420b3921cb412ff79ad764b1d7f50cae1f09f32b2e21d2e
     atomic_unit:
@@ -2064,7 +2064,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/47/rules_report.hpp
+      source: include/cxxlens/rules.hpp
       signature: cxxlens::rules::rule_builder cxxlens::rules::rule_builder::metadata(cxxlens::rules::rule_metadata) const;
         cxxlens::rules::rule_builder cxxlens::rules::rule_builder::when(cxxlens::select::semantic_selector) const; cxxlens::rules::rule_builder
         cxxlens::rules::rule_builder::unless(cxxlens::select::semantic_selector) const; cxxlens::rules::rule_builder cxxlens::rules::rule_builder::scope(cxxlens::analysis_scope)
@@ -2098,7 +2098,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/47/rules_report.hpp
+      source: include/cxxlens/rules.hpp
       signature: std::string_view cxxlens::rules::rule::id() const noexcept; const cxxlens::rules::rule_metadata& cxxlens::rules::rule::metadata()
         const noexcept; cxxlens::select::selector_requirements cxxlens::rules::rule::requirements() const; cxxlens::result<cxxlens::finding_set>
         cxxlens::rules::rule::run(const cxxlens::workspace&,cxxlens::rules::rule_run_options) const; std::string cxxlens::rules::rule::to_json()
@@ -2120,7 +2120,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/47/rules_report.hpp
+      source: include/cxxlens/rules.hpp
       signature: cxxlens::rules::rule_pack cxxlens::rules::rule_pack::add(cxxlens::rules::rule) const; cxxlens::rules::rule_pack
         cxxlens::rules::rule_pack::add(cxxlens::rules::rule_pack) const; cxxlens::rules::rule_pack cxxlens::rules::rule_pack::enable(std::string)
         const; cxxlens::rules::rule_pack cxxlens::rules::rule_pack::disable(std::string) const; cxxlens::rules::rule_pack
@@ -2150,7 +2150,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/47/rules_report.hpp
+      source: include/cxxlens/rules.hpp
       signature: cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::none(); cxxlens::rules::suppression_policy
         cxxlens::rules::suppression_policy::inline_nolint(bool) const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::file(cxxlens::path,std::string)
         const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::range(cxxlens::source_span,std::string)
@@ -2180,7 +2180,7 @@ packages:
     transition_issue: '#50'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-50
-    candidate_fingerprint: sha256:2cbc4efec8cc4784fe10df0d4ac5048d943b73ff5d3d677afc6991d7c7a569ad
+    candidate_fingerprint: sha256:ff9d40744eeff0c0d6d866875fb78fb40a359df61b38ed5c7f0742a6b715ba29
   header: <cxxlens/flow.hpp>
   purpose: CFG/dataflow, taint and resource protocol analyses.
   public_types:
@@ -2220,7 +2220,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/50/flow.hpp
+      source: include/cxxlens/flow.hpp
       signature: cxxlens::flow::source_model cxxlens::flow::source_model::call_return(cxxlens::select::call_selector); cxxlens::flow::source_model
         cxxlens::flow::source_model::parameter(cxxlens::select::symbol_selector,std::size_t); cxxlens::flow::source_model
         cxxlens::flow::source_model::receiver(cxxlens::select::call_selector); cxxlens::flow::source_model cxxlens::flow::source_model::field(cxxlens::select::symbol_selector);
@@ -2248,7 +2248,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/50/flow.hpp
+      source: include/cxxlens/flow.hpp
       signature: cxxlens::flow::sink_model cxxlens::flow::sink_model::call_argument(cxxlens::select::call_selector,std::size_t);
         cxxlens::flow::sink_model cxxlens::flow::sink_model::call_receiver(cxxlens::select::call_selector); cxxlens::flow::sink_model
         cxxlens::flow::sink_model::return_value(cxxlens::select::symbol_selector); cxxlens::flow::sink_model cxxlens::flow::sink_model::field_write(cxxlens::select::symbol_selector);
@@ -2279,7 +2279,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/50/flow.hpp
+      source: include/cxxlens/flow.hpp
       signature: cxxlens::flow::barrier_model cxxlens::flow::barrier_model::validation_call(cxxlens::select::call_selector);
         cxxlens::flow::barrier_model cxxlens::flow::barrier_model::sanitizer_call(cxxlens::select::call_selector); cxxlens::flow::barrier_model
         cxxlens::flow::barrier_model::bounds_check(); cxxlens::flow::barrier_model cxxlens::flow::barrier_model::null_check();
@@ -2303,7 +2303,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/50/flow.hpp
+      source: include/cxxlens/flow.hpp
       signature: cxxlens::flow::taint_policy cxxlens::flow::taint_policy::label(std::string) const; cxxlens::flow::taint_policy
         cxxlens::flow::taint_policy::source(cxxlens::flow::source_model) const; cxxlens::flow::taint_policy cxxlens::flow::taint_policy::sink(cxxlens::flow::sink_model)
         const; cxxlens::flow::taint_policy cxxlens::flow::taint_policy::barrier(cxxlens::flow::barrier_model) const; cxxlens::flow::taint_policy
@@ -2347,7 +2347,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/50/flow.hpp
+      source: include/cxxlens/flow.hpp
       signature: cxxlens::result<cxxlens::flow::cfg_availability> cxxlens::flow::inspect_cfg(const cxxlens::workspace&,cxxlens::analysis_scope,cxxlens::execution_context);
         cxxlens::result<cxxlens::flow::taint_report> cxxlens::flow::run_taint(const cxxlens::workspace&,cxxlens::flow::taint_policy,cxxlens::flow::flow_options)
       signature_fingerprint: sha256:51150e83fe8a833fa4fb38ac77297e67aea2e96f72884a54f477043b09562ce6
@@ -2368,7 +2368,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/50/flow.hpp
+      source: include/cxxlens/flow.hpp
       signature: cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::resource(std::string) const; cxxlens::flow::resource_protocol
         cxxlens::flow::resource_protocol::initial_state(std::string) const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::terminal_state(std::string)
         const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::error_state(std::string) const; cxxlens::flow::resource_protocol
@@ -2405,7 +2405,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/50/flow.hpp
+      source: include/cxxlens/flow.hpp
       signature: cxxlens::result<cxxlens::flow::resource_report> cxxlens::flow::check_resource_protocol(const cxxlens::workspace&,cxxlens::flow::resource_protocol,cxxlens::flow::flow_options);
         const cxxlens::finding_set& cxxlens::flow::resource_report::findings() const noexcept; std::span<const cxxlens::flow::flow_path>
         cxxlens::flow::resource_report::counterexamples() const noexcept; const cxxlens::flow::cfg_availability& cxxlens::flow::resource_report::cfg()
@@ -2439,7 +2439,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/50/flow.hpp
+      source: include/cxxlens/flow.hpp
       signature: cxxlens::result<cxxlens::flow::effect_summary_report> cxxlens::flow::build_effect_summaries(const cxxlens::workspace&,cxxlens::analysis_scope,cxxlens::flow::flow_options);
         std::span<const cxxlens::flow::effect_summary> cxxlens::flow::effect_summary_report::summaries() const noexcept; const
         cxxlens::flow::cfg_availability& cxxlens::flow::effect_summary_report::cfg() const noexcept; const cxxlens::coverage_report&
@@ -2462,7 +2462,7 @@ packages:
     transition_issue: '#48'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-48
-    candidate_fingerprint: sha256:6d209dd7b50a01718969b32c75fa1536ef946ccd9a6c71f603878fc13dc67d75
+    candidate_fingerprint: sha256:7f18fade87f89da2014f84a0dc9725e6225f67cca3c044bebd5c44f557158038
   header: <cxxlens/transform.hpp>
   purpose: Immutable edit plans, validation, formatting, reparsing and transactional apply.
   public_types:
@@ -2504,7 +2504,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/48/transform.hpp
+      source: include/cxxlens/transform.hpp
       signature: cxxlens::transform::codemod cxxlens::transform::replace_function_call(std::string,std::string)
       signature_fingerprint: sha256:05bdc3ef3e541c3f30a7bffd6ef1120f33325a047ab35ace02621dae83f303a5
     atomic_unit:
@@ -2532,7 +2532,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/48/transform.hpp
+      source: include/cxxlens/transform.hpp
       signature: cxxlens::transform::codemod cxxlens::transform::replace_method_call(std::string,std::string,std::string)
       signature_fingerprint: sha256:4051af4cf30ea174f0c6c8eade51905b67d42d07c209e3806cd2ac1dfdae91d0
     atomic_unit:
@@ -2556,7 +2556,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/48/transform.hpp
+      source: include/cxxlens/transform.hpp
       signature: cxxlens::transform::codemod cxxlens::transform::rewrite_calls(cxxlens::select::call_selector,cxxlens::transform::replacement_template)
       signature_fingerprint: sha256:7be8f7aed6f6a5d9526c6f1a95bbabdaa880b7f05b4012466461eebcd319bffa
     atomic_unit:
@@ -2584,7 +2584,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/48/transform.hpp
+      source: include/cxxlens/transform.hpp
       signature: cxxlens::transform::codemod cxxlens::transform::rename_symbol(cxxlens::select::symbol_selector,std::string)
       signature_fingerprint: sha256:64001973cf1e87a92cc541e35c8f1297f3f324970d7c0cf145ada7e7a4f16ff3
     atomic_unit:
@@ -2610,7 +2610,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/48/transform.hpp
+      source: include/cxxlens/transform.hpp
       signature: cxxlens::transform::codemod cxxlens::transform::add_include_where_needed(std::string,cxxlens::select::symbol_selector)
       signature_fingerprint: sha256:22bf4d3cf4b121d9064928e0be27211522db3e73ad79dde21d3a3cf0abfb45fb
     atomic_unit:
@@ -2637,7 +2637,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/48/transform.hpp
+      source: include/cxxlens/transform.hpp
       signature: cxxlens::transform::codemod cxxlens::transform::remove_unused_includes()
       signature_fingerprint: sha256:ad713f776a4f49954cd9e9b2b351b87dd1064e213a242b6feea2778ddc535b02
     atomic_unit:
@@ -2677,7 +2677,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/48/transform.hpp
+      source: include/cxxlens/transform.hpp
       signature: std::string_view cxxlens::transform::codemod::id() const noexcept; cxxlens::result<cxxlens::transform::edit_plan>
         cxxlens::transform::codemod::plan(cxxlens::workspace&,cxxlens::transform::plan_options) const; std::string cxxlens::transform::codemod::explain()
         const
@@ -2699,7 +2699,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/48/transform.hpp
+      source: include/cxxlens/transform.hpp
       signature: cxxlens::plan_id cxxlens::transform::edit_plan::id() const noexcept; bool cxxlens::transform::edit_plan::valid()
         const noexcept; std::span<const cxxlens::transform::edit> cxxlens::transform::edit_plan::edits() const noexcept; std::span<const
         cxxlens::transform::edit_conflict> cxxlens::transform::edit_plan::conflicts() const noexcept; std::span<const cxxlens::diagnostic>
@@ -2732,7 +2732,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/48/transform.hpp
+      source: include/cxxlens/transform.hpp
       signature: cxxlens::result<cxxlens::transform::apply_result> cxxlens::transform::edit_plan::apply(cxxlens::workspace&,cxxlens::transform::apply_options)
         const; cxxlens::transform::transaction_state cxxlens::transform::apply_result::state() const noexcept; bool cxxlens::transform::apply_result::committed()
         const noexcept; std::string_view cxxlens::transform::apply_result::transaction_id() const noexcept; std::span<const
@@ -2757,7 +2757,7 @@ packages:
     transition_issue: '#49'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-49
-    candidate_fingerprint: sha256:8ce8f299252b71f361407b41774291a97ef78dfaee1a74797ca4e9b41dace163
+    candidate_fingerprint: sha256:55a96e5b61bfc360a321c21b65e6a1908e7fecc5f7ef470fa80985636832a007
   header: <cxxlens/generate.hpp>
   purpose: Common census, decisions, artifacts and transaction apply.
   public_types:
@@ -2781,7 +2781,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/49/generate.hpp
+      source: include/cxxlens/generate.hpp
       signature: cxxlens::plan_id cxxlens::generate::generation_plan::id() const noexcept; bool cxxlens::generate::generation_plan::valid()
         const noexcept; std::span<const cxxlens::generate::surface> cxxlens::generate::generation_plan::census() const noexcept;
         std::span<const cxxlens::generate::surface_decision> cxxlens::generate::generation_plan::decisions() const noexcept;
@@ -2812,7 +2812,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/49/generate.hpp
+      source: include/cxxlens/generate.hpp
       signature: cxxlens::result<cxxlens::generate::generation_result> cxxlens::generate::generation_plan::apply(cxxlens::workspace&,cxxlens::transform::apply_mode,cxxlens::execution_context)
         const; cxxlens::transform::transaction_state cxxlens::generate::generation_result::state() const noexcept; bool cxxlens::generate::generation_result::committed()
         const noexcept; std::string_view cxxlens::generate::generation_result::transaction_id() const noexcept; std::span<const
@@ -2841,7 +2841,7 @@ packages:
     transition_issue: '#49'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-49
-    candidate_fingerprint: sha256:8ce8f299252b71f361407b41774291a97ef78dfaee1a74797ca4e9b41dace163
+    candidate_fingerprint: sha256:55a96e5b61bfc360a321c21b65e6a1908e7fecc5f7ef470fa80985636832a007
   header: <cxxlens/generate.hpp>
   purpose: Mock/fake planning and emission.
   public_types:
@@ -2872,7 +2872,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/49/generate.hpp
+      source: include/cxxlens/generate.hpp
       signature: cxxlens::generate::mock::generator cxxlens::generate::mock::generator::for_class(std::string); cxxlens::generate::mock::generator
         cxxlens::generate::mock::generator::for_symbol(cxxlens::select::symbol_selector); cxxlens::generate::mock::generator
         cxxlens::generate::mock::generator::for_c_api_header(cxxlens::path)
@@ -2892,7 +2892,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/49/generate.hpp
+      source: include/cxxlens/generate.hpp
       signature: cxxlens::generate::mock::generator cxxlens::generate::mock::generator::options(cxxlens::generate::mock::generation_options)
         const; cxxlens::generate::mock::generator cxxlens::generate::mock::generator::include_method(cxxlens::select::symbol_selector)
         const; cxxlens::generate::mock::generator cxxlens::generate::mock::generator::exclude_method(cxxlens::select::symbol_selector)
@@ -2941,7 +2941,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/49/generate.hpp
+      source: include/cxxlens/generate.hpp
       signature: cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::mock::generator::plan(cxxlens::workspace&,cxxlens::execution_context)
         const
       signature_fingerprint: sha256:bb033962a3625b1d861c6c7640854b4c80af715c100ebdfac0afb39c06434cb6
@@ -2959,7 +2959,7 @@ packages:
     transition_issue: '#49'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-49
-    candidate_fingerprint: sha256:8ce8f299252b71f361407b41774291a97ef78dfaee1a74797ca4e9b41dace163
+    candidate_fingerprint: sha256:55a96e5b61bfc360a321c21b65e6a1908e7fecc5f7ef470fa80985636832a007
   header: <cxxlens/generate.hpp>
   purpose: Exact method selection, inspection and extraction/harness planning.
   public_types:
@@ -2985,7 +2985,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/49/generate.hpp
+      source: include/cxxlens/generate.hpp
       signature: cxxlens::result<cxxlens::generate::method_harness::method_spec> cxxlens::generate::method_harness::parse_method_spec(std::string_view)
       signature_fingerprint: sha256:6d94c582c579712ebcdaa3e9c42bd027a7ced4b0d3b847e2e1baaa2d7914314b
     atomic_unit:
@@ -3022,7 +3022,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/49/generate.hpp
+      source: include/cxxlens/generate.hpp
       signature: cxxlens::result<cxxlens::generate::method_harness::method_resolution> cxxlens::generate::method_harness::resolve_method(const
         cxxlens::workspace&,const cxxlens::generate::method_harness::method_spec&,cxxlens::execution_context)
       signature_fingerprint: sha256:fe92e5d5988cb0b9a5ad6c5e5282de3ff773d157ff6b6859d5a0c0f7769a088f
@@ -3041,7 +3041,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/49/generate.hpp
+      source: include/cxxlens/generate.hpp
       signature: cxxlens::generate::method_harness::generator cxxlens::generate::method_harness::generator::for_method(cxxlens::generate::method_harness::method_spec);
         cxxlens::generate::method_harness::generator cxxlens::generate::method_harness::generator::for_symbol(cxxlens::select::symbol_selector);
         cxxlens::generate::method_harness::generator cxxlens::generate::method_harness::generator::options(cxxlens::generate::method_harness::harness_options)
@@ -3076,7 +3076,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/49/generate.hpp
+      source: include/cxxlens/generate.hpp
       signature: cxxlens::result<cxxlens::generate::method_harness::method_inspection> cxxlens::generate::method_harness::generator::inspect(const
         cxxlens::workspace&,cxxlens::execution_context) const
       signature_fingerprint: sha256:4a256d193b1ea1195c8c97a09f0855b23613ac3d8b8b66690558d7bc37b825c6
@@ -3107,7 +3107,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/49/generate.hpp
+      source: include/cxxlens/generate.hpp
       signature: cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::method_harness::generator::plan(cxxlens::workspace&,cxxlens::execution_context)
         const
       signature_fingerprint: sha256:1460708c6a7ef9cfabdea9f9080544c7a9f91658c7ddc9da62f7ef074ab4f6f3
@@ -3125,7 +3125,7 @@ packages:
     transition_issue: '#49'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-49
-    candidate_fingerprint: sha256:8ce8f299252b71f361407b41774291a97ef78dfaee1a74797ca4e9b41dace163
+    candidate_fingerprint: sha256:55a96e5b61bfc360a321c21b65e6a1908e7fecc5f7ef470fa80985636832a007
   header: <cxxlens/generate.hpp>
   purpose: Semantic public-surface and dependency copying.
   public_types:
@@ -3154,7 +3154,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/49/generate.hpp
+      source: include/cxxlens/generate.hpp
       signature: cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::copy::public_surface(cxxlens::workspace&,cxxlens::select::symbol_selector,cxxlens::generate::copy::copy_options,cxxlens::execution_context)
       signature_fingerprint: sha256:5baccebd7a8969352b8d491027605b672c73386339d4d615e672c69199f93342
     atomic_unit:
@@ -3180,7 +3180,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/49/generate.hpp
+      source: include/cxxlens/generate.hpp
       signature: cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::copy::required_types(cxxlens::workspace&,std::vector<cxxlens::symbol_id>,cxxlens::generate::copy::copy_options,cxxlens::execution_context)
       signature_fingerprint: sha256:e43bbeb56496fd0371b92ac9e1f18e8b9e887e5396a8134c1bd4dab520685eef
     atomic_unit:
@@ -3197,7 +3197,7 @@ packages:
     transition_issue: '#49'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-49
-    candidate_fingerprint: sha256:8ce8f299252b71f361407b41774291a97ef78dfaee1a74797ca4e9b41dace163
+    candidate_fingerprint: sha256:55a96e5b61bfc360a321c21b65e6a1908e7fecc5f7ef470fa80985636832a007
   header: <cxxlens/generate.hpp>
   purpose: Type-driven fuzz harness planning.
   public_types:
@@ -3221,7 +3221,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/49/generate.hpp
+      source: include/cxxlens/generate.hpp
       signature: cxxlens::generate::fuzz::generator cxxlens::generate::fuzz::generator::for_function(cxxlens::select::symbol_selector)
       signature_fingerprint: sha256:4eb44faf0469362a2f7ab650e21decf6860e808c7abcbf73e4f24258def55fa3
     atomic_unit:
@@ -3239,7 +3239,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/49/generate.hpp
+      source: include/cxxlens/generate.hpp
       signature: cxxlens::generate::fuzz::generator cxxlens::generate::fuzz::generator::input(std::size_t,cxxlens::generate::fuzz::input_model)
         const; cxxlens::generate::fuzz::generator cxxlens::generate::fuzz::generator::infer_inputs(bool) const; cxxlens::generate::fuzz::generator
         cxxlens::generate::fuzz::generator::options(cxxlens::generate::fuzz::fuzz_options) const
@@ -3270,7 +3270,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/49/generate.hpp
+      source: include/cxxlens/generate.hpp
       signature: cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::fuzz::generator::plan(cxxlens::workspace&,cxxlens::execution_context)
         const
       signature_fingerprint: sha256:6f342cb56a4df1a4533caceab26d8c624153fce6f053ad7e807622fb52a80b19
@@ -3288,7 +3288,7 @@ packages:
     transition_issue: '#51'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-51
-    candidate_fingerprint: sha256:e6173e94b9d36c3c746b7fc8aa9690a3b9c7aa2967155cd500ec4214bf7a23ad
+    candidate_fingerprint: sha256:34e502b3aa40015c99bbb1f351831fe4d0f7313f6f2e1ce6ecb4121ec3e59b79
   header: <cxxlens/qa.hpp>
   purpose: Sanitizer, coverage and external QA workflows.
   public_types:
@@ -3314,7 +3314,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/51/qa.hpp
+      source: include/cxxlens/qa.hpp
       signature: cxxlens::qa::profile cxxlens::qa::profile::memory(); cxxlens::qa::profile cxxlens::qa::profile::concurrency();
         cxxlens::qa::profile cxxlens::qa::profile::undefined_behavior(); cxxlens::qa::profile cxxlens::qa::profile::coverage();
         cxxlens::qa::profile cxxlens::qa::profile::sanitizer(cxxlens::qa::sanitizer_kind) const; cxxlens::qa::profile cxxlens::qa::profile::coverage_mode_(cxxlens::qa::coverage_mode)
@@ -3339,7 +3339,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/51/qa.hpp
+      source: include/cxxlens/qa.hpp
       signature: cxxlens::qa::workflow cxxlens::qa::workflow::for_project(const cxxlens::workspace&); cxxlens::qa::workflow
         cxxlens::qa::workflow::use(cxxlens::qa::profile) const; cxxlens::qa::workflow cxxlens::qa::workflow::process_policy_(cxxlens::qa::process_policy)
         const; cxxlens::qa::workflow cxxlens::qa::workflow::import_coverage(bool) const; cxxlens::qa::workflow cxxlens::qa::workflow::associate_with(cxxlens::finding_set)
@@ -3373,7 +3373,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/51/qa.hpp
+      source: include/cxxlens/qa.hpp
       signature: cxxlens::result<cxxlens::qa::dynamic_report> cxxlens::qa::workflow::run(cxxlens::execution_context) const
       signature_fingerprint: sha256:92a8be0f146613a1cb94d936d13b4f541660d8b9b6c0ffacde0d95f671e83994
     atomic_unit:
@@ -3403,7 +3403,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/51/qa.hpp
+      source: include/cxxlens/qa.hpp
       signature: cxxlens::result<cxxlens::qa::coverage_data> cxxlens::qa::import_source_coverage(const cxxlens::workspace&,cxxlens::qa::coverage_import_options,cxxlens::execution_context)
       signature_fingerprint: sha256:e3f46387620bff5172039554fbc902a665319b6a2eaa2c6960bb379df6bedc87
     atomic_unit:
@@ -3420,7 +3420,7 @@ packages:
     transition_issue: '#51'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-51
-    candidate_fingerprint: sha256:e6173e94b9d36c3c746b7fc8aa9690a3b9c7aa2967155cd500ec4214bf7a23ad
+    candidate_fingerprint: sha256:34e502b3aa40015c99bbb1f351831fe4d0f7313f6f2e1ce6ecb4121ec3e59b79
   header: <cxxlens/review.hpp>
   purpose: Diff scope, baseline, gate and review workflow.
   public_types:
@@ -3448,7 +3448,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/51/review.hpp
+      source: include/cxxlens/review.hpp
       signature: cxxlens::result<cxxlens::review::diff_view> cxxlens::review::diff_view::from_unified_diff(std::string_view,cxxlens::path,cxxlens::review::diff_options);
         cxxlens::result<cxxlens::review::diff_view> cxxlens::review::diff_view::from_git(cxxlens::path,std::string,cxxlens::review::diff_options,cxxlens::execution_context);
         bool cxxlens::review::diff_view::contains(const cxxlens::source_span&,cxxlens::review::diff_side) const; std::span<const
@@ -3476,7 +3476,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/51/review.hpp
+      source: include/cxxlens/review.hpp
       signature: cxxlens::result<cxxlens::review::baseline> cxxlens::review::baseline::load(cxxlens::path,cxxlens::review::baseline_options);
         cxxlens::result<void> cxxlens::review::baseline::save(cxxlens::path,cxxlens::review::baseline_options) const; cxxlens::review::baseline_match_state
         cxxlens::review::baseline::compare(const cxxlens::finding&) const; bool cxxlens::review::baseline::contains_equivalent(const
@@ -3502,7 +3502,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/51/review.hpp
+      source: include/cxxlens/review.hpp
       signature: cxxlens::review::gate_policy cxxlens::review::gate_policy::no_new_errors(); cxxlens::review::gate_policy
         cxxlens::review::gate_policy::no_high_confidence_security_findings(); cxxlens::review::gate_policy cxxlens::review::gate_policy::minimum_severity(cxxlens::severity)
         const; cxxlens::review::gate_policy cxxlens::review::gate_policy::minimum_confidence(cxxlens::confidence) const; cxxlens::review::gate_policy
@@ -3526,7 +3526,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/51/review.hpp
+      source: include/cxxlens/review.hpp
       signature: cxxlens::review::workflow cxxlens::review::workflow::for_diff(cxxlens::review::diff_view); cxxlens::review::workflow
         cxxlens::review::workflow::add(cxxlens::rules::rule_pack) const; cxxlens::review::workflow cxxlens::review::workflow::add_findings(cxxlens::finding_set)
         const; cxxlens::review::workflow cxxlens::review::workflow::baseline_(cxxlens::review::baseline) const; cxxlens::review::workflow
@@ -3561,7 +3561,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/51/review.hpp
+      source: include/cxxlens/review.hpp
       signature: cxxlens::result<cxxlens::review::review_report> cxxlens::review::workflow::run(const cxxlens::workspace&,cxxlens::execution_context)
         const
       signature_fingerprint: sha256:4db9ffbb52a800af72b493ac93a0be3e68ce4052b9c617e5c5a0fe6c9d4a30a7
@@ -3579,7 +3579,7 @@ packages:
     transition_issue: '#47'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-47
-    candidate_fingerprint: sha256:a7d7d2ef4dc907b517ead76a54d36ba067fcc0f1aa5da405eebef30e1d6d8143
+    candidate_fingerprint: sha256:139632fb5016e56fbf7085ca6a93e7cc23e40bdfd0063ce18b2910e5e742c956
   header: <cxxlens/report.hpp>
   purpose: Deterministic human and machine report projections.
   public_types:
@@ -3600,7 +3600,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/47/rules_report.hpp
+      source: include/cxxlens/report.hpp
       signature: cxxlens::result<cxxlens::report::rendered_report> cxxlens::report::render(const cxxlens::finding_set&,cxxlens::report::options)
       signature_fingerprint: sha256:8f3a8427029307727002b32c4844c196d71e8d95f04c067163148f2c097def55
     atomic_unit:
@@ -3625,7 +3625,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/47/rules_report.hpp
+      source: include/cxxlens/report.hpp
       signature: cxxlens::result<cxxlens::report::rendered_report> cxxlens::report::render(const cxxlens::transform::edit_plan&,cxxlens::report::options)
       signature_fingerprint: sha256:3d3125085729c443f2c5036d50b9236b05b0241bb501f940ca76987e92dc80c3
     atomic_unit:
@@ -3650,7 +3650,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/47/rules_report.hpp
+      source: include/cxxlens/report.hpp
       signature: cxxlens::result<cxxlens::report::rendered_report> cxxlens::report::render(const cxxlens::generate::generation_plan&,cxxlens::report::options)
       signature_fingerprint: sha256:de5a08a8862cccc51dd3d42d903bf6b679e1e12abd8450368ad9d87041959137
     atomic_unit:
@@ -3675,7 +3675,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/47/rules_report.hpp
+      source: include/cxxlens/report.hpp
       signature: cxxlens::result<cxxlens::report::rendered_report> cxxlens::report::render(const cxxlens::review::review_report&,cxxlens::report::options)
       signature_fingerprint: sha256:8ee2b2a7feccf83bc667a349d05680a53f0ea3b12983b2358041cc744b56f32d
     atomic_unit:
@@ -3695,7 +3695,7 @@ packages:
     transition_issue: '#45'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-45
-    candidate_fingerprint: sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024
+    candidate_fingerprint: sha256:9bb0cb68c4121996a9dd550df67e070c1d0c04d3609e1399d777c2705b5f7008
   header: <cxxlens/explain.hpp>
   purpose: Why/explanation and coding-agent task cards.
   public_types:
@@ -3711,7 +3711,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/45/select_search_explain.hpp
+      source: include/cxxlens/explain.hpp
       signature: cxxlens::explain::explanation cxxlens::explain::selector(const cxxlens::select::semantic_selector&,cxxlens::explain::detail_level);
         cxxlens::explain::explanation cxxlens::explain::finding(const cxxlens::finding&,cxxlens::explain::detail_level); cxxlens::explain::explanation
         cxxlens::explain::coverage(const cxxlens::coverage_report&,cxxlens::explain::detail_level); cxxlens::explain::explanation
@@ -3766,7 +3766,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/45/select_search_explain.hpp
+      source: include/cxxlens/explain.hpp
       signature: cxxlens::explain::agent_task_card cxxlens::explain::for_selector(const cxxlens::select::semantic_selector&);
         cxxlens::explain::agent_task_card cxxlens::explain::for_rule(const cxxlens::rules::rule&); cxxlens::explain::agent_task_card
         cxxlens::explain::for_codemod(const cxxlens::transform::codemod&); cxxlens::explain::agent_task_card cxxlens::explain::for_generation(const
@@ -3787,7 +3787,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/45/select_search_explain.hpp
+      source: include/cxxlens/explain.hpp
       signature: std::string cxxlens::explain::api_catalog_json()
       signature_fingerprint: sha256:7824de0ec7171b4de6eb4af75227d8c838b6b43c869929188b1c19306948dbbc
     atomic_unit:
@@ -3804,7 +3804,7 @@ packages:
     transition_issue: '#43'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-43
-    candidate_fingerprint: sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584
+    candidate_fingerprint: sha256:12ff14d27a96a78edb062e7263f4221f8b602e7347dc556c549715d3cd12cb4c
   header: <cxxlens/testing.hpp>
   purpose: Production-path fixtures, assertions, schema and determinism checks.
   public_types:
@@ -3919,7 +3919,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/43/testing_plan_assertions.hpp
+      source: include/cxxlens/testing.hpp
       signature: cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::valid() const; cxxlens::testing::edit_plan_assertion
         cxxlens::testing::edit_plan_assertion::changes_file(cxxlens::path) const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::diff_matches(cxxlens::path)
         const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::reparses() const; cxxlens::testing::edit_plan_assertion
@@ -3949,7 +3949,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/43/testing_plan_assertions.hpp
+      source: include/cxxlens/testing.hpp
       signature: cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::valid() const; cxxlens::testing::generation_plan_assertion
         cxxlens::testing::generation_plan_assertion::census_complete() const; cxxlens::testing::generation_plan_assertion
         cxxlens::testing::generation_plan_assertion::no_unknown_decisions() const; cxxlens::testing::generation_plan_assertion
@@ -4079,7 +4079,7 @@ packages:
     transition_issue: '#44'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-44
-    candidate_fingerprint: sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601
+    candidate_fingerprint: sha256:11b9a004c59d3895821ecf302cfcd08d7ec2ef5cbcb1fffaf722e7843c058a5c
   header: <cxxlens/interop/clang.hpp>
   purpose: Unstable LLVM-major-scoped raw Clang corridor.
   public_types:
@@ -4190,7 +4190,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/44/interop_extractors.hpp
+      source: include/cxxlens/interop/clang.hpp
       signature: cxxlens::result<void> cxxlens::interop::fact_sink::emit(cxxlens::fact); cxxlens::result<void> cxxlens::interop::fact_sink::emit_custom(cxxlens::interop::custom_fact);
         cxxlens::result<void> cxxlens::interop::fact_sink::emit_evidence(cxxlens::evidence_item); cxxlens::result<void> cxxlens::interop::fact_sink::mark_partial(cxxlens::unresolved)
       signature_fingerprint: sha256:4d667ed308ad08871902397aacaf79419053dc3799d278960e47a64bff9af3d5
@@ -4212,7 +4212,7 @@ packages:
     implementation_state: unimplemented
     declaration:
       status: exact
-      source: contracts/candidates/44/interop_extractors.hpp
+      source: include/cxxlens/interop/clang.hpp
       signature: cxxlens::result<std::string> cxxlens::interop::register_extractor(cxxlens::workspace&,std::shared_ptr<cxxlens::interop::clang_fact_extractor>);
         cxxlens::result<void> cxxlens::interop::unregister_extractor(cxxlens::workspace&,std::string)
       signature_fingerprint: sha256:d4049228415182ede11d70662295d69cf0642721e96ab500bbb024a6415a56b2
@@ -4230,7 +4230,7 @@ packages:
     transition_issue: '#43'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-43
-    candidate_fingerprint: sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584
+    candidate_fingerprint: sha256:12ff14d27a96a78edb062e7263f4221f8b602e7347dc556c549715d3cd12cb4c
   header: <cxxlens/configuration.hpp>
   purpose: Typed configuration loading, overlay and explanation.
   public_types:

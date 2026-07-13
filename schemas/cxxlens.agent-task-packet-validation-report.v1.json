@@ -5,7 +5,7 @@
     "candidate_declaration_not_integrated": 77,
     "dependency_contract_not_candidate": 2
   },
-  "catalog_fingerprint": "sha256:bc9a90973cc9956c781c576aa8beeab7539c50a11a809aa37393c647646d4fe9",
+  "catalog_fingerprint": "sha256:ba71733a6aa53336076365a3901d1de88b880919aab36f49db98dacf7b0f1e6f",
   "checks": [
     "atomic-unit-exactly-once",
     "catalog-and-source-fingerprint",
@@ -17,7 +17,7 @@
     "shared-implementation-dependency-closure",
     "typed-dependency-resolution"
   ],
-  "corpus_semantic_digest": "sha256:08583e55824ac16d601dfbd8fe6c045ee7af654f7fba26537736a34b0fe342ac",
+  "corpus_semantic_digest": "sha256:8b676982e6d984428483960de5be51fe6b1997ba3cb5ff2349e841595b187ab4",
   "generation_state_counts": {
     "blocked": 77,
     "complete": 47,
@@ -25,7 +25,7 @@
   },
   "global_contract_fingerprints": {
     "conventions": "sha256:cdf3166db0b38fb9230602ff5ba273baf9e7e253d61d6c2fc75d21f0fea1238c",
-    "ownership_registry": "sha256:49ae7011b11d5da85ba79cdedb1223ad3a4a1ca698795355c9cc0e84db407ede"
+    "ownership_registry": "sha256:61e9a56c983501e89a58c45d878e991c59053d321621fac8d8bfefb2160e9b60"
   },
   "schema": "cxxlens.agent-task-packet-validation-report.v1",
   "status": "passed"

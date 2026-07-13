@@ -353,6 +353,24 @@ namespace cxxlens
 		 * @endcode */
 		[[nodiscard]] std::string to_json() const;
 
+		/** @brief Render Markdown from the authoritative canonical rows.
+		 * @retval value Deterministic Markdown projection. @pre Rows are valid. @post Source set is
+		 * unchanged. @note Evidence, coverage, and unresolved state are never omitted.
+		 * @code{.cpp}
+		 * #include <cxxlens/core/finding.hpp>
+		 * int main(){return cxxlens::finding_set{}.to_markdown().empty()?1:0;}
+		 * @endcode */
+		[[nodiscard]] std::string to_markdown() const;
+
+		/** @brief Render SARIF from the authoritative canonical rows.
+		 * @retval value Deterministic SARIF projection. @pre Rows are valid. @post Source set is
+		 * unchanged. @note SARIF prose never becomes an identity or control-flow input.
+		 * @code{.cpp}
+		 * #include <cxxlens/core/finding.hpp>
+		 * int main(){return cxxlens::finding_set{}.to_sarif().empty()?1:0;}
+		 * @endcode */
+		[[nodiscard]] std::string to_sarif() const;
+
 	  private:
 		std::vector<finding> rows_;
 	};

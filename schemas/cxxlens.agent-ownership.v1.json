@@ -1,9 +1,9 @@
 {
   "global_contract_fingerprints": {
     "conventions": "sha256:cdf3166db0b38fb9230602ff5ba273baf9e7e253d61d6c2fc75d21f0fea1238c",
-    "ownership_registry": "sha256:49ae7011b11d5da85ba79cdedb1223ad3a4a1ca698795355c9cc0e84db407ede"
+    "ownership_registry": "sha256:61e9a56c983501e89a58c45d878e991c59053d321621fac8d8bfefb2160e9b60"
   },
-  "repository_paths_digest": "sha256:fa0a40e6bfb7ed2f1f8d0d9cb2298dd19909863e71b671e5d7002bd7868b8ac5",
+  "repository_paths_digest": "sha256:ba2a7f8e0188cc03124e2c8312b7082db830e81feb7dbc94be20a7b431543787",
   "reserved_paths": [
     {
       "access": "exclusive_write",
@@ -1137,7 +1137,7 @@
     }
   ],
   "schema": "cxxlens.agent-ownership.v1",
-  "semantic_digest": "sha256:72645743a10096e7890c3ca521300902c7b499013866b70c40c18efd35174149",
+  "semantic_digest": "sha256:e167c3b540838f04b1054026f51ebb706bd8ca4c41874d68db42f2d3657a0702",
   "skeletons": [
     {
       "api_id": "API-CFG-001",
@@ -1202,11 +1202,11 @@
       "contract_owner_issue": "#49",
       "contract_state": "candidate",
       "contract_transition_issue": "#49",
-      "declaration_source": "contracts/candidates/49/generate.hpp",
+      "declaration_source": "include/cxxlens/generate.hpp",
       "signature": "cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::copy::public_surface(cxxlens::workspace&,cxxlens::select::symbol_selector,cxxlens::generate::copy::copy_options,cxxlens::execution_context)",
       "signature_fingerprint": "sha256:5baccebd7a8969352b8d491027605b672c73386339d4d615e672c69199f93342",
-      "skeleton_fingerprint": "sha256:520fc61c6ab2f6d64a3ae01de547b5d68eab4ac0f020ebfc4f22fce85d926f52",
-      "source_fingerprint": "sha256:5217021161f3ade3525a66aac2ba7981bf93e92b633961c20049336344b441d5",
+      "skeleton_fingerprint": "sha256:65fed85d3b9affe4bae9c6037d781528bcd1193b7d7a38465002b7073b8a26d5",
+      "source_fingerprint": "sha256:f69d404f6a58da3610ed646e6e93804d160b79f2dcee7638c604ca89f51f921d",
       "state": "frozen"
     },
     {
@@ -1216,11 +1216,11 @@
       "contract_owner_issue": "#49",
       "contract_state": "candidate",
       "contract_transition_issue": "#49",
-      "declaration_source": "contracts/candidates/49/generate.hpp",
+      "declaration_source": "include/cxxlens/generate.hpp",
       "signature": "cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::copy::required_types(cxxlens::workspace&,std::vector<cxxlens::symbol_id>,cxxlens::generate::copy::copy_options,cxxlens::execution_context)",
       "signature_fingerprint": "sha256:e43bbeb56496fd0371b92ac9e1f18e8b9e887e5396a8134c1bd4dab520685eef",
-      "skeleton_fingerprint": "sha256:b440edcdeebb58065370f711892035cd564840dc76cdc15128238babb818fe84",
-      "source_fingerprint": "sha256:5217021161f3ade3525a66aac2ba7981bf93e92b633961c20049336344b441d5",
+      "skeleton_fingerprint": "sha256:5b5ca9bf55132cd027d5195d90af734d73a50aeb36188d183fdad8608b4f0981",
+      "source_fingerprint": "sha256:f69d404f6a58da3610ed646e6e93804d160b79f2dcee7638c604ca89f51f921d",
       "state": "frozen"
     },
     {
@@ -1286,11 +1286,11 @@
       "contract_owner_issue": "#43",
       "contract_state": "candidate",
       "contract_transition_issue": "#43",
-      "declaration_source": "contracts/candidates/43/core_findings.hpp",
+      "declaration_source": "include/cxxlens/core/finding.hpp",
       "signature": "cxxlens::result<cxxlens::finding> cxxlens::finding::make(cxxlens::finding_input,const cxxlens::finding_validation_context&); cxxlens::finding_id cxxlens::finding::id() const; std::string_view cxxlens::finding::rule_or_recipe() const noexcept; cxxlens::severity cxxlens::finding::level() const noexcept; cxxlens::confidence cxxlens::finding::certainty() const noexcept; cxxlens::result_guarantee cxxlens::finding::guarantee() const noexcept; const cxxlens::source_span& cxxlens::finding::primary_location() const noexcept; std::string_view cxxlens::finding::message() const noexcept; const cxxlens::evidence& cxxlens::finding::why() const noexcept; std::span<const cxxlens::unresolved> cxxlens::finding::unresolved_items() const noexcept; const cxxlens::coverage_report& cxxlens::finding::coverage() const noexcept; cxxlens::finding_explanation_input cxxlens::finding::explanation_input() const noexcept; cxxlens::result<void> cxxlens::finding::validate(const cxxlens::finding_validation_context&) const; std::string cxxlens::finding::semantic_representation() const; std::string cxxlens::finding::to_json() const",
       "signature_fingerprint": "sha256:6003d07f3ed009d442c160c73b728c82c1b2bddc21a731698c9c2aeaba061655",
-      "skeleton_fingerprint": "sha256:2be3d129e97920558ae72f82dc1a2620f6fd041001d53c1fc3bc4a9c08d2edce",
-      "source_fingerprint": "sha256:8f6d7316236004b4b7b072f823639c03a6afbe97301cfc685fbe969961fffe9e",
+      "skeleton_fingerprint": "sha256:ddc3ba8d189ed1775d028af575e8e3097e42e00d475c33da1440908364cd5f98",
+      "source_fingerprint": "sha256:1d73c5b7ff16462a95a1e66c83ea493104b7c11435e89b2c7a84699a02ece710",
       "state": "frozen"
     },
     {
@@ -1300,11 +1300,11 @@
       "contract_owner_issue": "#43",
       "contract_state": "candidate",
       "contract_transition_issue": "#43",
-      "declaration_source": "contracts/candidates/43/core_findings.hpp",
+      "declaration_source": "include/cxxlens/core/finding.hpp",
       "signature": "cxxlens::result<void> cxxlens::finding_set::add(cxxlens::finding); std::size_t cxxlens::finding_set::size() const noexcept; bool cxxlens::finding_set::empty() const noexcept; std::span<const cxxlens::finding> cxxlens::finding_set::all() const noexcept; cxxlens::finding_set cxxlens::finding_set::minimum_confidence(cxxlens::confidence) const; cxxlens::finding_set cxxlens::finding_set::minimum_severity(cxxlens::severity) const; std::string cxxlens::finding_set::to_json() const; std::string cxxlens::finding_set::to_markdown() const; std::string cxxlens::finding_set::to_sarif() const",
       "signature_fingerprint": "sha256:b111c53789436fc32aa3d7a496ef19725abd7beae0490df4ad0e33cde9509ca4",
-      "skeleton_fingerprint": "sha256:87c40ea89758985669228cd7d77301835351eda530d0a43de62f05d4dd54c17c",
-      "source_fingerprint": "sha256:8f6d7316236004b4b7b072f823639c03a6afbe97301cfc685fbe969961fffe9e",
+      "skeleton_fingerprint": "sha256:9b1ba89a7654e7ecec7101abe32a57db59a5bb23e3bd35aec5f2cbc7c8181214",
+      "source_fingerprint": "sha256:1d73c5b7ff16462a95a1e66c83ea493104b7c11435e89b2c7a84699a02ece710",
       "state": "frozen"
     },
     {
@@ -1314,11 +1314,11 @@
       "contract_owner_issue": "#45",
       "contract_state": "candidate",
       "contract_transition_issue": "#45",
-      "declaration_source": "contracts/candidates/45/select_search_explain.hpp",
+      "declaration_source": "include/cxxlens/explain.hpp",
       "signature": "cxxlens::explain::explanation cxxlens::explain::selector(const cxxlens::select::semantic_selector&,cxxlens::explain::detail_level); cxxlens::explain::explanation cxxlens::explain::finding(const cxxlens::finding&,cxxlens::explain::detail_level); cxxlens::explain::explanation cxxlens::explain::coverage(const cxxlens::coverage_report&,cxxlens::explain::detail_level); cxxlens::explain::explanation cxxlens::explain::edit_plan(const cxxlens::transform::edit_plan&,cxxlens::explain::detail_level); cxxlens::explain::explanation cxxlens::explain::generation_plan(const cxxlens::generate::generation_plan&,cxxlens::explain::detail_level)",
       "signature_fingerprint": "sha256:adc0fbd816afc1a43a846ec317545135a405fa0c799808e55592b6bea1c47263",
-      "skeleton_fingerprint": "sha256:a7ebeec5ed00c3aa974acf0f1d8a59347b59bc1e5c3339555468725841d295b1",
-      "source_fingerprint": "sha256:a516123cac779b3c05bb6930c4c0de01b1e2da22ff15a187f0da57bf00b3c17e",
+      "skeleton_fingerprint": "sha256:5a3c9cfd4f2216854f9692716e639128a51c503850d362d321605361acff3757",
+      "source_fingerprint": "sha256:27d43a84241defc3e2a8154449202745474116a96df14e6a606c07dfb8bb692e",
       "state": "frozen"
     },
     {
@@ -1331,8 +1331,8 @@
       "declaration_source": "include/cxxlens/explain.hpp",
       "signature": "cxxlens::result<cxxlens::explain::explanation> cxxlens::explain::why_not_matched(const cxxlens::workspace&,cxxlens::select::semantic_selector,cxxlens::analysis_scope,cxxlens::explain::detail_level,cxxlens::execution_context)",
       "signature_fingerprint": "sha256:e9ed782086cceba6787a9693bf1fa1ad103adb0bc4098fab9febb6c5421f5308",
-      "skeleton_fingerprint": "sha256:f27537a8b30ec7803beeb0773ffab28002c01cc6983a25c940d95a8a1db6e348",
-      "source_fingerprint": "sha256:e36da335a352b8341afaf624daf0b2248048f85be8607b0a74749df12b456503",
+      "skeleton_fingerprint": "sha256:29983cf0cad4aa4646dd9235b71e90e5845842c5e615524a939337f36c063abd",
+      "source_fingerprint": "sha256:27d43a84241defc3e2a8154449202745474116a96df14e6a606c07dfb8bb692e",
       "state": "frozen"
     },
     {
@@ -1342,11 +1342,11 @@
       "contract_owner_issue": "#45",
       "contract_state": "candidate",
       "contract_transition_issue": "#45",
-      "declaration_source": "contracts/candidates/45/select_search_explain.hpp",
+      "declaration_source": "include/cxxlens/explain.hpp",
       "signature": "cxxlens::explain::agent_task_card cxxlens::explain::for_selector(const cxxlens::select::semantic_selector&); cxxlens::explain::agent_task_card cxxlens::explain::for_rule(const cxxlens::rules::rule&); cxxlens::explain::agent_task_card cxxlens::explain::for_codemod(const cxxlens::transform::codemod&); cxxlens::explain::agent_task_card cxxlens::explain::for_generation(const cxxlens::generate::generation_plan&)",
       "signature_fingerprint": "sha256:52d1427216a080b8c400269de2b871d8a726f4aabc7ec87c601450ea94b4bd53",
-      "skeleton_fingerprint": "sha256:64f088f52bcf5ae670a76e0d54a13279286257d93302595118c7715d8d44cebd",
-      "source_fingerprint": "sha256:a516123cac779b3c05bb6930c4c0de01b1e2da22ff15a187f0da57bf00b3c17e",
+      "skeleton_fingerprint": "sha256:55029f10fef25ef8bc8187ae370f7bdaa00c919cb2d3332a5dc4c5e007206c87",
+      "source_fingerprint": "sha256:27d43a84241defc3e2a8154449202745474116a96df14e6a606c07dfb8bb692e",
       "state": "frozen"
     },
     {
@@ -1356,11 +1356,11 @@
       "contract_owner_issue": "#45",
       "contract_state": "candidate",
       "contract_transition_issue": "#45",
-      "declaration_source": "contracts/candidates/45/select_search_explain.hpp",
+      "declaration_source": "include/cxxlens/explain.hpp",
       "signature": "std::string cxxlens::explain::api_catalog_json()",
       "signature_fingerprint": "sha256:7824de0ec7171b4de6eb4af75227d8c838b6b43c869929188b1c19306948dbbc",
-      "skeleton_fingerprint": "sha256:fa3cf5aceb36a60ae79d77ba0b8f93e3cdd679fbcf8280d039845e0e6950fc90",
-      "source_fingerprint": "sha256:a516123cac779b3c05bb6930c4c0de01b1e2da22ff15a187f0da57bf00b3c17e",
+      "skeleton_fingerprint": "sha256:aa3db56a49201772f2a5ccbef9a222012ed6bbce163e9c7d4246fb96e34243dc",
+      "source_fingerprint": "sha256:27d43a84241defc3e2a8154449202745474116a96df14e6a606c07dfb8bb692e",
       "state": "frozen"
     },
     {
@@ -1510,11 +1510,11 @@
       "contract_owner_issue": "#50",
       "contract_state": "candidate",
       "contract_transition_issue": "#50",
-      "declaration_source": "contracts/candidates/50/flow.hpp",
+      "declaration_source": "include/cxxlens/flow.hpp",
       "signature": "cxxlens::flow::source_model cxxlens::flow::source_model::call_return(cxxlens::select::call_selector); cxxlens::flow::source_model cxxlens::flow::source_model::parameter(cxxlens::select::symbol_selector,std::size_t); cxxlens::flow::source_model cxxlens::flow::source_model::receiver(cxxlens::select::call_selector); cxxlens::flow::source_model cxxlens::flow::source_model::field(cxxlens::select::symbol_selector); cxxlens::flow::source_model cxxlens::flow::source_model::global(cxxlens::select::symbol_selector); cxxlens::flow::source_model cxxlens::flow::source_model::path(cxxlens::flow::value_path) const; cxxlens::flow::source_model cxxlens::flow::source_model::metadata(std::string,cxxlens::semantic_version,std::string,std::string,std::int32_t) const",
       "signature_fingerprint": "sha256:e699f888e8ca31f3fdeb90721a96ccf3512316f8db5565b66b07490277368272",
-      "skeleton_fingerprint": "sha256:04ca95ce0312b5afa790586fe3da2031fdbaa67b8754bced6d0eb8314eb4acd9",
-      "source_fingerprint": "sha256:14136478e6910b6a3f8068c55a331be15fd1c3a2599b2a7fed272360902c5bb2",
+      "skeleton_fingerprint": "sha256:0f96ac27519e3d1b60ed28969a380c2fabe2359d65ca758469bd1216a5a79fd3",
+      "source_fingerprint": "sha256:e5361a4b336a04bf5af0c2f84017150fef47ac91e9d18244994bb76925eb5ee8",
       "state": "frozen"
     },
     {
@@ -1524,11 +1524,11 @@
       "contract_owner_issue": "#50",
       "contract_state": "candidate",
       "contract_transition_issue": "#50",
-      "declaration_source": "contracts/candidates/50/flow.hpp",
+      "declaration_source": "include/cxxlens/flow.hpp",
       "signature": "cxxlens::flow::sink_model cxxlens::flow::sink_model::call_argument(cxxlens::select::call_selector,std::size_t); cxxlens::flow::sink_model cxxlens::flow::sink_model::call_receiver(cxxlens::select::call_selector); cxxlens::flow::sink_model cxxlens::flow::sink_model::return_value(cxxlens::select::symbol_selector); cxxlens::flow::sink_model cxxlens::flow::sink_model::field_write(cxxlens::select::symbol_selector); cxxlens::flow::sink_model cxxlens::flow::sink_model::global_write(cxxlens::select::symbol_selector); cxxlens::flow::sink_model cxxlens::flow::sink_model::dereference(); cxxlens::flow::sink_model cxxlens::flow::sink_model::array_index(); cxxlens::flow::sink_model cxxlens::flow::sink_model::format_string(); cxxlens::flow::sink_model cxxlens::flow::sink_model::command_execution(); cxxlens::flow::sink_model cxxlens::flow::sink_model::file_path_open(); cxxlens::flow::sink_model cxxlens::flow::sink_model::path(cxxlens::flow::value_path) const; cxxlens::flow::sink_model cxxlens::flow::sink_model::metadata(std::string,cxxlens::semantic_version,std::string,std::string,std::int32_t) const",
       "signature_fingerprint": "sha256:a4d8fe07e7bba316aa21fce1e2e68831230e649adadaea93c001db7598257877",
-      "skeleton_fingerprint": "sha256:daf02e36bb29d5ef495823242bda0fac233e546cf627e81e00c17882792c58b4",
-      "source_fingerprint": "sha256:14136478e6910b6a3f8068c55a331be15fd1c3a2599b2a7fed272360902c5bb2",
+      "skeleton_fingerprint": "sha256:a0fbc51c40fb8e6360000c4540a8d9b8922f6d56063c34fd0e230dc4ecd8dd8b",
+      "source_fingerprint": "sha256:e5361a4b336a04bf5af0c2f84017150fef47ac91e9d18244994bb76925eb5ee8",
       "state": "frozen"
     },
     {
@@ -1538,11 +1538,11 @@
       "contract_owner_issue": "#50",
       "contract_state": "candidate",
       "contract_transition_issue": "#50",
-      "declaration_source": "contracts/candidates/50/flow.hpp",
+      "declaration_source": "include/cxxlens/flow.hpp",
       "signature": "cxxlens::flow::barrier_model cxxlens::flow::barrier_model::validation_call(cxxlens::select::call_selector); cxxlens::flow::barrier_model cxxlens::flow::barrier_model::sanitizer_call(cxxlens::select::call_selector); cxxlens::flow::barrier_model cxxlens::flow::barrier_model::bounds_check(); cxxlens::flow::barrier_model cxxlens::flow::barrier_model::null_check(); cxxlens::flow::barrier_model cxxlens::flow::barrier_model::effect(cxxlens::flow::barrier_effect,std::string) const; cxxlens::flow::barrier_model cxxlens::flow::barrier_model::path(cxxlens::flow::value_path) const; cxxlens::flow::barrier_model cxxlens::flow::barrier_model::metadata(std::string,cxxlens::semantic_version,std::string,std::string,std::int32_t) const",
       "signature_fingerprint": "sha256:b5177faca54a108c2641e5a2a9cdef4d3e169c27f5b4e4ddee38f92bdc043695",
-      "skeleton_fingerprint": "sha256:f092d3e6a6ba026f602cc05f2329cb29c5c1c24a09abb00e1dc632e39fad182b",
-      "source_fingerprint": "sha256:14136478e6910b6a3f8068c55a331be15fd1c3a2599b2a7fed272360902c5bb2",
+      "skeleton_fingerprint": "sha256:b3f033e152f36d68e43a621f97a0110f8ed83c77a627f00254a573cf5246c51d",
+      "source_fingerprint": "sha256:e5361a4b336a04bf5af0c2f84017150fef47ac91e9d18244994bb76925eb5ee8",
       "state": "frozen"
     },
     {
@@ -1552,11 +1552,11 @@
       "contract_owner_issue": "#50",
       "contract_state": "candidate",
       "contract_transition_issue": "#50",
-      "declaration_source": "contracts/candidates/50/flow.hpp",
+      "declaration_source": "include/cxxlens/flow.hpp",
       "signature": "cxxlens::flow::taint_policy cxxlens::flow::taint_policy::label(std::string) const; cxxlens::flow::taint_policy cxxlens::flow::taint_policy::source(cxxlens::flow::source_model) const; cxxlens::flow::taint_policy cxxlens::flow::taint_policy::sink(cxxlens::flow::sink_model) const; cxxlens::flow::taint_policy cxxlens::flow::taint_policy::barrier(cxxlens::flow::barrier_model) const; cxxlens::flow::taint_policy cxxlens::flow::taint_policy::propagate(std::string,std::string) const; cxxlens::flow::taint_policy cxxlens::flow::taint_policy::interprocedural(bool) const; cxxlens::flow::taint_policy cxxlens::flow::taint_policy::precision(cxxlens::precision_level) const; cxxlens::result<void> cxxlens::flow::taint_policy::validate() const",
       "signature_fingerprint": "sha256:aa01efc56a151ba7b6206f0a991ef1b39ada2b0fee3c30b1bf2f89fffbae0321",
-      "skeleton_fingerprint": "sha256:da4476d0e638c95bb326b8c3dcf383604d0788b32ab7cac39020e6aeba63066d",
-      "source_fingerprint": "sha256:14136478e6910b6a3f8068c55a331be15fd1c3a2599b2a7fed272360902c5bb2",
+      "skeleton_fingerprint": "sha256:a629c7ac38d69f821ef3d565f5de6c777022a02c15d898a0c6ce342c82a98d2d",
+      "source_fingerprint": "sha256:e5361a4b336a04bf5af0c2f84017150fef47ac91e9d18244994bb76925eb5ee8",
       "state": "frozen"
     },
     {
@@ -1566,11 +1566,11 @@
       "contract_owner_issue": "#50",
       "contract_state": "candidate",
       "contract_transition_issue": "#50",
-      "declaration_source": "contracts/candidates/50/flow.hpp",
+      "declaration_source": "include/cxxlens/flow.hpp",
       "signature": "cxxlens::result<cxxlens::flow::cfg_availability> cxxlens::flow::inspect_cfg(const cxxlens::workspace&,cxxlens::analysis_scope,cxxlens::execution_context); cxxlens::result<cxxlens::flow::taint_report> cxxlens::flow::run_taint(const cxxlens::workspace&,cxxlens::flow::taint_policy,cxxlens::flow::flow_options)",
       "signature_fingerprint": "sha256:51150e83fe8a833fa4fb38ac77297e67aea2e96f72884a54f477043b09562ce6",
-      "skeleton_fingerprint": "sha256:0222c6340acea3f6f8264b97a0046571e33ecdb4b93e698bf8d131ab0d989901",
-      "source_fingerprint": "sha256:14136478e6910b6a3f8068c55a331be15fd1c3a2599b2a7fed272360902c5bb2",
+      "skeleton_fingerprint": "sha256:4af12a098dbe6de46b301a27a75b3bbe2d7abd3624ae1f8e52e9cf2188ec2a21",
+      "source_fingerprint": "sha256:e5361a4b336a04bf5af0c2f84017150fef47ac91e9d18244994bb76925eb5ee8",
       "state": "frozen"
     },
     {
@@ -1580,11 +1580,11 @@
       "contract_owner_issue": "#50",
       "contract_state": "candidate",
       "contract_transition_issue": "#50",
-      "declaration_source": "contracts/candidates/50/flow.hpp",
+      "declaration_source": "include/cxxlens/flow.hpp",
       "signature": "cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::resource(std::string) const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::initial_state(std::string) const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::terminal_state(std::string) const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::error_state(std::string) const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::transition(cxxlens::flow::resource_transition) const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::acquire(cxxlens::select::call_selector) const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::release(cxxlens::select::call_selector) const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::use(cxxlens::select::call_selector) const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::escape(cxxlens::select::call_selector) const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::invalid_use_message(std::string) const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::leak_message(std::string) const; cxxlens::result<void> cxxlens::flow::resource_protocol::validate() const",
       "signature_fingerprint": "sha256:54173e3c9e4f5c0ddaf9947f98df29e55db091454cede990e608ed8c891cbdee",
-      "skeleton_fingerprint": "sha256:121953ac68e2f835d2bf118531f8f42c7f68cdd7815cb45ed0a687e583e5dafa",
-      "source_fingerprint": "sha256:14136478e6910b6a3f8068c55a331be15fd1c3a2599b2a7fed272360902c5bb2",
+      "skeleton_fingerprint": "sha256:7c817646fbba146af2f358244d49d1db961588b9e66ed06dbbf576ea834d86f5",
+      "source_fingerprint": "sha256:e5361a4b336a04bf5af0c2f84017150fef47ac91e9d18244994bb76925eb5ee8",
       "state": "frozen"
     },
     {
@@ -1594,11 +1594,11 @@
       "contract_owner_issue": "#50",
       "contract_state": "candidate",
       "contract_transition_issue": "#50",
-      "declaration_source": "contracts/candidates/50/flow.hpp",
+      "declaration_source": "include/cxxlens/flow.hpp",
       "signature": "cxxlens::result<cxxlens::flow::resource_report> cxxlens::flow::check_resource_protocol(const cxxlens::workspace&,cxxlens::flow::resource_protocol,cxxlens::flow::flow_options); const cxxlens::finding_set& cxxlens::flow::resource_report::findings() const noexcept; std::span<const cxxlens::flow::flow_path> cxxlens::flow::resource_report::counterexamples() const noexcept; const cxxlens::flow::cfg_availability& cxxlens::flow::resource_report::cfg() const noexcept; const cxxlens::coverage_report& cxxlens::flow::resource_report::coverage() const noexcept; std::span<const cxxlens::unresolved> cxxlens::flow::resource_report::unresolved_items() const noexcept; std::span<const cxxlens::diagnostic> cxxlens::flow::resource_report::diagnostics() const noexcept; cxxlens::result_guarantee cxxlens::flow::resource_report::guarantee() const noexcept; std::string cxxlens::flow::resource_report::to_json() const",
       "signature_fingerprint": "sha256:e253f22cef7257a2ece2a40858d14687af9280a63bf9a00c292d03599bc42665",
-      "skeleton_fingerprint": "sha256:08fcba728f121efbf941d38020916bff53f578b3b6c9bd8223b7bd747cb83542",
-      "source_fingerprint": "sha256:14136478e6910b6a3f8068c55a331be15fd1c3a2599b2a7fed272360902c5bb2",
+      "skeleton_fingerprint": "sha256:e2f6645e7e1f1ff755e19f828e6d5475861986f9dd2705fa0cc1cade81cca532",
+      "source_fingerprint": "sha256:e5361a4b336a04bf5af0c2f84017150fef47ac91e9d18244994bb76925eb5ee8",
       "state": "frozen"
     },
     {
@@ -1608,11 +1608,11 @@
       "contract_owner_issue": "#50",
       "contract_state": "candidate",
       "contract_transition_issue": "#50",
-      "declaration_source": "contracts/candidates/50/flow.hpp",
+      "declaration_source": "include/cxxlens/flow.hpp",
       "signature": "cxxlens::result<cxxlens::flow::effect_summary_report> cxxlens::flow::build_effect_summaries(const cxxlens::workspace&,cxxlens::analysis_scope,cxxlens::flow::flow_options); std::span<const cxxlens::flow::effect_summary> cxxlens::flow::effect_summary_report::summaries() const noexcept; const cxxlens::flow::cfg_availability& cxxlens::flow::effect_summary_report::cfg() const noexcept; const cxxlens::coverage_report& cxxlens::flow::effect_summary_report::coverage() const noexcept; std::span<const cxxlens::unresolved> cxxlens::flow::effect_summary_report::unresolved_items() const noexcept; std::span<const cxxlens::diagnostic> cxxlens::flow::effect_summary_report::diagnostics() const noexcept; bool cxxlens::flow::effect_summary_report::converged() const noexcept; std::string cxxlens::flow::effect_summary_report::to_json() const",
       "signature_fingerprint": "sha256:fadb06a4d3396b24cfc8f1535e8d3b82d62d67da4f0d513a6bb357ab9852d633",
-      "skeleton_fingerprint": "sha256:ab68fb9804002fc2413f06460dca471e1613adc4db358a6d45f548d7eab36a12",
-      "source_fingerprint": "sha256:14136478e6910b6a3f8068c55a331be15fd1c3a2599b2a7fed272360902c5bb2",
+      "skeleton_fingerprint": "sha256:260bd7b402aa2c0e780621e719dd534a7f3c793834ccfcba24c16d4396957501",
+      "source_fingerprint": "sha256:e5361a4b336a04bf5af0c2f84017150fef47ac91e9d18244994bb76925eb5ee8",
       "state": "frozen"
     },
     {
@@ -1622,11 +1622,11 @@
       "contract_owner_issue": "#49",
       "contract_state": "candidate",
       "contract_transition_issue": "#49",
-      "declaration_source": "contracts/candidates/49/generate.hpp",
+      "declaration_source": "include/cxxlens/generate.hpp",
       "signature": "cxxlens::generate::fuzz::generator cxxlens::generate::fuzz::generator::for_function(cxxlens::select::symbol_selector)",
       "signature_fingerprint": "sha256:4eb44faf0469362a2f7ab650e21decf6860e808c7abcbf73e4f24258def55fa3",
-      "skeleton_fingerprint": "sha256:554c97fbc717cc5e441005325cfbb1102ccc4a557a1462903d57e69b28b4dbe5",
-      "source_fingerprint": "sha256:5217021161f3ade3525a66aac2ba7981bf93e92b633961c20049336344b441d5",
+      "skeleton_fingerprint": "sha256:4f0de45e622be4c6dfbb513f1091745df5daaadd407db5d06b551f6571a46497",
+      "source_fingerprint": "sha256:f69d404f6a58da3610ed646e6e93804d160b79f2dcee7638c604ca89f51f921d",
       "state": "frozen"
     },
     {
@@ -1636,11 +1636,11 @@
       "contract_owner_issue": "#49",
       "contract_state": "candidate",
       "contract_transition_issue": "#49",
-      "declaration_source": "contracts/candidates/49/generate.hpp",
+      "declaration_source": "include/cxxlens/generate.hpp",
       "signature": "cxxlens::generate::fuzz::generator cxxlens::generate::fuzz::generator::input(std::size_t,cxxlens::generate::fuzz::input_model) const; cxxlens::generate::fuzz::generator cxxlens::generate::fuzz::generator::infer_inputs(bool) const; cxxlens::generate::fuzz::generator cxxlens::generate::fuzz::generator::options(cxxlens::generate::fuzz::fuzz_options) const",
       "signature_fingerprint": "sha256:fdf33922f28cae71382625efead078385fa9ec64230fd66dc4c9ee16a24bb483",
-      "skeleton_fingerprint": "sha256:3035e64d5ecd3bf41cd482be81754d6a3338c241fac180a04b335b4dfea03f17",
-      "source_fingerprint": "sha256:5217021161f3ade3525a66aac2ba7981bf93e92b633961c20049336344b441d5",
+      "skeleton_fingerprint": "sha256:44be70b85cee74500e3ee73f0fc916de468b4aa07d0239e925b8ee8b78b4e615",
+      "source_fingerprint": "sha256:f69d404f6a58da3610ed646e6e93804d160b79f2dcee7638c604ca89f51f921d",
       "state": "frozen"
     },
     {
@@ -1650,11 +1650,11 @@
       "contract_owner_issue": "#49",
       "contract_state": "candidate",
       "contract_transition_issue": "#49",
-      "declaration_source": "contracts/candidates/49/generate.hpp",
+      "declaration_source": "include/cxxlens/generate.hpp",
       "signature": "cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::fuzz::generator::plan(cxxlens::workspace&,cxxlens::execution_context) const",
       "signature_fingerprint": "sha256:6f342cb56a4df1a4533caceab26d8c624153fce6f053ad7e807622fb52a80b19",
-      "skeleton_fingerprint": "sha256:a517727b836c817e041b57a72efe201e09610ac70401f3bd044ee183678ea28c",
-      "source_fingerprint": "sha256:5217021161f3ade3525a66aac2ba7981bf93e92b633961c20049336344b441d5",
+      "skeleton_fingerprint": "sha256:669d9fd8cc7ca77b4223e64998c9fb15ce1ee23696704199aeaaa00cf04b2422",
+      "source_fingerprint": "sha256:f69d404f6a58da3610ed646e6e93804d160b79f2dcee7638c604ca89f51f921d",
       "state": "frozen"
     },
     {
@@ -1664,11 +1664,11 @@
       "contract_owner_issue": "#49",
       "contract_state": "candidate",
       "contract_transition_issue": "#49",
-      "declaration_source": "contracts/candidates/49/generate.hpp",
+      "declaration_source": "include/cxxlens/generate.hpp",
       "signature": "cxxlens::plan_id cxxlens::generate::generation_plan::id() const noexcept; bool cxxlens::generate::generation_plan::valid() const noexcept; std::span<const cxxlens::generate::surface> cxxlens::generate::generation_plan::census() const noexcept; std::span<const cxxlens::generate::surface_decision> cxxlens::generate::generation_plan::decisions() const noexcept; std::span<const cxxlens::generate::artifact_plan> cxxlens::generate::generation_plan::artifacts() const noexcept; std::span<const cxxlens::diagnostic> cxxlens::generate::generation_plan::diagnostics() const noexcept; std::span<const cxxlens::unresolved> cxxlens::generate::generation_plan::unresolved_items() const noexcept; const cxxlens::coverage_report& cxxlens::generate::generation_plan::coverage() const noexcept; cxxlens::result<std::string> cxxlens::generate::generation_plan::preview(std::size_t) const; std::string cxxlens::generate::generation_plan::to_json() const; std::string cxxlens::generate::generation_plan::to_markdown() const",
       "signature_fingerprint": "sha256:6704d11628a4ad5b5f82b8e3b1b85026522faf7156eec6753eeef70e1e435a6d",
-      "skeleton_fingerprint": "sha256:3433923409287311e09be85387a99f51f7768ffb7067d6e0a1888da96dabd6aa",
-      "source_fingerprint": "sha256:5217021161f3ade3525a66aac2ba7981bf93e92b633961c20049336344b441d5",
+      "skeleton_fingerprint": "sha256:7b1ae561c1d49e78c59ad3f2c3bddf36b5b42b764aa0bacfe7ea0f2f80b051e2",
+      "source_fingerprint": "sha256:f69d404f6a58da3610ed646e6e93804d160b79f2dcee7638c604ca89f51f921d",
       "state": "frozen"
     },
     {
@@ -1678,11 +1678,11 @@
       "contract_owner_issue": "#49",
       "contract_state": "candidate",
       "contract_transition_issue": "#49",
-      "declaration_source": "contracts/candidates/49/generate.hpp",
+      "declaration_source": "include/cxxlens/generate.hpp",
       "signature": "cxxlens::result<cxxlens::generate::generation_result> cxxlens::generate::generation_plan::apply(cxxlens::workspace&,cxxlens::transform::apply_mode,cxxlens::execution_context) const; cxxlens::transform::transaction_state cxxlens::generate::generation_result::state() const noexcept; bool cxxlens::generate::generation_result::committed() const noexcept; std::string_view cxxlens::generate::generation_result::transaction_id() const noexcept; std::span<const cxxlens::generate::artifact_plan> cxxlens::generate::generation_result::artifacts() const noexcept; std::span<const cxxlens::path> cxxlens::generate::generation_result::emitted_files() const noexcept; std::span<const cxxlens::path> cxxlens::generate::generation_result::quarantined_files() const noexcept; std::span<const cxxlens::diagnostic> cxxlens::generate::generation_result::diagnostics() const noexcept; std::span<const cxxlens::unresolved> cxxlens::generate::generation_result::unresolved_items() const noexcept; const cxxlens::coverage_report& cxxlens::generate::generation_result::coverage() const noexcept; std::string cxxlens::generate::generation_result::manifest_json() const; std::string cxxlens::generate::generation_result::report_markdown() const",
       "signature_fingerprint": "sha256:c6264b670685f429dbcb01c3e96a69e1bdc169130c7dee4cbfb55eaa8e6643fa",
-      "skeleton_fingerprint": "sha256:337534e026c6db06d90a7e0cf5a83b3ac0fbea7c899922602c2de3e3f85d1233",
-      "source_fingerprint": "sha256:5217021161f3ade3525a66aac2ba7981bf93e92b633961c20049336344b441d5",
+      "skeleton_fingerprint": "sha256:f494e8f8120d72bed7db2165a15b981a411f8a80da6a3841518db03f29b9061c",
+      "source_fingerprint": "sha256:f69d404f6a58da3610ed646e6e93804d160b79f2dcee7638c604ca89f51f921d",
       "state": "frozen"
     },
     {
@@ -1692,11 +1692,11 @@
       "contract_owner_issue": "#46",
       "contract_state": "candidate",
       "contract_transition_issue": "#46",
-      "declaration_source": "contracts/candidates/46/graph.hpp",
+      "declaration_source": "include/cxxlens/graph.hpp",
       "signature": "cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::class_hierarchy(const cxxlens::workspace&,cxxlens::graph::graph_options)",
       "signature_fingerprint": "sha256:57a0c6e8a8d1c3cc056e54ca27cf90c0c5196c21df5a69254e6d9724c21d1161",
-      "skeleton_fingerprint": "sha256:69ed01cef56bf856a00a04dc22ab2095d34ad3c13d7affebb04a668d9c236d25",
-      "source_fingerprint": "sha256:8f103e2c7a747accaadc1fa9ca765e77adc8bb2c70d3df7fcc7c47c3d6ec639f",
+      "skeleton_fingerprint": "sha256:d1b1d84b4e1fb5698d7401a05c05283d2b38b87dcf4b7fa0a99e876602ea23a6",
+      "source_fingerprint": "sha256:cc3a2925282670820dc8afdb2b198763aa5d2dc06440046757bb0484a76e8872",
       "state": "frozen"
     },
     {
@@ -1706,11 +1706,11 @@
       "contract_owner_issue": "#46",
       "contract_state": "candidate",
       "contract_transition_issue": "#46",
-      "declaration_source": "contracts/candidates/46/graph.hpp",
+      "declaration_source": "include/cxxlens/graph.hpp",
       "signature": "cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::override_graph(const cxxlens::workspace&,cxxlens::graph::graph_options)",
       "signature_fingerprint": "sha256:680f964c6e7a97502882cd1a07c481098a8aa591f321651df52d21b677a87f58",
-      "skeleton_fingerprint": "sha256:3f60f8cbd7dfd5249ebe44f179c5e98d38fe9e3985ccff1b7b217748babf8302",
-      "source_fingerprint": "sha256:8f103e2c7a747accaadc1fa9ca765e77adc8bb2c70d3df7fcc7c47c3d6ec639f",
+      "skeleton_fingerprint": "sha256:308a386fb9d193a3be659b682a32a83f5faa8f16ddf247f37c0fecf7b138b027",
+      "source_fingerprint": "sha256:cc3a2925282670820dc8afdb2b198763aa5d2dc06440046757bb0484a76e8872",
       "state": "frozen"
     },
     {
@@ -1720,11 +1720,11 @@
       "contract_owner_issue": "#46",
       "contract_state": "candidate",
       "contract_transition_issue": "#46",
-      "declaration_source": "contracts/candidates/46/graph.hpp",
+      "declaration_source": "include/cxxlens/graph.hpp",
       "signature": "cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::call_graph(const cxxlens::workspace&,cxxlens::graph::graph_options)",
       "signature_fingerprint": "sha256:94731d48a2f4483281f98c39318c474c24bd14bb65c9535c0b6559f7f3af2b95",
-      "skeleton_fingerprint": "sha256:ab9f5726c6bba892f8eced0eef383bb96937f216cfa1ec1298151b6ded551b8b",
-      "source_fingerprint": "sha256:8f103e2c7a747accaadc1fa9ca765e77adc8bb2c70d3df7fcc7c47c3d6ec639f",
+      "skeleton_fingerprint": "sha256:856b8d8ed653ba15e54b9652ae955d5f816a6c21f3772d3bc3d658808e35060d",
+      "source_fingerprint": "sha256:cc3a2925282670820dc8afdb2b198763aa5d2dc06440046757bb0484a76e8872",
       "state": "frozen"
     },
     {
@@ -1734,11 +1734,11 @@
       "contract_owner_issue": "#46",
       "contract_state": "candidate",
       "contract_transition_issue": "#46",
-      "declaration_source": "contracts/candidates/46/graph.hpp",
+      "declaration_source": "include/cxxlens/graph.hpp",
       "signature": "cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::include_graph(const cxxlens::workspace&,cxxlens::graph::graph_options)",
       "signature_fingerprint": "sha256:8fb4444b60a610e06f27614784f009a1253121342645aec4a5ecae91f57f60bb",
-      "skeleton_fingerprint": "sha256:18dd852b742bb6062d26d4c2a086642244c68f73534536b9138339bc58fe3a95",
-      "source_fingerprint": "sha256:8f103e2c7a747accaadc1fa9ca765e77adc8bb2c70d3df7fcc7c47c3d6ec639f",
+      "skeleton_fingerprint": "sha256:45a72f96689f940ac33e47db77d5473e26f560d1b953e3272cf7b6809d0acfb0",
+      "source_fingerprint": "sha256:cc3a2925282670820dc8afdb2b198763aa5d2dc06440046757bb0484a76e8872",
       "state": "frozen"
     },
     {
@@ -1748,11 +1748,11 @@
       "contract_owner_issue": "#46",
       "contract_state": "candidate",
       "contract_transition_issue": "#46",
-      "declaration_source": "contracts/candidates/46/graph.hpp",
+      "declaration_source": "include/cxxlens/graph.hpp",
       "signature": "cxxlens::graph::impact_query cxxlens::graph::impact_query::changed_symbols(std::vector<cxxlens::symbol_id>); cxxlens::graph::impact_query cxxlens::graph::impact_query::matching(cxxlens::select::semantic_selector); cxxlens::graph::impact_query cxxlens::graph::impact_query::relations(std::vector<cxxlens::graph::graph_edge_kind>) const; cxxlens::graph::impact_query cxxlens::graph::impact_query::direction(cxxlens::graph::graph_direction) const; cxxlens::graph::impact_query cxxlens::graph::impact_query::paths(cxxlens::graph::graph_path_policy) const; cxxlens::graph::impact_query cxxlens::graph::impact_query::scope(cxxlens::analysis_scope) const; cxxlens::graph::impact_query cxxlens::graph::impact_query::limits(cxxlens::graph::graph_limits) const; cxxlens::graph::impact_query cxxlens::graph::impact_query::callers(bool) const; cxxlens::graph::impact_query cxxlens::graph::impact_query::derived_types(bool) const; cxxlens::graph::impact_query cxxlens::graph::impact_query::reverse_includes(bool) const; cxxlens::graph::impact_query cxxlens::graph::impact_query::tests(bool) const; cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::impact_query::run(const cxxlens::workspace&,cxxlens::execution_context) const",
       "signature_fingerprint": "sha256:dc3bd7fe7fcf9fdcf7e6c768b0cefc8bea02180d4d18f0d27daef37436c361e7",
-      "skeleton_fingerprint": "sha256:2ed697b025a338cbbe39041ff9d8c56fd4b56614bacc5a9d54b4f86e073abfc3",
-      "source_fingerprint": "sha256:8f103e2c7a747accaadc1fa9ca765e77adc8bb2c70d3df7fcc7c47c3d6ec639f",
+      "skeleton_fingerprint": "sha256:e2955475210c99cc84b729b6a41d956d0572168725046e09d2fa29d50ee89a52",
+      "source_fingerprint": "sha256:cc3a2925282670820dc8afdb2b198763aa5d2dc06440046757bb0484a76e8872",
       "state": "frozen"
     },
     {
@@ -1762,11 +1762,11 @@
       "contract_owner_issue": "#46",
       "contract_state": "candidate",
       "contract_transition_issue": "#46",
-      "declaration_source": "contracts/candidates/46/graph.hpp",
+      "declaration_source": "include/cxxlens/graph.hpp",
       "signature": "cxxlens::graph::graph_kind cxxlens::graph::semantic_graph::kind() const noexcept; std::span<const cxxlens::graph::graph_node> cxxlens::graph::semantic_graph::nodes() const noexcept; std::span<const cxxlens::graph::graph_edge> cxxlens::graph::semantic_graph::edges() const noexcept; std::span<const cxxlens::graph::graph_path> cxxlens::graph::semantic_graph::paths() const noexcept; const cxxlens::coverage_report& cxxlens::graph::semantic_graph::coverage() const noexcept; std::span<const cxxlens::unresolved> cxxlens::graph::semantic_graph::unresolved_items() const noexcept; cxxlens::result_guarantee cxxlens::graph::semantic_graph::guarantee() const noexcept; cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::semantic_graph::subgraph(std::vector<cxxlens::graph::graph_node_id>,cxxlens::graph::graph_options) const; std::string cxxlens::graph::semantic_graph::to_json() const; std::string cxxlens::graph::semantic_graph::to_dot() const",
       "signature_fingerprint": "sha256:9e6fab202a2416b938681326c119759e0da3e2a3800e29f19bcfd9544a3d5269",
-      "skeleton_fingerprint": "sha256:6ae83602dc444e79ed93f0333cd9a40b302266d2ac6897b9b905bb4ecd48fc49",
-      "source_fingerprint": "sha256:8f103e2c7a747accaadc1fa9ca765e77adc8bb2c70d3df7fcc7c47c3d6ec639f",
+      "skeleton_fingerprint": "sha256:60b762c7b254031b8b9f2c2083ad0f824c3034bcb76ec86277ae2d1396516888",
+      "source_fingerprint": "sha256:cc3a2925282670820dc8afdb2b198763aa5d2dc06440046757bb0484a76e8872",
       "state": "frozen"
     },
     {
@@ -1779,8 +1779,8 @@
       "declaration_source": "include/cxxlens/interop/clang.hpp",
       "signature": "cxxlens::interop::clang_api_version cxxlens::interop::linked_clang_version() noexcept",
       "signature_fingerprint": "sha256:f078c5614cdbe609d5b954134b6758a2e42a1ba06150909fe5e2a0e55e6470a3",
-      "skeleton_fingerprint": "sha256:cf15809a613dc557e9bd581bf80cb3d617df71ebad2eab74ff3f5851ddfb71f9",
-      "source_fingerprint": "sha256:e057e56981e50d24768a63018591497c2a7bcfddb9c42ce113eb64d0f882a110",
+      "skeleton_fingerprint": "sha256:5c10bc56a17ef72f6d397c0158906fcaf8d82a3d3510754e06ff7f02e9c987fb",
+      "source_fingerprint": "sha256:19b9a91d42058ac28ac8b7f36e6d02a458c1868d97dca0ccf0798e82d056c2a4",
       "state": "frozen"
     },
     {
@@ -1793,8 +1793,8 @@
       "declaration_source": "include/cxxlens/interop/clang.hpp",
       "signature": "cxxlens::result<void> cxxlens::interop::with_translation_unit(cxxlens::workspace&, cxxlens::compile_unit_id, cxxlens::interop::clang_tu_callback, cxxlens::execution_context)",
       "signature_fingerprint": "sha256:a4c0d049f7ee4e1c144fdcba162df5ff4eea7834fc6a6b519e03a8d927dd2e23",
-      "skeleton_fingerprint": "sha256:77c9bc8b4ee697def26a5e5a94870ad02ba111b407abf37c26765dd8e2a0794a",
-      "source_fingerprint": "sha256:e057e56981e50d24768a63018591497c2a7bcfddb9c42ce113eb64d0f882a110",
+      "skeleton_fingerprint": "sha256:4fe0f43b7e35be4fad870b2b6395ae6727c4770c6f8a73c5f96bf765e4dc6be8",
+      "source_fingerprint": "sha256:19b9a91d42058ac28ac8b7f36e6d02a458c1868d97dca0ccf0798e82d056c2a4",
       "state": "frozen"
     },
     {
@@ -1804,11 +1804,11 @@
       "contract_owner_issue": "#44",
       "contract_state": "candidate",
       "contract_transition_issue": "#44",
-      "declaration_source": "contracts/candidates/44/interop_extractors.hpp",
+      "declaration_source": "include/cxxlens/interop/clang.hpp",
       "signature": "cxxlens::result<void> cxxlens::interop::fact_sink::emit(cxxlens::fact); cxxlens::result<void> cxxlens::interop::fact_sink::emit_custom(cxxlens::interop::custom_fact); cxxlens::result<void> cxxlens::interop::fact_sink::emit_evidence(cxxlens::evidence_item); cxxlens::result<void> cxxlens::interop::fact_sink::mark_partial(cxxlens::unresolved)",
       "signature_fingerprint": "sha256:4d667ed308ad08871902397aacaf79419053dc3799d278960e47a64bff9af3d5",
-      "skeleton_fingerprint": "sha256:49039f8f82b90532d460a63b0578215e18e9f770e5f447b26fe7283233b0f509",
-      "source_fingerprint": "sha256:94829dddedd7bf74c9d6dff852b9215ab6dd140220b65513579073c3853c3a17",
+      "skeleton_fingerprint": "sha256:de5483eccd5c2b3a4f3efdd6478fd4e8a3fa0105b99a06e98d2dee2c0d93486d",
+      "source_fingerprint": "sha256:19b9a91d42058ac28ac8b7f36e6d02a458c1868d97dca0ccf0798e82d056c2a4",
       "state": "frozen"
     },
     {
@@ -1818,11 +1818,11 @@
       "contract_owner_issue": "#44",
       "contract_state": "candidate",
       "contract_transition_issue": "#44",
-      "declaration_source": "contracts/candidates/44/interop_extractors.hpp",
+      "declaration_source": "include/cxxlens/interop/clang.hpp",
       "signature": "cxxlens::result<std::string> cxxlens::interop::register_extractor(cxxlens::workspace&,std::shared_ptr<cxxlens::interop::clang_fact_extractor>); cxxlens::result<void> cxxlens::interop::unregister_extractor(cxxlens::workspace&,std::string)",
       "signature_fingerprint": "sha256:d4049228415182ede11d70662295d69cf0642721e96ab500bbb024a6415a56b2",
-      "skeleton_fingerprint": "sha256:e02ca7ad575801ebef4618d50546a978fa1075a0e898f70c5f99617a771b02c7",
-      "source_fingerprint": "sha256:94829dddedd7bf74c9d6dff852b9215ab6dd140220b65513579073c3853c3a17",
+      "skeleton_fingerprint": "sha256:291e4a5dc87e85f011a988b626817fdbd7739b6f87f8ec3c593a3722c320bd00",
+      "source_fingerprint": "sha256:19b9a91d42058ac28ac8b7f36e6d02a458c1868d97dca0ccf0798e82d056c2a4",
       "state": "frozen"
     },
     {
@@ -1832,11 +1832,11 @@
       "contract_owner_issue": "#49",
       "contract_state": "candidate",
       "contract_transition_issue": "#49",
-      "declaration_source": "contracts/candidates/49/generate.hpp",
+      "declaration_source": "include/cxxlens/generate.hpp",
       "signature": "cxxlens::result<cxxlens::generate::method_harness::method_spec> cxxlens::generate::method_harness::parse_method_spec(std::string_view)",
       "signature_fingerprint": "sha256:6d94c582c579712ebcdaa3e9c42bd027a7ced4b0d3b847e2e1baaa2d7914314b",
-      "skeleton_fingerprint": "sha256:0782def0ce843686297695d05e86096fe468d978908efe673813c0ab3090abdc",
-      "source_fingerprint": "sha256:5217021161f3ade3525a66aac2ba7981bf93e92b633961c20049336344b441d5",
+      "skeleton_fingerprint": "sha256:dfa59b5480033dadf2e4e4641af7e838ec952b01906a13e462c73e1de7742a50",
+      "source_fingerprint": "sha256:f69d404f6a58da3610ed646e6e93804d160b79f2dcee7638c604ca89f51f921d",
       "state": "frozen"
     },
     {
@@ -1846,11 +1846,11 @@
       "contract_owner_issue": "#49",
       "contract_state": "candidate",
       "contract_transition_issue": "#49",
-      "declaration_source": "contracts/candidates/49/generate.hpp",
+      "declaration_source": "include/cxxlens/generate.hpp",
       "signature": "cxxlens::result<cxxlens::generate::method_harness::method_resolution> cxxlens::generate::method_harness::resolve_method(const cxxlens::workspace&,const cxxlens::generate::method_harness::method_spec&,cxxlens::execution_context)",
       "signature_fingerprint": "sha256:fe92e5d5988cb0b9a5ad6c5e5282de3ff773d157ff6b6859d5a0c0f7769a088f",
-      "skeleton_fingerprint": "sha256:d858fd6312bff435e6bd1da42e9aa8b45bcf4252eb4f137d3c9cb2fdb8a970fc",
-      "source_fingerprint": "sha256:5217021161f3ade3525a66aac2ba7981bf93e92b633961c20049336344b441d5",
+      "skeleton_fingerprint": "sha256:af093bc440ec9d876f5a0bf2a7b8b2c45bc1fb6ba336eeb484bf1dc27391ca74",
+      "source_fingerprint": "sha256:f69d404f6a58da3610ed646e6e93804d160b79f2dcee7638c604ca89f51f921d",
       "state": "frozen"
     },
     {
@@ -1860,11 +1860,11 @@
       "contract_owner_issue": "#49",
       "contract_state": "candidate",
       "contract_transition_issue": "#49",
-      "declaration_source": "contracts/candidates/49/generate.hpp",
+      "declaration_source": "include/cxxlens/generate.hpp",
       "signature": "cxxlens::generate::method_harness::generator cxxlens::generate::method_harness::generator::for_method(cxxlens::generate::method_harness::method_spec); cxxlens::generate::method_harness::generator cxxlens::generate::method_harness::generator::for_symbol(cxxlens::select::symbol_selector); cxxlens::generate::method_harness::generator cxxlens::generate::method_harness::generator::options(cxxlens::generate::method_harness::harness_options) const",
       "signature_fingerprint": "sha256:1b9403e66fce6791b6fb09f31a0620b3b6d44579b1ebbde6cd012c90ef7edcb8",
-      "skeleton_fingerprint": "sha256:0dbab4a0ec8e208ec8ebe5e7da51de99a03efec0da9f4d5909890d0913cec680",
-      "source_fingerprint": "sha256:5217021161f3ade3525a66aac2ba7981bf93e92b633961c20049336344b441d5",
+      "skeleton_fingerprint": "sha256:d8c199c5df661906cbb592046eb9d0af244320be69164a3c148df0be77a9c413",
+      "source_fingerprint": "sha256:f69d404f6a58da3610ed646e6e93804d160b79f2dcee7638c604ca89f51f921d",
       "state": "frozen"
     },
     {
@@ -1874,11 +1874,11 @@
       "contract_owner_issue": "#49",
       "contract_state": "candidate",
       "contract_transition_issue": "#49",
-      "declaration_source": "contracts/candidates/49/generate.hpp",
+      "declaration_source": "include/cxxlens/generate.hpp",
       "signature": "cxxlens::result<cxxlens::generate::method_harness::method_inspection> cxxlens::generate::method_harness::generator::inspect(const cxxlens::workspace&,cxxlens::execution_context) const",
       "signature_fingerprint": "sha256:4a256d193b1ea1195c8c97a09f0855b23613ac3d8b8b66690558d7bc37b825c6",
-      "skeleton_fingerprint": "sha256:77657cd650137e44a75f25bece8ac904baf4611234a18b5d479ac4292a7262be",
-      "source_fingerprint": "sha256:5217021161f3ade3525a66aac2ba7981bf93e92b633961c20049336344b441d5",
+      "skeleton_fingerprint": "sha256:c47518e044d6562605c29deb55f36b144d6065f432dff87907f50e8c4bf54c53",
+      "source_fingerprint": "sha256:f69d404f6a58da3610ed646e6e93804d160b79f2dcee7638c604ca89f51f921d",
       "state": "frozen"
     },
     {
@@ -1888,11 +1888,11 @@
       "contract_owner_issue": "#49",
       "contract_state": "candidate",
       "contract_transition_issue": "#49",
-      "declaration_source": "contracts/candidates/49/generate.hpp",
+      "declaration_source": "include/cxxlens/generate.hpp",
       "signature": "cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::method_harness::generator::plan(cxxlens::workspace&,cxxlens::execution_context) const",
       "signature_fingerprint": "sha256:1460708c6a7ef9cfabdea9f9080544c7a9f91658c7ddc9da62f7ef074ab4f6f3",
-      "skeleton_fingerprint": "sha256:e8c2c64d239d3fb3e88c559789f6b0140bd1018c62a3ff2b3d33fd55af315136",
-      "source_fingerprint": "sha256:5217021161f3ade3525a66aac2ba7981bf93e92b633961c20049336344b441d5",
+      "skeleton_fingerprint": "sha256:ee896bc2bc9b4b676c300e76dcdaf75b6dbe2db1f9cda06050c04af1dd5414d4",
+      "source_fingerprint": "sha256:f69d404f6a58da3610ed646e6e93804d160b79f2dcee7638c604ca89f51f921d",
       "state": "frozen"
     },
     {
@@ -1902,11 +1902,11 @@
       "contract_owner_issue": "#49",
       "contract_state": "candidate",
       "contract_transition_issue": "#49",
-      "declaration_source": "contracts/candidates/49/generate.hpp",
+      "declaration_source": "include/cxxlens/generate.hpp",
       "signature": "cxxlens::generate::mock::generator cxxlens::generate::mock::generator::for_class(std::string); cxxlens::generate::mock::generator cxxlens::generate::mock::generator::for_symbol(cxxlens::select::symbol_selector); cxxlens::generate::mock::generator cxxlens::generate::mock::generator::for_c_api_header(cxxlens::path)",
       "signature_fingerprint": "sha256:dd93d4d1dbd07a2d9933d8879937e776f0927634fbf0b574416283c4590202ad",
-      "skeleton_fingerprint": "sha256:17bc5b9b51fdd053dd28411adba74a38442c8dd39d7f02f6f3cdc65ed1fc3b4d",
-      "source_fingerprint": "sha256:5217021161f3ade3525a66aac2ba7981bf93e92b633961c20049336344b441d5",
+      "skeleton_fingerprint": "sha256:04e51f4287e7d883bc830ca4ec95ff65d3ec67f84d1370d981409ad32fa1f018",
+      "source_fingerprint": "sha256:f69d404f6a58da3610ed646e6e93804d160b79f2dcee7638c604ca89f51f921d",
       "state": "frozen"
     },
     {
@@ -1916,11 +1916,11 @@
       "contract_owner_issue": "#49",
       "contract_state": "candidate",
       "contract_transition_issue": "#49",
-      "declaration_source": "contracts/candidates/49/generate.hpp",
+      "declaration_source": "include/cxxlens/generate.hpp",
       "signature": "cxxlens::generate::mock::generator cxxlens::generate::mock::generator::options(cxxlens::generate::mock::generation_options) const; cxxlens::generate::mock::generator cxxlens::generate::mock::generator::include_method(cxxlens::select::symbol_selector) const; cxxlens::generate::mock::generator cxxlens::generate::mock::generator::exclude_method(cxxlens::select::symbol_selector) const",
       "signature_fingerprint": "sha256:4cdda8f90c7c411b108325c03d45a3d1806eced2d7c765da263d948ac5ec9a6a",
-      "skeleton_fingerprint": "sha256:c846dc411add4f6cc589ba35378edff43f9aea48f34505ecf7ec4490267db687",
-      "source_fingerprint": "sha256:5217021161f3ade3525a66aac2ba7981bf93e92b633961c20049336344b441d5",
+      "skeleton_fingerprint": "sha256:e72b955d435c877a76ceab229cd646b053c90e583ec04a4ebe0e077f40700ec3",
+      "source_fingerprint": "sha256:f69d404f6a58da3610ed646e6e93804d160b79f2dcee7638c604ca89f51f921d",
       "state": "frozen"
     },
     {
@@ -1930,11 +1930,11 @@
       "contract_owner_issue": "#49",
       "contract_state": "candidate",
       "contract_transition_issue": "#49",
-      "declaration_source": "contracts/candidates/49/generate.hpp",
+      "declaration_source": "include/cxxlens/generate.hpp",
       "signature": "cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::mock::generator::plan(cxxlens::workspace&,cxxlens::execution_context) const",
       "signature_fingerprint": "sha256:bb033962a3625b1d861c6c7640854b4c80af715c100ebdfac0afb39c06434cb6",
-      "skeleton_fingerprint": "sha256:47a3f5fc8d49e34b21ba63f1bb3422e0d030b3c4ac5143be7f0a4f96c46897f4",
-      "source_fingerprint": "sha256:5217021161f3ade3525a66aac2ba7981bf93e92b633961c20049336344b441d5",
+      "skeleton_fingerprint": "sha256:d811f42451c2802841032b73446d3c986051ffa79664f59c98f02fe254bd6883",
+      "source_fingerprint": "sha256:f69d404f6a58da3610ed646e6e93804d160b79f2dcee7638c604ca89f51f921d",
       "state": "frozen"
     },
     {
@@ -1944,11 +1944,11 @@
       "contract_owner_issue": "#50",
       "contract_state": "candidate",
       "contract_transition_issue": "#50",
-      "declaration_source": "contracts/candidates/50/models.hpp",
+      "declaration_source": "include/cxxlens/models.hpp",
       "signature": "cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::empty(std::string,cxxlens::semantic_version)",
       "signature_fingerprint": "sha256:b8df1aee884666c26f1cbe61c1f55d850adc76ac4f62bd008e7f5a4b28d8eeed",
-      "skeleton_fingerprint": "sha256:e43cb4d36a9923fcdbee18ed3d9a30b902d73f37c5d9ffa4a5bcc8f20b5b2c0f",
-      "source_fingerprint": "sha256:40a380c051fcc1a484ce1fbb5bc6a10c17c9d56ab8a2568bdfbf929e7d41fa1e",
+      "skeleton_fingerprint": "sha256:4a2cf6a811e137d75ebc5ec6b2a64cafda865c39b8eee55b38e4e858f8939ff7",
+      "source_fingerprint": "sha256:824fe152c25d2f2a8abee0f6f5e7023f7d11e58d4f6479495766855ab670ed64",
       "state": "frozen"
     },
     {
@@ -1958,11 +1958,11 @@
       "contract_owner_issue": "#50",
       "contract_state": "candidate",
       "contract_transition_issue": "#50",
-      "declaration_source": "contracts/candidates/50/models.hpp",
+      "declaration_source": "include/cxxlens/models.hpp",
       "signature": "cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::function(std::string,cxxlens::models::api_effects) const; cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::method(std::string,std::string,cxxlens::models::api_effects) const; cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::replacement(std::string,std::string) const; cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::source(std::string,cxxlens::flow::source_model) const; cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::sink(std::string,cxxlens::flow::sink_model) const; cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::barrier(std::string,cxxlens::flow::barrier_model) const",
       "signature_fingerprint": "sha256:72b1ee2bce292c265b570401bd275590b4737c37ddbeac8cf7a229c71edcf757",
-      "skeleton_fingerprint": "sha256:23bcd673a8015bcbf7c571f8bba40713dd16a8baaedd0e9b0e0a94474bda68eb",
-      "source_fingerprint": "sha256:40a380c051fcc1a484ce1fbb5bc6a10c17c9d56ab8a2568bdfbf929e7d41fa1e",
+      "skeleton_fingerprint": "sha256:3db0f9e66029180ac7f631ac670d7d79180485434cc0926d41abab55d98d0768",
+      "source_fingerprint": "sha256:824fe152c25d2f2a8abee0f6f5e7023f7d11e58d4f6479495766855ab670ed64",
       "state": "frozen"
     },
     {
@@ -1972,11 +1972,11 @@
       "contract_owner_issue": "#50",
       "contract_state": "candidate",
       "contract_transition_issue": "#50",
-      "declaration_source": "contracts/candidates/50/models.hpp",
+      "declaration_source": "include/cxxlens/models.hpp",
       "signature": "cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::merge(const cxxlens::models::api_model_pack&,cxxlens::models::model_precedence) const",
       "signature_fingerprint": "sha256:ff1b159316602b9d0c333dc7a15ff5b7cf55a2100907395fdc35e400e26c5cc4",
-      "skeleton_fingerprint": "sha256:f4f22fd109f28992e02e70c6c7fa87e3512f16202c52d0348aca44dec5671df7",
-      "source_fingerprint": "sha256:40a380c051fcc1a484ce1fbb5bc6a10c17c9d56ab8a2568bdfbf929e7d41fa1e",
+      "skeleton_fingerprint": "sha256:1baf641286ac0be0c80a7038dab92ed1c6e5c32e382d10ea02d4ccfacfc1c685",
+      "source_fingerprint": "sha256:824fe152c25d2f2a8abee0f6f5e7023f7d11e58d4f6479495766855ab670ed64",
       "state": "frozen"
     },
     {
@@ -1986,11 +1986,11 @@
       "contract_owner_issue": "#50",
       "contract_state": "candidate",
       "contract_transition_issue": "#50",
-      "declaration_source": "contracts/candidates/50/models.hpp",
+      "declaration_source": "include/cxxlens/models.hpp",
       "signature": "cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::load(cxxlens::path,cxxlens::models::model_pack_options); cxxlens::result<void> cxxlens::models::api_model_pack::save(cxxlens::path,cxxlens::models::model_pack_options) const; std::string_view cxxlens::models::api_model_pack::id() const noexcept; cxxlens::semantic_version cxxlens::models::api_model_pack::version() const noexcept; std::span<const cxxlens::diagnostic> cxxlens::models::api_model_pack::diagnostics() const noexcept; std::span<const cxxlens::unresolved> cxxlens::models::api_model_pack::unresolved_items() const noexcept; std::string cxxlens::models::api_model_pack::to_json() const",
       "signature_fingerprint": "sha256:045639a5b50d6fcca083e69b1468a497b967d70893b41a5f41c5fcf81cf66283",
-      "skeleton_fingerprint": "sha256:c70e3bfce0609154257363b2b37e40f3947ad561012772c2698bf69815f8b975",
-      "source_fingerprint": "sha256:40a380c051fcc1a484ce1fbb5bc6a10c17c9d56ab8a2568bdfbf929e7d41fa1e",
+      "skeleton_fingerprint": "sha256:57443531c518028ef37e2221934240b7e381cc8aff93553841e10a3096ff1c88",
+      "source_fingerprint": "sha256:824fe152c25d2f2a8abee0f6f5e7023f7d11e58d4f6479495766855ab670ed64",
       "state": "frozen"
     },
     {
@@ -2000,11 +2000,11 @@
       "contract_owner_issue": "#51",
       "contract_state": "candidate",
       "contract_transition_issue": "#51",
-      "declaration_source": "contracts/candidates/51/qa.hpp",
+      "declaration_source": "include/cxxlens/qa.hpp",
       "signature": "cxxlens::qa::profile cxxlens::qa::profile::memory(); cxxlens::qa::profile cxxlens::qa::profile::concurrency(); cxxlens::qa::profile cxxlens::qa::profile::undefined_behavior(); cxxlens::qa::profile cxxlens::qa::profile::coverage(); cxxlens::qa::profile cxxlens::qa::profile::sanitizer(cxxlens::qa::sanitizer_kind) const; cxxlens::qa::profile cxxlens::qa::profile::coverage_mode_(cxxlens::qa::coverage_mode) const; cxxlens::qa::profile cxxlens::qa::profile::build_target(std::string,cxxlens::qa::step_requirement) const; cxxlens::qa::profile cxxlens::qa::profile::test_argv(std::vector<std::string>,cxxlens::qa::step_requirement) const; cxxlens::qa::profile cxxlens::qa::profile::environment(std::string,std::string) const; cxxlens::qa::profile cxxlens::qa::profile::timeout(std::chrono::seconds) const; cxxlens::qa::profile cxxlens::qa::profile::retry_limit(std::size_t) const; cxxlens::result<void> cxxlens::qa::profile::validate() const",
       "signature_fingerprint": "sha256:803f929d1b97e408b10c9b50f5127fd6a7b600048b9398bab90920ffc5161ac8",
-      "skeleton_fingerprint": "sha256:37046e08fa44afd3488274fa78c4808984dcff1988315cec5017a3098f7c75ad",
-      "source_fingerprint": "sha256:edd4970b379c9e6191666d20f40136f09eabe6f716be4adec74e3f3fbd970685",
+      "skeleton_fingerprint": "sha256:8a67f8536a2e04cc0d27fedc4ae5d8de0927111069c4df9721fe253c36059fb7",
+      "source_fingerprint": "sha256:9927f3f0db4f3dc25333e863823728105563465cf9ee7f22a429734e697d5f2a",
       "state": "frozen"
     },
     {
@@ -2014,11 +2014,11 @@
       "contract_owner_issue": "#51",
       "contract_state": "candidate",
       "contract_transition_issue": "#51",
-      "declaration_source": "contracts/candidates/51/qa.hpp",
+      "declaration_source": "include/cxxlens/qa.hpp",
       "signature": "cxxlens::qa::workflow cxxlens::qa::workflow::for_project(const cxxlens::workspace&); cxxlens::qa::workflow cxxlens::qa::workflow::use(cxxlens::qa::profile) const; cxxlens::qa::workflow cxxlens::qa::workflow::process_policy_(cxxlens::qa::process_policy) const; cxxlens::qa::workflow cxxlens::qa::workflow::import_coverage(bool) const; cxxlens::qa::workflow cxxlens::qa::workflow::associate_with(cxxlens::finding_set) const; cxxlens::qa::workflow cxxlens::qa::workflow::continue_on_optional_failure(bool) const",
       "signature_fingerprint": "sha256:fe69c17adf8d7e12cc77d48488ae9c20a7683b3e86e52036941e501dca941b30",
-      "skeleton_fingerprint": "sha256:5929a1f3cfc811c7c1081bece18630092d7c563f744973ba08209d30a83243ce",
-      "source_fingerprint": "sha256:edd4970b379c9e6191666d20f40136f09eabe6f716be4adec74e3f3fbd970685",
+      "skeleton_fingerprint": "sha256:6c2731107438641050d67543861e752d1577652e5dac3dce9fa062880dd2e53f",
+      "source_fingerprint": "sha256:9927f3f0db4f3dc25333e863823728105563465cf9ee7f22a429734e697d5f2a",
       "state": "frozen"
     },
     {
@@ -2028,11 +2028,11 @@
       "contract_owner_issue": "#51",
       "contract_state": "candidate",
       "contract_transition_issue": "#51",
-      "declaration_source": "contracts/candidates/51/qa.hpp",
+      "declaration_source": "include/cxxlens/qa.hpp",
       "signature": "cxxlens::result<cxxlens::qa::dynamic_report> cxxlens::qa::workflow::run(cxxlens::execution_context) const",
       "signature_fingerprint": "sha256:92a8be0f146613a1cb94d936d13b4f541660d8b9b6c0ffacde0d95f671e83994",
-      "skeleton_fingerprint": "sha256:cc34d3146f50ee68c30658750967f463d00aeab05b23165bbf80704c2990631b",
-      "source_fingerprint": "sha256:edd4970b379c9e6191666d20f40136f09eabe6f716be4adec74e3f3fbd970685",
+      "skeleton_fingerprint": "sha256:ec5ebeb82dc043f96e2e8717529ac30cd65d792586880f146e0e1f6d50f4c49d",
+      "source_fingerprint": "sha256:9927f3f0db4f3dc25333e863823728105563465cf9ee7f22a429734e697d5f2a",
       "state": "frozen"
     },
     {
@@ -2042,11 +2042,11 @@
       "contract_owner_issue": "#51",
       "contract_state": "candidate",
       "contract_transition_issue": "#51",
-      "declaration_source": "contracts/candidates/51/qa.hpp",
+      "declaration_source": "include/cxxlens/qa.hpp",
       "signature": "cxxlens::result<cxxlens::qa::coverage_data> cxxlens::qa::import_source_coverage(const cxxlens::workspace&,cxxlens::qa::coverage_import_options,cxxlens::execution_context)",
       "signature_fingerprint": "sha256:e3f46387620bff5172039554fbc902a665319b6a2eaa2c6960bb379df6bedc87",
-      "skeleton_fingerprint": "sha256:8b32aceb215ac19d63144d8b0ba6b25ed83601d1d6cfab88093250b27242c2b6",
-      "source_fingerprint": "sha256:edd4970b379c9e6191666d20f40136f09eabe6f716be4adec74e3f3fbd970685",
+      "skeleton_fingerprint": "sha256:834d2320f6a986f277f57520e9b20a81866f88f4ada49b235e918b78699020aa",
+      "source_fingerprint": "sha256:9927f3f0db4f3dc25333e863823728105563465cf9ee7f22a429734e697d5f2a",
       "state": "frozen"
     },
     {
@@ -2056,11 +2056,11 @@
       "contract_owner_issue": "#47",
       "contract_state": "candidate",
       "contract_transition_issue": "#47",
-      "declaration_source": "contracts/candidates/47/rules_report.hpp",
+      "declaration_source": "include/cxxlens/report.hpp",
       "signature": "cxxlens::result<cxxlens::report::rendered_report> cxxlens::report::render(const cxxlens::finding_set&,cxxlens::report::options)",
       "signature_fingerprint": "sha256:8f3a8427029307727002b32c4844c196d71e8d95f04c067163148f2c097def55",
-      "skeleton_fingerprint": "sha256:2520315568bd6d7f75fb925311817382ffcc5b03d574bf9e4240bb44ad18e1cc",
-      "source_fingerprint": "sha256:b84e953a620cdf9bf15e092f716e8c4213185abf1915122c2f3bb0d521125d42",
+      "skeleton_fingerprint": "sha256:47d38d0abaec5f6f228ea1ac2643ba0d84c56cffe327a9c4690f808f24db6b15",
+      "source_fingerprint": "sha256:a955d21c99e0e924a9789a110e10c33c4e90cd364ecb2814fa3eda3bc8de4e7b",
       "state": "frozen"
     },
     {
@@ -2070,11 +2070,11 @@
       "contract_owner_issue": "#47",
       "contract_state": "candidate",
       "contract_transition_issue": "#47",
-      "declaration_source": "contracts/candidates/47/rules_report.hpp",
+      "declaration_source": "include/cxxlens/report.hpp",
       "signature": "cxxlens::result<cxxlens::report::rendered_report> cxxlens::report::render(const cxxlens::transform::edit_plan&,cxxlens::report::options)",
       "signature_fingerprint": "sha256:3d3125085729c443f2c5036d50b9236b05b0241bb501f940ca76987e92dc80c3",
-      "skeleton_fingerprint": "sha256:864ec4f4b447672e65dcbc654d27d36735dc43a0e48da07315075d5548539963",
-      "source_fingerprint": "sha256:b84e953a620cdf9bf15e092f716e8c4213185abf1915122c2f3bb0d521125d42",
+      "skeleton_fingerprint": "sha256:6a7d1990643d00bb6377a039fb54f46ea24a21017a141ba4687425fbb1b4f5a8",
+      "source_fingerprint": "sha256:a955d21c99e0e924a9789a110e10c33c4e90cd364ecb2814fa3eda3bc8de4e7b",
       "state": "frozen"
     },
     {
@@ -2084,11 +2084,11 @@
       "contract_owner_issue": "#47",
       "contract_state": "candidate",
       "contract_transition_issue": "#47",
-      "declaration_source": "contracts/candidates/47/rules_report.hpp",
+      "declaration_source": "include/cxxlens/report.hpp",
       "signature": "cxxlens::result<cxxlens::report::rendered_report> cxxlens::report::render(const cxxlens::generate::generation_plan&,cxxlens::report::options)",
       "signature_fingerprint": "sha256:de5a08a8862cccc51dd3d42d903bf6b679e1e12abd8450368ad9d87041959137",
-      "skeleton_fingerprint": "sha256:075068fa6ddb08107508caf7bfa798a08ed090ea1a96df72b26cdb4307c9ffc9",
-      "source_fingerprint": "sha256:b84e953a620cdf9bf15e092f716e8c4213185abf1915122c2f3bb0d521125d42",
+      "skeleton_fingerprint": "sha256:8f7a14584d82b7facefe945522bf2013e8acdd840c745dfc7976e0ba0cb5855a",
+      "source_fingerprint": "sha256:a955d21c99e0e924a9789a110e10c33c4e90cd364ecb2814fa3eda3bc8de4e7b",
       "state": "frozen"
     },
     {
@@ -2098,11 +2098,11 @@
       "contract_owner_issue": "#47",
       "contract_state": "candidate",
       "contract_transition_issue": "#47",
-      "declaration_source": "contracts/candidates/47/rules_report.hpp",
+      "declaration_source": "include/cxxlens/report.hpp",
       "signature": "cxxlens::result<cxxlens::report::rendered_report> cxxlens::report::render(const cxxlens::review::review_report&,cxxlens::report::options)",
       "signature_fingerprint": "sha256:8ee2b2a7feccf83bc667a349d05680a53f0ea3b12983b2358041cc744b56f32d",
-      "skeleton_fingerprint": "sha256:736e450b8ac7000423b39ba9e2c61e0195799acd545d888e5059c87cdeea06da",
-      "source_fingerprint": "sha256:b84e953a620cdf9bf15e092f716e8c4213185abf1915122c2f3bb0d521125d42",
+      "skeleton_fingerprint": "sha256:c3c3ee0315d068d5e495d0c193cb8b960e089873b666046973e0ba9dd75ea785",
+      "source_fingerprint": "sha256:a955d21c99e0e924a9789a110e10c33c4e90cd364ecb2814fa3eda3bc8de4e7b",
       "state": "frozen"
     },
     {
@@ -2112,11 +2112,11 @@
       "contract_owner_issue": "#47",
       "contract_state": "candidate",
       "contract_transition_issue": "#47",
-      "declaration_source": "contracts/candidates/47/rules_report.hpp",
+      "declaration_source": "include/cxxlens/rules.hpp",
       "signature": "cxxlens::rules::rule_builder cxxlens::rules::make_rule(std::string,cxxlens::semantic_version)",
       "signature_fingerprint": "sha256:f6a0083dc0b03d5f9420b3921cb412ff79ad764b1d7f50cae1f09f32b2e21d2e",
-      "skeleton_fingerprint": "sha256:82f0f9e36525074d062afffb8d7c6435e72f5a0186cbf006eb4dc03a34dd36dc",
-      "source_fingerprint": "sha256:b84e953a620cdf9bf15e092f716e8c4213185abf1915122c2f3bb0d521125d42",
+      "skeleton_fingerprint": "sha256:8608dba31b3a9d69a01cb410c55f78757f5f4f8a141a115c9807681bd9c31f36",
+      "source_fingerprint": "sha256:d2319f5b599f81be092147ef25870bbddd4dfde8507e24cea2a0db7911407665",
       "state": "frozen"
     },
     {
@@ -2126,11 +2126,11 @@
       "contract_owner_issue": "#47",
       "contract_state": "candidate",
       "contract_transition_issue": "#47",
-      "declaration_source": "contracts/candidates/47/rules_report.hpp",
+      "declaration_source": "include/cxxlens/rules.hpp",
       "signature": "cxxlens::rules::rule_builder cxxlens::rules::rule_builder::metadata(cxxlens::rules::rule_metadata) const; cxxlens::rules::rule_builder cxxlens::rules::rule_builder::when(cxxlens::select::semantic_selector) const; cxxlens::rules::rule_builder cxxlens::rules::rule_builder::unless(cxxlens::select::semantic_selector) const; cxxlens::rules::rule_builder cxxlens::rules::rule_builder::scope(cxxlens::analysis_scope) const; cxxlens::rules::rule_builder cxxlens::rules::rule_builder::severity_level(cxxlens::severity) const; cxxlens::rules::rule_builder cxxlens::rules::rule_builder::confidence_at_least(cxxlens::confidence) const; cxxlens::rules::rule_builder cxxlens::rules::rule_builder::diagnose(cxxlens::rules::diagnostic_template) const; cxxlens::rules::rule_builder cxxlens::rules::rule_builder::note(cxxlens::rules::diagnostic_template) const; cxxlens::rules::rule_builder cxxlens::rules::rule_builder::fix(cxxlens::transform::codemod) const; cxxlens::rules::rule_builder cxxlens::rules::rule_builder::explain(std::string) const; cxxlens::result<cxxlens::rules::rule> cxxlens::rules::rule_builder::build() const",
       "signature_fingerprint": "sha256:e3249f1be7c4d8271bf3d32f97093a4b0c6e985f2a62ab54c1ccf93ee2594b2b",
-      "skeleton_fingerprint": "sha256:b424057659e691ad32a16a029dc99f61dda77882b306a149bc6c5dcc82406af3",
-      "source_fingerprint": "sha256:b84e953a620cdf9bf15e092f716e8c4213185abf1915122c2f3bb0d521125d42",
+      "skeleton_fingerprint": "sha256:30e7060a1a6d9bd4b7eb7b215b21c35685dcf5f3921ae8b64abc781d4ff8f9a3",
+      "source_fingerprint": "sha256:d2319f5b599f81be092147ef25870bbddd4dfde8507e24cea2a0db7911407665",
       "state": "frozen"
     },
     {
@@ -2140,11 +2140,11 @@
       "contract_owner_issue": "#47",
       "contract_state": "candidate",
       "contract_transition_issue": "#47",
-      "declaration_source": "contracts/candidates/47/rules_report.hpp",
+      "declaration_source": "include/cxxlens/rules.hpp",
       "signature": "std::string_view cxxlens::rules::rule::id() const noexcept; const cxxlens::rules::rule_metadata& cxxlens::rules::rule::metadata() const noexcept; cxxlens::select::selector_requirements cxxlens::rules::rule::requirements() const; cxxlens::result<cxxlens::finding_set> cxxlens::rules::rule::run(const cxxlens::workspace&,cxxlens::rules::rule_run_options) const; std::string cxxlens::rules::rule::to_json() const; std::string cxxlens::rules::rule::explain() const",
       "signature_fingerprint": "sha256:2d852ca4267d1762b67ae6e7a8033df3e8936ae2c9d5c380bd3e930249739d4d",
-      "skeleton_fingerprint": "sha256:3754ae7a324cd91275befe8e05a83bfbbadd13148e2ecc21cd799ba2e8d0b792",
-      "source_fingerprint": "sha256:b84e953a620cdf9bf15e092f716e8c4213185abf1915122c2f3bb0d521125d42",
+      "skeleton_fingerprint": "sha256:177c2a6cecab0271b058b228d4d2e3bdba6097fe42ed5e3b50599a3bd4c992a3",
+      "source_fingerprint": "sha256:d2319f5b599f81be092147ef25870bbddd4dfde8507e24cea2a0db7911407665",
       "state": "frozen"
     },
     {
@@ -2154,11 +2154,11 @@
       "contract_owner_issue": "#47",
       "contract_state": "candidate",
       "contract_transition_issue": "#47",
-      "declaration_source": "contracts/candidates/47/rules_report.hpp",
+      "declaration_source": "include/cxxlens/rules.hpp",
       "signature": "cxxlens::rules::rule_pack cxxlens::rules::rule_pack::add(cxxlens::rules::rule) const; cxxlens::rules::rule_pack cxxlens::rules::rule_pack::add(cxxlens::rules::rule_pack) const; cxxlens::rules::rule_pack cxxlens::rules::rule_pack::enable(std::string) const; cxxlens::rules::rule_pack cxxlens::rules::rule_pack::disable(std::string) const; cxxlens::rules::rule_pack cxxlens::rules::rule_pack::suppressions(cxxlens::rules::suppression_policy) const; cxxlens::rules::rule_pack cxxlens::rules::rule_pack::failure_policy(cxxlens::rules::rule_failure_policy) const; cxxlens::result<cxxlens::finding_set> cxxlens::rules::rule_pack::run(const cxxlens::workspace&,cxxlens::rules::rule_run_options) const",
       "signature_fingerprint": "sha256:73d8aa5c60c79c58a66f3201e58f74bf65204c3832949092e4819138c4503d12",
-      "skeleton_fingerprint": "sha256:9c9425b0b62d1bb907f395a89a140533aea4b617cbe18ee8075b3b70a564b636",
-      "source_fingerprint": "sha256:b84e953a620cdf9bf15e092f716e8c4213185abf1915122c2f3bb0d521125d42",
+      "skeleton_fingerprint": "sha256:4b6893432e14ed8c7a7941db3483f2fa5c2fb2c2549cd81ee93f1254b69d5589",
+      "source_fingerprint": "sha256:d2319f5b599f81be092147ef25870bbddd4dfde8507e24cea2a0db7911407665",
       "state": "frozen"
     },
     {
@@ -2168,11 +2168,11 @@
       "contract_owner_issue": "#47",
       "contract_state": "candidate",
       "contract_transition_issue": "#47",
-      "declaration_source": "contracts/candidates/47/rules_report.hpp",
+      "declaration_source": "include/cxxlens/rules.hpp",
       "signature": "cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::none(); cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::inline_nolint(bool) const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::file(cxxlens::path,std::string) const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::range(cxxlens::source_span,std::string) const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::symbol(cxxlens::symbol_id,std::string) const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::rule(std::string,std::string) const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::category(std::string,std::string) const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::tag(std::string,std::string) const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::minimum_severity(cxxlens::severity) const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::baseline(std::vector<std::string>) const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::external(std::vector<cxxlens::rules::suppression_entry>) const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::require_justification(bool) const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::reject_expired(bool) const; std::string cxxlens::rules::suppression_policy::to_json() const",
       "signature_fingerprint": "sha256:5efd21c566df3b86e0eb337fcaff0dc54c2bdbcec599ab91b23c6bb286880367",
-      "skeleton_fingerprint": "sha256:3c71eafffcd483db3c0e9ac545e9558f262b83d3438b057f37785db563f56a8d",
-      "source_fingerprint": "sha256:b84e953a620cdf9bf15e092f716e8c4213185abf1915122c2f3bb0d521125d42",
+      "skeleton_fingerprint": "sha256:0252f2d45f075de72d93929e588e2f3368f515002e8acab6c8183e1045e9df75",
+      "source_fingerprint": "sha256:d2319f5b599f81be092147ef25870bbddd4dfde8507e24cea2a0db7911407665",
       "state": "frozen"
     },
     {
@@ -2182,11 +2182,11 @@
       "contract_owner_issue": "#51",
       "contract_state": "candidate",
       "contract_transition_issue": "#51",
-      "declaration_source": "contracts/candidates/51/review.hpp",
+      "declaration_source": "include/cxxlens/review.hpp",
       "signature": "cxxlens::result<cxxlens::review::diff_view> cxxlens::review::diff_view::from_unified_diff(std::string_view,cxxlens::path,cxxlens::review::diff_options); cxxlens::result<cxxlens::review::diff_view> cxxlens::review::diff_view::from_git(cxxlens::path,std::string,cxxlens::review::diff_options,cxxlens::execution_context); bool cxxlens::review::diff_view::contains(const cxxlens::source_span&,cxxlens::review::diff_side) const; std::span<const cxxlens::path> cxxlens::review::diff_view::changed_files() const noexcept; std::string_view cxxlens::review::diff_view::identity() const noexcept; std::span<const cxxlens::diagnostic> cxxlens::review::diff_view::diagnostics() const noexcept; std::span<const cxxlens::unresolved> cxxlens::review::diff_view::unresolved_items() const noexcept; std::string cxxlens::review::diff_view::to_json() const",
       "signature_fingerprint": "sha256:0e2ddfb5ad219127112c61c98b8cfdf8a94c15d69fbff97eb23262f8e4176253",
-      "skeleton_fingerprint": "sha256:8b5211f4c5bd9115d2ade89c78b4a099c4dad68da6cc6a164c70bf9bb9a563ce",
-      "source_fingerprint": "sha256:ec85207895f3c6883c73d402949645938ae31b2eb320a4e17809a02249c3d6c9",
+      "skeleton_fingerprint": "sha256:f003c82e2fac4809cdb1823c2869eb0c595808add4cee861910b20d4dbbd5ab2",
+      "source_fingerprint": "sha256:ba1413dedb2f5837680af21377a636eafba7087f01a5e005fc104bb11b6fa782",
       "state": "frozen"
     },
     {
@@ -2196,11 +2196,11 @@
       "contract_owner_issue": "#51",
       "contract_state": "candidate",
       "contract_transition_issue": "#51",
-      "declaration_source": "contracts/candidates/51/review.hpp",
+      "declaration_source": "include/cxxlens/review.hpp",
       "signature": "cxxlens::result<cxxlens::review::baseline> cxxlens::review::baseline::load(cxxlens::path,cxxlens::review::baseline_options); cxxlens::result<void> cxxlens::review::baseline::save(cxxlens::path,cxxlens::review::baseline_options) const; cxxlens::review::baseline_match_state cxxlens::review::baseline::compare(const cxxlens::finding&) const; bool cxxlens::review::baseline::contains_equivalent(const cxxlens::finding&) const; std::string_view cxxlens::review::baseline::id() const noexcept; cxxlens::semantic_version cxxlens::review::baseline::version() const noexcept; std::span<const cxxlens::diagnostic> cxxlens::review::baseline::diagnostics() const noexcept; std::span<const cxxlens::unresolved> cxxlens::review::baseline::unresolved_items() const noexcept; std::string cxxlens::review::baseline::to_json() const",
       "signature_fingerprint": "sha256:1f39724e417c6fbd5a129d35b3db0a1bd1815ee0dff51fb053feefff0a71bc8b",
-      "skeleton_fingerprint": "sha256:1994f10124d24c90e23f2e3a9f2b662070d3fa7968ba84050a618445ac7e544f",
-      "source_fingerprint": "sha256:ec85207895f3c6883c73d402949645938ae31b2eb320a4e17809a02249c3d6c9",
+      "skeleton_fingerprint": "sha256:209f92358f33ec04f711f52e0cb112e70c1225380a71fb9475afef7edaaa2950",
+      "source_fingerprint": "sha256:ba1413dedb2f5837680af21377a636eafba7087f01a5e005fc104bb11b6fa782",
       "state": "frozen"
     },
     {
@@ -2210,11 +2210,11 @@
       "contract_owner_issue": "#51",
       "contract_state": "candidate",
       "contract_transition_issue": "#51",
-      "declaration_source": "contracts/candidates/51/review.hpp",
+      "declaration_source": "include/cxxlens/review.hpp",
       "signature": "cxxlens::review::gate_policy cxxlens::review::gate_policy::no_new_errors(); cxxlens::review::gate_policy cxxlens::review::gate_policy::no_high_confidence_security_findings(); cxxlens::review::gate_policy cxxlens::review::gate_policy::minimum_severity(cxxlens::severity) const; cxxlens::review::gate_policy cxxlens::review::gate_policy::minimum_confidence(cxxlens::confidence) const; cxxlens::review::gate_policy cxxlens::review::gate_policy::changed_lines_only(bool) const; cxxlens::review::gate_policy cxxlens::review::gate_policy::no_new_only(bool) const; cxxlens::review::gate_policy cxxlens::review::gate_policy::maximum_unresolved(std::size_t) const; cxxlens::review::gate_policy cxxlens::review::gate_policy::minimum_coverage(double) const; cxxlens::result<void> cxxlens::review::gate_policy::validate() const",
       "signature_fingerprint": "sha256:4d0ce52b810dde462f736f361416e24211716f629f1b13eb1373bf20cff9420d",
-      "skeleton_fingerprint": "sha256:cc7611fd19885ba497e7936a213cfdf837745979c1421e139943a012d8cc4b2b",
-      "source_fingerprint": "sha256:ec85207895f3c6883c73d402949645938ae31b2eb320a4e17809a02249c3d6c9",
+      "skeleton_fingerprint": "sha256:c20a74b23977284b797f1a79d4e903b811d0fdb84d09a4559fff333f46a565ca",
+      "source_fingerprint": "sha256:ba1413dedb2f5837680af21377a636eafba7087f01a5e005fc104bb11b6fa782",
       "state": "frozen"
     },
     {
@@ -2224,11 +2224,11 @@
       "contract_owner_issue": "#51",
       "contract_state": "candidate",
       "contract_transition_issue": "#51",
-      "declaration_source": "contracts/candidates/51/review.hpp",
+      "declaration_source": "include/cxxlens/review.hpp",
       "signature": "cxxlens::review::workflow cxxlens::review::workflow::for_diff(cxxlens::review::diff_view); cxxlens::review::workflow cxxlens::review::workflow::add(cxxlens::rules::rule_pack) const; cxxlens::review::workflow cxxlens::review::workflow::add_findings(cxxlens::finding_set) const; cxxlens::review::workflow cxxlens::review::workflow::baseline_(cxxlens::review::baseline) const; cxxlens::review::workflow cxxlens::review::workflow::gate(cxxlens::review::gate_policy) const; cxxlens::review::workflow cxxlens::review::workflow::propose_fixes(bool) const; cxxlens::review::workflow cxxlens::review::workflow::affected_context(bool) const",
       "signature_fingerprint": "sha256:f0456adae5a0849fa78d70321c1900bdd549d04905dd54cd8e11cb5827c5bdf6",
-      "skeleton_fingerprint": "sha256:3f352c2a0f2076475d9accbaadde2d7b895acede02013bb64990728608698c90",
-      "source_fingerprint": "sha256:ec85207895f3c6883c73d402949645938ae31b2eb320a4e17809a02249c3d6c9",
+      "skeleton_fingerprint": "sha256:fef5d6bfe3de0378705561fa5a68a7007b726e47818e7ae7cc7e498a84a3940b",
+      "source_fingerprint": "sha256:ba1413dedb2f5837680af21377a636eafba7087f01a5e005fc104bb11b6fa782",
       "state": "frozen"
     },
     {
@@ -2238,11 +2238,11 @@
       "contract_owner_issue": "#51",
       "contract_state": "candidate",
       "contract_transition_issue": "#51",
-      "declaration_source": "contracts/candidates/51/review.hpp",
+      "declaration_source": "include/cxxlens/review.hpp",
       "signature": "cxxlens::result<cxxlens::review::review_report> cxxlens::review::workflow::run(const cxxlens::workspace&,cxxlens::execution_context) const",
       "signature_fingerprint": "sha256:4db9ffbb52a800af72b493ac93a0be3e68ce4052b9c617e5c5a0fe6c9d4a30a7",
-      "skeleton_fingerprint": "sha256:ea61067a78a53814f257fcfb1b22e174144317ebc371123a34c5cbfbcff2a183",
-      "source_fingerprint": "sha256:ec85207895f3c6883c73d402949645938ae31b2eb320a4e17809a02249c3d6c9",
+      "skeleton_fingerprint": "sha256:ccd0cb25dd79cbe9a74653be7ede8dbd9e954ff6adfaf198e69c41e8e03eacb5",
+      "source_fingerprint": "sha256:ba1413dedb2f5837680af21377a636eafba7087f01a5e005fc104bb11b6fa782",
       "state": "frozen"
     },
     {
@@ -2255,8 +2255,8 @@
       "declaration_source": "include/cxxlens/select.hpp",
       "signature": "cxxlens::select::file_selector cxxlens::select::file_selector::path_exact(cxxlens::path) const; cxxlens::select::file_selector cxxlens::select::file_selector::path_glob(std::string) const; cxxlens::select::file_selector cxxlens::select::file_selector::generated(bool) const; cxxlens::select::file_selector cxxlens::select::file_selector::system(bool) const; cxxlens::select::file_selector cxxlens::select::file_selector::any_of(std::vector<cxxlens::select::file_selector>) const; cxxlens::select::file_selector cxxlens::select::file_selector::negate() const; std::string cxxlens::select::file_selector::to_json() const",
       "signature_fingerprint": "sha256:c8e9429700291df9ab577ec71058f1f97b92daf1666943e0d5aa3c996df03ae7",
-      "skeleton_fingerprint": "sha256:3da121f31b4fa1c8d0ed4f7e07b247579e569d755ca02e179a3940ac8a3336fd",
-      "source_fingerprint": "sha256:383016d36deb064c589a2aa84aaa89626d294eea539c4f49001c31986b942f6c",
+      "skeleton_fingerprint": "sha256:447d1cb2917fdfd40257a644025b9c0656f678359ddbaa5902a45d70607ef747",
+      "source_fingerprint": "sha256:ab30e21b3ea45dbfa1ef2ac9fb60c14e90348e4e2b66e903da61c2adea62eb00",
       "state": "frozen"
     },
     {
@@ -2269,8 +2269,8 @@
       "declaration_source": "include/cxxlens/select.hpp",
       "signature": "cxxlens::select::symbol_selector cxxlens::select::symbol_selector::kind(cxxlens::symbol_kind) const; cxxlens::select::symbol_selector cxxlens::select::symbol_selector::kinds(std::vector<cxxlens::symbol_kind>) const; cxxlens::select::symbol_selector cxxlens::select::symbol_selector::name(std::string,cxxlens::select::name_match) const; cxxlens::select::symbol_selector cxxlens::select::symbol_selector::declared_in(cxxlens::select::file_selector) const; cxxlens::select::symbol_selector cxxlens::select::symbol_selector::defined(bool) const; cxxlens::select::symbol_selector cxxlens::select::symbol_selector::member_of(cxxlens::select::symbol_selector) const; cxxlens::select::symbol_selector cxxlens::select::symbol_selector::derived_from(cxxlens::select::symbol_selector) const; cxxlens::select::symbol_selector cxxlens::select::symbol_selector::overrides(cxxlens::select::symbol_selector) const; cxxlens::select::symbol_selector cxxlens::select::symbol_selector::public_surface(bool) const; cxxlens::select::symbol_selector cxxlens::select::symbol_selector::macro(cxxlens::select::macro_match_policy) const; cxxlens::select::symbol_selector cxxlens::select::symbol_selector::variants(cxxlens::select::variant_match_policy) const; cxxlens::select::symbol_selector cxxlens::select::symbol_selector::any_of(std::vector<cxxlens::select::symbol_selector>) const; cxxlens::select::symbol_selector cxxlens::select::symbol_selector::all_of(std::vector<cxxlens::select::symbol_selector>) const; cxxlens::select::symbol_selector cxxlens::select::symbol_selector::negate() const; cxxlens::select::selector_requirements cxxlens::select::symbol_selector::requirements() const; std::string cxxlens::select::symbol_selector::explain() const; std::string cxxlens::select::symbol_selector::to_json() const",
       "signature_fingerprint": "sha256:158597f7269a10fa3f3916151f97d1ba3757d1e354dd52ba08a969d8337ae82b",
-      "skeleton_fingerprint": "sha256:54e84eed10fa6ee0a0e9994865fe501717015baf24a08f072423308e899ded41",
-      "source_fingerprint": "sha256:383016d36deb064c589a2aa84aaa89626d294eea539c4f49001c31986b942f6c",
+      "skeleton_fingerprint": "sha256:43783e98f4647cdbd8ea152ba4e1c580cd1b8b7e55d61f851b21878f36baef15",
+      "source_fingerprint": "sha256:ab30e21b3ea45dbfa1ef2ac9fb60c14e90348e4e2b66e903da61c2adea62eb00",
       "state": "frozen"
     },
     {
@@ -2283,8 +2283,8 @@
       "declaration_source": "include/cxxlens/select.hpp",
       "signature": "cxxlens::select::type_selector cxxlens::select::type_selector::canonical(std::string) const; cxxlens::select::type_selector cxxlens::select::type_selector::spelling(std::string) const; cxxlens::select::type_selector cxxlens::select::type_selector::declared_as(cxxlens::select::symbol_selector) const; cxxlens::select::type_selector cxxlens::select::type_selector::pointer_to(cxxlens::select::type_selector) const; cxxlens::select::type_selector cxxlens::select::type_selector::reference_to(cxxlens::select::type_selector) const; cxxlens::select::type_selector cxxlens::select::type_selector::const_qualified(bool) const; cxxlens::select::type_selector cxxlens::select::type_selector::derived_from(cxxlens::select::symbol_selector) const; cxxlens::select::type_selector cxxlens::select::type_selector::including_derived(bool) const; cxxlens::select::type_selector cxxlens::select::type_selector::convertible_to(cxxlens::select::type_selector) const; cxxlens::select::type_selector cxxlens::select::type_selector::specialization_of(std::string) const; cxxlens::select::type_selector cxxlens::select::type_selector::any_cvref() const; cxxlens::select::selector_requirements cxxlens::select::type_selector::requirements() const; std::string cxxlens::select::type_selector::explain() const; std::string cxxlens::select::type_selector::to_json() const",
       "signature_fingerprint": "sha256:236427d43aa49d9ef3c4e94cde81905da7902d6951ea72b24bc225b4e8a1aad4",
-      "skeleton_fingerprint": "sha256:13cffc8dfe0bf8cfc6421ce428ec8bd8efbe8d1760610747f1613f801d182563",
-      "source_fingerprint": "sha256:383016d36deb064c589a2aa84aaa89626d294eea539c4f49001c31986b942f6c",
+      "skeleton_fingerprint": "sha256:ecc0b2382173944500106645ccf4614b7d39b220843df74064c3e97a40a402e0",
+      "source_fingerprint": "sha256:ab30e21b3ea45dbfa1ef2ac9fb60c14e90348e4e2b66e903da61c2adea62eb00",
       "state": "frozen"
     },
     {
@@ -2294,11 +2294,11 @@
       "contract_owner_issue": "#45",
       "contract_state": "candidate",
       "contract_transition_issue": "#45",
-      "declaration_source": "contracts/candidates/45/select_search_explain.hpp",
+      "declaration_source": "include/cxxlens/select.hpp",
       "signature": "cxxlens::select::expression_selector cxxlens::select::expression_selector::type_is(cxxlens::select::type_selector) const; cxxlens::select::expression_selector cxxlens::select::expression_selector::refers_to(cxxlens::select::symbol_selector) const; cxxlens::select::expression_selector cxxlens::select::expression_selector::is_null_pointer() const; cxxlens::select::expression_selector cxxlens::select::expression_selector::is_literal() const; cxxlens::select::expression_selector cxxlens::select::expression_selector::integer_value(std::int64_t) const; cxxlens::select::expression_selector cxxlens::select::expression_selector::string_value(std::string) const; cxxlens::select::expression_selector cxxlens::select::expression_selector::implicit(cxxlens::select::implicit_node_policy) const; cxxlens::select::expression_selector cxxlens::select::expression_selector::macro(cxxlens::select::macro_match_policy) const; cxxlens::select::selector_requirements cxxlens::select::expression_selector::requirements() const; std::string cxxlens::select::expression_selector::to_json() const; cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::expression_selector)",
       "signature_fingerprint": "sha256:53dfcb364dd7a081822dea17bee50722a84b17c7d3bca236fdfb87ab7316a608",
-      "skeleton_fingerprint": "sha256:60d6e23bcb2e11e1a6fe34bf00612c3af570cd8b3eebf5ac6f2a9c6f1acadd7a",
-      "source_fingerprint": "sha256:a516123cac779b3c05bb6930c4c0de01b1e2da22ff15a187f0da57bf00b3c17e",
+      "skeleton_fingerprint": "sha256:cdea58e641146f16f565939583cb93c5f445b2eac076dcd3c765679847514350",
+      "source_fingerprint": "sha256:ab30e21b3ea45dbfa1ef2ac9fb60c14e90348e4e2b66e903da61c2adea62eb00",
       "state": "frozen"
     },
     {
@@ -2308,11 +2308,11 @@
       "contract_owner_issue": "#45",
       "contract_state": "candidate",
       "contract_transition_issue": "#45",
-      "declaration_source": "contracts/candidates/45/select_search_explain.hpp",
+      "declaration_source": "include/cxxlens/select.hpp",
       "signature": "cxxlens::select::reference_selector cxxlens::select::reference_selector::target(cxxlens::select::symbol_selector) const; cxxlens::select::reference_selector cxxlens::select::reference_selector::kind(cxxlens::reference_kind) const; cxxlens::select::reference_selector cxxlens::select::reference_selector::kinds(std::vector<cxxlens::reference_kind>) const; cxxlens::select::reference_selector cxxlens::select::reference_selector::inside(cxxlens::select::symbol_selector) const; cxxlens::select::reference_selector cxxlens::select::reference_selector::in_file(cxxlens::select::file_selector) const; cxxlens::select::reference_selector cxxlens::select::reference_selector::macro(cxxlens::select::macro_match_policy) const; cxxlens::select::reference_selector cxxlens::select::reference_selector::variants(cxxlens::select::variant_match_policy) const; cxxlens::select::selector_requirements cxxlens::select::reference_selector::requirements() const; std::string cxxlens::select::reference_selector::to_json() const; cxxlens::select::reference_selector cxxlens::select::references_to(cxxlens::select::symbol_selector); cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::reference_selector)",
       "signature_fingerprint": "sha256:65db6021d0192c263cb8f56635918c49bfa9398d1bf6e6bd1dbb93a996064b34",
-      "skeleton_fingerprint": "sha256:48f2d1bf0f439fff510183780807c5d35d6a03a1048d4e22efc2f46e42ad30aa",
-      "source_fingerprint": "sha256:a516123cac779b3c05bb6930c4c0de01b1e2da22ff15a187f0da57bf00b3c17e",
+      "skeleton_fingerprint": "sha256:0ad85203fdd2109bd073c3b16b28d37526c01c805ae5a59cc47c979c5f04c54f",
+      "source_fingerprint": "sha256:ab30e21b3ea45dbfa1ef2ac9fb60c14e90348e4e2b66e903da61c2adea62eb00",
       "state": "frozen"
     },
     {
@@ -2325,8 +2325,8 @@
       "declaration_source": "include/cxxlens/select.hpp",
       "signature": "cxxlens::select::call_selector cxxlens::select::call_selector::kind(cxxlens::call_kind) const; cxxlens::select::call_selector cxxlens::select::call_selector::kinds(std::vector<cxxlens::call_kind>) const; cxxlens::select::call_selector cxxlens::select::call_selector::callee(cxxlens::select::symbol_selector) const; cxxlens::select::call_selector cxxlens::select::call_selector::callee_name(std::string) const; cxxlens::select::call_selector cxxlens::select::call_selector::function_name(std::string) const; cxxlens::select::call_selector cxxlens::select::call_selector::method_name(std::string) const; cxxlens::select::call_selector cxxlens::select::call_selector::receiver_type(cxxlens::select::type_selector) const; cxxlens::select::call_selector cxxlens::select::call_selector::include_derived_types(bool) const; cxxlens::select::call_selector cxxlens::select::call_selector::include_virtual_overrides(bool) const; cxxlens::select::call_selector cxxlens::select::call_selector::dispatch(cxxlens::select::dispatch_policy) const; cxxlens::select::call_selector cxxlens::select::call_selector::argument_type(std::size_t,cxxlens::select::type_selector) const; cxxlens::select::call_selector cxxlens::select::call_selector::inside(cxxlens::select::symbol_selector) const; cxxlens::select::call_selector cxxlens::select::call_selector::in_file(cxxlens::select::file_selector) const; cxxlens::select::call_selector cxxlens::select::call_selector::implicit(cxxlens::select::implicit_node_policy) const; cxxlens::select::call_selector cxxlens::select::call_selector::macro(cxxlens::select::macro_match_policy) const; cxxlens::select::call_selector cxxlens::select::call_selector::templates(cxxlens::select::template_selection_policy) const; cxxlens::select::call_selector cxxlens::select::call_selector::variants(cxxlens::select::variant_match_policy) const; cxxlens::select::call_selector cxxlens::select::call_selector::precision(cxxlens::precision_level) const; cxxlens::select::selector_requirements cxxlens::select::call_selector::requirements() const; std::string cxxlens::select::call_selector::explain() const; std::string cxxlens::select::call_selector::to_json() const",
       "signature_fingerprint": "sha256:a0c75263dd8d5dd8d4afbed31930224f235bbd918660010b5f8be4e779c81572",
-      "skeleton_fingerprint": "sha256:8a5168e5133fdded76d138b0bdb38677f8f3a55f841a279c04cb925f0091ca27",
-      "source_fingerprint": "sha256:383016d36deb064c589a2aa84aaa89626d294eea539c4f49001c31986b942f6c",
+      "skeleton_fingerprint": "sha256:3f22133105533ee91b9356e86a11f4c6b923747a261e4c712cd5b08daaf10088",
+      "source_fingerprint": "sha256:ab30e21b3ea45dbfa1ef2ac9fb60c14e90348e4e2b66e903da61c2adea62eb00",
       "state": "frozen"
     },
     {
@@ -2336,11 +2336,11 @@
       "contract_owner_issue": "#45",
       "contract_state": "candidate",
       "contract_transition_issue": "#45",
-      "declaration_source": "contracts/candidates/45/select_search_explain.hpp",
+      "declaration_source": "include/cxxlens/select.hpp",
       "signature": "cxxlens::select::conversion_selector cxxlens::select::conversion_selector::kind(std::string) const; cxxlens::select::conversion_selector cxxlens::select::conversion_selector::from(cxxlens::select::type_selector) const; cxxlens::select::conversion_selector cxxlens::select::conversion_selector::to(cxxlens::select::type_selector) const; cxxlens::select::conversion_selector cxxlens::select::conversion_selector::implicit(bool) const; cxxlens::select::conversion_selector cxxlens::select::conversion_selector::in_file(cxxlens::select::file_selector) const; cxxlens::select::selector_requirements cxxlens::select::conversion_selector::requirements() const; cxxlens::select::include_selector cxxlens::select::include_selector::header(std::string) const; cxxlens::select::include_selector cxxlens::select::include_selector::resolved_to(cxxlens::path) const; cxxlens::select::include_selector cxxlens::select::include_selector::used(bool) const; cxxlens::select::include_selector cxxlens::select::include_selector::system(bool) const; cxxlens::select::include_selector cxxlens::select::include_selector::providing(cxxlens::select::symbol_selector) const; cxxlens::select::include_selector cxxlens::select::include_selector::included_by(cxxlens::select::file_selector) const; cxxlens::select::selector_requirements cxxlens::select::include_selector::requirements() const; cxxlens::select::macro_selector cxxlens::select::macro_selector::name(std::string) const; cxxlens::select::macro_selector cxxlens::select::macro_selector::function_like(bool) const; cxxlens::select::macro_selector cxxlens::select::macro_selector::used_in(cxxlens::select::file_selector) const; cxxlens::select::macro_selector cxxlens::select::macro_selector::argument_contains(cxxlens::select::expression_selector) const; cxxlens::select::selector_requirements cxxlens::select::macro_selector::requirements() const; cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::conversion_selector); cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::include_selector); cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::macro_selector)",
       "signature_fingerprint": "sha256:06f0913e607e3b68748d1dc77098544d1b33c6a81c3cfd905510006ead6690f9",
-      "skeleton_fingerprint": "sha256:ab68dd51a5abae0600e2260c752fad2a08ad96704c59c74e7164b7a6a7cfbb0d",
-      "source_fingerprint": "sha256:a516123cac779b3c05bb6930c4c0de01b1e2da22ff15a187f0da57bf00b3c17e",
+      "skeleton_fingerprint": "sha256:4ce2751982c44692ca878f422dcd744b8071eea2297cae97fe32f02fdb1fd85a",
+      "source_fingerprint": "sha256:ab30e21b3ea45dbfa1ef2ac9fb60c14e90348e4e2b66e903da61c2adea62eb00",
       "state": "frozen"
     },
     {
@@ -2353,8 +2353,8 @@
       "declaration_source": "include/cxxlens/select.hpp",
       "signature": "cxxlens::select::symbol_selector cxxlens::select::any_symbol(); cxxlens::select::symbol_selector cxxlens::select::function(std::string); cxxlens::select::symbol_selector cxxlens::select::method(std::string); cxxlens::select::symbol_selector cxxlens::select::record(std::string); cxxlens::select::symbol_selector cxxlens::select::variable(std::string); cxxlens::select::symbol_selector cxxlens::select::macro(std::string); cxxlens::select::type_selector cxxlens::select::type(std::string); cxxlens::select::call_selector cxxlens::select::any_call()",
       "signature_fingerprint": "sha256:db4ff4d614eafb8b8d0a4170224cfaa5e77d6a98752d60aa3e9b71eba41e3f7f",
-      "skeleton_fingerprint": "sha256:c28811bf88ffe8ea8e8de4beb03e435ca7aa3b4c967edf37bb0a9121d4cbc81a",
-      "source_fingerprint": "sha256:383016d36deb064c589a2aa84aaa89626d294eea539c4f49001c31986b942f6c",
+      "skeleton_fingerprint": "sha256:b62c18221e00ffd70174f8dbe104d2aef67eaf9d579e45a1b576309a7f1d8945",
+      "source_fingerprint": "sha256:ab30e21b3ea45dbfa1ef2ac9fb60c14e90348e4e2b66e903da61c2adea62eb00",
       "state": "frozen"
     },
     {
@@ -2367,8 +2367,8 @@
       "declaration_source": "include/cxxlens/select.hpp",
       "signature": "cxxlens::select::call_selector cxxlens::select::calls_to(cxxlens::select::symbol_selector); cxxlens::select::call_selector cxxlens::select::calls_to_function(std::string); cxxlens::select::call_selector cxxlens::select::calls_to_method(std::string,std::string)",
       "signature_fingerprint": "sha256:248934c1db65198944f397f629dc9177a5e5bcde6e2c93ee5129b786a1e02121",
-      "skeleton_fingerprint": "sha256:0b2dc074572d012efa099b3a9cb558561040ada4fd1c5ae40671e814dad05471",
-      "source_fingerprint": "sha256:383016d36deb064c589a2aa84aaa89626d294eea539c4f49001c31986b942f6c",
+      "skeleton_fingerprint": "sha256:a91d3fe58fad4baabef988f981c31c852497a05c46426f586c8c0ba616b7c0a5",
+      "source_fingerprint": "sha256:ab30e21b3ea45dbfa1ef2ac9fb60c14e90348e4e2b66e903da61c2adea62eb00",
       "state": "frozen"
     },
     {
@@ -2381,8 +2381,8 @@
       "declaration_source": "include/cxxlens/select.hpp",
       "signature": "cxxlens::result<cxxlens::select::semantic_selector> cxxlens::select::semantic_selector::from_json(std::string_view); cxxlens::select::selector_requirements cxxlens::select::semantic_selector::requirements() const; std::string cxxlens::select::semantic_selector::explain() const; std::string cxxlens::select::semantic_selector::to_json() const",
       "signature_fingerprint": "sha256:5a9c31955dd08d580ea2d68ab9b3c3d864a50a8081545bfff5bf6d7db15b6580",
-      "skeleton_fingerprint": "sha256:bfd9b159ad62c0867f51b621d65a2efdbdb4bcb8d02353183c23f16a31472b59",
-      "source_fingerprint": "sha256:383016d36deb064c589a2aa84aaa89626d294eea539c4f49001c31986b942f6c",
+      "skeleton_fingerprint": "sha256:f76afcc09ca56bb929bc499b445d18c5c268935e758ff55d32156429566ea8c9",
+      "source_fingerprint": "sha256:ab30e21b3ea45dbfa1ef2ac9fb60c14e90348e4e2b66e903da61c2adea62eb00",
       "state": "frozen"
     },
     {
@@ -2395,8 +2395,8 @@
       "declaration_source": "include/cxxlens/select.hpp",
       "signature": "cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::file_selector); cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::symbol_selector); cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::type_selector); cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::call_selector)",
       "signature_fingerprint": "sha256:af3bea8d8ebde60611cc1f9d96793fc4f262ffcac39e6ac073ba7b8f60c235cf",
-      "skeleton_fingerprint": "sha256:fc08e350b16a3c1786a5eaed1f37f4263f28a02c00e1578489583bea78c709d4",
-      "source_fingerprint": "sha256:383016d36deb064c589a2aa84aaa89626d294eea539c4f49001c31986b942f6c",
+      "skeleton_fingerprint": "sha256:5716b23b883a178b5dade799e77f3869795f46fa533f05576365dd4b20df4a58",
+      "source_fingerprint": "sha256:ab30e21b3ea45dbfa1ef2ac9fb60c14e90348e4e2b66e903da61c2adea62eb00",
       "state": "frozen"
     },
     {
@@ -2406,11 +2406,11 @@
       "contract_owner_issue": "#45",
       "contract_state": "candidate",
       "contract_transition_issue": "#45",
-      "declaration_source": "contracts/candidates/45/select_search_explain.hpp",
+      "declaration_source": "include/cxxlens/search.hpp",
       "signature": "cxxlens::result<cxxlens::search_report<cxxlens::symbol>> cxxlens::search::symbols(const cxxlens::workspace&,cxxlens::select::symbol_selector,cxxlens::search_options)",
       "signature_fingerprint": "sha256:b96eb750e20a847cade5cfb28f7baa0f472533f05cc70397e0119f3e61e8487b",
-      "skeleton_fingerprint": "sha256:c4869e28b01ab1090297520881f4681e8437db6db024c7d5575e956e61bfa7b1",
-      "source_fingerprint": "sha256:a516123cac779b3c05bb6930c4c0de01b1e2da22ff15a187f0da57bf00b3c17e",
+      "skeleton_fingerprint": "sha256:6d12d41b6842c3b4d4bca5f0e31302782f23b87cd8982e9dc97e5df9ba82e3ce",
+      "source_fingerprint": "sha256:9683fd095e9e8c01e939d208cdac833bf7b942923df1fe3ee6c15bf2b6e27fad",
       "state": "frozen"
     },
     {
@@ -2420,11 +2420,11 @@
       "contract_owner_issue": "#45",
       "contract_state": "candidate",
       "contract_transition_issue": "#45",
-      "declaration_source": "contracts/candidates/45/select_search_explain.hpp",
+      "declaration_source": "include/cxxlens/search.hpp",
       "signature": "cxxlens::result<cxxlens::search_report<cxxlens::reference>> cxxlens::search::references(const cxxlens::workspace&,cxxlens::select::reference_selector,cxxlens::search_options)",
       "signature_fingerprint": "sha256:9bfea1820f9e8bbff568c40f2c55e37a31e5f3fb28276f3dcd152e1679feaebd",
-      "skeleton_fingerprint": "sha256:d848ffbc81ee00745aed228ab576d7b0c5beb84680d6f71704569ef4d473a133",
-      "source_fingerprint": "sha256:a516123cac779b3c05bb6930c4c0de01b1e2da22ff15a187f0da57bf00b3c17e",
+      "skeleton_fingerprint": "sha256:aa12b0236ee70e37858eee35738e11c79da61d5e9323d47f8afcff0c70af1fb7",
+      "source_fingerprint": "sha256:9683fd095e9e8c01e939d208cdac833bf7b942923df1fe3ee6c15bf2b6e27fad",
       "state": "frozen"
     },
     {
@@ -2437,8 +2437,8 @@
       "declaration_source": "include/cxxlens/search.hpp",
       "signature": "cxxlens::result<cxxlens::search_report<cxxlens::call_site>> cxxlens::search::calls(const cxxlens::workspace&,cxxlens::select::call_selector,cxxlens::search_options)",
       "signature_fingerprint": "sha256:daf1c6cf5399279ca599a5727382d6d6b5861b5c15819beb68a78ea431033539",
-      "skeleton_fingerprint": "sha256:a11b25a951014b849839022238d20256a20570d83d3f2f1ee8d9d4828efacf70",
-      "source_fingerprint": "sha256:2050fd4e13541b7a5db44b806ac0121af02fcbe51a0b94f23240d739d89e2a65",
+      "skeleton_fingerprint": "sha256:d52f143008cb6204a07e93cf66dcc24e70761a08536d41a3f968d82dded76ec1",
+      "source_fingerprint": "sha256:9683fd095e9e8c01e939d208cdac833bf7b942923df1fe3ee6c15bf2b6e27fad",
       "state": "frozen"
     },
     {
@@ -2451,8 +2451,8 @@
       "declaration_source": "include/cxxlens/search.hpp",
       "signature": "cxxlens::result<cxxlens::search_report<cxxlens::call_site>> cxxlens::search::calls_to_function(const cxxlens::workspace&,std::string,cxxlens::search_options)",
       "signature_fingerprint": "sha256:45b5a52a7be28140b2f44610111c8b92a74ed020f06a559a87e38994745e16b4",
-      "skeleton_fingerprint": "sha256:d1bf5290ed5b4b40580465a7df3a1feea025830bb99ad3c88c3c6bd2348cdce9",
-      "source_fingerprint": "sha256:2050fd4e13541b7a5db44b806ac0121af02fcbe51a0b94f23240d739d89e2a65",
+      "skeleton_fingerprint": "sha256:dbdcaab1e673c1dc0e2c07bd124a8fb801463c9435748be16b750b4d6ed98c58",
+      "source_fingerprint": "sha256:9683fd095e9e8c01e939d208cdac833bf7b942923df1fe3ee6c15bf2b6e27fad",
       "state": "frozen"
     },
     {
@@ -2465,8 +2465,8 @@
       "declaration_source": "include/cxxlens/search.hpp",
       "signature": "cxxlens::result<cxxlens::search_report<cxxlens::call_site>> cxxlens::search::calls_to_method(const cxxlens::workspace&,std::string,std::string,cxxlens::search_options)",
       "signature_fingerprint": "sha256:d4e1b61a3d37e843311b01d14c62826df7844a5e00eab2e931098685dccc49e9",
-      "skeleton_fingerprint": "sha256:a9f7adf1f0b2022af240084a2fb228c3cd1788b62962593e1ca9b12fe89c2a10",
-      "source_fingerprint": "sha256:2050fd4e13541b7a5db44b806ac0121af02fcbe51a0b94f23240d739d89e2a65",
+      "skeleton_fingerprint": "sha256:71759497fd69fd6e72037fff351c54dfa264f93dad4bc5c079c74b9f9303ced4",
+      "source_fingerprint": "sha256:9683fd095e9e8c01e939d208cdac833bf7b942923df1fe3ee6c15bf2b6e27fad",
       "state": "frozen"
     },
     {
@@ -2479,8 +2479,8 @@
       "declaration_source": "include/cxxlens/search.hpp",
       "signature": "cxxlens::result<cxxlens::search_report<cxxlens::inheritance_edge>> cxxlens::search::inheritance(const cxxlens::workspace&,cxxlens::select::symbol_selector,bool,cxxlens::search_options)",
       "signature_fingerprint": "sha256:f4fb15563a0488bebd88fbddff5129a4741cee335522f0e65ae36b36dafac685",
-      "skeleton_fingerprint": "sha256:365a5883bd7b162d8c32e3cf99af1d76a9779325ab9aec812f29fa5d02eba880",
-      "source_fingerprint": "sha256:2050fd4e13541b7a5db44b806ac0121af02fcbe51a0b94f23240d739d89e2a65",
+      "skeleton_fingerprint": "sha256:598a15f2eb400a34a552c871dabc7b31d850a2bfb4f33265904668a252bd06c3",
+      "source_fingerprint": "sha256:9683fd095e9e8c01e939d208cdac833bf7b942923df1fe3ee6c15bf2b6e27fad",
       "state": "frozen"
     },
     {
@@ -2493,8 +2493,8 @@
       "declaration_source": "include/cxxlens/search.hpp",
       "signature": "cxxlens::result<cxxlens::search_report<cxxlens::override_edge>> cxxlens::search::overrides(const cxxlens::workspace&,cxxlens::select::symbol_selector,bool,cxxlens::search_options)",
       "signature_fingerprint": "sha256:db6d878297da8b91adbb9f4f5beded715425b6daecc4b444d5adcc15881bede3",
-      "skeleton_fingerprint": "sha256:39faab098b6b0bb9c57a6bd04b5773a2203938ab5d82bac4c6cc999cd5efed4c",
-      "source_fingerprint": "sha256:2050fd4e13541b7a5db44b806ac0121af02fcbe51a0b94f23240d739d89e2a65",
+      "skeleton_fingerprint": "sha256:1e2956952124b3d0340101e1bd438a03c37805dea0b73c7c08f7be270855e82b",
+      "source_fingerprint": "sha256:9683fd095e9e8c01e939d208cdac833bf7b942923df1fe3ee6c15bf2b6e27fad",
       "state": "frozen"
     },
     {
@@ -2504,11 +2504,11 @@
       "contract_owner_issue": "#45",
       "contract_state": "candidate",
       "contract_transition_issue": "#45",
-      "declaration_source": "contracts/candidates/45/select_search_explain.hpp",
+      "declaration_source": "include/cxxlens/search.hpp",
       "signature": "cxxlens::result<cxxlens::search_report<cxxlens::include_relation>> cxxlens::search::includes(const cxxlens::workspace&,cxxlens::select::include_selector,cxxlens::search_options)",
       "signature_fingerprint": "sha256:125d6fced9b72bc7d75cfc5c1a38967d6d8440c2380bf22bc80ebc77d375b5d3",
-      "skeleton_fingerprint": "sha256:e9547ce469cea8ad98050dcf532aed8b06d0160dd1bae41c67a7a75a2deb078b",
-      "source_fingerprint": "sha256:a516123cac779b3c05bb6930c4c0de01b1e2da22ff15a187f0da57bf00b3c17e",
+      "skeleton_fingerprint": "sha256:22649ee6afc92f3681d3016a7595170746ef7a279d910b6820ba7987c2359b9a",
+      "source_fingerprint": "sha256:9683fd095e9e8c01e939d208cdac833bf7b942923df1fe3ee6c15bf2b6e27fad",
       "state": "frozen"
     },
     {
@@ -2518,11 +2518,11 @@
       "contract_owner_issue": "#45",
       "contract_state": "candidate",
       "contract_transition_issue": "#45",
-      "declaration_source": "contracts/candidates/45/select_search_explain.hpp",
+      "declaration_source": "include/cxxlens/search.hpp",
       "signature": "cxxlens::result<cxxlens::search_report<cxxlens::macro_expansion>> cxxlens::search::macros(const cxxlens::workspace&,cxxlens::select::macro_selector,cxxlens::search_options)",
       "signature_fingerprint": "sha256:c281593aa30a769f783052201fef0533f0830c15cd5aa7e184335f3bc417cdc5",
-      "skeleton_fingerprint": "sha256:eb5a01ef717031dc7257d55eb0290e8bd374f4579b379090c727d9bf1b5b1f5b",
-      "source_fingerprint": "sha256:a516123cac779b3c05bb6930c4c0de01b1e2da22ff15a187f0da57bf00b3c17e",
+      "skeleton_fingerprint": "sha256:53bb94875c65f75ca25ac1120d2bcdb48aade8aed1ef7c0d8537f66a3a573d43",
+      "source_fingerprint": "sha256:9683fd095e9e8c01e939d208cdac833bf7b942923df1fe3ee6c15bf2b6e27fad",
       "state": "frozen"
     },
     {
@@ -2532,11 +2532,11 @@
       "contract_owner_issue": "#45",
       "contract_state": "candidate",
       "contract_transition_issue": "#45",
-      "declaration_source": "contracts/candidates/45/select_search_explain.hpp",
+      "declaration_source": "include/cxxlens/search.hpp",
       "signature": "cxxlens::result<cxxlens::search_report<cxxlens::fact>> cxxlens::search::conversions(const cxxlens::workspace&,cxxlens::select::conversion_selector,cxxlens::search_options)",
       "signature_fingerprint": "sha256:f0fd1deb433ea736c422d98579cb2c9351d3032c8153dab1c1209ba0d8d54fcd",
-      "skeleton_fingerprint": "sha256:23f5a2795b175cf97dc67d5c5ba226be33634afc20016a270c0798ffad9925f5",
-      "source_fingerprint": "sha256:a516123cac779b3c05bb6930c4c0de01b1e2da22ff15a187f0da57bf00b3c17e",
+      "skeleton_fingerprint": "sha256:1fb8fb113adf69ae70a962ada8d9520b539ee5d3f7cd6988501b9af47f8fef03",
+      "source_fingerprint": "sha256:9683fd095e9e8c01e939d208cdac833bf7b942923df1fe3ee6c15bf2b6e27fad",
       "state": "frozen"
     },
     {
@@ -2549,8 +2549,8 @@
       "declaration_source": "include/cxxlens/testing.hpp",
       "signature": "cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::cpp(std::string); cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::c(std::string); cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::main_file(cxxlens::path) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::add_file(cxxlens::path,std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::add_header(cxxlens::path,std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::add_variant(cxxlens::testing::fixture_variant) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::standard(std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::target(std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::argument(std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::generated(cxxlens::path) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::system_header(cxxlens::path) const; cxxlens::result<cxxlens::testing::fixture_bundle> cxxlens::testing::workspace_fixture::materialize(const cxxlens::path&) const; cxxlens::result<cxxlens::testing::fault_plan> cxxlens::testing::fault_plan::make(std::vector<cxxlens::testing::fault_injection>); cxxlens::result<void> cxxlens::testing::fault_plan::probe(cxxlens::testing::fault_target,std::string_view,std::uint64_t) const",
       "signature_fingerprint": "sha256:4c9b40c214f9ece3c5f4fda3e86951dca06cd8479e6db023c7e4aca7598dfb4d",
-      "skeleton_fingerprint": "sha256:45ed515537a2a69c4a9499170c20d30577651c17b928140007d2339ecd9eea35",
-      "source_fingerprint": "sha256:b03c0fa5e17b3f957ed7dafc7f510f2a5ee8e5be64f5f9f83ad9575f450a51ed",
+      "skeleton_fingerprint": "sha256:7838a0877adf7e729b9179d05b2cb4555cde8b0b72c918c2f5854c523f019ca0",
+      "source_fingerprint": "sha256:a6d255282b9ba156c2c41ce383805035ff0875674c17ef6d973300a8718f7eba",
       "state": "frozen"
     },
     {
@@ -2563,8 +2563,8 @@
       "declaration_source": "include/cxxlens/testing.hpp",
       "signature": "cxxlens::testing::result_assertion cxxlens::testing::result_assertion::has_exactly(std::size_t) const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::has_no_errors() const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::is_complete() const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::is_partial_with(cxxlens::unresolved_kind) const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::json_matches(cxxlens::path) const; cxxlens::result<void> cxxlens::testing::result_assertion::check(const cxxlens::testing::result_observation&) const",
       "signature_fingerprint": "sha256:4e30f3fdec5f05e2f6f69b4e555188ba1e9cd258a9af39bab6cd080074644a10",
-      "skeleton_fingerprint": "sha256:0770c53565b77ca5b29dd092abd419631a9a3d77740db09775cf7d884da5af5c",
-      "source_fingerprint": "sha256:b03c0fa5e17b3f957ed7dafc7f510f2a5ee8e5be64f5f9f83ad9575f450a51ed",
+      "skeleton_fingerprint": "sha256:e4c6578924859f0b86c386b4d33e5f429e42f38b687730b9ed761cc642c47fdd",
+      "source_fingerprint": "sha256:a6d255282b9ba156c2c41ce383805035ff0875674c17ef6d973300a8718f7eba",
       "state": "frozen"
     },
     {
@@ -2574,11 +2574,11 @@
       "contract_owner_issue": "#43",
       "contract_state": "candidate",
       "contract_transition_issue": "#43",
-      "declaration_source": "contracts/candidates/43/testing_plan_assertions.hpp",
+      "declaration_source": "include/cxxlens/testing.hpp",
       "signature": "cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::valid() const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::changes_file(cxxlens::path) const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::diff_matches(cxxlens::path) const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::reparses() const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::idempotent(cxxlens::transform::codemod) const; cxxlens::result<void> cxxlens::testing::edit_plan_assertion::check(const cxxlens::workspace&,const cxxlens::transform::edit_plan&) const",
       "signature_fingerprint": "sha256:4fceea615289412b759940a951c527fb01d093154a8347b8ba4741bee7f45b4b",
-      "skeleton_fingerprint": "sha256:31a6947e06442eda175faed517ce5c268423b7ceaacab2e1bb7a53bfa63a9241",
-      "source_fingerprint": "sha256:fab2229755b58b2dd5fd25557d0803a5b3a75fbaf1aedede07f34b230027df8b",
+      "skeleton_fingerprint": "sha256:85f6a4d7a200877532bce6573baae2dfdd2367d548355850510ea41580c5995b",
+      "source_fingerprint": "sha256:a6d255282b9ba156c2c41ce383805035ff0875674c17ef6d973300a8718f7eba",
       "state": "frozen"
     },
     {
@@ -2588,11 +2588,11 @@
       "contract_owner_issue": "#43",
       "contract_state": "candidate",
       "contract_transition_issue": "#43",
-      "declaration_source": "contracts/candidates/43/testing_plan_assertions.hpp",
+      "declaration_source": "include/cxxlens/testing.hpp",
       "signature": "cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::valid() const; cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::census_complete() const; cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::no_unknown_decisions() const; cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::artifacts_reparse() const; cxxlens::result<void> cxxlens::testing::generation_plan_assertion::check(const cxxlens::workspace&,const cxxlens::generate::generation_plan&) const",
       "signature_fingerprint": "sha256:cf24f7cb4f920ad1d50201849e6c46c4873abb75d881c52594fa42f3204975cf",
-      "skeleton_fingerprint": "sha256:3f589124baac16d097a0d589ad28b096cfd1dc3621cf50f4287d84e1e92680d5",
-      "source_fingerprint": "sha256:fab2229755b58b2dd5fd25557d0803a5b3a75fbaf1aedede07f34b230027df8b",
+      "skeleton_fingerprint": "sha256:738962e2834443cea90a01ca9f01a6ecbf1933300852d56e6517a3b42c6edeb7",
+      "source_fingerprint": "sha256:a6d255282b9ba156c2c41ce383805035ff0875674c17ef6d973300a8718f7eba",
       "state": "frozen"
     },
     {
@@ -2605,8 +2605,8 @@
       "declaration_source": "include/cxxlens/testing.hpp",
       "signature": "template<class Generator,class Predicate,class Renderer> cxxlens::testing::property_report cxxlens::testing::check_property(const cxxlens::testing::property_options&,Generator&&,Predicate&&,Renderer&&); template<class Generator,class Predicate,class Shrinker,class Renderer> cxxlens::testing::property_report cxxlens::testing::check_property(const cxxlens::testing::property_options&,Generator&&,Predicate&&,Shrinker&&,Renderer&&); template<class Operation> cxxlens::result<cxxlens::testing::determinism_report> cxxlens::testing::check_determinism(const cxxlens::testing::workspace_fixture&,Operation&&,const cxxlens::testing::determinism_options&)",
       "signature_fingerprint": "sha256:072d60f45b1db5c9556a2cff38d4570e18d4c4263259075863abe7e288909214",
-      "skeleton_fingerprint": "sha256:32a20eb0d48b69f4040d77b3a27a0efb46d4c14785cd80ad4e3aa7f8b9e80c90",
-      "source_fingerprint": "sha256:b03c0fa5e17b3f957ed7dafc7f510f2a5ee8e5be64f5f9f83ad9575f450a51ed",
+      "skeleton_fingerprint": "sha256:346e32e204e9af269ea5d5137f7b48ac6d96d45c7550cde35688b19e4350c4ad",
+      "source_fingerprint": "sha256:a6d255282b9ba156c2c41ce383805035ff0875674c17ef6d973300a8718f7eba",
       "state": "frozen"
     },
     {
@@ -2619,8 +2619,8 @@
       "declaration_source": "include/cxxlens/testing.hpp",
       "signature": "cxxlens::result<void> cxxlens::testing::assert_schema_conforms(std::string_view,std::string_view)",
       "signature_fingerprint": "sha256:63d098a2572aceefec45abfe1a8ed665eb6ce014cc119e67f9a9f85b67492995",
-      "skeleton_fingerprint": "sha256:2987547fa04fba7c8c8c45871092a28be355903f52f63e1ba59eb0da570f657b",
-      "source_fingerprint": "sha256:b03c0fa5e17b3f957ed7dafc7f510f2a5ee8e5be64f5f9f83ad9575f450a51ed",
+      "skeleton_fingerprint": "sha256:25f828ae5e94c4fcdfc11c9d0a9c7dc574bfa898493a4ef8dc05fc158c3b4bce",
+      "source_fingerprint": "sha256:a6d255282b9ba156c2c41ce383805035ff0875674c17ef6d973300a8718f7eba",
       "state": "frozen"
     },
     {
@@ -2633,8 +2633,8 @@
       "declaration_source": "include/cxxlens/testing.hpp",
       "signature": "cxxlens::result<cxxlens::workspace> cxxlens::testing::workspace_fixture::open(cxxlens::execution_context) const",
       "signature_fingerprint": "sha256:2c8d40b0b0faf9fb1534392ff6cc46eba5e1fc5df45a2cc51fe77b4eb5d06203",
-      "skeleton_fingerprint": "sha256:37a52e887dcc81c3c32358b229d2da67cb478f41a8187809b8c4eff7143c628a",
-      "source_fingerprint": "sha256:b03c0fa5e17b3f957ed7dafc7f510f2a5ee8e5be64f5f9f83ad9575f450a51ed",
+      "skeleton_fingerprint": "sha256:cfeb9ebe693ae0b4d9deec80343597a4fdb55228b59d7b4cf3533dc562d30f8c",
+      "source_fingerprint": "sha256:a6d255282b9ba156c2c41ce383805035ff0875674c17ef6d973300a8718f7eba",
       "state": "frozen"
     },
     {
@@ -2644,11 +2644,11 @@
       "contract_owner_issue": "#48",
       "contract_state": "candidate",
       "contract_transition_issue": "#48",
-      "declaration_source": "contracts/candidates/48/transform.hpp",
+      "declaration_source": "include/cxxlens/transform.hpp",
       "signature": "cxxlens::transform::codemod cxxlens::transform::replace_function_call(std::string,std::string)",
       "signature_fingerprint": "sha256:05bdc3ef3e541c3f30a7bffd6ef1120f33325a047ab35ace02621dae83f303a5",
-      "skeleton_fingerprint": "sha256:8a0af2001106b9e5a4f3a5bba08803e1486d6b5ccab99a42e1ee907acdba92fe",
-      "source_fingerprint": "sha256:0fbcee8a4d8ce4b06d75b74d224d548bd5c861e84811ac8a07ebc5cd0f370ec4",
+      "skeleton_fingerprint": "sha256:a03275a2947543d4ed418b692acf176171ccd9ca199ab7f98314c172a3bfe022",
+      "source_fingerprint": "sha256:d6c8882c145684e5bf61150ca1c58e32906ba09721f3ebfe3c482a83d59db887",
       "state": "frozen"
     },
     {
@@ -2658,11 +2658,11 @@
       "contract_owner_issue": "#48",
       "contract_state": "candidate",
       "contract_transition_issue": "#48",
-      "declaration_source": "contracts/candidates/48/transform.hpp",
+      "declaration_source": "include/cxxlens/transform.hpp",
       "signature": "cxxlens::transform::codemod cxxlens::transform::replace_method_call(std::string,std::string,std::string)",
       "signature_fingerprint": "sha256:4051af4cf30ea174f0c6c8eade51905b67d42d07c209e3806cd2ac1dfdae91d0",
-      "skeleton_fingerprint": "sha256:77ba5fcb1d9a08af1ba9adca5c900d7759c46dcb3c6cfab9dfd76ddc6605371e",
-      "source_fingerprint": "sha256:0fbcee8a4d8ce4b06d75b74d224d548bd5c861e84811ac8a07ebc5cd0f370ec4",
+      "skeleton_fingerprint": "sha256:185255086331bcf1183b0bb85843dfa29739398b1416f794ab2a6e996df373b1",
+      "source_fingerprint": "sha256:d6c8882c145684e5bf61150ca1c58e32906ba09721f3ebfe3c482a83d59db887",
       "state": "frozen"
     },
     {
@@ -2672,11 +2672,11 @@
       "contract_owner_issue": "#48",
       "contract_state": "candidate",
       "contract_transition_issue": "#48",
-      "declaration_source": "contracts/candidates/48/transform.hpp",
+      "declaration_source": "include/cxxlens/transform.hpp",
       "signature": "cxxlens::transform::codemod cxxlens::transform::rewrite_calls(cxxlens::select::call_selector,cxxlens::transform::replacement_template)",
       "signature_fingerprint": "sha256:7be8f7aed6f6a5d9526c6f1a95bbabdaa880b7f05b4012466461eebcd319bffa",
-      "skeleton_fingerprint": "sha256:5bd73f71c99d69a52abbb0bf31d5b1926b5b8fd8e1c2b6f0626f1519d25139c6",
-      "source_fingerprint": "sha256:0fbcee8a4d8ce4b06d75b74d224d548bd5c861e84811ac8a07ebc5cd0f370ec4",
+      "skeleton_fingerprint": "sha256:95b912c4feb672f76851b6e351fafebdb887160eca725b6a0e278b79f08fafb5",
+      "source_fingerprint": "sha256:d6c8882c145684e5bf61150ca1c58e32906ba09721f3ebfe3c482a83d59db887",
       "state": "frozen"
     },
     {
@@ -2686,11 +2686,11 @@
       "contract_owner_issue": "#48",
       "contract_state": "candidate",
       "contract_transition_issue": "#48",
-      "declaration_source": "contracts/candidates/48/transform.hpp",
+      "declaration_source": "include/cxxlens/transform.hpp",
       "signature": "cxxlens::transform::codemod cxxlens::transform::rename_symbol(cxxlens::select::symbol_selector,std::string)",
       "signature_fingerprint": "sha256:64001973cf1e87a92cc541e35c8f1297f3f324970d7c0cf145ada7e7a4f16ff3",
-      "skeleton_fingerprint": "sha256:a68f4a3d0d075027daa8ddef11d5c6148ce1eec68fe2df16bd453a0c04e5a659",
-      "source_fingerprint": "sha256:0fbcee8a4d8ce4b06d75b74d224d548bd5c861e84811ac8a07ebc5cd0f370ec4",
+      "skeleton_fingerprint": "sha256:157dadf72e6ee4cae884f3c48a5782f4a5357a37aed2a0a6ccf2b19abcc25b43",
+      "source_fingerprint": "sha256:d6c8882c145684e5bf61150ca1c58e32906ba09721f3ebfe3c482a83d59db887",
       "state": "frozen"
     },
     {
@@ -2700,11 +2700,11 @@
       "contract_owner_issue": "#48",
       "contract_state": "candidate",
       "contract_transition_issue": "#48",
-      "declaration_source": "contracts/candidates/48/transform.hpp",
+      "declaration_source": "include/cxxlens/transform.hpp",
       "signature": "cxxlens::transform::codemod cxxlens::transform::add_include_where_needed(std::string,cxxlens::select::symbol_selector)",
       "signature_fingerprint": "sha256:22bf4d3cf4b121d9064928e0be27211522db3e73ad79dde21d3a3cf0abfb45fb",
-      "skeleton_fingerprint": "sha256:0a82edd3dd328b50ecb0ed90f4047dc63905ddd98a6d31c0b6c59abe9a3f36c2",
-      "source_fingerprint": "sha256:0fbcee8a4d8ce4b06d75b74d224d548bd5c861e84811ac8a07ebc5cd0f370ec4",
+      "skeleton_fingerprint": "sha256:077a98958933018a38567babd9f54a2bc6140c90b489f7ced4300451afe390e6",
+      "source_fingerprint": "sha256:d6c8882c145684e5bf61150ca1c58e32906ba09721f3ebfe3c482a83d59db887",
       "state": "frozen"
     },
     {
@@ -2714,11 +2714,11 @@
       "contract_owner_issue": "#48",
       "contract_state": "candidate",
       "contract_transition_issue": "#48",
-      "declaration_source": "contracts/candidates/48/transform.hpp",
+      "declaration_source": "include/cxxlens/transform.hpp",
       "signature": "cxxlens::transform::codemod cxxlens::transform::remove_unused_includes()",
       "signature_fingerprint": "sha256:ad713f776a4f49954cd9e9b2b351b87dd1064e213a242b6feea2778ddc535b02",
-      "skeleton_fingerprint": "sha256:5f0647303110be30348601fd572900a4f0f9afc6aeb20b3f4b914a3fd1513d35",
-      "source_fingerprint": "sha256:0fbcee8a4d8ce4b06d75b74d224d548bd5c861e84811ac8a07ebc5cd0f370ec4",
+      "skeleton_fingerprint": "sha256:780354ae7a2d08671f51e43707c3663552db4f4b6444d4628c294928c54a44e7",
+      "source_fingerprint": "sha256:d6c8882c145684e5bf61150ca1c58e32906ba09721f3ebfe3c482a83d59db887",
       "state": "frozen"
     },
     {
@@ -2728,11 +2728,11 @@
       "contract_owner_issue": "#48",
       "contract_state": "candidate",
       "contract_transition_issue": "#48",
-      "declaration_source": "contracts/candidates/48/transform.hpp",
+      "declaration_source": "include/cxxlens/transform.hpp",
       "signature": "std::string_view cxxlens::transform::codemod::id() const noexcept; cxxlens::result<cxxlens::transform::edit_plan> cxxlens::transform::codemod::plan(cxxlens::workspace&,cxxlens::transform::plan_options) const; std::string cxxlens::transform::codemod::explain() const",
       "signature_fingerprint": "sha256:cfa0deee9ecb4fc340c38ea5a9b75a8828deee4a5c6f4eef08975cfeee802947",
-      "skeleton_fingerprint": "sha256:bd01d235e56fa358f3237183bf92f4d54752b90d061899a2d323524ec498efab",
-      "source_fingerprint": "sha256:0fbcee8a4d8ce4b06d75b74d224d548bd5c861e84811ac8a07ebc5cd0f370ec4",
+      "skeleton_fingerprint": "sha256:7016fee50d1f8f48040ca72a8b3465b343d50f398c42a7db23c62b229481b259",
+      "source_fingerprint": "sha256:d6c8882c145684e5bf61150ca1c58e32906ba09721f3ebfe3c482a83d59db887",
       "state": "frozen"
     },
     {
@@ -2742,11 +2742,11 @@
       "contract_owner_issue": "#48",
       "contract_state": "candidate",
       "contract_transition_issue": "#48",
-      "declaration_source": "contracts/candidates/48/transform.hpp",
+      "declaration_source": "include/cxxlens/transform.hpp",
       "signature": "cxxlens::plan_id cxxlens::transform::edit_plan::id() const noexcept; bool cxxlens::transform::edit_plan::valid() const noexcept; std::span<const cxxlens::transform::edit> cxxlens::transform::edit_plan::edits() const noexcept; std::span<const cxxlens::transform::edit_conflict> cxxlens::transform::edit_plan::conflicts() const noexcept; std::span<const cxxlens::diagnostic> cxxlens::transform::edit_plan::diagnostics() const noexcept; std::span<const cxxlens::unresolved> cxxlens::transform::edit_plan::unresolved_items() const noexcept; const cxxlens::coverage_report& cxxlens::transform::edit_plan::coverage() const noexcept; cxxlens::result<cxxlens::transform::preview_result> cxxlens::transform::edit_plan::preview_unified_diff(cxxlens::transform::preview_options) const; std::string cxxlens::transform::edit_plan::to_json() const",
       "signature_fingerprint": "sha256:aa6e97e03c70f4b7407ff629aa67061fb876c77bd733b464f41d197ed8413e82",
-      "skeleton_fingerprint": "sha256:e51cb87ac19c8fb7cd23bc9e8a73368b8d098adb504464778151a57cd1bbb5f3",
-      "source_fingerprint": "sha256:0fbcee8a4d8ce4b06d75b74d224d548bd5c861e84811ac8a07ebc5cd0f370ec4",
+      "skeleton_fingerprint": "sha256:0ffe015072062eb40ef6aa1a2bf687553175fc4c71ddda15dfa062141dc34940",
+      "source_fingerprint": "sha256:d6c8882c145684e5bf61150ca1c58e32906ba09721f3ebfe3c482a83d59db887",
       "state": "frozen"
     },
     {
@@ -2756,11 +2756,11 @@
       "contract_owner_issue": "#48",
       "contract_state": "candidate",
       "contract_transition_issue": "#48",
-      "declaration_source": "contracts/candidates/48/transform.hpp",
+      "declaration_source": "include/cxxlens/transform.hpp",
       "signature": "cxxlens::result<cxxlens::transform::apply_result> cxxlens::transform::edit_plan::apply(cxxlens::workspace&,cxxlens::transform::apply_options) const; cxxlens::transform::transaction_state cxxlens::transform::apply_result::state() const noexcept; bool cxxlens::transform::apply_result::committed() const noexcept; std::string_view cxxlens::transform::apply_result::transaction_id() const noexcept; std::span<const cxxlens::transform::file_apply_result> cxxlens::transform::apply_result::files() const noexcept; std::span<const cxxlens::diagnostic> cxxlens::transform::apply_result::diagnostics() const noexcept; std::span<const cxxlens::unresolved> cxxlens::transform::apply_result::unresolved_items() const noexcept; const cxxlens::coverage_report& cxxlens::transform::apply_result::coverage() const noexcept; std::string cxxlens::transform::apply_result::to_json() const",
       "signature_fingerprint": "sha256:f09493e3022346b1974f8141f069826604fcb2ef3d55f2929a89345c6d917112",
-      "skeleton_fingerprint": "sha256:a227170c2480c56890368e0b72cf98b5e71d9b16257c7611ddb5a5f2b1bd68a8",
-      "source_fingerprint": "sha256:0fbcee8a4d8ce4b06d75b74d224d548bd5c861e84811ac8a07ebc5cd0f370ec4",
+      "skeleton_fingerprint": "sha256:2c2f8a0c6c8f31f9463a7acf681e1f0d100dbbfa863012fd33cad2d94ac75211",
+      "source_fingerprint": "sha256:d6c8882c145684e5bf61150ca1c58e32906ba09721f3ebfe3c482a83d59db887",
       "state": "frozen"
     },
     {
@@ -2887,10 +2887,10 @@
       "blocked": 0,
       "frozen": 124
     },
-    "tracked_path_count": 451,
+    "tracked_path_count": 493,
     "unit_count": 124
   },
-  "task_packet_digest": "sha256:08583e55824ac16d601dfbd8fe6c045ee7af654f7fba26537736a34b0fe342ac",
+  "task_packet_digest": "sha256:8b676982e6d984428483960de5be51fe6b1997ba3cb5ff2349e841595b187ab4",
   "tracked_paths": [
     {
       "access": "exclusive_write",
@@ -3282,6 +3282,13 @@
       "generated": false,
       "generator_role": null,
       "owner_role": "steward.design",
+      "path": "docs/design/high_risk_contract_validation.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.design",
       "path": "docs/design/package_contract_43.md"
     },
     {
@@ -3339,6 +3346,13 @@
       "generator_role": null,
       "owner_role": "steward.design",
       "path": "docs/design/package_contract_51.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.design",
+      "path": "docs/design/phase_b_contract_integration.md"
     },
     {
       "access": "exclusive_write",
@@ -3512,6 +3526,160 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/configuration.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/copy.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/core.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/explain.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/facts.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/flow.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/fuzz.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/generate.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/graph.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/interop.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/method_harness.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/mock.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/models.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/qa.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/report.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/review.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/rules.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/search.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/select.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/testing.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/transform.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/packages/workspace.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "integration.package.configuration",
       "path": "include/cxxlens/configuration.hpp"
     },
@@ -3582,8 +3750,64 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "integration.package.flow",
+      "path": "include/cxxlens/flow.hpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "integration.package.generate",
+      "path": "include/cxxlens/generate.hpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "integration.package.graph",
+      "path": "include/cxxlens/graph.hpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.clang-adapter",
       "path": "include/cxxlens/interop/clang.hpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "integration.package.models",
+      "path": "include/cxxlens/models.hpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "integration.package.qa",
+      "path": "include/cxxlens/qa.hpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "integration.package.report",
+      "path": "include/cxxlens/report.hpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "integration.package.review",
+      "path": "include/cxxlens/review.hpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "integration.package.rules",
+      "path": "include/cxxlens/rules.hpp"
     },
     {
       "access": "exclusive_write",
@@ -3612,6 +3836,13 @@
       "generator_role": null,
       "owner_role": "integration.package.testing",
       "path": "include/cxxlens/testing.hpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "integration.package.transform",
+      "path": "include/cxxlens/transform.hpp"
     },
     {
       "access": "exclusive_write",
@@ -4002,6 +4233,20 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.schema",
+      "path": "schemas/cxxlens_high_risk_contract_validation.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.schema",
+      "path": "schemas/cxxlens_high_risk_contract_validation.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.identity",
       "path": "schemas/cxxlens_identity_contract.yaml"
     },
@@ -4102,6 +4347,20 @@
       "generator_role": null,
       "owner_role": "steward.schema",
       "path": "schemas/cxxlens_package_contract_candidates.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.schema",
+      "path": "schemas/cxxlens_phase_b_contract_integration.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.schema",
+      "path": "schemas/cxxlens_phase_b_contract_integration.yaml"
     },
     {
       "access": "exclusive_write",
@@ -5108,6 +5367,27 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.quality",
+      "path": "tests/contract_spikes/high_risk_contract_spike.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.evidence",
+      "path": "tests/contract_spikes/high_risk_validation_evidence.json"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.quality",
+      "path": "tests/contract_spikes/test_high_risk_contract_validation.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.evidence",
       "path": "tests/evidence/test_evidence_process.py"
     },
@@ -5878,6 +6158,13 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.quality",
+      "path": "tools/quality/check_high_risk_contract_validation.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.identity",
       "path": "tools/quality/check_identity_path.py"
     },
@@ -5908,6 +6195,13 @@
       "generator_role": null,
       "owner_role": "steward.quality",
       "path": "tools/quality/check_package_contract_candidates.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.quality",
+      "path": "tools/quality/check_phase_b_contract_integration.py"
     },
     {
       "access": "exclusive_write",
@@ -6141,7 +6435,6 @@
       "package_id": "copy",
       "package_integration_role": "integration.package.copy",
       "read_only_shared_inputs": [
-        "contracts/candidates/49/generate.hpp",
         "include/cxxlens/generate.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6161,7 +6454,6 @@
       "package_id": "copy",
       "package_integration_role": "integration.package.copy",
       "read_only_shared_inputs": [
-        "contracts/candidates/49/generate.hpp",
         "include/cxxlens/generate.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6259,8 +6551,8 @@
       "package_id": "core",
       "package_integration_role": "integration.package.core",
       "read_only_shared_inputs": [
-        "contracts/candidates/43/core_findings.hpp",
         "include/cxxlens/core.hpp",
+        "include/cxxlens/core/finding.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
       "unit_owner_role": "unit.au-core-005"
@@ -6279,8 +6571,8 @@
       "package_id": "core",
       "package_integration_role": "integration.package.core",
       "read_only_shared_inputs": [
-        "contracts/candidates/43/core_findings.hpp",
         "include/cxxlens/core.hpp",
+        "include/cxxlens/core/finding.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
       "unit_owner_role": "unit.au-core-006"
@@ -6299,7 +6591,6 @@
       "package_id": "explain",
       "package_integration_role": "integration.package.explain",
       "read_only_shared_inputs": [
-        "contracts/candidates/45/select_search_explain.hpp",
         "include/cxxlens/explain.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6338,7 +6629,6 @@
       "package_id": "explain",
       "package_integration_role": "integration.package.explain",
       "read_only_shared_inputs": [
-        "contracts/candidates/45/select_search_explain.hpp",
         "include/cxxlens/explain.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6358,7 +6648,6 @@
       "package_id": "explain",
       "package_integration_role": "integration.package.explain",
       "read_only_shared_inputs": [
-        "contracts/candidates/45/select_search_explain.hpp",
         "include/cxxlens/explain.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6568,7 +6857,6 @@
       "package_id": "flow",
       "package_integration_role": "integration.package.flow",
       "read_only_shared_inputs": [
-        "contracts/candidates/50/flow.hpp",
         "include/cxxlens/flow.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6588,7 +6876,6 @@
       "package_id": "flow",
       "package_integration_role": "integration.package.flow",
       "read_only_shared_inputs": [
-        "contracts/candidates/50/flow.hpp",
         "include/cxxlens/flow.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6608,7 +6895,6 @@
       "package_id": "flow",
       "package_integration_role": "integration.package.flow",
       "read_only_shared_inputs": [
-        "contracts/candidates/50/flow.hpp",
         "include/cxxlens/flow.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6628,7 +6914,6 @@
       "package_id": "flow",
       "package_integration_role": "integration.package.flow",
       "read_only_shared_inputs": [
-        "contracts/candidates/50/flow.hpp",
         "include/cxxlens/flow.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6648,7 +6933,6 @@
       "package_id": "flow",
       "package_integration_role": "integration.package.flow",
       "read_only_shared_inputs": [
-        "contracts/candidates/50/flow.hpp",
         "include/cxxlens/flow.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6668,7 +6952,6 @@
       "package_id": "flow",
       "package_integration_role": "integration.package.flow",
       "read_only_shared_inputs": [
-        "contracts/candidates/50/flow.hpp",
         "include/cxxlens/flow.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6688,7 +6971,6 @@
       "package_id": "flow",
       "package_integration_role": "integration.package.flow",
       "read_only_shared_inputs": [
-        "contracts/candidates/50/flow.hpp",
         "include/cxxlens/flow.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6708,7 +6990,6 @@
       "package_id": "flow",
       "package_integration_role": "integration.package.flow",
       "read_only_shared_inputs": [
-        "contracts/candidates/50/flow.hpp",
         "include/cxxlens/flow.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6728,7 +7009,6 @@
       "package_id": "fuzz",
       "package_integration_role": "integration.package.fuzz",
       "read_only_shared_inputs": [
-        "contracts/candidates/49/generate.hpp",
         "include/cxxlens/generate.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6748,7 +7028,6 @@
       "package_id": "fuzz",
       "package_integration_role": "integration.package.fuzz",
       "read_only_shared_inputs": [
-        "contracts/candidates/49/generate.hpp",
         "include/cxxlens/generate.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6768,7 +7047,6 @@
       "package_id": "fuzz",
       "package_integration_role": "integration.package.fuzz",
       "read_only_shared_inputs": [
-        "contracts/candidates/49/generate.hpp",
         "include/cxxlens/generate.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6788,7 +7066,6 @@
       "package_id": "generate",
       "package_integration_role": "integration.package.generate",
       "read_only_shared_inputs": [
-        "contracts/candidates/49/generate.hpp",
         "include/cxxlens/generate.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6808,7 +7085,6 @@
       "package_id": "generate",
       "package_integration_role": "integration.package.generate",
       "read_only_shared_inputs": [
-        "contracts/candidates/49/generate.hpp",
         "include/cxxlens/generate.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6828,7 +7104,6 @@
       "package_id": "graph",
       "package_integration_role": "integration.package.graph",
       "read_only_shared_inputs": [
-        "contracts/candidates/46/graph.hpp",
         "include/cxxlens/graph.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6848,7 +7123,6 @@
       "package_id": "graph",
       "package_integration_role": "integration.package.graph",
       "read_only_shared_inputs": [
-        "contracts/candidates/46/graph.hpp",
         "include/cxxlens/graph.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6868,7 +7142,6 @@
       "package_id": "graph",
       "package_integration_role": "integration.package.graph",
       "read_only_shared_inputs": [
-        "contracts/candidates/46/graph.hpp",
         "include/cxxlens/graph.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6888,7 +7161,6 @@
       "package_id": "graph",
       "package_integration_role": "integration.package.graph",
       "read_only_shared_inputs": [
-        "contracts/candidates/46/graph.hpp",
         "include/cxxlens/graph.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6908,7 +7180,6 @@
       "package_id": "graph",
       "package_integration_role": "integration.package.graph",
       "read_only_shared_inputs": [
-        "contracts/candidates/46/graph.hpp",
         "include/cxxlens/graph.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6928,7 +7199,6 @@
       "package_id": "graph",
       "package_integration_role": "integration.package.graph",
       "read_only_shared_inputs": [
-        "contracts/candidates/46/graph.hpp",
         "include/cxxlens/graph.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -6986,7 +7256,6 @@
       "package_id": "interop",
       "package_integration_role": "integration.package.interop",
       "read_only_shared_inputs": [
-        "contracts/candidates/44/interop_extractors.hpp",
         "include/cxxlens/interop/clang.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7006,7 +7275,6 @@
       "package_id": "interop",
       "package_integration_role": "integration.package.interop",
       "read_only_shared_inputs": [
-        "contracts/candidates/44/interop_extractors.hpp",
         "include/cxxlens/interop/clang.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7026,7 +7294,6 @@
       "package_id": "method_harness",
       "package_integration_role": "integration.package.method_harness",
       "read_only_shared_inputs": [
-        "contracts/candidates/49/generate.hpp",
         "include/cxxlens/generate.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7046,7 +7313,6 @@
       "package_id": "method_harness",
       "package_integration_role": "integration.package.method_harness",
       "read_only_shared_inputs": [
-        "contracts/candidates/49/generate.hpp",
         "include/cxxlens/generate.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7066,7 +7332,6 @@
       "package_id": "method_harness",
       "package_integration_role": "integration.package.method_harness",
       "read_only_shared_inputs": [
-        "contracts/candidates/49/generate.hpp",
         "include/cxxlens/generate.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7086,7 +7351,6 @@
       "package_id": "method_harness",
       "package_integration_role": "integration.package.method_harness",
       "read_only_shared_inputs": [
-        "contracts/candidates/49/generate.hpp",
         "include/cxxlens/generate.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7106,7 +7370,6 @@
       "package_id": "method_harness",
       "package_integration_role": "integration.package.method_harness",
       "read_only_shared_inputs": [
-        "contracts/candidates/49/generate.hpp",
         "include/cxxlens/generate.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7126,7 +7389,6 @@
       "package_id": "mock",
       "package_integration_role": "integration.package.mock",
       "read_only_shared_inputs": [
-        "contracts/candidates/49/generate.hpp",
         "include/cxxlens/generate.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7146,7 +7408,6 @@
       "package_id": "mock",
       "package_integration_role": "integration.package.mock",
       "read_only_shared_inputs": [
-        "contracts/candidates/49/generate.hpp",
         "include/cxxlens/generate.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7166,7 +7427,6 @@
       "package_id": "mock",
       "package_integration_role": "integration.package.mock",
       "read_only_shared_inputs": [
-        "contracts/candidates/49/generate.hpp",
         "include/cxxlens/generate.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7186,7 +7446,6 @@
       "package_id": "models",
       "package_integration_role": "integration.package.models",
       "read_only_shared_inputs": [
-        "contracts/candidates/50/models.hpp",
         "include/cxxlens/models.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7206,7 +7465,6 @@
       "package_id": "models",
       "package_integration_role": "integration.package.models",
       "read_only_shared_inputs": [
-        "contracts/candidates/50/models.hpp",
         "include/cxxlens/models.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7226,7 +7484,6 @@
       "package_id": "models",
       "package_integration_role": "integration.package.models",
       "read_only_shared_inputs": [
-        "contracts/candidates/50/models.hpp",
         "include/cxxlens/models.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7246,7 +7503,6 @@
       "package_id": "models",
       "package_integration_role": "integration.package.models",
       "read_only_shared_inputs": [
-        "contracts/candidates/50/models.hpp",
         "include/cxxlens/models.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7266,7 +7522,6 @@
       "package_id": "qa",
       "package_integration_role": "integration.package.qa",
       "read_only_shared_inputs": [
-        "contracts/candidates/51/qa.hpp",
         "include/cxxlens/qa.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7286,7 +7541,6 @@
       "package_id": "qa",
       "package_integration_role": "integration.package.qa",
       "read_only_shared_inputs": [
-        "contracts/candidates/51/qa.hpp",
         "include/cxxlens/qa.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7306,7 +7560,6 @@
       "package_id": "qa",
       "package_integration_role": "integration.package.qa",
       "read_only_shared_inputs": [
-        "contracts/candidates/51/qa.hpp",
         "include/cxxlens/qa.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7326,7 +7579,6 @@
       "package_id": "qa",
       "package_integration_role": "integration.package.qa",
       "read_only_shared_inputs": [
-        "contracts/candidates/51/qa.hpp",
         "include/cxxlens/qa.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7346,7 +7598,6 @@
       "package_id": "report",
       "package_integration_role": "integration.package.report",
       "read_only_shared_inputs": [
-        "contracts/candidates/47/rules_report.hpp",
         "include/cxxlens/report.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7366,7 +7617,6 @@
       "package_id": "report",
       "package_integration_role": "integration.package.report",
       "read_only_shared_inputs": [
-        "contracts/candidates/47/rules_report.hpp",
         "include/cxxlens/report.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7386,7 +7636,6 @@
       "package_id": "report",
       "package_integration_role": "integration.package.report",
       "read_only_shared_inputs": [
-        "contracts/candidates/47/rules_report.hpp",
         "include/cxxlens/report.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7406,7 +7655,6 @@
       "package_id": "report",
       "package_integration_role": "integration.package.report",
       "read_only_shared_inputs": [
-        "contracts/candidates/47/rules_report.hpp",
         "include/cxxlens/report.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7426,7 +7674,6 @@
       "package_id": "rules",
       "package_integration_role": "integration.package.rules",
       "read_only_shared_inputs": [
-        "contracts/candidates/47/rules_report.hpp",
         "include/cxxlens/rules.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7446,7 +7693,6 @@
       "package_id": "rules",
       "package_integration_role": "integration.package.rules",
       "read_only_shared_inputs": [
-        "contracts/candidates/47/rules_report.hpp",
         "include/cxxlens/rules.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7466,7 +7712,6 @@
       "package_id": "rules",
       "package_integration_role": "integration.package.rules",
       "read_only_shared_inputs": [
-        "contracts/candidates/47/rules_report.hpp",
         "include/cxxlens/rules.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7486,7 +7731,6 @@
       "package_id": "rules",
       "package_integration_role": "integration.package.rules",
       "read_only_shared_inputs": [
-        "contracts/candidates/47/rules_report.hpp",
         "include/cxxlens/rules.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7506,7 +7750,6 @@
       "package_id": "rules",
       "package_integration_role": "integration.package.rules",
       "read_only_shared_inputs": [
-        "contracts/candidates/47/rules_report.hpp",
         "include/cxxlens/rules.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7526,7 +7769,6 @@
       "package_id": "review",
       "package_integration_role": "integration.package.review",
       "read_only_shared_inputs": [
-        "contracts/candidates/51/review.hpp",
         "include/cxxlens/review.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7546,7 +7788,6 @@
       "package_id": "review",
       "package_integration_role": "integration.package.review",
       "read_only_shared_inputs": [
-        "contracts/candidates/51/review.hpp",
         "include/cxxlens/review.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7566,7 +7807,6 @@
       "package_id": "review",
       "package_integration_role": "integration.package.review",
       "read_only_shared_inputs": [
-        "contracts/candidates/51/review.hpp",
         "include/cxxlens/review.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7586,7 +7826,6 @@
       "package_id": "review",
       "package_integration_role": "integration.package.review",
       "read_only_shared_inputs": [
-        "contracts/candidates/51/review.hpp",
         "include/cxxlens/review.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7606,7 +7845,6 @@
       "package_id": "review",
       "package_integration_role": "integration.package.review",
       "read_only_shared_inputs": [
-        "contracts/candidates/51/review.hpp",
         "include/cxxlens/review.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7683,7 +7921,6 @@
       "package_id": "select",
       "package_integration_role": "integration.package.select",
       "read_only_shared_inputs": [
-        "contracts/candidates/45/select_search_explain.hpp",
         "include/cxxlens/select.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7703,7 +7940,6 @@
       "package_id": "select",
       "package_integration_role": "integration.package.select",
       "read_only_shared_inputs": [
-        "contracts/candidates/45/select_search_explain.hpp",
         "include/cxxlens/select.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7742,7 +7978,6 @@
       "package_id": "select",
       "package_integration_role": "integration.package.select",
       "read_only_shared_inputs": [
-        "contracts/candidates/45/select_search_explain.hpp",
         "include/cxxlens/select.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7838,7 +8073,6 @@
       "package_id": "search",
       "package_integration_role": "integration.package.search",
       "read_only_shared_inputs": [
-        "contracts/candidates/45/select_search_explain.hpp",
         "include/cxxlens/search.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7858,7 +8092,6 @@
       "package_id": "search",
       "package_integration_role": "integration.package.search",
       "read_only_shared_inputs": [
-        "contracts/candidates/45/select_search_explain.hpp",
         "include/cxxlens/search.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7973,7 +8206,6 @@
       "package_id": "search",
       "package_integration_role": "integration.package.search",
       "read_only_shared_inputs": [
-        "contracts/candidates/45/select_search_explain.hpp",
         "include/cxxlens/search.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -7993,7 +8225,6 @@
       "package_id": "search",
       "package_integration_role": "integration.package.search",
       "read_only_shared_inputs": [
-        "contracts/candidates/45/select_search_explain.hpp",
         "include/cxxlens/search.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -8013,7 +8244,6 @@
       "package_id": "search",
       "package_integration_role": "integration.package.search",
       "read_only_shared_inputs": [
-        "contracts/candidates/45/select_search_explain.hpp",
         "include/cxxlens/search.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -8071,7 +8301,6 @@
       "package_id": "testing",
       "package_integration_role": "integration.package.testing",
       "read_only_shared_inputs": [
-        "contracts/candidates/43/testing_plan_assertions.hpp",
         "include/cxxlens/testing.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -8091,7 +8320,6 @@
       "package_id": "testing",
       "package_integration_role": "integration.package.testing",
       "read_only_shared_inputs": [
-        "contracts/candidates/43/testing_plan_assertions.hpp",
         "include/cxxlens/testing.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -8168,7 +8396,6 @@
       "package_id": "transform",
       "package_integration_role": "integration.package.transform",
       "read_only_shared_inputs": [
-        "contracts/candidates/48/transform.hpp",
         "include/cxxlens/transform.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -8188,7 +8415,6 @@
       "package_id": "transform",
       "package_integration_role": "integration.package.transform",
       "read_only_shared_inputs": [
-        "contracts/candidates/48/transform.hpp",
         "include/cxxlens/transform.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -8208,7 +8434,6 @@
       "package_id": "transform",
       "package_integration_role": "integration.package.transform",
       "read_only_shared_inputs": [
-        "contracts/candidates/48/transform.hpp",
         "include/cxxlens/transform.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -8228,7 +8453,6 @@
       "package_id": "transform",
       "package_integration_role": "integration.package.transform",
       "read_only_shared_inputs": [
-        "contracts/candidates/48/transform.hpp",
         "include/cxxlens/transform.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -8248,7 +8472,6 @@
       "package_id": "transform",
       "package_integration_role": "integration.package.transform",
       "read_only_shared_inputs": [
-        "contracts/candidates/48/transform.hpp",
         "include/cxxlens/transform.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -8268,7 +8491,6 @@
       "package_id": "transform",
       "package_integration_role": "integration.package.transform",
       "read_only_shared_inputs": [
-        "contracts/candidates/48/transform.hpp",
         "include/cxxlens/transform.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -8288,7 +8510,6 @@
       "package_id": "transform",
       "package_integration_role": "integration.package.transform",
       "read_only_shared_inputs": [
-        "contracts/candidates/48/transform.hpp",
         "include/cxxlens/transform.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -8308,7 +8529,6 @@
       "package_id": "transform",
       "package_integration_role": "integration.package.transform",
       "read_only_shared_inputs": [
-        "contracts/candidates/48/transform.hpp",
         "include/cxxlens/transform.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],
@@ -8328,7 +8548,6 @@
       "package_id": "transform",
       "package_integration_role": "integration.package.transform",
       "read_only_shared_inputs": [
-        "contracts/candidates/48/transform.hpp",
         "include/cxxlens/transform.hpp",
         "schemas/cxxlens.agent-task-packet-corpus.v1.json"
       ],

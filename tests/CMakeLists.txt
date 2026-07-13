@@ -843,3 +843,11 @@ set_tests_properties(
   ${cxxlens_registered_tests}
   PROPERTIES ENVIRONMENT_MODIFICATION
              "PATH=path_list_prepend:${PROJECT_BINARY_DIR}")
+add_test(
+  NAME contract.phase-b-integration-metadata
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tools/quality/check_phase_b_contract_integration.py"
+    --root "${PROJECT_SOURCE_DIR}" --metadata-only)
+set_tests_properties(contract.phase-b-integration-metadata
+                     PROPERTIES LABELS "contract;phase-b;integration")

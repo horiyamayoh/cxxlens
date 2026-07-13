@@ -181,6 +181,8 @@ install(
         schemas/cxxlens_global_contract_conventions.schema.yaml
         schemas/cxxlens_package_contract_candidates.yaml
         schemas/cxxlens_package_contract_candidates.schema.yaml
+        schemas/cxxlens_phase_b_contract_integration.yaml
+        schemas/cxxlens_phase_b_contract_integration.schema.yaml
         schemas/cxxlens_contract_ownership.yaml
         schemas/cxxlens_contract_ownership.schema.yaml
         schemas/cxxlens_coverage.schema.yaml
@@ -264,6 +266,8 @@ install(
 install(FILES README.md SECURITY.md
         DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cxxlens")
 install(DIRECTORY examples/m2-flagship
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cxxlens/examples")
+install(DIRECTORY examples/packages
         DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cxxlens/examples")
 
 configure_package_config_file(

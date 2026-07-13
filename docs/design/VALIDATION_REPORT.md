@@ -94,7 +94,7 @@
 - registry owner and entry overlap: 0
 - candidate C++23 syntax usage: 2/2 PASS
 - fail-closed validator fixture: 9/9 PASS
-- candidate fingerprint: `sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584`
+- candidate fingerprint: `sha256:12ff14d27a96a78edb062e7263f4221f8b602e7347dc556c549715d3cd12cb4c`
 
 ### Issue #44 workspace・facts・interop
 
@@ -109,7 +109,7 @@
 - custom fact schema positive/native-pointer/name-only negative fixture: 3/3 PASS
 - provider ownership: `custom` は `provider.fact.custom-extractor` の一意 owner、重複0
 - candidate C++23 syntax usage: 1/1 PASS
-- candidate fingerprint: `sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601`
+- candidate fingerprint: `sha256:11b9a004c59d3895821ecf302cfcd08d7ec2ef5cbcb1fffaf722e7843c058a5c`
 
 ### Issue #45 select・search・explain
 
@@ -123,7 +123,7 @@
 - explanation/rejection trace/task card/catalog bounded pure projection: 完全
 - selector predicate/reason-code unique fixture、search result kind 8種、options schema: PASS
 - candidate C++23 syntax usage: 1/1 PASS
-- candidate fingerprint: `sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024`
+- candidate fingerprint: `sha256:9bb0cb68c4121996a9dd550df67e070c1d0c04d3609e1399d777c2705b5f7008`
 
 ### Issue #46 graph
 
@@ -138,7 +138,7 @@
 - JSON authoritative schema / deterministic DOT pure projection / subgraph boundary: 完全
 - #44 facts/workspace、#45 select/search、#50 flow owner/provider boundary: dangling 0
 - candidate C++23 syntax usage: 1/1 PASS
-- candidate fingerprint: `sha256:3c8f4fec0bb55eae81842b2dc4dec84c5efcfc236621f4b9e73888736de9f940`
+- candidate fingerprint: `sha256:6993968a9393a4f465aa9038b8ff58d236a44f0a5d7d3aa438882fdfa6a400e2`
 
 ### Issue #47 rules・report
 
@@ -152,7 +152,7 @@
 - finding/edit/generation/review authoritative owner compatibility boundary: dangling 0
 - report format/options/envelope、redaction、UTF-8/LF、record-boundary budget truncation: 完全
 - candidate C++23 syntax usage: 1/1 PASS
-- candidate fingerprint: `sha256:a7d7d2ef4dc907b517ead76a54d36ba067fcc0f1aa5da405eebef30e1d6d8143`
+- candidate fingerprint: `sha256:139632fb5016e56fbf7085ca6a93e7cc23e40bdfd0063ce18b2910e5e742c956`
 
 ### Issue #48 transform
 
@@ -166,7 +166,7 @@
 - multi-file prepare/commit/rollback、partial commit 禁止、rollback failure/recovery evidence: 完全
 - #49 writer reuse、#52 spike 境界、production implementation 非変更: 明示
 - candidate C++23 syntax usage: 1/1 PASS
-- candidate fingerprint: `sha256:6d209dd7b50a01718969b32c75fa1536ef946ccd9a6c71f603878fc13dc67d75`
+- candidate fingerprint: `sha256:7f18fade87f89da2014f84a0dc9725e6225f67cca3c044bebd5c44f557158038`
 
 ### Issue #49 generation・mock・method harness・copy・fuzz
 
@@ -181,7 +181,7 @@
 - mock 四軸、exact method cv/ref/noexcept resolution、copy ODR/type closure、fuzz finite inference: 完全
 - #50 optional model・#52 spike・#53 integration 境界、production implementation 非変更: 明示
 - candidate C++23 syntax usage: 1/1 PASS
-- candidate fingerprint: `sha256:8ce8f299252b71f361407b41774291a97ef78dfaee1a74797ca4e9b41dace163`
+- candidate fingerprint: `sha256:55a96e5b61bfc360a321c21b65e6a1908e7fecc5f7ef470fa80985636832a007`
 
 ### Issue #50 flow・models
 
@@ -196,7 +196,7 @@
 - model pack exact binding/merge precedence/trust/version/migration/bounded I/O: 完全
 - #46 graph・#49 generation・#52 spike・#53 integration 境界、production implementation 非変更: 明示
 - candidate C++23 syntax usage: 1/1 PASS
-- candidate fingerprint: `sha256:2cbc4efec8cc4784fe10df0d4ac5048d943b73ff5d3d677afc6991d7c7a569ad`
+- candidate fingerprint: `sha256:ff9d40744eeff0c0d6d866875fb78fb40a359df61b38ed5c7f0742a6b715ba29`
 
 ### Issue #51 review・qa
 
@@ -211,7 +211,7 @@
 - coverage format/build/path mismatch/merge と finding/test/artifact many-to-many association: 完全
 - #43 findings/coverage・#47 rules/report・runtime ports・#52 spike・#53 integration 境界: 明示
 - candidate C++23 syntax usage: 1/1 PASS
-- candidate fingerprint: `sha256:e6173e94b9d36c3c746b7fc8aa9690a3b9c7aa2967155cd500ec4214bf7a23ad`
+- candidate fingerprint: `sha256:34e502b3aa40015c99bbb1f351831fe4d0f7313f6f2e1ce6ecb4121ec3e59b79`
 
 ## Phase B high-risk validation（Issue #52）
 

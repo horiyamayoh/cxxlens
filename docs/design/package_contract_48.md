@@ -92,4 +92,4 @@ provider/schema dependencies, and Doxygen obligations.
 
 Validated by `docs/design/high_risk_contract_validation.md#decisions`: stale/overlap rejection, default dry-run,
 two-file mid-write rollback and explicit rollback-failure recovery were reproduced. Fingerprint
-`sha256:6d209dd7b50a01718969b32c75fa1536ef946ccd9a6c71f603878fc13dc67d75` was unchanged.
+`sha256:7f18fade87f89da2014f84a0dc9725e6225f67cca3c044bebd5c44f557158038` was unchanged.

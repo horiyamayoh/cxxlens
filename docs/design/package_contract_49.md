@@ -123,4 +123,4 @@ provider/schema dependencies, and Doxygen obligations.
 
 Validated by `docs/design/high_risk_contract_validation.md#decisions`: 6/6 surface census, cv/ref/noexcept,
 zero/one/many resolution, cyclic type closure and artifact collision remained finite typed decisions.
-Fingerprint `sha256:8ce8f299252b71f361407b41774291a97ef78dfaee1a74797ca4e9b41dace163` was unchanged.
+Fingerprint `sha256:55a96e5b61bfc360a321c21b65e6a1908e7fecc5f7ef470fa80985636832a007` was unchanged.

@@ -100,4 +100,4 @@ drift. C++23 syntax checks compile the candidate usage without linking a product
 
 Validated by `docs/design/high_risk_contract_validation.md#decisions`: the interop/extractor domain covers
 borrowed lifetime, thread affinity, in-flight unregister, schema/duplicate reduction and partial failure.
-Fingerprint `sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601` was unchanged.
+Fingerprint `sha256:11b9a004c59d3895821ecf302cfcd08d7ec2ef5cbcb1fffaf722e7843c058a5c` was unchanged.

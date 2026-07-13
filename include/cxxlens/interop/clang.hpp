@@ -4,9 +4,13 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
+#include <optional>
 #include <string>
 
 #include <cxxlens/core/failure.hpp>
+#include <cxxlens/facts.hpp>
+#include <cxxlens/source.hpp>
 #include <cxxlens/workspace.hpp>
 
 namespace clang
@@ -164,4 +168,46 @@ namespace cxxlens::interop
 													 compile_unit_id unit,
 													 clang_tu_callback callback,
 													 execution_context context = {});
+
+	/** @brief Detached, versioned custom fact accepted by a registered extractor. */
+	struct custom_fact
+	{
+		std::string provider_namespace;
+		std::string schema_id;
+		semantic_version schema_version;
+		std::string semantic_key;
+		std::string payload_json;
+		std::optional<source_span> source;
+	};
+
+	/** @brief Callback-scoped transactional sink for detached built-in and custom facts. */
+	class fact_sink
+	{
+	  public:
+		[[nodiscard]] result<void> emit(fact value);
+		[[nodiscard]] result<void> emit_custom(custom_fact value);
+		[[nodiscard]] result<void> emit_evidence(evidence_item value);
+		[[nodiscard]] result<void> mark_partial(unresolved value);
+
+	  private:
+		struct state;
+		explicit fact_sink(state* value) noexcept : state_{value} {}
+		state* state_{};
+	};
+
+	/** @brief Registered synchronous extractor using only callback-scoped Clang borrows. */
+	class clang_fact_extractor
+	{
+	  public:
+		virtual ~clang_fact_extractor() = default;
+		[[nodiscard]] virtual std::string id() const = 0;
+		[[nodiscard]] virtual semantic_version version() const = 0;
+		[[nodiscard]] virtual result<void> extract(borrowed_clang_tu& unit, fact_sink& sink) = 0;
+	};
+
+	/** @brief Atomically register one extractor and its namespace/schema ownership. */
+	[[nodiscard]] result<std::string>
+	register_extractor(workspace& workspace, std::shared_ptr<clang_fact_extractor> extractor);
+	/** @brief Remove an idle extractor by exact workspace-scoped token. */
+	[[nodiscard]] result<void> unregister_extractor(workspace& workspace, std::string token);
 } // namespace cxxlens::interop

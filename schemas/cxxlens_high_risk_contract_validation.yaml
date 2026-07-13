@@ -2,15 +2,15 @@ schema: cxxlens.high-risk-contract-validation.v1
 document_version: 1.0.0
 candidate_authority: schemas/cxxlens_package_contract_candidates.yaml
 candidate_snapshot:
-  - {issue: '#43', fingerprint: 'sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584', result: validated, backlink: docs/design/package_contract_43.md#issue-52-validation-backlink}
-  - {issue: '#44', fingerprint: 'sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601', result: validated, backlink: docs/design/package_contract_44.md#issue-52-validation-backlink}
-  - {issue: '#45', fingerprint: 'sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024', result: validated, backlink: docs/design/package_contract_45.md#issue-52-validation-backlink}
-  - {issue: '#46', fingerprint: 'sha256:3c8f4fec0bb55eae81842b2dc4dec84c5efcfc236621f4b9e73888736de9f940', result: validated, backlink: docs/design/package_contract_46.md#issue-52-validation-backlink}
-  - {issue: '#47', fingerprint: 'sha256:a7d7d2ef4dc907b517ead76a54d36ba067fcc0f1aa5da405eebef30e1d6d8143', result: validated, backlink: docs/design/package_contract_47.md#issue-52-validation-backlink}
-  - {issue: '#48', fingerprint: 'sha256:6d209dd7b50a01718969b32c75fa1536ef946ccd9a6c71f603878fc13dc67d75', result: validated, backlink: docs/design/package_contract_48.md#issue-52-validation-backlink}
-  - {issue: '#49', fingerprint: 'sha256:8ce8f299252b71f361407b41774291a97ef78dfaee1a74797ca4e9b41dace163', result: validated, backlink: docs/design/package_contract_49.md#issue-52-validation-backlink}
-  - {issue: '#50', fingerprint: 'sha256:2cbc4efec8cc4784fe10df0d4ac5048d943b73ff5d3d677afc6991d7c7a569ad', result: validated, backlink: docs/design/package_contract_50.md#issue-52-validation-backlink}
-  - {issue: '#51', fingerprint: 'sha256:e6173e94b9d36c3c746b7fc8aa9690a3b9c7aa2967155cd500ec4214bf7a23ad', result: validated, backlink: docs/design/package_contract_51.md#issue-52-validation-backlink}
+  - {issue: '#43', fingerprint: 'sha256:12ff14d27a96a78edb062e7263f4221f8b602e7347dc556c549715d3cd12cb4c', result: validated, backlink: docs/design/package_contract_43.md#issue-52-validation-backlink}
+  - {issue: '#44', fingerprint: 'sha256:11b9a004c59d3895821ecf302cfcd08d7ec2ef5cbcb1fffaf722e7843c058a5c', result: validated, backlink: docs/design/package_contract_44.md#issue-52-validation-backlink}
+  - {issue: '#45', fingerprint: 'sha256:9bb0cb68c4121996a9dd550df67e070c1d0c04d3609e1399d777c2705b5f7008', result: validated, backlink: docs/design/package_contract_45.md#issue-52-validation-backlink}
+  - {issue: '#46', fingerprint: 'sha256:6993968a9393a4f465aa9038b8ff58d236a44f0a5d7d3aa438882fdfa6a400e2', result: validated, backlink: docs/design/package_contract_46.md#issue-52-validation-backlink}
+  - {issue: '#47', fingerprint: 'sha256:139632fb5016e56fbf7085ca6a93e7cc23e40bdfd0063ce18b2910e5e742c956', result: validated, backlink: docs/design/package_contract_47.md#issue-52-validation-backlink}
+  - {issue: '#48', fingerprint: 'sha256:7f18fade87f89da2014f84a0dc9725e6225f67cca3c044bebd5c44f557158038', result: validated, backlink: docs/design/package_contract_48.md#issue-52-validation-backlink}
+  - {issue: '#49', fingerprint: 'sha256:55a96e5b61bfc360a321c21b65e6a1908e7fecc5f7ef470fa80985636832a007', result: validated, backlink: docs/design/package_contract_49.md#issue-52-validation-backlink}
+  - {issue: '#50', fingerprint: 'sha256:ff9d40744eeff0c0d6d866875fb78fb40a359df61b38ed5c7f0742a6b715ba29', result: validated, backlink: docs/design/package_contract_50.md#issue-52-validation-backlink}
+  - {issue: '#51', fingerprint: 'sha256:34e502b3aa40015c99bbb1f351831fe4d0f7313f6f2e1ce6ecb4121ec3e59b79', result: validated, backlink: docs/design/package_contract_51.md#issue-52-validation-backlink}
 spike_harness: tests/contract_spikes/high_risk_contract_spike.py
 evidence:
   path: tests/contract_spikes/high_risk_validation_evidence.json
@@ -27,8 +27,8 @@ domains:
   - id: graph
     result: validated
     candidate_bindings:
-      - {issue: '#46', fingerprint: 'sha256:3c8f4fec0bb55eae81842b2dc4dec84c5efcfc236621f4b9e73888736de9f940', api_ids: [API-GRAPH-001, API-GRAPH-002, API-GRAPH-003, API-GRAPH-004, API-GRAPH-005, API-GRAPH-006]}
-      - {issue: '#45', fingerprint: 'sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024', api_ids: [API-SEL-010]}
+      - {issue: '#46', fingerprint: 'sha256:6993968a9393a4f465aa9038b8ff58d236a44f0a5d7d3aa438882fdfa6a400e2', api_ids: [API-GRAPH-001, API-GRAPH-002, API-GRAPH-003, API-GRAPH-004, API-GRAPH-005, API-GRAPH-006]}
+      - {issue: '#45', fingerprint: 'sha256:9bb0cb68c4121996a9dd550df67e070c1d0c04d3609e1399d777c2705b5f7008', api_ids: [API-SEL-010]}
     risk_hypotheses:
       - A shared node/edge value can represent hierarchy, override, call and include relations without unbounded materialization.
       - Cycles, open-world candidates and budget truncation can remain explicit under canonical order.
@@ -47,7 +47,7 @@ domains:
   - id: flow_resource
     result: validated
     candidate_bindings:
-      - {issue: '#50', fingerprint: 'sha256:2cbc4efec8cc4784fe10df0d4ac5048d943b73ff5d3d677afc6991d7c7a569ad', api_ids: [API-FLOW-001, API-FLOW-002, API-FLOW-003, API-FLOW-004, API-FLOW-005, API-FLOW-006, API-FLOW-007, API-FLOW-008, API-MODEL-001, API-MODEL-002, API-MODEL-003, API-MODEL-004]}
+      - {issue: '#50', fingerprint: 'sha256:ff9d40744eeff0c0d6d866875fb78fb40a359df61b38ed5c7f0742a6b715ba29', api_ids: [API-FLOW-001, API-FLOW-002, API-FLOW-003, API-FLOW-004, API-FLOW-005, API-FLOW-006, API-FLOW-007, API-FLOW-008, API-MODEL-001, API-MODEL-002, API-MODEL-003, API-MODEL-004]}
     risk_hypotheses:
       - CFG availability, taint fixpoint and resource counterexample values can preserve partial/non-convergent state under finite budgets.
       - Effect summary and model pack ownership can avoid a public type dependency cycle.
@@ -66,7 +66,7 @@ domains:
   - id: transform_transaction
     result: validated
     candidate_bindings:
-      - {issue: '#48', fingerprint: 'sha256:6d209dd7b50a01718969b32c75fa1536ef946ccd9a6c71f603878fc13dc67d75', api_ids: [API-TF-001, API-TF-002, API-TF-003, API-TF-004, API-TF-005, API-TF-006, API-TF-007, API-TF-008, API-TF-009]}
+      - {issue: '#48', fingerprint: 'sha256:7f18fade87f89da2014f84a0dc9725e6225f67cca3c044bebd5c44f557158038', api_ids: [API-TF-001, API-TF-002, API-TF-003, API-TF-004, API-TF-005, API-TF-006, API-TF-007, API-TF-008, API-TF-009]}
     risk_hypotheses:
       - Immutable plans can enforce stale/conflict/reparse checks and default dry-run before a multi-file port transaction.
       - Mid-write and rollback failure can retain atomic/recovery evidence without partial-success claims.
@@ -85,7 +85,7 @@ domains:
   - id: generation_surface
     result: validated
     candidate_bindings:
-      - {issue: '#49', fingerprint: 'sha256:8ce8f299252b71f361407b41774291a97ef78dfaee1a74797ca4e9b41dace163', api_ids: [API-COPY-001, API-COPY-002, API-FUZZ-001, API-FUZZ-002, API-FUZZ-003, API-GEN-001, API-GEN-002, API-METHOD-001, API-METHOD-002, API-METHOD-003, API-METHOD-004, API-METHOD-005, API-MOCK-001, API-MOCK-002, API-MOCK-003]}
+      - {issue: '#49', fingerprint: 'sha256:55a96e5b61bfc360a321c21b65e6a1908e7fecc5f7ef470fa80985636832a007', api_ids: [API-COPY-001, API-COPY-002, API-FUZZ-001, API-FUZZ-002, API-FUZZ-003, API-GEN-001, API-GEN-002, API-METHOD-001, API-METHOD-002, API-METHOD-003, API-METHOD-004, API-METHOD-005, API-MOCK-001, API-MOCK-002, API-MOCK-003]}
     risk_hypotheses:
       - Exhaustive surface census can account for cv/ref/noexcept/template/C/macro rows without unsafe fallback.
       - Zero/one/many resolution, cyclic type closure and artifact collision can be finite typed decisions.
@@ -104,8 +104,8 @@ domains:
   - id: review_gate
     result: validated
     candidate_bindings:
-      - {issue: '#47', fingerprint: 'sha256:a7d7d2ef4dc907b517ead76a54d36ba067fcc0f1aa5da405eebef30e1d6d8143', api_ids: [API-REPORT-001, API-REPORT-002, API-REPORT-003, API-REPORT-004, API-RULE-001, API-RULE-002, API-RULE-003, API-RULE-004, API-RULE-005]}
-      - {issue: '#51', fingerprint: 'sha256:e6173e94b9d36c3c746b7fc8aa9690a3b9c7aa2967155cd500ec4214bf7a23ad', api_ids: [API-RV-001, API-RV-002, API-RV-003, API-RV-004, API-RV-005]}
+      - {issue: '#47', fingerprint: 'sha256:139632fb5016e56fbf7085ca6a93e7cc23e40bdfd0063ce18b2910e5e742c956', api_ids: [API-REPORT-001, API-REPORT-002, API-REPORT-003, API-REPORT-004, API-RULE-001, API-RULE-002, API-RULE-003, API-RULE-004, API-RULE-005]}
+      - {issue: '#51', fingerprint: 'sha256:34e502b3aa40015c99bbb1f351831fe4d0f7313f6f2e1ce6ecb4121ec3e59b79', api_ids: [API-RV-001, API-RV-002, API-RV-003, API-RV-004, API-RV-005]}
     risk_hypotheses:
       - Stable semantic keys can distinguish all six baseline states across rename/root relocation.
       - Partial coverage, unsupported analysis and ambiguity can force indeterminate while diagnostics remain bounded/deterministic.
@@ -124,8 +124,8 @@ domains:
   - id: qa_process_coverage
     result: validated
     candidate_bindings:
-      - {issue: '#51', fingerprint: 'sha256:e6173e94b9d36c3c746b7fc8aa9690a3b9c7aa2967155cd500ec4214bf7a23ad', api_ids: [API-QA-001, API-QA-002, API-QA-003, API-QA-004]}
-      - {issue: '#43', fingerprint: 'sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584', api_ids: [API-CORE-003, API-CORE-004, API-CORE-005, API-CORE-006]}
+      - {issue: '#51', fingerprint: 'sha256:34e502b3aa40015c99bbb1f351831fe4d0f7313f6f2e1ce6ecb4121ec3e59b79', api_ids: [API-QA-001, API-QA-002, API-QA-003, API-QA-004]}
+      - {issue: '#43', fingerprint: 'sha256:12ff14d27a96a78edb062e7263f4221f8b602e7347dc556c549715d3cd12cb4c', api_ids: [API-CORE-003, API-CORE-004, API-CORE-005, API-CORE-006]}
     risk_hypotheses:
       - QA policy can project naturally to the Phase A argv process port with bounded output, timeout, signal and unavailable states.
       - Coverage mismatch and many-to-many association ambiguity can remain typed without false completeness.
@@ -146,7 +146,7 @@ domains:
   - id: interop_extractor
     result: validated
     candidate_bindings:
-      - {issue: '#44', fingerprint: 'sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601', api_ids: [API-INT-001, API-INT-002, API-INT-003, API-INT-004]}
+      - {issue: '#44', fingerprint: 'sha256:11b9a004c59d3895821ecf302cfcd08d7ec2ef5cbcb1fffaf722e7843c058a5c', api_ids: [API-INT-001, API-INT-002, API-INT-003, API-INT-004]}
     risk_hypotheses:
       - Callback-scoped borrowed lifetime and unregister/in-flight state can enforce thread affinity without AST escape.
       - Fact sink schema/duplicate ordering and callback failure can isolate partial contribution.

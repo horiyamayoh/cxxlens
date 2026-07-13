@@ -20,6 +20,19 @@
 #include <cxxlens/source.hpp>
 #include <cxxlens/workspace.hpp>
 
+namespace cxxlens
+{
+	namespace transform
+	{
+		class codemod;
+		class edit_plan;
+	} // namespace transform
+	namespace generate
+	{
+		class generation_plan;
+	} // namespace generate
+} // namespace cxxlens
+
 namespace cxxlens::testing
 {
 	namespace detail
@@ -674,4 +687,32 @@ namespace cxxlens::testing
 				}
 		return report;
 	}
+
+	/** @brief Immutable assertions over authoritative edit-plan rows and independent validation. */
+	class edit_plan_assertion
+	{
+	  public:
+		[[nodiscard]] edit_plan_assertion valid() const;
+		[[nodiscard]] edit_plan_assertion changes_file(path file) const;
+		[[nodiscard]] edit_plan_assertion diff_matches(path golden) const;
+		[[nodiscard]] edit_plan_assertion reparses() const;
+		[[nodiscard]] edit_plan_assertion idempotent(transform::codemod recipe) const;
+		/** @brief Check without applying writes; validation and dry-run remain separate from apply.
+		 */
+		[[nodiscard]] result<void> check(const workspace& workspace,
+										 const transform::edit_plan& plan) const;
+	};
+
+	/** @brief Immutable assertions over census, decisions, payloads, and artifacts. */
+	class generation_plan_assertion
+	{
+	  public:
+		[[nodiscard]] generation_plan_assertion valid() const;
+		[[nodiscard]] generation_plan_assertion census_complete() const;
+		[[nodiscard]] generation_plan_assertion no_unknown_decisions() const;
+		[[nodiscard]] generation_plan_assertion artifacts_reparse() const;
+		/** @brief Check in an overlay only; no artifact is emitted or transaction committed. */
+		[[nodiscard]] result<void> check(const workspace& workspace,
+										 const generate::generation_plan& plan) const;
+	};
 } // namespace cxxlens::testing

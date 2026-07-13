@@ -147,6 +147,19 @@ add_custom_target(
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/contract_spikes/test_high_risk_contract_validation.py"
   VERBATIM)
 
+find_program(CXXLENS_PHASE_B_CLANG NAMES clang++-22 clang++ REQUIRED)
+find_program(CXXLENS_PHASE_B_GCC NAMES g++ REQUIRED)
+add_custom_target(
+  cxxlens-phase-b-contract-integration
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_phase_b_contract_integration.py"
+    --root "${CMAKE_CURRENT_SOURCE_DIR}" --include-dir
+    "${CMAKE_CURRENT_SOURCE_DIR}/include" --compiler "${CXXLENS_PHASE_B_CLANG}"
+    --compiler "${CXXLENS_PHASE_B_GCC}" --report
+    "${CMAKE_BINARY_DIR}/phase-b-contract-integration-report.json"
+  USES_TERMINAL VERBATIM)
+
 add_custom_target(
   cxxlens-api-contract-check
   COMMAND
@@ -388,6 +401,7 @@ add_dependencies(
   cxxlens-global-contract-conventions-check
   cxxlens-high-risk-contract-validation-check
   cxxlens-package-contract-candidates-check
+  cxxlens-phase-b-contract-integration
   cxxlens-identity-path-check
   cxxlens-m0-completion-check
   cxxlens-m1-completion-check
@@ -495,7 +509,8 @@ if(CXXLENS_BUILD_DOCS)
     COMMAND
       "${Python3_EXECUTABLE}"
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/verify_doxygen.py"
-      "${CMAKE_CURRENT_BINARY_DIR}/doxygen/xml"
+      "${CMAKE_CURRENT_BINARY_DIR}/doxygen/xml" --candidate-manifest
+      "${CMAKE_CURRENT_SOURCE_DIR}/schemas/cxxlens_package_contract_candidates.yaml"
     COMMAND
       "${Python3_EXECUTABLE}"
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_doc_examples.py"

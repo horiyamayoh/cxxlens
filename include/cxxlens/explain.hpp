@@ -9,6 +9,23 @@
 #include <cxxlens/select.hpp>
 #include <cxxlens/workspace.hpp>
 
+namespace cxxlens
+{
+	namespace transform
+	{
+		class codemod;
+		class edit_plan;
+	} // namespace transform
+	namespace generate
+	{
+		class generation_plan;
+	} // namespace generate
+	namespace rules
+	{
+		class rule;
+	} // namespace rules
+} // namespace cxxlens
+
 namespace cxxlens::explain
 {
 	/** @brief Requested human or agent explanation detail. */
@@ -155,4 +172,19 @@ namespace cxxlens::explain
 	 * c.goal.empty();}
 	 * @endcode */
 	[[nodiscard]] agent_task_card for_selector(const select::semantic_selector& value);
+
+	/** @brief Project an already validated edit plan without replanning. */
+	[[nodiscard]] explanation edit_plan(const transform::edit_plan& value,
+										detail_level level = detail_level::normal);
+	/** @brief Project an already validated generation plan without rerunning decisions. */
+	[[nodiscard]] explanation generation_plan(const generate::generation_plan& value,
+											  detail_level level = detail_level::normal);
+	/** @brief Build deterministic agent guidance from authoritative rule metadata. */
+	[[nodiscard]] agent_task_card for_rule(const rules::rule& value);
+	/** @brief Build deterministic agent guidance from an immutable codemod contract. */
+	[[nodiscard]] agent_task_card for_codemod(const transform::codemod& value);
+	/** @brief Build deterministic agent guidance from an authoritative generation plan. */
+	[[nodiscard]] agent_task_card for_generation(const generate::generation_plan& value);
+	/** @brief Return canonical frozen-catalog data without runtime state or sensitive paths. */
+	[[nodiscard]] std::string api_catalog_json();
 } // namespace cxxlens::explain

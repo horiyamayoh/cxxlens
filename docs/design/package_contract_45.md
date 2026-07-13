@@ -108,4 +108,4 @@ syntax-checked without linking production implementations.
 
 Validated as a graph/search dependency by `docs/design/high_risk_contract_validation.md#decisions`:
 selector identities and canonical ordering support bounded graph expansion without first-wins. Fingerprint
-`sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024` was unchanged.
+`sha256:9bb0cb68c4121996a9dd550df67e070c1d0c04d3609e1399d777c2705b5f7008` was unchanged.

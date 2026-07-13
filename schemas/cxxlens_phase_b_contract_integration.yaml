@@ -1,0 +1,92 @@
+schema: cxxlens.phase-b-contract-integration.v1
+document_version: 1.0.0
+authorities:
+  catalog: schemas/cxxlens_public_api_contract.yaml
+  candidates: schemas/cxxlens_package_contract_candidates.yaml
+  high_risk: schemas/cxxlens_high_risk_contract_validation.yaml
+  ownership: schemas/cxxlens_contract_ownership.yaml
+  conventions: schemas/cxxlens_global_contract_conventions.yaml
+counts: {packages: 22, apis: 124, atomic_units: 124}
+public_headers:
+  umbrella: include/cxxlens/cxxlens.hpp
+  explicit_interop: include/cxxlens/interop/clang.hpp
+  ordinary:
+    - include/cxxlens/configuration.hpp
+    - include/cxxlens/core.hpp
+    - include/cxxlens/core/evidence.hpp
+    - include/cxxlens/core/failure.hpp
+    - include/cxxlens/core/finding.hpp
+    - include/cxxlens/core/identity.hpp
+    - include/cxxlens/core/schema.hpp
+    - include/cxxlens/cxxlens.hpp
+    - include/cxxlens/explain.hpp
+    - include/cxxlens/facts.hpp
+    - include/cxxlens/flow.hpp
+    - include/cxxlens/generate.hpp
+    - include/cxxlens/graph.hpp
+    - include/cxxlens/models.hpp
+    - include/cxxlens/qa.hpp
+    - include/cxxlens/report.hpp
+    - include/cxxlens/review.hpp
+    - include/cxxlens/rules.hpp
+    - include/cxxlens/search.hpp
+    - include/cxxlens/select.hpp
+    - include/cxxlens/source.hpp
+    - include/cxxlens/testing.hpp
+    - include/cxxlens/transform.hpp
+    - include/cxxlens/workspace.hpp
+package_examples:
+  - {package: core, header: '<cxxlens/core.hpp>', source: examples/packages/core.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: workspace, header: '<cxxlens/workspace.hpp>', source: examples/packages/workspace.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: facts, header: '<cxxlens/facts.hpp>', source: examples/packages/facts.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: models, header: '<cxxlens/models.hpp>', source: examples/packages/models.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: select, header: '<cxxlens/select.hpp>', source: examples/packages/select.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: search, header: '<cxxlens/search.hpp>', source: examples/packages/search.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: graph, header: '<cxxlens/graph.hpp>', source: examples/packages/graph.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: rules, header: '<cxxlens/rules.hpp>', source: examples/packages/rules.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: flow, header: '<cxxlens/flow.hpp>', source: examples/packages/flow.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: transform, header: '<cxxlens/transform.hpp>', source: examples/packages/transform.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: generate, header: '<cxxlens/generate.hpp>', source: examples/packages/generate.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: mock, header: '<cxxlens/generate.hpp>', source: examples/packages/mock.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: method_harness, header: '<cxxlens/generate.hpp>', source: examples/packages/method_harness.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: copy, header: '<cxxlens/generate.hpp>', source: examples/packages/copy.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: fuzz, header: '<cxxlens/generate.hpp>', source: examples/packages/fuzz.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: qa, header: '<cxxlens/qa.hpp>', source: examples/packages/qa.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: review, header: '<cxxlens/review.hpp>', source: examples/packages/review.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: report, header: '<cxxlens/report.hpp>', source: examples/packages/report.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: explain, header: '<cxxlens/explain.hpp>', source: examples/packages/explain.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: testing, header: '<cxxlens/testing.hpp>', source: examples/packages/testing.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: interop, header: '<cxxlens/interop/clang.hpp>', source: examples/packages/interop.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+  - {package: configuration, header: '<cxxlens/configuration.hpp>', source: examples/packages/configuration.cpp, scenarios: [positive, negative, ambiguous, partial], installed: true}
+matrices:
+  language: C++23
+  warnings_as_errors: true
+  compiler_families: [GCC, Clang]
+  include_order: [forward, reverse, repeated]
+  source_tree: true
+  installed_tree: true
+  linkage: [static, shared]
+traceability:
+  api_dimensions: [requirement_or_use_case, package_issue, declaration, schema, doxygen, example, compile_test, install_test, ownership, atomic_unit]
+  doxygen_authority: schemas/cxxlens_package_contract_candidates.yaml
+  package_document_pattern: 'docs/design/package_contract_{issue}.md'
+evidence_inputs:
+  - docs/design/api_catalog_inventory.md
+  - docs/design/phase_b_contract_integration.md
+  - docs/design/VALIDATION_REPORT.md
+  - schemas/cxxlens.agent-task-packet-corpus.v1.json
+  - schemas/cxxlens.agent-ownership.v1.json
+  - schemas/cxxlens.api-ready.report.v1.json
+  - schemas/cxxlens.readiness.authorization.v1.json
+  - schemas/cxxlens_contract_ownership.yaml
+  - schemas/cxxlens_high_risk_contract_validation.yaml
+  - schemas/cxxlens_package_contract_candidates.yaml
+  - schemas/cxxlens_public_api_contract.yaml
+  - tests/install/run_install_test.cmake.in
+  - tools/quality/check_doc_examples.py
+  - tools/quality/check_phase_b_contract_integration.py
+  - tools/quality/verify_doxygen.py
+report:
+  schema: cxxlens.phase-b-contract-integration-report.v1
+  binding: git-head-at-execution
+  output: phase-b-contract-integration-report.json

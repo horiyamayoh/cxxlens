@@ -201,4 +201,27 @@ namespace cxxlens::search
 																 select::symbol_selector method,
 																 bool reverse = false,
 																 search_options options = {});
+
+	/** @brief Search semantic symbols in one provisioned immutable snapshot. */
+	[[nodiscard]] result<search_report<symbol>>
+	symbols(const workspace& workspace,
+			select::symbol_selector selector = select::any_symbol(),
+			search_options options = {});
+	/** @brief Search detached semantic reference rows without collapsing missing facts to empty. */
+	[[nodiscard]] result<search_report<reference>> references(const workspace& workspace,
+															  select::reference_selector selector,
+															  search_options options = {});
+	/** @brief Search include relations while preserving resolution and variant state. */
+	[[nodiscard]] result<search_report<include_relation>>
+	includes(const workspace& workspace,
+			 select::include_selector selector = {},
+			 search_options options = {});
+	/** @brief Search macro expansions with definition and expansion origins kept distinct. */
+	[[nodiscard]] result<search_report<macro_expansion>> macros(const workspace& workspace,
+																select::macro_selector selector,
+																search_options options = {});
+	/** @brief Search versioned conversion facts without pretty-type-string identity. */
+	[[nodiscard]] result<search_report<fact>> conversions(const workspace& workspace,
+														  select::conversion_selector selector,
+														  search_options options = {});
 } // namespace cxxlens::search

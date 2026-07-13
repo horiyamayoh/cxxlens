@@ -90,4 +90,4 @@ owner/provider/schema edges, and Doxygen obligations.
 
 Validated by `docs/design/high_risk_contract_validation.md#decisions`: review/rule/report compatibility,
 six-state baseline classification, bounded diagnostics and indeterminate partial gate were reproduced.
-Fingerprint `sha256:a7d7d2ef4dc907b517ead76a54d36ba067fcc0f1aa5da405eebef30e1d6d8143` was unchanged.
+Fingerprint `sha256:139632fb5016e56fbf7085ca6a93e7cc23e40bdfd0063ce18b2910e5e742c956` was unchanged.

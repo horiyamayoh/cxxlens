@@ -1,6 +1,7 @@
 set(test_root "@CMAKE_CURRENT_BINARY_DIR@/install-consumer")
 set(install_prefix "${test_root}/prefix")
 set(consumer_build "${test_root}/build")
+set(phase_b_report "${test_root}/phase-b-contract-integration-report.json")
 
 file(REMOVE_RECURSE "${test_root}")
 
@@ -20,6 +21,8 @@ foreach(
     "${install_prefix}/include/cxxlens/facts.hpp"
     "${install_prefix}/include/cxxlens/interop/clang.hpp"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_public_api_contract.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_phase_b_contract_integration.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_phase_b_contract_integration.schema.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens.agent-task-packet-corpus.v1.json"
     "${install_prefix}/share/cxxlens/schemas/cxxlens.agent-task-packet-validation-report.v1.json"
     "${install_prefix}/share/cxxlens/schemas/cxxlens.agent-task-packet-validation-report.v1.schema.yaml"
@@ -49,12 +52,24 @@ foreach(
     "${install_prefix}/share/cxxlens/schemas/cxxlens_explanation.schema.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_agent_task_card.schema.yaml"
     "${install_prefix}/share/doc/cxxlens/examples/m2-flagship/main.cpp"
+    "${install_prefix}/share/doc/cxxlens/examples/packages/core.cpp"
+    "${install_prefix}/share/doc/cxxlens/examples/packages/interop.cpp"
     "${install_prefix}/share/doc/cxxlens/README.md"
     "${install_prefix}/share/doc/cxxlens/SECURITY.md")
   if(NOT EXISTS "${required}")
     message(FATAL_ERROR "installed M0 artifact is missing: ${required}")
   endif()
 endforeach()
+
+find_program(phase_b_gxx NAMES g++ REQUIRED)
+execute_process(
+  COMMAND
+    "@Python3_EXECUTABLE@"
+    "@CMAKE_CURRENT_SOURCE_DIR@/../tools/quality/check_phase_b_contract_integration.py"
+    --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --include-dir
+    "${install_prefix}/include" --compiler "@CMAKE_CXX_COMPILER@" --compiler
+    "${phase_b_gxx}" --report "${phase_b_report}"
+  RESULT_VARIABLE phase_b_result COMMAND_ERROR_IS_FATAL ANY)
 
 execute_process(
   COMMAND
