@@ -46,6 +46,8 @@ def main() -> int:
         "set_nonblocking",
         "drain_failure",
         "terminate_group_and_reap",
+        "::memfd_create",
+        "termination_signal",
     ):
         if marker not in process:
             failures.append(f"process adapter fail-closed marker missing: {marker}")
@@ -55,6 +57,8 @@ def main() -> int:
         "nonblocking setup failure was accepted",
         "concurrent production launches were not reliable",
         "timeout/cancellation left a live descendant",
+        "anonymous standard input transport truncated process input",
+        "worker signal termination evidence was lost",
     ):
         if fixture not in runtime_tests:
             failures.append(f"production process regression fixture missing: {fixture}")

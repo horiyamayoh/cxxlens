@@ -489,13 +489,23 @@ set_tests_properties(
   schema.frontend-batch
   PROPERTIES LABELS "frontend;interop;schema;security;conformance")
 
+add_executable(cxxlens-frontend-worker-fixture
+               fixtures/frontend_worker_fixture.cpp)
+target_link_libraries(cxxlens-frontend-worker-fixture PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-frontend-worker-fixture
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-frontend-worker-fixture PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-frontend-worker-fixture)
+
 add_executable(cxxlens-unit-scheduler unit/workspace/scheduler_test.cpp)
 target_link_libraries(cxxlens-unit-scheduler PRIVATE cxxlens::cxxlens)
 target_include_directories(cxxlens-unit-scheduler
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 target_compile_features(cxxlens-unit-scheduler PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens-unit-scheduler)
-add_test(NAME unit.scheduler COMMAND cxxlens-unit-scheduler)
+add_test(NAME unit.scheduler
+         COMMAND cxxlens-unit-scheduler
+                 "$<TARGET_FILE:cxxlens-frontend-worker-fixture>")
 set_tests_properties(
   unit.scheduler
   PROPERTIES LABELS
@@ -730,6 +740,7 @@ endif()
 add_custom_target(cxxlens-m0-test-binaries)
 add_dependencies(
   cxxlens-m0-test-binaries
+  cxxlens-frontend-worker
   cxxlens-public-header-configuration
   cxxlens-public-header-core
   cxxlens-public-header-cxxlens
@@ -780,3 +791,12 @@ endif()
 if(TARGET cxxlens-m2-test-binaries)
   add_dependencies(cxxlens-m2-test-binaries cxxlens-m1-test-binaries)
 endif()
+
+get_property(
+  cxxlens_registered_tests
+  DIRECTORY
+  PROPERTY TESTS)
+set_tests_properties(
+  ${cxxlens_registered_tests}
+  PROPERTIES ENVIRONMENT_MODIFICATION
+             "PATH=path_list_prepend:${PROJECT_BINARY_DIR}")

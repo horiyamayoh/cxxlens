@@ -14,6 +14,9 @@ import yaml
 root = pathlib.Path(sys.argv[1])
 batch_schema = yaml.safe_load((root / "schemas/cxxlens_frontend_batch.schema.yaml").read_text())
 observation_schema = yaml.safe_load((root / "schemas/cxxlens_observation.schema.yaml").read_text())
+worker_contract = yaml.safe_load(
+    (root / "schemas/cxxlens_frontend_worker_ipc.contract.yaml").read_text()
+)
 batch_schema["properties"]["observations"]["items"] = observation_schema
 validator = jsonschema.Draft202012Validator(batch_schema)
 
@@ -64,5 +67,14 @@ bad_coverage = copy.deepcopy(batch)
 bad_coverage["coverage"] = {"requested": 1, "parsed": 1, "failed": 1, "cancelled": 0}
 validator.validate(bad_coverage)
 assert sum(bad_coverage["coverage"][key] for key in ("parsed", "failed", "cancelled")) != 1
+
+assert worker_contract["schema"] == "cxxlens.frontend-worker-ipc.v1"
+assert worker_contract["encoding"]["maximum_message_bytes"] == 64 * 1024 * 1024
+assert worker_contract["transport"]["temporary_artifacts"] == "forbidden"
+assert worker_contract["termination_mapping"] == {
+    "deadline": "parse.timeout",
+    "cancellation": "core.cancelled",
+    "signal_or_abnormal_exit": "parse.crashed",
+}
 
 print("validated Clang-free frontend batch and embedded observation schema")

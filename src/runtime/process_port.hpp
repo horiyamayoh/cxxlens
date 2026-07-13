@@ -14,6 +14,7 @@ namespace cxxlens::detail::runtime
 	struct process_request
 	{
 		std::vector<std::string> argv;
+		std::string standard_input;
 		std::filesystem::path working_directory;
 		std::vector<std::pair<std::string, std::string>> environment;
 		std::chrono::milliseconds timeout{std::chrono::seconds{300}};
@@ -23,6 +24,7 @@ namespace cxxlens::detail::runtime
 	struct process_result
 	{
 		int exit_code{};
+		int termination_signal{};
 		std::string standard_output;
 		std::string standard_error;
 	};

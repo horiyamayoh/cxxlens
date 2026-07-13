@@ -9827,12 +9827,12 @@
     }
   ],
   "input_fingerprints": {
-    "dependency_requests": "sha256:750aea127f05904eb6c5c108357da133f8e0e941deb6fdfd24702ca44432de84",
+    "dependency_requests": "sha256:50f9e916250c5ea7378f5e1c7870f446b81c7e9caa2289e5cf88a599f4caffc0",
     "m0": "sha256:b0e967a78fa4d8e936d54a60bea16c59feb57ad8cbcef645628e9651c1d0b617",
     "m1": "sha256:0e5bf5dd8568f14394199e2deb51649bbd2743170812de12fd098b54caaa142f",
     "m2": "sha256:448a5141f4c6e1045b5ff0ddae6126054be2a0cb261cfd2b227b1e1ce741e9c7",
-    "ownership": "sha256:d6f2741c68f9c12639e6d8af1e2a5e1606b84069fe0c3c9befa2b4e7e52a07f6",
-    "task_packets": "sha256:23361bf09dbefd8066a72afa5d0c9f569da353490dcaa61537164033bd9e74b4"
+    "ownership": "sha256:dccc8be8c5aa118f70562663abac33cadd2c3c7634d245320a151a5224d39a3e",
+    "task_packets": "sha256:7d31b7ec195cb8a4b6ad5567dff8b24cf2b52fcef2412f4d91b831f3dbaccfb5"
   },
   "nodes": [
     {
@@ -23636,7 +23636,7 @@
           "atomic_unit_id": "AU-WS-005",
           "execution_result_path": "build/dev-clang/agent-results/AU-WS-005.json",
           "required_execution_status": "passed",
-          "shard_digest": "sha256:8e90c9988ff6968b845af994727e145c0d6297944d9894b908e7b2ceb02f5d50",
+          "shard_digest": "sha256:d0cd4a5766fd4e8a11290e852e128c568b575b5b04caa9e2cfd6f7e0b8062465",
           "shard_id": "shard.au-ws-005"
         },
         {
@@ -23776,7 +23776,7 @@
       ],
       "package_id": "workspace",
       "package_integration_role": "integration.package.workspace",
-      "semantic_digest": "sha256:a50a1cf1097cd170f88c9497bb58f1d460290fb17d4049837c5ae8d20f1f1d90",
+      "semantic_digest": "sha256:7a04185710057d60c655c7f3dc926dc55eb342e62551d7bbc3d1f908e8f76f9e",
       "state": "verification"
     }
   ],
@@ -24178,7 +24178,7 @@
     ]
   },
   "schema": "cxxlens.api-ready.v1",
-  "semantic_digest": "sha256:7ba052dd496daf5ad4d783de5868a2d1c05ccb86762070725a937194a9047adf",
+  "semantic_digest": "sha256:b755313e4f17e40086101634f2886802e4407f3a1e485180eef541777946ebd3",
   "shards": [
     {
       "acceptance_command": {
@@ -57612,13 +57612,16 @@
               "--category",
               "ambiguous",
               "--evidence",
-              "tests/unit/workspace/provisioning_test.cpp"
+              "tests/unit/workspace/provisioning_test.cpp",
+              "--evidence",
+              "tests/unit/workspace/scheduler_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-ambiguous"
           },
           "evidence_paths": [
-            "tests/unit/workspace/provisioning_test.cpp"
+            "tests/unit/workspace/provisioning_test.cpp",
+            "tests/unit/workspace/scheduler_test.cpp"
           ],
           "fixture_category": "ambiguous",
           "id": "local.ambiguous",
@@ -57637,13 +57640,16 @@
               "--category",
               "negative",
               "--evidence",
-              "tests/unit/workspace/provisioning_test.cpp"
+              "tests/unit/workspace/provisioning_test.cpp",
+              "--evidence",
+              "tests/unit/workspace/scheduler_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-negative"
           },
           "evidence_paths": [
-            "tests/unit/workspace/provisioning_test.cpp"
+            "tests/unit/workspace/provisioning_test.cpp",
+            "tests/unit/workspace/scheduler_test.cpp"
           ],
           "fixture_category": "negative",
           "id": "local.negative",
@@ -57662,13 +57668,16 @@
               "--category",
               "positive",
               "--evidence",
-              "tests/unit/workspace/provisioning_test.cpp"
+              "tests/unit/workspace/provisioning_test.cpp",
+              "--evidence",
+              "tests/unit/workspace/scheduler_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-positive"
           },
           "evidence_paths": [
-            "tests/unit/workspace/provisioning_test.cpp"
+            "tests/unit/workspace/provisioning_test.cpp",
+            "tests/unit/workspace/scheduler_test.cpp"
           ],
           "fixture_category": "positive",
           "id": "local.positive",
@@ -57728,12 +57737,18 @@
         "include/cxxlens/workspace.hpp",
         "schemas/cxxlens_coverage_delta.schema.yaml",
         "schemas/cxxlens_fact_requirement.schema.yaml",
+        "schemas/cxxlens_frontend_worker_ipc.contract.yaml",
         "schemas/cxxlens_provisioning_trace.schema.yaml",
+        "src/llvm/clang22/frontend_worker.cpp",
+        "src/llvm/common/frontend_worker_ipc.cpp",
+        "src/runtime/process_adapter.cpp",
+        "src/workspace/frontend_scheduler_worker.cpp",
         "src/workspace/provisioning.cpp",
         "src/workspace/scheduler.cpp",
-        "tests/unit/workspace/provisioning_test.cpp"
+        "tests/unit/workspace/provisioning_test.cpp",
+        "tests/unit/workspace/scheduler_test.cpp"
       ],
-      "semantic_digest": "sha256:8e90c9988ff6968b845af994727e145c0d6297944d9894b908e7b2ceb02f5d50",
+      "semantic_digest": "sha256:d0cd4a5766fd4e8a11290e852e128c568b575b5b04caa9e2cfd6f7e0b8062465",
       "state": "verification"
     },
     {

@@ -57,9 +57,11 @@ namespace cxxlens
 	/** @brief Cancellation, budget and progress inputs shared by workspace operations. */
 	struct execution_context
 	{
-		/** @brief Cooperative cancellation token. */
+		/** @brief Cancellation token; isolated frontend workers are actively terminated.
+		 * @note In-process interop callbacks remain cooperative and must return to observe it. */
 		std::stop_token cancellation;
-		/** @brief Optional steady-clock deadline. */
+		/** @brief Optional steady-clock deadline; isolated frontend work is bounded by process
+		 * termination and reap grace. */
 		std::optional<std::chrono::steady_clock::time_point> deadline;
 		/** @brief Requested parallelism; zero means automatic. */
 		std::size_t parallelism{};

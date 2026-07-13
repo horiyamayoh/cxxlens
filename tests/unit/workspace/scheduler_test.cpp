@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
+#include <csignal>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -424,6 +426,80 @@ namespace
 						result.reason_code == "core.capability-unavailable",
 					"production frontend bridge lost its capability state");
 	}
+
+	void isolated_execution_boundary(scheduler& service,
+									 const task_request& base,
+									 const std::string& fixture,
+									 const std::filesystem::path& root)
+	{
+		auto direct = base;
+		direct.input_fingerprint = "input_" + std::string(64U, 'a');
+		const auto pid_file = root / "blocked-worker.pid";
+		std::filesystem::remove(pid_file);
+		frontend_scheduler_worker blocking{
+			std::vector<std::string>{fixture, "--block", pid_file.generic_string()}};
+		execution_context deadline;
+		deadline.deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds{80};
+		const auto started = std::chrono::steady_clock::now();
+		auto timed_out = blocking.execute(direct, deadline);
+		const auto elapsed = std::chrono::steady_clock::now() - started;
+		require(!timed_out && timed_out.error().code.value == "parse.timeout" &&
+					elapsed < std::chrono::seconds{2},
+				"blocking worker did not return within bounded deadline grace");
+		std::ifstream pid_input{pid_file};
+		int blocked_pid{};
+		pid_input >> blocked_pid;
+		require(blocked_pid > 0 && ::kill(blocked_pid, 0) != 0 && errno == ESRCH,
+				"deadline left the isolated worker process alive");
+		std::filesystem::remove(pid_file);
+
+		std::stop_source cancellation;
+		execution_context cancelled;
+		cancelled.cancellation = cancellation.get_token();
+		frontend_scheduler_worker cancellable{
+			std::vector<std::string>{fixture, "--block", pid_file.generic_string()}};
+		std::jthread request_stop{[&cancellation]
+								  {
+									  std::this_thread::sleep_for(std::chrono::milliseconds{50});
+									  cancellation.request_stop();
+								  }};
+		const auto cancel_started = std::chrono::steady_clock::now();
+		auto cancelled_result = cancellable.execute(direct, cancelled);
+		require(!cancelled_result && cancelled_result.error().code.value == "core.cancelled" &&
+					std::chrono::steady_clock::now() - cancel_started < std::chrono::seconds{2},
+				"in-flight cancellation did not stop the isolated worker");
+		std::filesystem::remove(pid_file);
+
+		frontend_scheduler_worker crashing{std::vector<std::string>{fixture, "--crash"}};
+		auto crashed = crashing.execute(direct, {});
+		require(!crashed && crashed.error().code.value == "parse.crashed" &&
+					crashed.error().attributes.at("reason") == "worker-signal" &&
+					crashed.error().attributes.at("platform_code") == std::to_string(SIGSEGV),
+				"real worker signal was not converted to structured parse.crashed evidence");
+
+		auto failed = base;
+		failed.snapshot_key = "snapshot-crash";
+		failed.subscribers = {{"crashed-subscriber", {}}};
+		auto sibling = base;
+		sibling.snapshot_key = "snapshot-success";
+		sibling.subscribers = {{"successful-subscriber", {}}};
+		frontend_scheduler_worker mixed{std::vector<std::string>{fixture, "--mixed"}};
+		auto first = service.run({failed, sibling}, mixed, options(2U, 41U));
+		auto second = service.run({sibling, failed}, mixed, options(2U, 99U));
+		require(first && second && first.value().coverage.failed == 1U &&
+					first.value().coverage.succeeded == 1U &&
+					first.value().to_json() == second.value().to_json(),
+				"worker crash contaminated its sibling or made partial results nondeterministic");
+		require(std::ranges::all_of(first.value().tasks,
+									[](const task_result& task)
+									{
+										return task.frontend_coverage.requested ==
+											task.frontend_coverage.parsed +
+											task.frontend_coverage.failed +
+											task.frontend_coverage.cancelled;
+									}),
+				"isolated worker terminal states broke frontend coverage accounting");
+	}
 } // namespace
 
 int main(const int argument_count, const char* const* arguments)
@@ -439,7 +515,7 @@ int main(const int argument_count, const char* const* arguments)
 	runtime::fixed_time_adapter time{
 		std::chrono::system_clock::time_point{},
 		std::chrono::steady_clock::time_point{std::chrono::seconds{10}}};
-	scheduler service{hashes, time};
+	scheduler service{hashes, time, "clang22:fixture@1.0.0"};
 	if (argument_count == 5 && std::string_view{arguments[1]} == "--emit")
 	{
 		const auto jobs = static_cast<std::size_t>(std::stoull(arguments[2]));
@@ -459,6 +535,8 @@ int main(const int argument_count, const char* const* arguments)
 	partial_failures_and_dag(service, requests);
 	controls(service, requests.front(), time);
 	production_bridge(service, requests.front());
+	if (argument_count == 2)
+		isolated_execution_boundary(service, requests.front(), arguments[1], root);
 	std::filesystem::remove_all(root);
 	return 0;
 }

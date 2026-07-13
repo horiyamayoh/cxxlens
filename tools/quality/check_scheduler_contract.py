@@ -26,7 +26,7 @@ for forbidden, reason in (
 
 for marker in (
     "cxxlens.scheduler-task.v2",
-    "cxxlens.scheduler-parse-input.v1",
+    "cxxlens.scheduler-parse-input.v2",
     "canonical_encoder",
     "normalized_virtual_sources",
     "input_fingerprint",
@@ -44,6 +44,8 @@ for marker in (
     "std::ranges::sort(batch.tasks",
     "std::ranges::sort(batch.trace",
     "time_.steady_now()",
+    "std::stop_source",
+    "future.wait_for",
 ):
     if marker not in combined:
         raise SystemExit(f"scheduler contract marker is missing: {marker}")
@@ -72,6 +74,9 @@ for marker in (
     "different virtual content was coalesced",
     "injected fault was omitted from task identity",
     "normalized duplicate virtual path was accepted",
+    "blocking worker did not return within bounded deadline grace",
+    "real worker signal was not converted to structured parse.crashed evidence",
+    "worker crash contaminated its sibling or made partial results nondeterministic",
 ):
     if marker not in test:
         raise SystemExit(f"scheduler acceptance seam is missing: {marker}")

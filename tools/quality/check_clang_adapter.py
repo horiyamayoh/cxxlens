@@ -87,10 +87,50 @@ schema = (root / "schemas/cxxlens_frontend_batch.schema.yaml").read_text()
 if "cxxlens_observation.schema.yaml" not in schema or "llvm_major: {const: 22}" not in schema:
     raise SystemExit("frontend batch does not validate exact-major observations")
 
+worker = (root / "src/workspace/frontend_scheduler_worker.cpp").read_text()
+ipc = (root / "src/llvm/common/frontend_worker_ipc.cpp").read_text()
+worker_contract = (root / "schemas/cxxlens_frontend_worker_ipc.contract.yaml").read_text()
+isolation_test = (root / "tests/unit/workspace/scheduler_test.cpp").read_text()
+for marker in (
+    "argv_process_adapter",
+    "encode_worker_request",
+    "decode_worker_response",
+    '"parse.crashed"',
+    '"parse.timeout"',
+    '"core.cancelled"',
+):
+    if marker not in worker:
+        raise SystemExit(f"frontend worker isolation marker is missing: {marker}")
+for marker in (
+    "CXXLFWQ1",
+    "CXXLFWR1",
+    "worker_ipc_version",
+    "maximum_message_bytes",
+    "input.remaining() != 0U",
+    "batch.validate()",
+):
+    if marker not in ipc:
+        raise SystemExit(f"frontend IPC fail-closed marker is missing: {marker}")
+for marker in (
+    "cxxlens.frontend-worker-ipc.v1",
+    "anonymous_memfd_stdin",
+    "temporary_artifacts: forbidden",
+):
+    if marker not in worker_contract:
+        raise SystemExit(f"frontend worker contract marker is missing: {marker}")
+for marker in (
+    "--block",
+    "--crash",
+    "worker-signal",
+    "coverage.succeeded == 1U",
+):
+    if marker not in isolation_test:
+        raise SystemExit(f"frontend process acceptance fixture is missing: {marker}")
+
 catalog = (root / "schemas/cxxlens_public_api_contract.yaml").read_text()
 for api in ("API-INT-001", "API-INT-002"):
     position = catalog.find(f"- id: {api}")
     if position < 0 or "implementation_state: conformant" not in catalog[position : position + 1800]:
         raise SystemExit(f"{api} is not catalogued as conformant")
 
-print("validated exact Clang 22 discovery, link closure, VFS, and borrowed lifetime boundaries")
+print("validated exact Clang 22 discovery, IPC isolation, VFS, and borrowed lifetime boundaries")

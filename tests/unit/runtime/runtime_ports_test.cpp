@@ -271,6 +271,17 @@ namespace
 			check(!combined_limit && combined_limit.error().status == runtime_status::output_limit,
 				  "stdout and stderr did not share an output limit");
 
+		auto standard_input = make_process_request({"/bin/cat"});
+		standard_input.standard_input = std::string(128U * 1024U, 'i');
+		const auto echoed = process.run(standard_input, context("process.production.stdin"));
+		passed &= check(echoed && echoed->standard_output == standard_input.standard_input,
+						"anonymous standard input transport truncated process input");
+		const auto signalled = process.run(make_process_request({"/bin/sh", "-c", "kill -SEGV $$"}),
+										   context("process.production.signal"));
+		passed &= check(signalled && signalled->exit_code == 128 &&
+							signalled->termination_signal == SIGSEGV,
+						"worker signal termination evidence was lost");
+
 		argv_process_adapter final_read_error{{.final_drain_error = EIO}};
 		const auto read_failure = final_read_error.run(make_process_request({"/bin/true"}),
 													   context("process.production.final-read"));

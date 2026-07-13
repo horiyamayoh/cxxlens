@@ -47,6 +47,7 @@ namespace cxxlens::detail::scheduling
 		std::vector<std::string> dependencies;
 		std::vector<subscriber_request> subscribers;
 		std::uint64_t cost{1U};
+		std::string input_fingerprint;
 	};
 
 	enum class task_state : std::uint8_t
@@ -137,7 +138,9 @@ namespace cxxlens::detail::scheduling
 	class scheduler
 	{
 	  public:
-		scheduler(const runtime::hash_port& hashes, const runtime::time_port& time) noexcept;
+		scheduler(const runtime::hash_port& hashes,
+				  const runtime::time_port& time,
+				  std::string frontend_toolchain = {});
 		[[nodiscard]] result<std::string> task_key(const task_request& task) const;
 		[[nodiscard]] result<scheduler_batch> run(std::vector<task_request> requests,
 												  worker_port& worker,
@@ -146,5 +149,6 @@ namespace cxxlens::detail::scheduling
 	  private:
 		const runtime::hash_port& hashes_;
 		const runtime::time_port& time_;
+		std::string frontend_toolchain_;
 	};
 } // namespace cxxlens::detail::scheduling

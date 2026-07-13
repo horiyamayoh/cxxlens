@@ -1,0 +1,41 @@
+schema: cxxlens.frontend-worker-ipc.v1
+version: 1
+encoding:
+  kind: little-endian-length-framed-binary
+  maximum_message_bytes: 67108864
+  request_magic: CXXLFWQ1
+  response_magic: CXXLFWR1
+request:
+  required:
+  - compile_unit
+  - virtual_files
+  - injected_fault
+  - fact_profile
+  - snapshot_key
+  - input_fingerprint
+  - toolchain_version
+  identity_binding:
+  - virtual_file_path_and_content
+  - compile_unit_id
+  - build_variant_id
+  - compile_command_digest
+  - fact_profile
+  - exact_toolchain_version
+response:
+  exactly_one:
+  - detached_observation_batch
+  - structured_error
+validation:
+- exact_magic_schema_and_version
+- bounded_collection_counts
+- no_trailing_bytes
+- decoded_batch_invariants
+- no_native_ast_or_clang_pointer
+transport:
+  request: anonymous_memfd_stdin
+  response: bounded_stdout
+  temporary_artifacts: forbidden
+termination_mapping:
+  deadline: parse.timeout
+  cancellation: core.cancelled
+  signal_or_abnormal_exit: parse.crashed

@@ -12,6 +12,7 @@
 
 #include "../core/canonical_encoding.hpp"
 #include "../core/canonical_json.hpp"
+#include "../llvm/clang22/frontend_job.hpp"
 
 namespace cxxlens::detail::scheduling
 {
@@ -163,7 +164,9 @@ namespace cxxlens::detail::scheduling
 		}
 
 		[[nodiscard]] result<canonical_task_identity>
-		make_task_identity(const task_request& task, const runtime::hash_port& hashes)
+		make_task_identity(const task_request& task,
+						   const runtime::hash_port& hashes,
+						   const std::string_view toolchain)
 		{
 			if (!task.parse.unit.id().valid() || !task.parse.unit.variant_id().valid() ||
 				task.snapshot_key.empty() || task.cost == 0U)
@@ -173,10 +176,16 @@ namespace cxxlens::detail::scheduling
 				return scheduler_error(sources.error().code.value,
 									   sources.error().attributes.at("reason"));
 
-			identity::canonical_encoder input_encoder{"cxxlens.scheduler-parse-input.v1", {1U, 1U}};
+			identity::canonical_encoder input_encoder{"cxxlens.scheduler-parse-input.v2", {2U, 2U}};
 			input_encoder.string_map("virtual_sources", std::move(sources.value()));
 			input_encoder.enum_field("injected_fault",
 									 static_cast<std::int64_t>(task.parse.injected_fault));
+			input_encoder.string_field("compile_unit", std::string{task.parse.unit.id().value()});
+			input_encoder.string_field("variant",
+									   std::string{task.parse.unit.variant_id().value()});
+			input_encoder.string_field("compile_command", task.parse.unit.command_digest());
+			input_encoder.string_field("profile", task.profile.to_json());
+			input_encoder.string_field("toolchain", std::string{toolchain});
 			auto input_payload = input_encoder.finish();
 			if (!input_payload)
 				return scheduler_error("core.invalid-argument", "canonical-parse-input");
@@ -351,14 +360,23 @@ namespace cxxlens::detail::scheduling
 		return written ? std::move(written.value()) : std::string{};
 	}
 
-	scheduler::scheduler(const runtime::hash_port& hashes, const runtime::time_port& time) noexcept
-		: hashes_{hashes}, time_{time}
+	scheduler::scheduler(const runtime::hash_port& hashes,
+						 const runtime::time_port& time,
+						 std::string frontend_toolchain)
+		: hashes_{hashes}, time_{time}, frontend_toolchain_{std::move(frontend_toolchain)}
 	{
+		if (frontend_toolchain_.empty())
+		{
+			const auto adapter = clang22::capability();
+			frontend_toolchain_ = std::string{"clang22:"} + std::to_string(adapter.llvm_major) +
+				"." + std::to_string(adapter.llvm_minor) + "." +
+				std::to_string(adapter.llvm_patch) + "@" + adapter.adapter_version;
+		}
 	}
 
 	result<std::string> scheduler::task_key(const task_request& task) const
 	{
-		auto identity = make_task_identity(task, hashes_);
+		auto identity = make_task_identity(task, hashes_, frontend_toolchain_);
 		if (!identity)
 			return scheduler_error(identity.error().code.value,
 								   identity.error().attributes.at("reason"));
@@ -403,7 +421,7 @@ namespace cxxlens::detail::scheduling
 			if (std::ranges::adjacent_find(request.subscribers, {}, &subscriber_request::id) !=
 				request.subscribers.end())
 				return scheduler_error("core.invalid-argument", "duplicate-subscriber");
-			auto identity = make_task_identity(request, hashes_);
+			auto identity = make_task_identity(request, hashes_, frontend_toolchain_);
 			if (!identity)
 				return scheduler_error(identity.error().code.value,
 									   identity.error().attributes.at("reason"));
@@ -415,6 +433,7 @@ namespace cxxlens::detail::scheduling
 											  std::move(identity.value().canonical_bytes),
 											  std::move(request),
 											  1U};
+				admitted.request.input_fingerprint = identity.value().input_fingerprint;
 				unique.emplace(admitted.key, std::move(admitted));
 			}
 			else
@@ -481,6 +500,7 @@ namespace cxxlens::detail::scheduling
 				struct pending
 				{
 					admitted_task* task{};
+					std::stop_source cancellation;
 					std::future<result<frontend::observation_batch>> future;
 				};
 				std::vector<pending> running;
@@ -529,23 +549,26 @@ namespace cxxlens::detail::scheduling
 						batch.trace.push_back(
 							{task.key, task.input_fingerprint, "scheduled", "worker"});
 						auto* scheduled_task = &task;
+						std::stop_source worker_cancellation;
+						auto worker_context = options.execution;
+						worker_context.cancellation = worker_cancellation.get_token();
 						running.push_back(
 							{scheduled_task,
-							 std::async(std::launch::async,
-										[&worker, &options, scheduled_task]
-										{
-											std::uint64_t key_fold{};
-											for (const auto value : scheduled_task->key)
-												key_fold = (key_fold * 131U) ^
-													static_cast<unsigned char>(value);
-											const auto perturbation =
-												(options.seed ^ key_fold) & 3U;
-											for (std::uint64_t count = 0U; count < perturbation;
-												 ++count)
-												std::this_thread::yield();
-											return worker.execute(scheduled_task->request,
-																  options.execution);
-										})});
+							 worker_cancellation,
+							 std::async(
+								 std::launch::async,
+								 [&worker, &options, scheduled_task, worker_context]() mutable
+								 {
+									 std::uint64_t key_fold{};
+									 for (const auto value : scheduled_task->key)
+										 key_fold =
+											 (key_fold * 131U) ^ static_cast<unsigned char>(value);
+									 const auto perturbation = (options.seed ^ key_fold) & 3U;
+									 for (std::uint64_t count = 0U; count < perturbation; ++count)
+										 std::this_thread::yield();
+									 return worker.execute(scheduled_task->request,
+														   std::move(worker_context));
+								 })});
 						continue;
 					}
 					set_deliveries(immediate, task.request);
@@ -564,6 +587,15 @@ namespace cxxlens::detail::scheduling
 
 				for (auto& pending : running)
 				{
+					while (pending.future.wait_for(std::chrono::milliseconds{5}) !=
+						   std::future_status::ready)
+					{
+						if (options.execution.cancellation.stop_requested() ||
+							!any_active_subscriber(pending.task->request) ||
+							(options.execution.deadline &&
+							 time_.steady_now() >= *options.execution.deadline))
+							pending.cancellation.request_stop();
+					}
 					auto outcome = pending.future.get();
 					task_result result;
 					result.task_key = pending.task->key;

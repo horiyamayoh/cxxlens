@@ -358,8 +358,12 @@ packages:
       - FrontendAction
     guarantees:
     - Builds only missing coverage while retaining partial failures.
+    - Clang parse/extraction runs in an isolated worker process with active deadline and cancellation termination.
     errors:
     - parse.frontend-failed
+    - parse.crashed
+    - parse.timeout
+    - core.cancelled
     - facts.transaction-failed
     contract_maturity: contract-defined
     implementation_state: conformant
@@ -372,10 +376,16 @@ packages:
     - include/cxxlens/workspace.hpp
     - src/workspace/provisioning.cpp
     - src/workspace/scheduler.cpp
+    - src/workspace/frontend_scheduler_worker.cpp
+    - src/llvm/common/frontend_worker_ipc.cpp
+    - src/llvm/clang22/frontend_worker.cpp
+    - src/runtime/process_adapter.cpp
     - schemas/cxxlens_fact_requirement.schema.yaml
     - schemas/cxxlens_coverage_delta.schema.yaml
     - schemas/cxxlens_provisioning_trace.schema.yaml
+    - schemas/cxxlens_frontend_worker_ipc.contract.yaml
     - tests/unit/workspace/provisioning_test.cpp
+    - tests/unit/workspace/scheduler_test.cpp
     atomic_unit:
       id: AU-WS-005
       indivisible: true
@@ -3518,6 +3528,7 @@ packages:
       - Preprocessor
     guarantees:
     - Borrowed objects are valid only during the callback.
+    - Cancellation and deadline during the in-process user callback are cooperative; bounded workspace parsing uses the isolated scheduler worker.
     errors:
     - interop.borrowed-lifetime-violation
     - core.capability-unavailable

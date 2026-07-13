@@ -62,7 +62,9 @@ add_library(
   src/graph/virtual_candidate_resolver.cpp
   src/llvm/common/borrowed_lifetime.cpp
   src/llvm/common/frontend_port.cpp
+  src/llvm/common/frontend_worker_ipc.cpp
   src/llvm/clang22/frontend_job.cpp
+  src/llvm/clang22/frontend_worker.cpp
   src/llvm/clang22/call_relation_extractor.cpp
   src/llvm/clang22/preprocessor_extractor.cpp
   src/llvm/clang22/source_map_adapter.cpp
@@ -112,6 +114,14 @@ cxxlens_set_project_warnings(cxxlens)
 cxxlens_enable_sanitizers(cxxlens)
 cxxlens_configure_clang22(cxxlens)
 
+add_executable(cxxlens-frontend-worker
+               src/llvm/clang22/frontend_worker_main.cpp)
+target_link_libraries(cxxlens-frontend-worker PRIVATE cxxlens::cxxlens)
+target_include_directories(cxxlens-frontend-worker
+                           PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-frontend-worker PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-frontend-worker)
+
 if(CXXLENS_ENABLE_CLANG_TIDY)
   find_program(CXXLENS_CLANG_TIDY NAMES clang-tidy-22 clang-tidy REQUIRED)
   set_target_properties(
@@ -134,7 +144,7 @@ if(CXXLENS_BUILD_QUALITY_TOOLS OR CXXLENS_BUILD_DOCS)
 endif()
 
 install(
-  TARGETS cxxlens
+  TARGETS cxxlens cxxlens-frontend-worker
   EXPORT cxxlensTargets
   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
@@ -175,6 +185,7 @@ install(
         schemas/cxxlens_fact_conformance.schema.yaml
         schemas/cxxlens_fact_profile.schema.yaml
         schemas/cxxlens_frontend_batch.schema.yaml
+        schemas/cxxlens_frontend_worker_ipc.contract.yaml
         schemas/cxxlens_failure_contract.yaml
         schemas/cxxlens_finding_contract.yaml
         schemas/cxxlens_finding.schema.yaml

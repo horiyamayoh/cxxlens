@@ -13,6 +13,7 @@
 #include <cxxlens/interop/clang.hpp>
 
 #include "llvm/common/borrowed_lifetime.hpp"
+#include "llvm/common/frontend_worker_ipc.hpp"
 
 namespace
 {
@@ -125,6 +126,25 @@ namespace
 		batch.observations.front().payload = {{"clang_ast_pointer", "0x1234"}};
 		require(!batch.validate(), "native AST pointer escaped through frontend batch");
 	}
+
+	void check_worker_ipc_fail_closed()
+	{
+		auto malformed = cxxlens::detail::frontend::decode_worker_request("not-an-envelope");
+		require(!malformed && malformed.error().code.value == "parse.frontend-failed",
+				"malformed worker request was accepted");
+		cxxlens::detail::frontend::observation_batch batch;
+		batch.adapter_id = "clang22.frontend";
+		batch.adapter_version = "ipc-test";
+		batch.unit = cxxlens::compile_unit_id{"cu_" + std::string(64U, 'a')};
+		batch.variant = cxxlens::build_variant_id{"variant_" + std::string(64U, 'b')};
+		batch.coverage.parsed = 1U;
+		auto encoded = cxxlens::detail::frontend::encode_worker_response(batch);
+		require(encoded.has_value(), "valid worker response did not encode");
+		encoded.value().push_back('\0');
+		auto trailing = cxxlens::detail::frontend::decode_worker_response(encoded.value());
+		require(!trailing && trailing.error().attributes.at("reason") == "response-batch-invalid",
+				"worker response trailing bytes were accepted");
+	}
 } // namespace
 
 int main()
@@ -132,6 +152,7 @@ int main()
 	check_lifetime_token();
 	check_failure_seams();
 	check_detached_batch();
+	check_worker_ipc_fail_closed();
 	const auto capability = cxxlens::detail::clang22::capability();
 	require(std::ranges::is_sorted(capability.explicit_components),
 			"component map is not canonical");

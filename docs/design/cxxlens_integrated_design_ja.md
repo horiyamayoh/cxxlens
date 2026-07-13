@@ -2998,6 +2998,7 @@ Expected failureは`result<T>`。User callback/interop extractor例外はboundar
 - priority: explicit target > changed > refinement > background build。
 - compatible extractor requestsをcoalesce。
 - coalesce identity は実際の parse input を canonical fingerprint 化する。virtual source の相対 path は compile command directory 基準で絶対 lexical normalize し、path 順序は非意味的、normalize 後の重複は invalid とする。content bytes は length framing し、injected test fault も identity に含める。caller supplied snapshot key はこの照合を代替せず、trace/artifact には content ではなく fingerprint だけを出力する。
+- parse input fingerprint v2 は virtual source bytes に加え、compile-unit/variant/command digest、fact profile、exact Clang toolchain version を含む。checkout absolute root や diagnostic prose は含めない。同じ fingerprint を versioned worker IPC request に封入し、worker 応答との境界 evidence とする。
 - CPUとmemory budgetからworker数決定。
 - `CompilerInstance`/AST/SourceManager/PPはone job/thread。
 - immutable config/fact snapshots/selectors/plans/reportsはconcurrent read可。
@@ -3009,6 +3010,12 @@ Expected failureは`result<T>`。User callback/interop extractor例外はboundar
 Memory pressure順: completed AST解放、lazy source buffer eviction、batch chunking、streaming cursor、optional trace削減。Required semantic dataをdropしてcomplete報告は禁止。
 
 Cancellation checkpoints: compile command、scheduler dequeue、top-level decl/function、graph frontier、dataflow iteration、artifact emission、process wait、commit前。commit不可分区間では安全点まで延期。
+
+Production scheduler の Clang parse/extraction は `cxxlens-frontend-worker` subprocess に隔離する。scheduler は各 pending job 用の owned stop source を持ち、外部 cancellation、全 subscriber cancellation、deadline を 5ms 間隔で監視して worker context へ伝播する。worker process port は deadline/cancel で process group を kill/reap するため、`future.get()` は process boundary の terminal response 後にのみ呼ぶ。signal は `parse.crashed`、deadline は `parse.timeout`、cancel は `core.cancelled` として unit-local に会計し、sibling result と coverage を保持する。
+
+Worker IPC は `cxxlens.frontend-worker-ipc.v1` の 64MiB 上限付き little-endian length-framed binary envelope である。request は anonymous `memfd` から stdin に渡し、temporary filesystem artifact を作らない。response は detached `observation_batch` または structured `error` のいずれか一方で、AST/Clang pointer を含めない。magic、schema、version、collection count、trailing bytes、decoded batch invariant を親子双方で検証し、silent downgrade しない。worker executable は install bindir/PATH から `posix_spawnp()` し、Linux + glibc baseline 以外は capability/platform failure とする。
+
+`interop::with_translation_unit()` の user callback は process を越せないため in-process borrowed boundary のままであり、callback 実行中の cancellation/deadline は cooperative post-check である。bounded execution が必要な workspace fact/search path は isolated scheduler worker を使用する。
 
 ### 33.4 Cache levels
 

@@ -989,6 +989,24 @@ namespace cxxlens
 		return workspace{std::move(state)};
 	}
 
+	compile_unit
+	detail::workspace_catalog_access::reconstitute_compile_unit(compile_unit_id unit,
+																build_variant_id variant,
+																file_id main_file,
+																compile_command command,
+																target_context target,
+																std::string command_digest)
+	{
+		auto value = std::make_shared<compile_unit::data>();
+		value->unit_id = std::move(unit);
+		value->build_id = std::move(variant);
+		value->file = std::move(main_file);
+		value->invocation = std::move(command);
+		value->target = std::move(target);
+		value->digest = std::move(command_digest);
+		return compile_unit{std::move(value)};
+	}
+
 	path workspace::root() const
 	{
 		return data_ ? data_->project_root : path{};

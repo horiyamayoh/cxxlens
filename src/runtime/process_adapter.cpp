@@ -17,6 +17,9 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#if defined(__linux__)
+#include <sys/mman.h>
+#endif
 
 #include "process_port.hpp"
 
@@ -61,6 +64,27 @@ namespace cxxlens::detail::runtime
 			{
 				return descriptors[1];
 			}
+		};
+
+		class owned_descriptor
+		{
+		  public:
+			explicit owned_descriptor(const int value = -1) noexcept : value_{value} {}
+			owned_descriptor(const owned_descriptor&) = delete;
+			owned_descriptor& operator=(const owned_descriptor&) = delete;
+			~owned_descriptor()
+			{
+				if (value_ >= 0)
+					(void)::close(value_);
+			}
+
+			[[nodiscard]] int get() const noexcept
+			{
+				return value_;
+			}
+
+		  private:
+			int value_;
 		};
 
 		class spawn_file_actions
@@ -151,8 +175,10 @@ namespace cxxlens::detail::runtime
 
 		[[nodiscard]] bool valid_request(const process_request& request)
 		{
+			constexpr std::size_t maximum_input_bytes = std::size_t{64U} * 1024U * 1024U;
 			if (request.argv.empty() || request.argv.front().empty() || request.shell_allowed ||
-				request.timeout < std::chrono::milliseconds::zero())
+				request.timeout < std::chrono::milliseconds::zero() ||
+				request.standard_input.size() > maximum_input_bytes)
 				return false;
 			if (std::ranges::any_of(request.argv, contains_nul))
 				return false;
@@ -166,6 +192,53 @@ namespace cxxlens::detail::runtime
 												contains_nul(variable.first) ||
 												contains_nul(variable.second);
 										});
+		}
+
+		[[nodiscard]] int make_standard_input(const std::string_view input)
+		{
+#if defined(__linux__)
+			int descriptor = ::memfd_create("cxxlens-process-input", MFD_CLOEXEC);
+			if (descriptor < 0)
+				return -errno;
+			if (descriptor <= STDERR_FILENO)
+			{
+				const auto moved = ::fcntl(descriptor, F_DUPFD_CLOEXEC, STDERR_FILENO + 1);
+				if (moved < 0)
+				{
+					const auto failure = errno;
+					(void)::close(descriptor);
+					return -failure;
+				}
+				(void)::close(descriptor);
+				descriptor = moved;
+			}
+			std::size_t offset{};
+			while (offset < input.size())
+			{
+				const auto written =
+					::write(descriptor, input.data() + offset, input.size() - offset);
+				if (written > 0)
+				{
+					offset += static_cast<std::size_t>(written);
+					continue;
+				}
+				if (written < 0 && errno == EINTR)
+					continue;
+				const auto failure = written < 0 ? errno : EIO;
+				(void)::close(descriptor);
+				return -failure;
+			}
+			if (::lseek(descriptor, 0, SEEK_SET) < 0)
+			{
+				const auto failure = errno;
+				(void)::close(descriptor);
+				return -failure;
+			}
+			return descriptor;
+#else
+			(void)input;
+			return -ENOTSUP;
+#endif
 		}
 
 		[[nodiscard]] int make_pipe(pipe_pair& output)
@@ -209,17 +282,20 @@ namespace cxxlens::detail::runtime
 		}
 
 		[[nodiscard]] int add_pipe_actions(spawn_file_actions& actions,
+										   const int standard_input,
 										   const pipe_pair& standard_output,
 										   const pipe_pair& standard_error)
 		{
 			for (const auto [source, destination] :
-				 {std::pair{standard_output.write_end(), STDOUT_FILENO},
+				 {std::pair{standard_input, STDIN_FILENO},
+				  std::pair{standard_output.write_end(), STDOUT_FILENO},
 				  std::pair{standard_error.write_end(), STDERR_FILENO}})
 				if (const auto error =
 						::posix_spawn_file_actions_adddup2(actions.get(), source, destination);
 					error != 0)
 					return error;
-			for (const auto descriptor : {standard_output.read_end(),
+			for (const auto descriptor : {standard_input,
+										  standard_output.read_end(),
 										  standard_output.write_end(),
 										  standard_error.read_end(),
 										  standard_error.write_end()})
@@ -391,6 +467,10 @@ namespace cxxlens::detail::runtime
 			return invalid(context);
 		if (context.cancelled())
 			return unexpected{runtime_failure{runtime_status::cancelled, context.operation, 0}};
+		const auto standard_input_descriptor = make_standard_input(request.standard_input);
+		if (standard_input_descriptor < 0)
+			return platform_failure(context, -standard_input_descriptor);
+		owned_descriptor standard_input{standard_input_descriptor};
 
 		pipe_pair standard_output_pipe;
 		pipe_pair standard_error_pipe;
@@ -410,7 +490,8 @@ namespace cxxlens::detail::runtime
 		spawn_file_actions actions;
 		if (actions.error() != 0)
 			return platform_failure(context, actions.error());
-		if (const auto error = add_pipe_actions(actions, standard_output_pipe, standard_error_pipe);
+		if (const auto error = add_pipe_actions(
+				actions, standard_input.get(), standard_output_pipe, standard_error_pipe);
 			error != 0)
 			return platform_failure(context, error);
 		if (const auto error = add_working_directory(actions, request); error != 0)
@@ -521,6 +602,7 @@ namespace cxxlens::detail::runtime
 		standard_output_pipe.close_all();
 		standard_error_pipe.close_all();
 		result.exit_code = WIFEXITED(wait_status) ? WEXITSTATUS(wait_status) : 128;
+		result.termination_signal = WIFSIGNALED(wait_status) ? WTERMSIG(wait_status) : 0;
 		return result;
 	}
 
