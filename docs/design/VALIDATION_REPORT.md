@@ -69,9 +69,22 @@
 | interop | 4 |
 | configuration | 4 |
 
-## Phase B package Contract Candidate (#43)
+## Phase B package Contract Candidates (#43–#44)
 
-- candidate group: 1
+- candidate group: 2
+- candidate packages: `configuration`, `core`, `facts`, `interop`, `testing`, `workspace`（6）
+- assigned API: 39、exact declaration: 39、unresolved declaration: 0
+- implementation state: `conformant` 33、`unimplemented` 6（変更なし）
+- policy record: 15、各 record の result outcome 6種: 完全
+- positive / negative / ambiguous acceptance: 各 API 1件、計117件
+- public type 179 / shared component 66 / provider subject 24 / schema 58: owner 一意、dangling 0
+- registry owner and entry overlap: 0
+- candidate C++23 syntax usage: 3/3 PASS
+- package candidate validator/test: 10/10 PASS
+- production implementation / public install integration / final freeze: 未主張（#53 / #54 owner を維持）
+
+### Issue #43 core・configuration・testing
+
 - candidate packages: `configuration`, `core`, `testing`（3）
 - assigned API: 17、exact declaration: 17、unresolved declaration: 0
 - implementation state: `conformant` 13、`unimplemented` 4（変更なし）
@@ -82,4 +95,18 @@
 - candidate C++23 syntax usage: 2/2 PASS
 - fail-closed validator fixture: 9/9 PASS
 - candidate fingerprint: `sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584`
-- production implementation / public install integration / final freeze: 未主張（#53 / #54 owner を維持）
+
+### Issue #44 workspace・facts・interop
+
+- candidate packages: `facts`, `interop`, `workspace`（3）
+- assigned API: 22、exact declaration: 22、unresolved declaration: 0
+- implementation state: `conformant` 20、`unimplemented` 2（変更なし）
+- policy record: 6、各 record の result outcome 6種: 完全
+- positive / negative / ambiguous acceptance: 各 API 1件、計66件
+- workspace root/command/variant/scope/snapshot/provisioning decision table: 完全
+- fact profile/query/snapshot/coverage conservation: 完全、complete zero-match と unresolved を分離
+- borrowed Clang lifetime / custom extractor registration state machine / failure isolation: 完全
+- custom fact schema positive/native-pointer/name-only negative fixture: 3/3 PASS
+- provider ownership: `custom` は `provider.fact.custom-extractor` の一意 owner、重複0
+- candidate C++23 syntax usage: 1/1 PASS
+- candidate fingerprint: `sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601`

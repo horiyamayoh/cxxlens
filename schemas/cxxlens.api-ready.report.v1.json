@@ -10116,14 +10116,14 @@
     }
   ],
   "input_fingerprints": {
-    "contract_ownership_registry": "sha256:6bb5f3ee1de558ff2645d8a4983d222c7faf3a90b207a66082e9111206f76157",
-    "dependency_requests": "sha256:66c3e528d8371e9bb9607ad09d49a8eef3d3f03cfb5616e36aa53cab7fd09e64",
+    "contract_ownership_registry": "sha256:18a75e14eb12d0cf4cdde519646447fe033a35ac48fd91c850502624a86c08da",
+    "dependency_requests": "sha256:41a45589d8c53d74ea2b31f3e9f11c5ffe6f16fab51f1f3dfa64d91a96a06c69",
     "global_contract_conventions": "sha256:cdf3166db0b38fb9230602ff5ba273baf9e7e253d61d6c2fc75d21f0fea1238c",
     "m0": "sha256:9e32e99675512405e1247fd92b8cfcbc5c6e99ab9dc0378833482541c0538f19",
-    "m1": "sha256:0e5bf5dd8568f14394199e2deb51649bbd2743170812de12fd098b54caaa142f",
+    "m1": "sha256:330670610fc393f8fd9a79493477b28f45c22f863fddaa35dae8a074a4deb567",
     "m2": "sha256:448a5141f4c6e1045b5ff0ddae6126054be2a0cb261cfd2b227b1e1ce741e9c7",
-    "ownership": "sha256:47a467f434f4b5ed8eca8bb86f43842e00830289d5d4a49c3de894a7bddd3c54",
-    "task_packets": "sha256:8b63cc737209b88d07f05930255472802fe611c27defab75fde2318b062ee274"
+    "ownership": "sha256:938f8f06a38de7f5aab72ebde313fc01530f06166e3334f2e5b73191029eeaea",
+    "task_packets": "sha256:d1a9424c0e90b502f200277ebc1c680cc6aa7d667274410521ff0616e37bf496"
   },
   "nodes": [
     {
@@ -11198,7 +11198,7 @@
         "M0"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -11239,7 +11239,7 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -11282,7 +11282,7 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -11328,7 +11328,7 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -11374,7 +11374,7 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -11420,7 +11420,7 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -11466,7 +11466,7 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -11512,7 +11512,7 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -11558,7 +11558,7 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -11604,7 +11604,7 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -14090,7 +14090,7 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -14135,7 +14135,7 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -14170,11 +14170,11 @@
         {
           "chain": [
             "AU-INT-003",
-            "contract-candidate-missing:AU-INT-003"
+            "candidate_declaration_not_integrated:API-INT-003"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-INT-003"
+          "subject": "API-INT-003"
         },
         {
           "chain": [
@@ -14188,37 +14188,10 @@
         {
           "chain": [
             "AU-INT-003",
-            "exact-contract-missing:AU-INT-003"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-INT-003"
-        },
-        {
-          "chain": [
-            "AU-INT-003",
-            "exact_declaration_unresolved:API-INT-003"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-INT-003"
-        },
-        {
-          "chain": [
-            "AU-INT-003",
             "fixtures-missing:AU-INT-003"
           ],
           "code": "fixtures-missing",
           "steward": "steward.testing",
-          "subject": "AU-INT-003"
-        },
-        {
-          "chain": [
-            "AU-INT-003",
-            "frozen-skeleton-missing:AU-INT-003"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
           "subject": "AU-INT-003"
         }
       ],
@@ -14234,12 +14207,12 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -14266,11 +14239,11 @@
         {
           "chain": [
             "AU-INT-004",
-            "contract-candidate-missing:AU-INT-004"
+            "candidate_declaration_not_integrated:API-INT-004"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-INT-004"
+          "subject": "API-INT-004"
         },
         {
           "chain": [
@@ -14284,37 +14257,10 @@
         {
           "chain": [
             "AU-INT-004",
-            "exact-contract-missing:AU-INT-004"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-INT-004"
-        },
-        {
-          "chain": [
-            "AU-INT-004",
-            "exact_declaration_unresolved:API-INT-004"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-INT-004"
-        },
-        {
-          "chain": [
-            "AU-INT-004",
             "fixtures-missing:AU-INT-004"
           ],
           "code": "fixtures-missing",
           "steward": "steward.testing",
-          "subject": "AU-INT-004"
-        },
-        {
-          "chain": [
-            "AU-INT-004",
-            "frozen-skeleton-missing:AU-INT-004"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
           "subject": "AU-INT-004"
         }
       ],
@@ -14330,12 +14276,12 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -21216,7 +21162,7 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -21262,7 +21208,7 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -21308,7 +21254,7 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -21349,7 +21295,7 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -21390,7 +21336,7 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -21431,7 +21377,7 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -21472,7 +21418,7 @@
         "M1"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -21513,7 +21459,7 @@
         "M0"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -26809,7 +26755,7 @@
     ]
   },
   "schema": "cxxlens.api-ready.v1",
-  "semantic_digest": "sha256:be5b050adc835a2f9319ae444661bbe4f595dbbb50afe51a749eff5d46ef49f6",
+  "semantic_digest": "sha256:c18040619b0e2fd0b347d1fb324465fded27e8b362dd912676fc6fbbe8e3d3f4",
   "shards": [
     {
       "acceptance_command": {

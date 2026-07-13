@@ -20,16 +20,16 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-EXP-002 | explain | <cxxlens/explain.hpp> | explain::why_not_matched | AU-EXP-002 | conformant | unresolved |
 | API-EXP-003 | explain | <cxxlens/explain.hpp> | explain::{for_selector,for_rule,for_codemod,for_generation} | AU-EXP-003 | unimplemented | unresolved |
 | API-EXP-004 | explain | <cxxlens/explain.hpp> | explain::api_catalog_json | AU-EXP-004 | unimplemented | unresolved |
-| API-FACT-001 | facts | <cxxlens/facts.hpp> | fact_profile::{minimal,semantic_search,refactor,generation,flow,full,include,exclude,precision} | AU-FACT-001 | conformant | draft |
-| API-FACT-002 | facts | <cxxlens/facts.hpp> | fact_store::find(fact_query) | AU-FACT-002 | conformant | draft |
-| API-FACT-003 | facts | <cxxlens/facts.hpp> | fact_store::symbols() | AU-FACT-003 | conformant | draft |
-| API-FACT-004 | facts | <cxxlens/facts.hpp> | fact_store::references(symbol_id) | AU-FACT-004 | conformant | draft |
-| API-FACT-005 | facts | <cxxlens/facts.hpp> | fact_store::calls() | AU-FACT-005 | conformant | draft |
-| API-FACT-006 | facts | <cxxlens/facts.hpp> | fact_store::inheritance() | AU-FACT-006 | conformant | draft |
-| API-FACT-007 | facts | <cxxlens/facts.hpp> | fact_store::overrides() | AU-FACT-007 | conformant | draft |
-| API-FACT-008 | facts | <cxxlens/facts.hpp> | fact_store::includes() | AU-FACT-008 | conformant | draft |
-| API-FACT-009 | facts | <cxxlens/facts.hpp> | fact_store::macros() | AU-FACT-009 | conformant | draft |
-| API-FACT-010 | facts | <cxxlens/facts.hpp> | fact_store::coverage(fact_profile,analysis_scope) | AU-FACT-010 | conformant | draft |
+| API-FACT-001 | facts | <cxxlens/facts.hpp> | fact_profile::{minimal,semantic_search,refactor,generation,flow,full,include,exclude,precision} | AU-FACT-001 | conformant | candidate |
+| API-FACT-002 | facts | <cxxlens/facts.hpp> | fact_store::find(fact_query) | AU-FACT-002 | conformant | candidate |
+| API-FACT-003 | facts | <cxxlens/facts.hpp> | fact_store::symbols() | AU-FACT-003 | conformant | candidate |
+| API-FACT-004 | facts | <cxxlens/facts.hpp> | fact_store::references(symbol_id) | AU-FACT-004 | conformant | candidate |
+| API-FACT-005 | facts | <cxxlens/facts.hpp> | fact_store::calls() | AU-FACT-005 | conformant | candidate |
+| API-FACT-006 | facts | <cxxlens/facts.hpp> | fact_store::inheritance() | AU-FACT-006 | conformant | candidate |
+| API-FACT-007 | facts | <cxxlens/facts.hpp> | fact_store::overrides() | AU-FACT-007 | conformant | candidate |
+| API-FACT-008 | facts | <cxxlens/facts.hpp> | fact_store::includes() | AU-FACT-008 | conformant | candidate |
+| API-FACT-009 | facts | <cxxlens/facts.hpp> | fact_store::macros() | AU-FACT-009 | conformant | candidate |
+| API-FACT-010 | facts | <cxxlens/facts.hpp> | fact_store::coverage(fact_profile,analysis_scope) | AU-FACT-010 | conformant | candidate |
 | API-FLOW-001 | flow | <cxxlens/flow.hpp> | source_model factories | AU-FLOW-001 | unimplemented | unresolved |
 | API-FLOW-002 | flow | <cxxlens/flow.hpp> | sink_model factories | AU-FLOW-002 | unimplemented | unresolved |
 | API-FLOW-003 | flow | <cxxlens/flow.hpp> | barrier_model factories | AU-FLOW-003 | unimplemented | unresolved |
@@ -49,10 +49,10 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-GRAPH-004 | graph | <cxxlens/graph.hpp> | graph::include_graph | AU-GRAPH-004 | unimplemented | unresolved |
 | API-GRAPH-005 | graph | <cxxlens/graph.hpp> | impact_query builder and run | AU-GRAPH-005 | unimplemented | unresolved |
 | API-GRAPH-006 | graph | <cxxlens/graph.hpp> | semantic_graph::{subgraph,to_json,to_dot} | AU-GRAPH-006 | unimplemented | unresolved |
-| API-INT-001 | interop | <cxxlens/interop/clang.hpp> | interop::linked_clang_version | AU-INT-001 | conformant | unresolved |
-| API-INT-002 | interop | <cxxlens/interop/clang.hpp> | interop::with_translation_unit | AU-INT-002 | conformant | unresolved |
-| API-INT-003 | interop | <cxxlens/interop/clang.hpp> | fact_sink::{emit,emit_custom,emit_evidence,mark_partial} | AU-INT-003 | unimplemented | unresolved |
-| API-INT-004 | interop | <cxxlens/interop/clang.hpp> | interop::{register_extractor,unregister_extractor} | AU-INT-004 | unimplemented | unresolved |
+| API-INT-001 | interop | <cxxlens/interop/clang.hpp> | interop::linked_clang_version | AU-INT-001 | conformant | candidate |
+| API-INT-002 | interop | <cxxlens/interop/clang.hpp> | interop::with_translation_unit | AU-INT-002 | conformant | candidate |
+| API-INT-003 | interop | <cxxlens/interop/clang.hpp> | fact_sink::{emit,emit_custom,emit_evidence,mark_partial} | AU-INT-003 | unimplemented | candidate |
+| API-INT-004 | interop | <cxxlens/interop/clang.hpp> | interop::{register_extractor,unregister_extractor} | AU-INT-004 | unimplemented | candidate |
 | API-METHOD-001 | method_harness | <cxxlens/generate.hpp> | method_harness::parse_method_spec | AU-METHOD-001 | unimplemented | unresolved |
 | API-METHOD-002 | method_harness | <cxxlens/generate.hpp> | method_harness::resolve_method | AU-METHOD-002 | unimplemented | unresolved |
 | API-METHOD-003 | method_harness | <cxxlens/generate.hpp> | method_harness::generator::{for_method,for_symbol,options} | AU-METHOD-003 | unimplemented | unresolved |
@@ -120,11 +120,11 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-TF-007 | transform | <cxxlens/transform.hpp> | codemod::plan | AU-TF-007 | unimplemented | unresolved |
 | API-TF-008 | transform | <cxxlens/transform.hpp> | edit_plan::preview_unified_diff | AU-TF-008 | unimplemented | unresolved |
 | API-TF-009 | transform | <cxxlens/transform.hpp> | edit_plan::apply | AU-TF-009 | unimplemented | unresolved |
-| API-WS-001 | workspace | <cxxlens/workspace.hpp> | workspace_options::from_compilation_database(path) | AU-WS-001 | conformant | draft |
-| API-WS-002 | workspace | <cxxlens/workspace.hpp> | workspace::open(workspace_options, execution_context) | AU-WS-002 | conformant | draft |
-| API-WS-003 | workspace | <cxxlens/workspace.hpp> | workspace::compile_units() | AU-WS-003 | conformant | draft |
-| API-WS-004 | workspace | <cxxlens/workspace.hpp> | workspace::command_for(path) | AU-WS-004 | conformant | draft |
-| API-WS-005 | workspace | <cxxlens/workspace.hpp> | workspace::ensure(fact_profile, analysis_scope, execution_context) | AU-WS-005 | conformant | draft |
-| API-WS-006 | workspace | <cxxlens/workspace.hpp> | workspace::facts() | AU-WS-006 | conformant | draft |
-| API-WS-007 | workspace | <cxxlens/workspace.hpp> | workspace::doctor(execution_context) | AU-WS-007 | conformant | draft |
-| API-WS-008 | workspace | <cxxlens/workspace.hpp> | analysis_scope::{all,files,compile_units,changed_files,include_headers,variants} | AU-WS-008 | conformant | draft |
+| API-WS-001 | workspace | <cxxlens/workspace.hpp> | workspace_options::from_compilation_database(path) | AU-WS-001 | conformant | candidate |
+| API-WS-002 | workspace | <cxxlens/workspace.hpp> | workspace::open(workspace_options, execution_context) | AU-WS-002 | conformant | candidate |
+| API-WS-003 | workspace | <cxxlens/workspace.hpp> | workspace::compile_units() | AU-WS-003 | conformant | candidate |
+| API-WS-004 | workspace | <cxxlens/workspace.hpp> | workspace::command_for(path) | AU-WS-004 | conformant | candidate |
+| API-WS-005 | workspace | <cxxlens/workspace.hpp> | workspace::ensure(fact_profile, analysis_scope, execution_context) | AU-WS-005 | conformant | candidate |
+| API-WS-006 | workspace | <cxxlens/workspace.hpp> | workspace::facts() | AU-WS-006 | conformant | candidate |
+| API-WS-007 | workspace | <cxxlens/workspace.hpp> | workspace::doctor(execution_context) | AU-WS-007 | conformant | candidate |
+| API-WS-008 | workspace | <cxxlens/workspace.hpp> | analysis_scope::{all,files,compile_units,changed_files,include_headers,variants} | AU-WS-008 | conformant | candidate |

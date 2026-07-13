@@ -8,6 +8,7 @@ import pathlib
 import sys
 import unittest
 
+import jsonschema
 import yaml
 
 
@@ -74,6 +75,43 @@ class PackageContractCandidateTest(unittest.TestCase):
         self.assertEqual(len(group["packages"]), 3)
         self.assertEqual(len(group["api_contracts"]), 17)
         self.assertFalse(group["production_implementation_changed"])
+
+    def test_positive_issue_44_candidate_and_custom_fact_schema(self) -> None:
+        group = next(row for row in self.manifest["groups"] if row["issue"] == "#44")
+        self.assertEqual(group["packages"], ["facts", "interop", "workspace"])
+        self.assertEqual(len(group["api_contracts"]), 22)
+        self.assertFalse(group["production_implementation_changed"])
+
+        schema = load("cxxlens_custom_fact.schema.yaml")
+        fact_schema = load("cxxlens_fact.schema.yaml")
+        source_schema = load("cxxlens_source_span.schema.yaml")
+        resolver = jsonschema.RefResolver.from_schema(
+            schema,
+            store={
+                "https://schemas.cxxlens.dev/cxxlens_fact.schema.yaml": fact_schema,
+                "https://schemas.cxxlens.dev/cxxlens_source_span.schema.yaml": source_schema,
+            },
+        )
+        validator = jsonschema.Draft202012Validator(schema, resolver=resolver)
+        valid = {
+            "schema": "cxxlens.custom-fact.v1",
+            "provider_namespace": "dev.example.analysis",
+            "schema_id": "dev.example.analysis.escape-summary",
+            "schema_version": {"major": 1, "minor": 0, "patch": 0, "prerelease": ""},
+            "semantic_key": "symbol:symbol_" + "a" * 64,
+            "payload": {"escapes": False, "reasons": ["return"]},
+            "source": None,
+        }
+        validator.validate(valid)
+
+        native_pointer = copy.deepcopy(valid)
+        native_pointer["payload"] = {"decl_ptr": "0x7fff12345678"}
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(native_pointer)
+        name_only = copy.deepcopy(valid)
+        name_only["semantic_key"] = "widget"
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate(name_only)
 
     def test_missing_assigned_api_is_rejected(self) -> None:
         document = copy.deepcopy(self.manifest)

@@ -14,7 +14,7 @@
       "package_id": "configuration",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:17466b45a8eaffc70c8db11ae07e1035d5ccf1c0a966779b27fd6444b1e33f0f"
+      "task_packet_digest": "sha256:7bb18ed088f5066c38ae2373bed257853b335b91034bea6b16ec2167c68ccb89"
     },
     {
       "api_id": "API-CFG-002",
@@ -30,7 +30,7 @@
       "package_id": "configuration",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:52a976ed1d1e3a78ffd8ae8fd9ffc7b5f1f4d8b3da0faeb1cf9103d7dc652102"
+      "task_packet_digest": "sha256:e323f4d9182624cce625458dd57c00b43797a7fed972362187a09c06fc2b196d"
     },
     {
       "api_id": "API-CFG-003",
@@ -46,7 +46,7 @@
       "package_id": "configuration",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:6caca18c32aa0207aa5952a098004c6f4736e6f603f654e442dcc2b8e0390db4"
+      "task_packet_digest": "sha256:e222794f8d295e307e0e4d693637d7d0e7531ec53702260d1eec12dcc293bae3"
     },
     {
       "api_id": "API-CFG-004",
@@ -62,7 +62,7 @@
       "package_id": "configuration",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:5bb83b94cbf03c475f624cac5db5aed88460b8ef67de068daaaccb91abc0c991"
+      "task_packet_digest": "sha256:f55f27aeb126dfbe4856965101e16d5bea2971707e372fd3d539c60f0f18bdd4"
     },
     {
       "api_id": "API-COPY-001",
@@ -149,7 +149,7 @@
       "package_id": "copy",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:aee04f70fc7f251de31072a5e2462033e0d9a9adbe76eae07422a0d2d9b3e73d"
+      "task_packet_digest": "sha256:54f602aeea910c693628903254b3f556b92db19a586eae2309c2072f7f995e44"
     },
     {
       "api_id": "API-COPY-002",
@@ -262,7 +262,7 @@
       "package_id": "copy",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:05f836608af3b4339e47b3612a93d6036faa5663ca6cacaf783a3dc6316f7643"
+      "task_packet_digest": "sha256:47a4981d5b66fe640b79c72848ab9ab4d9198f4e5ba116e7e13407bf27233f7c"
     },
     {
       "api_id": "API-CORE-001",
@@ -278,7 +278,7 @@
       "package_id": "core",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:6080575430201bcc5eff2dc5424ba3a89b4ef06342272a3e15cdc9ba0edfacb7"
+      "task_packet_digest": "sha256:95bc9f8f6f92e5fb49daa7c492a5b710bdc11cf4b18f50145b7def26a677bd49"
     },
     {
       "api_id": "API-CORE-002",
@@ -294,7 +294,7 @@
       "package_id": "core",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:fe55c666597fa783fb6702d1c0791566a5d11782eadcc0a45029db51c51369d1"
+      "task_packet_digest": "sha256:d620c53a2b948704b5e8846a3ff1cd9a7688e6e9077d9858af922ba32942a804"
     },
     {
       "api_id": "API-CORE-003",
@@ -310,7 +310,7 @@
       "package_id": "core",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:2932528f3948b142ec67feedc6bb3138630711f87e1a5f13f2e0ea8e26d93878"
+      "task_packet_digest": "sha256:85de398fcf196191d6dea37859a524b3cf3d3e182076b9ea508fe4f4d0f83a64"
     },
     {
       "api_id": "API-CORE-004",
@@ -326,7 +326,7 @@
       "package_id": "core",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:76f3958f970b3f6b8fbc5effcb078daa2ce4be2eeaf628c34523d4df450c2b37"
+      "task_packet_digest": "sha256:a8f34c3ca8f9f2bf3a6fe04d7afed27edcc54e5ce2b62c9f1384e8c2b534df56"
     },
     {
       "api_id": "API-CORE-005",
@@ -373,7 +373,7 @@
       "package_id": "core",
       "phase": "M0",
       "state": "blocked",
-      "task_packet_digest": "sha256:8bfa960ee04884ba3525d93877773a8e5134762e3003f1511d9a1d78a8a248de"
+      "task_packet_digest": "sha256:e307d15aa407d5233b08b3411f0fe3a6c40cbb45b696fd30a3b506adc8ee7308"
     },
     {
       "api_id": "API-CORE-006",
@@ -431,7 +431,7 @@
       "package_id": "core",
       "phase": "M0",
       "state": "blocked",
-      "task_packet_digest": "sha256:41d643dc42d6589bc1ec04b65a4c69972e89929c220e0896353be1968ac6c9ec"
+      "task_packet_digest": "sha256:c34eb268a6e5cc2139c222eb9029d91082931f7c464137806c4bca5f675b9761"
     },
     {
       "api_id": "API-EXP-001",
@@ -508,7 +508,7 @@
       "package_id": "explain",
       "phase": "M2",
       "state": "blocked",
-      "task_packet_digest": "sha256:1d611021a33356356d347fe49a9f5c16869b1b528b8bedb8f6653b163a9c8e0c"
+      "task_packet_digest": "sha256:50dc928dbd6c3e82ee15b864492dfb134f592f4e64b278923f5fe6d476cdbfa1"
     },
     {
       "api_id": "API-EXP-002",
@@ -524,7 +524,7 @@
       "package_id": "explain",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:731be853aa8fc78c514b66a224e05d97ce84809bf2f3e9c4ff68f3237d1d2331"
+      "task_packet_digest": "sha256:cb819f9fd427f760718ad478fd1b0b7b02b46aaae0327122626a2678943c1ecd"
     },
     {
       "api_id": "API-EXP-003",
@@ -601,7 +601,7 @@
       "package_id": "explain",
       "phase": "M2",
       "state": "blocked",
-      "task_packet_digest": "sha256:26f47dfcca125b56ee131930d4f30b4e60961d2231fd912fa5dfc08f2a04904e"
+      "task_packet_digest": "sha256:c84c5b4b06f0a4d30dfd7f38ede6e364f0a973b9ae4032c46d67284067751e57"
     },
     {
       "api_id": "API-EXP-004",
@@ -678,15 +678,15 @@
       "package_id": "explain",
       "phase": "M0",
       "state": "blocked",
-      "task_packet_digest": "sha256:96a4249818b1427c0b9e65008da7090da57dd5d3035b426fa191762feed440b9"
+      "task_packet_digest": "sha256:853f1f745253a95f692514b163e2315c48c8083966845776627c5943cc91da6e"
     },
     {
       "api_id": "API-FACT-001",
       "atomic_unit_id": "AU-FACT-001",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "draft",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -694,15 +694,15 @@
       "package_id": "facts",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:094b7c33c9bdf49c630302d0fc5112821d5f1c3e5a98042eef71246c79750a7b"
+      "task_packet_digest": "sha256:8980d4118031a12adb35a6876df0ba9eaec7681578e0d3bd6592ff00dd945bd6"
     },
     {
       "api_id": "API-FACT-002",
       "atomic_unit_id": "AU-FACT-002",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "draft",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -710,15 +710,15 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:2c0add0181435f0e760be07dbd030c495b53ea0bf58b1861d680b06ead0a3d73"
+      "task_packet_digest": "sha256:cb9fc1861fa44eed9ac5fad64edf7c31ddd1fb17509d975dc40557f5d0ec007e"
     },
     {
       "api_id": "API-FACT-003",
       "atomic_unit_id": "AU-FACT-003",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "draft",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -726,15 +726,15 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:dc558f02fe569d43ff48066fa2c74c46f5705f3e16a075b148847b9450ee57af"
+      "task_packet_digest": "sha256:a95013c40ef17f32977ab8134b33b5a29cf78f4b1d76daa199a0918e35f06add"
     },
     {
       "api_id": "API-FACT-004",
       "atomic_unit_id": "AU-FACT-004",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "draft",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -742,15 +742,15 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:d9e92be5e4b4860d3a2f80fe07b3c259f94fdbcdb4fd9681a64f0ebb49a6de21"
+      "task_packet_digest": "sha256:807000d0d76cdcbb6a5ea87ee7cb443e4cef3a3fb2f0b6d08d68c5ceea3d644c"
     },
     {
       "api_id": "API-FACT-005",
       "atomic_unit_id": "AU-FACT-005",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "draft",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -758,15 +758,15 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:c71b83dc0f4dc1f955782c248331071551913371e357e5e9054a8ca538c38b21"
+      "task_packet_digest": "sha256:fed9b1d8893d9cefd51b83ec322401be1479a30d779a6e71560be0767ba60e98"
     },
     {
       "api_id": "API-FACT-006",
       "atomic_unit_id": "AU-FACT-006",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "draft",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -774,15 +774,15 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:5aea0fd0d9293a4f3e74f2a660d9b432af58c9ff59be11fa8c30c3e079e5a721"
+      "task_packet_digest": "sha256:df4c7d1d880e0de0b0fa8b246e5cfc6072895cf43968ceb6edea6394aac85877"
     },
     {
       "api_id": "API-FACT-007",
       "atomic_unit_id": "AU-FACT-007",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "draft",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -790,15 +790,15 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:da3f2d6443d0a513b6c6c59d8795a43f26329f1429449d3f5c97652435873796"
+      "task_packet_digest": "sha256:faf83ddd1c4d3b870b45c75540ce22e7cf5980324efcb3afa6fa9c26ad15ffc7"
     },
     {
       "api_id": "API-FACT-008",
       "atomic_unit_id": "AU-FACT-008",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "draft",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -806,15 +806,15 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:c85601b6a966917934831a49186251412f1915c3b889129e4519ee0fbc82f018"
+      "task_packet_digest": "sha256:3dc6710a35e9d6779b2ef6da4518c4680743c09e7f1d54d93dd0260d34f73393"
     },
     {
       "api_id": "API-FACT-009",
       "atomic_unit_id": "AU-FACT-009",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "draft",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -822,15 +822,15 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:0ab8083e640b87a595009eb53d06a4f42d2a00e73c61f4ab853d04b6d86e763e"
+      "task_packet_digest": "sha256:997588266b0a82eeb5818453f222d99e581caf5d6f2966f0f81b5f8f3a966281"
     },
     {
       "api_id": "API-FACT-010",
       "atomic_unit_id": "AU-FACT-010",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "draft",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -838,7 +838,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:37eef7109b0825b088c078ecda655a8e4f5c87b6d8bfa9dcf12a47ec7a4f1377"
+      "task_packet_digest": "sha256:4d951501314ab8b13367aedec0966535fb2a4b67ee9af5f3a3c0e9cf88b73ea0"
     },
     {
       "api_id": "API-FLOW-001",
@@ -915,7 +915,7 @@
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:e64a2d2e81094efb8d0b22885f221032eadf212d49fcc76f06bd68e6981d3dee"
+      "task_packet_digest": "sha256:bfce3f7428964e9b2bc15f576bc8614f91a3e6bfe1c4b2d9624be8ee8d773f09"
     },
     {
       "api_id": "API-FLOW-002",
@@ -1028,7 +1028,7 @@
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:7a5e61e36dfdfa9607723ae84e67ff2e0656df49f9cb67fc8098999532cdce3b"
+      "task_packet_digest": "sha256:e173e08e4969079e2c05779c283cbe18665c5b9e66aaeaf8dc61d3175ca100d6"
     },
     {
       "api_id": "API-FLOW-003",
@@ -1151,7 +1151,7 @@
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:e82a9d59cc7863fe2a197492a081867186b023581b8a955a271a2dcf6a921bc2"
+      "task_packet_digest": "sha256:55064172cd29efca92979d31fa093fde23545942a3fb372a5e9384ceb1e47cf6"
     },
     {
       "api_id": "API-FLOW-004",
@@ -1264,7 +1264,7 @@
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:1212c49503f7f54ba9e0625fb39bdd1616883cc0d86f45a574f95ab65acff478"
+      "task_packet_digest": "sha256:0aff0604652fb41fa9813593d684ff3b45d39be918617379eeb73c14f5c567e0"
     },
     {
       "api_id": "API-FLOW-005",
@@ -1397,7 +1397,7 @@
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:893b0f7afffb92adee3978711076f633537b178fc2302127b963c7e4823afc47"
+      "task_packet_digest": "sha256:c017d8d7e24175bd25437eb22ef09472a1c4695a56724fc6e1c15b00e42b3925"
     },
     {
       "api_id": "API-FLOW-006",
@@ -1510,7 +1510,7 @@
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:6601a558e99f18d4ea25669618e676116b6e042f8e33c9657dcbcfc7b3142997"
+      "task_packet_digest": "sha256:f1b873c99e2bf88cb9b2adf956cf6e9b0b8d0f60b5143fa2b6b4795e64fe35e4"
     },
     {
       "api_id": "API-FLOW-007",
@@ -1633,7 +1633,7 @@
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:a05e9f6b4093d6c46107cd221c4dc1aa21951facf561f413bc4c073442900f69"
+      "task_packet_digest": "sha256:6623e19315cacea51089b58470d414235a3231bd7f724ebabc9067ae04fdb3c1"
     },
     {
       "api_id": "API-FLOW-008",
@@ -1766,7 +1766,7 @@
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:26d50030ad443a7a4a598f04349106d5437114623505fcc79e2caad5dbed17a3"
+      "task_packet_digest": "sha256:55eb9e554b7e3ed2735aa8d0bbd03fa7603b845568e434eaa290136544cb8666"
     },
     {
       "api_id": "API-FUZZ-001",
@@ -1843,7 +1843,7 @@
       "package_id": "fuzz",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:609ae8a8178fb488cdad800c63f4d74a79c40131d1c930ee5f9aa67cef10dfe2"
+      "task_packet_digest": "sha256:1c2b5c753dc356ccef7d612f2f40b3caaadac45fc9acb692df86040b65901f0a"
     },
     {
       "api_id": "API-FUZZ-002",
@@ -1956,7 +1956,7 @@
       "package_id": "fuzz",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:69d225fa52b45f0b2202373e42816ad436309568500b509dbc4baefbc50959da"
+      "task_packet_digest": "sha256:6f0e09a7fb433289e32179e9abcebc84080a8214146c523868449fe15c5c5269"
     },
     {
       "api_id": "API-FUZZ-003",
@@ -2069,7 +2069,7 @@
       "package_id": "fuzz",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:f510154dc496d80be2be2a0d5eb274e6e5d83b26e0d5a345b76b0b07cf47b787"
+      "task_packet_digest": "sha256:e6bdff39a97b2bf9e46e81aa4be5822746d9d00a0b7b7a9e8e61f1ae1fe813f7"
     },
     {
       "api_id": "API-GEN-001",
@@ -2146,7 +2146,7 @@
       "package_id": "generate",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:b144cda0e5716dc495aa1419b4e4574846a94ea2e47c8e1a1891f35ae0a21d52"
+      "task_packet_digest": "sha256:e6c22dc36f8660ecce816a965b338d04aa7570d6362edace337607590ee80fd9"
     },
     {
       "api_id": "API-GEN-002",
@@ -2259,7 +2259,7 @@
       "package_id": "generate",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:1594ab885296b09be9a75de0601d5027ae15f35976d7a6c7cf97f849c04d22f3"
+      "task_packet_digest": "sha256:9c38ef90617019ec983374a579f524229be6176fb56b294411b5ff000516c5a2"
     },
     {
       "api_id": "API-GRAPH-001",
@@ -2336,7 +2336,7 @@
       "package_id": "graph",
       "phase": "M2",
       "state": "blocked",
-      "task_packet_digest": "sha256:96a3cc5ff6b46b1c9ad2a9b12a88f426fdf590213d09b887fda0d362d062dd65"
+      "task_packet_digest": "sha256:7e720e93ab0bbbe235d5e5894cd0d2aabe1739d0897ea0655f970f2ec8cf730c"
     },
     {
       "api_id": "API-GRAPH-002",
@@ -2449,7 +2449,7 @@
       "package_id": "graph",
       "phase": "M2",
       "state": "blocked",
-      "task_packet_digest": "sha256:0ae17339dddf8ffab649e3dc9870f657fba5c7e29bacfbf957ca3e7462685db9"
+      "task_packet_digest": "sha256:0d6beec331d546de39df35afc4c241f3a69c10d1b5fa7a5007638b8f96c95fa3"
     },
     {
       "api_id": "API-GRAPH-003",
@@ -2562,7 +2562,7 @@
       "package_id": "graph",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:049b5dedab98379dcd8194a265542c3e70248ffc1fcc2d9d9e11120f01fea403"
+      "task_packet_digest": "sha256:857f92652f9fba8be0c43bd43f862cf2ab60f16819cd8d943c2aaede6872470e"
     },
     {
       "api_id": "API-GRAPH-004",
@@ -2675,7 +2675,7 @@
       "package_id": "graph",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:3013831435e5692ff102894be3a55e996e0453d56ba0cc3d1c8c412b73233c86"
+      "task_packet_digest": "sha256:1dbbb33891f6c0078697d295e5d947b8026a379bd42ef7524eb92b5a08be6715"
     },
     {
       "api_id": "API-GRAPH-005",
@@ -2788,7 +2788,7 @@
       "package_id": "graph",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:aee12a211435dbf854cb4e9d1bca3541fba4f80c419e65b9cef6b4cebcd6114a"
+      "task_packet_digest": "sha256:374b326de073fe6800c2969396e86090221dbce1896e731b064cec0a68ce2eda"
     },
     {
       "api_id": "API-GRAPH-006",
@@ -2901,15 +2901,15 @@
       "package_id": "graph",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:20c02e375f768c5ba6ce661b34bc9b0fd9cf43c63435375b11f8f5a7f467387c"
+      "task_packet_digest": "sha256:bb918e5e8bf3da3e90ecef7f90e81aa5bf0d848223861926de967bbc3accf170"
     },
     {
       "api_id": "API-INT-001",
       "atomic_unit_id": "AU-INT-001",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "unresolved",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -2917,15 +2917,15 @@
       "package_id": "interop",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:d8310e5dccf6e40b1d39742709748f10feb87104eac7a1455b6215abd4a8a846"
+      "task_packet_digest": "sha256:ced722e20ef6a18b837c03b3cf48bd00a21a8baa385a68ec1c41c6a588a2adb9"
     },
     {
       "api_id": "API-INT-002",
       "atomic_unit_id": "AU-INT-002",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "unresolved",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -2933,7 +2933,7 @@
       "package_id": "interop",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:e10a4f3db9ea2f82ddd3a95acedf97578cbb9b4266f396e8f25336566949e6af"
+      "task_packet_digest": "sha256:c35bbff4e2e7cfaab8b556db18b1f3141be4f51ac33c6a878a522fbc6d176cbd"
     },
     {
       "api_id": "API-INT-003",
@@ -2942,12 +2942,12 @@
         {
           "chain": [
             "AU-INT-003",
-            "contract-candidate-missing:AU-INT-003"
+            "candidate_declaration_not_integrated:API-INT-003"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-INT-003"
+          "subject": "API-INT-003"
         },
         {
           "chain": [
@@ -2962,55 +2962,25 @@
         {
           "chain": [
             "AU-INT-003",
-            "exact-contract-missing:AU-INT-003"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-INT-003"
-        },
-        {
-          "chain": [
-            "AU-INT-003",
-            "exact_declaration_unresolved:API-INT-003"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-INT-003"
-        },
-        {
-          "chain": [
-            "AU-INT-003",
             "fixtures-missing:AU-INT-003"
           ],
           "code": "fixtures-missing",
           "resolution_issue": 1,
           "steward": "steward.testing",
           "subject": "AU-INT-003"
-        },
-        {
-          "chain": [
-            "AU-INT-003",
-            "frozen-skeleton-missing:AU-INT-003"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-INT-003"
         }
       ],
       "contract_owner_issue": "#44",
-      "contract_state": "unresolved",
-      "contract_transition_issue": "#42",
-      "declaration_status": "unresolved",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
+      "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "unimplemented",
       "kind": "method_family",
       "package_id": "interop",
       "phase": "M1",
       "state": "blocked",
-      "task_packet_digest": "sha256:516a5078d201a124d4764c59320cf0aaf61966b8025ffd3ee99af9d62d6a9d62"
+      "task_packet_digest": "sha256:4a97b03ffac0b7b7f91516cd1ae39c62c2af847ceddedf9d58ee1d9147318302"
     },
     {
       "api_id": "API-INT-004",
@@ -3019,12 +2989,12 @@
         {
           "chain": [
             "AU-INT-004",
-            "contract-candidate-missing:AU-INT-004"
+            "candidate_declaration_not_integrated:API-INT-004"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-INT-004"
+          "subject": "API-INT-004"
         },
         {
           "chain": [
@@ -3039,55 +3009,25 @@
         {
           "chain": [
             "AU-INT-004",
-            "exact-contract-missing:AU-INT-004"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-INT-004"
-        },
-        {
-          "chain": [
-            "AU-INT-004",
-            "exact_declaration_unresolved:API-INT-004"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-INT-004"
-        },
-        {
-          "chain": [
-            "AU-INT-004",
             "fixtures-missing:AU-INT-004"
           ],
           "code": "fixtures-missing",
           "resolution_issue": 1,
           "steward": "steward.testing",
           "subject": "AU-INT-004"
-        },
-        {
-          "chain": [
-            "AU-INT-004",
-            "frozen-skeleton-missing:AU-INT-004"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-INT-004"
         }
       ],
       "contract_owner_issue": "#44",
-      "contract_state": "unresolved",
-      "contract_transition_issue": "#42",
-      "declaration_status": "unresolved",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
+      "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "unimplemented",
       "kind": "free_function_family",
       "package_id": "interop",
       "phase": "M1",
       "state": "blocked",
-      "task_packet_digest": "sha256:ffda249979eb7eacd90e5d89cc3606993e5f0c9edbcabd23a1d63eecf15211c9"
+      "task_packet_digest": "sha256:0f35b9416d31f48b50280b4fe18f313690f477993d25a3f1f01692ba677c6d93"
     },
     {
       "api_id": "API-METHOD-001",
@@ -3164,7 +3104,7 @@
       "package_id": "method_harness",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:9b313eb03778e507d93b9e1f66aa3bcd9c7ded7b5c37960abfd39deb0e4c5c69"
+      "task_packet_digest": "sha256:c6306aa5be48bce8b62a31409eb1f94af0fb5969c75dd98814db09635c9eedd6"
     },
     {
       "api_id": "API-METHOD-002",
@@ -3277,7 +3217,7 @@
       "package_id": "method_harness",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:28d7039660f8d2bf8609287bec45e88d7b8889d958143fb6d0b30f42dc5a0245"
+      "task_packet_digest": "sha256:fcf411d364e63931be16ca71b1d33ae18b24d2e8637f3a1edda57e7e46c3fbae"
     },
     {
       "api_id": "API-METHOD-003",
@@ -3390,7 +3330,7 @@
       "package_id": "method_harness",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:bd29b205799ccbe1837bea62c93f69f36d1f7a0c3f03e9336f52eedaea79fc6d"
+      "task_packet_digest": "sha256:f11d26e7679575a34553d0cba4ba8a1765e7df680535559fd6a693843e4fc895"
     },
     {
       "api_id": "API-METHOD-004",
@@ -3523,7 +3463,7 @@
       "package_id": "method_harness",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:ae7f30ec77bad998e05e71a7842e36f4b247359c5f28f56d4df966429ed202f5"
+      "task_packet_digest": "sha256:8c7096f830b4895491e5553f7f2990d76164120c9c52e3e0c6bc52d0521da3db"
     },
     {
       "api_id": "API-METHOD-005",
@@ -3646,7 +3586,7 @@
       "package_id": "method_harness",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:e2c8cfd2c09a1975cb3ddc4a37b40552585a50b05e56c1fdddf2aa46ee64fa5c"
+      "task_packet_digest": "sha256:71ed28270884a2eabe5ae911b946576df8128ee4aceb1a4bde167e661c28fa64"
     },
     {
       "api_id": "API-MOCK-001",
@@ -3723,7 +3663,7 @@
       "package_id": "mock",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:f9828f562fd99eae6a613d0a6a3a870b4fa7a1e5baee2cd9febd875093b28916"
+      "task_packet_digest": "sha256:48b69df2202937bb7e051125f1feb8a95c8174b5c31a0b1b50b006bb17e003e2"
     },
     {
       "api_id": "API-MOCK-002",
@@ -3836,7 +3776,7 @@
       "package_id": "mock",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:2f753fabc04c8253405eff6d628cabc9bb89f57f270a2a05540c00b214143495"
+      "task_packet_digest": "sha256:339cba673f1b662e215cb0749c784d27c0399c1976102c9b47d1a49baccefcc0"
     },
     {
       "api_id": "API-MOCK-003",
@@ -3949,7 +3889,7 @@
       "package_id": "mock",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:c604c62d65876aec2082334509c7110b54d77be95c7f3476473e4facd415bf61"
+      "task_packet_digest": "sha256:f4f34edfaf2ff2445d5a3de7f2b934cc6b70d41916e269580143fad96cf50d4e"
     },
     {
       "api_id": "API-MODEL-001",
@@ -4026,7 +3966,7 @@
       "package_id": "models",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:3c8655533b845b8807096da3e3d37afda452ed01c2bdc784b207347bda8e2c92"
+      "task_packet_digest": "sha256:7d6016554e822e008452e95baa7cb170f3a44715c9bd9bda1188e90422abb394"
     },
     {
       "api_id": "API-MODEL-002",
@@ -4139,7 +4079,7 @@
       "package_id": "models",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:da12beae5a834ddcffebfbf61644017e6acc977cfc1454641e3e9fb223642f8c"
+      "task_packet_digest": "sha256:f6d06a44751abe20a403ab52e546d2e2b3459279fc16028244998ddb25f84f00"
     },
     {
       "api_id": "API-MODEL-003",
@@ -4252,7 +4192,7 @@
       "package_id": "models",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:c3d324ac167a046b986205c6af597dccf16434ffba9ca25106a5acc37ad2c157"
+      "task_packet_digest": "sha256:3b6f769005cb6e1c296fad549d8bf343aa1f837004387909a3e7112baa8069fe"
     },
     {
       "api_id": "API-MODEL-004",
@@ -4365,7 +4305,7 @@
       "package_id": "models",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:7ae9a458626306e88197fee2d265900f569bea8e7d08e58f65dab151f7f46cb6"
+      "task_packet_digest": "sha256:55ec6bbf026092bc8e187b704f820dca6be657f41f974dff13111137ddccc500"
     },
     {
       "api_id": "API-QA-001",
@@ -4442,7 +4382,7 @@
       "package_id": "qa",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:2f0daf3767f180ca1e21d5b5f71a78ae4ce1a5d7d0d14b712c9f11c37da2cfa9"
+      "task_packet_digest": "sha256:4bc9dd0a893f6cd05fae9b76b4e6dfa5025cec821cd24129045855c1dc1dcacb"
     },
     {
       "api_id": "API-QA-002",
@@ -4555,7 +4495,7 @@
       "package_id": "qa",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:c50b5146d7f15a47be915d5a666f6624387eff860b151f0ca60352a93b5420e1"
+      "task_packet_digest": "sha256:e7db6915d32aba652662e399af48cda9aaeb5fac21f3c42bb4af834e4f44a40d"
     },
     {
       "api_id": "API-QA-003",
@@ -4690,7 +4630,7 @@
       "package_id": "qa",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:093889771c99d2ecae71b2d64ed0e9931db811c3c542620a75e0f604b560ea0e"
+      "task_packet_digest": "sha256:4432ff1460d9fbac4aac872c6cbea3a28c85bb1f790c29e2d267c76139cdef4a"
     },
     {
       "api_id": "API-QA-004",
@@ -4825,7 +4765,7 @@
       "package_id": "qa",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:f12d33f972581356f63feecfd6eb6d235f4f87776310e0363378d1ee92b35232"
+      "task_packet_digest": "sha256:66bb91b7c10c62dd9244709220062b460c3ed33ae02d3ec9b4c0db33cef1059d"
     },
     {
       "api_id": "API-REPORT-001",
@@ -4902,7 +4842,7 @@
       "package_id": "report",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:7447238967ef27c46690ed9c5f67151ef5c95c1784a56b8f00589fa05c6d15cb"
+      "task_packet_digest": "sha256:84eda9319d41d0d77d17269a2f381640a212afda90fa8b3f8737988261096630"
     },
     {
       "api_id": "API-REPORT-002",
@@ -5015,7 +4955,7 @@
       "package_id": "report",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:3c12a744ddf6b9d604cb588b6ae6dbe999da2bd0e44f0549282c32fe1ed248d1"
+      "task_packet_digest": "sha256:3086d451314b780322ab287e11f4d33c192febd37680925810bee4c6644d4884"
     },
     {
       "api_id": "API-REPORT-003",
@@ -5128,7 +5068,7 @@
       "package_id": "report",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:b4c41c07e30da281e6ff7bbae165b0ecf6c28f46a7a5ec61a4f279cb6d8308a1"
+      "task_packet_digest": "sha256:c8c5f88045203f42596d3152fdbc76ddc2e2e9494ccd0a6ba6a35d9d5b60b912"
     },
     {
       "api_id": "API-REPORT-004",
@@ -5241,7 +5181,7 @@
       "package_id": "report",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:51e36bb66548e6444af93ecd320c5d0139532a9ac3b8c39da9742336f576d67a"
+      "task_packet_digest": "sha256:7e6094e1c31b7ce5b04fe8e38eb0582a9451d6d26b97cf970ab4b871ce76ca2f"
     },
     {
       "api_id": "API-RULE-001",
@@ -5318,7 +5258,7 @@
       "package_id": "rules",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:ce6c8f346cba6425ee7bafe17a21994298236f35b424eab6d1f17c461bf3d9f7"
+      "task_packet_digest": "sha256:eb1fdebb53f008ac82f30e475f0fcd437097925bc2e1812f351ca986249bd892"
     },
     {
       "api_id": "API-RULE-002",
@@ -5431,7 +5371,7 @@
       "package_id": "rules",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:20b8fefcf2a0d28db9ab6f37a3149c270593d4bae6370401a5fcdfb3c070fc0e"
+      "task_packet_digest": "sha256:eb783743dcd75585f1aa6f66e1555f8a14482a01d2ee6c5c325b92971b8a2b07"
     },
     {
       "api_id": "API-RULE-003",
@@ -5544,7 +5484,7 @@
       "package_id": "rules",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:dc1f79a53b02c4dfc2540b9eb8e9c13a338f59a2a691ec75e5a6c1f0a4e689e2"
+      "task_packet_digest": "sha256:3453c7f72ee9c8ecb1c0442a02a648f8bbe86f6d29accdc9445b8b567c422fc2"
     },
     {
       "api_id": "API-RULE-004",
@@ -5657,7 +5597,7 @@
       "package_id": "rules",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:c54fc52c18a3d9472929b198e0bb9ac4b2174cf4fe3de588700e7d151591af5e"
+      "task_packet_digest": "sha256:810c66fbbb4f29b8b5a6f2272d5552f1e63cd341a62ab855d89bd2d300e3b1ef"
     },
     {
       "api_id": "API-RULE-005",
@@ -5770,7 +5710,7 @@
       "package_id": "rules",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:a6265efdabf129790e3f8549fa238023e1c99429c1f75e483a8ddcd8ea087641"
+      "task_packet_digest": "sha256:a41fa66ae6c03a34b5b18507e462bf8dd7f1db19ae6107baffb9616c8571e840"
     },
     {
       "api_id": "API-RV-001",
@@ -5847,7 +5787,7 @@
       "package_id": "review",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:156720d3a021528323bc542346311a8823d9019f85f7e02c7a544a511e35a5c5"
+      "task_packet_digest": "sha256:3aca83fae65353ccf5b3f78925b5aac89d7edc1ce5e71aea45f56cb52c5dd2fc"
     },
     {
       "api_id": "API-RV-002",
@@ -5960,7 +5900,7 @@
       "package_id": "review",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:8afeb6ad3bcdbdc5ea760841f4acfed1185a2816decf4d7b3aaae1f92b4bbade"
+      "task_packet_digest": "sha256:e5af72f0b322a3fd45b09b5c712aa583495098faa02a9a94b5922bc84d4af420"
     },
     {
       "api_id": "API-RV-003",
@@ -6073,7 +6013,7 @@
       "package_id": "review",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:c12e6d27a348401fe8c3a57252fa3c9dd4a6fa5cf55f5e9f27096e76809f9f1f"
+      "task_packet_digest": "sha256:fb54dcbccf289e9dd4aef6655c8632d82e6372b854cb69ca9b21dde7a2670be0"
     },
     {
       "api_id": "API-RV-004",
@@ -6186,7 +6126,7 @@
       "package_id": "review",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:c67aa69f33c31a940583683ce5887d49440b169b6f6421a9722081ed13a6a096"
+      "task_packet_digest": "sha256:67d713d36855765639414a7bb25dc00dc59384be5e9c3adc53f83fd0b5178200"
     },
     {
       "api_id": "API-RV-005",
@@ -6309,7 +6249,7 @@
       "package_id": "review",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:9477fbc16cb16fd424b5fdfb2bc95b5b63bcb3f7385744882af0bb9f6978513e"
+      "task_packet_digest": "sha256:b44a0d67a4b8cadcc136832616c3a2ba74dcd88dee05b7c43e50961a8b6a633c"
     },
     {
       "api_id": "API-SEL-001",
@@ -6325,7 +6265,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:4dee565881100fa0e6f99feb74eeb5c63f9f34a073d50d0b6799ae6644301cb6"
+      "task_packet_digest": "sha256:a565a6c018b40326c262a157b6f77cd19e5d7d53d220640ee4e0b5c6c4cb10ac"
     },
     {
       "api_id": "API-SEL-002",
@@ -6341,7 +6281,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:39743fb87d3cf78bc32326bcc3fe765b0c8affc11715880cfc78e2adfcc26f46"
+      "task_packet_digest": "sha256:955de16af69ef9ff1ce06c198381adc6342b6863edf3549d336d97057d161f97"
     },
     {
       "api_id": "API-SEL-003",
@@ -6357,7 +6297,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:5d50d39c63271857dc4531d4611310a1c940bee8bbf4d5ade4e5d9b7a0a29a13"
+      "task_packet_digest": "sha256:424fa577a4a12a93c19421778015365dfdaa98aa705581e45ad4b766f8972502"
     },
     {
       "api_id": "API-SEL-004",
@@ -6444,7 +6384,7 @@
       "package_id": "select",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:8bd217af6e18a1062b8bb5573471ced4e854a8b051f7ee19ae596b12190bfc49"
+      "task_packet_digest": "sha256:6a16285daa20fa0008a064847cd903bdc37730754b9b10dac3bd13f057504c26"
     },
     {
       "api_id": "API-SEL-005",
@@ -6521,7 +6461,7 @@
       "package_id": "select",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:fefc23cd95a20e003054725764356d09d4d4cbcad7c5596d099a366055a523b8"
+      "task_packet_digest": "sha256:553a2c0d0e24739ec09b0eed5b8c608c5fc1202fee9eda43c527ad910c204262"
     },
     {
       "api_id": "API-SEL-006",
@@ -6537,7 +6477,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:5c38ae6fbe6571280c39572ae696c7c8092656e23c97a7018e66055da2dab5f6"
+      "task_packet_digest": "sha256:53906b1bf0b39f43cd66a0970d739a855cfcf830f878a5bb2b6536ef82833c93"
     },
     {
       "api_id": "API-SEL-007",
@@ -6614,7 +6554,7 @@
       "package_id": "select",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:c7c68fb0752e7ccfc48895aad7ea9d25d1d8502d2f501ba65f27fe63525a22e7"
+      "task_packet_digest": "sha256:9a50693f608bc3ae229edd826a8ab2d8b2e2188b52dcb072d03834cd2411b921"
     },
     {
       "api_id": "API-SEL-008",
@@ -6630,7 +6570,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:8445548c83371da4f6c91e97ce7630580974e5b6cbbeb2936cfe4b938a04afa9"
+      "task_packet_digest": "sha256:338902031947b4cdb23239f70cc61bf28e0b0d6c2f85f51cf509899ab298227e"
     },
     {
       "api_id": "API-SEL-009",
@@ -6646,7 +6586,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:83b7f1219bf2a8c69b4211cd549dc5502eadc6e2aa461840e8cd15c02e7bb304"
+      "task_packet_digest": "sha256:57f8ff6f4821259003b3f80b5169bef8eb25feb62a339bb522ba11138c51b17b"
     },
     {
       "api_id": "API-SEL-010",
@@ -6662,7 +6602,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:202132ae020c09610ec5cb59dc2ac2b8664138d8449bce20f8ad07a122de361c"
+      "task_packet_digest": "sha256:f24bc20eaae853380e03026a67738fa929f73d262cda96c6579ecd3cf57d2d37"
     },
     {
       "api_id": "API-SEL-011",
@@ -6678,7 +6618,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:641b3aa7670028425f6f88d7f1b91ebad6969a5638e09e873e213c5e49169607"
+      "task_packet_digest": "sha256:726272b7f8b2d55ecf66f01e046b8551a70d6e6ede8d781688742ddb1906299e"
     },
     {
       "api_id": "API-SRCH-001",
@@ -6755,7 +6695,7 @@
       "package_id": "search",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:72312b319c22b0e862444e0118cefd47279c15733150a655c6fecd3d43ca4b35"
+      "task_packet_digest": "sha256:40d2ca6d7cdce8eb413373461af268a47495229aec2eca7b90a360e738ed0446"
     },
     {
       "api_id": "API-SRCH-002",
@@ -6832,7 +6772,7 @@
       "package_id": "search",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:77e80870b37d16c0003109faa2092844b43ab950eb70016bb773339d5c06c2d3"
+      "task_packet_digest": "sha256:06449717f92fba6fa153be441a29f6061d3392a1989fbb3f50ab6583b1d2884d"
     },
     {
       "api_id": "API-SRCH-003",
@@ -6848,7 +6788,7 @@
       "package_id": "search",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:e11924da5ce87adba52fd921d40c44c6191fd2b515ad2be05e31a26873daaf12"
+      "task_packet_digest": "sha256:bcfb742a34cd310fda5d959328776cbafa087128e54bfec1a846a2745ea05b0c"
     },
     {
       "api_id": "API-SRCH-004",
@@ -6864,7 +6804,7 @@
       "package_id": "search",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:9268bfc5f72416a194c9921d74b393c60fa102008d9c898a56dd38629f457766"
+      "task_packet_digest": "sha256:211c49fb4779144cac7d2dfff8d35e8f458f46a6c079635b320a8592ff26cc5a"
     },
     {
       "api_id": "API-SRCH-005",
@@ -6880,7 +6820,7 @@
       "package_id": "search",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:9c55bab43f22913b9c0b3465acde29e240d88a568a833f2695f4a9d2c27af872"
+      "task_packet_digest": "sha256:d6b84747ceccae11aa04d97db623b874c70be8eb56894c64d25a7e1081f52d49"
     },
     {
       "api_id": "API-SRCH-006",
@@ -6896,7 +6836,7 @@
       "package_id": "search",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:3695d3e9b3d07517ccdba9541fd10c7a0a2da9eaca6308433614cd194b98a0c8"
+      "task_packet_digest": "sha256:4716693d1664a9c78f5fd7ccda464fc9a547cadd57b10344ba3470240eba771d"
     },
     {
       "api_id": "API-SRCH-007",
@@ -6912,7 +6852,7 @@
       "package_id": "search",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:938649f69bda40256a2f869d6670ddf8429af2d689a223565d44934a37c482e2"
+      "task_packet_digest": "sha256:fa819b0accce5c22bacc87d4e947269b7e60c497459b0fe3990732b1791bd895"
     },
     {
       "api_id": "API-SRCH-008",
@@ -6989,7 +6929,7 @@
       "package_id": "search",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:900241bd50a5862c872167b4eb66c0701393fa02330faa751dc9600a2cdc68d8"
+      "task_packet_digest": "sha256:69bee8be1d8b4d030e2eab467abb4a97441783e8cca2c9c0cb1a139a6b9f2021"
     },
     {
       "api_id": "API-SRCH-009",
@@ -7066,7 +7006,7 @@
       "package_id": "search",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:4e2e74d78b9c4695b9138a272c6d0669d683091335370035b215297aba93ec72"
+      "task_packet_digest": "sha256:70d5aef73304000705f14a7c86a2df09daf3016da35c52b5742a01a259e52f7b"
     },
     {
       "api_id": "API-SRCH-010",
@@ -7153,7 +7093,7 @@
       "package_id": "search",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:b877ab3aab7a9548c5c046b6443c033af0ae6eed4222aa02631e0bd3ae88dce2"
+      "task_packet_digest": "sha256:46496dd02a7e3616f72529157234dd3ed4658de5b1dabe13e196037bb08c45bb"
     },
     {
       "api_id": "API-TEST-001",
@@ -7169,7 +7109,7 @@
       "package_id": "testing",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:2a4c315483c9ad7558e537238aeed3bef99c2be0db57992fc157dd3e3aaa09e9"
+      "task_packet_digest": "sha256:dd440c9d5418a64b3a00535ddc9dba48ed3ea560a078e4d230cc69b9943a2bfe"
     },
     {
       "api_id": "API-TEST-002",
@@ -7185,7 +7125,7 @@
       "package_id": "testing",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:9a166f83bcdb233e56c6bce2829cf7228498daf6727bc73e06d026ec5eebe016"
+      "task_packet_digest": "sha256:9e3b9d282ebcfe68de6e0acd0a00277a50d2be78365455b71f7b4af6aab4a9c3"
     },
     {
       "api_id": "API-TEST-003",
@@ -7297,7 +7237,7 @@
       "package_id": "testing",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:65c8a48ac1923e8fa953453ab31f13c480cf9a104a74c6e0a50c428f235a32fb"
+      "task_packet_digest": "sha256:4d09c9966534484b4c45d2f50daae4240fc1cde7d76ee2a251bc0b6d739424d5"
     },
     {
       "api_id": "API-TEST-004",
@@ -7376,7 +7316,7 @@
       "package_id": "testing",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:a853e59285ec43aa32232ba4badb711daf7e135e8a5ed3a74009db5a642776ee"
+      "task_packet_digest": "sha256:6452d44cdbc7cd68f87d273b94d63aed36263d8b1c9d41d6bfddab1188361c97"
     },
     {
       "api_id": "API-TEST-005",
@@ -7392,7 +7332,7 @@
       "package_id": "testing",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:6c0730d78ee330b8b267e8569267f9ab1283068a722037b503147c969728d2ed"
+      "task_packet_digest": "sha256:dd802e98b8ec8ceed523e4d2a6e491d948437090d1c5ea9a5529c210ebe71a46"
     },
     {
       "api_id": "API-TEST-006",
@@ -7408,7 +7348,7 @@
       "package_id": "testing",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:cf89fd8b283e7c160322606132e3d1037937a8d2143f0f032369b9fb0d3e6e74"
+      "task_packet_digest": "sha256:26d49ddeb6aa1d3c98870096b8b3a9003d0085418a835dee8dc1ddce7fd7825d"
     },
     {
       "api_id": "API-TEST-007",
@@ -7424,7 +7364,7 @@
       "package_id": "testing",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:801dbb7d3f6f63bde6544a6d497fefe6c6f047da0f6a7aae1453e9e21d8262de"
+      "task_packet_digest": "sha256:1f7ad4c88b299be26457f47f268317e7e380bf7ebd0a73ad06dafb79ab9e0017"
     },
     {
       "api_id": "API-TF-001",
@@ -7501,7 +7441,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:dc3d78e9b2ec0816e6f2e707dea451b61798273f3d2979e2bd423a32a903c1bf"
+      "task_packet_digest": "sha256:64fd2200d030c5539d83fcabf5c5e581075d134ebb3e9c732539051d8af470ea"
     },
     {
       "api_id": "API-TF-002",
@@ -7614,7 +7554,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:4d10f1405232105bd2fad8372a1b653bdbf4ba942c505eff7aa0a8d7aaf7d8f3"
+      "task_packet_digest": "sha256:cbb92f6ac00aea3aa4cb2b4ecf5276e2bf0bb91f5ba9e7c6f52221eb0094b59c"
     },
     {
       "api_id": "API-TF-003",
@@ -7727,7 +7667,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:dd8a632af380a20da6eabbb9de8f40f287c991700e6506634a79b4f6c22fefde"
+      "task_packet_digest": "sha256:f146c2c3082699a4ed9f990664a2d3119f08e047cdd3433fa2b3cce2a4ea61ab"
     },
     {
       "api_id": "API-TF-004",
@@ -7840,7 +7780,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:337563d80070a72c5ea3a7b7953147a462bf1fe1a8b9eb50d1b9ce44ef597c7e"
+      "task_packet_digest": "sha256:f7950fbe4f2c1e902aea065960843c097ab9083321874bda2cbdea50fc53359f"
     },
     {
       "api_id": "API-TF-005",
@@ -7953,7 +7893,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:3e07d1d7890dd42a8ee94368cccc750b200a07e5b4fd441c03a022ea2d743aa4"
+      "task_packet_digest": "sha256:e57e2ea37bd570262b0c0f3d54617aca244a87405470fb31734b6bbc2c79d1a1"
     },
     {
       "api_id": "API-TF-006",
@@ -8076,7 +8016,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:955e128e309715d1200ea697d4542d221e54774a6fd6de2e35d0388c8efe92f5"
+      "task_packet_digest": "sha256:137044e642697eb712751476d6d3e4d488362405ae17a93051cc8e3ed56d0681"
     },
     {
       "api_id": "API-TF-007",
@@ -8189,7 +8129,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:1c1b59e3eb6d17eb8c224af5c7173a825ee1badd807ccc9780daf70eae105d30"
+      "task_packet_digest": "sha256:63ecd05bd0d411576f7ac40c76530844b86a51400842c782f212f250a1478652"
     },
     {
       "api_id": "API-TF-008",
@@ -8302,7 +8242,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:89c6a9d1be2fc2185f61366ffef3e19512d313a4aa1261f434a929454869ba82"
+      "task_packet_digest": "sha256:4ac01c2367b93e0f8bcaae4ad85efd306ff2e96bf8694ec37d2c80d64709bfd7"
     },
     {
       "api_id": "API-TF-009",
@@ -8415,15 +8355,15 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:8a73848a222b6b0905cd5bd62ad03304a9c304ad2cdc5dc0f0650ef51ff377ce"
+      "task_packet_digest": "sha256:d8a35a5fc693b7e188305a87438d5b735ea904b1d5c5af27d27bb5d60e0621a5"
     },
     {
       "api_id": "API-WS-001",
       "atomic_unit_id": "AU-WS-001",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "draft",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -8431,15 +8371,15 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:a939a66a1e613dc2670c5138349daaf51b75ed7d8cbf0ab0917b6c9b7ba80cda"
+      "task_packet_digest": "sha256:3749f672d238006866c1840d8994c0d07b1b609919911affea7dfa5918dc4984"
     },
     {
       "api_id": "API-WS-002",
       "atomic_unit_id": "AU-WS-002",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "draft",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -8447,15 +8387,15 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:eb8010b260e07b8f258a257c1bbe3cf4a47020b1532483fa92c270425c16c825"
+      "task_packet_digest": "sha256:bbf762a03c5397b2d9e2adabc25a6aaa6ec1ccc7d56f571908ae5e642c9c10e8"
     },
     {
       "api_id": "API-WS-003",
       "atomic_unit_id": "AU-WS-003",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "draft",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -8463,15 +8403,15 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:993120ae02516a2ce31422f04239283e6de6359b33fab575c5ac20b2c0e75bed"
+      "task_packet_digest": "sha256:c1398de75ad0bb3785b8af15df5b354a902eac353d06a86a4fd68e9df89791a5"
     },
     {
       "api_id": "API-WS-004",
       "atomic_unit_id": "AU-WS-004",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "draft",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -8479,15 +8419,15 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:6a74d0d7ce15f03dc93faa0edc733a8bf429f83bc7a431a34b86ec272caf44b7"
+      "task_packet_digest": "sha256:5509960a027a4d92af875110952d326fa37e28d2a8de48a5b34580c0125a1488"
     },
     {
       "api_id": "API-WS-005",
       "atomic_unit_id": "AU-WS-005",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "draft",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -8495,15 +8435,15 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:15faf707b553927a32bc4055086f9fbad4fc729efc0a6297838caef7303a374e"
+      "task_packet_digest": "sha256:ad954b1cf571eea9bd086e8b3dfa50f3058c86486c69710ea6256bef763a5525"
     },
     {
       "api_id": "API-WS-006",
       "atomic_unit_id": "AU-WS-006",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "draft",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -8511,15 +8451,15 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:b1cf4849ca25e25da17b6acffff3ed8fbfb4962efd7e77b15c36059b529d1213"
+      "task_packet_digest": "sha256:66d9f5490063d5658472e41626c7f630201bf69299162058ac4699085ebc2c85"
     },
     {
       "api_id": "API-WS-007",
       "atomic_unit_id": "AU-WS-007",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "draft",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -8527,15 +8467,15 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:3a0a58a749615cefc9b2e2d8ca8f6bde3fc1646ecaddc039dac935d8ed42e05d"
+      "task_packet_digest": "sha256:a47c12118589d7d91c114bf9cf42687068c88dd2194be2e15000ebfcf2e0e54b"
     },
     {
       "api_id": "API-WS-008",
       "atomic_unit_id": "AU-WS-008",
       "blockers": [],
       "contract_owner_issue": "#44",
-      "contract_state": "draft",
-      "contract_transition_issue": "#42",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#44",
       "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "conformant",
@@ -8543,7 +8483,7 @@
       "package_id": "workspace",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:397fb13474b3798bd054dcf59598340fe071e52b6154e849902e612e0a5cdf8a"
+      "task_packet_digest": "sha256:0801151690cbd0a5ab449888e8fcfbfc6f041ba88030c8ee48c8e182f75b9900"
     }
   ],
   "authorization": {
@@ -8555,21 +8495,21 @@
     "validity": {
       "basis": "exact-source-and-observed-gates",
       "expires_on": "source-workflow-gate-or-input-drift",
-      "fingerprint_digest": "sha256:be793386ef18db810f94d37a33ee0970b701fef1b0ba0614fea62dbc1e17caa3",
+      "fingerprint_digest": "sha256:6516c3887ffec155cc84970dc3bab0564cc783a8884a7b6f28e398a5a95483d8",
       "state": "unverified"
     }
   },
   "catalog_audit": {
     "api_count": 124,
-    "candidate_contract_package_count": 3,
+    "candidate_contract_package_count": 6,
     "dangling_api_dependency_count": 0,
     "duplicate_api_count": 0,
     "evidence_free_conformant_count": 0,
-    "exact_declaration_count": 51,
+    "exact_declaration_count": 53,
     "frozen_contract_package_count": 0,
     "invalid_contract_transition_count": 0,
     "package_count": 22,
-    "unresolved_declaration_count": 73,
+    "unresolved_declaration_count": 71,
     "unresolved_ready_signature_count": 0
   },
   "checks": [
@@ -8616,7 +8556,7 @@
         "api_id": "API-COPY-001",
         "atomic_unit_id": "AU-COPY-001",
         "kind": "free_function",
-        "packet_digest": "sha256:aee04f70fc7f251de31072a5e2462033e0d9a9adbe76eae07422a0d2d9b3e73d",
+        "packet_digest": "sha256:54f602aeea910c693628903254b3f556b92db19a586eae2309c2072f7f995e44",
         "phase": "M6",
         "shard_digest": "sha256:18c87c4c640f39c4e80809eaed8b385d4ea46e737f63b341251d49e264332e84",
         "start_authorized": false,
@@ -8634,7 +8574,7 @@
         "api_id": "API-FACT-002",
         "atomic_unit_id": "AU-FACT-002",
         "kind": "method",
-        "packet_digest": "sha256:2c0add0181435f0e760be07dbd030c495b53ea0bf58b1861d680b06ead0a3d73",
+        "packet_digest": "sha256:cb9fc1861fa44eed9ac5fad64edf7c31ddd1fb17509d975dc40557f5d0ec007e",
         "phase": "M1",
         "shard_digest": "sha256:a6504479ade54c8e1d2300faa842ece5bee90b2c9dc7b9fb3c478e64181c9c92",
         "start_authorized": false,
@@ -8652,7 +8592,7 @@
         "api_id": "API-CFG-003",
         "atomic_unit_id": "AU-CFG-003",
         "kind": "method_family",
-        "packet_digest": "sha256:6caca18c32aa0207aa5952a098004c6f4736e6f603f654e442dcc2b8e0390db4",
+        "packet_digest": "sha256:e222794f8d295e307e0e4d693637d7d0e7531ec53702260d1eec12dcc293bae3",
         "phase": "M0",
         "shard_digest": "sha256:9e855b296298f42106a01eb28242729c2a7e6ece47f1fdb01ef05e1deb2d2b1e",
         "start_authorized": false,
@@ -8670,7 +8610,7 @@
         "api_id": "API-FLOW-004",
         "atomic_unit_id": "AU-FLOW-004",
         "kind": "builder_family",
-        "packet_digest": "sha256:1212c49503f7f54ba9e0625fb39bdd1616883cc0d86f45a574f95ab65acff478",
+        "packet_digest": "sha256:0aff0604652fb41fa9813593d684ff3b45d39be918617379eeb73c14f5c567e0",
         "phase": "M7",
         "shard_digest": "sha256:5f9955687c7ac6ca15598af95745b818fb32f398a1fcdcd7b6ff35dfb1997bc0",
         "start_authorized": false,
@@ -8688,7 +8628,7 @@
         "api_id": "API-CFG-001",
         "atomic_unit_id": "AU-CFG-001",
         "kind": "static_factory",
-        "packet_digest": "sha256:17466b45a8eaffc70c8db11ae07e1035d5ccf1c0a966779b27fd6444b1e33f0f",
+        "packet_digest": "sha256:7bb18ed088f5066c38ae2373bed257853b335b91034bea6b16ec2167c68ccb89",
         "phase": "M0",
         "shard_digest": "sha256:d9df4256387eaa53c053ee711a7dc3700331bccba8cda4d9f75945e8004f2eec",
         "start_authorized": false,
@@ -8970,25 +8910,25 @@
     "packet_count": 124,
     "provider_ambiguity_count": 0,
     "reserved_path_count": 11,
-    "tracked_path_count": 399,
+    "tracked_path_count": 403,
     "unowned_path_count": 0,
     "write_overlap_count": 0
   },
   "input_fingerprints": {
-    "audit_policy": "sha256:466a65e8904aa49c0e6a6b7954426dcd97961803273e2c526ed3cdc7b80a3e9b",
-    "build_gates": "sha256:6a01ddc50149d949caa3811184b73db19a7c3598aa9e638d55d351ec2b52e149",
-    "catalog": "sha256:79350ec6a6ac759d9e61267fe9c8461b75b6ec83c2b7bda697ca80496ee461ea",
-    "contract_ownership_registry": "sha256:6bb5f3ee1de558ff2645d8a4983d222c7faf3a90b207a66082e9111206f76157",
-    "dependency_requests": "sha256:66c3e528d8371e9bb9607ad09d49a8eef3d3f03cfb5616e36aa53cab7fd09e64",
-    "design_package": "sha256:e3faaaba86414c553d25e1176ae56e9a2497663779233e67371c57179ff22d17",
+    "audit_policy": "sha256:87b91edd6b05225092ccb63b2f326bb3b83e53c3bd6cbe518a04dc92ef97437d",
+    "build_gates": "sha256:7d46f5680c07938aff0f1fdad8011119645d3e3a41ea16a33a7da78564526d5d",
+    "catalog": "sha256:7ae9de3d643038321104b0d2633febdd1558af2e1295a07d0a367d7ca7f2efd7",
+    "contract_ownership_registry": "sha256:18a75e14eb12d0cf4cdde519646447fe033a35ac48fd91c850502624a86c08da",
+    "dependency_requests": "sha256:41a45589d8c53d74ea2b31f3e9f11c5ffe6f16fab51f1f3dfa64d91a96a06c69",
+    "design_package": "sha256:f1428317921eada4af0a674dae4773f68f1e0621954054af175183445e1c3770",
     "global_contract_conventions": "sha256:cdf3166db0b38fb9230602ff5ba273baf9e7e253d61d6c2fc75d21f0fea1238c",
     "m0": "sha256:9e32e99675512405e1247fd92b8cfcbc5c6e99ab9dc0378833482541c0538f19",
-    "m1": "sha256:0e5bf5dd8568f14394199e2deb51649bbd2743170812de12fd098b54caaa142f",
+    "m1": "sha256:330670610fc393f8fd9a79493477b28f45c22f863fddaa35dae8a074a4deb567",
     "m2": "sha256:448a5141f4c6e1045b5ff0ddae6126054be2a0cb261cfd2b227b1e1ce741e9c7",
-    "ownership": "sha256:47a467f434f4b5ed8eca8bb86f43842e00830289d5d4a49c3de894a7bddd3c54",
+    "ownership": "sha256:938f8f06a38de7f5aab72ebde313fc01530f06166e3334f2e5b73191029eeaea",
     "quality_workflow": "sha256:f8fc4c3623c6ff6c81204823ee49dcb1fc457de5a7dcffbc0a8d9957cac743b5",
-    "ready_report": "sha256:be5b050adc835a2f9319ae444661bbe4f595dbbb50afe51a749eff5d46ef49f6",
-    "task_packets": "sha256:8b63cc737209b88d07f05930255472802fe611c27defab75fde2318b062ee274"
+    "ready_report": "sha256:c18040619b0e2fd0b347d1fb324465fded27e8b362dd912676fc6fbbe8e3d3f4",
+    "task_packets": "sha256:d1a9424c0e90b502f200277ebc1c680cc6aa7d667274410521ff0616e37bf496"
   },
   "policy": {
     "dispatch_scope": "manifest_ready_units_only",
@@ -9004,7 +8944,7 @@
     "waivers_allowed": false
   },
   "schema": "cxxlens.readiness.authorization.v1",
-  "semantic_digest": "sha256:e921eb41caafd1513249e2a5c8f833134aa6757c084479330c393138f264f61b",
+  "semantic_digest": "sha256:607760e4b2a7d2e58b9ca667406517205761caef411f09962757c99bd3982eff",
   "source_identity": {
     "binding": "unbound",
     "commit_sha": null,
@@ -11878,12 +11818,12 @@
         {
           "chain": [
             "AU-INT-003",
-            "contract-candidate-missing:AU-INT-003"
+            "candidate_declaration_not_integrated:API-INT-003"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-INT-003"
+          "subject": "API-INT-003"
         },
         {
           "chain": [
@@ -11898,41 +11838,11 @@
         {
           "chain": [
             "AU-INT-003",
-            "exact-contract-missing:AU-INT-003"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-INT-003"
-        },
-        {
-          "chain": [
-            "AU-INT-003",
-            "exact_declaration_unresolved:API-INT-003"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-INT-003"
-        },
-        {
-          "chain": [
-            "AU-INT-003",
             "fixtures-missing:AU-INT-003"
           ],
           "code": "fixtures-missing",
           "resolution_issue": 1,
           "steward": "steward.testing",
-          "subject": "AU-INT-003"
-        },
-        {
-          "chain": [
-            "AU-INT-003",
-            "frozen-skeleton-missing:AU-INT-003"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
           "subject": "AU-INT-003"
         }
       ],
@@ -11953,12 +11863,12 @@
         {
           "chain": [
             "AU-INT-004",
-            "contract-candidate-missing:AU-INT-004"
+            "candidate_declaration_not_integrated:API-INT-004"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-INT-004"
+          "subject": "API-INT-004"
         },
         {
           "chain": [
@@ -11973,41 +11883,11 @@
         {
           "chain": [
             "AU-INT-004",
-            "exact-contract-missing:AU-INT-004"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-INT-004"
-        },
-        {
-          "chain": [
-            "AU-INT-004",
-            "exact_declaration_unresolved:API-INT-004"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-INT-004"
-        },
-        {
-          "chain": [
-            "AU-INT-004",
             "fixtures-missing:AU-INT-004"
           ],
           "code": "fixtures-missing",
           "resolution_issue": 1,
           "steward": "steward.testing",
-          "subject": "AU-INT-004"
-        },
-        {
-          "chain": [
-            "AU-INT-004",
-            "frozen-skeleton-missing:AU-INT-004"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
           "subject": "AU-INT-004"
         }
       ],

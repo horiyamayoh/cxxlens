@@ -65,9 +65,9 @@ class GlobalContractConventionsTest(unittest.TestCase):
             self.catalog,
             ROOT,
         )
-        self.assertEqual(self.ownership["summary"]["public_type_count"], 178)
+        self.assertEqual(self.ownership["summary"]["public_type_count"], 179)
         self.assertEqual(self.ownership["summary"]["shared_component_count"], 66)
-        self.assertEqual(self.ownership["summary"]["provider_subject_count"], 23)
+        self.assertEqual(self.ownership["summary"]["provider_subject_count"], 24)
         self.assertGreaterEqual(self.ownership["summary"]["schema_count"], 56)
 
     def test_missing_package_owner_is_rejected(self) -> None:

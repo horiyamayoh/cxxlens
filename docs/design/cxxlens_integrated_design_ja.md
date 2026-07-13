@@ -3623,6 +3623,18 @@ assertion、property/determinism、exact schema lookup を持ち、transform/gen
 consumer として参照するだけで再所有しない。candidate fragment の public/install 統合は #53、freeze は
 #54 の authority とする。
 
+### 39.15 workspace・facts・interop package candidate
+
+Issue #44 の規範的 package contract は `package_contract_44.md` と
+`cxxlens_package_contract_candidates.yaml#issue-44` である。`workspace` は root/compile command/
+variant/scope、immutable snapshot、差分 provisioning と coverage 会計を所有する。`facts` は profile、
+generic/typed query、fact identity/provenance、snapshot/coverage schema を所有し、complete zero-match と
+incomplete/unresolved を分離する。`interop` は Clang callback 内だけの thread-confined borrow と、
+namespace/schema/version を一意所有する custom extractor/fact sink 登録 state machine を所有する。
+custom payload へ AST/LLVM pointer、address、pretty-type-only identity を保存してはならない。extractor
+failure は個別 staging batch に隔離し、typed evidence/coverage を残す。candidate fragment の public/install
+統合は #53、freeze は #54 の authority とする。
+
 ---
 
 ## 40. Public API inventory

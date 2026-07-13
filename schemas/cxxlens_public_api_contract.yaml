@@ -212,7 +212,7 @@ packages:
       blockers:
       - candidate_declaration_not_integrated
 - id: workspace
-  contract: {state: draft, owner_issue: '#44', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract: {state: candidate, owner_issue: '#44', transition_issue: '#44', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-44', candidate_fingerprint: 'sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601'}
   header: <cxxlens/workspace.hpp>
   purpose: Compilation database, build variants, snapshots and fact provisioning.
   public_types:
@@ -493,7 +493,7 @@ packages:
       state: complete
       blockers: []
 - id: facts
-  contract: {state: draft, owner_issue: '#44', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract: {state: candidate, owner_issue: '#44', transition_issue: '#44', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-44', candidate_fingerprint: 'sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601'}
   header: <cxxlens/facts.hpp>
   purpose: Immutable semantic facts and typed fact access.
   public_types:
@@ -3528,12 +3528,13 @@ packages:
       state: complete
       blockers: []
 - id: interop
-  contract: {state: unresolved, owner_issue: '#44', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract: {state: candidate, owner_issue: '#44', transition_issue: '#44', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-44', candidate_fingerprint: 'sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601'}
   header: <cxxlens/interop/clang.hpp>
   purpose: Unstable LLVM-major-scoped raw Clang corridor.
   public_types:
   - clang_api_version
   - borrowed_clang_tu
+  - custom_fact
   - fact_sink
   - clang_fact_extractor
   apis:
@@ -3622,17 +3623,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/44/interop_extractors.hpp
+      signature: 'cxxlens::result<void> cxxlens::interop::fact_sink::emit(cxxlens::fact); cxxlens::result<void> cxxlens::interop::fact_sink::emit_custom(cxxlens::interop::custom_fact); cxxlens::result<void> cxxlens::interop::fact_sink::emit_evidence(cxxlens::evidence_item); cxxlens::result<void> cxxlens::interop::fact_sink::mark_partial(cxxlens::unresolved)'
+      signature_fingerprint: sha256:4d667ed308ad08871902397aacaf79419053dc3799d278960e47a64bff9af3d5
     atomic_unit:
       id: AU-INT-003
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-INT-004
     symbol: interop::{register_extractor,unregister_extractor}
     kind: free_function_family
@@ -3643,17 +3644,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/44/interop_extractors.hpp
+      signature: 'cxxlens::result<std::string> cxxlens::interop::register_extractor(cxxlens::workspace&,std::shared_ptr<cxxlens::interop::clang_fact_extractor>); cxxlens::result<void> cxxlens::interop::unregister_extractor(cxxlens::workspace&,std::string)'
+      signature_fingerprint: sha256:d4049228415182ede11d70662295d69cf0642721e96ab500bbb024a6415a56b2
     atomic_unit:
       id: AU-INT-004
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
 - id: configuration
   contract: {state: candidate, owner_issue: '#43', transition_issue: '#43', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-43', candidate_fingerprint: 'sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584'}
   header: <cxxlens/configuration.hpp>
@@ -3781,9 +3782,8 @@ summary:
     implemented: 0
     conformant: 47
   contract_state_counts:
-    candidate: 3
-    draft: 2
-    unresolved: 17
+    candidate: 6
+    unresolved: 16
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.
@@ -3808,6 +3808,7 @@ registries:
   - control_flow
   - conversion
   - coverage
+  - custom
   - declaration
   - definition
   - effect_summary
@@ -3886,6 +3887,13 @@ registries:
     steward: steward.workspace
     semantics_version: cxxlens.fact-provider.compile-command.v1
     source_contract: schemas/cxxlens_m1_completion.yaml
+  - id: provider.fact.custom-extractor
+    kind: fact_provider_implementation
+    subjects: [custom]
+    owner_atomic_unit: AU-INT-004
+    steward: steward.interop
+    semantics_version: cxxlens.fact-provider.custom-extractor.v1
+    source_contract: docs/design/package_contract_44.md#custom-fact-and-extractor-state-machine
   - id: provider.fact.frontend
     kind: fact_provider_implementation
     subjects: [call, cfg_summary, control_flow, conversion, coverage, declaration, definition, effect_summary, file, finding, flow_summary, include_relation, inheritance, macro_expansion, override_relation, reference, symbol, type]

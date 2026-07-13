@@ -776,3 +776,1604 @@ groups:
       ambiguous: {id: API-TEST-007.ambiguous, expression: Two compile commands match one file, expected: Explicit ambiguity; never first-wins.}
   production_implementation_changed: false
   candidate_fingerprint: sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584
+- issue: '#44'
+  state: candidate
+  packages:
+  - facts
+  - interop
+  - workspace
+  normative_document: docs/design/package_contract_44.md
+  candidate_headers:
+  - contracts/candidates/44/interop_extractors.hpp
+  usage_examples:
+  - contracts/candidates/44/interop_extractors_usage.cpp
+  policies:
+  - id: workspace.catalog-snapshot.v1
+    ownership_and_lifetime:
+    - Workspace options, catalog rows, scopes, doctor reports, and snapshot handles are value-owned; all persistent values
+      are detached and own their stable data.
+    - Views and callback borrows name their backing owner and never outlive it.
+    const_noexcept_thread_safety:
+    - Immutable values and snapshots support concurrent reads; mutation and staging require exclusive ownership.
+    - Only allocation-free accessors are noexcept; expected operational failure uses result.
+    callback_and_exception:
+    - No catalog callback is retained; workspace operations use the execution-context progress contract.
+    - Expected failures do not cross a library callback as exceptions or prose.
+    execution_context_and_budgets:
+    - Catalog reads and doctor obey input/output budgets; current directory and ambient environment never alter identity.
+    - Filesystem, process, time, and cancellation are observed only through explicit ports/context.
+    result_semantics:
+      empty_success: A complete known-empty universe is a successful empty value and remains distinct from unknown or incomplete.
+      unresolved: Typed unresolved rows and incomplete coverage are preserved; they cannot be converted to empty success.
+      unsupported: A known unsupported capability/schema/precision returns a structured error without fallback.
+      ambiguous: All authoritative variants/candidates remain visible with typed ambiguity; no first-wins is allowed.
+      partial: Valid rows survive bounded failure with failed/unresolved coverage and downgraded guarantee.
+      failure: Invalid identity, schema, ownership, conservation, or conflicting duplicates fail structurally.
+    evidence_coverage_guarantee:
+    - Evidence and per-unit coverage are authoritative; summary prose and confidence cannot upgrade precision or guarantee.
+    - Requested units are conserved exactly across covered, excluded, failed, unresolved, and not_applicable.
+    ordering_duplicates_variants:
+    - Canonical typed identity and full IDs define order; hash, filesystem, arrival, and thread completion order are forbidden.
+    - Equal duplicates collapse, conflicting payloads reject, and divergent variants remain separate.
+    schema_and_versioning:
+    - Exact schema and independent cpp/public/fact/semantics/adapter versions are mandatory.
+    - Unknown values reject and no nearest-version or adjacent-LLVM-major fallback is permitted.
+    change_policy:
+    - Signature, lifetime, identity, ordering, schema, provider ownership, coverage, or guarantee changes invalidate this
+      fingerprint.
+  - id: workspace.provisioning.v1
+    ownership_and_lifetime:
+    - Provisioning stages rows against one immutable input snapshot and atomically publishes a new snapshot; all persistent
+      values are detached and own their stable data.
+    - Views and callback borrows name their backing owner and never outlive it.
+    const_noexcept_thread_safety:
+    - Immutable values and snapshots support concurrent reads; mutation and staging require exclusive ownership.
+    - Only allocation-free accessors are noexcept; expected operational failure uses result.
+    callback_and_exception:
+    - Frontend progress/cancellation callbacks run by the documented scheduler rules and cannot retain job state.
+    - Expected failures do not cross a library callback as exceptions or prose.
+    execution_context_and_budgets:
+    - Every scope/variant/fact/precision unit observes cancellation, deadline, memory, path, state, and output budgets.
+    - Filesystem, process, time, and cancellation are observed only through explicit ports/context.
+    result_semantics:
+      empty_success: A complete known-empty universe is a successful empty value and remains distinct from unknown or incomplete.
+      unresolved: Typed unresolved rows and incomplete coverage are preserved; they cannot be converted to empty success.
+      unsupported: A known unsupported capability/schema/precision returns a structured error without fallback.
+      ambiguous: All authoritative variants/candidates remain visible with typed ambiguity; no first-wins is allowed.
+      partial: Valid rows survive bounded failure with failed/unresolved coverage and downgraded guarantee.
+      failure: Invalid identity, schema, ownership, conservation, or conflicting duplicates fail structurally.
+    evidence_coverage_guarantee:
+    - Evidence and per-unit coverage are authoritative; summary prose and confidence cannot upgrade precision or guarantee.
+    - Requested units are conserved exactly across covered, excluded, failed, unresolved, and not_applicable.
+    ordering_duplicates_variants:
+    - Canonical typed identity and full IDs define order; hash, filesystem, arrival, and thread completion order are forbidden.
+    - Equal duplicates collapse, conflicting payloads reject, and divergent variants remain separate.
+    schema_and_versioning:
+    - Exact schema and independent cpp/public/fact/semantics/adapter versions are mandatory.
+    - Unknown values reject and no nearest-version or adjacent-LLVM-major fallback is permitted.
+    change_policy:
+    - Signature, lifetime, identity, ordering, schema, provider ownership, coverage, or guarantee changes invalidate this
+      fingerprint.
+  - id: facts.profile-query.v1
+    ownership_and_lifetime:
+    - Profiles, queries, and typed fact results are immutable detached values; all persistent values are detached and own
+      their stable data.
+    - Views and callback borrows name their backing owner and never outlive it.
+    const_noexcept_thread_safety:
+    - Immutable values and snapshots support concurrent reads; mutation and staging require exclusive ownership.
+    - Only allocation-free accessors are noexcept; expected operational failure uses result.
+    callback_and_exception:
+    - Fact queries retain no callback and evaluate synchronously against one selected snapshot.
+    - Expected failures do not cross a library callback as exceptions or prose.
+    execution_context_and_budgets:
+    - Query planning and output cardinality are budgeted; no query performs ambient filesystem/process access.
+    - Filesystem, process, time, and cancellation are observed only through explicit ports/context.
+    result_semantics:
+      empty_success: A complete known-empty universe is a successful empty value and remains distinct from unknown or incomplete.
+      unresolved: Typed unresolved rows and incomplete coverage are preserved; they cannot be converted to empty success.
+      unsupported: A known unsupported capability/schema/precision returns a structured error without fallback.
+      ambiguous: All authoritative variants/candidates remain visible with typed ambiguity; no first-wins is allowed.
+      partial: Valid rows survive bounded failure with failed/unresolved coverage and downgraded guarantee.
+      failure: Invalid identity, schema, ownership, conservation, or conflicting duplicates fail structurally.
+    evidence_coverage_guarantee:
+    - Evidence and per-unit coverage are authoritative; summary prose and confidence cannot upgrade precision or guarantee.
+    - Requested units are conserved exactly across covered, excluded, failed, unresolved, and not_applicable.
+    ordering_duplicates_variants:
+    - Canonical typed identity and full IDs define order; hash, filesystem, arrival, and thread completion order are forbidden.
+    - Equal duplicates collapse, conflicting payloads reject, and divergent variants remain separate.
+    schema_and_versioning:
+    - Exact schema and independent cpp/public/fact/semantics/adapter versions are mandatory.
+    - Unknown values reject and no nearest-version or adjacent-LLVM-major fallback is permitted.
+    change_policy:
+    - Signature, lifetime, identity, ordering, schema, provider ownership, coverage, or guarantee changes invalidate this
+      fingerprint.
+  - id: facts.snapshot-coverage.v1
+    ownership_and_lifetime:
+    - Fact handles share immutable snapshot backing while returned result vectors own their handles; all persistent values
+      are detached and own their stable data.
+    - Views and callback borrows name their backing owner and never outlive it.
+    const_noexcept_thread_safety:
+    - Immutable values and snapshots support concurrent reads; mutation and staging require exclusive ownership.
+    - Only allocation-free accessors are noexcept; expected operational failure uses result.
+    callback_and_exception:
+    - No callback is retained; reducers and validators isolate producer failure before snapshot commit.
+    - Expected failures do not cross a library callback as exceptions or prose.
+    execution_context_and_budgets:
+    - Coverage accounts the exact requested scope, variants, fact kinds, and precision under the operation context.
+    - Filesystem, process, time, and cancellation are observed only through explicit ports/context.
+    result_semantics:
+      empty_success: A complete known-empty universe is a successful empty value and remains distinct from unknown or incomplete.
+      unresolved: Typed unresolved rows and incomplete coverage are preserved; they cannot be converted to empty success.
+      unsupported: A known unsupported capability/schema/precision returns a structured error without fallback.
+      ambiguous: All authoritative variants/candidates remain visible with typed ambiguity; no first-wins is allowed.
+      partial: Valid rows survive bounded failure with failed/unresolved coverage and downgraded guarantee.
+      failure: Invalid identity, schema, ownership, conservation, or conflicting duplicates fail structurally.
+    evidence_coverage_guarantee:
+    - Evidence and per-unit coverage are authoritative; summary prose and confidence cannot upgrade precision or guarantee.
+    - Requested units are conserved exactly across covered, excluded, failed, unresolved, and not_applicable.
+    ordering_duplicates_variants:
+    - Canonical typed identity and full IDs define order; hash, filesystem, arrival, and thread completion order are forbidden.
+    - Equal duplicates collapse, conflicting payloads reject, and divergent variants remain separate.
+    schema_and_versioning:
+    - Exact schema and independent cpp/public/fact/semantics/adapter versions are mandatory.
+    - Unknown values reject and no nearest-version or adjacent-LLVM-major fallback is permitted.
+    change_policy:
+    - Signature, lifetime, identity, ordering, schema, provider ownership, coverage, or guarantee changes invalidate this
+      fingerprint.
+  - id: interop.borrowed-clang.v1
+    ownership_and_lifetime:
+    - Clang objects and fact sinks are synchronous callback-scoped borrows on one owning thread; all persistent values are
+      detached and own their stable data.
+    - Views and callback borrows name their backing owner and never outlive it.
+    const_noexcept_thread_safety:
+    - Immutable values and snapshots support concurrent reads; mutation and staging require exclusive ownership.
+    - Only allocation-free accessors are noexcept; expected operational failure uses result.
+    callback_and_exception:
+    - The callback cannot suspend, reenter with the borrow, cross threads, or retain native references; callback exceptions
+      are contained.
+    - Expected failures do not cross a library callback as exceptions or prose.
+    execution_context_and_budgets:
+    - In-callback cancellation is cooperative; bounded workspace parsing uses the isolated scheduler worker.
+    - Filesystem, process, time, and cancellation are observed only through explicit ports/context.
+    result_semantics:
+      empty_success: A complete known-empty universe is a successful empty value and remains distinct from unknown or incomplete.
+      unresolved: Typed unresolved rows and incomplete coverage are preserved; they cannot be converted to empty success.
+      unsupported: A known unsupported capability/schema/precision returns a structured error without fallback.
+      ambiguous: All authoritative variants/candidates remain visible with typed ambiguity; no first-wins is allowed.
+      partial: Valid rows survive bounded failure with failed/unresolved coverage and downgraded guarantee.
+      failure: Invalid identity, schema, ownership, conservation, or conflicting duplicates fail structurally.
+    evidence_coverage_guarantee:
+    - Evidence and per-unit coverage are authoritative; summary prose and confidence cannot upgrade precision or guarantee.
+    - Requested units are conserved exactly across covered, excluded, failed, unresolved, and not_applicable.
+    ordering_duplicates_variants:
+    - Canonical typed identity and full IDs define order; hash, filesystem, arrival, and thread completion order are forbidden.
+    - Equal duplicates collapse, conflicting payloads reject, and divergent variants remain separate.
+    schema_and_versioning:
+    - Exact schema and independent cpp/public/fact/semantics/adapter versions are mandatory.
+    - Unknown values reject and no nearest-version or adjacent-LLVM-major fallback is permitted.
+    change_policy:
+    - Signature, lifetime, identity, ordering, schema, provider ownership, coverage, or guarantee changes invalidate this
+      fingerprint.
+  - id: interop.custom-extractor.v1
+    ownership_and_lifetime:
+    - The workspace registry shares extractor ownership; tokens and staged custom facts are workspace-scoped detached values;
+      all persistent values are detached and own their stable data.
+    - Views and callback borrows name their backing owner and never outlive it.
+    const_noexcept_thread_safety:
+    - Immutable values and snapshots support concurrent reads; mutation and staging require exclusive ownership.
+    - Only allocation-free accessors are noexcept; expected operational failure uses result.
+    callback_and_exception:
+    - Extractors execute synchronously in canonical ID/version order and one extractor failure is isolated to its staging
+      batch.
+    - Expected failures do not cross a library callback as exceptions or prose.
+    execution_context_and_budgets:
+    - Registration is bounded and operation execution observes workspace context; unregister never destroys an executing extractor.
+    - Filesystem, process, time, and cancellation are observed only through explicit ports/context.
+    result_semantics:
+      empty_success: A complete known-empty universe is a successful empty value and remains distinct from unknown or incomplete.
+      unresolved: Typed unresolved rows and incomplete coverage are preserved; they cannot be converted to empty success.
+      unsupported: A known unsupported capability/schema/precision returns a structured error without fallback.
+      ambiguous: All authoritative variants/candidates remain visible with typed ambiguity; no first-wins is allowed.
+      partial: Valid rows survive bounded failure with failed/unresolved coverage and downgraded guarantee.
+      failure: Invalid identity, schema, ownership, conservation, or conflicting duplicates fail structurally.
+    evidence_coverage_guarantee:
+    - Evidence and per-unit coverage are authoritative; summary prose and confidence cannot upgrade precision or guarantee.
+    - Requested units are conserved exactly across covered, excluded, failed, unresolved, and not_applicable.
+    ordering_duplicates_variants:
+    - Canonical typed identity and full IDs define order; hash, filesystem, arrival, and thread completion order are forbidden.
+    - Equal duplicates collapse, conflicting payloads reject, and divergent variants remain separate.
+    schema_and_versioning:
+    - Exact schema and independent cpp/public/fact/semantics/adapter versions are mandatory.
+    - Unknown values reject and no nearest-version or adjacent-LLVM-major fallback is permitted.
+    change_policy:
+    - Signature, lifetime, identity, ordering, schema, provider ownership, coverage, or guarantee changes invalidate this
+      fingerprint.
+  registry_owners:
+  - id: registry.facts.errors
+    kind: error_registry
+    owner_atomic_unit: AU-FACT-001
+    steward: integration.package.facts
+    entries:
+    - facts.query-invalid
+    - facts.snapshot-stale
+    - facts.transaction-failed
+    behavior: Query, snapshot, and transaction failures are distinct structured codes; no empty fallback.
+  - id: registry.facts.schemas
+    kind: schema_registry
+    owner_atomic_unit: AU-FACT-001
+    steward: steward.schema
+    entries:
+    - cxxlens.fact.v1
+    - cxxlens.fact-profile.v1
+    behavior: Exact fact/profile/coverage schema identity is required and unknown versions reject.
+  - id: registry.interop.errors
+    kind: error_registry
+    owner_atomic_unit: AU-INT-004
+    steward: integration.package.interop
+    entries:
+    - interop.borrowed-lifetime-violation
+    - interop.custom-schema-conflict
+    - interop.nondeterministic-extractor
+    behavior: Lifetime, ownership conflict, and nondeterminism never collapse into callback prose.
+  - id: registry.interop.custom-schemas
+    kind: schema_registry
+    owner_atomic_unit: AU-INT-004
+    steward: steward.schema
+    entries:
+    - cxxlens.custom-fact.v1
+    behavior: Registration atomically assigns each namespace/schema major to one extractor; duplicate ownership rejects.
+  - id: registry.workspace.errors
+    kind: error_registry
+    owner_atomic_unit: AU-WS-001
+    steward: integration.package.workspace
+    entries:
+    - workspace.compile-command-ambiguous
+    - workspace.compile-database-invalid
+    - workspace.compile-database-not-found
+    - workspace.resource-dir-not-found
+    behavior: Missing, invalid, ambiguous, and resource failures stay distinct; command selection never first-wins.
+  - id: registry.workspace.schemas
+    kind: schema_registry
+    owner_atomic_unit: AU-WS-001
+    steward: steward.schema
+    entries:
+    - cxxlens.analysis-scope.v1
+    - cxxlens.provisioning-trace.v1
+    - cxxlens.workspace-context.v1
+    - cxxlens.workspace-doctor.v1
+    behavior: Workspace scope/context/provisioning/doctor schemas use exact IDs and canonical normalized paths.
+  consumer_boundaries:
+  - owner_package: workspace
+    consumer_package: search
+    shared_types:
+    - workspace
+    - analysis_scope
+    access: const_reference
+    rule: Search borrows workspace state per operation and cannot redefine root, command, variant, scope, or snapshot identity.
+  - owner_package: facts
+    consumer_package: graph
+    shared_types:
+    - fact_store
+    - fact
+    - fact_profile
+    access: value_copy
+    rule: Graph consumes immutable snapshot handles and preserves fact identity, provenance, variants, and coverage.
+  - owner_package: facts
+    consumer_package: rules
+    shared_types:
+    - fact_store
+    - fact_query
+    access: value_copy
+    rule: Rules cannot reinterpret complete zero-match, unresolved prerequisites, duplicate facts, or guarantees.
+  - owner_package: interop
+    consumer_package: workspace
+    shared_types:
+    - borrowed_clang_tu
+    - fact_sink
+    - clang_fact_extractor
+    access: forward_declaration
+    rule: Workspace schedules the callback but interop owns native borrow lifetime and custom registration state.
+  - owner_package: interop
+    consumer_package: facts
+    shared_types:
+    - custom_fact
+    - fact_sink
+    access: value_copy
+    rule: Facts accepts only schema-valid detached rows and never stores Clang/LLVM pointers or callback state.
+  api_contracts:
+  - api_id: API-FACT-001
+    atomic_unit: AU-FACT-001
+    package: facts
+    policy: facts.profile-query.v1
+    declaration:
+      source: include/cxxlens/facts.hpp
+      signature: cxxlens::fact_profile cxxlens::fact_profile::minimal(); cxxlens::fact_profile cxxlens::fact_profile::semantic_search();
+        cxxlens::fact_profile cxxlens::fact_profile::refactor(); cxxlens::fact_profile cxxlens::fact_profile::generation();
+        cxxlens::fact_profile cxxlens::fact_profile::flow(); cxxlens::fact_profile cxxlens::fact_profile::full(); cxxlens::fact_profile
+        cxxlens::fact_profile::include(cxxlens::fact_kind) const; cxxlens::fact_profile cxxlens::fact_profile::exclude(cxxlens::fact_kind)
+        const; cxxlens::fact_profile cxxlens::fact_profile::precision(cxxlens::precision_level) const; std::string cxxlens::fact_profile::to_json()
+        const
+      signature_fingerprint: sha256:4c36e740a41436761ec96c06ec8519c14707eee9a3febc92e5c695181d48f552
+    family_members:
+    - cxxlens::fact_profile::minimal
+    - cxxlens::fact_profile::semantic_search
+    - cxxlens::fact_profile::refactor
+    - cxxlens::fact_profile::generation
+    - cxxlens::fact_profile::flow
+    - cxxlens::fact_profile::full
+    - cxxlens::fact_profile::include
+    - cxxlens::fact_profile::exclude
+    - cxxlens::fact_profile::precision
+    - cxxlens::fact_profile::to_json
+    semantics:
+    - fact_profile::{minimal,semantic_search,refactor,generation,flow,full,include,exclude,precision} uses the exact facts.profile-query.v1
+      decision table and one immutable workspace/fact snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:facts:call_site
+      - public-type:facts:fact
+      - public-type:facts:fact_kind
+      - public-type:facts:fact_profile
+      - public-type:facts:fact_query
+      - public-type:facts:fact_store
+      - public-type:facts:include_relation
+      - public-type:facts:inheritance_edge
+      - public-type:facts:macro_expansion
+      - public-type:facts:override_edge
+      - public-type:facts:provenance
+      - public-type:facts:reference
+      - public-type:facts:symbol
+      - public-type:facts:type_ref
+      shared_components:
+      - shared.package.facts.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_fact_profile.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-005
+      - QR-001
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.15'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-FACT-001.positive
+        expression: Execute fact_profile::{minimal,semantic_search,refactor,generation,flow,full,include,exclude,precision}
+          with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-FACT-001.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-FACT-001.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-FACT-002
+    atomic_unit: AU-FACT-002
+    package: facts
+    policy: facts.profile-query.v1
+    declaration:
+      source: include/cxxlens/facts.hpp
+      signature: cxxlens::result<std::vector<cxxlens::fact>> cxxlens::fact_store::find(cxxlens::fact_query) const
+      signature_fingerprint: sha256:cadc83bc7a1ddd6071b40569dbfafa45bbfed70e8463dc35763a18ff1a1ace50
+    family_members:
+    - cxxlens::fact_store::find
+    semantics:
+    - fact_store::find(fact_query) uses the exact facts.profile-query.v1 decision table and one immutable workspace/fact snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:facts:call_site
+      - public-type:facts:fact
+      - public-type:facts:fact_kind
+      - public-type:facts:fact_profile
+      - public-type:facts:fact_query
+      - public-type:facts:fact_store
+      - public-type:facts:include_relation
+      - public-type:facts:inheritance_edge
+      - public-type:facts:macro_expansion
+      - public-type:facts:override_edge
+      - public-type:facts:provenance
+      - public-type:facts:reference
+      - public-type:facts:symbol
+      - public-type:facts:type_ref
+      shared_components:
+      - shared.package.facts.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_fact.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-005
+      - QR-001
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.15'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-FACT-002.positive
+        expression: Execute fact_store::find(fact_query) with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-FACT-002.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-FACT-002.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-FACT-003
+    atomic_unit: AU-FACT-003
+    package: facts
+    policy: facts.snapshot-coverage.v1
+    declaration:
+      source: include/cxxlens/facts.hpp
+      signature: cxxlens::result<std::vector<cxxlens::symbol>> cxxlens::fact_store::symbols() const
+      signature_fingerprint: sha256:0056e80277d8a79ecbff47bed0bbd283ca5a1667f25ae4c64731eb6502901aa5
+    family_members:
+    - cxxlens::fact_store::symbols
+    semantics:
+    - fact_store::symbols() uses the exact facts.snapshot-coverage.v1 decision table and one immutable workspace/fact snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:facts:call_site
+      - public-type:facts:fact
+      - public-type:facts:fact_kind
+      - public-type:facts:fact_profile
+      - public-type:facts:fact_query
+      - public-type:facts:fact_store
+      - public-type:facts:include_relation
+      - public-type:facts:inheritance_edge
+      - public-type:facts:macro_expansion
+      - public-type:facts:override_edge
+      - public-type:facts:provenance
+      - public-type:facts:reference
+      - public-type:facts:symbol
+      - public-type:facts:type_ref
+      shared_components:
+      - shared.package.facts.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:symbol
+      schemas:
+      - schema:schemas/cxxlens_fact.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-005
+      - QR-001
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.15'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-FACT-003.positive
+        expression: Execute fact_store::symbols() with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-FACT-003.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-FACT-003.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-FACT-004
+    atomic_unit: AU-FACT-004
+    package: facts
+    policy: facts.snapshot-coverage.v1
+    declaration:
+      source: include/cxxlens/facts.hpp
+      signature: cxxlens::result<std::vector<cxxlens::reference>> cxxlens::fact_store::references(cxxlens::symbol_id) const
+      signature_fingerprint: sha256:4a09fe12bbd8c5ea03b789a3400ce36ac76178d020dde1a8a78462921bf28f49
+    family_members:
+    - cxxlens::fact_store::references
+    semantics:
+    - fact_store::references(symbol_id) uses the exact facts.snapshot-coverage.v1 decision table and one immutable workspace/fact
+      snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:facts:call_site
+      - public-type:facts:fact
+      - public-type:facts:fact_kind
+      - public-type:facts:fact_profile
+      - public-type:facts:fact_query
+      - public-type:facts:fact_store
+      - public-type:facts:include_relation
+      - public-type:facts:inheritance_edge
+      - public-type:facts:macro_expansion
+      - public-type:facts:override_edge
+      - public-type:facts:provenance
+      - public-type:facts:reference
+      - public-type:facts:symbol
+      - public-type:facts:type_ref
+      shared_components:
+      - shared.package.facts.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:reference
+      schemas:
+      - schema:schemas/cxxlens_fact.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-005
+      - QR-001
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.15'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-FACT-004.positive
+        expression: Execute fact_store::references(symbol_id) with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-FACT-004.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-FACT-004.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-FACT-005
+    atomic_unit: AU-FACT-005
+    package: facts
+    policy: facts.snapshot-coverage.v1
+    declaration:
+      source: include/cxxlens/facts.hpp
+      signature: cxxlens::result<std::vector<cxxlens::call_site>> cxxlens::fact_store::calls() const
+      signature_fingerprint: sha256:602bb1506fdd68665990546957767a6506cc40a3e1155e3fef5180e128910cdb
+    family_members:
+    - cxxlens::fact_store::calls
+    semantics:
+    - fact_store::calls() uses the exact facts.snapshot-coverage.v1 decision table and one immutable workspace/fact snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:facts:call_site
+      - public-type:facts:fact
+      - public-type:facts:fact_kind
+      - public-type:facts:fact_profile
+      - public-type:facts:fact_query
+      - public-type:facts:fact_store
+      - public-type:facts:include_relation
+      - public-type:facts:inheritance_edge
+      - public-type:facts:macro_expansion
+      - public-type:facts:override_edge
+      - public-type:facts:provenance
+      - public-type:facts:reference
+      - public-type:facts:symbol
+      - public-type:facts:type_ref
+      shared_components:
+      - shared.package.facts.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:call
+      schemas:
+      - schema:schemas/cxxlens_fact.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-005
+      - FR-009
+      - QR-001
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.15'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-FACT-005.positive
+        expression: Execute fact_store::calls() with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-FACT-005.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-FACT-005.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-FACT-006
+    atomic_unit: AU-FACT-006
+    package: facts
+    policy: facts.snapshot-coverage.v1
+    declaration:
+      source: include/cxxlens/facts.hpp
+      signature: cxxlens::result<std::vector<cxxlens::inheritance_edge>> cxxlens::fact_store::inheritance() const
+      signature_fingerprint: sha256:734ba3cda2f9efe70ea962229e311359aad515d669f8dfb13143d67f4e393bf1
+    family_members:
+    - cxxlens::fact_store::inheritance
+    semantics:
+    - fact_store::inheritance() uses the exact facts.snapshot-coverage.v1 decision table and one immutable workspace/fact
+      snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:facts:call_site
+      - public-type:facts:fact
+      - public-type:facts:fact_kind
+      - public-type:facts:fact_profile
+      - public-type:facts:fact_query
+      - public-type:facts:fact_store
+      - public-type:facts:include_relation
+      - public-type:facts:inheritance_edge
+      - public-type:facts:macro_expansion
+      - public-type:facts:override_edge
+      - public-type:facts:provenance
+      - public-type:facts:reference
+      - public-type:facts:symbol
+      - public-type:facts:type_ref
+      shared_components:
+      - shared.package.facts.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:inheritance
+      schemas:
+      - schema:schemas/cxxlens_fact.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-005
+      - QR-001
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.15'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-FACT-006.positive
+        expression: Execute fact_store::inheritance() with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-FACT-006.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-FACT-006.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-FACT-007
+    atomic_unit: AU-FACT-007
+    package: facts
+    policy: facts.snapshot-coverage.v1
+    declaration:
+      source: include/cxxlens/facts.hpp
+      signature: cxxlens::result<std::vector<cxxlens::override_edge>> cxxlens::fact_store::overrides() const
+      signature_fingerprint: sha256:8c555f51a821e623795eb7b6277730ca00ae432c42a33f41ae992b27fb9ffebe
+    family_members:
+    - cxxlens::fact_store::overrides
+    semantics:
+    - fact_store::overrides() uses the exact facts.snapshot-coverage.v1 decision table and one immutable workspace/fact snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:facts:call_site
+      - public-type:facts:fact
+      - public-type:facts:fact_kind
+      - public-type:facts:fact_profile
+      - public-type:facts:fact_query
+      - public-type:facts:fact_store
+      - public-type:facts:include_relation
+      - public-type:facts:inheritance_edge
+      - public-type:facts:macro_expansion
+      - public-type:facts:override_edge
+      - public-type:facts:provenance
+      - public-type:facts:reference
+      - public-type:facts:symbol
+      - public-type:facts:type_ref
+      shared_components:
+      - shared.package.facts.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:override_relation
+      schemas:
+      - schema:schemas/cxxlens_fact.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-005
+      - QR-001
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.15'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-FACT-007.positive
+        expression: Execute fact_store::overrides() with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-FACT-007.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-FACT-007.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-FACT-008
+    atomic_unit: AU-FACT-008
+    package: facts
+    policy: facts.snapshot-coverage.v1
+    declaration:
+      source: include/cxxlens/facts.hpp
+      signature: cxxlens::result<std::vector<cxxlens::include_relation>> cxxlens::fact_store::includes() const
+      signature_fingerprint: sha256:08c62b7f7fb5a2cbf8400ea26bd79d20284cde66f4c274fe5e665d2f7c277a3f
+    family_members:
+    - cxxlens::fact_store::includes
+    semantics:
+    - fact_store::includes() uses the exact facts.snapshot-coverage.v1 decision table and one immutable workspace/fact snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:facts:call_site
+      - public-type:facts:fact
+      - public-type:facts:fact_kind
+      - public-type:facts:fact_profile
+      - public-type:facts:fact_query
+      - public-type:facts:fact_store
+      - public-type:facts:include_relation
+      - public-type:facts:inheritance_edge
+      - public-type:facts:macro_expansion
+      - public-type:facts:override_edge
+      - public-type:facts:provenance
+      - public-type:facts:reference
+      - public-type:facts:symbol
+      - public-type:facts:type_ref
+      shared_components:
+      - shared.package.facts.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:include_relation
+      schemas:
+      - schema:schemas/cxxlens_fact.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-005
+      - QR-001
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.15'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-FACT-008.positive
+        expression: Execute fact_store::includes() with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-FACT-008.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-FACT-008.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-FACT-009
+    atomic_unit: AU-FACT-009
+    package: facts
+    policy: facts.snapshot-coverage.v1
+    declaration:
+      source: include/cxxlens/facts.hpp
+      signature: cxxlens::result<std::vector<cxxlens::macro_expansion>> cxxlens::fact_store::macros() const
+      signature_fingerprint: sha256:f05fe2a00a73a36bc0715f6deb2ca4af38dab246cca0ef57cd389f42e221b84e
+    family_members:
+    - cxxlens::fact_store::macros
+    semantics:
+    - fact_store::macros() uses the exact facts.snapshot-coverage.v1 decision table and one immutable workspace/fact snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:facts:call_site
+      - public-type:facts:fact
+      - public-type:facts:fact_kind
+      - public-type:facts:fact_profile
+      - public-type:facts:fact_query
+      - public-type:facts:fact_store
+      - public-type:facts:include_relation
+      - public-type:facts:inheritance_edge
+      - public-type:facts:macro_expansion
+      - public-type:facts:override_edge
+      - public-type:facts:provenance
+      - public-type:facts:reference
+      - public-type:facts:symbol
+      - public-type:facts:type_ref
+      shared_components:
+      - shared.package.facts.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:macro_expansion
+      schemas:
+      - schema:schemas/cxxlens_fact.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-003
+      - FR-005
+      - QR-001
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.15'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-FACT-009.positive
+        expression: Execute fact_store::macros() with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-FACT-009.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-FACT-009.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-FACT-010
+    atomic_unit: AU-FACT-010
+    package: facts
+    policy: facts.snapshot-coverage.v1
+    declaration:
+      source: include/cxxlens/facts.hpp
+      signature: cxxlens::coverage_report cxxlens::fact_store::coverage(cxxlens::fact_profile, cxxlens::analysis_scope) const
+      signature_fingerprint: sha256:b57198f6c82c99bbe496b390ec3e65bc37115a2ded8014ce55e8efffa897d89b
+    family_members:
+    - cxxlens::fact_store::coverage
+    semantics:
+    - fact_store::coverage(fact_profile,analysis_scope) uses the exact facts.snapshot-coverage.v1 decision table and one immutable
+      workspace/fact snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:facts:call_site
+      - public-type:facts:fact
+      - public-type:facts:fact_kind
+      - public-type:facts:fact_profile
+      - public-type:facts:fact_query
+      - public-type:facts:fact_store
+      - public-type:facts:include_relation
+      - public-type:facts:inheritance_edge
+      - public-type:facts:macro_expansion
+      - public-type:facts:override_edge
+      - public-type:facts:provenance
+      - public-type:facts:reference
+      - public-type:facts:symbol
+      - public-type:facts:type_ref
+      shared_components:
+      - shared.package.facts.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:coverage
+      schemas:
+      - schema:schemas/cxxlens_coverage.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-008
+      - QR-001
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.15'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-FACT-010.positive
+        expression: Execute fact_store::coverage(fact_profile,analysis_scope) with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-FACT-010.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-FACT-010.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-INT-001
+    atomic_unit: AU-INT-001
+    package: interop
+    policy: interop.borrowed-clang.v1
+    declaration:
+      source: include/cxxlens/interop/clang.hpp
+      signature: cxxlens::interop::clang_api_version cxxlens::interop::linked_clang_version() noexcept
+      signature_fingerprint: sha256:f078c5614cdbe609d5b954134b6758a2e42a1ba06150909fe5e2a0e55e6470a3
+    family_members:
+    - cxxlens::interop::linked_clang_version
+    semantics:
+    - interop::linked_clang_version uses the exact interop.borrowed-clang.v1 decision table and one immutable workspace/fact
+      snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:core:evidence_item
+      - public-type:core:semantic_version
+      - public-type:core:unresolved
+      - public-type:facts:fact
+      - public-type:interop:borrowed_clang_tu
+      - public-type:interop:clang_api_version
+      - public-type:interop:clang_fact_extractor
+      - public-type:interop:custom_fact
+      - public-type:interop:fact_sink
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.interop.shared_public_type_contract
+      providers:
+      - provider.capability.interop-clang:interop.clang
+      schemas:
+      - schema:schemas/cxxlens_capabilities.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-018
+      - QR-003
+      - QR-010
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '27'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-INT-001.positive
+        expression: Execute interop::linked_clang_version with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-INT-001.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-INT-001.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-INT-002
+    atomic_unit: AU-INT-002
+    package: interop
+    policy: interop.borrowed-clang.v1
+    declaration:
+      source: include/cxxlens/interop/clang.hpp
+      signature: cxxlens::result<void> cxxlens::interop::with_translation_unit(cxxlens::workspace&, cxxlens::compile_unit_id,
+        cxxlens::interop::clang_tu_callback, cxxlens::execution_context)
+      signature_fingerprint: sha256:a4c0d049f7ee4e1c144fdcba162df5ff4eea7834fc6a6b519e03a8d927dd2e23
+    family_members:
+    - cxxlens::interop::with_translation_unit
+    semantics:
+    - interop::with_translation_unit uses the exact interop.borrowed-clang.v1 decision table and one immutable workspace/fact
+      snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:core:evidence_item
+      - public-type:core:semantic_version
+      - public-type:core:unresolved
+      - public-type:facts:fact
+      - public-type:interop:borrowed_clang_tu
+      - public-type:interop:clang_api_version
+      - public-type:interop:clang_fact_extractor
+      - public-type:interop:custom_fact
+      - public-type:interop:fact_sink
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.interop.shared_public_type_contract
+      providers:
+      - provider.capability.interop-clang:interop.clang
+      schemas:
+      - schema:schemas/cxxlens_frontend_batch.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-004
+      - FR-019
+      - FR-020
+      - QR-001
+      - QR-002
+      - QR-003
+      - QR-004
+      - QR-005
+      - QR-006
+      - QR-010
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '27'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-INT-002.positive
+        expression: Execute interop::with_translation_unit with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-INT-002.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-INT-002.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-INT-003
+    atomic_unit: AU-INT-003
+    package: interop
+    policy: interop.custom-extractor.v1
+    declaration:
+      source: contracts/candidates/44/interop_extractors.hpp
+      signature: cxxlens::result<void> cxxlens::interop::fact_sink::emit(cxxlens::fact); cxxlens::result<void> cxxlens::interop::fact_sink::emit_custom(cxxlens::interop::custom_fact);
+        cxxlens::result<void> cxxlens::interop::fact_sink::emit_evidence(cxxlens::evidence_item); cxxlens::result<void> cxxlens::interop::fact_sink::mark_partial(cxxlens::unresolved)
+      signature_fingerprint: sha256:4d667ed308ad08871902397aacaf79419053dc3799d278960e47a64bff9af3d5
+    family_members:
+    - cxxlens::interop::fact_sink::emit
+    - cxxlens::interop::fact_sink::emit_custom
+    - cxxlens::interop::fact_sink::emit_evidence
+    - cxxlens::interop::fact_sink::mark_partial
+    semantics:
+    - fact_sink::{emit,emit_custom,emit_evidence,mark_partial} uses the exact interop.custom-extractor.v1 decision table and
+      one immutable workspace/fact snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:core:evidence_item
+      - public-type:core:semantic_version
+      - public-type:core:unresolved
+      - public-type:facts:fact
+      - public-type:interop:borrowed_clang_tu
+      - public-type:interop:clang_api_version
+      - public-type:interop:clang_fact_extractor
+      - public-type:interop:custom_fact
+      - public-type:interop:fact_sink
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.interop.shared_public_type_contract
+      providers:
+      - provider.fact.custom-extractor:custom
+      schemas:
+      - schema:schemas/cxxlens_custom_fact.schema.yaml
+      - schema:schemas/cxxlens_evidence.schema.yaml
+      - schema:schemas/cxxlens_unresolved.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-004
+      - FR-005
+      - QR-001
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '27'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-INT-003.positive
+        expression: Execute fact_sink::{emit,emit_custom,emit_evidence,mark_partial} with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-INT-003.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-INT-003.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-INT-004
+    atomic_unit: AU-INT-004
+    package: interop
+    policy: interop.custom-extractor.v1
+    declaration:
+      source: contracts/candidates/44/interop_extractors.hpp
+      signature: cxxlens::result<std::string> cxxlens::interop::register_extractor(cxxlens::workspace&,std::shared_ptr<cxxlens::interop::clang_fact_extractor>);
+        cxxlens::result<void> cxxlens::interop::unregister_extractor(cxxlens::workspace&,std::string)
+      signature_fingerprint: sha256:d4049228415182ede11d70662295d69cf0642721e96ab500bbb024a6415a56b2
+    family_members:
+    - cxxlens::interop::register_extractor
+    - cxxlens::interop::unregister_extractor
+    semantics:
+    - interop::{register_extractor,unregister_extractor} uses the exact interop.custom-extractor.v1 decision table and one
+      immutable workspace/fact snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:core:evidence_item
+      - public-type:core:semantic_version
+      - public-type:core:unresolved
+      - public-type:facts:fact
+      - public-type:interop:borrowed_clang_tu
+      - public-type:interop:clang_api_version
+      - public-type:interop:clang_fact_extractor
+      - public-type:interop:custom_fact
+      - public-type:interop:fact_sink
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.interop.shared_public_type_contract
+      providers:
+      - provider.capability.interop-clang:interop.clang
+      - provider.fact.custom-extractor:custom
+      schemas:
+      - schema:schemas/cxxlens_custom_fact.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-004
+      - FR-005
+      - QR-001
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '27'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-INT-004.positive
+        expression: Execute interop::{register_extractor,unregister_extractor} with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-INT-004.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-INT-004.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-WS-001
+    atomic_unit: AU-WS-001
+    package: workspace
+    policy: workspace.catalog-snapshot.v1
+    declaration:
+      source: include/cxxlens/workspace.hpp
+      signature: cxxlens::workspace_options cxxlens::workspace_options::from_compilation_database(cxxlens::path)
+      signature_fingerprint: sha256:3749a527bc7c8b1bdcdd68fb1ae22a6ddd580fb11ae84a2dfe7c0a6b5286151e
+    family_members:
+    - cxxlens::workspace_options::from_compilation_database
+    semantics:
+    - workspace_options::from_compilation_database(path) uses the exact workspace.catalog-snapshot.v1 decision table and one
+      immutable workspace/fact snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:compile_command
+      - public-type:workspace:compile_unit
+      - public-type:workspace:doctor_report
+      - public-type:workspace:target_context
+      - public-type:workspace:workspace
+      - public-type:workspace:workspace_options
+      shared_components:
+      - shared.package.workspace.shared_public_type_contract
+      providers:
+      - provider.fact.compile-command:compile_command
+      schemas:
+      - schema:schemas/cxxlens_workspace_context.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-001
+      - QR-007
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.15'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-WS-001.positive
+        expression: Execute workspace_options::from_compilation_database(path) with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-WS-001.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-WS-001.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-WS-002
+    atomic_unit: AU-WS-002
+    package: workspace
+    policy: workspace.catalog-snapshot.v1
+    declaration:
+      source: include/cxxlens/workspace.hpp
+      signature: cxxlens::result<cxxlens::workspace> cxxlens::workspace::open(cxxlens::workspace_options, cxxlens::execution_context)
+      signature_fingerprint: sha256:d7940b317f42ce7f19da9161d748d2f7985a45483c9fc2b988dfee7f2741c60b
+    family_members:
+    - cxxlens::workspace::open
+    semantics:
+    - workspace::open(workspace_options, execution_context) uses the exact workspace.catalog-snapshot.v1 decision table and
+      one immutable workspace/fact snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:compile_command
+      - public-type:workspace:compile_unit
+      - public-type:workspace:doctor_report
+      - public-type:workspace:target_context
+      - public-type:workspace:workspace
+      - public-type:workspace:workspace_options
+      shared_components:
+      - shared.package.workspace.shared_public_type_contract
+      providers:
+      - provider.fact.compile-command:compile_command
+      - provider.fact.frontend:file
+      schemas:
+      - schema:schemas/cxxlens_workspace_context.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-001
+      - FR-002
+      - QR-001
+      - QR-007
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.15'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-WS-002.positive
+        expression: Execute workspace::open(workspace_options, execution_context) with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-WS-002.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-WS-002.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-WS-003
+    atomic_unit: AU-WS-003
+    package: workspace
+    policy: workspace.catalog-snapshot.v1
+    declaration:
+      source: include/cxxlens/workspace.hpp
+      signature: std::vector<cxxlens::compile_unit> cxxlens::workspace::compile_units() const
+      signature_fingerprint: sha256:753a9b4d1bb989afc258d64ab87357df61b916f7af1d2a496e449742250f0756
+    family_members:
+    - cxxlens::workspace::compile_units
+    semantics:
+    - workspace::compile_units() uses the exact workspace.catalog-snapshot.v1 decision table and one immutable workspace/fact
+      snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:compile_command
+      - public-type:workspace:compile_unit
+      - public-type:workspace:doctor_report
+      - public-type:workspace:target_context
+      - public-type:workspace:workspace
+      - public-type:workspace:workspace_options
+      shared_components:
+      - shared.package.workspace.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_workspace_context.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-002
+      - QR-001
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.15'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-WS-003.positive
+        expression: Execute workspace::compile_units() with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-WS-003.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-WS-003.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-WS-004
+    atomic_unit: AU-WS-004
+    package: workspace
+    policy: workspace.catalog-snapshot.v1
+    declaration:
+      source: include/cxxlens/workspace.hpp
+      signature: std::vector<cxxlens::compile_unit> cxxlens::workspace::command_for(cxxlens::path) const
+      signature_fingerprint: sha256:4b6fa3a1a7a0fa6e2d783b5c82b42f09fc59dac61418229be04a9271b012b650
+    family_members:
+    - cxxlens::workspace::command_for
+    semantics:
+    - workspace::command_for(path) uses the exact workspace.catalog-snapshot.v1 decision table and one immutable workspace/fact
+      snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:compile_command
+      - public-type:workspace:compile_unit
+      - public-type:workspace:doctor_report
+      - public-type:workspace:target_context
+      - public-type:workspace:workspace
+      - public-type:workspace:workspace_options
+      shared_components:
+      - shared.package.workspace.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_workspace_context.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-001
+      - FR-002
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.15'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-WS-004.positive
+        expression: Execute workspace::command_for(path) with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-WS-004.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-WS-004.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-WS-005
+    atomic_unit: AU-WS-005
+    package: workspace
+    policy: workspace.provisioning.v1
+    declaration:
+      source: include/cxxlens/workspace.hpp
+      signature: cxxlens::result<void> cxxlens::workspace::ensure(cxxlens::fact_profile, cxxlens::analysis_scope, cxxlens::execution_context)
+        const
+      signature_fingerprint: sha256:5c614f83d10df4a9401230ee2f2cd91c170d6005fa37444db4ad468983eda97e
+    family_members:
+    - cxxlens::workspace::ensure
+    semantics:
+    - workspace::ensure(fact_profile, analysis_scope, execution_context) uses the exact workspace.provisioning.v1 decision
+      table and one immutable workspace/fact snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:compile_command
+      - public-type:workspace:compile_unit
+      - public-type:workspace:doctor_report
+      - public-type:workspace:target_context
+      - public-type:workspace:workspace
+      - public-type:workspace:workspace_options
+      shared_components:
+      - shared.package.workspace.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:coverage
+      - provider.fact.frontend:file
+      schemas:
+      - schema:schemas/cxxlens_coverage_delta.schema.yaml
+      - schema:schemas/cxxlens_fact_requirement.schema.yaml
+      - schema:schemas/cxxlens_provisioning_trace.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-005
+      - FR-010
+      - QR-004
+      - QR-005
+      - QR-011
+      - QR-012
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.15'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-WS-005.positive
+        expression: Execute workspace::ensure(fact_profile, analysis_scope, execution_context) with one valid exact-version
+          input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-WS-005.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-WS-005.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-WS-006
+    atomic_unit: AU-WS-006
+    package: workspace
+    policy: workspace.catalog-snapshot.v1
+    declaration:
+      source: include/cxxlens/workspace.hpp
+      signature: cxxlens::fact_store cxxlens::workspace::facts() const
+      signature_fingerprint: sha256:d84d450bfea28ad01b6476388f3eea89406bcd28f8e0f03a13db5db6fbda8359
+    family_members:
+    - cxxlens::workspace::facts
+    semantics:
+    - workspace::facts() uses the exact workspace.catalog-snapshot.v1 decision table and one immutable workspace/fact snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:compile_command
+      - public-type:workspace:compile_unit
+      - public-type:workspace:doctor_report
+      - public-type:workspace:target_context
+      - public-type:workspace:workspace
+      - public-type:workspace:workspace_options
+      shared_components:
+      - shared.package.workspace.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:file
+      schemas:
+      - schema:schemas/cxxlens_fact.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-005
+      - QR-001
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.15'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-WS-006.positive
+        expression: Execute workspace::facts() with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-WS-006.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-WS-006.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-WS-007
+    atomic_unit: AU-WS-007
+    package: workspace
+    policy: workspace.catalog-snapshot.v1
+    declaration:
+      source: include/cxxlens/workspace.hpp
+      signature: cxxlens::result<cxxlens::doctor_report> cxxlens::workspace::doctor(cxxlens::execution_context) const
+      signature_fingerprint: sha256:eb99e571b55bd15cfb849429febe0ab41b40a638f671b4b792bad07c4cc68553
+    family_members:
+    - cxxlens::workspace::doctor
+    semantics:
+    - workspace::doctor(execution_context) uses the exact workspace.catalog-snapshot.v1 decision table and one immutable workspace/fact
+      snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:compile_command
+      - public-type:workspace:compile_unit
+      - public-type:workspace:doctor_report
+      - public-type:workspace:target_context
+      - public-type:workspace:workspace
+      - public-type:workspace:workspace_options
+      shared_components:
+      - shared.package.workspace.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_workspace_doctor.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - QR-010
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.15'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-WS-007.positive
+        expression: Execute workspace::doctor(execution_context) with one valid exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-WS-007.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-WS-007.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  - api_id: API-WS-008
+    atomic_unit: AU-WS-008
+    package: workspace
+    policy: workspace.catalog-snapshot.v1
+    declaration:
+      source: include/cxxlens/workspace.hpp
+      signature: cxxlens::analysis_scope cxxlens::analysis_scope::all(); cxxlens::analysis_scope cxxlens::analysis_scope::files(std::vector<cxxlens::path>);
+        cxxlens::analysis_scope cxxlens::analysis_scope::compile_units(std::vector<cxxlens::compile_unit_id>); cxxlens::analysis_scope
+        cxxlens::analysis_scope::changed_files(std::vector<cxxlens::path>); cxxlens::analysis_scope cxxlens::analysis_scope::include_headers(bool)
+        const; cxxlens::analysis_scope cxxlens::analysis_scope::variants(std::vector<cxxlens::build_variant_id>) const; std::string
+        cxxlens::analysis_scope::to_json() const
+      signature_fingerprint: sha256:dade0894af26e531e563987ac02c4c44d3e843c3396c4b66fd7e60bcf684b0e0
+    family_members:
+    - cxxlens::analysis_scope::all
+    - cxxlens::analysis_scope::files
+    - cxxlens::analysis_scope::compile_units
+    - cxxlens::analysis_scope::changed_files
+    - cxxlens::analysis_scope::include_headers
+    - cxxlens::analysis_scope::variants
+    - cxxlens::analysis_scope::to_json
+    semantics:
+    - analysis_scope::{all,files,compile_units,changed_files,include_headers,variants} uses the exact workspace.catalog-snapshot.v1
+      decision table and one immutable workspace/fact snapshot.
+    - Complete empty, partial/unresolved, unsupported, ambiguous, and failure outcomes remain machine-distinguishable.
+    ownership_refs:
+      public_types:
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:compile_command
+      - public-type:workspace:compile_unit
+      - public-type:workspace:doctor_report
+      - public-type:workspace:target_context
+      - public-type:workspace:workspace
+      - public-type:workspace:workspace_options
+      shared_components:
+      - shared.package.workspace.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_analysis_scope.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - QR-001
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.15'
+      doxygen_obligation: Document ownership/lifetime, canonical order, variants, all six outcomes, evidence/coverage, exact
+        schema/version, and invalidation rules.
+    acceptance:
+      positive:
+        id: API-WS-008.positive
+        expression: Execute analysis_scope::{all,files,compile_units,changed_files,include_headers,variants} with one valid
+          exact-version input.
+        expected: Canonical deterministic value and complete authoritative coverage.
+      negative:
+        id: API-WS-008.negative
+        expression: Supply invalid identity, stale snapshot, schema, lifetime, or unsupported capability input.
+        expected: Stable structured failure; no fallback, prose control, or staged partial commit.
+      ambiguous:
+        id: API-WS-008.ambiguous
+        expression: Use divergent variants, duplicate providers, or an incomplete requested universe.
+        expected: All authoritative rows plus typed unresolved/coverage, or explicit conflict; never first-wins.
+  production_implementation_changed: false
+  candidate_fingerprint: sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601

@@ -184,6 +184,7 @@ install(
         schemas/cxxlens_contract_ownership.yaml
         schemas/cxxlens_contract_ownership.schema.yaml
         schemas/cxxlens_coverage.schema.yaml
+        schemas/cxxlens_custom_fact.schema.yaml
         schemas/cxxlens_diagnostic.schema.yaml
         schemas/cxxlens_error.schema.yaml
         schemas/cxxlens_evidence_coverage_contract.yaml

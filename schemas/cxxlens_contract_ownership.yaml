@@ -625,6 +625,13 @@ public_types:
   owner_atomic_unit: AU-INT-001
   steward: integration.package.interop
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-interop
+- id: public-type:interop:custom_fact
+  type: custom_fact
+  package: interop
+  header: <cxxlens/interop/clang.hpp>
+  owner_atomic_unit: AU-INT-001
+  steward: integration.package.interop
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-interop
 - id: public-type:interop:fact_sink
   type: fact_sink
   package: interop
@@ -1752,6 +1759,14 @@ providers:
   steward: steward.workspace
   semantics_version: cxxlens.fact-provider.compile-command.v1
   source_contract: schemas/cxxlens_m1_completion.yaml
+- id: provider.fact.custom-extractor:custom
+  contract_id: provider.fact.custom-extractor
+  kind: fact_provider_implementation
+  subject: custom
+  owner_atomic_unit: AU-INT-004
+  steward: steward.interop
+  semantics_version: cxxlens.fact-provider.custom-extractor.v1
+  source_contract: docs/design/package_contract_44.md#custom-fact-and-extractor-state-machine
 - id: provider.fact.frontend:call
   contract_id: provider.fact.frontend
   kind: fact_provider_implementation
@@ -2002,6 +2017,11 @@ schemas:
   owner_atomic_unit: AU-CORE-001
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_custom_fact.schema.yaml
+  path: schemas/cxxlens_custom_fact.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
 - id: schema:schemas/cxxlens_diagnostic.schema.yaml
   path: schemas/cxxlens_diagnostic.schema.yaml
   owner_atomic_unit: AU-CORE-001
@@ -2183,8 +2203,8 @@ schemas:
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
 summary:
-  public_type_count: 178
+  public_type_count: 179
   shared_component_count: 66
-  provider_subject_count: 23
-  schema_count: 57
-semantic_digest: sha256:268aa0abff91e0de5b37e6acf03c2958d86a05e9f24d381a6acfba20b68d6956
+  provider_subject_count: 24
+  schema_count: 58
+semantic_digest: sha256:933753f7639119657cd754a7c5ad3f6457f33966743e624948b6531c2858daea
