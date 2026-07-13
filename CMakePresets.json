@@ -70,6 +70,7 @@
       "displayName": "ThreadSanitizer",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "CXXLENS_CLANG_ADAPTER": "OFF",
         "CXXLENS_ENABLE_TSAN": "ON",
         "CXXLENS_WARNINGS_AS_ERRORS": "ON"
       }

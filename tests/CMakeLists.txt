@@ -191,8 +191,8 @@ target_include_directories(cxxlens-unit-runtime-ports
 target_compile_features(cxxlens-unit-runtime-ports PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens-unit-runtime-ports)
 add_test(NAME unit.runtime-ports COMMAND cxxlens-unit-runtime-ports)
-set_tests_properties(unit.runtime-ports PROPERTIES LABELS
-                                                   "unit;runtime;security")
+set_tests_properties(unit.runtime-ports
+                     PROPERTIES LABELS "unit;runtime;security;concurrency")
 
 add_executable(cxxlens-unit-source-span unit/source/source_span_test.cpp)
 target_link_libraries(cxxlens-unit-source-span PRIVATE cxxlens::cxxlens)
@@ -445,7 +445,8 @@ set_tests_properties(
   unit.fact-store
   PROPERTIES
     LABELS
-    "unit;facts;store;sqlite;transaction;coverage;determinism;conformance")
+    "unit;facts;store;sqlite;transaction;coverage;determinism;conformance;concurrency"
+)
 add_test(
   NAME determinism.fact-store-process
   COMMAND
@@ -532,7 +533,7 @@ set_tests_properties(
   unit.provisioning
   PROPERTIES
     LABELS
-    "unit;workspace;facts;coverage;incremental;sqlite;determinism;cancellation;capability;doctor;conformance"
+    "unit;workspace;facts;coverage;incremental;sqlite;determinism;cancellation;capability;doctor;conformance;concurrency"
 )
 add_test(
   NAME schema.provisioning
@@ -791,6 +792,38 @@ endif()
 if(TARGET cxxlens-m2-test-binaries)
   add_dependencies(cxxlens-m2-test-binaries cxxlens-m1-test-binaries)
 endif()
+
+if(CXXLENS_ENABLE_TSAN)
+  add_executable(cxxlens-tsan-race-fixture fixtures/tsan_race_fixture.cpp)
+  target_compile_features(cxxlens-tsan-race-fixture PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(cxxlens-tsan-race-fixture)
+  add_test(
+    NAME sanitizer.tsan-detection
+    COMMAND
+      "${Python3_EXECUTABLE}"
+      "${PROJECT_SOURCE_DIR}/tests/tsan/verify_tsan_detection.py"
+      "$<TARGET_FILE:cxxlens-tsan-race-fixture>"
+      "${CMAKE_CURRENT_BINARY_DIR}/Testing/Temporary/tsan-detection.log")
+  set_tests_properties(
+    sanitizer.tsan-detection
+    PROPERTIES
+      LABELS
+      "sanitizer;tsan;tsan-self-test"
+      ENVIRONMENT
+      "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tests/tsan/tsan.supp:halt_on_error=1:exitcode=66:handle_segv=0"
+  )
+endif()
+
+get_property(
+  cxxlens_test_targets
+  DIRECTORY
+  PROPERTY BUILDSYSTEM_TARGETS)
+foreach(cxxlens_test_target IN LISTS cxxlens_test_targets)
+  get_target_property(cxxlens_test_target_type ${cxxlens_test_target} TYPE)
+  if(cxxlens_test_target_type STREQUAL "EXECUTABLE")
+    cxxlens_enable_sanitizers(${cxxlens_test_target})
+  endif()
+endforeach()
 
 get_property(
   cxxlens_registered_tests

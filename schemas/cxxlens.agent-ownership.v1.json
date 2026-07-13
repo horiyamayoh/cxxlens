@@ -1,5 +1,5 @@
 {
-  "repository_paths_digest": "sha256:bd6797fe713b3bbc87f45bddf7230207616c99d3002029b5babf5b3bfe454964",
+  "repository_paths_digest": "sha256:99472132fe858a982817a69209d2c16f585b9ab7da736a1667253a5d141343da",
   "reserved_paths": [
     {
       "access": "exclusive_write",
@@ -1133,7 +1133,7 @@
     }
   ],
   "schema": "cxxlens.agent-ownership.v1",
-  "semantic_digest": "sha256:dccc8be8c5aa118f70562663abac33cadd2c3c7634d245320a151a5224d39a3e",
+  "semantic_digest": "sha256:cdc07ee3f040667278c9d0d97d83054a41e58ecaf9891b9d3521dbb80002a1b6",
   "skeletons": [
     {
       "api_id": "API-CFG-001",
@@ -2662,7 +2662,7 @@
       "blocked": 77,
       "frozen": 47
     },
-    "tracked_path_count": 369,
+    "tracked_path_count": 375,
     "unit_count": 124
   },
   "task_packet_digest": "sha256:7d31b7ec195cb8a4b6ad5567dff8b24cf2b52fcef2412f4d91b831f3dbaccfb5",
@@ -4442,6 +4442,13 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.testing",
+      "path": "tests/fixtures/tsan_race_fixture.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.clang-adapter",
       "path": "tests/frontend/test_frontend_schema.py"
     },
@@ -4729,6 +4736,13 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.quality",
+      "path": "tests/quality/test_tsan_gate.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.query",
       "path": "tests/query/test_query_process.py"
     },
@@ -4780,6 +4794,27 @@
       "generator_role": null,
       "owner_role": "steward.testing",
       "path": "tests/testing/test_testing_fixture_process.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.quality",
+      "path": "tests/tsan/suppressions.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.quality",
+      "path": "tests/tsan/tsan.supp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.quality",
+      "path": "tests/tsan/verify_tsan_detection.py"
     },
     {
       "access": "exclusive_write",
@@ -5172,6 +5207,13 @@
       "generator_role": null,
       "owner_role": "steward.testing",
       "path": "tools/quality/check_testing_contract.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.quality",
+      "path": "tools/quality/check_tsan_gate.py"
     },
     {
       "access": "exclusive_write",

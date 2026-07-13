@@ -5885,7 +5885,7 @@
     "validity": {
       "basis": "exact-source-and-observed-gates",
       "expires_on": "source-workflow-gate-or-input-drift",
-      "fingerprint_digest": "sha256:5caed42528d9767f12026160764199d06791cb05f26ec1830434242a580d6ed9",
+      "fingerprint_digest": "sha256:7c4bb34112a80dbca33f6f51b1246c3fcb09d5a1f46cde7a1d10d3ea8631d0d1",
       "state": "unverified"
     }
   },
@@ -6297,22 +6297,22 @@
     "packet_count": 124,
     "provider_ambiguity_count": 0,
     "reserved_path_count": 11,
-    "tracked_path_count": 369,
+    "tracked_path_count": 375,
     "unowned_path_count": 0,
     "write_overlap_count": 0
   },
   "input_fingerprints": {
     "audit_policy": "sha256:822908a7964cb07984bf1fd6b23cd591333a393fdf7ce8ccf3d3fdcddc8804c9",
-    "build_gates": "sha256:20243b1084c96fe7d6370f071efd882be10d2c7197e31242778175275642db4b",
+    "build_gates": "sha256:4f8b16d230e8b7cb6fd0de7c75c8e1eb371b63762c304b1b02291bd369427409",
     "catalog": "sha256:1d88d58f684a44ee82fff9e2cc8757630609890b49623aca2ae34b1d1aba7538",
     "dependency_requests": "sha256:50f9e916250c5ea7378f5e1c7870f446b81c7e9caa2289e5cf88a599f4caffc0",
     "design_package": "sha256:cf7dbe6e36c95bedc7330165bd222caa71288a3cb1081ebac14fec1455f949cf",
     "m0": "sha256:b0e967a78fa4d8e936d54a60bea16c59feb57ad8cbcef645628e9651c1d0b617",
     "m1": "sha256:0e5bf5dd8568f14394199e2deb51649bbd2743170812de12fd098b54caaa142f",
     "m2": "sha256:448a5141f4c6e1045b5ff0ddae6126054be2a0cb261cfd2b227b1e1ce741e9c7",
-    "ownership": "sha256:dccc8be8c5aa118f70562663abac33cadd2c3c7634d245320a151a5224d39a3e",
+    "ownership": "sha256:cdc07ee3f040667278c9d0d97d83054a41e58ecaf9891b9d3521dbb80002a1b6",
     "quality_workflow": "sha256:f8fc4c3623c6ff6c81204823ee49dcb1fc457de5a7dcffbc0a8d9957cac743b5",
-    "ready_report": "sha256:b755313e4f17e40086101634f2886802e4407f3a1e485180eef541777946ebd3",
+    "ready_report": "sha256:8f734d878a6383a00df08fab2be9fb4e1d2ad83f20418867fea4e866ce34ae2e",
     "task_packets": "sha256:7d31b7ec195cb8a4b6ad5567dff8b24cf2b52fcef2412f4d91b831f3dbaccfb5"
   },
   "policy": {
@@ -6328,7 +6328,7 @@
     "waivers_allowed": false
   },
   "schema": "cxxlens.readiness.authorization.v1",
-  "semantic_digest": "sha256:be466fd2b1fa6bfdd36c2456305892e7c4101cd2fac85a93e1625366f9f301dd",
+  "semantic_digest": "sha256:a05a0c51d270709ea82c5311f8c3fa92b058d3cef136c516a3574850dc14c923",
   "source_identity": {
     "binding": "unbound",
     "commit_sha": null,

@@ -121,6 +121,7 @@ target_include_directories(cxxlens-frontend-worker
                            PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(cxxlens-frontend-worker PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens-frontend-worker)
+cxxlens_enable_sanitizers(cxxlens-frontend-worker)
 
 if(CXXLENS_ENABLE_CLANG_TIDY)
   find_program(CXXLENS_CLANG_TIDY NAMES clang-tidy-22 clang-tidy REQUIRED)

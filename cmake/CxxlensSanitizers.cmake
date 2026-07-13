@@ -1,4 +1,11 @@
 function(cxxlens_enable_sanitizers target)
+  get_target_property(cxxlens_sanitizers_configured ${target}
+                      CXXLENS_SANITIZERS_CONFIGURED)
+  if(cxxlens_sanitizers_configured)
+    return()
+  endif()
+  set_property(TARGET ${target} PROPERTY CXXLENS_SANITIZERS_CONFIGURED TRUE)
+
   if(CXXLENS_ENABLE_TSAN AND (CXXLENS_ENABLE_ASAN OR CXXLENS_ENABLE_UBSAN))
     message(FATAL_ERROR "ThreadSanitizer requires a separate build")
   endif()

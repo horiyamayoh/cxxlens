@@ -159,6 +159,16 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-tsan-gate-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_tsan_gate.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_tsan_gate.py"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-m0-completion-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -292,6 +302,7 @@ add_dependencies(
   cxxlens-semantic-extractor-contract-check
   cxxlens-serialization-contract-check
   cxxlens-testing-contract-check
+  cxxlens-tsan-gate-check
   cxxlens-workspace-contract-check
   cxxlens-text-lint)
 if(TARGET cxxlens-format-check)

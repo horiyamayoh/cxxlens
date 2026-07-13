@@ -1,0 +1,6 @@
+schema: cxxlens.tsan-suppressions.v1
+policy:
+  review_interval_days: 30
+  owner: foundation
+  rule: Every active suppression requires a narrow target, reason, expiry, and revalidation trigger.
+suppressions: []
