@@ -96,6 +96,14 @@ class OwnershipTest(unittest.TestCase):
             generated["summary"]["skeleton_state_counts"],
             {"blocked": 77, "frozen": 47},
         )
+        self.assertEqual(
+            generated["summary"]["contract_state_counts"],
+            {"draft": 22, "unresolved": 102},
+        )
+        self.assertEqual(
+            generated["global_contract_fingerprints"],
+            self.corpus["global_contract_fingerprints"],
+        )
         tracked = [item["path"] for item in generated["tracked_paths"]]
         self.assertEqual(tracked, sorted(baseline_paths))
         self.assertEqual(len(tracked), len(set(tracked)))
@@ -104,6 +112,13 @@ class OwnershipTest(unittest.TestCase):
             {packet["api_id"] for packet in self.corpus["packets"]},
         )
         for skeleton in generated["skeletons"]:
+            packet = next(
+                value for value in self.corpus["packets"] if value["api_id"] == skeleton["api_id"]
+            )
+            self.assertEqual(skeleton["contract_state"], packet["contract"]["state"])
+            self.assertEqual(
+                skeleton["contract_owner_issue"], packet["contract"]["owner_issue"]
+            )
             if skeleton["state"] == "blocked":
                 self.assertIsNone(skeleton["signature"])
                 self.assertTrue(skeleton["block_reasons"])

@@ -11,6 +11,9 @@ operation summaries are non-authoritative.
   silent edit.
 - `contract_maturity` describes design stability. `implementation_state` changes only with paths to
   implementation and conformance evidence.
+- Package `contract.state` is an independent Phase B axis. Draft or unresolved contracts can move
+  to candidate only through their #43-#51 owner; only #54 can move candidate to frozen. Exact
+  declarations and conformant implementations do not imply this freeze.
 - An exact declaration records its authoritative source, canonical signature, and SHA-256
   fingerprint. An unresolved declaration has null signature fields and cannot be `ready`.
 - Fact, capability, expression, and API dependencies use their typed registries. Dependency
@@ -19,6 +22,8 @@ operation summaries are non-authoritative.
   state; partial release is invalid.
 - Catalog changes regenerate `api_catalog_inventory.md`, update the migration notes when identity or
   declaration meaning changes, and pass `cxxlens-api-contract-check` and its negative tests.
+- Signature, semantics, public ownership, dependencies, schemas, decision tables, or evidence
+  changes invalidate convention/ownership fingerprints and any Phase C authorization.
 
 ## v1 to v2 reconciliation
 

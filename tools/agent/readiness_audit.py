@@ -150,6 +150,12 @@ def validate_upstream_artifacts(inputs: dict[str, Any], root: pathlib.Path) -> N
 def input_fingerprints(inputs: dict[str, Any], root: pathlib.Path) -> dict[str, str]:
     return {
         "catalog": inputs["corpus"]["catalog_fingerprint"],
+        "global_contract_conventions": inputs["corpus"]["global_contract_fingerprints"][
+            "conventions"
+        ],
+        "contract_ownership_registry": inputs["corpus"]["global_contract_fingerprints"][
+            "ownership_registry"
+        ],
         "task_packets": inputs["corpus"]["semantic_digest"],
         "ownership": inputs["ownership"]["semantic_digest"],
         "ready_report": inputs["ready"]["semantic_digest"],
@@ -1028,6 +1034,9 @@ def generate_authorization(
                 "phase": api["phase"],
                 "declaration_status": api["declaration"]["status"],
                 "implementation_state": api["implementation_state"],
+                "contract_state": packet["contract"]["state"],
+                "contract_owner_issue": packet["contract"]["owner_issue"],
+                "contract_transition_issue": packet["contract"]["transition_issue"],
                 "state": unit["state"],
                 "dispatch_authorized": unit["dispatch_authorized"],
                 "task_packet_digest": packet["semantic_digest"],
@@ -1063,6 +1072,7 @@ def generate_authorization(
                 "completion-or-foundation-gate-failure",
                 "dependency-or-provider-drift",
                 "exact-source-or-observed-gate-drift",
+                "global-contract-convention-or-ownership-drift",
                 "ownership-or-shared-contract-drift",
                 "schema-task-packet-or-shard-drift",
             ],
@@ -1101,6 +1111,15 @@ def generate_authorization(
                 and not api["implementation_evidence"]
                 for _, api in entries
             ),
+            "candidate_contract_package_count": sum(
+                package["contract"]["state"] == "candidate"
+                for package in inputs["catalog"]["packages"]
+            ),
+            "frozen_contract_package_count": sum(
+                package["contract"]["state"] == "frozen"
+                for package in inputs["catalog"]["packages"]
+            ),
+            "invalid_contract_transition_count": 0,
         },
         "infrastructure_audit": {
             "atomic_unit_count": len(inputs["corpus"]["atomic_units"]),

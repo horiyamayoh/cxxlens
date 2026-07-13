@@ -1,0 +1,163 @@
+schema: cxxlens.global-contract-conventions.v1
+document_version: 1.0.0
+contract_state: candidate
+transition_issue: '#42'
+authority:
+  catalog: schemas/cxxlens_public_api_contract.yaml
+  normative_document: docs/design/public_contract_conventions.md
+  checklist_template: docs/design/contract_candidate_checklist.md
+  ownership_registry: schemas/cxxlens_contract_ownership.yaml
+state_machine:
+  states: [draft, unresolved, candidate, frozen]
+  transitions:
+  - {from: draft, to: unresolved, authority: package_candidate_owner}
+  - {from: draft, to: candidate, authority: package_candidate_owner}
+  - {from: unresolved, to: candidate, authority: package_candidate_owner}
+  - {from: candidate, to: frozen, authority: '#54'}
+  final_freeze_issue: '#54'
+  direct_package_freeze_forbidden: true
+  independent_axes: [declaration_status, contract_state, implementation_state, readiness_state]
+package_candidate_owners:
+- {issue: '#43', packages: [configuration, core, testing]}
+- {issue: '#44', packages: [facts, interop, workspace]}
+- {issue: '#45', packages: [explain, search, select]}
+- {issue: '#46', packages: [graph]}
+- {issue: '#47', packages: [report, rules]}
+- {issue: '#48', packages: [transform]}
+- {issue: '#49', packages: [copy, fuzz, generate, method_harness, mock]}
+- {issue: '#50', packages: [flow, models]}
+- {issue: '#51', packages: [qa, review]}
+required_contract_sections:
+- naming_and_family
+- exact_declaration_and_fingerprint
+- value_reference_ownership_lifetime
+- const_noexcept_thread_safety
+- callback_and_reentrancy
+- cancellation_deadline_budget
+- result_failure_unresolved_partial
+- evidence_coverage_confidence_guarantee
+- ordering_duplicates_variants
+- serialization_schema_versioning
+- shared_ownership_and_dependencies
+- positive_negative_ambiguous_acceptance
+naming_and_family:
+  rules:
+  - Public namespaces, types, functions, members, and enum values use lower_snake_case.
+  - A coherent family is one indivisible atomic unit and lists every public member.
+  - Factories express validated construction; constructors only establish unconditional invariants.
+  - Options objects replace boolean flags or unstable default-argument sets.
+  - Overloads have one semantic operation and cannot change failure or ownership meaning.
+  - Ranges, spans, views, tag types, nodiscard, explicit conversion, and value traits are recorded per API.
+value_lifetime_and_concurrency:
+  rules:
+  - Values are preferred; nullable references use explicit handles and never raw owning pointers.
+  - Owned, shared, borrowed, callback_scoped, and view backing lifetimes are stated independently.
+  - Returned spans, ranges, and string views name their backing owner and invalidation events.
+  - Snapshots, builders, plans, reports, and registries have explicit copy and move semantics.
+  - Stable headers expose no Clang or LLVM type; raw interop is confined to cxxlens/interop/clang.hpp.
+  - Logical constness and cache mutation are documented with per-type read and write concurrency rules.
+  - noexcept is used only when every reachable failure is represented as stable data.
+  - Callbacks state invocation thread, ordering, reentrancy, exception boundary, and argument lifetime.
+execution_context:
+  rules:
+  - Execution context carries cancellation, deadline, time, memory, path, state, and output budgets.
+  - Preflight, in_flight, and post_completion observation points are explicit.
+  - Timeout, cancellation, crash, and unsupported capability are stable failure data.
+  - Caller cancellation never cancels shared or coalesced work required by another live caller.
+  - Valid authoritative partial rows survive cancellation or budget exhaustion with downgraded guarantee.
+result_decisions:
+- id: empty_success
+  result_channel: value
+  payload: empty
+  error_required: false
+  unresolved_required: false
+  coverage_complete: true
+  allowed_guarantees: [exact, conservative]
+  authoritative_rows_preserved: true
+- id: unresolved
+  result_channel: value
+  payload: partial
+  error_required: false
+  unresolved_required: true
+  coverage_complete: false
+  allowed_guarantees: [best_effort, conservative]
+  authoritative_rows_preserved: true
+- id: unsupported
+  result_channel: error
+  payload: none
+  error_required: true
+  unresolved_required: false
+  coverage_complete: false
+  allowed_guarantees: [none]
+  authoritative_rows_preserved: false
+- id: ambiguous
+  result_channel: value
+  payload: partial
+  error_required: false
+  unresolved_required: true
+  coverage_complete: false
+  allowed_guarantees: [best_effort]
+  authoritative_rows_preserved: true
+- id: partial
+  result_channel: value
+  payload: partial
+  error_required: false
+  unresolved_required: true
+  coverage_complete: false
+  allowed_guarantees: [best_effort, conservative]
+  authoritative_rows_preserved: true
+- id: failure
+  result_channel: error
+  payload: none
+  error_required: true
+  unresolved_required: false
+  coverage_complete: false
+  allowed_guarantees: [none]
+  authoritative_rows_preserved: false
+evidence_coverage_and_guarantee:
+  coverage_states: [requested, excluded, covered, failed, unresolved, not_applicable]
+  conservation_rule: Every requested unit occurs exactly once in covered, excluded, failed, unresolved, or not_applicable.
+  evidence_authoritative: true
+  prose_is_projection: true
+  downgrade_rules:
+  - Any unresolved or failed requested unit forbids an exact guarantee.
+  - Budget exhaustion, cancellation, variant divergence, or unsupported surface makes coverage incomplete.
+  - Confidence never upgrades precision, coverage, or result guarantee.
+determinism:
+  total_order_required: true
+  forbidden_order_sources: [input_arrival, filesystem_iteration, thread_completion, hash_seed, checkout_root, backend_selection]
+  duplicate_policies: [identity_collapse, merge, preserve, reject]
+  variant_states: [equal, divergent, conflicting]
+serialization_and_versioning:
+  canonical_json_required: true
+  version_axes: [cpp_api, public_schema, fact_schema, semantics, adapter]
+  unknown_field_policy: schema_declared
+  unknown_value_policy: reject
+  migration_outcomes: [compatible, migrate, rebuild, reject]
+change_policy:
+  classes:
+  - {id: additive, fingerprint_invalidated: true, major_version_required: false, migration_required: false}
+  - {id: source_breaking, fingerprint_invalidated: true, major_version_required: true, migration_required: true}
+  - {id: semantic_breaking, fingerprint_invalidated: true, major_version_required: true, migration_required: true}
+  - {id: schema_breaking, fingerprint_invalidated: true, major_version_required: true, migration_required: true}
+  frozen_approval_issue: '#54'
+  invalidate_on: [signature, semantics, ownership, dependency, schema, decision_table, evidence]
+  deprecation_requires_migration: true
+candidate_checklist:
+  required_fields:
+  - api_ids_and_atomic_units
+  - exact_signatures_and_fingerprints
+  - family_members
+  - value_ownership_lifetime
+  - const_noexcept_thread_safety
+  - callback_contract
+  - execution_context_and_budgets
+  - result_failure_partial_table
+  - evidence_coverage_guarantee
+  - ordering_duplicates_variants
+  - schema_and_version_axes
+  - public_type_component_provider_schema_owners
+  - traceability_examples_and_acceptance
+  - transition_issue_and_candidate_fingerprint
+  positive_negative_ambiguous_fixtures: true
+  production_implementation_forbidden: true

@@ -9827,12 +9827,14 @@
     }
   ],
   "input_fingerprints": {
-    "dependency_requests": "sha256:3b91ab753296257f93cd8d51c63beb3dc1918dbd95e59c3954c9f44fc887b4b1",
+    "contract_ownership_registry": "sha256:ddc993a6279db3afa1dbd866f43847ad11d629ba4e8f8bd53ec63e53ce5d5949",
+    "dependency_requests": "sha256:8184eb496bc8f6843be8d8ecefb23169abdd94adf42185628f2a2b4248d21208",
+    "global_contract_conventions": "sha256:cdf3166db0b38fb9230602ff5ba273baf9e7e253d61d6c2fc75d21f0fea1238c",
     "m0": "sha256:9e32e99675512405e1247fd92b8cfcbc5c6e99ab9dc0378833482541c0538f19",
     "m1": "sha256:0e5bf5dd8568f14394199e2deb51649bbd2743170812de12fd098b54caaa142f",
     "m2": "sha256:448a5141f4c6e1045b5ff0ddae6126054be2a0cb261cfd2b227b1e1ce741e9c7",
-    "ownership": "sha256:9ce60be52194edf057499a440b0a65cb072cd5394d82b7faa7fff4de6dc41070",
-    "task_packets": "sha256:b7b92fcdcbe3be0c9764f64c102497d86f69b76754b46d23d7d809d49c8a8192"
+    "ownership": "sha256:18f13264ff6186d625e54b84bec66060a64cac911841257adeb6752051bdb007",
+    "task_packets": "sha256:a20f4049690102142ade8c1ea5ef20aa94b5d1bf193f6b09b20f2b32b3951013"
   },
   "nodes": [
     {
@@ -9847,6 +9849,8 @@
         "M0"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -9886,6 +9890,8 @@
         "M0"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -9925,6 +9931,8 @@
         "M0"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -9964,6 +9972,8 @@
         "M0"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -9991,6 +10001,24 @@
       ],
       "atomic_unit_id": "AU-COPY-001",
       "blockers": [
+        {
+          "chain": [
+            "AU-COPY-001",
+            "contract-candidate-missing:AU-COPY-001"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-COPY-001"
+        },
+        {
+          "chain": [
+            "AU-COPY-001",
+            "contract-freeze-missing:AU-COPY-001"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-COPY-001"
+        },
         {
           "chain": [
             "AU-COPY-001",
@@ -10047,6 +10075,8 @@
         "M6"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -10088,6 +10118,24 @@
         {
           "chain": [
             "AU-COPY-002",
+            "contract-candidate-missing:AU-COPY-002"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-COPY-002"
+        },
+        {
+          "chain": [
+            "AU-COPY-002",
+            "contract-freeze-missing:AU-COPY-002"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-COPY-002"
+        },
+        {
+          "chain": [
+            "AU-COPY-002",
             "exact-contract-missing:AU-COPY-002"
           ],
           "code": "exact-contract-missing",
@@ -10126,7 +10174,7 @@
             "AU-COPY-002",
             "shared.package.copy.package_internal_engine",
             "AU-COPY-001",
-            "dependency-request-open:DR-AU-COPY-001-001"
+            "contract-candidate-missing:AU-COPY-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.copy",
@@ -10137,7 +10185,7 @@
             "AU-COPY-002",
             "shared.package.copy.schema_fixture_contract",
             "AU-COPY-001",
-            "dependency-request-open:DR-AU-COPY-001-001"
+            "contract-candidate-missing:AU-COPY-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.copy",
@@ -10148,7 +10196,7 @@
             "AU-COPY-002",
             "shared.package.copy.shared_public_type",
             "AU-COPY-001",
-            "dependency-request-open:DR-AU-COPY-001-001"
+            "contract-candidate-missing:AU-COPY-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.copy",
@@ -10169,6 +10217,8 @@
         "M6"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -10209,6 +10259,8 @@
         "M0"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -10248,6 +10300,8 @@
         "M0"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -10287,6 +10341,8 @@
         "M0"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -10326,6 +10382,8 @@
         "M0"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -10353,6 +10411,24 @@
       ],
       "atomic_unit_id": "AU-CORE-005",
       "blockers": [
+        {
+          "chain": [
+            "AU-CORE-005",
+            "contract-candidate-missing:AU-CORE-005"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-CORE-005"
+        },
+        {
+          "chain": [
+            "AU-CORE-005",
+            "contract-freeze-missing:AU-CORE-005"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-CORE-005"
+        },
         {
           "chain": [
             "AU-CORE-005",
@@ -10402,6 +10478,8 @@
         "M0"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -10429,6 +10507,24 @@
       ],
       "atomic_unit_id": "AU-CORE-006",
       "blockers": [
+        {
+          "chain": [
+            "AU-CORE-006",
+            "contract-candidate-missing:AU-CORE-006"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-CORE-006"
+        },
+        {
+          "chain": [
+            "AU-CORE-006",
+            "contract-freeze-missing:AU-CORE-006"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-CORE-006"
+        },
         {
           "chain": [
             "AU-CORE-006",
@@ -10478,6 +10574,8 @@
         "M0"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -10505,6 +10603,24 @@
       ],
       "atomic_unit_id": "AU-EXP-001",
       "blockers": [
+        {
+          "chain": [
+            "AU-EXP-001",
+            "contract-candidate-missing:AU-EXP-001"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-EXP-001"
+        },
+        {
+          "chain": [
+            "AU-EXP-001",
+            "contract-freeze-missing:AU-EXP-001"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-EXP-001"
+        },
         {
           "chain": [
             "AU-EXP-001",
@@ -10554,6 +10670,8 @@
         "M2"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -10591,6 +10709,8 @@
         "M2"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -10627,6 +10747,24 @@
       ],
       "atomic_unit_id": "AU-EXP-003",
       "blockers": [
+        {
+          "chain": [
+            "AU-EXP-003",
+            "contract-candidate-missing:AU-EXP-003"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-EXP-003"
+        },
+        {
+          "chain": [
+            "AU-EXP-003",
+            "contract-freeze-missing:AU-EXP-003"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-EXP-003"
+        },
         {
           "chain": [
             "AU-EXP-003",
@@ -10676,6 +10814,8 @@
         "M2"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -10703,6 +10843,24 @@
       ],
       "atomic_unit_id": "AU-EXP-004",
       "blockers": [
+        {
+          "chain": [
+            "AU-EXP-004",
+            "contract-candidate-missing:AU-EXP-004"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-EXP-004"
+        },
+        {
+          "chain": [
+            "AU-EXP-004",
+            "contract-freeze-missing:AU-EXP-004"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-EXP-004"
+        },
         {
           "chain": [
             "AU-EXP-004",
@@ -10752,6 +10910,8 @@
         "M0"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -10785,6 +10945,8 @@
         "M0"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -10824,6 +10986,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -10865,6 +11029,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -10909,6 +11075,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -10953,6 +11121,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -10997,6 +11167,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -11041,6 +11213,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -11085,6 +11259,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -11129,6 +11305,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -11173,6 +11351,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -11203,6 +11383,24 @@
       ],
       "atomic_unit_id": "AU-FLOW-001",
       "blockers": [
+        {
+          "chain": [
+            "AU-FLOW-001",
+            "contract-candidate-missing:AU-FLOW-001"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FLOW-001"
+        },
+        {
+          "chain": [
+            "AU-FLOW-001",
+            "contract-freeze-missing:AU-FLOW-001"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FLOW-001"
+        },
         {
           "chain": [
             "AU-FLOW-001",
@@ -11250,6 +11448,8 @@
         "M7"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -11284,6 +11484,24 @@
       ],
       "atomic_unit_id": "AU-FLOW-002",
       "blockers": [
+        {
+          "chain": [
+            "AU-FLOW-002",
+            "contract-candidate-missing:AU-FLOW-002"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FLOW-002"
+        },
+        {
+          "chain": [
+            "AU-FLOW-002",
+            "contract-freeze-missing:AU-FLOW-002"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FLOW-002"
+        },
         {
           "chain": [
             "AU-FLOW-002",
@@ -11325,7 +11543,7 @@
             "AU-FLOW-002",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11336,7 +11554,7 @@
             "AU-FLOW-002",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11347,7 +11565,7 @@
             "AU-FLOW-002",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11368,6 +11586,8 @@
         "M7"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -11400,6 +11620,24 @@
       ],
       "atomic_unit_id": "AU-FLOW-003",
       "blockers": [
+        {
+          "chain": [
+            "AU-FLOW-003",
+            "contract-candidate-missing:AU-FLOW-003"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FLOW-003"
+        },
+        {
+          "chain": [
+            "AU-FLOW-003",
+            "contract-freeze-missing:AU-FLOW-003"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FLOW-003"
+        },
         {
           "chain": [
             "AU-FLOW-003",
@@ -11450,7 +11688,7 @@
             "AU-FLOW-003",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11461,7 +11699,7 @@
             "AU-FLOW-003",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11472,7 +11710,7 @@
             "AU-FLOW-003",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11493,6 +11731,8 @@
         "M7"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -11525,6 +11765,24 @@
       ],
       "atomic_unit_id": "AU-FLOW-004",
       "blockers": [
+        {
+          "chain": [
+            "AU-FLOW-004",
+            "contract-candidate-missing:AU-FLOW-004"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FLOW-004"
+        },
+        {
+          "chain": [
+            "AU-FLOW-004",
+            "contract-freeze-missing:AU-FLOW-004"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FLOW-004"
+        },
         {
           "chain": [
             "AU-FLOW-004",
@@ -11566,7 +11824,7 @@
             "AU-FLOW-004",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11577,7 +11835,7 @@
             "AU-FLOW-004",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11588,7 +11846,7 @@
             "AU-FLOW-004",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11607,6 +11865,8 @@
         "M7"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -11634,6 +11894,24 @@
       ],
       "atomic_unit_id": "AU-FLOW-005",
       "blockers": [
+        {
+          "chain": [
+            "AU-FLOW-005",
+            "contract-candidate-missing:AU-FLOW-005"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FLOW-005"
+        },
+        {
+          "chain": [
+            "AU-FLOW-005",
+            "contract-freeze-missing:AU-FLOW-005"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FLOW-005"
+        },
         {
           "chain": [
             "AU-FLOW-005",
@@ -11693,7 +11971,7 @@
             "AU-FLOW-005",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11704,7 +11982,7 @@
             "AU-FLOW-005",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11715,7 +11993,7 @@
             "AU-FLOW-005",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11736,6 +12014,8 @@
         "M7"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -11770,6 +12050,24 @@
       ],
       "atomic_unit_id": "AU-FLOW-006",
       "blockers": [
+        {
+          "chain": [
+            "AU-FLOW-006",
+            "contract-candidate-missing:AU-FLOW-006"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FLOW-006"
+        },
+        {
+          "chain": [
+            "AU-FLOW-006",
+            "contract-freeze-missing:AU-FLOW-006"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FLOW-006"
+        },
         {
           "chain": [
             "AU-FLOW-006",
@@ -11811,7 +12109,7 @@
             "AU-FLOW-006",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11822,7 +12120,7 @@
             "AU-FLOW-006",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11833,7 +12131,7 @@
             "AU-FLOW-006",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11852,6 +12150,8 @@
         "M7"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -11879,6 +12179,24 @@
       ],
       "atomic_unit_id": "AU-FLOW-007",
       "blockers": [
+        {
+          "chain": [
+            "AU-FLOW-007",
+            "contract-candidate-missing:AU-FLOW-007"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FLOW-007"
+        },
+        {
+          "chain": [
+            "AU-FLOW-007",
+            "contract-freeze-missing:AU-FLOW-007"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FLOW-007"
+        },
         {
           "chain": [
             "AU-FLOW-007",
@@ -11929,7 +12247,7 @@
             "AU-FLOW-007",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11940,7 +12258,7 @@
             "AU-FLOW-007",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11951,7 +12269,7 @@
             "AU-FLOW-007",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11972,6 +12290,8 @@
         "M7"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -12004,6 +12324,24 @@
       ],
       "atomic_unit_id": "AU-FLOW-008",
       "blockers": [
+        {
+          "chain": [
+            "AU-FLOW-008",
+            "contract-candidate-missing:AU-FLOW-008"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FLOW-008"
+        },
+        {
+          "chain": [
+            "AU-FLOW-008",
+            "contract-freeze-missing:AU-FLOW-008"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FLOW-008"
+        },
         {
           "chain": [
             "AU-FLOW-008",
@@ -12063,7 +12401,7 @@
             "AU-FLOW-008",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12074,7 +12412,7 @@
             "AU-FLOW-008",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12085,7 +12423,7 @@
             "AU-FLOW-008",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
+            "contract-candidate-missing:AU-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12106,6 +12444,8 @@
         "M7"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -12140,6 +12480,24 @@
       ],
       "atomic_unit_id": "AU-FUZZ-001",
       "blockers": [
+        {
+          "chain": [
+            "AU-FUZZ-001",
+            "contract-candidate-missing:AU-FUZZ-001"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FUZZ-001"
+        },
+        {
+          "chain": [
+            "AU-FUZZ-001",
+            "contract-freeze-missing:AU-FUZZ-001"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FUZZ-001"
+        },
         {
           "chain": [
             "AU-FUZZ-001",
@@ -12187,6 +12545,8 @@
         "M6"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -12219,6 +12579,24 @@
       ],
       "atomic_unit_id": "AU-FUZZ-002",
       "blockers": [
+        {
+          "chain": [
+            "AU-FUZZ-002",
+            "contract-candidate-missing:AU-FUZZ-002"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FUZZ-002"
+        },
+        {
+          "chain": [
+            "AU-FUZZ-002",
+            "contract-freeze-missing:AU-FUZZ-002"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FUZZ-002"
+        },
         {
           "chain": [
             "AU-FUZZ-002",
@@ -12260,7 +12638,7 @@
             "AU-FUZZ-002",
             "shared.package.fuzz.package_internal_engine",
             "AU-FUZZ-001",
-            "exact-contract-missing:AU-FUZZ-001"
+            "contract-candidate-missing:AU-FUZZ-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.fuzz",
@@ -12271,7 +12649,7 @@
             "AU-FUZZ-002",
             "shared.package.fuzz.schema_fixture_contract",
             "AU-FUZZ-001",
-            "exact-contract-missing:AU-FUZZ-001"
+            "contract-candidate-missing:AU-FUZZ-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.fuzz",
@@ -12282,7 +12660,7 @@
             "AU-FUZZ-002",
             "shared.package.fuzz.shared_public_type",
             "AU-FUZZ-001",
-            "exact-contract-missing:AU-FUZZ-001"
+            "contract-candidate-missing:AU-FUZZ-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.fuzz",
@@ -12301,6 +12679,8 @@
         "M6"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -12328,6 +12708,24 @@
       ],
       "atomic_unit_id": "AU-FUZZ-003",
       "blockers": [
+        {
+          "chain": [
+            "AU-FUZZ-003",
+            "contract-candidate-missing:AU-FUZZ-003"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FUZZ-003"
+        },
+        {
+          "chain": [
+            "AU-FUZZ-003",
+            "contract-freeze-missing:AU-FUZZ-003"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-FUZZ-003"
+        },
         {
           "chain": [
             "AU-FUZZ-003",
@@ -12369,7 +12767,7 @@
             "AU-FUZZ-003",
             "shared.package.fuzz.package_internal_engine",
             "AU-FUZZ-001",
-            "exact-contract-missing:AU-FUZZ-001"
+            "contract-candidate-missing:AU-FUZZ-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.fuzz",
@@ -12380,7 +12778,7 @@
             "AU-FUZZ-003",
             "shared.package.fuzz.schema_fixture_contract",
             "AU-FUZZ-001",
-            "exact-contract-missing:AU-FUZZ-001"
+            "contract-candidate-missing:AU-FUZZ-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.fuzz",
@@ -12391,7 +12789,7 @@
             "AU-FUZZ-003",
             "shared.package.fuzz.shared_public_type",
             "AU-FUZZ-001",
-            "exact-contract-missing:AU-FUZZ-001"
+            "contract-candidate-missing:AU-FUZZ-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.fuzz",
@@ -12412,6 +12810,8 @@
         "M6"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -12446,6 +12846,24 @@
       ],
       "atomic_unit_id": "AU-GEN-001",
       "blockers": [
+        {
+          "chain": [
+            "AU-GEN-001",
+            "contract-candidate-missing:AU-GEN-001"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-GEN-001"
+        },
+        {
+          "chain": [
+            "AU-GEN-001",
+            "contract-freeze-missing:AU-GEN-001"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-GEN-001"
+        },
         {
           "chain": [
             "AU-GEN-001",
@@ -12489,6 +12907,8 @@
         "M5"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -12516,6 +12936,24 @@
       ],
       "atomic_unit_id": "AU-GEN-002",
       "blockers": [
+        {
+          "chain": [
+            "AU-GEN-002",
+            "contract-candidate-missing:AU-GEN-002"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-GEN-002"
+        },
+        {
+          "chain": [
+            "AU-GEN-002",
+            "contract-freeze-missing:AU-GEN-002"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-GEN-002"
+        },
         {
           "chain": [
             "AU-GEN-002",
@@ -12557,7 +12995,7 @@
             "AU-GEN-002",
             "shared.package.generate.package_internal_engine",
             "AU-GEN-001",
-            "exact-contract-missing:AU-GEN-001"
+            "contract-candidate-missing:AU-GEN-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.generate",
@@ -12568,7 +13006,7 @@
             "AU-GEN-002",
             "shared.package.generate.schema_fixture_contract",
             "AU-GEN-001",
-            "exact-contract-missing:AU-GEN-001"
+            "contract-candidate-missing:AU-GEN-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.generate",
@@ -12579,7 +13017,7 @@
             "AU-GEN-002",
             "shared.package.generate.shared_public_type",
             "AU-GEN-001",
-            "exact-contract-missing:AU-GEN-001"
+            "contract-candidate-missing:AU-GEN-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.generate",
@@ -12598,6 +13036,8 @@
         "M5"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -12625,6 +13065,24 @@
       ],
       "atomic_unit_id": "AU-GRAPH-001",
       "blockers": [
+        {
+          "chain": [
+            "AU-GRAPH-001",
+            "contract-candidate-missing:AU-GRAPH-001"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-GRAPH-001"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-001",
+            "contract-freeze-missing:AU-GRAPH-001"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-GRAPH-001"
+        },
         {
           "chain": [
             "AU-GRAPH-001",
@@ -12672,6 +13130,8 @@
         "M2"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -12702,6 +13162,24 @@
       ],
       "atomic_unit_id": "AU-GRAPH-002",
       "blockers": [
+        {
+          "chain": [
+            "AU-GRAPH-002",
+            "contract-candidate-missing:AU-GRAPH-002"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-GRAPH-002"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-002",
+            "contract-freeze-missing:AU-GRAPH-002"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-GRAPH-002"
+        },
         {
           "chain": [
             "AU-GRAPH-002",
@@ -12743,7 +13221,7 @@
             "AU-GRAPH-002",
             "shared.package.graph.package_internal_engine",
             "AU-GRAPH-001",
-            "exact-contract-missing:AU-GRAPH-001"
+            "contract-candidate-missing:AU-GRAPH-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.graph",
@@ -12754,7 +13232,7 @@
             "AU-GRAPH-002",
             "shared.package.graph.schema_fixture_contract",
             "AU-GRAPH-001",
-            "exact-contract-missing:AU-GRAPH-001"
+            "contract-candidate-missing:AU-GRAPH-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.graph",
@@ -12765,7 +13243,7 @@
             "AU-GRAPH-002",
             "shared.package.graph.shared_public_type",
             "AU-GRAPH-001",
-            "exact-contract-missing:AU-GRAPH-001"
+            "contract-candidate-missing:AU-GRAPH-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.graph",
@@ -12786,6 +13264,8 @@
         "M2"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -12816,6 +13296,24 @@
       ],
       "atomic_unit_id": "AU-GRAPH-003",
       "blockers": [
+        {
+          "chain": [
+            "AU-GRAPH-003",
+            "contract-candidate-missing:AU-GRAPH-003"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-GRAPH-003"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-003",
+            "contract-freeze-missing:AU-GRAPH-003"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-GRAPH-003"
+        },
         {
           "chain": [
             "AU-GRAPH-003",
@@ -12857,7 +13355,7 @@
             "AU-GRAPH-003",
             "shared.package.graph.package_internal_engine",
             "AU-GRAPH-001",
-            "exact-contract-missing:AU-GRAPH-001"
+            "contract-candidate-missing:AU-GRAPH-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.graph",
@@ -12868,7 +13366,7 @@
             "AU-GRAPH-003",
             "shared.package.graph.schema_fixture_contract",
             "AU-GRAPH-001",
-            "exact-contract-missing:AU-GRAPH-001"
+            "contract-candidate-missing:AU-GRAPH-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.graph",
@@ -12879,7 +13377,7 @@
             "AU-GRAPH-003",
             "shared.package.graph.shared_public_type",
             "AU-GRAPH-001",
-            "exact-contract-missing:AU-GRAPH-001"
+            "contract-candidate-missing:AU-GRAPH-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.graph",
@@ -12900,6 +13398,8 @@
         "M3"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -12930,6 +13430,24 @@
       ],
       "atomic_unit_id": "AU-GRAPH-004",
       "blockers": [
+        {
+          "chain": [
+            "AU-GRAPH-004",
+            "contract-candidate-missing:AU-GRAPH-004"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-GRAPH-004"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-004",
+            "contract-freeze-missing:AU-GRAPH-004"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-GRAPH-004"
+        },
         {
           "chain": [
             "AU-GRAPH-004",
@@ -12971,7 +13489,7 @@
             "AU-GRAPH-004",
             "shared.package.graph.package_internal_engine",
             "AU-GRAPH-001",
-            "exact-contract-missing:AU-GRAPH-001"
+            "contract-candidate-missing:AU-GRAPH-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.graph",
@@ -12982,7 +13500,7 @@
             "AU-GRAPH-004",
             "shared.package.graph.schema_fixture_contract",
             "AU-GRAPH-001",
-            "exact-contract-missing:AU-GRAPH-001"
+            "contract-candidate-missing:AU-GRAPH-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.graph",
@@ -12993,7 +13511,7 @@
             "AU-GRAPH-004",
             "shared.package.graph.shared_public_type",
             "AU-GRAPH-001",
-            "exact-contract-missing:AU-GRAPH-001"
+            "contract-candidate-missing:AU-GRAPH-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.graph",
@@ -13014,6 +13532,8 @@
         "M3"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -13044,6 +13564,24 @@
       ],
       "atomic_unit_id": "AU-GRAPH-005",
       "blockers": [
+        {
+          "chain": [
+            "AU-GRAPH-005",
+            "contract-candidate-missing:AU-GRAPH-005"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-GRAPH-005"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-005",
+            "contract-freeze-missing:AU-GRAPH-005"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-GRAPH-005"
+        },
         {
           "chain": [
             "AU-GRAPH-005",
@@ -13085,7 +13623,7 @@
             "AU-GRAPH-005",
             "shared.package.graph.package_internal_engine",
             "AU-GRAPH-001",
-            "exact-contract-missing:AU-GRAPH-001"
+            "contract-candidate-missing:AU-GRAPH-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.graph",
@@ -13096,7 +13634,7 @@
             "AU-GRAPH-005",
             "shared.package.graph.schema_fixture_contract",
             "AU-GRAPH-001",
-            "exact-contract-missing:AU-GRAPH-001"
+            "contract-candidate-missing:AU-GRAPH-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.graph",
@@ -13107,7 +13645,7 @@
             "AU-GRAPH-005",
             "shared.package.graph.shared_public_type",
             "AU-GRAPH-001",
-            "exact-contract-missing:AU-GRAPH-001"
+            "contract-candidate-missing:AU-GRAPH-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.graph",
@@ -13128,6 +13666,8 @@
         "M3"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -13162,6 +13702,24 @@
       ],
       "atomic_unit_id": "AU-GRAPH-006",
       "blockers": [
+        {
+          "chain": [
+            "AU-GRAPH-006",
+            "contract-candidate-missing:AU-GRAPH-006"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-GRAPH-006"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-006",
+            "contract-freeze-missing:AU-GRAPH-006"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-GRAPH-006"
+        },
         {
           "chain": [
             "AU-GRAPH-006",
@@ -13203,7 +13761,7 @@
             "AU-GRAPH-006",
             "shared.package.graph.package_internal_engine",
             "AU-GRAPH-001",
-            "exact-contract-missing:AU-GRAPH-001"
+            "contract-candidate-missing:AU-GRAPH-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.graph",
@@ -13214,7 +13772,7 @@
             "AU-GRAPH-006",
             "shared.package.graph.schema_fixture_contract",
             "AU-GRAPH-001",
-            "exact-contract-missing:AU-GRAPH-001"
+            "contract-candidate-missing:AU-GRAPH-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.graph",
@@ -13225,7 +13783,7 @@
             "AU-GRAPH-006",
             "shared.package.graph.shared_public_type",
             "AU-GRAPH-001",
-            "exact-contract-missing:AU-GRAPH-001"
+            "contract-candidate-missing:AU-GRAPH-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.graph",
@@ -13244,6 +13802,8 @@
         "M3"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -13277,6 +13837,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -13320,6 +13882,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -13350,6 +13914,24 @@
       ],
       "atomic_unit_id": "AU-INT-003",
       "blockers": [
+        {
+          "chain": [
+            "AU-INT-003",
+            "contract-candidate-missing:AU-INT-003"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-INT-003"
+        },
+        {
+          "chain": [
+            "AU-INT-003",
+            "contract-freeze-missing:AU-INT-003"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-INT-003"
+        },
         {
           "chain": [
             "AU-INT-003",
@@ -13399,6 +13981,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -13426,6 +14010,24 @@
       ],
       "atomic_unit_id": "AU-INT-004",
       "blockers": [
+        {
+          "chain": [
+            "AU-INT-004",
+            "contract-candidate-missing:AU-INT-004"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-INT-004"
+        },
+        {
+          "chain": [
+            "AU-INT-004",
+            "contract-freeze-missing:AU-INT-004"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-INT-004"
+        },
         {
           "chain": [
             "AU-INT-004",
@@ -13475,6 +14077,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -13502,6 +14106,24 @@
       ],
       "atomic_unit_id": "AU-METHOD-001",
       "blockers": [
+        {
+          "chain": [
+            "AU-METHOD-001",
+            "contract-candidate-missing:AU-METHOD-001"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-METHOD-001"
+        },
+        {
+          "chain": [
+            "AU-METHOD-001",
+            "contract-freeze-missing:AU-METHOD-001"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-METHOD-001"
+        },
         {
           "chain": [
             "AU-METHOD-001",
@@ -13545,6 +14167,8 @@
         "M6"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -13572,6 +14196,24 @@
       ],
       "atomic_unit_id": "AU-METHOD-002",
       "blockers": [
+        {
+          "chain": [
+            "AU-METHOD-002",
+            "contract-candidate-missing:AU-METHOD-002"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-METHOD-002"
+        },
+        {
+          "chain": [
+            "AU-METHOD-002",
+            "contract-freeze-missing:AU-METHOD-002"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-METHOD-002"
+        },
         {
           "chain": [
             "AU-METHOD-002",
@@ -13613,7 +14255,7 @@
             "AU-METHOD-002",
             "shared.package.method_harness.package_internal_engine",
             "AU-METHOD-001",
-            "exact-contract-missing:AU-METHOD-001"
+            "contract-candidate-missing:AU-METHOD-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.method_harness",
@@ -13624,7 +14266,7 @@
             "AU-METHOD-002",
             "shared.package.method_harness.schema_fixture_contract",
             "AU-METHOD-001",
-            "exact-contract-missing:AU-METHOD-001"
+            "contract-candidate-missing:AU-METHOD-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.method_harness",
@@ -13635,7 +14277,7 @@
             "AU-METHOD-002",
             "shared.package.method_harness.shared_public_type",
             "AU-METHOD-001",
-            "exact-contract-missing:AU-METHOD-001"
+            "contract-candidate-missing:AU-METHOD-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.method_harness",
@@ -13656,6 +14298,8 @@
         "M6"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -13688,6 +14332,24 @@
       ],
       "atomic_unit_id": "AU-METHOD-003",
       "blockers": [
+        {
+          "chain": [
+            "AU-METHOD-003",
+            "contract-candidate-missing:AU-METHOD-003"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-METHOD-003"
+        },
+        {
+          "chain": [
+            "AU-METHOD-003",
+            "contract-freeze-missing:AU-METHOD-003"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-METHOD-003"
+        },
         {
           "chain": [
             "AU-METHOD-003",
@@ -13729,7 +14391,7 @@
             "AU-METHOD-003",
             "shared.package.method_harness.package_internal_engine",
             "AU-METHOD-001",
-            "exact-contract-missing:AU-METHOD-001"
+            "contract-candidate-missing:AU-METHOD-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.method_harness",
@@ -13740,7 +14402,7 @@
             "AU-METHOD-003",
             "shared.package.method_harness.schema_fixture_contract",
             "AU-METHOD-001",
-            "exact-contract-missing:AU-METHOD-001"
+            "contract-candidate-missing:AU-METHOD-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.method_harness",
@@ -13751,7 +14413,7 @@
             "AU-METHOD-003",
             "shared.package.method_harness.shared_public_type",
             "AU-METHOD-001",
-            "exact-contract-missing:AU-METHOD-001"
+            "contract-candidate-missing:AU-METHOD-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.method_harness",
@@ -13770,6 +14432,8 @@
         "M6"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -13797,6 +14461,24 @@
       ],
       "atomic_unit_id": "AU-METHOD-004",
       "blockers": [
+        {
+          "chain": [
+            "AU-METHOD-004",
+            "contract-candidate-missing:AU-METHOD-004"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-METHOD-004"
+        },
+        {
+          "chain": [
+            "AU-METHOD-004",
+            "contract-freeze-missing:AU-METHOD-004"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-METHOD-004"
+        },
         {
           "chain": [
             "AU-METHOD-004",
@@ -13856,7 +14538,7 @@
             "AU-METHOD-004",
             "shared.package.method_harness.package_internal_engine",
             "AU-METHOD-001",
-            "exact-contract-missing:AU-METHOD-001"
+            "contract-candidate-missing:AU-METHOD-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.method_harness",
@@ -13867,7 +14549,7 @@
             "AU-METHOD-004",
             "shared.package.method_harness.schema_fixture_contract",
             "AU-METHOD-001",
-            "exact-contract-missing:AU-METHOD-001"
+            "contract-candidate-missing:AU-METHOD-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.method_harness",
@@ -13878,7 +14560,7 @@
             "AU-METHOD-004",
             "shared.package.method_harness.shared_public_type",
             "AU-METHOD-001",
-            "exact-contract-missing:AU-METHOD-001"
+            "contract-candidate-missing:AU-METHOD-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.method_harness",
@@ -13899,6 +14581,8 @@
         "M6"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -13935,6 +14619,24 @@
       ],
       "atomic_unit_id": "AU-METHOD-005",
       "blockers": [
+        {
+          "chain": [
+            "AU-METHOD-005",
+            "contract-candidate-missing:AU-METHOD-005"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-METHOD-005"
+        },
+        {
+          "chain": [
+            "AU-METHOD-005",
+            "contract-freeze-missing:AU-METHOD-005"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-METHOD-005"
+        },
         {
           "chain": [
             "AU-METHOD-005",
@@ -13985,7 +14687,7 @@
             "AU-METHOD-005",
             "shared.package.method_harness.package_internal_engine",
             "AU-METHOD-001",
-            "exact-contract-missing:AU-METHOD-001"
+            "contract-candidate-missing:AU-METHOD-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.method_harness",
@@ -13996,7 +14698,7 @@
             "AU-METHOD-005",
             "shared.package.method_harness.schema_fixture_contract",
             "AU-METHOD-001",
-            "exact-contract-missing:AU-METHOD-001"
+            "contract-candidate-missing:AU-METHOD-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.method_harness",
@@ -14007,7 +14709,7 @@
             "AU-METHOD-005",
             "shared.package.method_harness.shared_public_type",
             "AU-METHOD-001",
-            "exact-contract-missing:AU-METHOD-001"
+            "contract-candidate-missing:AU-METHOD-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.method_harness",
@@ -14028,6 +14730,8 @@
         "M6"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -14064,6 +14768,24 @@
       ],
       "atomic_unit_id": "AU-MOCK-001",
       "blockers": [
+        {
+          "chain": [
+            "AU-MOCK-001",
+            "contract-candidate-missing:AU-MOCK-001"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-MOCK-001"
+        },
+        {
+          "chain": [
+            "AU-MOCK-001",
+            "contract-freeze-missing:AU-MOCK-001"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-MOCK-001"
+        },
         {
           "chain": [
             "AU-MOCK-001",
@@ -14111,6 +14833,8 @@
         "M5"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -14143,6 +14867,24 @@
       ],
       "atomic_unit_id": "AU-MOCK-002",
       "blockers": [
+        {
+          "chain": [
+            "AU-MOCK-002",
+            "contract-candidate-missing:AU-MOCK-002"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-MOCK-002"
+        },
+        {
+          "chain": [
+            "AU-MOCK-002",
+            "contract-freeze-missing:AU-MOCK-002"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-MOCK-002"
+        },
         {
           "chain": [
             "AU-MOCK-002",
@@ -14184,7 +14926,7 @@
             "AU-MOCK-002",
             "shared.package.mock.package_internal_engine",
             "AU-MOCK-001",
-            "exact-contract-missing:AU-MOCK-001"
+            "contract-candidate-missing:AU-MOCK-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.mock",
@@ -14195,7 +14937,7 @@
             "AU-MOCK-002",
             "shared.package.mock.schema_fixture_contract",
             "AU-MOCK-001",
-            "exact-contract-missing:AU-MOCK-001"
+            "contract-candidate-missing:AU-MOCK-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.mock",
@@ -14206,7 +14948,7 @@
             "AU-MOCK-002",
             "shared.package.mock.shared_public_type",
             "AU-MOCK-001",
-            "exact-contract-missing:AU-MOCK-001"
+            "contract-candidate-missing:AU-MOCK-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.mock",
@@ -14225,6 +14967,8 @@
         "M5"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -14252,6 +14996,24 @@
       ],
       "atomic_unit_id": "AU-MOCK-003",
       "blockers": [
+        {
+          "chain": [
+            "AU-MOCK-003",
+            "contract-candidate-missing:AU-MOCK-003"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-MOCK-003"
+        },
+        {
+          "chain": [
+            "AU-MOCK-003",
+            "contract-freeze-missing:AU-MOCK-003"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-MOCK-003"
+        },
         {
           "chain": [
             "AU-MOCK-003",
@@ -14293,7 +15055,7 @@
             "AU-MOCK-003",
             "shared.package.mock.package_internal_engine",
             "AU-MOCK-001",
-            "exact-contract-missing:AU-MOCK-001"
+            "contract-candidate-missing:AU-MOCK-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.mock",
@@ -14304,7 +15066,7 @@
             "AU-MOCK-003",
             "shared.package.mock.schema_fixture_contract",
             "AU-MOCK-001",
-            "exact-contract-missing:AU-MOCK-001"
+            "contract-candidate-missing:AU-MOCK-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.mock",
@@ -14315,7 +15077,7 @@
             "AU-MOCK-003",
             "shared.package.mock.shared_public_type",
             "AU-MOCK-001",
-            "exact-contract-missing:AU-MOCK-001"
+            "contract-candidate-missing:AU-MOCK-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.mock",
@@ -14336,6 +15098,8 @@
         "M5"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -14379,6 +15143,24 @@
         {
           "chain": [
             "AU-MODEL-001",
+            "contract-candidate-missing:AU-MODEL-001"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-MODEL-001"
+        },
+        {
+          "chain": [
+            "AU-MODEL-001",
+            "contract-freeze-missing:AU-MODEL-001"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-MODEL-001"
+        },
+        {
+          "chain": [
+            "AU-MODEL-001",
             "exact-contract-missing:AU-MODEL-001"
           ],
           "code": "exact-contract-missing",
@@ -14419,6 +15201,8 @@
         "M3"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -14446,6 +15230,24 @@
       ],
       "atomic_unit_id": "AU-MODEL-002",
       "blockers": [
+        {
+          "chain": [
+            "AU-MODEL-002",
+            "contract-candidate-missing:AU-MODEL-002"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-MODEL-002"
+        },
+        {
+          "chain": [
+            "AU-MODEL-002",
+            "contract-freeze-missing:AU-MODEL-002"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-MODEL-002"
+        },
         {
           "chain": [
             "AU-MODEL-002",
@@ -14487,7 +15289,7 @@
             "AU-MODEL-002",
             "shared.package.models.package_internal_engine",
             "AU-MODEL-001",
-            "exact-contract-missing:AU-MODEL-001"
+            "contract-candidate-missing:AU-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.models",
@@ -14498,7 +15300,7 @@
             "AU-MODEL-002",
             "shared.package.models.schema_fixture_contract",
             "AU-MODEL-001",
-            "exact-contract-missing:AU-MODEL-001"
+            "contract-candidate-missing:AU-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.models",
@@ -14509,7 +15311,7 @@
             "AU-MODEL-002",
             "shared.package.models.shared_public_type",
             "AU-MODEL-001",
-            "exact-contract-missing:AU-MODEL-001"
+            "contract-candidate-missing:AU-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.models",
@@ -14530,6 +15332,8 @@
         "M3"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -14562,6 +15366,24 @@
       ],
       "atomic_unit_id": "AU-MODEL-003",
       "blockers": [
+        {
+          "chain": [
+            "AU-MODEL-003",
+            "contract-candidate-missing:AU-MODEL-003"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-MODEL-003"
+        },
+        {
+          "chain": [
+            "AU-MODEL-003",
+            "contract-freeze-missing:AU-MODEL-003"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-MODEL-003"
+        },
         {
           "chain": [
             "AU-MODEL-003",
@@ -14603,7 +15425,7 @@
             "AU-MODEL-003",
             "shared.package.models.package_internal_engine",
             "AU-MODEL-001",
-            "exact-contract-missing:AU-MODEL-001"
+            "contract-candidate-missing:AU-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.models",
@@ -14614,7 +15436,7 @@
             "AU-MODEL-003",
             "shared.package.models.schema_fixture_contract",
             "AU-MODEL-001",
-            "exact-contract-missing:AU-MODEL-001"
+            "contract-candidate-missing:AU-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.models",
@@ -14625,7 +15447,7 @@
             "AU-MODEL-003",
             "shared.package.models.shared_public_type",
             "AU-MODEL-001",
-            "exact-contract-missing:AU-MODEL-001"
+            "contract-candidate-missing:AU-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.models",
@@ -14644,6 +15466,8 @@
         "M3"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -14671,6 +15495,24 @@
       ],
       "atomic_unit_id": "AU-MODEL-004",
       "blockers": [
+        {
+          "chain": [
+            "AU-MODEL-004",
+            "contract-candidate-missing:AU-MODEL-004"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-MODEL-004"
+        },
+        {
+          "chain": [
+            "AU-MODEL-004",
+            "contract-freeze-missing:AU-MODEL-004"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-MODEL-004"
+        },
         {
           "chain": [
             "AU-MODEL-004",
@@ -14712,7 +15554,7 @@
             "AU-MODEL-004",
             "shared.package.models.package_internal_engine",
             "AU-MODEL-001",
-            "exact-contract-missing:AU-MODEL-001"
+            "contract-candidate-missing:AU-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.models",
@@ -14723,7 +15565,7 @@
             "AU-MODEL-004",
             "shared.package.models.schema_fixture_contract",
             "AU-MODEL-001",
-            "exact-contract-missing:AU-MODEL-001"
+            "contract-candidate-missing:AU-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.models",
@@ -14734,7 +15576,7 @@
             "AU-MODEL-004",
             "shared.package.models.shared_public_type",
             "AU-MODEL-001",
-            "exact-contract-missing:AU-MODEL-001"
+            "contract-candidate-missing:AU-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.models",
@@ -14753,6 +15595,8 @@
         "M3"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -14780,6 +15624,24 @@
       ],
       "atomic_unit_id": "AU-QA-001",
       "blockers": [
+        {
+          "chain": [
+            "AU-QA-001",
+            "contract-candidate-missing:AU-QA-001"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-QA-001"
+        },
+        {
+          "chain": [
+            "AU-QA-001",
+            "contract-freeze-missing:AU-QA-001"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-QA-001"
+        },
         {
           "chain": [
             "AU-QA-001",
@@ -14823,6 +15685,8 @@
         "M8"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -14850,6 +15714,24 @@
       ],
       "atomic_unit_id": "AU-QA-002",
       "blockers": [
+        {
+          "chain": [
+            "AU-QA-002",
+            "contract-candidate-missing:AU-QA-002"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-QA-002"
+        },
+        {
+          "chain": [
+            "AU-QA-002",
+            "contract-freeze-missing:AU-QA-002"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-QA-002"
+        },
         {
           "chain": [
             "AU-QA-002",
@@ -14891,7 +15773,7 @@
             "AU-QA-002",
             "shared.package.qa.package_internal_engine",
             "AU-QA-001",
-            "exact-contract-missing:AU-QA-001"
+            "contract-candidate-missing:AU-QA-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.qa",
@@ -14902,7 +15784,7 @@
             "AU-QA-002",
             "shared.package.qa.schema_fixture_contract",
             "AU-QA-001",
-            "exact-contract-missing:AU-QA-001"
+            "contract-candidate-missing:AU-QA-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.qa",
@@ -14913,7 +15795,7 @@
             "AU-QA-002",
             "shared.package.qa.shared_public_type",
             "AU-QA-001",
-            "exact-contract-missing:AU-QA-001"
+            "contract-candidate-missing:AU-QA-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.qa",
@@ -14932,6 +15814,8 @@
         "M8"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -14967,6 +15851,24 @@
           "code": "capability-provider-unavailable",
           "steward": "steward.repository",
           "subject": "qa.sanitizers"
+        },
+        {
+          "chain": [
+            "AU-QA-003",
+            "contract-candidate-missing:AU-QA-003"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-QA-003"
+        },
+        {
+          "chain": [
+            "AU-QA-003",
+            "contract-freeze-missing:AU-QA-003"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-QA-003"
         },
         {
           "chain": [
@@ -15009,7 +15911,7 @@
             "AU-QA-003",
             "provider.capability.qa-sanitizers.qa.sanitizers",
             "AU-QA-001",
-            "exact-contract-missing:AU-QA-001"
+            "contract-candidate-missing:AU-QA-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "steward.qa",
@@ -15020,7 +15922,7 @@
             "AU-QA-003",
             "shared.package.qa.package_internal_engine",
             "AU-QA-001",
-            "exact-contract-missing:AU-QA-001"
+            "contract-candidate-missing:AU-QA-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.qa",
@@ -15031,7 +15933,7 @@
             "AU-QA-003",
             "shared.package.qa.schema_fixture_contract",
             "AU-QA-001",
-            "exact-contract-missing:AU-QA-001"
+            "contract-candidate-missing:AU-QA-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.qa",
@@ -15042,7 +15944,7 @@
             "AU-QA-003",
             "shared.package.qa.shared_public_type",
             "AU-QA-001",
-            "exact-contract-missing:AU-QA-001"
+            "contract-candidate-missing:AU-QA-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.qa",
@@ -15062,6 +15964,8 @@
         "M8"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -15104,6 +16008,24 @@
         {
           "chain": [
             "AU-QA-004",
+            "contract-candidate-missing:AU-QA-004"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-QA-004"
+        },
+        {
+          "chain": [
+            "AU-QA-004",
+            "contract-freeze-missing:AU-QA-004"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-QA-004"
+        },
+        {
+          "chain": [
+            "AU-QA-004",
             "exact-contract-missing:AU-QA-004"
           ],
           "code": "exact-contract-missing",
@@ -15142,7 +16064,7 @@
             "AU-QA-004",
             "provider.capability.qa-coverage.qa.coverage",
             "AU-QA-002",
-            "exact-contract-missing:AU-QA-002"
+            "contract-candidate-missing:AU-QA-002"
           ],
           "code": "shared-component-not-complete",
           "steward": "steward.qa",
@@ -15153,7 +16075,7 @@
             "AU-QA-004",
             "shared.package.qa.package_internal_engine",
             "AU-QA-001",
-            "exact-contract-missing:AU-QA-001"
+            "contract-candidate-missing:AU-QA-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.qa",
@@ -15164,7 +16086,7 @@
             "AU-QA-004",
             "shared.package.qa.schema_fixture_contract",
             "AU-QA-001",
-            "exact-contract-missing:AU-QA-001"
+            "contract-candidate-missing:AU-QA-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.qa",
@@ -15175,7 +16097,7 @@
             "AU-QA-004",
             "shared.package.qa.shared_public_type",
             "AU-QA-001",
-            "exact-contract-missing:AU-QA-001"
+            "contract-candidate-missing:AU-QA-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.qa",
@@ -15196,6 +16118,8 @@
         "M8"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -15226,6 +16150,24 @@
       ],
       "atomic_unit_id": "AU-REPORT-001",
       "blockers": [
+        {
+          "chain": [
+            "AU-REPORT-001",
+            "contract-candidate-missing:AU-REPORT-001"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-REPORT-001"
+        },
+        {
+          "chain": [
+            "AU-REPORT-001",
+            "contract-freeze-missing:AU-REPORT-001"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-REPORT-001"
+        },
         {
           "chain": [
             "AU-REPORT-001",
@@ -15269,6 +16211,8 @@
         "M4"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -15296,6 +16240,24 @@
       ],
       "atomic_unit_id": "AU-REPORT-002",
       "blockers": [
+        {
+          "chain": [
+            "AU-REPORT-002",
+            "contract-candidate-missing:AU-REPORT-002"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-REPORT-002"
+        },
+        {
+          "chain": [
+            "AU-REPORT-002",
+            "contract-freeze-missing:AU-REPORT-002"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-REPORT-002"
+        },
         {
           "chain": [
             "AU-REPORT-002",
@@ -15337,7 +16299,7 @@
             "AU-REPORT-002",
             "shared.package.report.package_internal_engine",
             "AU-REPORT-001",
-            "exact-contract-missing:AU-REPORT-001"
+            "contract-candidate-missing:AU-REPORT-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.report",
@@ -15348,7 +16310,7 @@
             "AU-REPORT-002",
             "shared.package.report.schema_fixture_contract",
             "AU-REPORT-001",
-            "exact-contract-missing:AU-REPORT-001"
+            "contract-candidate-missing:AU-REPORT-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.report",
@@ -15359,7 +16321,7 @@
             "AU-REPORT-002",
             "shared.package.report.shared_public_type",
             "AU-REPORT-001",
-            "exact-contract-missing:AU-REPORT-001"
+            "contract-candidate-missing:AU-REPORT-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.report",
@@ -15378,6 +16340,8 @@
         "M5"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -15405,6 +16369,24 @@
       ],
       "atomic_unit_id": "AU-REPORT-003",
       "blockers": [
+        {
+          "chain": [
+            "AU-REPORT-003",
+            "contract-candidate-missing:AU-REPORT-003"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-REPORT-003"
+        },
+        {
+          "chain": [
+            "AU-REPORT-003",
+            "contract-freeze-missing:AU-REPORT-003"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-REPORT-003"
+        },
         {
           "chain": [
             "AU-REPORT-003",
@@ -15446,7 +16428,7 @@
             "AU-REPORT-003",
             "shared.package.report.package_internal_engine",
             "AU-REPORT-001",
-            "exact-contract-missing:AU-REPORT-001"
+            "contract-candidate-missing:AU-REPORT-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.report",
@@ -15457,7 +16439,7 @@
             "AU-REPORT-003",
             "shared.package.report.schema_fixture_contract",
             "AU-REPORT-001",
-            "exact-contract-missing:AU-REPORT-001"
+            "contract-candidate-missing:AU-REPORT-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.report",
@@ -15468,7 +16450,7 @@
             "AU-REPORT-003",
             "shared.package.report.shared_public_type",
             "AU-REPORT-001",
-            "exact-contract-missing:AU-REPORT-001"
+            "contract-candidate-missing:AU-REPORT-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.report",
@@ -15487,6 +16469,8 @@
         "M5"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -15514,6 +16498,24 @@
       ],
       "atomic_unit_id": "AU-REPORT-004",
       "blockers": [
+        {
+          "chain": [
+            "AU-REPORT-004",
+            "contract-candidate-missing:AU-REPORT-004"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-REPORT-004"
+        },
+        {
+          "chain": [
+            "AU-REPORT-004",
+            "contract-freeze-missing:AU-REPORT-004"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-REPORT-004"
+        },
         {
           "chain": [
             "AU-REPORT-004",
@@ -15555,7 +16557,7 @@
             "AU-REPORT-004",
             "shared.package.report.package_internal_engine",
             "AU-REPORT-001",
-            "exact-contract-missing:AU-REPORT-001"
+            "contract-candidate-missing:AU-REPORT-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.report",
@@ -15566,7 +16568,7 @@
             "AU-REPORT-004",
             "shared.package.report.schema_fixture_contract",
             "AU-REPORT-001",
-            "exact-contract-missing:AU-REPORT-001"
+            "contract-candidate-missing:AU-REPORT-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.report",
@@ -15577,7 +16579,7 @@
             "AU-REPORT-004",
             "shared.package.report.shared_public_type",
             "AU-REPORT-001",
-            "exact-contract-missing:AU-REPORT-001"
+            "contract-candidate-missing:AU-REPORT-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.report",
@@ -15596,6 +16598,8 @@
         "M5"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -15623,6 +16627,24 @@
       ],
       "atomic_unit_id": "AU-RULE-001",
       "blockers": [
+        {
+          "chain": [
+            "AU-RULE-001",
+            "contract-candidate-missing:AU-RULE-001"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RULE-001"
+        },
+        {
+          "chain": [
+            "AU-RULE-001",
+            "contract-freeze-missing:AU-RULE-001"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RULE-001"
+        },
         {
           "chain": [
             "AU-RULE-001",
@@ -15666,6 +16688,8 @@
         "M4"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -15693,6 +16717,24 @@
       ],
       "atomic_unit_id": "AU-RULE-002",
       "blockers": [
+        {
+          "chain": [
+            "AU-RULE-002",
+            "contract-candidate-missing:AU-RULE-002"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RULE-002"
+        },
+        {
+          "chain": [
+            "AU-RULE-002",
+            "contract-freeze-missing:AU-RULE-002"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RULE-002"
+        },
         {
           "chain": [
             "AU-RULE-002",
@@ -15734,7 +16776,7 @@
             "AU-RULE-002",
             "shared.package.rules.package_internal_engine",
             "AU-RULE-001",
-            "exact-contract-missing:AU-RULE-001"
+            "contract-candidate-missing:AU-RULE-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.rules",
@@ -15745,7 +16787,7 @@
             "AU-RULE-002",
             "shared.package.rules.schema_fixture_contract",
             "AU-RULE-001",
-            "exact-contract-missing:AU-RULE-001"
+            "contract-candidate-missing:AU-RULE-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.rules",
@@ -15756,7 +16798,7 @@
             "AU-RULE-002",
             "shared.package.rules.shared_public_type",
             "AU-RULE-001",
-            "exact-contract-missing:AU-RULE-001"
+            "contract-candidate-missing:AU-RULE-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.rules",
@@ -15777,6 +16819,8 @@
         "M4"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -15813,6 +16857,24 @@
       ],
       "atomic_unit_id": "AU-RULE-003",
       "blockers": [
+        {
+          "chain": [
+            "AU-RULE-003",
+            "contract-candidate-missing:AU-RULE-003"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RULE-003"
+        },
+        {
+          "chain": [
+            "AU-RULE-003",
+            "contract-freeze-missing:AU-RULE-003"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RULE-003"
+        },
         {
           "chain": [
             "AU-RULE-003",
@@ -15854,7 +16916,7 @@
             "AU-RULE-003",
             "shared.package.rules.package_internal_engine",
             "AU-RULE-001",
-            "exact-contract-missing:AU-RULE-001"
+            "contract-candidate-missing:AU-RULE-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.rules",
@@ -15865,7 +16927,7 @@
             "AU-RULE-003",
             "shared.package.rules.schema_fixture_contract",
             "AU-RULE-001",
-            "exact-contract-missing:AU-RULE-001"
+            "contract-candidate-missing:AU-RULE-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.rules",
@@ -15876,7 +16938,7 @@
             "AU-RULE-003",
             "shared.package.rules.shared_public_type",
             "AU-RULE-001",
-            "exact-contract-missing:AU-RULE-001"
+            "contract-candidate-missing:AU-RULE-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.rules",
@@ -15897,6 +16959,8 @@
         "M4"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -15933,6 +16997,24 @@
       ],
       "atomic_unit_id": "AU-RULE-004",
       "blockers": [
+        {
+          "chain": [
+            "AU-RULE-004",
+            "contract-candidate-missing:AU-RULE-004"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RULE-004"
+        },
+        {
+          "chain": [
+            "AU-RULE-004",
+            "contract-freeze-missing:AU-RULE-004"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RULE-004"
+        },
         {
           "chain": [
             "AU-RULE-004",
@@ -15974,7 +17056,7 @@
             "AU-RULE-004",
             "shared.package.rules.package_internal_engine",
             "AU-RULE-001",
-            "exact-contract-missing:AU-RULE-001"
+            "contract-candidate-missing:AU-RULE-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.rules",
@@ -15985,7 +17067,7 @@
             "AU-RULE-004",
             "shared.package.rules.schema_fixture_contract",
             "AU-RULE-001",
-            "exact-contract-missing:AU-RULE-001"
+            "contract-candidate-missing:AU-RULE-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.rules",
@@ -15996,7 +17078,7 @@
             "AU-RULE-004",
             "shared.package.rules.shared_public_type",
             "AU-RULE-001",
-            "exact-contract-missing:AU-RULE-001"
+            "contract-candidate-missing:AU-RULE-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.rules",
@@ -16015,6 +17097,8 @@
         "M4"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -16042,6 +17126,24 @@
       ],
       "atomic_unit_id": "AU-RULE-005",
       "blockers": [
+        {
+          "chain": [
+            "AU-RULE-005",
+            "contract-candidate-missing:AU-RULE-005"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RULE-005"
+        },
+        {
+          "chain": [
+            "AU-RULE-005",
+            "contract-freeze-missing:AU-RULE-005"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RULE-005"
+        },
         {
           "chain": [
             "AU-RULE-005",
@@ -16083,7 +17185,7 @@
             "AU-RULE-005",
             "shared.package.rules.package_internal_engine",
             "AU-RULE-001",
-            "exact-contract-missing:AU-RULE-001"
+            "contract-candidate-missing:AU-RULE-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.rules",
@@ -16094,7 +17196,7 @@
             "AU-RULE-005",
             "shared.package.rules.schema_fixture_contract",
             "AU-RULE-001",
-            "exact-contract-missing:AU-RULE-001"
+            "contract-candidate-missing:AU-RULE-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.rules",
@@ -16105,7 +17207,7 @@
             "AU-RULE-005",
             "shared.package.rules.shared_public_type",
             "AU-RULE-001",
-            "exact-contract-missing:AU-RULE-001"
+            "contract-candidate-missing:AU-RULE-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.rules",
@@ -16124,6 +17226,8 @@
         "M4"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -16151,6 +17255,24 @@
       ],
       "atomic_unit_id": "AU-RV-001",
       "blockers": [
+        {
+          "chain": [
+            "AU-RV-001",
+            "contract-candidate-missing:AU-RV-001"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RV-001"
+        },
+        {
+          "chain": [
+            "AU-RV-001",
+            "contract-freeze-missing:AU-RV-001"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RV-001"
+        },
         {
           "chain": [
             "AU-RV-001",
@@ -16194,6 +17316,8 @@
         "M8"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -16221,6 +17345,24 @@
       ],
       "atomic_unit_id": "AU-RV-002",
       "blockers": [
+        {
+          "chain": [
+            "AU-RV-002",
+            "contract-candidate-missing:AU-RV-002"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RV-002"
+        },
+        {
+          "chain": [
+            "AU-RV-002",
+            "contract-freeze-missing:AU-RV-002"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RV-002"
+        },
         {
           "chain": [
             "AU-RV-002",
@@ -16262,7 +17404,7 @@
             "AU-RV-002",
             "shared.package.review.package_internal_engine",
             "AU-RV-001",
-            "exact-contract-missing:AU-RV-001"
+            "contract-candidate-missing:AU-RV-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.review",
@@ -16273,7 +17415,7 @@
             "AU-RV-002",
             "shared.package.review.schema_fixture_contract",
             "AU-RV-001",
-            "exact-contract-missing:AU-RV-001"
+            "contract-candidate-missing:AU-RV-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.review",
@@ -16284,7 +17426,7 @@
             "AU-RV-002",
             "shared.package.review.shared_public_type",
             "AU-RV-001",
-            "exact-contract-missing:AU-RV-001"
+            "contract-candidate-missing:AU-RV-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.review",
@@ -16303,6 +17445,8 @@
         "M8"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -16330,6 +17474,24 @@
       ],
       "atomic_unit_id": "AU-RV-003",
       "blockers": [
+        {
+          "chain": [
+            "AU-RV-003",
+            "contract-candidate-missing:AU-RV-003"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RV-003"
+        },
+        {
+          "chain": [
+            "AU-RV-003",
+            "contract-freeze-missing:AU-RV-003"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RV-003"
+        },
         {
           "chain": [
             "AU-RV-003",
@@ -16371,7 +17533,7 @@
             "AU-RV-003",
             "shared.package.review.package_internal_engine",
             "AU-RV-001",
-            "exact-contract-missing:AU-RV-001"
+            "contract-candidate-missing:AU-RV-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.review",
@@ -16382,7 +17544,7 @@
             "AU-RV-003",
             "shared.package.review.schema_fixture_contract",
             "AU-RV-001",
-            "exact-contract-missing:AU-RV-001"
+            "contract-candidate-missing:AU-RV-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.review",
@@ -16393,7 +17555,7 @@
             "AU-RV-003",
             "shared.package.review.shared_public_type",
             "AU-RV-001",
-            "exact-contract-missing:AU-RV-001"
+            "contract-candidate-missing:AU-RV-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.review",
@@ -16412,6 +17574,8 @@
         "M8"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -16439,6 +17603,24 @@
       ],
       "atomic_unit_id": "AU-RV-004",
       "blockers": [
+        {
+          "chain": [
+            "AU-RV-004",
+            "contract-candidate-missing:AU-RV-004"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RV-004"
+        },
+        {
+          "chain": [
+            "AU-RV-004",
+            "contract-freeze-missing:AU-RV-004"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RV-004"
+        },
         {
           "chain": [
             "AU-RV-004",
@@ -16480,7 +17662,7 @@
             "AU-RV-004",
             "shared.package.review.package_internal_engine",
             "AU-RV-001",
-            "exact-contract-missing:AU-RV-001"
+            "contract-candidate-missing:AU-RV-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.review",
@@ -16491,7 +17673,7 @@
             "AU-RV-004",
             "shared.package.review.schema_fixture_contract",
             "AU-RV-001",
-            "exact-contract-missing:AU-RV-001"
+            "contract-candidate-missing:AU-RV-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.review",
@@ -16502,7 +17684,7 @@
             "AU-RV-004",
             "shared.package.review.shared_public_type",
             "AU-RV-001",
-            "exact-contract-missing:AU-RV-001"
+            "contract-candidate-missing:AU-RV-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.review",
@@ -16521,6 +17703,8 @@
         "M8"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -16548,6 +17732,24 @@
       ],
       "atomic_unit_id": "AU-RV-005",
       "blockers": [
+        {
+          "chain": [
+            "AU-RV-005",
+            "contract-candidate-missing:AU-RV-005"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RV-005"
+        },
+        {
+          "chain": [
+            "AU-RV-005",
+            "contract-freeze-missing:AU-RV-005"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-RV-005"
+        },
         {
           "chain": [
             "AU-RV-005",
@@ -16598,7 +17800,7 @@
             "AU-RV-005",
             "shared.package.review.package_internal_engine",
             "AU-RV-001",
-            "exact-contract-missing:AU-RV-001"
+            "contract-candidate-missing:AU-RV-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.review",
@@ -16609,7 +17811,7 @@
             "AU-RV-005",
             "shared.package.review.schema_fixture_contract",
             "AU-RV-001",
-            "exact-contract-missing:AU-RV-001"
+            "contract-candidate-missing:AU-RV-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.review",
@@ -16620,7 +17822,7 @@
             "AU-RV-005",
             "shared.package.review.shared_public_type",
             "AU-RV-001",
-            "exact-contract-missing:AU-RV-001"
+            "contract-candidate-missing:AU-RV-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.review",
@@ -16641,6 +17843,8 @@
         "M8"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -16687,6 +17891,8 @@
         "M2"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -16731,6 +17937,8 @@
         "M2"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -16779,6 +17987,8 @@
         "M2"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -16813,6 +18023,24 @@
       ],
       "atomic_unit_id": "AU-SEL-004",
       "blockers": [
+        {
+          "chain": [
+            "AU-SEL-004",
+            "contract-candidate-missing:AU-SEL-004"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-SEL-004"
+        },
+        {
+          "chain": [
+            "AU-SEL-004",
+            "contract-freeze-missing:AU-SEL-004"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-SEL-004"
+        },
         {
           "chain": [
             "AU-SEL-004",
@@ -16873,6 +18101,8 @@
         "M3"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -16907,6 +18137,24 @@
       ],
       "atomic_unit_id": "AU-SEL-005",
       "blockers": [
+        {
+          "chain": [
+            "AU-SEL-005",
+            "contract-candidate-missing:AU-SEL-005"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-SEL-005"
+        },
+        {
+          "chain": [
+            "AU-SEL-005",
+            "contract-freeze-missing:AU-SEL-005"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-SEL-005"
+        },
         {
           "chain": [
             "AU-SEL-005",
@@ -16958,6 +18206,8 @@
         "M3"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -17002,6 +18252,8 @@
         "M2"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -17038,6 +18290,24 @@
       ],
       "atomic_unit_id": "AU-SEL-007",
       "blockers": [
+        {
+          "chain": [
+            "AU-SEL-007",
+            "contract-candidate-missing:AU-SEL-007"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-SEL-007"
+        },
+        {
+          "chain": [
+            "AU-SEL-007",
+            "contract-freeze-missing:AU-SEL-007"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-SEL-007"
+        },
         {
           "chain": [
             "AU-SEL-007",
@@ -17087,6 +18357,8 @@
         "M3"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -17126,6 +18398,8 @@
         "M2"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -17165,6 +18439,8 @@
         "M2"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -17204,6 +18480,8 @@
         "M2"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -17243,6 +18521,8 @@
         "M2"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -17270,6 +18550,24 @@
       ],
       "atomic_unit_id": "AU-SRCH-001",
       "blockers": [
+        {
+          "chain": [
+            "AU-SRCH-001",
+            "contract-candidate-missing:AU-SRCH-001"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-SRCH-001"
+        },
+        {
+          "chain": [
+            "AU-SRCH-001",
+            "contract-freeze-missing:AU-SRCH-001"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-SRCH-001"
+        },
         {
           "chain": [
             "AU-SRCH-001",
@@ -17321,6 +18619,8 @@
         "M3"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -17351,6 +18651,24 @@
       ],
       "atomic_unit_id": "AU-SRCH-002",
       "blockers": [
+        {
+          "chain": [
+            "AU-SRCH-002",
+            "contract-candidate-missing:AU-SRCH-002"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-SRCH-002"
+        },
+        {
+          "chain": [
+            "AU-SRCH-002",
+            "contract-freeze-missing:AU-SRCH-002"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-SRCH-002"
+        },
         {
           "chain": [
             "AU-SRCH-002",
@@ -17402,6 +18720,8 @@
         "M3"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -17444,6 +18764,8 @@
         "M2"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -17494,6 +18816,8 @@
         "M2"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -17540,6 +18864,8 @@
         "M2"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -17590,6 +18916,8 @@
         "M2"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -17634,6 +18962,8 @@
         "M2"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -17664,6 +18994,24 @@
       ],
       "atomic_unit_id": "AU-SRCH-008",
       "blockers": [
+        {
+          "chain": [
+            "AU-SRCH-008",
+            "contract-candidate-missing:AU-SRCH-008"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-SRCH-008"
+        },
+        {
+          "chain": [
+            "AU-SRCH-008",
+            "contract-freeze-missing:AU-SRCH-008"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-SRCH-008"
+        },
         {
           "chain": [
             "AU-SRCH-008",
@@ -17715,6 +19063,8 @@
         "M3"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -17747,6 +19097,24 @@
       ],
       "atomic_unit_id": "AU-SRCH-009",
       "blockers": [
+        {
+          "chain": [
+            "AU-SRCH-009",
+            "contract-candidate-missing:AU-SRCH-009"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-SRCH-009"
+        },
+        {
+          "chain": [
+            "AU-SRCH-009",
+            "contract-freeze-missing:AU-SRCH-009"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-SRCH-009"
+        },
         {
           "chain": [
             "AU-SRCH-009",
@@ -17798,6 +19166,8 @@
         "M3"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -17828,6 +19198,24 @@
       ],
       "atomic_unit_id": "AU-SRCH-010",
       "blockers": [
+        {
+          "chain": [
+            "AU-SRCH-010",
+            "contract-candidate-missing:AU-SRCH-010"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-SRCH-010"
+        },
+        {
+          "chain": [
+            "AU-SRCH-010",
+            "contract-freeze-missing:AU-SRCH-010"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-SRCH-010"
+        },
         {
           "chain": [
             "AU-SRCH-010",
@@ -17888,6 +19276,8 @@
         "M3"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -17924,6 +19314,8 @@
         "M0"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -17963,6 +19355,8 @@
         "M0"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -17990,6 +19384,24 @@
       ],
       "atomic_unit_id": "AU-TEST-003",
       "blockers": [
+        {
+          "chain": [
+            "AU-TEST-003",
+            "contract-candidate-missing:AU-TEST-003"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TEST-003"
+        },
+        {
+          "chain": [
+            "AU-TEST-003",
+            "contract-freeze-missing:AU-TEST-003"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TEST-003"
+        },
         {
           "chain": [
             "AU-TEST-003",
@@ -18039,6 +19451,8 @@
         "M4"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -18066,6 +19480,24 @@
       ],
       "atomic_unit_id": "AU-TEST-004",
       "blockers": [
+        {
+          "chain": [
+            "AU-TEST-004",
+            "contract-candidate-missing:AU-TEST-004"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TEST-004"
+        },
+        {
+          "chain": [
+            "AU-TEST-004",
+            "contract-freeze-missing:AU-TEST-004"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TEST-004"
+        },
         {
           "chain": [
             "AU-TEST-004",
@@ -18115,6 +19547,8 @@
         "M5"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -18154,6 +19588,8 @@
         "M0"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -18193,6 +19629,8 @@
         "M0"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -18239,6 +19677,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -18274,6 +19714,24 @@
       ],
       "atomic_unit_id": "AU-TF-001",
       "blockers": [
+        {
+          "chain": [
+            "AU-TF-001",
+            "contract-candidate-missing:AU-TF-001"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TF-001"
+        },
+        {
+          "chain": [
+            "AU-TF-001",
+            "contract-freeze-missing:AU-TF-001"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TF-001"
+        },
         {
           "chain": [
             "AU-TF-001",
@@ -18321,6 +19779,8 @@
         "M4"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": false,
         "fixtures": false,
@@ -18353,6 +19813,24 @@
       ],
       "atomic_unit_id": "AU-TF-002",
       "blockers": [
+        {
+          "chain": [
+            "AU-TF-002",
+            "contract-candidate-missing:AU-TF-002"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TF-002"
+        },
+        {
+          "chain": [
+            "AU-TF-002",
+            "contract-freeze-missing:AU-TF-002"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TF-002"
+        },
         {
           "chain": [
             "AU-TF-002",
@@ -18394,7 +19872,7 @@
             "AU-TF-002",
             "shared.package.transform.package_internal_engine",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -18405,7 +19883,7 @@
             "AU-TF-002",
             "shared.package.transform.schema_fixture_contract",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -18416,7 +19894,7 @@
             "AU-TF-002",
             "shared.package.transform.shared_public_type",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -18437,6 +19915,8 @@
         "M4"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -18473,6 +19953,24 @@
       ],
       "atomic_unit_id": "AU-TF-003",
       "blockers": [
+        {
+          "chain": [
+            "AU-TF-003",
+            "contract-candidate-missing:AU-TF-003"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TF-003"
+        },
+        {
+          "chain": [
+            "AU-TF-003",
+            "contract-freeze-missing:AU-TF-003"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TF-003"
+        },
         {
           "chain": [
             "AU-TF-003",
@@ -18514,7 +20012,7 @@
             "AU-TF-003",
             "shared.package.transform.package_internal_engine",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -18525,7 +20023,7 @@
             "AU-TF-003",
             "shared.package.transform.schema_fixture_contract",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -18536,7 +20034,7 @@
             "AU-TF-003",
             "shared.package.transform.shared_public_type",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -18557,6 +20055,8 @@
         "M4"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -18587,6 +20087,24 @@
       ],
       "atomic_unit_id": "AU-TF-004",
       "blockers": [
+        {
+          "chain": [
+            "AU-TF-004",
+            "contract-candidate-missing:AU-TF-004"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TF-004"
+        },
+        {
+          "chain": [
+            "AU-TF-004",
+            "contract-freeze-missing:AU-TF-004"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TF-004"
+        },
         {
           "chain": [
             "AU-TF-004",
@@ -18628,7 +20146,7 @@
             "AU-TF-004",
             "shared.package.transform.package_internal_engine",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -18639,7 +20157,7 @@
             "AU-TF-004",
             "shared.package.transform.schema_fixture_contract",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -18650,7 +20168,7 @@
             "AU-TF-004",
             "shared.package.transform.shared_public_type",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -18671,6 +20189,8 @@
         "M4"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -18705,6 +20225,24 @@
       ],
       "atomic_unit_id": "AU-TF-005",
       "blockers": [
+        {
+          "chain": [
+            "AU-TF-005",
+            "contract-candidate-missing:AU-TF-005"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TF-005"
+        },
+        {
+          "chain": [
+            "AU-TF-005",
+            "contract-freeze-missing:AU-TF-005"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TF-005"
+        },
         {
           "chain": [
             "AU-TF-005",
@@ -18746,7 +20284,7 @@
             "AU-TF-005",
             "shared.package.transform.package_internal_engine",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -18757,7 +20295,7 @@
             "AU-TF-005",
             "shared.package.transform.schema_fixture_contract",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -18768,7 +20306,7 @@
             "AU-TF-005",
             "shared.package.transform.shared_public_type",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -18789,6 +20327,8 @@
         "M4"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -18833,6 +20373,24 @@
         {
           "chain": [
             "AU-TF-006",
+            "contract-candidate-missing:AU-TF-006"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TF-006"
+        },
+        {
+          "chain": [
+            "AU-TF-006",
+            "contract-freeze-missing:AU-TF-006"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TF-006"
+        },
+        {
+          "chain": [
+            "AU-TF-006",
             "exact-contract-missing:AU-TF-006"
           ],
           "code": "exact-contract-missing",
@@ -18871,7 +20429,7 @@
             "AU-TF-006",
             "shared.package.transform.package_internal_engine",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -18882,7 +20440,7 @@
             "AU-TF-006",
             "shared.package.transform.schema_fixture_contract",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -18893,7 +20451,7 @@
             "AU-TF-006",
             "shared.package.transform.shared_public_type",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -18915,6 +20473,8 @@
         "M4"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -18950,6 +20510,24 @@
       ],
       "atomic_unit_id": "AU-TF-007",
       "blockers": [
+        {
+          "chain": [
+            "AU-TF-007",
+            "contract-candidate-missing:AU-TF-007"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TF-007"
+        },
+        {
+          "chain": [
+            "AU-TF-007",
+            "contract-freeze-missing:AU-TF-007"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TF-007"
+        },
         {
           "chain": [
             "AU-TF-007",
@@ -18991,7 +20569,7 @@
             "AU-TF-007",
             "shared.package.transform.package_internal_engine",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -19002,7 +20580,7 @@
             "AU-TF-007",
             "shared.package.transform.schema_fixture_contract",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -19013,7 +20591,7 @@
             "AU-TF-007",
             "shared.package.transform.shared_public_type",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -19034,6 +20612,8 @@
         "M4"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -19070,6 +20650,24 @@
       ],
       "atomic_unit_id": "AU-TF-008",
       "blockers": [
+        {
+          "chain": [
+            "AU-TF-008",
+            "contract-candidate-missing:AU-TF-008"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TF-008"
+        },
+        {
+          "chain": [
+            "AU-TF-008",
+            "contract-freeze-missing:AU-TF-008"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TF-008"
+        },
         {
           "chain": [
             "AU-TF-008",
@@ -19111,7 +20709,7 @@
             "AU-TF-008",
             "shared.package.transform.package_internal_engine",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -19122,7 +20720,7 @@
             "AU-TF-008",
             "shared.package.transform.schema_fixture_contract",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -19133,7 +20731,7 @@
             "AU-TF-008",
             "shared.package.transform.shared_public_type",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -19152,6 +20750,8 @@
         "M4"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -19179,6 +20779,24 @@
       ],
       "atomic_unit_id": "AU-TF-009",
       "blockers": [
+        {
+          "chain": [
+            "AU-TF-009",
+            "contract-candidate-missing:AU-TF-009"
+          ],
+          "code": "contract-candidate-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TF-009"
+        },
+        {
+          "chain": [
+            "AU-TF-009",
+            "contract-freeze-missing:AU-TF-009"
+          ],
+          "code": "contract-freeze-missing",
+          "steward": "generator.catalog",
+          "subject": "AU-TF-009"
+        },
         {
           "chain": [
             "AU-TF-009",
@@ -19220,7 +20838,7 @@
             "AU-TF-009",
             "shared.package.transform.package_internal_engine",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -19231,7 +20849,7 @@
             "AU-TF-009",
             "shared.package.transform.schema_fixture_contract",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -19242,7 +20860,7 @@
             "AU-TF-009",
             "shared.package.transform.shared_public_type",
             "AU-TF-001",
-            "exact-contract-missing:AU-TF-001"
+            "contract-candidate-missing:AU-TF-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.transform",
@@ -19261,6 +20879,8 @@
         "M4"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": false,
         "exact_contract": false,
         "fixtures": false,
@@ -19294,6 +20914,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -19338,6 +20960,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -19382,6 +21006,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -19421,6 +21047,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -19460,6 +21088,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -19499,6 +21129,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -19538,6 +21170,8 @@
         "M1"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -19577,6 +21211,8 @@
         "M0"
       ],
       "prerequisites": {
+        "contract_candidate": false,
+        "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
         "fixtures": true,
@@ -24871,7 +26507,7 @@
     ]
   },
   "schema": "cxxlens.api-ready.v1",
-  "semantic_digest": "sha256:eb8adfaeb1bf9e260a212b03e3eef2928cf3f2ae192b7fc3eba8fae6cf08a7a5",
+  "semantic_digest": "sha256:5b4c2a984631783be104d83b7e2ed5b0c1819362ad76831d29a040fe690763f5",
   "shards": [
     {
       "acceptance_command": {

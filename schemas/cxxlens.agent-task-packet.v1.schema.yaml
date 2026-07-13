@@ -6,6 +6,7 @@ additionalProperties: false
 required:
   - schema
   - catalog_fingerprint
+  - global_contract_fingerprints
   - semantic_digest
   - summary
   - atomic_units
@@ -15,6 +16,8 @@ properties:
     const: cxxlens.agent-task-packet-corpus.v1
   catalog_fingerprint:
     $ref: '#/$defs/digest'
+  global_contract_fingerprints:
+    $ref: '#/$defs/global_contract_fingerprints'
   semantic_digest:
     $ref: '#/$defs/digest'
   summary:
@@ -51,6 +54,13 @@ $defs:
   digest:
     type: string
     pattern: '^sha256:[0-9a-f]{64}$'
+  global_contract_fingerprints:
+    type: object
+    additionalProperties: false
+    required: [conventions, ownership_registry]
+    properties:
+      conventions: {$ref: '#/$defs/digest'}
+      ownership_registry: {$ref: '#/$defs/digest'}
   string_list:
     type: array
     uniqueItems: true
@@ -84,6 +94,23 @@ $defs:
         $ref: '#/$defs/digest'
       contract_fingerprint:
         $ref: '#/$defs/digest'
+  contract:
+    type: object
+    additionalProperties: false
+    required:
+      - state
+      - owner_issue
+      - transition_issue
+      - conventions
+      - conventions_fingerprint
+      - ownership_registry_fingerprint
+    properties:
+      state: {enum: [draft, unresolved, candidate, frozen]}
+      owner_issue: {pattern: '^#(43|44|45|46|47|48|49|50|51)$'}
+      transition_issue: {pattern: '^#(42|43|44|45|46|47|48|49|50|51|54)$'}
+      conventions: {const: cxxlens.global-contract-conventions.v1}
+      conventions_fingerprint: {$ref: '#/$defs/digest'}
+      ownership_registry_fingerprint: {$ref: '#/$defs/digest'}
   dependency_expression:
     type: object
     additionalProperties: false
@@ -209,6 +236,7 @@ $defs:
       - phase
       - contract_maturity
       - implementation_state
+      - contract
       - declaration
       - family_contract
       - dependencies
@@ -240,6 +268,8 @@ $defs:
       phase: {pattern: '^M[0-9]+$'}
       contract_maturity: {type: string, minLength: 1}
       implementation_state: {type: string, minLength: 1}
+      contract:
+        $ref: '#/$defs/contract'
       declaration:
         $ref: '#/$defs/declaration'
       family_contract:
@@ -310,6 +340,7 @@ $defs:
           - ownership_contract
           - ownership_provider_issue
           - shared_contract_steward_refs
+          - schema_owner_refs
         properties:
           ownership_contract: {const: cxxlens.agent-ownership.v1}
           ownership_provider_issue: {const: '#28'}
@@ -318,6 +349,12 @@ $defs:
             minItems: 1
             maxItems: 1
             uniqueItems: true
+          schema_owner_refs:
+            type: array
+            prefixItems:
+              - {const: steward.schema}
+            minItems: 1
+            maxItems: 1
             items: {type: string, minLength: 1}
       generation:
         type: object

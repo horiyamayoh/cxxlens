@@ -589,6 +589,12 @@ def generate_report(
                 }
             )
             exact = all(packet["declaration"]["status"] == "exact" for packet in packets)
+            contract_candidate = all(
+                packet["contract"]["state"] in {"candidate", "frozen"} for packet in packets
+            )
+            contract_frozen = all(
+                packet["contract"]["state"] == "frozen" for packet in packets
+            )
             frozen = all(skeletons[packet["api_id"]]["state"] == "frozen" for packet in packets)
             owned = unit_id in ownership_units and bool(
                 ownership_units[unit_id]["allowed_write_prefixes"]
@@ -635,6 +641,14 @@ def generate_report(
             if not exact:
                 blockers.append(
                     blocker("exact-contract-missing", unit_id, "generator.catalog", unit_id)
+                )
+            if not contract_candidate:
+                blockers.append(
+                    blocker("contract-candidate-missing", unit_id, "generator.catalog", unit_id)
+                )
+            if not contract_frozen:
+                blockers.append(
+                    blocker("contract-freeze-missing", unit_id, "generator.catalog", unit_id)
                 )
             if not frozen:
                 blockers.append(
@@ -739,7 +753,16 @@ def generate_report(
                 state = "complete"
                 blockers = []
             elif packet_states == {"ready"} and all(
-                (exact, frozen, owned, fixtures, providers, dependencies_ready)
+                (
+                    exact,
+                    contract_candidate,
+                    contract_frozen,
+                    frozen,
+                    owned,
+                    fixtures,
+                    providers,
+                    dependencies_ready,
+                )
             ) and not pending_requests[unit_id]:
                 state = "ready"
             else:
@@ -758,6 +781,8 @@ def generate_report(
                 "required_capabilities": capabilities,
                 "prerequisites": {
                     "exact_contract": exact,
+                    "contract_candidate": contract_candidate,
+                    "contract_frozen": contract_frozen,
                     "frozen_skeleton": frozen,
                     "ownership": owned,
                     "fixtures": fixtures,
@@ -791,6 +816,8 @@ def generate_report(
         "input_fingerprints": {
             "task_packets": corpus["semantic_digest"],
             "ownership": ownership["semantic_digest"],
+            "global_contract_conventions": corpus["global_contract_fingerprints"]["conventions"],
+            "contract_ownership_registry": corpus["global_contract_fingerprints"]["ownership_registry"],
             "m0": digest(canonicalize_input(m0)),
             "m1": digest(canonicalize_input(m1)),
             "m2": digest(canonicalize_input(m2)),

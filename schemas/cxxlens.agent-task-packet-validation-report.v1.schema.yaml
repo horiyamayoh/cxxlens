@@ -7,6 +7,7 @@ required:
   - schema
   - status
   - catalog_fingerprint
+  - global_contract_fingerprints
   - corpus_semantic_digest
   - api_count
   - atomic_unit_count
@@ -21,6 +22,17 @@ properties:
   catalog_fingerprint:
     type: string
     pattern: '^sha256:[0-9a-f]{64}$'
+  global_contract_fingerprints:
+    type: object
+    additionalProperties: false
+    required: [conventions, ownership_registry]
+    properties:
+      conventions:
+        type: string
+        pattern: '^sha256:[0-9a-f]{64}$'
+      ownership_registry:
+        type: string
+        pattern: '^sha256:[0-9a-f]{64}$'
   corpus_semantic_digest:
     type: string
     pattern: '^sha256:[0-9a-f]{64}$'

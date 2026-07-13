@@ -177,6 +177,10 @@ install(
         schemas/cxxlens_api_test_coverage.schema.yaml
         schemas/cxxlens_api_test_coverage_report.json
         schemas/cxxlens_api_test_coverage_report.schema.yaml
+        schemas/cxxlens_global_contract_conventions.yaml
+        schemas/cxxlens_global_contract_conventions.schema.yaml
+        schemas/cxxlens_contract_ownership.yaml
+        schemas/cxxlens_contract_ownership.schema.yaml
         schemas/cxxlens_coverage.schema.yaml
         schemas/cxxlens_diagnostic.schema.yaml
         schemas/cxxlens_error.schema.yaml

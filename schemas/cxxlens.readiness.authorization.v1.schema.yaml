@@ -35,6 +35,8 @@ properties:
     additionalProperties: {$ref: '#/$defs/digest'}
     required:
       - catalog
+      - global_contract_conventions
+      - contract_ownership_registry
       - task_packets
       - ownership
       - ready_report
@@ -78,6 +80,9 @@ properties:
       - dangling_api_dependency_count
       - unresolved_ready_signature_count
       - evidence_free_conformant_count
+      - candidate_contract_package_count
+      - frozen_contract_package_count
+      - invalid_contract_transition_count
     properties:
       package_count: {type: integer, minimum: 1}
       api_count: {type: integer, minimum: 1}
@@ -87,6 +92,9 @@ properties:
       dangling_api_dependency_count: {const: 0}
       unresolved_ready_signature_count: {const: 0}
       evidence_free_conformant_count: {const: 0}
+      candidate_contract_package_count: {type: integer, minimum: 0, maximum: 22}
+      frozen_contract_package_count: {type: integer, minimum: 0, maximum: 22}
+      invalid_contract_transition_count: {const: 0}
   infrastructure_audit:
     type: object
     additionalProperties: false
@@ -471,6 +479,9 @@ $defs:
       - phase
       - declaration_status
       - implementation_state
+      - contract_state
+      - contract_owner_issue
+      - contract_transition_issue
       - state
       - dispatch_authorized
       - task_packet_digest
@@ -483,6 +494,9 @@ $defs:
       phase: {type: string, minLength: 1}
       declaration_status: {enum: [exact, unresolved]}
       implementation_state: {enum: [conformant, unimplemented]}
+      contract_state: {enum: [draft, unresolved, candidate, frozen]}
+      contract_owner_issue: {pattern: '^#(43|44|45|46|47|48|49|50|51)$'}
+      contract_transition_issue: {pattern: '^#(42|43|44|45|46|47|48|49|50|51|54)$'}
       state: {enum: [blocked, complete, ready]}
       dispatch_authorized: {type: boolean}
       task_packet_digest: {$ref: '#/$defs/digest'}

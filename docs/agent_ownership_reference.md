@@ -8,9 +8,12 @@ read-only to implementation units. Reserved non-overlapping prefixes assign the 
 readiness artifacts before those downstream Issues add files, so their authorized additions do not
 require rewriting this manifest.
 
-Exact task-packet declarations produce frozen skeleton records. Unresolved declarations remain
-blocked and cannot acquire a usable skeleton from contract maturity alone. Signature, declaration
-source, task-packet, or repository-path drift makes the manifest stale.
+Exact task-packet declarations produce source-bound skeleton lock records whose legacy state name is
+`frozen`. This lock means only that declaration bytes are exact; it is not the Phase B public
+contract `frozen` state. Every skeleton separately carries contract state, candidate owner, and
+transition Issue. Unresolved declarations remain blocked and cannot acquire a usable skeleton from
+contract maturity alone. Signature, declaration source, global conventions, shared ownership,
+task-packet, or repository-path drift makes the manifest stale.
 
 ## Commands
 

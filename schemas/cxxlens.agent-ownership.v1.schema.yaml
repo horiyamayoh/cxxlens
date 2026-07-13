@@ -6,6 +6,7 @@ additionalProperties: false
 required:
   - schema
   - task_packet_digest
+  - global_contract_fingerprints
   - repository_paths_digest
   - semantic_digest
   - roles
@@ -19,6 +20,13 @@ properties:
     const: cxxlens.agent-ownership.v1
   task_packet_digest:
     $ref: '#/$defs/digest'
+  global_contract_fingerprints:
+    type: object
+    additionalProperties: false
+    required: [conventions, ownership_registry]
+    properties:
+      conventions: {$ref: '#/$defs/digest'}
+      ownership_registry: {$ref: '#/$defs/digest'}
   repository_paths_digest:
     $ref: '#/$defs/digest'
   semantic_digest:
@@ -57,6 +65,7 @@ properties:
       - reserved_path_count
       - unit_count
       - skeleton_state_counts
+      - contract_state_counts
       - generated_path_count
     properties:
       role_count: {type: integer, minimum: 1}
@@ -64,6 +73,8 @@ properties:
       reserved_path_count: {type: integer, minimum: 1}
       unit_count: {type: integer, minimum: 1}
       skeleton_state_counts:
+        $ref: '#/$defs/count_map'
+      contract_state_counts:
         $ref: '#/$defs/count_map'
       generated_path_count: {type: integer, minimum: 1}
 $defs:
@@ -150,6 +161,9 @@ $defs:
       - api_id
       - atomic_unit_id
       - state
+      - contract_state
+      - contract_owner_issue
+      - contract_transition_issue
       - declaration_source
       - signature
       - signature_fingerprint
@@ -161,6 +175,10 @@ $defs:
       atomic_unit_id: {pattern: '^AU-[A-Z]+-[0-9]{3}$'}
       state:
         enum: [frozen, blocked]
+      contract_state:
+        enum: [draft, unresolved, candidate, frozen]
+      contract_owner_issue: {pattern: '^#(43|44|45|46|47|48|49|50|51)$'}
+      contract_transition_issue: {pattern: '^#(42|43|44|45|46|47|48|49|50|51|54)$'}
       declaration_source: {type: string, minLength: 1}
       signature:
         type: [string, 'null']

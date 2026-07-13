@@ -115,6 +115,10 @@ class TaskPacketTest(unittest.TestCase):
             generated["summary"]["declaration_state_counts"],
             {"exact": 47, "unresolved": 77},
         )
+        self.assertEqual(
+            set(generated["global_contract_fingerprints"]),
+            {"conventions", "ownership_registry"},
+        )
         api_ids = [packet["api_id"] for packet in generated["packets"]]
         member_ids = [
             api_id for unit in generated["atomic_units"] for api_id in unit["member_api_ids"]
@@ -132,6 +136,22 @@ class TaskPacketTest(unittest.TestCase):
             self.assertEqual(packet["schema"], PACKET_SCHEMA)
             self.assertRegex(packet["declaration"]["source_fingerprint"], r"^sha256:")
             self.assertRegex(packet["declaration"]["contract_fingerprint"], r"^sha256:")
+            self.assertEqual(
+                packet["contract"]["conventions_fingerprint"],
+                self.checked_in["global_contract_fingerprints"]["conventions"],
+            )
+            self.assertEqual(
+                packet["contract"]["ownership_registry_fingerprint"],
+                self.checked_in["global_contract_fingerprints"]["ownership_registry"],
+            )
+            package = next(
+                value for value in self.document["packages"] if value["id"] == packet["package"]["id"]
+            )
+            self.assertEqual(
+                {key: packet["contract"][key] for key in package["contract"]},
+                package["contract"],
+            )
+            self.assertEqual(packet["coordination"]["schema_owner_refs"], ["steward.schema"])
             self.assertEqual(
                 {fixture["category"] for fixture in packet["fixtures"]},
                 {"positive", "negative", "ambiguous"},
@@ -156,6 +176,12 @@ class TaskPacketTest(unittest.TestCase):
                 self.assertIn(
                     "exact_declaration_unresolved", packet["generation"]["block_reasons"]
                 )
+
+    def test_contract_state_drift_is_rejected(self) -> None:
+        corpus = self.generated()
+        corpus["packets"][0]["contract"]["state"] = "candidate"
+        self.resign(corpus, (corpus["packets"][0]["api_id"],))
+        self.assert_code(corpus, "task_packet.contract-state-drift")
 
     def test_complete_packet_without_category_evidence_is_rejected(self) -> None:
         corpus = self.generated()

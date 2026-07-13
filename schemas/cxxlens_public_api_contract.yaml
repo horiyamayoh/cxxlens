@@ -13,6 +13,7 @@ stability:
   all_result_operations_require_coverage: true
 packages:
 - id: core
+  contract: {state: unresolved, owner_issue: '#43', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/core.hpp>
   purpose: Version, capability, IDs, errors, evidence, coverage and findings.
   public_types:
@@ -202,6 +203,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: workspace
+  contract: {state: draft, owner_issue: '#44', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/workspace.hpp>
   purpose: Compilation database, build variants, snapshots and fact provisioning.
   public_types:
@@ -482,6 +484,7 @@ packages:
       state: complete
       blockers: []
 - id: facts
+  contract: {state: draft, owner_issue: '#44', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/facts.hpp>
   purpose: Immutable semantic facts and typed fact access.
   public_types:
@@ -830,6 +833,7 @@ packages:
       state: complete
       blockers: []
 - id: models
+  contract: {state: unresolved, owner_issue: '#50', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/models.hpp>
   purpose: Versioned project API effects, replacements and flow models.
   public_types:
@@ -923,6 +927,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: select
+  contract: {state: unresolved, owner_issue: '#45', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/select.hpp>
   purpose: Immutable serializable semantic selector DSL.
   public_types:
@@ -1305,6 +1310,7 @@ packages:
       state: complete
       blockers: []
 - id: search
+  contract: {state: unresolved, owner_issue: '#45', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/search.hpp>
   purpose: Semantic grep over facts with targeted AST/CFG refinement.
   public_types:
@@ -1655,6 +1661,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: graph
+  contract: {state: unresolved, owner_issue: '#46', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/graph.hpp>
   purpose: Call, hierarchy, override, include and impact graphs.
   public_types:
@@ -1810,6 +1817,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: rules
+  contract: {state: unresolved, owner_issue: '#47', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/rules.hpp>
   purpose: Declarative rules, suppressions and shared execution.
   public_types:
@@ -1931,6 +1939,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: flow
+  contract: {state: unresolved, owner_issue: '#50', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/flow.hpp>
   purpose: CFG/dataflow, taint and resource protocol analyses.
   public_types:
@@ -2141,6 +2150,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: transform
+  contract: {state: unresolved, owner_issue: '#48', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/transform.hpp>
   purpose: Immutable edit plans, validation, formatting, reparsing and transactional apply.
   public_types:
@@ -2394,6 +2404,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: generate
+  contract: {state: unresolved, owner_issue: '#49', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/generate.hpp>
   purpose: Common census, decisions, artifacts and transaction apply.
   public_types:
@@ -2451,6 +2462,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: mock
+  contract: {state: unresolved, owner_issue: '#49', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/generate.hpp>
   purpose: Mock/fake planning and emission.
   public_types:
@@ -2556,6 +2568,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: method_harness
+  contract: {state: unresolved, owner_issue: '#49', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/generate.hpp>
   purpose: Exact method selection, inspection and extraction/harness planning.
   public_types:
@@ -2708,6 +2721,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: copy
+  contract: {state: unresolved, owner_issue: '#49', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/generate.hpp>
   purpose: Semantic public-surface and dependency copying.
   public_types:
@@ -2773,6 +2787,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: fuzz
+  contract: {state: unresolved, owner_issue: '#49', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/generate.hpp>
   purpose: Type-driven fuzz harness planning.
   public_types:
@@ -2854,6 +2869,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: qa
+  contract: {state: unresolved, owner_issue: '#51', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/qa.hpp>
   purpose: Sanitizer, coverage and external QA workflows.
   public_types:
@@ -2966,6 +2982,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: review
+  contract: {state: unresolved, owner_issue: '#51', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/review.hpp>
   purpose: Diff scope, baseline, gate and review workflow.
   public_types:
@@ -3089,6 +3106,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: report
+  contract: {state: unresolved, owner_issue: '#47', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/report.hpp>
   purpose: Deterministic human and machine report projections.
   public_types:
@@ -3185,6 +3203,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: explain
+  contract: {state: unresolved, owner_issue: '#45', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/explain.hpp>
   purpose: Why/explanation and coding-agent task cards.
   public_types:
@@ -3277,6 +3296,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: testing
+  contract: {state: unresolved, owner_issue: '#43', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/testing.hpp>
   purpose: Production-path fixtures, assertions, schema and determinism checks.
   public_types:
@@ -3481,6 +3501,7 @@ packages:
       state: complete
       blockers: []
 - id: interop
+  contract: {state: unresolved, owner_issue: '#44', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/interop/clang.hpp>
   purpose: Unstable LLVM-major-scoped raw Clang corridor.
   public_types:
@@ -3607,6 +3628,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: configuration
+  contract: {state: draft, owner_issue: '#43', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/configuration.hpp>
   purpose: Typed configuration loading, overlay and explanation.
   public_types:
@@ -3727,6 +3749,9 @@ summary:
     unimplemented: 77
     implemented: 0
     conformant: 47
+  contract_state_counts:
+    draft: 3
+    unresolved: 19
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.
@@ -3738,6 +3763,8 @@ authority:
   machine_readable_source: schemas/cxxlens_public_api_contract.yaml
   human_inventory: docs/design/api_catalog_inventory.md
   change_policy: docs/design/api_catalog_change_policy.md
+  global_contract_conventions: schemas/cxxlens_global_contract_conventions.yaml
+  contract_ownership_registry: schemas/cxxlens_contract_ownership.yaml
   executable_test_coverage: schemas/cxxlens_api_test_coverage.yaml
   executable_test_coverage_report: schemas/cxxlens_api_test_coverage_report.json
 registries:

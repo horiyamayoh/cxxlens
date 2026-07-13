@@ -193,6 +193,17 @@ class ReadinessAuditTest(unittest.TestCase):
         self.assertEqual(catalog["dangling_api_dependency_count"], 0)
         self.assertEqual(catalog["unresolved_ready_signature_count"], 0)
         self.assertEqual(catalog["evidence_free_conformant_count"], 0)
+        self.assertEqual(catalog["candidate_contract_package_count"], 0)
+        self.assertEqual(catalog["frozen_contract_package_count"], 0)
+        self.assertEqual(catalog["invalid_contract_transition_count"], 0)
+        self.assertEqual(
+            {api["contract_state"] for api in self.authorization["apis"]},
+            {"draft", "unresolved"},
+        )
+        self.assertEqual(
+            self.authorization["input_fingerprints"]["global_contract_conventions"],
+            self.inputs["corpus"]["global_contract_fingerprints"]["conventions"],
+        )
         infrastructure = self.authorization["infrastructure_audit"]
         for key in (
             "write_overlap_count",

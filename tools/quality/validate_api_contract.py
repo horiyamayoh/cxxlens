@@ -21,6 +21,31 @@ PHASE = re.compile(r"M[0-9]+$")
 HEADER = re.compile(r"<cxxlens/[a-z0-9_/]+\.hpp>$")
 FINGERPRINT = re.compile(r"sha256:[0-9a-f]{64}$")
 MATURITIES = {"contract-defined", "planned", "experimental", "stable", "deprecated"}
+CONTRACT_STATES = {"draft", "unresolved", "candidate", "frozen"}
+PACKAGE_CONTRACT_OWNERS = {
+    "configuration": "#43",
+    "core": "#43",
+    "testing": "#43",
+    "facts": "#44",
+    "interop": "#44",
+    "workspace": "#44",
+    "explain": "#45",
+    "search": "#45",
+    "select": "#45",
+    "graph": "#46",
+    "report": "#47",
+    "rules": "#47",
+    "transform": "#48",
+    "copy": "#49",
+    "fuzz": "#49",
+    "generate": "#49",
+    "method_harness": "#49",
+    "mock": "#49",
+    "flow": "#50",
+    "models": "#50",
+    "qa": "#51",
+    "review": "#51",
+}
 
 
 class ContractError(ValueError):
@@ -63,6 +88,9 @@ def canonical_summary(document: dict) -> dict:
     for state in document["registries"]["implementation_states"]:
         states.setdefault(state, 0)
     atomic_units = {api["atomic_unit"]["id"] for _, api in entries}
+    contract_states = collections.Counter(
+        package["contract"]["state"] for package in document["packages"]
+    )
     graph = {
         api["id"]: sorted(api.get("requires", {}).get("apis", []))
         for _, api in sorted(entries, key=lambda item: item[1]["id"])
@@ -75,6 +103,7 @@ def canonical_summary(document: dict) -> dict:
         "contract_maturity_counts": dict(sorted(maturities.items())),
         "kind_counts": dict(sorted(kinds.items())),
         "implementation_state_counts": dict(sorted(states.items())),
+        "contract_state_counts": dict(sorted(contract_states.items())),
         "dependency_graph": graph,
     }
 
@@ -88,6 +117,7 @@ def render_inventory(document: dict) -> str:
             api["symbol"],
             api["atomic_unit"]["id"],
             api["implementation_state"],
+            package["contract"]["state"],
         )
         for package, api in iter_apis(document)
     )
@@ -96,8 +126,8 @@ def render_inventory(document: dict) -> str:
         "",
         "This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not edit rows manually.",
         "",
-        "| API ID | Package | Header | Symbol | Atomic unit | Implementation state |",
-        "|---|---|---|---|---|---|",
+        "| API ID | Package | Header | Symbol | Atomic unit | Implementation state | Contract state |",
+        "|---|---|---|---|---|---|---|",
     ]
     lines.extend("| " + " | ".join(row) + " |" for row in rows)
     lines.append("")
@@ -142,6 +172,14 @@ def validate_document(document: Any, inventory_text: str | None = None) -> dict:
         "schemas/cxxlens_api_test_coverage_report.json"
     ):
         fail("authority must identify the executable API test coverage report")
+    if authority.get("global_contract_conventions") != (
+        "schemas/cxxlens_global_contract_conventions.yaml"
+    ):
+        fail("authority must identify the global public contract conventions")
+    if authority.get("contract_ownership_registry") != (
+        "schemas/cxxlens_contract_ownership.yaml"
+    ):
+        fail("authority must identify the shared contract ownership registry")
 
     registries = document.get("registries")
     if not isinstance(registries, dict):
@@ -190,7 +228,7 @@ def validate_document(document: Any, inventory_text: str | None = None) -> dict:
     atomic_states: dict[str, set[str]] = collections.defaultdict(set)
     package_units: dict[str, set[str]] = collections.defaultdict(set)
     graph: dict[str, list[str]] = {}
-    required_package = {"id", "header", "purpose", "public_types", "apis"}
+    required_package = {"id", "header", "contract", "purpose", "public_types", "apis"}
     required_api = {
         "id",
         "symbol",
@@ -213,6 +251,27 @@ def validate_document(document: Any, inventory_text: str | None = None) -> dict:
         if not isinstance(package_id, str) or package_id in package_ids:
             fail(f"duplicate or invalid package id: {package_id}")
         package_ids.add(package_id)
+        contract = package["contract"]
+        if not isinstance(contract, dict):
+            fail(f"package {package_id}: contract must be a mapping")
+        if contract.get("state") not in CONTRACT_STATES:
+            fail(f"package {package_id}: invalid contract state")
+        if contract.get("owner_issue") != PACKAGE_CONTRACT_OWNERS.get(package_id):
+            fail(f"package {package_id}: invalid contract candidate owner")
+        if contract.get("conventions") != "cxxlens.global-contract-conventions.v1":
+            fail(f"package {package_id}: invalid global contract conventions reference")
+        transition_issue = contract.get("transition_issue")
+        if contract["state"] == "draft" and transition_issue != "#42":
+            fail(f"package {package_id}: initial contract state must be established by #42")
+        if contract["state"] == "unresolved" and transition_issue not in {
+            "#42",
+            contract["owner_issue"],
+        }:
+            fail(f"package {package_id}: unresolved transition requires #42 or its package owner")
+        if contract["state"] == "candidate" and transition_issue != contract["owner_issue"]:
+            fail(f"package {package_id}: candidate transition requires its package owner issue")
+        if contract["state"] == "frozen" and transition_issue != "#54":
+            fail(f"package {package_id}: only #54 may freeze a public contract")
         if not isinstance(package["header"], str) or not HEADER.fullmatch(package["header"]):
             fail(f"package {package_id}: invalid public header")
         _unique_strings(package["public_types"], f"package {package_id}.public_types")
@@ -334,6 +393,14 @@ def validate_document(document: Any, inventory_text: str | None = None) -> dict:
             ):
                 fail(f"{api_id}: ready or complete API requires traceability")
 
+        unresolved_declarations = sum(
+            api["declaration"]["status"] == "unresolved" for api in package["apis"]
+        )
+        if contract["state"] == "unresolved" and not unresolved_declarations:
+            fail(f"package {package_id}: unresolved contract requires an unresolved declaration")
+        if contract["state"] in {"candidate", "frozen"} and unresolved_declarations:
+            fail(f"package {package_id}: candidate or frozen contract requires exact declarations")
+
     for atomic_unit, states in atomic_states.items():
         if len(states) != 1:
             fail(f"{atomic_unit}: an atomic unit cannot have split readiness")
@@ -420,6 +487,8 @@ def validate_document(document: Any, inventory_text: str | None = None) -> dict:
             fail(f"summary.{key} does not match the catalog")
     if summary.get("implementation_state_counts") != calculated["implementation_state_counts"]:
         fail("summary.implementation_state_counts does not match the catalog")
+    if summary.get("contract_state_counts") != calculated["contract_state_counts"]:
+        fail("summary.contract_state_counts does not match the catalog")
     if calculated["package_count"] != 22 or calculated["api_entry_count"] != 124:
         fail("full catalog regression: expected 22 packages and 124 API entries")
     implemented = sorted(
@@ -485,9 +554,12 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("catalog", type=pathlib.Path)
     parser.add_argument("--inventory", type=pathlib.Path)
+    parser.add_argument("--write-inventory", type=pathlib.Path)
     parser.add_argument("--summary-json", action="store_true")
     args = parser.parse_args()
     document = yaml.safe_load(args.catalog.read_text(encoding="utf-8"))
+    if args.write_inventory:
+        args.write_inventory.write_text(render_inventory(document), encoding="utf-8")
     inventory = args.inventory.read_text(encoding="utf-8") if args.inventory else None
     summary = validate_document(document, inventory)
     if args.summary_json:

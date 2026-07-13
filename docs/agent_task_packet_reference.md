@@ -23,7 +23,9 @@ fixture suite. It is a dependency of `cxxlens-api-contract-check` and therefore 
 
 Each API record contains the authoritative API and atomic-unit IDs, package/header, symbol, kind,
 phase, contract maturity, implementation state, exact or unresolved declaration, signature/source
-fingerprints, and a combined contract fingerprint. A coherent method, builder, factory, or free
+fingerprints, and a combined contract fingerprint. It also inherits the package Phase B contract
+state, #43-#51 candidate owner, transition Issue, global-conventions fingerprint, and shared
+contract-ownership fingerprint. A coherent method, builder, factory, or free
 function family records its entire surface under `family_contract`; the surface is indivisible.
 
 `dependencies` keeps facts, capabilities, expressions and their concrete expansions, minimum
@@ -55,9 +57,10 @@ catalog says so.
 The corpus-level `atomic_units` array gives exactly-once API membership and the complete family
 surface. Issue #28 owns the separate file-ownership contract. Shared-contract steward references
 are derived from the catalog's exactly-once package contract instead of being emitted as an empty
-placeholder; missing, changed, or ambiguous steward/component projections are rejected.
+placeholder. The central schema owner is propagated separately. Missing, changed, or ambiguous
+state, owner, steward, component, or registry projections are rejected.
 
 Packet, corpus, and validation-report digests exclude timestamps and absolute checkout roots.
 Package/API input order, checkout root, and process count therefore cannot alter semantic output.
-Catalog, declaration source, signature, dependency, family, or schema drift invalidates the
-checked-in corpus and requires regeneration.
+Catalog, declaration source, signature, dependency, family, conventions, ownership-registry, or
+schema drift invalidates the checked-in corpus and requires regeneration.

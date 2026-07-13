@@ -207,6 +207,7 @@ ROLE_DEFINITIONS: dict[str, tuple[str, str, str]] = {
 
 GENERATED_PATHS = {
     "docs/design/api_catalog_inventory.md": "generator.catalog",
+    "schemas/cxxlens_contract_ownership.yaml": "generator.catalog",
     "schemas/cxxlens.agent-task-packet-corpus.v1.json": "steward.task-packet",
     "schemas/cxxlens.agent-task-packet-validation-report.v1.json": "steward.task-packet",
     "schemas/cxxlens.agent-ownership.v1.json": "steward.ownership",
@@ -477,6 +478,9 @@ def make_skeletons(corpus: dict[str, Any]) -> list[dict[str, Any]]:
             "api_id": packet["api_id"],
             "atomic_unit_id": packet["atomic_unit_id"],
             "state": state,
+            "contract_state": packet["contract"]["state"],
+            "contract_owner_issue": packet["contract"]["owner_issue"],
+            "contract_transition_issue": packet["contract"]["transition_issue"],
             "declaration_source": declaration["source"],
             "signature": declaration["signature"],
             "signature_fingerprint": declaration["signature_fingerprint"],
@@ -513,9 +517,11 @@ def generate_manifest(corpus: dict[str, Any], paths: list[str]) -> dict[str, Any
         )
     skeletons = make_skeletons(corpus)
     skeleton_counts = collections.Counter(item["state"] for item in skeletons)
+    contract_counts = collections.Counter(item["contract_state"] for item in skeletons)
     manifest: dict[str, Any] = {
         "schema": OWNERSHIP_SCHEMA,
         "task_packet_digest": corpus["semantic_digest"],
+        "global_contract_fingerprints": corpus["global_contract_fingerprints"],
         "repository_paths_digest": digest(
             {"baseline_paths": baseline_paths, "reserved_paths": RESERVED_PATHS}
         ),
@@ -533,6 +539,7 @@ def generate_manifest(corpus: dict[str, Any], paths: list[str]) -> dict[str, Any
                 "blocked": skeleton_counts.get("blocked", 0),
                 "frozen": skeleton_counts.get("frozen", 0),
             },
+            "contract_state_counts": dict(sorted(contract_counts.items())),
             "generated_path_count": sum(item["generated"] for item in tracked_paths),
         },
     }
@@ -661,6 +668,12 @@ def validate_manifest(
         expected_state = "frozen" if declaration["status"] == "exact" else "blocked"
         if skeleton["state"] != expected_state:
             fail("ownership.skeleton-state", f"{skeleton['api_id']}: invalid skeleton state")
+        if (
+            skeleton["contract_state"] != packet["contract"]["state"]
+            or skeleton["contract_owner_issue"] != packet["contract"]["owner_issue"]
+            or skeleton["contract_transition_issue"] != packet["contract"]["transition_issue"]
+        ):
+            fail("ownership.contract-state-drift", f"{skeleton['api_id']}: contract state differs")
         if (
             skeleton["signature"] != declaration["signature"]
             or skeleton["signature_fingerprint"] != declaration["signature_fingerprint"]

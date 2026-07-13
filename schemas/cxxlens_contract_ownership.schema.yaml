@@ -1,0 +1,96 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.contract-ownership.v1.schema.yaml
+title: cxxlens shared public contract ownership registry v1
+type: object
+additionalProperties: false
+required: [schema, source_catalog, conventions, public_types, shared_components, providers, schemas, summary, semantic_digest]
+properties:
+  schema: {const: cxxlens.contract-ownership.v1}
+  source_catalog: {const: schemas/cxxlens_public_api_contract.yaml}
+  conventions: {const: schemas/cxxlens_global_contract_conventions.yaml}
+  public_types:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {$ref: '#/$defs/public_type'}
+  shared_components:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {$ref: '#/$defs/component'}
+  providers:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {$ref: '#/$defs/provider'}
+  schemas:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {$ref: '#/$defs/schema_owner'}
+  summary:
+    type: object
+    additionalProperties: false
+    required: [public_type_count, shared_component_count, provider_subject_count, schema_count]
+    properties:
+      public_type_count: {type: integer, minimum: 1}
+      shared_component_count: {type: integer, minimum: 1}
+      provider_subject_count: {type: integer, minimum: 1}
+      schema_count: {type: integer, minimum: 1}
+  semantic_digest: {$ref: '#/$defs/digest'}
+$defs:
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  owner_fields:
+    type: object
+    required: [owner_atomic_unit, steward, source_contract]
+    properties:
+      owner_atomic_unit: {pattern: '^AU-[A-Z]+-[0-9]{3}$'}
+      steward: {type: string, minLength: 1}
+      source_contract: {type: string, minLength: 1}
+  public_type:
+    type: object
+    additionalProperties: false
+    required: [id, type, package, header, owner_atomic_unit, steward, source_contract]
+    properties:
+      id: {type: string, minLength: 1}
+      type: {type: string, minLength: 1}
+      package: {type: string, minLength: 1}
+      header: {type: string, minLength: 1}
+      owner_atomic_unit: {pattern: '^AU-[A-Z]+-[0-9]{3}$'}
+      steward: {type: string, minLength: 1}
+      source_contract: {type: string, minLength: 1}
+  component:
+    type: object
+    additionalProperties: false
+    required: [id, kind, package, owner_atomic_unit, steward, semantics_version, source_contract]
+    properties:
+      id: {type: string, minLength: 1}
+      kind: {enum: [package_internal_engine, schema_fixture_contract, shared_public_type_contract]}
+      package: {type: string, minLength: 1}
+      owner_atomic_unit: {pattern: '^AU-[A-Z]+-[0-9]{3}$'}
+      steward: {type: string, minLength: 1}
+      semantics_version: {type: string, minLength: 1}
+      source_contract: {type: string, minLength: 1}
+  provider:
+    type: object
+    additionalProperties: false
+    required: [id, contract_id, kind, subject, owner_atomic_unit, steward, semantics_version, source_contract]
+    properties:
+      id: {type: string, minLength: 1}
+      contract_id: {type: string, minLength: 1}
+      kind: {enum: [fact_provider_implementation, capability_provider_implementation]}
+      subject: {type: string, minLength: 1}
+      owner_atomic_unit: {pattern: '^AU-[A-Z]+-[0-9]{3}$'}
+      steward: {type: string, minLength: 1}
+      semantics_version: {type: string, minLength: 1}
+      source_contract: {type: string, minLength: 1}
+  schema_owner:
+    type: object
+    additionalProperties: false
+    required: [id, path, owner_atomic_unit, steward, source_contract]
+    properties:
+      id: {type: string, minLength: 1}
+      path: {type: string, pattern: '^schemas/.+\.schema\.yaml$'}
+      owner_atomic_unit: {const: AU-CORE-001}
+      steward: {const: steward.schema}
+      source_contract: {const: docs/design/public_contract_conventions.md#schema-ownership}

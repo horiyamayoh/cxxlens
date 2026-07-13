@@ -64,6 +64,17 @@ add_custom_target(
 add_dependencies(cxxlens-readiness-audit-check cxxlens-ready-check)
 
 add_custom_target(
+  cxxlens-global-contract-conventions-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_global_contract_conventions.py"
+    check --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_global_contract_conventions.py"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-api-contract-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -83,6 +94,8 @@ add_custom_target(
 add_dependencies(cxxlens-api-contract-check cxxlens-task-packet-check)
 add_dependencies(cxxlens-api-contract-check cxxlens-ownership-check)
 add_dependencies(cxxlens-api-contract-check cxxlens-ready-check)
+add_dependencies(cxxlens-api-contract-check
+                 cxxlens-global-contract-conventions-check)
 
 add_custom_target(
   cxxlens-design-package-check
@@ -295,6 +308,7 @@ add_dependencies(
   cxxlens-fact-contract-check
   cxxlens-fact-reducer-contract-check
   cxxlens-finding-contract-check
+  cxxlens-global-contract-conventions-check
   cxxlens-identity-path-check
   cxxlens-m0-completion-check
   cxxlens-m1-completion-check

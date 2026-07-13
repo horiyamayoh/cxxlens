@@ -21,7 +21,15 @@ properties:
   input_fingerprints:
     type: object
     additionalProperties: {$ref: '#/$defs/digest'}
-    required: [task_packets, ownership, m0, m1, m2, dependency_requests]
+    required:
+      - task_packets
+      - ownership
+      - global_contract_conventions
+      - contract_ownership_registry
+      - m0
+      - m1
+      - m2
+      - dependency_requests
   semantic_digest: {$ref: '#/$defs/digest'}
   providers:
     type: object
@@ -245,6 +253,8 @@ $defs:
           observed_global_gates: {const: false}
         required:
           - exact_contract
+          - contract_candidate
+          - contract_frozen
           - frozen_skeleton
           - ownership
           - fixtures

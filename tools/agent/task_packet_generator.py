@@ -70,6 +70,43 @@ def file_digest(path: pathlib.Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def global_contract_fingerprints() -> dict[str, str]:
+    conventions = yaml.safe_load(
+        (REPOSITORY_ROOT / "schemas/cxxlens_global_contract_conventions.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    ownership = yaml.safe_load(
+        (REPOSITORY_ROOT / "schemas/cxxlens_contract_ownership.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    return {
+        "conventions": digest(
+            {
+                "manifest": canonicalize_catalog_value(conventions),
+                "schema": file_digest(
+                    REPOSITORY_ROOT / "schemas/cxxlens_global_contract_conventions.schema.yaml"
+                ),
+                "normative_document": file_digest(
+                    REPOSITORY_ROOT / conventions["authority"]["normative_document"]
+                ),
+                "checklist_template": file_digest(
+                    REPOSITORY_ROOT / conventions["authority"]["checklist_template"]
+                ),
+            }
+        ),
+        "ownership_registry": digest(
+            {
+                "manifest": ownership["semantic_digest"],
+                "schema": file_digest(
+                    REPOSITORY_ROOT / "schemas/cxxlens_contract_ownership.schema.yaml"
+                ),
+            }
+        ),
+    }
+
+
 def canonicalize_catalog_value(value: Any) -> Any:
     """Normalize catalog containers whose order is not semantic."""
     if isinstance(value, dict):
@@ -291,6 +328,7 @@ def make_packet(
     shared_contracts: dict[str, dict[str, Any]],
     providers: dict[tuple[str, str], dict[str, Any]],
     coverage: dict[str, Any] | None,
+    contract_fingerprints: dict[str, str],
 ) -> dict[str, Any]:
     api_id = api["id"]
     declaration = api["declaration"]
@@ -299,6 +337,8 @@ def make_packet(
         {
             "signature_fingerprint": declaration["signature_fingerprint"],
             "source_fingerprint": source_fingerprint,
+            "package_contract": package["contract"],
+            "global_contract_fingerprints": contract_fingerprints,
         }
     )
     requires = api.get("requires", {})
@@ -324,6 +364,11 @@ def make_packet(
         "phase": api["phase"],
         "contract_maturity": api["contract_maturity"],
         "implementation_state": api["implementation_state"],
+        "contract": {
+            **package["contract"],
+            "conventions_fingerprint": contract_fingerprints["conventions"],
+            "ownership_registry_fingerprint": contract_fingerprints["ownership_registry"],
+        },
         "declaration": {
             "status": declaration["status"],
             "source": declaration["source"],
@@ -380,6 +425,7 @@ def make_packet(
             "ownership_contract": "cxxlens.agent-ownership.v1",
             "ownership_provider_issue": "#28",
             "shared_contract_steward_refs": [shared_contracts[package["id"]]["steward"]],
+            "schema_owner_refs": ["steward.schema"],
         },
         "generation": {
             "state": generation_state(api),
@@ -440,6 +486,7 @@ def generate_corpus(
     coverage_by_api = {
         row["api_id"]: row for row in coverage_document.get("apis", [])
     }
+    contract_fingerprints = global_contract_fingerprints()
     packets = [
         make_packet(
             package,
@@ -450,6 +497,7 @@ def generate_corpus(
             shared_contracts,
             providers,
             coverage_by_api.get(api["id"]),
+            contract_fingerprints,
         )
         for package, api in entries
     ]
@@ -464,6 +512,7 @@ def generate_corpus(
     corpus: dict[str, Any] = {
         "schema": CORPUS_SCHEMA,
         "catalog_fingerprint": digest(canonicalize_catalog_value(document)),
+        "global_contract_fingerprints": contract_fingerprints,
         "summary": {
             "package_count": len(document["packages"]),
             "api_count": len(packets),
@@ -488,6 +537,7 @@ def make_report(corpus: dict[str, Any]) -> dict[str, Any]:
         "schema": REPORT_SCHEMA,
         "status": "passed",
         "catalog_fingerprint": corpus["catalog_fingerprint"],
+        "global_contract_fingerprints": corpus["global_contract_fingerprints"],
         "corpus_semantic_digest": corpus["semantic_digest"],
         "api_count": corpus["summary"]["api_count"],
         "atomic_unit_count": corpus["summary"]["atomic_unit_count"],
@@ -497,6 +547,8 @@ def make_report(corpus: dict[str, Any]) -> dict[str, Any]:
             "atomic-unit-exactly-once",
             "catalog-and-source-fingerprint",
             "family-indivisibility",
+            "global-contract-state-and-owner",
+            "contract-ownership-registry",
             "root-order-process-determinism",
             "schema-and-semantic-digest",
             "shared-implementation-dependency-closure",
@@ -557,6 +609,9 @@ def validate_corpus(
     provider_contracts = provider_subject_lookup(document)
     known_units = {api["atomic_unit"]["id"] for _, api in iter_apis(document)}
     expected_api_ids = set(catalog)
+    expected_contract_fingerprints = global_contract_fingerprints()
+    if corpus.get("global_contract_fingerprints") != expected_contract_fingerprints:
+        fail("task_packet.global-contract-drift", "global convention or ownership fingerprint differs")
 
     for packet in packets:
         if not isinstance(packet, dict) or packet.get("schema") != PACKET_SCHEMA:
@@ -569,6 +624,13 @@ def validate_corpus(
         seen.add(api_id)
         packet_by_api[api_id] = packet
         package, api = catalog[api_id]
+        expected_contract = {
+            **package["contract"],
+            "conventions_fingerprint": expected_contract_fingerprints["conventions"],
+            "ownership_registry_fingerprint": expected_contract_fingerprints["ownership_registry"],
+        }
+        if packet.get("contract") != expected_contract:
+            fail("task_packet.contract-state-drift", f"{api_id}: package contract state differs")
         family = api["kind"] in FAMILY_KINDS
         if packet.get("atomic_unit_id") != api["atomic_unit"]["id"]:
             code = "task_packet.family-split" if family else "task_packet.atomic-unit-drift"
@@ -586,6 +648,8 @@ def validate_corpus(
                 "task_packet.shared-steward-drift",
                 f"{api_id}: shared steward must be derived from the catalog",
             )
+        if packet.get("coordination", {}).get("schema_owner_refs") != ["steward.schema"]:
+            fail("task_packet.schema-owner-drift", f"{api_id}: schema owner differs")
         state = packet.get("generation", {}).get("state")
         expected_state = generation_state(api)
         if state != expected_state:

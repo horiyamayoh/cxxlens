@@ -25,6 +25,8 @@ properties:
     - change_policy
     - executable_test_coverage
     - executable_test_coverage_report
+    - global_contract_conventions
+    - contract_ownership_registry
   registries:
     type: object
     required:
@@ -56,8 +58,17 @@ properties:
     minItems: 1
     items:
       type: object
-      required: [id, header, purpose, public_types, apis]
+      required: [id, header, contract, purpose, public_types, apis]
       properties:
+        contract:
+          type: object
+          additionalProperties: false
+          required: [state, owner_issue, transition_issue, conventions]
+          properties:
+            state: {enum: [draft, unresolved, candidate, frozen]}
+            owner_issue: {pattern: '^#(43|44|45|46|47|48|49|50|51)$'}
+            transition_issue: {pattern: '^#(42|43|44|45|46|47|48|49|50|51|54)$'}
+            conventions: {const: cxxlens.global-contract-conventions.v1}
         apis:
           type: array
           items:
@@ -91,4 +102,5 @@ properties:
     - api_entry_count
     - atomic_unit_count
     - implementation_state_counts
+    - contract_state_counts
 additionalProperties: true

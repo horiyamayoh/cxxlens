@@ -41,6 +41,7 @@ class ApiContractTest(unittest.TestCase):
             summary["implementation_state_counts"],
             {"conformant": 47, "implemented": 0, "unimplemented": 77},
         )
+        self.assertEqual(summary["contract_state_counts"], {"draft": 3, "unresolved": 19})
 
     def test_duplicate_id_fixture(self) -> None:
         document = self.mutated()
@@ -95,6 +96,20 @@ class ApiContractTest(unittest.TestCase):
         second["atomic_unit"]["id"] = first["atomic_unit"]["id"]
         document["summary"]["atomic_unit_count"] -= 1
         self.assert_invalid(document, "split readiness")
+
+    def test_package_candidate_requires_owner_issue(self) -> None:
+        document = self.mutated()
+        package = document["packages"][0]
+        package["contract"]["state"] = "candidate"
+        package["contract"]["transition_issue"] = "#44"
+        self.assert_invalid(document, "candidate transition requires")
+
+    def test_package_issue_cannot_freeze_contract(self) -> None:
+        document = self.mutated()
+        package = document["packages"][0]
+        package["contract"]["state"] = "frozen"
+        package["contract"]["transition_issue"] = package["contract"]["owner_issue"]
+        self.assert_invalid(document, "only #54 may freeze")
 
     def test_api_dependency_cycle_fixture(self) -> None:
         document = self.mutated()

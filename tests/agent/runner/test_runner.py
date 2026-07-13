@@ -102,6 +102,21 @@ class RunnerTest(unittest.TestCase):
             {"blocked": 77, "complete": 47, "ready": 0},
         )
         self.assertEqual(generated["summary"]["ready_waves"], [])
+        self.assertEqual(
+            generated["input_fingerprints"]["global_contract_conventions"],
+            self.corpus["global_contract_fingerprints"]["conventions"],
+        )
+        self.assertEqual(
+            generated["input_fingerprints"]["contract_ownership_registry"],
+            self.corpus["global_contract_fingerprints"]["ownership_registry"],
+        )
+        self.assertTrue(
+            all(
+                not node["prerequisites"]["contract_candidate"]
+                and not node["prerequisites"]["contract_frozen"]
+                for node in generated["nodes"]
+            )
+        )
         wave_units = [unit for wave in generated["topological_waves"] for unit in wave]
         node_units = [node["atomic_unit_id"] for node in generated["nodes"]]
         self.assertEqual(sorted(wave_units), node_units)

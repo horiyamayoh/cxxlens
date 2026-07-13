@@ -3599,6 +3599,19 @@ Coverageは requested universe − excluded − covered − failed − unresolve
 [ ] no forbidden shortcut
 ```
 
+### 39.13 Phase B public contract candidate
+
+全 package contract は `cxxlens_global_contract_conventions.yaml` と
+`contract_candidate_checklist.md` を共通規約とする。catalog の package `contract.state` は declaration、
+implementation、readiness と独立した `draft` / `unresolved` / `candidate` / `frozen` の軸である。
+#43〜#51 の一意な package owner は exact contract と全 checklist evidence を揃えて `candidate` へ遷移
+できるが、`frozen` への遷移 authority は #54 のみとする。
+
+`cxxlens_contract_ownership.yaml` は shared public type、package component、fact/capability provider subject、
+public schema の owner を exactly one で保持する。task packet、ownership、ready report、authorization は
+conventions と ownership registry の digest および package contract state を伝播し、signature、semantics、
+owner、dependency、schema、decision table、evidence の drift で既存 authorization を失効させる。
+
 ---
 
 ## 40. Public API inventory
@@ -3608,6 +3621,8 @@ Coverageは requested universe − excluded − covered − failed − unresolve
 規範とする。YAML が machine-readable source of truth であり、API ID、header、
 `contract_maturity`、`implementation_state`、exact declaration、signature fingerprint、phase、
 typed fact/capability/API/expression dependency、atomic unit、readiness、guarantees/errors を持つ。
+各 package は Phase B contract state、candidate owner Issue、最後の transition Issue、global conventions
+version も持つ。これは exact declaration や implementation completion を意味しない。
 Complete API の executable evidence は catalog authority が指す
 `cxxlens_api_test_coverage.yaml` が signature fingerprint に結び付け、unit/acceptance CTest、全 family
 member、use-case/requirement、category 別 fixture と expected outcome を保持する。M0/M1/M2 manifest の
