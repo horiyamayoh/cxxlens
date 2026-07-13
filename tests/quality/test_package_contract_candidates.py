@@ -158,6 +158,27 @@ class PackageContractCandidateTest(unittest.TestCase):
             {"base", "override_relation", "direct_call", "possible_dynamic_call", "indirect_call", "include", "impact", "custom"},
         )
 
+    def test_positive_issue_47_candidate_and_rule_report_schemas(self) -> None:
+        group = next(row for row in self.manifest["groups"] if row["issue"] == "#47")
+        self.assertEqual(group["packages"], ["report", "rules"])
+        self.assertEqual(len(group["api_contracts"]), 9)
+        self.assertFalse(group["production_implementation_changed"])
+        for name in (
+            "cxxlens_rule.schema.yaml",
+            "cxxlens_suppression.schema.yaml",
+            "cxxlens_report_options.schema.yaml",
+            "cxxlens_rendered_report.schema.yaml",
+        ):
+            jsonschema.Draft202012Validator.check_schema(load(name))
+        suppression = load("cxxlens_suppression.schema.yaml")
+        self.assertEqual(
+            suppression["properties"]["precedence"]["const"],
+            ["inline_source", "external_configuration", "baseline"],
+        )
+        report_options = load("cxxlens_report_options.schema.yaml")
+        self.assertEqual(report_options["properties"]["output_budget_bytes"]["minimum"], 1)
+        self.assertNotIn("absolute", report_options["properties"]["paths"]["enum"])
+
     def test_missing_assigned_api_is_rejected(self) -> None:
         document = copy.deepcopy(self.manifest)
         group = document["groups"][0]

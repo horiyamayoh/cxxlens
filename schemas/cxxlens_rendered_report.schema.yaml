@@ -1,0 +1,16 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.rendered-report.v1.schema.yaml
+title: cxxlens rendered report envelope v1
+type: object
+additionalProperties: false
+required: [schema, source_schema, media_type, encoding, bytes, truncated, omitted_count, unresolved, guarantee]
+properties:
+  schema: {const: cxxlens.rendered-report.v1}
+  source_schema: {type: string, minLength: 1}
+  media_type: {enum: [application/json, application/sarif+json, text/markdown, text/x-diff]}
+  encoding: {const: utf-8}
+  bytes: {type: string}
+  truncated: {type: boolean}
+  omitted_count: {type: integer, minimum: 0}
+  unresolved: {type: array, items: {$ref: cxxlens_unresolved.schema.yaml}}
+  guarantee: {enum: [exact, conservative, best_effort, none]}

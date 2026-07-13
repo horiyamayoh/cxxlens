@@ -116,7 +116,7 @@ class RunnerTest(unittest.TestCase):
             for node in generated["nodes"]
             if node["prerequisites"]["contract_candidate"]
         ]
-        self.assertEqual(len(candidate_nodes), 70)
+        self.assertEqual(len(candidate_nodes), 79)
         self.assertTrue(
             all(not node["prerequisites"]["contract_frozen"] for node in generated["nodes"])
         )

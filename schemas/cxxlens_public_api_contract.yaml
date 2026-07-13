@@ -1988,19 +1988,25 @@ packages:
       - candidate_declaration_not_integrated
 - id: rules
   contract:
-    state: unresolved
+    state: candidate
     owner_issue: '#47'
-    transition_issue: '#42'
+    transition_issue: '#47'
     conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-47
+    candidate_fingerprint: sha256:a7d7d2ef4dc907b517ead76a54d36ba067fcc0f1aa5da405eebef30e1d6d8143
   header: <cxxlens/rules.hpp>
   purpose: Declarative rules, suppressions and shared execution.
   public_types:
-  - rule_metadata
-  - rule_builder
+  - diagnostic_template
   - rule
-  - suppression_policy
-  - rule_run_options
+  - rule_builder
+  - rule_failure_policy
+  - rule_metadata
   - rule_pack
+  - rule_run_options
+  - suppression_entry
+  - suppression_origin
+  - suppression_policy
   apis:
   - id: API-RULE-001
     symbol: rules::make_rule
@@ -2012,17 +2018,19 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/47/rules_report.hpp
+      signature: cxxlens::rules::rule_builder cxxlens::rules::make_rule(std::string,cxxlens::semantic_version)
+      signature_fingerprint: sha256:f6a0083dc0b03d5f9420b3921cb412ff79ad764b1d7f50cae1f09f32b2e21d2e
     atomic_unit:
       id: AU-RULE-001
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
+    requires:
+      apis: []
   - id: API-RULE-002
     symbol: rule_builder::{metadata,when,unless,scope,severity_level,confidence_at_least,diagnose,note,fix,explain,build}
     kind: builder_family
@@ -2030,23 +2038,33 @@ packages:
     requires:
       expressions:
       - selector_dependent
-      apis: []
+      apis:
+      - API-SEL-010
+      - API-TF-007
     errors:
     - rules.invalid-metadata
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/47/rules_report.hpp
+      signature: cxxlens::rules::rule_builder cxxlens::rules::rule_builder::metadata(cxxlens::rules::rule_metadata) const;
+        cxxlens::rules::rule_builder cxxlens::rules::rule_builder::when(cxxlens::select::semantic_selector) const; cxxlens::rules::rule_builder
+        cxxlens::rules::rule_builder::unless(cxxlens::select::semantic_selector) const; cxxlens::rules::rule_builder cxxlens::rules::rule_builder::scope(cxxlens::analysis_scope)
+        const; cxxlens::rules::rule_builder cxxlens::rules::rule_builder::severity_level(cxxlens::severity) const; cxxlens::rules::rule_builder
+        cxxlens::rules::rule_builder::confidence_at_least(cxxlens::confidence) const; cxxlens::rules::rule_builder cxxlens::rules::rule_builder::diagnose(cxxlens::rules::diagnostic_template)
+        const; cxxlens::rules::rule_builder cxxlens::rules::rule_builder::note(cxxlens::rules::diagnostic_template) const;
+        cxxlens::rules::rule_builder cxxlens::rules::rule_builder::fix(cxxlens::transform::codemod) const; cxxlens::rules::rule_builder
+        cxxlens::rules::rule_builder::explain(std::string) const; cxxlens::result<cxxlens::rules::rule> cxxlens::rules::rule_builder::build()
+        const
+      signature_fingerprint: sha256:e3249f1be7c4d8271bf3d32f97093a4b0c6e985f2a62ab54c1ccf93ee2594b2b
     atomic_unit:
       id: AU-RULE-002
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-RULE-003
     symbol: rule::run
     kind: method
@@ -2054,23 +2072,28 @@ packages:
     requires:
       expressions:
       - selector_dependent
-      apis: []
+      apis:
+      - API-CORE-006
+      - API-SEL-010
     guarantees:
     - Finding identity is stable and every result carries evidence/coverage.
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/47/rules_report.hpp
+      signature: std::string_view cxxlens::rules::rule::id() const noexcept; const cxxlens::rules::rule_metadata& cxxlens::rules::rule::metadata()
+        const noexcept; cxxlens::select::selector_requirements cxxlens::rules::rule::requirements() const; cxxlens::result<cxxlens::finding_set>
+        cxxlens::rules::rule::run(const cxxlens::workspace&,cxxlens::rules::rule_run_options) const; std::string cxxlens::rules::rule::to_json()
+        const; std::string cxxlens::rules::rule::explain() const
+      signature_fingerprint: sha256:2d852ca4267d1762b67ae6e7a8033df3e8936ae2c9d5c380bd3e930249739d4d
     atomic_unit:
       id: AU-RULE-003
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-RULE-004
     symbol: rule_pack::{add,enable,disable,run}
     kind: method_family
@@ -2079,17 +2102,25 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/47/rules_report.hpp
+      signature: cxxlens::rules::rule_pack cxxlens::rules::rule_pack::add(cxxlens::rules::rule) const; cxxlens::rules::rule_pack
+        cxxlens::rules::rule_pack::add(cxxlens::rules::rule_pack) const; cxxlens::rules::rule_pack cxxlens::rules::rule_pack::enable(std::string)
+        const; cxxlens::rules::rule_pack cxxlens::rules::rule_pack::disable(std::string) const; cxxlens::rules::rule_pack
+        cxxlens::rules::rule_pack::suppressions(cxxlens::rules::suppression_policy) const; cxxlens::rules::rule_pack cxxlens::rules::rule_pack::failure_policy(cxxlens::rules::rule_failure_policy)
+        const; cxxlens::result<cxxlens::finding_set> cxxlens::rules::rule_pack::run(const cxxlens::workspace&,cxxlens::rules::rule_run_options)
+        const
+      signature_fingerprint: sha256:73d8aa5c60c79c58a66f3201e58f74bf65204c3832949092e4819138c4503d12
     atomic_unit:
       id: AU-RULE-004
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
+    requires:
+      apis:
+      - API-RULE-003
   - id: API-RULE-005
     symbol: suppression_policy builder family
     kind: builder_family
@@ -2101,17 +2132,30 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/47/rules_report.hpp
+      signature: cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::none(); cxxlens::rules::suppression_policy
+        cxxlens::rules::suppression_policy::inline_nolint(bool) const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::file(cxxlens::path,std::string)
+        const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::range(cxxlens::source_span,std::string)
+        const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::symbol(cxxlens::symbol_id,std::string)
+        const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::rule(std::string,std::string) const;
+        cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::category(std::string,std::string) const; cxxlens::rules::suppression_policy
+        cxxlens::rules::suppression_policy::tag(std::string,std::string) const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::minimum_severity(cxxlens::severity)
+        const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::baseline(std::vector<std::string>) const;
+        cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::external(std::vector<cxxlens::rules::suppression_entry>)
+        const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::require_justification(bool) const; cxxlens::rules::suppression_policy
+        cxxlens::rules::suppression_policy::reject_expired(bool) const; std::string cxxlens::rules::suppression_policy::to_json()
+        const
+      signature_fingerprint: sha256:5efd21c566df3b86e0eb337fcaff0dc54c2bdbcec599ab91b23c6bb286880367
     atomic_unit:
       id: AU-RULE-005
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
+    requires:
+      apis: []
 - id: flow
   contract:
     state: unresolved
@@ -3317,16 +3361,19 @@ packages:
       - exact_declaration_unresolved
 - id: report
   contract:
-    state: unresolved
+    state: candidate
     owner_issue: '#47'
-    transition_issue: '#42'
+    transition_issue: '#47'
     conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-47
+    candidate_fingerprint: sha256:a7d7d2ef4dc907b517ead76a54d36ba067fcc0f1aa5da405eebef30e1d6d8143
   header: <cxxlens/report.hpp>
   purpose: Deterministic human and machine report projections.
   public_types:
   - report::format
-  - report::path_presentation
   - report::options
+  - report::path_presentation
+  - report::rendered_report
   apis:
   - id: API-REPORT-001
     symbol: report::render(finding_set)
@@ -3339,17 +3386,20 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/47/rules_report.hpp
+      signature: cxxlens::result<cxxlens::report::rendered_report> cxxlens::report::render(const cxxlens::finding_set&,cxxlens::report::options)
+      signature_fingerprint: sha256:8f3a8427029307727002b32c4844c196d71e8d95f04c067163148f2c097def55
     atomic_unit:
       id: AU-REPORT-001
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
+    requires:
+      apis:
+      - API-CORE-006
   - id: API-REPORT-002
     symbol: report::render(edit_plan)
     kind: free_function
@@ -3361,17 +3411,20 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/47/rules_report.hpp
+      signature: cxxlens::result<cxxlens::report::rendered_report> cxxlens::report::render(const cxxlens::transform::edit_plan&,cxxlens::report::options)
+      signature_fingerprint: sha256:3d3125085729c443f2c5036d50b9236b05b0241bb501f940ca76987e92dc80c3
     atomic_unit:
       id: AU-REPORT-002
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
+    requires:
+      apis:
+      - API-TF-008
   - id: API-REPORT-003
     symbol: report::render(generation_plan)
     kind: free_function
@@ -3383,17 +3436,20 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/47/rules_report.hpp
+      signature: cxxlens::result<cxxlens::report::rendered_report> cxxlens::report::render(const cxxlens::generate::generation_plan&,cxxlens::report::options)
+      signature_fingerprint: sha256:de5a08a8862cccc51dd3d42d903bf6b679e1e12abd8450368ad9d87041959137
     atomic_unit:
       id: AU-REPORT-003
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
+    requires:
+      apis:
+      - API-GEN-001
   - id: API-REPORT-004
     symbol: report::render(review_report)
     kind: free_function
@@ -3405,17 +3461,20 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/47/rules_report.hpp
+      signature: cxxlens::result<cxxlens::report::rendered_report> cxxlens::report::render(const cxxlens::review::review_report&,cxxlens::report::options)
+      signature_fingerprint: sha256:8ee2b2a7feccf83bc667a349d05680a53f0ea3b12983b2358041cc744b56f32d
     atomic_unit:
       id: AU-REPORT-004
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
+    requires:
+      apis:
+      - API-RV-005
 - id: explain
   contract:
     state: candidate
@@ -4090,8 +4149,8 @@ summary:
     implemented: 0
     conformant: 47
   contract_state_counts:
-    candidate: 10
-    unresolved: 12
+    candidate: 12
+    unresolved: 10
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.

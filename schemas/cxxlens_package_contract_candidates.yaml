@@ -5416,3 +5416,855 @@ groups:
         expected: Preserved canonical rows plus typed unresolved/coverage/truncation and downgraded guarantee.
   production_implementation_changed: false
   candidate_fingerprint: sha256:3c8f4fec0bb55eae81842b2dc4dec84c5efcfc236621f4b9e73888736de9f940
+- issue: '#47'
+  state: candidate
+  packages:
+  - report
+  - rules
+  normative_document: docs/design/package_contract_47.md
+  candidate_headers:
+  - contracts/candidates/47/rules_report.hpp
+  usage_examples:
+  - contracts/candidates/47/rules_report_usage.cpp
+  policies:
+  - id: rules.immutable-construction.v1
+    ownership_and_lifetime:
+    - Rule construction uses detached immutable values and retains no caller view, AST/backend pointer, or callback.
+    - Borrowed accessors remain valid only while the immutable owner lives; rendered output owns its bytes.
+    const_noexcept_thread_safety:
+    - Immutable builders and const reads are safe concurrently; no writer is hidden behind const.
+    - Noexcept accessors allocate nothing; build/run/render allocation may fail without partial mutation.
+    callback_and_exception:
+    - Typed diagnostic templates replace retained arbitrary callbacks; placeholders come from a closed registry.
+    - Provider/template/render exceptions are caught at the engine boundary and become stable result failures.
+    execution_context_and_budgets:
+    - Rule runs bind one snapshot, cancellation/deadline, candidate/result budgets, and shared provisioning before evaluation.
+    - Report rendering uses a positive byte budget and performs no filesystem/process/time side effect.
+    result_semantics:
+      empty_success: Empty findings/output is complete only when the authoritative requested universe is completely covered.
+      unresolved: Missing providers, candidate ambiguity, unsafe fixes, and unknown/expired suppression state remain typed
+        rows.
+      unsupported: Unsupported rule/format/schema/version is a structured error without nearest-version fallback.
+      ambiguous: All semantic/variant/suppression candidates remain with provenance; no name-only or first-wins choice.
+      partial: Valid findings/records survive continue-partial or output truncation with accounting and downgraded guarantee.
+      failure: Invalid metadata/template/pattern/input, duplicate conflict, or invariant failure returns no fabricated success.
+    evidence_coverage_guarantee:
+    - 'Finding authority remains #43; suppression and renderers preserve IDs, evidence, coverage, unresolved, confidence,
+      and guarantee.'
+    - Suppression/truncation accounting cannot upgrade incomplete authority or hide failed/unresolved requested units.
+    ordering_duplicates_variants:
+    - 'Rules order by ID/version and findings by #43 canonical order; output never follows worker/container order.'
+    - Same-ID equal payload merges contributors; conflict rejects; variants and suppression provenance remain explicit.
+    schema_and_versioning:
+    - Rule, suppression, report-options, and rendered-report v1 schemas are exact independent axes.
+    - Consumer object version incompatibility rejects unless a named migration exists; Markdown/SARIF/diff are projections.
+    change_policy:
+    - Identity, requirements, failure/suppression precedence, ordering, projection, compatibility, owner, or schema changes
+      invalidate fingerprint.
+  - id: rules.snapshot-execution.v1
+    ownership_and_lifetime:
+    - Rule and pack execution uses detached immutable values and retains no caller view, AST/backend pointer, or callback.
+    - Borrowed accessors remain valid only while the immutable owner lives; rendered output owns its bytes.
+    const_noexcept_thread_safety:
+    - Immutable builders and const reads are safe concurrently; no writer is hidden behind const.
+    - Noexcept accessors allocate nothing; build/run/render allocation may fail without partial mutation.
+    callback_and_exception:
+    - Typed diagnostic templates replace retained arbitrary callbacks; placeholders come from a closed registry.
+    - Provider/template/render exceptions are caught at the engine boundary and become stable result failures.
+    execution_context_and_budgets:
+    - Rule runs bind one snapshot, cancellation/deadline, candidate/result budgets, and shared provisioning before evaluation.
+    - Report rendering uses a positive byte budget and performs no filesystem/process/time side effect.
+    result_semantics:
+      empty_success: Empty findings/output is complete only when the authoritative requested universe is completely covered.
+      unresolved: Missing providers, candidate ambiguity, unsafe fixes, and unknown/expired suppression state remain typed
+        rows.
+      unsupported: Unsupported rule/format/schema/version is a structured error without nearest-version fallback.
+      ambiguous: All semantic/variant/suppression candidates remain with provenance; no name-only or first-wins choice.
+      partial: Valid findings/records survive continue-partial or output truncation with accounting and downgraded guarantee.
+      failure: Invalid metadata/template/pattern/input, duplicate conflict, or invariant failure returns no fabricated success.
+    evidence_coverage_guarantee:
+    - 'Finding authority remains #43; suppression and renderers preserve IDs, evidence, coverage, unresolved, confidence,
+      and guarantee.'
+    - Suppression/truncation accounting cannot upgrade incomplete authority or hide failed/unresolved requested units.
+    ordering_duplicates_variants:
+    - 'Rules order by ID/version and findings by #43 canonical order; output never follows worker/container order.'
+    - Same-ID equal payload merges contributors; conflict rejects; variants and suppression provenance remain explicit.
+    schema_and_versioning:
+    - Rule, suppression, report-options, and rendered-report v1 schemas are exact independent axes.
+    - Consumer object version incompatibility rejects unless a named migration exists; Markdown/SARIF/diff are projections.
+    change_policy:
+    - Identity, requirements, failure/suppression precedence, ordering, projection, compatibility, owner, or schema changes
+      invalidate fingerprint.
+  - id: rules.suppression-accounting.v1
+    ownership_and_lifetime:
+    - Suppression matching uses detached immutable values and retains no caller view, AST/backend pointer, or callback.
+    - Borrowed accessors remain valid only while the immutable owner lives; rendered output owns its bytes.
+    const_noexcept_thread_safety:
+    - Immutable builders and const reads are safe concurrently; no writer is hidden behind const.
+    - Noexcept accessors allocate nothing; build/run/render allocation may fail without partial mutation.
+    callback_and_exception:
+    - Typed diagnostic templates replace retained arbitrary callbacks; placeholders come from a closed registry.
+    - Provider/template/render exceptions are caught at the engine boundary and become stable result failures.
+    execution_context_and_budgets:
+    - Rule runs bind one snapshot, cancellation/deadline, candidate/result budgets, and shared provisioning before evaluation.
+    - Report rendering uses a positive byte budget and performs no filesystem/process/time side effect.
+    result_semantics:
+      empty_success: Empty findings/output is complete only when the authoritative requested universe is completely covered.
+      unresolved: Missing providers, candidate ambiguity, unsafe fixes, and unknown/expired suppression state remain typed
+        rows.
+      unsupported: Unsupported rule/format/schema/version is a structured error without nearest-version fallback.
+      ambiguous: All semantic/variant/suppression candidates remain with provenance; no name-only or first-wins choice.
+      partial: Valid findings/records survive continue-partial or output truncation with accounting and downgraded guarantee.
+      failure: Invalid metadata/template/pattern/input, duplicate conflict, or invariant failure returns no fabricated success.
+    evidence_coverage_guarantee:
+    - 'Finding authority remains #43; suppression and renderers preserve IDs, evidence, coverage, unresolved, confidence,
+      and guarantee.'
+    - Suppression/truncation accounting cannot upgrade incomplete authority or hide failed/unresolved requested units.
+    ordering_duplicates_variants:
+    - 'Rules order by ID/version and findings by #43 canonical order; output never follows worker/container order.'
+    - Same-ID equal payload merges contributors; conflict rejects; variants and suppression provenance remain explicit.
+    schema_and_versioning:
+    - Rule, suppression, report-options, and rendered-report v1 schemas are exact independent axes.
+    - Consumer object version incompatibility rejects unless a named migration exists; Markdown/SARIF/diff are projections.
+    change_policy:
+    - Identity, requirements, failure/suppression precedence, ordering, projection, compatibility, owner, or schema changes
+      invalidate fingerprint.
+  - id: report.authoritative-projection.v1
+    ownership_and_lifetime:
+    - Report rendering uses detached immutable values and retains no caller view, AST/backend pointer, or callback.
+    - Borrowed accessors remain valid only while the immutable owner lives; rendered output owns its bytes.
+    const_noexcept_thread_safety:
+    - Immutable builders and const reads are safe concurrently; no writer is hidden behind const.
+    - Noexcept accessors allocate nothing; build/run/render allocation may fail without partial mutation.
+    callback_and_exception:
+    - Typed diagnostic templates replace retained arbitrary callbacks; placeholders come from a closed registry.
+    - Provider/template/render exceptions are caught at the engine boundary and become stable result failures.
+    execution_context_and_budgets:
+    - Rule runs bind one snapshot, cancellation/deadline, candidate/result budgets, and shared provisioning before evaluation.
+    - Report rendering uses a positive byte budget and performs no filesystem/process/time side effect.
+    result_semantics:
+      empty_success: Empty findings/output is complete only when the authoritative requested universe is completely covered.
+      unresolved: Missing providers, candidate ambiguity, unsafe fixes, and unknown/expired suppression state remain typed
+        rows.
+      unsupported: Unsupported rule/format/schema/version is a structured error without nearest-version fallback.
+      ambiguous: All semantic/variant/suppression candidates remain with provenance; no name-only or first-wins choice.
+      partial: Valid findings/records survive continue-partial or output truncation with accounting and downgraded guarantee.
+      failure: Invalid metadata/template/pattern/input, duplicate conflict, or invariant failure returns no fabricated success.
+    evidence_coverage_guarantee:
+    - 'Finding authority remains #43; suppression and renderers preserve IDs, evidence, coverage, unresolved, confidence,
+      and guarantee.'
+    - Suppression/truncation accounting cannot upgrade incomplete authority or hide failed/unresolved requested units.
+    ordering_duplicates_variants:
+    - 'Rules order by ID/version and findings by #43 canonical order; output never follows worker/container order.'
+    - Same-ID equal payload merges contributors; conflict rejects; variants and suppression provenance remain explicit.
+    schema_and_versioning:
+    - Rule, suppression, report-options, and rendered-report v1 schemas are exact independent axes.
+    - Consumer object version incompatibility rejects unless a named migration exists; Markdown/SARIF/diff are projections.
+    change_policy:
+    - Identity, requirements, failure/suppression precedence, ordering, projection, compatibility, owner, or schema changes
+      invalidate fingerprint.
+  registry_owners:
+  - id: registry.rules.errors
+    kind: error_registry
+    owner_atomic_unit: AU-RULE-001
+    steward: integration.package.rules
+    entries:
+    - rules.callback-failed
+    - rules.duplicate-conflict
+    - rules.invalid-metadata
+    - rules.required-facts-unavailable
+    - rules.suppression-invalid
+    - rules.template-invalid
+    behavior: Rule/build/run/suppression failures are typed and diagnostic prose is not control input.
+  - id: registry.rules.schemas
+    kind: schema_registry
+    owner_atomic_unit: AU-RULE-001
+    steward: steward.schema
+    entries:
+    - cxxlens.rule.v1
+    - cxxlens.suppression-policy.v1
+    behavior: Rule and suppression identity/precedence require exact schema and semantics versions.
+  - id: registry.report.errors
+    kind: error_registry
+    owner_atomic_unit: AU-REPORT-001
+    steward: integration.package.report
+    entries:
+    - report.format-unsupported
+    - report.input-invalid
+    - report.output-budget-exhausted
+    - report.schema-incompatible
+    behavior: Render incompatibility and truncation are explicit; render never reinterprets source authority.
+  - id: registry.report.schemas
+    kind: schema_registry
+    owner_atomic_unit: AU-REPORT-001
+    steward: steward.schema
+    entries:
+    - cxxlens.rendered-report.v1
+    - cxxlens.report-options.v1
+    behavior: Options/envelope select exact formats and preserve source schema, truncation, unresolved, and guarantee.
+  consumer_boundaries:
+  - owner_package: core
+    consumer_package: rules
+    shared_types:
+    - finding
+    - finding_set
+    - evidence
+    - coverage_report
+    access: const_reference
+    rule: '#43 owns finding identity/order/evidence/coverage; rules only construct validated inputs and reduce through that
+      contract.'
+  - owner_package: select
+    consumer_package: rules
+    shared_types:
+    - semantic_selector
+    - selector_requirements
+    access: value_copy
+    rule: 'Rules consume #45 normalized selectors/requirements and cannot define a second matcher or name-only identity.'
+  - owner_package: transform
+    consumer_package: rules
+    shared_types:
+    - transform::codemod
+    access: value_copy
+    rule: 'A rule retains an immutable #48 fix proposal but never plans, validates, or applies an edit.'
+  - owner_package: core
+    consumer_package: report
+    shared_types:
+    - finding_set
+    - evidence
+    - coverage_report
+    - unresolved
+    access: const_reference
+    rule: 'Report projects #43 authoritative rows without recalculation, suppression, or guarantee upgrade.'
+  - owner_package: transform
+    consumer_package: report
+    shared_types:
+    - transform::edit_plan
+    access: const_reference
+    rule: '#48 owns edit plan validity and schema; report accepts only declared compatible versions.'
+  - owner_package: generate
+    consumer_package: report
+    shared_types:
+    - generate::generation_plan
+    access: const_reference
+    rule: '#49 owns generation decisions/artifacts; report is a bounded pure projection.'
+  - owner_package: review
+    consumer_package: report
+    shared_types:
+    - review::review_report
+    access: const_reference
+    rule: '#51 owns baseline/gate/review meaning; report cannot rerun or reinterpret the workflow.'
+  api_contracts:
+  - api_id: API-RULE-001
+    atomic_unit: AU-RULE-001
+    package: rules
+    policy: rules.immutable-construction.v1
+    declaration:
+      source: contracts/candidates/47/rules_report.hpp
+      signature: cxxlens::rules::rule_builder cxxlens::rules::make_rule(std::string,cxxlens::semantic_version)
+      signature_fingerprint: sha256:f6a0083dc0b03d5f9420b3921cb412ff79ad764b1d7f50cae1f09f32b2e21d2e
+    family_members:
+    - cxxlens::rules::make_rule
+    semantics:
+    - rule factory follows rules.immutable-construction.v1 over one declared authoritative snapshot/value.
+    - Complete empty, unresolved, unsupported, ambiguous, partial, and failure outcomes remain distinct.
+    - Identity/order/dedup/variant/provenance and suppression/truncation accounting are deterministic and schema-versioned.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:finding_set
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:unresolved
+      - public-type:rules:diagnostic_template
+      - public-type:rules:rule
+      - public-type:rules:rule_builder
+      - public-type:rules:rule_failure_policy
+      - public-type:rules:rule_metadata
+      - public-type:rules:rule_pack
+      - public-type:rules:rule_run_options
+      - public-type:rules:suppression_entry
+      - public-type:rules:suppression_origin
+      - public-type:rules:suppression_policy
+      - public-type:select:selector_requirements
+      - public-type:select:semantic_selector
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.rules.package_internal_engine
+      - shared.package.rules.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_finding_set.schema.yaml
+      - schema:schemas/cxxlens_rule.schema.yaml
+      - schema:schemas/cxxlens_suppression.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-RL-001
+      - UC-RL-002
+      design_sections:
+      - '17'
+      - '39.18'
+      doxygen_obligation: Document immutable ownership/lifetime, ID/version and dependencies, all result outcomes, suppression/fix
+        or projection semantics, ordering/dedup/variants, evidence/coverage/guarantee, budgets, compatibility, and schema.
+    acceptance:
+      positive:
+        id: API-RULE-001.positive
+        expression: Execute rule factory with exact-version complete authoritative input.
+        expected: Canonical deterministic value/output with complete accounting and justified guarantee.
+      negative:
+        id: API-RULE-001.negative
+        expression: Use invalid metadata/template/pattern/input/schema, conflicting identity, or unsupported format/version.
+        expected: Stable structured failure; no fallback, prose control, re-execution, or side effect.
+      ambiguous:
+        id: API-RULE-001.ambiguous
+        expression: Use variants, provider failure, suppression conflicts/expiry, unsafe fix, or reached run/output budget.
+        expected: Preserved authority plus provenance, typed unresolved/coverage/truncation, and downgraded guarantee.
+  - api_id: API-RULE-002
+    atomic_unit: AU-RULE-002
+    package: rules
+    policy: rules.immutable-construction.v1
+    declaration:
+      source: contracts/candidates/47/rules_report.hpp
+      signature: cxxlens::rules::rule_builder cxxlens::rules::rule_builder::metadata(cxxlens::rules::rule_metadata) const;
+        cxxlens::rules::rule_builder cxxlens::rules::rule_builder::when(cxxlens::select::semantic_selector) const; cxxlens::rules::rule_builder
+        cxxlens::rules::rule_builder::unless(cxxlens::select::semantic_selector) const; cxxlens::rules::rule_builder cxxlens::rules::rule_builder::scope(cxxlens::analysis_scope)
+        const; cxxlens::rules::rule_builder cxxlens::rules::rule_builder::severity_level(cxxlens::severity) const; cxxlens::rules::rule_builder
+        cxxlens::rules::rule_builder::confidence_at_least(cxxlens::confidence) const; cxxlens::rules::rule_builder cxxlens::rules::rule_builder::diagnose(cxxlens::rules::diagnostic_template)
+        const; cxxlens::rules::rule_builder cxxlens::rules::rule_builder::note(cxxlens::rules::diagnostic_template) const;
+        cxxlens::rules::rule_builder cxxlens::rules::rule_builder::fix(cxxlens::transform::codemod) const; cxxlens::rules::rule_builder
+        cxxlens::rules::rule_builder::explain(std::string) const; cxxlens::result<cxxlens::rules::rule> cxxlens::rules::rule_builder::build()
+        const
+      signature_fingerprint: sha256:e3249f1be7c4d8271bf3d32f97093a4b0c6e985f2a62ab54c1ccf93ee2594b2b
+    family_members:
+    - cxxlens::rules::rule_builder::metadata
+    - cxxlens::rules::rule_builder::when
+    - cxxlens::rules::rule_builder::unless
+    - cxxlens::rules::rule_builder::scope
+    - cxxlens::rules::rule_builder::severity_level
+    - cxxlens::rules::rule_builder::confidence_at_least
+    - cxxlens::rules::rule_builder::diagnose
+    - cxxlens::rules::rule_builder::note
+    - cxxlens::rules::rule_builder::fix
+    - cxxlens::rules::rule_builder::explain
+    - cxxlens::rules::rule_builder::build
+    semantics:
+    - rule builder follows rules.immutable-construction.v1 over one declared authoritative snapshot/value.
+    - Complete empty, unresolved, unsupported, ambiguous, partial, and failure outcomes remain distinct.
+    - Identity/order/dedup/variant/provenance and suppression/truncation accounting are deterministic and schema-versioned.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:finding_set
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:unresolved
+      - public-type:rules:diagnostic_template
+      - public-type:rules:rule
+      - public-type:rules:rule_builder
+      - public-type:rules:rule_failure_policy
+      - public-type:rules:rule_metadata
+      - public-type:rules:rule_pack
+      - public-type:rules:rule_run_options
+      - public-type:rules:suppression_entry
+      - public-type:rules:suppression_origin
+      - public-type:rules:suppression_policy
+      - public-type:select:selector_requirements
+      - public-type:select:semantic_selector
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.rules.package_internal_engine
+      - shared.package.rules.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_finding_set.schema.yaml
+      - schema:schemas/cxxlens_rule.schema.yaml
+      - schema:schemas/cxxlens_suppression.schema.yaml
+    dependency_apis:
+    - API-SEL-010
+    - API-TF-007
+    traceability:
+      requirements_or_use_cases:
+      - QR-001
+      design_sections:
+      - '17'
+      - '39.18'
+      doxygen_obligation: Document immutable ownership/lifetime, ID/version and dependencies, all result outcomes, suppression/fix
+        or projection semantics, ordering/dedup/variants, evidence/coverage/guarantee, budgets, compatibility, and schema.
+    acceptance:
+      positive:
+        id: API-RULE-002.positive
+        expression: Execute rule builder with exact-version complete authoritative input.
+        expected: Canonical deterministic value/output with complete accounting and justified guarantee.
+      negative:
+        id: API-RULE-002.negative
+        expression: Use invalid metadata/template/pattern/input/schema, conflicting identity, or unsupported format/version.
+        expected: Stable structured failure; no fallback, prose control, re-execution, or side effect.
+      ambiguous:
+        id: API-RULE-002.ambiguous
+        expression: Use variants, provider failure, suppression conflicts/expiry, unsafe fix, or reached run/output budget.
+        expected: Preserved authority plus provenance, typed unresolved/coverage/truncation, and downgraded guarantee.
+  - api_id: API-RULE-003
+    atomic_unit: AU-RULE-003
+    package: rules
+    policy: rules.snapshot-execution.v1
+    declaration:
+      source: contracts/candidates/47/rules_report.hpp
+      signature: std::string_view cxxlens::rules::rule::id() const noexcept; const cxxlens::rules::rule_metadata& cxxlens::rules::rule::metadata()
+        const noexcept; cxxlens::select::selector_requirements cxxlens::rules::rule::requirements() const; cxxlens::result<cxxlens::finding_set>
+        cxxlens::rules::rule::run(const cxxlens::workspace&,cxxlens::rules::rule_run_options) const; std::string cxxlens::rules::rule::to_json()
+        const; std::string cxxlens::rules::rule::explain() const
+      signature_fingerprint: sha256:2d852ca4267d1762b67ae6e7a8033df3e8936ae2c9d5c380bd3e930249739d4d
+    family_members:
+    - cxxlens::rules::rule::id
+    - cxxlens::rules::rule::metadata
+    - cxxlens::rules::rule::requirements
+    - cxxlens::rules::rule::run
+    - cxxlens::rules::rule::to_json
+    - cxxlens::rules::rule::explain
+    semantics:
+    - single rule execution follows rules.snapshot-execution.v1 over one declared authoritative snapshot/value.
+    - Complete empty, unresolved, unsupported, ambiguous, partial, and failure outcomes remain distinct.
+    - Identity/order/dedup/variant/provenance and suppression/truncation accounting are deterministic and schema-versioned.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:finding_set
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:unresolved
+      - public-type:rules:diagnostic_template
+      - public-type:rules:rule
+      - public-type:rules:rule_builder
+      - public-type:rules:rule_failure_policy
+      - public-type:rules:rule_metadata
+      - public-type:rules:rule_pack
+      - public-type:rules:rule_run_options
+      - public-type:rules:suppression_entry
+      - public-type:rules:suppression_origin
+      - public-type:rules:suppression_policy
+      - public-type:select:selector_requirements
+      - public-type:select:semantic_selector
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.rules.package_internal_engine
+      - shared.package.rules.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_finding_set.schema.yaml
+      - schema:schemas/cxxlens_rule.schema.yaml
+      - schema:schemas/cxxlens_suppression.schema.yaml
+    dependency_apis:
+    - API-CORE-006
+    - API-SEL-010
+    traceability:
+      requirements_or_use_cases:
+      - QR-001
+      design_sections:
+      - '17'
+      - '39.18'
+      doxygen_obligation: Document immutable ownership/lifetime, ID/version and dependencies, all result outcomes, suppression/fix
+        or projection semantics, ordering/dedup/variants, evidence/coverage/guarantee, budgets, compatibility, and schema.
+    acceptance:
+      positive:
+        id: API-RULE-003.positive
+        expression: Execute single rule execution with exact-version complete authoritative input.
+        expected: Canonical deterministic value/output with complete accounting and justified guarantee.
+      negative:
+        id: API-RULE-003.negative
+        expression: Use invalid metadata/template/pattern/input/schema, conflicting identity, or unsupported format/version.
+        expected: Stable structured failure; no fallback, prose control, re-execution, or side effect.
+      ambiguous:
+        id: API-RULE-003.ambiguous
+        expression: Use variants, provider failure, suppression conflicts/expiry, unsafe fix, or reached run/output budget.
+        expected: Preserved authority plus provenance, typed unresolved/coverage/truncation, and downgraded guarantee.
+  - api_id: API-RULE-004
+    atomic_unit: AU-RULE-004
+    package: rules
+    policy: rules.snapshot-execution.v1
+    declaration:
+      source: contracts/candidates/47/rules_report.hpp
+      signature: cxxlens::rules::rule_pack cxxlens::rules::rule_pack::add(cxxlens::rules::rule) const; cxxlens::rules::rule_pack
+        cxxlens::rules::rule_pack::add(cxxlens::rules::rule_pack) const; cxxlens::rules::rule_pack cxxlens::rules::rule_pack::enable(std::string)
+        const; cxxlens::rules::rule_pack cxxlens::rules::rule_pack::disable(std::string) const; cxxlens::rules::rule_pack
+        cxxlens::rules::rule_pack::suppressions(cxxlens::rules::suppression_policy) const; cxxlens::rules::rule_pack cxxlens::rules::rule_pack::failure_policy(cxxlens::rules::rule_failure_policy)
+        const; cxxlens::result<cxxlens::finding_set> cxxlens::rules::rule_pack::run(const cxxlens::workspace&,cxxlens::rules::rule_run_options)
+        const
+      signature_fingerprint: sha256:73d8aa5c60c79c58a66f3201e58f74bf65204c3832949092e4819138c4503d12
+    family_members:
+    - cxxlens::rules::rule_pack::add(rule)
+    - cxxlens::rules::rule_pack::add(rule_pack)
+    - cxxlens::rules::rule_pack::enable
+    - cxxlens::rules::rule_pack::disable
+    - cxxlens::rules::rule_pack::suppressions
+    - cxxlens::rules::rule_pack::failure_policy
+    - cxxlens::rules::rule_pack::run
+    semantics:
+    - rule pack execution follows rules.snapshot-execution.v1 over one declared authoritative snapshot/value.
+    - Complete empty, unresolved, unsupported, ambiguous, partial, and failure outcomes remain distinct.
+    - Identity/order/dedup/variant/provenance and suppression/truncation accounting are deterministic and schema-versioned.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:finding_set
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:unresolved
+      - public-type:rules:diagnostic_template
+      - public-type:rules:rule
+      - public-type:rules:rule_builder
+      - public-type:rules:rule_failure_policy
+      - public-type:rules:rule_metadata
+      - public-type:rules:rule_pack
+      - public-type:rules:rule_run_options
+      - public-type:rules:suppression_entry
+      - public-type:rules:suppression_origin
+      - public-type:rules:suppression_policy
+      - public-type:select:selector_requirements
+      - public-type:select:semantic_selector
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.rules.package_internal_engine
+      - shared.package.rules.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_finding_set.schema.yaml
+      - schema:schemas/cxxlens_rule.schema.yaml
+      - schema:schemas/cxxlens_suppression.schema.yaml
+    dependency_apis:
+    - API-RULE-003
+    traceability:
+      requirements_or_use_cases:
+      - QR-001
+      design_sections:
+      - '17'
+      - '39.18'
+      doxygen_obligation: Document immutable ownership/lifetime, ID/version and dependencies, all result outcomes, suppression/fix
+        or projection semantics, ordering/dedup/variants, evidence/coverage/guarantee, budgets, compatibility, and schema.
+    acceptance:
+      positive:
+        id: API-RULE-004.positive
+        expression: Execute rule pack execution with exact-version complete authoritative input.
+        expected: Canonical deterministic value/output with complete accounting and justified guarantee.
+      negative:
+        id: API-RULE-004.negative
+        expression: Use invalid metadata/template/pattern/input/schema, conflicting identity, or unsupported format/version.
+        expected: Stable structured failure; no fallback, prose control, re-execution, or side effect.
+      ambiguous:
+        id: API-RULE-004.ambiguous
+        expression: Use variants, provider failure, suppression conflicts/expiry, unsafe fix, or reached run/output budget.
+        expected: Preserved authority plus provenance, typed unresolved/coverage/truncation, and downgraded guarantee.
+  - api_id: API-RULE-005
+    atomic_unit: AU-RULE-005
+    package: rules
+    policy: rules.suppression-accounting.v1
+    declaration:
+      source: contracts/candidates/47/rules_report.hpp
+      signature: cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::none(); cxxlens::rules::suppression_policy
+        cxxlens::rules::suppression_policy::inline_nolint(bool) const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::file(cxxlens::path,std::string)
+        const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::range(cxxlens::source_span,std::string)
+        const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::symbol(cxxlens::symbol_id,std::string)
+        const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::rule(std::string,std::string) const;
+        cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::category(std::string,std::string) const; cxxlens::rules::suppression_policy
+        cxxlens::rules::suppression_policy::tag(std::string,std::string) const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::minimum_severity(cxxlens::severity)
+        const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::baseline(std::vector<std::string>) const;
+        cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::external(std::vector<cxxlens::rules::suppression_entry>)
+        const; cxxlens::rules::suppression_policy cxxlens::rules::suppression_policy::require_justification(bool) const; cxxlens::rules::suppression_policy
+        cxxlens::rules::suppression_policy::reject_expired(bool) const; std::string cxxlens::rules::suppression_policy::to_json()
+        const
+      signature_fingerprint: sha256:5efd21c566df3b86e0eb337fcaff0dc54c2bdbcec599ab91b23c6bb286880367
+    family_members:
+    - cxxlens::rules::suppression_policy::none
+    - cxxlens::rules::suppression_policy::inline_nolint
+    - cxxlens::rules::suppression_policy::file
+    - cxxlens::rules::suppression_policy::range
+    - cxxlens::rules::suppression_policy::symbol
+    - cxxlens::rules::suppression_policy::rule
+    - cxxlens::rules::suppression_policy::category
+    - cxxlens::rules::suppression_policy::tag
+    - cxxlens::rules::suppression_policy::minimum_severity
+    - cxxlens::rules::suppression_policy::baseline
+    - cxxlens::rules::suppression_policy::external
+    - cxxlens::rules::suppression_policy::require_justification
+    - cxxlens::rules::suppression_policy::reject_expired
+    - cxxlens::rules::suppression_policy::to_json
+    semantics:
+    - suppression policy follows rules.suppression-accounting.v1 over one declared authoritative snapshot/value.
+    - Complete empty, unresolved, unsupported, ambiguous, partial, and failure outcomes remain distinct.
+    - Identity/order/dedup/variant/provenance and suppression/truncation accounting are deterministic and schema-versioned.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:finding_set
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:unresolved
+      - public-type:rules:diagnostic_template
+      - public-type:rules:rule
+      - public-type:rules:rule_builder
+      - public-type:rules:rule_failure_policy
+      - public-type:rules:rule_metadata
+      - public-type:rules:rule_pack
+      - public-type:rules:rule_run_options
+      - public-type:rules:suppression_entry
+      - public-type:rules:suppression_origin
+      - public-type:rules:suppression_policy
+      - public-type:select:selector_requirements
+      - public-type:select:semantic_selector
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.rules.package_internal_engine
+      - shared.package.rules.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_finding_set.schema.yaml
+      - schema:schemas/cxxlens_rule.schema.yaml
+      - schema:schemas/cxxlens_suppression.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-RL-003
+      design_sections:
+      - '17'
+      - '39.18'
+      doxygen_obligation: Document immutable ownership/lifetime, ID/version and dependencies, all result outcomes, suppression/fix
+        or projection semantics, ordering/dedup/variants, evidence/coverage/guarantee, budgets, compatibility, and schema.
+    acceptance:
+      positive:
+        id: API-RULE-005.positive
+        expression: Execute suppression policy with exact-version complete authoritative input.
+        expected: Canonical deterministic value/output with complete accounting and justified guarantee.
+      negative:
+        id: API-RULE-005.negative
+        expression: Use invalid metadata/template/pattern/input/schema, conflicting identity, or unsupported format/version.
+        expected: Stable structured failure; no fallback, prose control, re-execution, or side effect.
+      ambiguous:
+        id: API-RULE-005.ambiguous
+        expression: Use variants, provider failure, suppression conflicts/expiry, unsafe fix, or reached run/output budget.
+        expected: Preserved authority plus provenance, typed unresolved/coverage/truncation, and downgraded guarantee.
+  - api_id: API-REPORT-001
+    atomic_unit: AU-REPORT-001
+    package: report
+    policy: report.authoritative-projection.v1
+    declaration:
+      source: contracts/candidates/47/rules_report.hpp
+      signature: cxxlens::result<cxxlens::report::rendered_report> cxxlens::report::render(const cxxlens::finding_set&,cxxlens::report::options)
+      signature_fingerprint: sha256:8f3a8427029307727002b32c4844c196d71e8d95f04c067163148f2c097def55
+    family_members:
+    - cxxlens::report::render(finding_set)
+    semantics:
+    - finding set rendering follows report.authoritative-projection.v1 over one declared authoritative snapshot/value.
+    - Complete empty, unresolved, unsupported, ambiguous, partial, and failure outcomes remain distinct.
+    - Identity/order/dedup/variant/provenance and suppression/truncation accounting are deterministic and schema-versioned.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:finding_set
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:unresolved
+      - public-type:report:report::format
+      - public-type:report:report::options
+      - public-type:report:report::path_presentation
+      - public-type:report:report::rendered_report
+      shared_components:
+      - shared.package.report.package_internal_engine
+      - shared.package.report.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_report_options.schema.yaml
+      - schema:schemas/cxxlens_rendered_report.schema.yaml
+    dependency_apis:
+    - API-CORE-006
+    traceability:
+      requirements_or_use_cases:
+      - QR-001
+      design_sections:
+      - '26'
+      - '39.18'
+      doxygen_obligation: Document immutable ownership/lifetime, ID/version and dependencies, all result outcomes, suppression/fix
+        or projection semantics, ordering/dedup/variants, evidence/coverage/guarantee, budgets, compatibility, and schema.
+    acceptance:
+      positive:
+        id: API-REPORT-001.positive
+        expression: Execute finding set rendering with exact-version complete authoritative input.
+        expected: Canonical deterministic value/output with complete accounting and justified guarantee.
+      negative:
+        id: API-REPORT-001.negative
+        expression: Use invalid metadata/template/pattern/input/schema, conflicting identity, or unsupported format/version.
+        expected: Stable structured failure; no fallback, prose control, re-execution, or side effect.
+      ambiguous:
+        id: API-REPORT-001.ambiguous
+        expression: Use variants, provider failure, suppression conflicts/expiry, unsafe fix, or reached run/output budget.
+        expected: Preserved authority plus provenance, typed unresolved/coverage/truncation, and downgraded guarantee.
+  - api_id: API-REPORT-002
+    atomic_unit: AU-REPORT-002
+    package: report
+    policy: report.authoritative-projection.v1
+    declaration:
+      source: contracts/candidates/47/rules_report.hpp
+      signature: cxxlens::result<cxxlens::report::rendered_report> cxxlens::report::render(const cxxlens::transform::edit_plan&,cxxlens::report::options)
+      signature_fingerprint: sha256:3d3125085729c443f2c5036d50b9236b05b0241bb501f940ca76987e92dc80c3
+    family_members:
+    - cxxlens::report::render(edit_plan)
+    semantics:
+    - edit plan rendering follows report.authoritative-projection.v1 over one declared authoritative snapshot/value.
+    - Complete empty, unresolved, unsupported, ambiguous, partial, and failure outcomes remain distinct.
+    - Identity/order/dedup/variant/provenance and suppression/truncation accounting are deterministic and schema-versioned.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:finding_set
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:unresolved
+      - public-type:report:report::format
+      - public-type:report:report::options
+      - public-type:report:report::path_presentation
+      - public-type:report:report::rendered_report
+      shared_components:
+      - shared.package.report.package_internal_engine
+      - shared.package.report.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_report_options.schema.yaml
+      - schema:schemas/cxxlens_rendered_report.schema.yaml
+    dependency_apis:
+    - API-TF-008
+    traceability:
+      requirements_or_use_cases:
+      - QR-001
+      design_sections:
+      - '26'
+      - '39.18'
+      doxygen_obligation: Document immutable ownership/lifetime, ID/version and dependencies, all result outcomes, suppression/fix
+        or projection semantics, ordering/dedup/variants, evidence/coverage/guarantee, budgets, compatibility, and schema.
+    acceptance:
+      positive:
+        id: API-REPORT-002.positive
+        expression: Execute edit plan rendering with exact-version complete authoritative input.
+        expected: Canonical deterministic value/output with complete accounting and justified guarantee.
+      negative:
+        id: API-REPORT-002.negative
+        expression: Use invalid metadata/template/pattern/input/schema, conflicting identity, or unsupported format/version.
+        expected: Stable structured failure; no fallback, prose control, re-execution, or side effect.
+      ambiguous:
+        id: API-REPORT-002.ambiguous
+        expression: Use variants, provider failure, suppression conflicts/expiry, unsafe fix, or reached run/output budget.
+        expected: Preserved authority plus provenance, typed unresolved/coverage/truncation, and downgraded guarantee.
+  - api_id: API-REPORT-003
+    atomic_unit: AU-REPORT-003
+    package: report
+    policy: report.authoritative-projection.v1
+    declaration:
+      source: contracts/candidates/47/rules_report.hpp
+      signature: cxxlens::result<cxxlens::report::rendered_report> cxxlens::report::render(const cxxlens::generate::generation_plan&,cxxlens::report::options)
+      signature_fingerprint: sha256:de5a08a8862cccc51dd3d42d903bf6b679e1e12abd8450368ad9d87041959137
+    family_members:
+    - cxxlens::report::render(generation_plan)
+    semantics:
+    - generation plan rendering follows report.authoritative-projection.v1 over one declared authoritative snapshot/value.
+    - Complete empty, unresolved, unsupported, ambiguous, partial, and failure outcomes remain distinct.
+    - Identity/order/dedup/variant/provenance and suppression/truncation accounting are deterministic and schema-versioned.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:finding_set
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:unresolved
+      - public-type:report:report::format
+      - public-type:report:report::options
+      - public-type:report:report::path_presentation
+      - public-type:report:report::rendered_report
+      shared_components:
+      - shared.package.report.package_internal_engine
+      - shared.package.report.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_report_options.schema.yaml
+      - schema:schemas/cxxlens_rendered_report.schema.yaml
+    dependency_apis:
+    - API-GEN-001
+    traceability:
+      requirements_or_use_cases:
+      - QR-001
+      design_sections:
+      - '26'
+      - '39.18'
+      doxygen_obligation: Document immutable ownership/lifetime, ID/version and dependencies, all result outcomes, suppression/fix
+        or projection semantics, ordering/dedup/variants, evidence/coverage/guarantee, budgets, compatibility, and schema.
+    acceptance:
+      positive:
+        id: API-REPORT-003.positive
+        expression: Execute generation plan rendering with exact-version complete authoritative input.
+        expected: Canonical deterministic value/output with complete accounting and justified guarantee.
+      negative:
+        id: API-REPORT-003.negative
+        expression: Use invalid metadata/template/pattern/input/schema, conflicting identity, or unsupported format/version.
+        expected: Stable structured failure; no fallback, prose control, re-execution, or side effect.
+      ambiguous:
+        id: API-REPORT-003.ambiguous
+        expression: Use variants, provider failure, suppression conflicts/expiry, unsafe fix, or reached run/output budget.
+        expected: Preserved authority plus provenance, typed unresolved/coverage/truncation, and downgraded guarantee.
+  - api_id: API-REPORT-004
+    atomic_unit: AU-REPORT-004
+    package: report
+    policy: report.authoritative-projection.v1
+    declaration:
+      source: contracts/candidates/47/rules_report.hpp
+      signature: cxxlens::result<cxxlens::report::rendered_report> cxxlens::report::render(const cxxlens::review::review_report&,cxxlens::report::options)
+      signature_fingerprint: sha256:8ee2b2a7feccf83bc667a349d05680a53f0ea3b12983b2358041cc744b56f32d
+    family_members:
+    - cxxlens::report::render(review_report)
+    semantics:
+    - review report rendering follows report.authoritative-projection.v1 over one declared authoritative snapshot/value.
+    - Complete empty, unresolved, unsupported, ambiguous, partial, and failure outcomes remain distinct.
+    - Identity/order/dedup/variant/provenance and suppression/truncation accounting are deterministic and schema-versioned.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:finding_set
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:unresolved
+      - public-type:report:report::format
+      - public-type:report:report::options
+      - public-type:report:report::path_presentation
+      - public-type:report:report::rendered_report
+      shared_components:
+      - shared.package.report.package_internal_engine
+      - shared.package.report.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_report_options.schema.yaml
+      - schema:schemas/cxxlens_rendered_report.schema.yaml
+    dependency_apis:
+    - API-RV-005
+    traceability:
+      requirements_or_use_cases:
+      - QR-001
+      design_sections:
+      - '26'
+      - '39.18'
+      doxygen_obligation: Document immutable ownership/lifetime, ID/version and dependencies, all result outcomes, suppression/fix
+        or projection semantics, ordering/dedup/variants, evidence/coverage/guarantee, budgets, compatibility, and schema.
+    acceptance:
+      positive:
+        id: API-REPORT-004.positive
+        expression: Execute review report rendering with exact-version complete authoritative input.
+        expected: Canonical deterministic value/output with complete accounting and justified guarantee.
+      negative:
+        id: API-REPORT-004.negative
+        expression: Use invalid metadata/template/pattern/input/schema, conflicting identity, or unsupported format/version.
+        expected: Stable structured failure; no fallback, prose control, re-execution, or side effect.
+      ambiguous:
+        id: API-REPORT-004.ambiguous
+        expression: Use variants, provider failure, suppression conflicts/expiry, unsafe fix, or reached run/output budget.
+        expected: Preserved authority plus provenance, typed unresolved/coverage/truncation, and downgraded guarantee.
+  production_implementation_changed: false
+  candidate_fingerprint: sha256:a7d7d2ef4dc907b517ead76a54d36ba067fcc0f1aa5da405eebef30e1d6d8143

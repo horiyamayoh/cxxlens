@@ -235,6 +235,10 @@ install(
         schemas/cxxlens_search_options.schema.yaml
         schemas/cxxlens_graph.schema.yaml
         schemas/cxxlens_graph_options.schema.yaml
+        schemas/cxxlens_rule.schema.yaml
+        schemas/cxxlens_suppression.schema.yaml
+        schemas/cxxlens_report_options.schema.yaml
+        schemas/cxxlens_rendered_report.schema.yaml
         schemas/cxxlens_virtual_candidate_resolution.schema.yaml
         schemas/cxxlens_workspace_doctor.schema.yaml
         schemas/cxxlens_workspace_context.schema.yaml

@@ -108,6 +108,11 @@ add_custom_target(
     "-I${CMAKE_CURRENT_SOURCE_DIR}/include"
     "-I${CMAKE_CURRENT_SOURCE_DIR}/contracts/candidates/46"
     "${CMAKE_CURRENT_SOURCE_DIR}/contracts/candidates/46/graph_usage.cpp"
+  COMMAND
+    "${CMAKE_CXX_COMPILER}" -std=c++23 -fsyntax-only
+    "-I${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "-I${CMAKE_CURRENT_SOURCE_DIR}/contracts/candidates/47"
+    "${CMAKE_CURRENT_SOURCE_DIR}/contracts/candidates/47/rules_report_usage.cpp"
   VERBATIM)
 
 add_custom_target(

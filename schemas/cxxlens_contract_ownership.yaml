@@ -912,6 +912,13 @@ public_types:
   owner_atomic_unit: AU-REPORT-001
   steward: integration.package.report
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-report
+- id: public-type:report:report::rendered_report
+  type: report::rendered_report
+  package: report
+  header: <cxxlens/report.hpp>
+  owner_atomic_unit: AU-REPORT-001
+  steward: integration.package.report
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-report
 - id: public-type:review:baseline
   type: baseline
   package: review
@@ -947,6 +954,13 @@ public_types:
   owner_atomic_unit: AU-RV-001
   steward: integration.package.review
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-review
+- id: public-type:rules:diagnostic_template
+  type: diagnostic_template
+  package: rules
+  header: <cxxlens/rules.hpp>
+  owner_atomic_unit: AU-RULE-001
+  steward: integration.package.rules
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-rules
 - id: public-type:rules:rule
   type: rule
   package: rules
@@ -956,6 +970,13 @@ public_types:
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-rules
 - id: public-type:rules:rule_builder
   type: rule_builder
+  package: rules
+  header: <cxxlens/rules.hpp>
+  owner_atomic_unit: AU-RULE-001
+  steward: integration.package.rules
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-rules
+- id: public-type:rules:rule_failure_policy
+  type: rule_failure_policy
   package: rules
   header: <cxxlens/rules.hpp>
   owner_atomic_unit: AU-RULE-001
@@ -977,6 +998,20 @@ public_types:
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-rules
 - id: public-type:rules:rule_run_options
   type: rule_run_options
+  package: rules
+  header: <cxxlens/rules.hpp>
+  owner_atomic_unit: AU-RULE-001
+  steward: integration.package.rules
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-rules
+- id: public-type:rules:suppression_entry
+  type: suppression_entry
+  package: rules
+  header: <cxxlens/rules.hpp>
+  owner_atomic_unit: AU-RULE-001
+  steward: integration.package.rules
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-rules
+- id: public-type:rules:suppression_origin
+  type: suppression_origin
   package: rules
   header: <cxxlens/rules.hpp>
   owner_atomic_unit: AU-RULE-001
@@ -2218,6 +2253,21 @@ schemas:
   owner_atomic_unit: AU-CORE-001
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_rendered_report.schema.yaml
+  path: schemas/cxxlens_rendered_report.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_report_options.schema.yaml
+  path: schemas/cxxlens_report_options.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_rule.schema.yaml
+  path: schemas/cxxlens_rule.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
 - id: schema:schemas/cxxlens_scheduler_trace.schema.yaml
   path: schemas/cxxlens_scheduler_trace.schema.yaml
   owner_atomic_unit: AU-CORE-001
@@ -2248,6 +2298,11 @@ schemas:
   owner_atomic_unit: AU-CORE-001
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_suppression.schema.yaml
+  path: schemas/cxxlens_suppression.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
 - id: schema:schemas/cxxlens_testing_fixture.schema.yaml
   path: schemas/cxxlens_testing_fixture.schema.yaml
   owner_atomic_unit: AU-CORE-001
@@ -2274,8 +2329,8 @@ schemas:
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
 summary:
-  public_type_count: 187
+  public_type_count: 192
   shared_component_count: 66
   provider_subject_count: 24
-  schema_count: 61
-semantic_digest: sha256:ac79c3f79b8857ed98148db4262ed76c99673f9c7a68b13a07ceae4397f3375e
+  schema_count: 65
+semantic_digest: sha256:1c7c2e728d01190342ed9aaf52d96e9b5e22b1d51cd42655507b22113bbc27a8

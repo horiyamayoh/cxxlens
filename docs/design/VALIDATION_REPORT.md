@@ -69,18 +69,18 @@
 | interop | 4 |
 | configuration | 4 |
 
-## Phase B package Contract Candidates (#43–#46)
+## Phase B package Contract Candidates (#43–#47)
 
-- candidate group: 4
-- candidate packages: `configuration`, `core`, `explain`, `facts`, `graph`, `interop`, `search`, `select`, `testing`, `workspace`（10）
-- assigned API: 70、exact declaration: 70、unresolved declaration: 0
-- implementation state: `conformant` 47、`unimplemented` 23（変更なし）
-- policy record: 23、各 record の result outcome 6種: 完全
-- positive / negative / ambiguous acceptance: 各 API 1件、計210件
-- public type 187 / shared component 66 / provider subject 24 / schema 61: owner 一意、dangling 0
+- candidate group: 5
+- candidate packages: `configuration`, `core`, `explain`, `facts`, `graph`, `interop`, `report`, `rules`, `search`, `select`, `testing`, `workspace`（12）
+- assigned API: 79、exact declaration: 79、unresolved declaration: 0
+- implementation state: `conformant` 47、`unimplemented` 32（変更なし）
+- policy record: 27、各 record の result outcome 6種: 完全
+- positive / negative / ambiguous acceptance: 各 API 1件、計237件
+- public type 192 / shared component 66 / provider subject 24 / schema 65: owner 一意、dangling 0
 - registry owner and entry overlap: 0
-- candidate C++23 syntax usage: 5/5 PASS
-- package candidate validator/test: 12/12 PASS
+- candidate C++23 syntax usage: 6/6 PASS
+- package candidate validator/test: 13/13 PASS
 - production implementation / public install integration / final freeze: 未主張（#53 / #54 owner を維持）
 
 ### Issue #43 core・configuration・testing
@@ -139,3 +139,17 @@
 - #44 facts/workspace、#45 select/search、#50 flow owner/provider boundary: dangling 0
 - candidate C++23 syntax usage: 1/1 PASS
 - candidate fingerprint: `sha256:3c8f4fec0bb55eae81842b2dc4dec84c5efcfc236621f4b9e73888736de9f940`
+
+### Issue #47 rules・report
+
+- candidate packages: `report`, `rules`（2）
+- assigned API: 9、exact declaration: 9、unresolved declaration: 0
+- implementation state: `unimplemented` 9（変更なし）
+- policy record: 4、各 record の result outcome 6種: 完全
+- positive / negative / ambiguous acceptance: 各 API 1件、計27件
+- immutable rule identity/version/builder/requirements/shared execution/reduction: 完全
+- suppression typed key/precedence/provenance/expiry/unused/accounting: 完全
+- finding/edit/generation/review authoritative owner compatibility boundary: dangling 0
+- report format/options/envelope、redaction、UTF-8/LF、record-boundary budget truncation: 完全
+- candidate C++23 syntax usage: 1/1 PASS
+- candidate fingerprint: `sha256:a7d7d2ef4dc907b517ead76a54d36ba067fcc0f1aa5da405eebef30e1d6d8143`
