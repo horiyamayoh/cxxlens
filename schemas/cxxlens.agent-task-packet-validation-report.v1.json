@@ -4,16 +4,17 @@
   "blocker_counts": {
     "exact_declaration_unresolved": 77
   },
-  "catalog_fingerprint": "sha256:f15210027efab175410e651b45c9a80feada443719c56732ed94663b82da7d8e",
+  "catalog_fingerprint": "sha256:0b8002c533caafa0c269288db9ca32b27da9fb888d8217431cf9851e404006b5",
   "checks": [
     "atomic-unit-exactly-once",
     "catalog-and-source-fingerprint",
     "family-indivisibility",
     "root-order-process-determinism",
     "schema-and-semantic-digest",
+    "shared-implementation-dependency-closure",
     "typed-dependency-resolution"
   ],
-  "corpus_semantic_digest": "sha256:02a75b8c49a1e55b4be4e68334166b4f4f0dc42ee85b6e124fcc31f278f7b4f7",
+  "corpus_semantic_digest": "sha256:a7df33f415b656232d5ec60badf94b79b493d6b48f5ad484077fb8b661a7d5a7",
   "generation_state_counts": {
     "blocked": 77,
     "complete": 47,

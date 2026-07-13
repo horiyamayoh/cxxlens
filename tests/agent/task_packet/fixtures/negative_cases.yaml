@@ -14,6 +14,8 @@ cases:
     expected_code: task_packet.duplicate-membership
   - id: dependency_cycle
     expected_code: task_packet.dependency-cycle
+  - id: hidden_shared_dependency
+    expected_code: task_packet.shared-dependency-undeclared
   - id: shared_steward_ambiguity
     expected_code: task_packet.shared-steward-ambiguous
   - id: maturity_only_readiness

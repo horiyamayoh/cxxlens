@@ -1127,7 +1127,7 @@
     }
   ],
   "schema": "cxxlens.agent-ownership.v1",
-  "semantic_digest": "sha256:104d0a6fa432b10dfa9ff41074a4f3e1c4ccc39269b9cd1c6258c2c4e7d64dd9",
+  "semantic_digest": "sha256:7ba898d72b51cdafd4b5919f0a69f2fdc7cf75f616987d7a5578d549978602b0",
   "skeletons": [
     {
       "api_id": "API-CFG-001",
@@ -2659,7 +2659,7 @@
     "tracked_path_count": 360,
     "unit_count": 124
   },
-  "task_packet_digest": "sha256:02a75b8c49a1e55b4be4e68334166b4f4f0dc42ee85b6e124fcc31f278f7b4f7",
+  "task_packet_digest": "sha256:a7df33f415b656232d5ec60badf94b79b493d6b48f5ad484077fb8b661a7d5a7",
   "tracked_paths": [
     {
       "access": "exclusive_write",

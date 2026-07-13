@@ -27,9 +27,13 @@ fingerprints, and a combined contract fingerprint. A coherent method, builder, f
 function family records its entire surface under `family_contract`; the surface is indivisible.
 
 `dependencies` keeps facts, capabilities, expressions and their concrete expansions, minimum
-precision, API IDs, and derived atomic-unit IDs as separate typed fields. `traceability`, `behavior`,
-and `quality_obligations` retain requirements, errors, guarantees, side effects, evidence, coverage,
-unresolved, and schema obligations without manufacturing missing catalog facts.
+precision, API IDs, derived atomic-unit IDs, and typed implementation components as separate
+fields. Package-engine, shared-public-type, schema/fixture, fact-provider, and capability-provider
+components name their owner unit, steward, reason, source contract, and required semantics version.
+The owner closure is included in `atomic_units`; a missing component is rejected with a stable
+fail-closed diagnostic. `traceability`, `behavior`, and `quality_obligations` retain requirements,
+errors, guarantees, side effects, evidence, coverage, unresolved, and schema obligations without
+manufacturing missing catalog facts.
 
 Every record exposes positive, negative, and ambiguous fixture requirements. Existing test/example
 paths are evidence candidates, not an inferred claim about which category they cover. Acceptance
@@ -44,9 +48,9 @@ catalog says so.
 ## Atomic units and coordination
 
 The corpus-level `atomic_units` array gives exactly-once API membership and the complete family
-surface. Issue #28 owns the separate file-ownership and shared-steward contract; packets reference
-that version and issue but do not guess path owners. Multiple shared-steward references are rejected
-as ambiguous.
+surface. Issue #28 owns the separate file-ownership contract. Shared-contract steward references
+are derived from the catalog's exactly-once package contract instead of being emitted as an empty
+placeholder; missing, changed, or ambiguous steward/component projections are rejected.
 
 Packet, corpus, and validation-report digests exclude timestamps and absolute checkout roots.
 Package/API input order, checkout root, and process count therefore cannot alter semantic output.

@@ -14,6 +14,11 @@ API and atomic unit exactly once and binds the decision to catalog, packet, owne
 foundation, design-package, and CI-workflow fingerprints. Any relevant input drift makes the checked
 artifact stale and therefore expires authorization automatically.
 
+The dependency fingerprint includes typed shared package contracts, provider ownership and
+semantics versions, edge provenance, blocking chains, and package-integration prerequisites. A
+provider declaration without a unique owner, an incomplete required semantics version, or an
+undeclared shared component denies readiness even when the provider is otherwise marked available.
+
 ## Current decision
 
 The current manifest denies a new parallel implementation wave: 47 units are already complete, 77

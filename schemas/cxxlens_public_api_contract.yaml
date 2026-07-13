@@ -3771,6 +3771,48 @@ registries:
     - symbol
     - type
     expansion_order: lexicographic_unique
+  shared_implementation_contracts:
+  - {id: shared.package.configuration, package: configuration, owner_atomic_unit: AU-CFG-001, steward: integration.package.configuration, semantics_version: cxxlens.package.configuration.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-configuration}
+  - {id: shared.package.copy, package: copy, owner_atomic_unit: AU-COPY-001, steward: integration.package.copy, semantics_version: cxxlens.package.copy.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-copy}
+  - {id: shared.package.core, package: core, owner_atomic_unit: AU-CORE-001, steward: integration.package.core, semantics_version: cxxlens.package.core.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-core}
+  - {id: shared.package.explain, package: explain, owner_atomic_unit: AU-EXP-002, steward: integration.package.explain, semantics_version: cxxlens.package.explain.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-explain}
+  - {id: shared.package.facts, package: facts, owner_atomic_unit: AU-FACT-001, steward: integration.package.facts, semantics_version: cxxlens.package.facts.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-facts}
+  - {id: shared.package.flow, package: flow, owner_atomic_unit: AU-FLOW-001, steward: integration.package.flow, semantics_version: cxxlens.package.flow.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-flow}
+  - {id: shared.package.fuzz, package: fuzz, owner_atomic_unit: AU-FUZZ-001, steward: integration.package.fuzz, semantics_version: cxxlens.package.fuzz.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-fuzz}
+  - {id: shared.package.generate, package: generate, owner_atomic_unit: AU-GEN-001, steward: integration.package.generate, semantics_version: cxxlens.package.generate.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-generate}
+  - {id: shared.package.graph, package: graph, owner_atomic_unit: AU-GRAPH-001, steward: integration.package.graph, semantics_version: cxxlens.package.graph.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-graph}
+  - {id: shared.package.interop, package: interop, owner_atomic_unit: AU-INT-001, steward: integration.package.interop, semantics_version: cxxlens.package.interop.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-interop}
+  - {id: shared.package.method_harness, package: method_harness, owner_atomic_unit: AU-METHOD-001, steward: integration.package.method_harness, semantics_version: cxxlens.package.method_harness.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-method_harness}
+  - {id: shared.package.mock, package: mock, owner_atomic_unit: AU-MOCK-001, steward: integration.package.mock, semantics_version: cxxlens.package.mock.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-mock}
+  - {id: shared.package.models, package: models, owner_atomic_unit: AU-MODEL-001, steward: integration.package.models, semantics_version: cxxlens.package.models.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-models}
+  - {id: shared.package.qa, package: qa, owner_atomic_unit: AU-QA-001, steward: integration.package.qa, semantics_version: cxxlens.package.qa.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-qa}
+  - {id: shared.package.report, package: report, owner_atomic_unit: AU-REPORT-001, steward: integration.package.report, semantics_version: cxxlens.package.report.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-report}
+  - {id: shared.package.review, package: review, owner_atomic_unit: AU-RV-001, steward: integration.package.review, semantics_version: cxxlens.package.review.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-review}
+  - {id: shared.package.rules, package: rules, owner_atomic_unit: AU-RULE-001, steward: integration.package.rules, semantics_version: cxxlens.package.rules.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-rules}
+  - {id: shared.package.search, package: search, owner_atomic_unit: AU-SRCH-003, steward: integration.package.search, semantics_version: cxxlens.package.search.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-search}
+  - {id: shared.package.select, package: select, owner_atomic_unit: AU-SEL-001, steward: integration.package.select, semantics_version: cxxlens.package.select.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-select}
+  - {id: shared.package.testing, package: testing, owner_atomic_unit: AU-TEST-001, steward: integration.package.testing, semantics_version: cxxlens.package.testing.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-testing}
+  - {id: shared.package.transform, package: transform, owner_atomic_unit: AU-TF-001, steward: integration.package.transform, semantics_version: cxxlens.package.transform.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform}
+  - {id: shared.package.workspace, package: workspace, owner_atomic_unit: AU-WS-001, steward: integration.package.workspace, semantics_version: cxxlens.package.workspace.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-workspace}
+  provider_implementation_contracts:
+  - id: provider.fact.compile-command
+    kind: fact_provider_implementation
+    subjects: [compile_command]
+    owner_atomic_unit: AU-WS-001
+    steward: steward.workspace
+    semantics_version: cxxlens.fact-provider.compile-command.v1
+    source_contract: schemas/cxxlens_m1_completion.yaml
+  - id: provider.fact.frontend
+    kind: fact_provider_implementation
+    subjects: [call, cfg_summary, control_flow, conversion, coverage, declaration, definition, effect_summary, file, finding, flow_summary, include_relation, inheritance, macro_expansion, override_relation, reference, symbol, type]
+    owner_atomic_unit: AU-WS-005
+    steward: steward.facts
+    semantics_version: cxxlens.fact-provider.frontend.v1
+    source_contract: schemas/cxxlens_m1_completion.yaml
+  - {id: provider.capability.include-cleaner, kind: capability_provider_implementation, subjects: [include.cleaner], owner_atomic_unit: AU-WS-005, steward: steward.repository, semantics_version: cxxlens.capability.include-cleaner.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#capability-include-cleaner}
+  - {id: provider.capability.interop-clang, kind: capability_provider_implementation, subjects: [interop.clang], owner_atomic_unit: AU-INT-001, steward: steward.interop, semantics_version: cxxlens.capability.interop-clang.v1, source_contract: schemas/cxxlens_m1_completion.yaml}
+  - {id: provider.capability.qa-coverage, kind: capability_provider_implementation, subjects: [qa.coverage], owner_atomic_unit: AU-QA-002, steward: steward.qa, semantics_version: cxxlens.capability.qa-coverage.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#capability-qa-coverage}
+  - {id: provider.capability.qa-sanitizers, kind: capability_provider_implementation, subjects: [qa.sanitizers], owner_atomic_unit: AU-QA-001, steward: steward.qa, semantics_version: cxxlens.capability.qa-sanitizers.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#capability-qa-sanitizers}
   implementation_states:
   - unimplemented
   - implemented

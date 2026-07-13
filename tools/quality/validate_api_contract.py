@@ -182,6 +182,7 @@ def validate_document(document: Any, inventory_text: str | None = None) -> dict:
     package_ids: set[str] = set()
     api_ids: set[str] = set()
     atomic_states: dict[str, set[str]] = collections.defaultdict(set)
+    package_units: dict[str, set[str]] = collections.defaultdict(set)
     graph: dict[str, list[str]] = {}
     required_package = {"id", "header", "purpose", "public_types", "apis"}
     required_api = {
@@ -269,6 +270,7 @@ def validate_document(document: Any, inventory_text: str | None = None) -> dict:
             if readiness["state"] in {"ready", "complete"} and blockers:
                 fail(f"{api_id}: non-blocked readiness cannot have blockers")
             atomic_states[atomic_unit["id"]].add(readiness["state"])
+            package_units[package_id].add(atomic_unit["id"])
 
             if api["implementation_state"] != "unimplemented":
                 evidence = _unique_strings(
@@ -334,6 +336,74 @@ def validate_document(document: Any, inventory_text: str | None = None) -> dict:
         if dangling:
             fail(f"{api_id}: dangling API dependencies: {sorted(dangling)}")
     _check_no_api_cycles(graph)
+
+    shared_contracts = _sequence(
+        registries.get("shared_implementation_contracts"),
+        "registries.shared_implementation_contracts",
+    )
+    shared_ids: set[str] = set()
+    shared_packages: set[str] = set()
+    for contract in shared_contracts:
+        if not isinstance(contract, dict):
+            fail("shared implementation contract must be a mapping")
+        contract_id = contract.get("id")
+        package_id = contract.get("package")
+        owner = contract.get("owner_atomic_unit")
+        if not isinstance(contract_id, str) or not contract_id:
+            fail("shared implementation contract must have an id")
+        if contract_id in shared_ids:
+            fail(f"duplicate shared implementation contract: {contract_id}")
+        shared_ids.add(contract_id)
+        if package_id not in package_ids or package_id in shared_packages:
+            fail(f"duplicate or unknown shared contract package: {package_id}")
+        shared_packages.add(package_id)
+        if owner not in package_units[package_id]:
+            fail(f"{contract_id}: owner must be an atomic unit in package {package_id}")
+        for field in ("steward", "semantics_version", "source_contract"):
+            if not isinstance(contract.get(field), str) or not contract[field]:
+                fail(f"{contract_id}: {field} must be a non-empty string")
+    if shared_packages != package_ids:
+        fail(
+            "shared implementation contracts must cover every package exactly once: "
+            f"{sorted(package_ids - shared_packages)}"
+        )
+
+    provider_contracts = _sequence(
+        registries.get("provider_implementation_contracts"),
+        "registries.provider_implementation_contracts",
+    )
+    provider_ids: set[str] = set()
+    provider_subjects = {
+        "fact_provider_implementation": set(),
+        "capability_provider_implementation": set(),
+    }
+    for contract in provider_contracts:
+        if not isinstance(contract, dict):
+            fail("provider implementation contract must be a mapping")
+        contract_id = contract.get("id")
+        kind = contract.get("kind")
+        owner = contract.get("owner_atomic_unit")
+        if not isinstance(contract_id, str) or not contract_id:
+            fail("provider implementation contract must have an id")
+        if contract_id in provider_ids:
+            fail(f"duplicate provider implementation contract: {contract_id}")
+        provider_ids.add(contract_id)
+        if kind not in provider_subjects:
+            fail(f"{contract_id}: unknown provider implementation kind {kind}")
+        subjects = set(_unique_strings(contract.get("subjects"), f"{contract_id}.subjects"))
+        overlap = provider_subjects[kind] & subjects
+        if overlap:
+            fail(f"{contract_id}: ambiguous provider subjects {sorted(overlap)}")
+        provider_subjects[kind].update(subjects)
+        if owner not in atomic_states:
+            fail(f"{contract_id}: unknown owner atomic unit {owner}")
+        for field in ("steward", "semantics_version", "source_contract"):
+            if not isinstance(contract.get(field), str) or not contract[field]:
+                fail(f"{contract_id}: {field} must be a non-empty string")
+    if provider_subjects["fact_provider_implementation"] != fact_kinds:
+        fail("fact provider contracts must cover every fact kind exactly once")
+    if provider_subjects["capability_provider_implementation"] != capabilities:
+        fail("capability provider contracts must cover every capability exactly once")
 
     summary = document.get("summary")
     calculated = canonical_summary(document)

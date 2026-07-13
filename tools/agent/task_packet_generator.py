@@ -35,6 +35,11 @@ FAMILY_KINDS = {
     "static_factory_family",
 }
 SHA256 = re.compile(r"sha256:[0-9a-f]{64}$")
+SHARED_COMPONENT_KINDS = (
+    "package_internal_engine",
+    "schema_fixture_contract",
+    "shared_public_type",
+)
 
 
 class TaskPacketError(ValueError):
@@ -113,6 +118,75 @@ def expression_lookup(document: dict[str, Any]) -> dict[str, list[str]]:
         expression["id"]: sorted(expression["expands_to"])
         for expression in document["registries"]["dependency_expressions"]
     }
+
+
+def shared_contract_lookup(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        contract["package"]: contract
+        for contract in document["registries"]["shared_implementation_contracts"]
+    }
+
+
+def provider_subject_lookup(document: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
+    providers: dict[tuple[str, str], dict[str, Any]] = {}
+    for contract in document["registries"]["provider_implementation_contracts"]:
+        for subject in contract["subjects"]:
+            key = (contract["kind"], subject)
+            if key in providers:
+                fail("task_packet.provider-ambiguous", f"multiple providers for {subject}")
+            providers[key] = contract
+    return providers
+
+
+def implementation_components(
+    package: dict[str, Any],
+    api: dict[str, Any],
+    expressions: dict[str, list[str]],
+    shared_contracts: dict[str, dict[str, Any]],
+    providers: dict[tuple[str, str], dict[str, Any]],
+) -> list[dict[str, Any]]:
+    shared = shared_contracts[package["id"]]
+    components = [
+        {
+            "id": f"{shared['id']}.{kind}",
+            "kind": kind,
+            "subject": package["id"],
+            "owner_atomic_unit": shared["owner_atomic_unit"],
+            "steward": shared["steward"],
+            "reason": {
+                "package_internal_engine": "package APIs share one internal semantic engine",
+                "schema_fixture_contract": "package schema, golden, and fixture semantics are shared",
+                "shared_public_type": "package public value types require one contract owner",
+            }[kind],
+            "source_contract": shared["source_contract"],
+            "required_semantics_version": shared["semantics_version"],
+        }
+        for kind in SHARED_COMPONENT_KINDS
+    ]
+    requires = api.get("requires", {})
+    fact_subjects = set(requires.get("facts", []))
+    for expression_id in requires.get("expressions", []):
+        fact_subjects.update(expressions[expression_id])
+    subjects_by_kind = {
+        "fact_provider_implementation": sorted(fact_subjects),
+        "capability_provider_implementation": sorted(requires.get("capabilities", [])),
+    }
+    for kind, subjects in subjects_by_kind.items():
+        for subject in subjects:
+            contract = providers[(kind, subject)]
+            components.append(
+                {
+                    "id": f"{contract['id']}.{subject}",
+                    "kind": kind,
+                    "subject": subject,
+                    "owner_atomic_unit": contract["owner_atomic_unit"],
+                    "steward": contract["steward"],
+                    "reason": f"{subject} requires its declared implementation provider",
+                    "source_contract": contract["source_contract"],
+                    "required_semantics_version": contract["semantics_version"],
+                }
+            )
+    return sorted(components, key=lambda item: (item["kind"], item["id"]))
 
 
 def family_surface(api: dict[str, Any]) -> list[str]:
@@ -203,6 +277,8 @@ def make_packet(
     root: pathlib.Path,
     api_to_unit: dict[str, str],
     expressions: dict[str, list[str]],
+    shared_contracts: dict[str, dict[str, Any]],
+    providers: dict[tuple[str, str], dict[str, Any]],
 ) -> dict[str, Any]:
     api_id = api["id"]
     declaration = api["declaration"]
@@ -219,6 +295,13 @@ def make_packet(
         {"id": expression_id, "expands_to": expressions[expression_id]}
         for expression_id in sorted(requires.get("expressions", []))
     ]
+    components = implementation_components(
+        package, api, expressions, shared_contracts, providers
+    )
+    dependency_units = {
+        api_to_unit[item] for item in dependency_apis
+    } | {component["owner_atomic_unit"] for component in components}
+    dependency_units.discard(api["atomic_unit"]["id"])
     packet: dict[str, Any] = {
         "schema": PACKET_SCHEMA,
         "api_id": api_id,
@@ -248,7 +331,8 @@ def make_packet(
             "expressions": dependency_expressions,
             "minimum_precision": requires.get("minimum_precision"),
             "apis": dependency_apis,
-            "atomic_units": sorted({api_to_unit[item] for item in dependency_apis}),
+            "atomic_units": sorted(dependency_units),
+            "components": components,
         },
         "traceability": {
             "use_cases": sorted(api.get("use_cases", [])),
@@ -283,7 +367,7 @@ def make_packet(
         "coordination": {
             "ownership_contract": "cxxlens.agent-ownership.v1",
             "ownership_provider_issue": "#28",
-            "shared_contract_steward_refs": [],
+            "shared_contract_steward_refs": [shared_contracts[package["id"]]["steward"]],
         },
         "generation": {
             "state": generation_state(api),
@@ -329,8 +413,19 @@ def generate_corpus(document: dict[str, Any], root: pathlib.Path) -> dict[str, A
     entries = iter_apis(document)
     api_to_unit = {api["id"]: api["atomic_unit"]["id"] for _, api in entries}
     expressions = expression_lookup(document)
+    shared_contracts = shared_contract_lookup(document)
+    providers = provider_subject_lookup(document)
     packets = [
-        make_packet(package, api, root, api_to_unit, expressions) for package, api in entries
+        make_packet(
+            package,
+            api,
+            root,
+            api_to_unit,
+            expressions,
+            shared_contracts,
+            providers,
+        )
+        for package, api in entries
     ]
     units = make_atomic_units(packets)
     state_counts = collections.Counter(packet["generation"]["state"] for packet in packets)
@@ -378,6 +473,7 @@ def make_report(corpus: dict[str, Any]) -> dict[str, Any]:
             "family-indivisibility",
             "root-order-process-determinism",
             "schema-and-semantic-digest",
+            "shared-implementation-dependency-closure",
             "typed-dependency-resolution",
         ],
     }
@@ -431,6 +527,8 @@ def validate_corpus(
     known_facts = set(document["registries"]["fact_kinds"])
     known_capabilities = set(document["registries"]["capabilities"])
     known_expressions = expression_lookup(document)
+    shared_contracts = shared_contract_lookup(document)
+    provider_contracts = provider_subject_lookup(document)
     known_units = {api["atomic_unit"]["id"] for _, api in iter_apis(document)}
     expected_api_ids = set(catalog)
 
@@ -450,8 +548,18 @@ def validate_corpus(
             code = "task_packet.family-split" if family else "task_packet.atomic-unit-drift"
             fail(code, f"{api_id}: atomic unit differs from the catalog")
         steward_refs = packet.get("coordination", {}).get("shared_contract_steward_refs", [])
-        if not isinstance(steward_refs, list) or len(steward_refs) > 1:
+        if (
+            not isinstance(steward_refs, list)
+            or len(steward_refs) > 1
+            or len(steward_refs) != len(set(steward_refs))
+        ):
             fail("task_packet.shared-steward-ambiguous", f"{api_id}: multiple shared stewards")
+        expected_stewards = [shared_contracts[package["id"]]["steward"]]
+        if steward_refs != expected_stewards:
+            fail(
+                "task_packet.shared-steward-drift",
+                f"{api_id}: shared steward must be derived from the catalog",
+            )
         state = packet.get("generation", {}).get("state")
         expected_state = generation_state(api)
         if state != expected_state:
@@ -478,6 +586,31 @@ def validate_corpus(
         if declaration.get("source_fingerprint") != file_digest(source_path):
             fail("task_packet.source-drift", f"{api_id}: frozen declaration source changed")
         dependencies = packet.get("dependencies", {})
+        components = dependencies.get("components", [])
+        if not isinstance(components, list):
+            fail("task_packet.schema-invalid", f"{api_id}: components must be an array")
+        component_ids = [component.get("id") for component in components if isinstance(component, dict)]
+        if len(component_ids) != len(components) or len(component_ids) != len(set(component_ids)):
+            fail(
+                "task_packet.shared-dependency-ambiguous",
+                f"{api_id}: component dependencies are ambiguous",
+            )
+        expected_components = implementation_components(
+            package, api, known_expressions, shared_contracts, provider_contracts
+        )
+        expected_component_ids = {component["id"] for component in expected_components}
+        actual_component_ids = set(component_ids)
+        if expected_component_ids - actual_component_ids:
+            fail(
+                "task_packet.shared-dependency-undeclared",
+                f"{api_id}: missing shared dependencies "
+                f"{sorted(expected_component_ids - actual_component_ids)}",
+            )
+        if components != expected_components:
+            fail(
+                "task_packet.shared-dependency-drift",
+                f"{api_id}: shared dependency contract differs from the catalog",
+            )
         dependency_apis = dependencies.get("apis", [])
         dangling_apis = set(dependency_apis) - expected_api_ids
         if dangling_apis:
@@ -490,6 +623,15 @@ def validate_corpus(
             fail(
                 "task_packet.dangling-dependency",
                 f"{api_id}: dangling atomic units {sorted(dangling_units)}",
+            )
+        expected_units = {
+            catalog[dependency][1]["atomic_unit"]["id"] for dependency in dependency_apis
+        } | {component["owner_atomic_unit"] for component in components}
+        expected_units.discard(api["atomic_unit"]["id"])
+        if dependencies.get("atomic_units") != sorted(expected_units):
+            fail(
+                "task_packet.shared-dependency-drift",
+                f"{api_id}: atomic-unit dependency closure differs",
             )
         if set(dependencies.get("facts", [])) - known_facts:
             fail("task_packet.dangling-dependency", f"{api_id}: dangling fact dependency")

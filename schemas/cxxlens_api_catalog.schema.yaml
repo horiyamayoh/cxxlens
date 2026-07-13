@@ -26,11 +26,26 @@ properties:
     - fact_kinds
     - capabilities
     - dependency_expressions
+    - shared_implementation_contracts
+    - provider_implementation_contracts
     - implementation_states
     - readiness_states
     - use_cases
     - requirements
     - error_codes
+    properties:
+      shared_implementation_contracts:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          required: [id, package, owner_atomic_unit, steward, semantics_version, source_contract]
+      provider_implementation_contracts:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          required: [id, kind, subjects, owner_atomic_unit, steward, semantics_version, source_contract]
   packages:
     type: array
     minItems: 1

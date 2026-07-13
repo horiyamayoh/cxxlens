@@ -160,9 +160,28 @@ class TaskPacketTest(unittest.TestCase):
         }
         for packet in self.generated()["packets"]:
             dependencies = packet["dependencies"]
+            component_units = {
+                component["owner_atomic_unit"]
+                for component in dependencies["components"]
+            }
+            expected_units = {
+                api_to_unit[api_id] for api_id in dependencies["apis"]
+            } | component_units
+            expected_units.discard(packet["atomic_unit_id"])
             self.assertEqual(
                 dependencies["atomic_units"],
-                sorted({api_to_unit[api_id] for api_id in dependencies["apis"]}),
+                sorted(expected_units),
+            )
+            self.assertEqual(len(dependencies["components"]), len({
+                component["id"] for component in dependencies["components"]
+            }))
+            self.assertEqual(
+                packet["coordination"]["shared_contract_steward_refs"],
+                [next(
+                    component["steward"]
+                    for component in dependencies["components"]
+                    if component["kind"] == "package_internal_engine"
+                )],
             )
             for expression in dependencies["expressions"]:
                 self.assertEqual(
@@ -266,6 +285,7 @@ class TaskPacketTest(unittest.TestCase):
             "signature_drift": self.mutate_signature_drift,
             "duplicate_membership": self.mutate_duplicate_membership,
             "dependency_cycle": self.mutate_dependency_cycle,
+            "hidden_shared_dependency": self.mutate_hidden_shared_dependency,
             "shared_steward_ambiguity": self.mutate_shared_steward_ambiguity,
             "maturity_only_readiness": self.mutate_unresolved_ready,
         }
@@ -323,6 +343,11 @@ class TaskPacketTest(unittest.TestCase):
         second["dependencies"]["apis"] = [first["api_id"]]
         second["dependencies"]["atomic_units"] = [first["atomic_unit_id"]]
         self.resign(corpus, (first["api_id"], second["api_id"]))
+
+    def mutate_hidden_shared_dependency(self, corpus: dict) -> None:
+        packet = corpus["packets"][0]
+        packet["dependencies"]["components"].pop()
+        self.resign(corpus, (packet["api_id"],))
 
     @staticmethod
     def mutate_shared_steward_ambiguity(corpus: dict) -> None:

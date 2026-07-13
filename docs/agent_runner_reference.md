@@ -2,7 +2,10 @@
 
 The ready evaluator combines the task-packet corpus, ownership manifest, foundation completion
 manifests, fact/capability providers, and dependency requests. Its DAG nodes are atomic
-implementation units. Contract maturity is never a readiness input by itself.
+implementation units. Edges cover API dependencies, package engines, shared public types,
+schema/fixture contracts, and provider implementations; package-integration prerequisites are
+recorded as a separate edge scope. Every edge carries a reason, owner/steward, source contract, and
+required semantics version when applicable. Contract maturity is never a readiness input by itself.
 
 ```sh
 python3 tools/agent/ready_evaluator.py check --root .
@@ -21,6 +24,11 @@ quality target. Positive, negative, and ambiguous fixture categories are mandato
 integration remains a separate role and receives only conformant unit/shard digests. Its generated
 shard is blocked while any package unit is incomplete, and its preflight accepts only paths owned by
 that package integration role.
+
+A provider being named or globally available is insufficient: its owner unit must have completed
+the required semantics version. Blockers include the component/provider and recursively visible
+owner chain. Topological waves therefore place the package contract owner before leaf API units,
+and the report digest binds dispatch authorization to the full typed graph.
 
 ```sh
 python3 tools/agent/api_task_runner.py integrate --root . --package-id configuration

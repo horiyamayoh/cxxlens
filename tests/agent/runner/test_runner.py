@@ -137,6 +137,63 @@ class RunnerTest(unittest.TestCase):
                 self.assertEqual(blocker["chain"][0], node["atomic_unit_id"])
                 self.assertTrue(blocker["steward"])
 
+    def test_shared_components_providers_and_topology_fail_closed(self) -> None:
+        engine_edges = [
+            edge for edge in self.report["edges"]
+            if edge["kind"] == "package_internal_engine"
+        ]
+        by_owner: dict[str, list[dict]] = {}
+        for edge in engine_edges:
+            by_owner.setdefault(edge["to"], []).append(edge)
+        owner, shared_edges = next(
+            (owner, edges) for owner, edges in by_owner.items() if len(edges) >= 2
+        )
+        self.assertGreaterEqual(len({edge["from"] for edge in shared_edges}), 2)
+        wave_index = {
+            unit_id: index
+            for index, wave in enumerate(self.report["topological_waves"])
+            for unit_id in wave
+        }
+        self.assertTrue(all(wave_index[owner] < wave_index[edge["from"]] for edge in shared_edges))
+        self.assertTrue(all(
+            edge["reason"] and edge["owner"]["steward"] and edge["source_contract"]
+            for edge in self.report["edges"]
+        ))
+        self.assertTrue(any(
+            blocker["code"] == "shared-component-not-complete"
+            and ".shared_public_type" in blocker["subject"]
+            for node in self.report["nodes"]
+            for blocker in node["blockers"]
+        ))
+
+        inputs = list(self.inputs())
+        owner_unit = next(
+            provider["owner"]["atomic_unit_id"]
+            for provider in self.report["providers"]["facts"]
+            if provider["state"] == "available"
+            and provider["owner"]["atomic_unit_id"] != "AU-WS-001"
+        )
+        unit = next(item for item in inputs[0]["atomic_units"] if item["id"] == owner_unit)
+        unit["generation_state"] = "blocked"
+        unit["readiness_state"] = "blocked"
+        for packet in inputs[0]["packets"]:
+            if packet["atomic_unit_id"] == owner_unit:
+                packet["generation"] = {
+                    "state": "blocked",
+                    "block_reasons": ["provider_semantics_incomplete_fixture"],
+                }
+        incomplete = self.generated(tuple(inputs))
+        self.assertTrue(any(
+            provider["state"] == "available"
+            and provider["semantics_state"] == "incomplete"
+            for provider in incomplete["providers"]["facts"]
+        ))
+        self.assertTrue(any(
+            blocker["code"] == "provider-semantics-incomplete"
+            for node in incomplete["nodes"]
+            for blocker in node["blockers"]
+        ))
+
     def test_representative_minimal_prompts_resolve_one_constrained_unit(self) -> None:
         kinds = ["free_function", "method", "method_family", "builder_family", "static_factory"]
         for kind in kinds:
@@ -340,25 +397,34 @@ class RunnerTest(unittest.TestCase):
 
     def negative_dangling(self) -> None:
         report = copy.deepcopy(self.report)
-        report["edges"].append(
-            {
-                "from": report["nodes"][0]["atomic_unit_id"],
-                "to": "AU-NOT-999",
-                "kind": "api_dependency",
-                "via_api_ids": [report["nodes"][0]["api_ids"][0]],
-            }
-        )
+        edge = copy.deepcopy(next(edge for edge in report["edges"] if edge["scope"] == "readiness"))
+        edge["to"] = "AU-NOT-999"
+        edge["owner"]["atomic_unit_id"] = "AU-NOT-999"
+        report["edges"].append(edge)
         validate_report(report, self.report, self.schema)
 
     def negative_cycle(self) -> None:
         report = copy.deepcopy(self.report)
         first, second = report["topological_waves"][0][:2]
         api_id = report["nodes"][0]["api_ids"][0]
+        template = copy.deepcopy(next(edge for edge in report["edges"] if edge["scope"] == "readiness"))
+        template.update({
+            "scope": "readiness",
+            "kind": "api_dependency",
+            "component_id": None,
+            "reason": "negative cycle fixture",
+            "source_contract": "tests/agent/runner/fixtures/negative_cases.yaml",
+            "required_semantics_version": None,
+            "via_api_ids": [api_id],
+        })
+        forward = copy.deepcopy(template)
+        forward.update({"from": first, "to": second})
+        forward["owner"] = {"atomic_unit_id": second, "steward": "fixture"}
+        reverse = copy.deepcopy(template)
+        reverse.update({"from": second, "to": first})
+        reverse["owner"] = {"atomic_unit_id": first, "steward": "fixture"}
         report["edges"].extend(
-            [
-                {"from": first, "to": second, "kind": "api_dependency", "via_api_ids": [api_id]},
-                {"from": second, "to": first, "kind": "api_dependency", "via_api_ids": [api_id]},
-            ]
+            [forward, reverse]
         )
         validate_report(report, self.report, self.schema)
 

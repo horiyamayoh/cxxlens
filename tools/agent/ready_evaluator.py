@@ -105,70 +105,161 @@ def global_gates() -> list[dict[str, Any]]:
 def provider_registry(
     corpus: dict[str, Any], m1: dict[str, Any]
 ) -> dict[str, list[dict[str, Any]]]:
-    required_facts = sorted(
-        {
-            fact
-            for packet in corpus["packets"]
-            for fact in packet["dependencies"]["facts"]
-        }
-        | {
-            fact
-            for packet in corpus["packets"]
-            for expression in packet["dependencies"]["expressions"]
-            for fact in expression["expands_to"]
-        }
-    )
+    references: dict[tuple[str, str], dict[str, Any]] = {}
+    for packet in corpus["packets"]:
+        for component in packet["dependencies"]["components"]:
+            if component["kind"] not in {
+                "fact_provider_implementation",
+                "capability_provider_implementation",
+            }:
+                continue
+            key = (component["kind"], component["subject"])
+            if key in references and references[key] != component:
+                fail("ready.provider-ambiguity", f"provider contract differs for {key[1]}")
+            references[key] = component
+    unit_states = {
+        unit["id"]: unit["generation_state"] for unit in corpus["atomic_units"]
+    }
     available_facts = set(m1["fact_kinds"])
-    facts = [
-        {
-            "id": fact,
-            "state": "available" if fact in available_facts else "unavailable",
-            "evidence": (
-                ["schemas/cxxlens_m1_completion.yaml"]
-                if fact in available_facts
-                else [f"fact_provider_unavailable:{fact}"]
-            ),
-        }
-        for fact in required_facts
-    ]
-    required_capabilities = sorted(
-        {
-            capability
-            for packet in corpus["packets"]
-            for capability in packet["dependencies"]["capabilities"]
-        }
-    )
     available_capabilities = {"interop.clang"}
-    capabilities = [
-        {
-            "id": capability,
-            "state": "available" if capability in available_capabilities else "unavailable",
-            "evidence": (
-                ["schemas/cxxlens_m1_completion.yaml:API-INT-001,API-INT-002"]
-                if capability in available_capabilities
-                else [f"capability_provider_unavailable:{capability}"]
-            ),
-        }
-        for capability in required_capabilities
-    ]
+    rows = {"facts": [], "capabilities": []}
+    for (kind, subject), component in sorted(references.items()):
+        available = subject in (
+            available_facts
+            if kind == "fact_provider_implementation"
+            else available_capabilities
+        )
+        semantics_complete = unit_states.get(component["owner_atomic_unit"]) == "complete"
+        rows[
+            "facts" if kind == "fact_provider_implementation" else "capabilities"
+        ].append(
+            {
+                "id": subject,
+                "contract_id": component["id"],
+                "kind": kind,
+                "state": "available" if available else "unavailable",
+                "semantics_state": "complete" if semantics_complete else "incomplete",
+                "required_semantics_version": component["required_semantics_version"],
+                "provided_semantics_version": (
+                    component["required_semantics_version"] if semantics_complete else None
+                ),
+                "owner": {
+                    "atomic_unit_id": component["owner_atomic_unit"],
+                    "steward": component["steward"],
+                },
+                "source_contract": component["source_contract"],
+                "evidence": (
+                    [component["source_contract"]]
+                    if available
+                    else [f"provider_unavailable:{kind}:{subject}"]
+                ),
+            }
+        )
+    facts = rows["facts"]
+    capabilities = rows["capabilities"]
     return {"facts": facts, "capabilities": capabilities}
 
 
 def dependency_edges(corpus: dict[str, Any]) -> list[dict[str, Any]]:
-    grouped: dict[tuple[str, str], set[str]] = collections.defaultdict(set)
+    api_to_unit = {
+        packet["api_id"]: packet["atomic_unit_id"] for packet in corpus["packets"]
+    }
+    grouped: dict[str, dict[str, Any]] = {}
+
+    def add(edge: dict[str, Any], api_id: str) -> None:
+        key_value = copy.deepcopy(edge)
+        key_value.pop("via_api_ids")
+        key = canonical_json(key_value)
+        if key not in grouped:
+            grouped[key] = edge
+        grouped[key]["via_api_ids"].add(api_id)
+
     for packet in corpus["packets"]:
-        for dependency in packet["dependencies"]["atomic_units"]:
-            if dependency != packet["atomic_unit_id"]:
-                grouped[(packet["atomic_unit_id"], dependency)].add(packet["api_id"])
-    return [
-        {
-            "from": source,
-            "to": target,
-            "kind": "api_dependency",
-            "via_api_ids": sorted(api_ids),
-        }
-        for (source, target), api_ids in sorted(grouped.items())
-    ]
+        source = packet["atomic_unit_id"]
+        for dependency_api in packet["dependencies"]["apis"]:
+            target = api_to_unit[dependency_api]
+            if target == source:
+                continue
+            add(
+                {
+                    "from": source,
+                    "to": target,
+                    "scope": "readiness",
+                    "kind": "api_dependency",
+                    "component_id": None,
+                    "reason": f"{packet['api_id']} requires {dependency_api}",
+                    "owner": {
+                        "atomic_unit_id": target,
+                        "steward": f"steward.atomic.{target.lower()}",
+                    },
+                    "source_contract": "schemas/cxxlens_public_api_contract.yaml",
+                    "required_semantics_version": None,
+                    "via_api_ids": set(),
+                },
+                packet["api_id"],
+            )
+        for component in packet["dependencies"]["components"]:
+            target = component["owner_atomic_unit"]
+            if target == source:
+                continue
+            add(
+                {
+                    "from": source,
+                    "to": target,
+                    "scope": "readiness",
+                    "kind": component["kind"],
+                    "component_id": component["id"],
+                    "reason": component["reason"],
+                    "owner": {
+                        "atomic_unit_id": target,
+                        "steward": component["steward"],
+                    },
+                    "source_contract": component["source_contract"],
+                    "required_semantics_version": component[
+                        "required_semantics_version"
+                    ],
+                    "via_api_ids": set(),
+                },
+                packet["api_id"],
+            )
+
+    packets_by_package: dict[str, list[dict[str, Any]]] = collections.defaultdict(list)
+    for packet in corpus["packets"]:
+        packets_by_package[packet["package"]["id"]].append(packet)
+    for package_id, packets in sorted(packets_by_package.items()):
+        integration_id = f"integration.{package_id}"
+        for packet in packets:
+            shared = next(
+                component
+                for component in packet["dependencies"]["components"]
+                if component["kind"] == "package_internal_engine"
+            )
+            add(
+                {
+                    "from": integration_id,
+                    "to": packet["atomic_unit_id"],
+                    "scope": "package_integration",
+                    "kind": "package_integration_prerequisite",
+                    "component_id": integration_id,
+                    "reason": "package integration consumes the conformant atomic-unit artifact",
+                    "owner": {
+                        "atomic_unit_id": packet["atomic_unit_id"],
+                        "steward": shared["steward"],
+                    },
+                    "source_contract": shared["source_contract"],
+                    "required_semantics_version": shared[
+                        "required_semantics_version"
+                    ],
+                    "via_api_ids": set(),
+                },
+                packet["api_id"],
+            )
+    edges = []
+    for key in sorted(grouped):
+        edge = grouped[key]
+        edge["via_api_ids"] = sorted(edge["via_api_ids"])
+        edges.append(edge)
+    return edges
 
 
 def topological_waves(unit_ids: set[str], edges: list[dict[str, Any]]) -> list[list[str]]:
@@ -199,12 +290,18 @@ def topological_waves(unit_ids: set[str], edges: list[dict[str, Any]]) -> list[l
     return waves
 
 
-def blocker(code: str, subject: str, steward: str, unit_id: str) -> dict[str, Any]:
+def blocker(
+    code: str,
+    subject: str,
+    steward: str,
+    unit_id: str,
+    chain: list[str] | None = None,
+) -> dict[str, Any]:
     return {
         "code": code,
         "subject": subject,
         "steward": steward,
-        "chain": [unit_id, f"{code}:{subject}"],
+        "chain": chain or [unit_id, f"{code}:{subject}"],
     }
 
 
@@ -347,11 +444,16 @@ def generate_report(
     skeletons = {item["api_id"]: item for item in ownership["skeletons"]}
     unit_ids = set(packets_by_unit)
     edges = dependency_edges(corpus)
-    waves = topological_waves(unit_ids, edges)
+    readiness_edges = [edge for edge in edges if edge["scope"] == "readiness"]
+    waves = topological_waves(unit_ids, readiness_edges)
+    edges_by_source: dict[str, list[dict[str, Any]]] = collections.defaultdict(list)
+    for edge in readiness_edges:
+        edges_by_source[edge["from"]].append(edge)
     provider_data = provider_registry(corpus, m1)
-    fact_states = {item["id"]: item["state"] for item in provider_data["facts"]}
-    capability_states = {
-        item["id"]: item["state"] for item in provider_data["capabilities"]
+    providers_by_key = {
+        (item["kind"], item["id"]): item
+        for provider_kind in ("facts", "capabilities")
+        for item in provider_data[provider_kind]
     }
     pending_requests: dict[str, list[dict[str, Any]]] = collections.defaultdict(list)
     request_rows = []
@@ -392,6 +494,13 @@ def generate_report(
                     for capability in packet["dependencies"]["capabilities"]
                 }
             )
+            shared_components = sorted(
+                {
+                    component["id"]
+                    for packet in packets
+                    for component in packet["dependencies"]["components"]
+                }
+            )
             exact = all(packet["declaration"]["status"] == "exact" for packet in packets)
             frozen = all(skeletons[packet["api_id"]]["state"] == "frozen" for packet in packets)
             owned = unit_id in ownership_units and bool(
@@ -402,10 +511,25 @@ def generate_report(
                 == {"positive", "negative", "ambiguous"}
                 for packet in packets
             )
-            providers = all(fact_states.get(fact) == "available" for fact in facts) and all(
-                capability_states.get(capability) == "available"
+            required_provider_rows = [
+                providers_by_key.get(("fact_provider_implementation", fact))
+                for fact in facts
+            ] + [
+                providers_by_key.get(("capability_provider_implementation", capability))
                 for capability in capabilities
+            ]
+            provider_availability = all(
+                row is not None and row["state"] == "available"
+                for row in required_provider_rows
             )
+            provider_semantics = all(
+                row is not None
+                and row["semantics_state"] == "complete"
+                and row["provided_semantics_version"]
+                == row["required_semantics_version"]
+                for row in required_provider_rows
+            )
+            providers = provider_availability and provider_semantics
             dependencies_ready = all(
                 nodes_by_id[dependency]["state"] == "complete"
                 for dependency in dependency_units
@@ -429,12 +553,34 @@ def generate_report(
             if not fixtures:
                 blockers.append(blocker("fixtures-missing", unit_id, "steward.testing", unit_id))
             for fact in facts:
-                if fact_states.get(fact) != "available":
+                provider = providers_by_key.get(("fact_provider_implementation", fact))
+                if provider is None or provider["state"] != "available":
                     blockers.append(
                         blocker("fact-provider-unavailable", fact, "steward.facts", unit_id)
                     )
+                elif (
+                    provider["semantics_state"] != "complete"
+                    or provider["provided_semantics_version"]
+                    != provider["required_semantics_version"]
+                ):
+                    blockers.append(
+                        blocker(
+                            "provider-semantics-incomplete",
+                            provider["contract_id"],
+                            provider["owner"]["steward"],
+                            unit_id,
+                            [
+                                unit_id,
+                                provider["contract_id"],
+                                provider["owner"]["atomic_unit_id"],
+                            ],
+                        )
+                    )
             for capability in capabilities:
-                if capability_states.get(capability) != "available":
+                provider = providers_by_key.get(
+                    ("capability_provider_implementation", capability)
+                )
+                if provider is None or provider["state"] != "available":
                     blockers.append(
                         blocker(
                             "capability-provider-unavailable",
@@ -443,14 +589,46 @@ def generate_report(
                             unit_id,
                         )
                     )
-            for dependency in dependency_units:
-                if nodes_by_id[dependency]["state"] != "complete":
+                elif (
+                    provider["semantics_state"] != "complete"
+                    or provider["provided_semantics_version"]
+                    != provider["required_semantics_version"]
+                ):
                     blockers.append(
                         blocker(
-                            "dependency-not-complete",
-                            dependency,
-                            nodes_by_id[dependency]["blockers"][0]["steward"],
+                            "provider-semantics-incomplete",
+                            provider["contract_id"],
+                            provider["owner"]["steward"],
                             unit_id,
+                            [
+                                unit_id,
+                                provider["contract_id"],
+                                provider["owner"]["atomic_unit_id"],
+                            ],
+                        )
+                    )
+            for edge in edges_by_source[unit_id]:
+                dependency = edge["to"]
+                dependency_node = nodes_by_id[dependency]
+                if dependency_node["state"] != "complete":
+                    code = (
+                        "dependency-not-complete"
+                        if edge["kind"] == "api_dependency"
+                        else "shared-component-not-complete"
+                    )
+                    subject = edge["component_id"] or dependency
+                    downstream = (
+                        dependency_node["blockers"][0]["chain"]
+                        if dependency_node["blockers"]
+                        else [dependency]
+                    )
+                    blockers.append(
+                        blocker(
+                            code,
+                            subject,
+                            edge["owner"]["steward"],
+                            unit_id,
+                            [unit_id, subject, *downstream],
                         )
                     )
             for request in pending_requests[unit_id]:
@@ -478,6 +656,10 @@ def generate_report(
                 "phases": sorted({packet["phase"] for packet in packets}),
                 "state": state,
                 "dependencies": dependency_units,
+                "dependency_kinds": sorted(
+                    {edge["kind"] for edge in edges_by_source[unit_id]}
+                ),
+                "shared_components": shared_components,
                 "required_facts": facts,
                 "required_capabilities": capabilities,
                 "prerequisites": {
@@ -486,6 +668,8 @@ def generate_report(
                     "ownership": owned,
                     "fixtures": fixtures,
                     "providers": providers,
+                    "provider_availability": provider_availability,
+                    "provider_semantics": provider_semantics,
                     "dependencies": dependencies_ready,
                     "global_gates": True,
                 },
@@ -530,6 +714,10 @@ def generate_report(
             "unit_count": len(nodes),
             "package_count": len(package_integration_shards),
             "edge_count": len(edges),
+            "readiness_edge_count": len(readiness_edges),
+            "edge_kind_counts": dict(
+                sorted(collections.Counter(edge["kind"] for edge in edges).items())
+            ),
             "state_counts": {
                 state: state_counts.get(state, 0) for state in ("blocked", "complete", "ready")
             },
@@ -566,7 +754,7 @@ def validate_report(
     if not isinstance(report, dict) or report.get("schema") != REPORT_SCHEMA:
         fail("ready.unknown-schema", "ready report schema is not supported")
     provider_ids = [
-        (kind, provider["id"])
+        (provider["kind"], provider["id"])
         for kind in ("facts", "capabilities")
         for provider in report.get("providers", {}).get(kind, [])
     ]
@@ -577,7 +765,20 @@ def validate_report(
     if len(node_ids) != len(set(node_ids)):
         fail("ready.duplicate-unit", "DAG unit identifiers are not unique")
     edges = report.get("edges", [])
-    topological_waves(set(node_ids), edges)
+    readiness_edges = [edge for edge in edges if edge.get("scope") == "readiness"]
+    topological_waves(set(node_ids), readiness_edges)
+    integration_ids = {
+        integration["id"] for integration in report.get("package_integration_shards", [])
+    }
+    known_graph_ids = set(node_ids) | integration_ids
+    for edge in edges:
+        if edge.get("from") not in known_graph_ids or edge.get("to") not in known_graph_ids:
+            fail("ready.dangling-edge", f"{edge.get('from')} -> {edge.get('to')}")
+        if not edge.get("reason") or not edge.get("source_contract"):
+            fail("ready.edge-provenance-missing", f"{edge.get('from')} -> {edge.get('to')}")
+        owner = edge.get("owner", {})
+        if not owner.get("steward") or owner.get("atomic_unit_id") not in node_ids:
+            fail("ready.edge-owner-missing", f"{edge.get('from')} -> {edge.get('to')}")
     shards = report.get("shards", [])
     shard_units = [shard["atomic_unit_id"] for shard in shards]
     if sorted(shard_units) != sorted(node_ids) or len(shard_units) != len(
@@ -629,6 +830,11 @@ def validate_report(
             fail(
                 "ready.maturity-not-readiness",
                 f"{node['atomic_unit_id']}: ready lacks prerequisite evidence",
+            )
+        if node["state"] == "ready" and not all(node["prerequisites"].values()):
+            fail(
+                "ready.prerequisite-incomplete",
+                f"{node['atomic_unit_id']}: ready has an incomplete prerequisite closure",
             )
     unsigned = copy.deepcopy(report)
     semantic_digest = unsigned.pop("semantic_digest", None)

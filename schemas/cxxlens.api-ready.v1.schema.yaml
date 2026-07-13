@@ -55,11 +55,36 @@ properties:
     items:
       type: object
       additionalProperties: false
-      required: [from, to, kind, via_api_ids]
+      required:
+        - from
+        - to
+        - scope
+        - kind
+        - component_id
+        - reason
+        - owner
+        - source_contract
+        - required_semantics_version
+        - via_api_ids
       properties:
-        from: {pattern: '^AU-[A-Z]+-[0-9]{3}$'}
+        from:
+          pattern: '^(AU-[A-Z]+-[0-9]{3}|integration[.][a-z][a-z0-9_]*)$'
         to: {pattern: '^AU-[A-Z]+-[0-9]{3}$'}
-        kind: {const: api_dependency}
+        scope: {enum: [readiness, package_integration]}
+        kind:
+          enum:
+            - api_dependency
+            - package_internal_engine
+            - shared_public_type
+            - fact_provider_implementation
+            - capability_provider_implementation
+            - schema_fixture_contract
+            - package_integration_prerequisite
+        component_id: {type: [string, 'null']}
+        reason: {type: string, minLength: 1}
+        owner: {$ref: '#/$defs/edge_owner'}
+        source_contract: {type: string, minLength: 1}
+        required_semantics_version: {type: [string, 'null']}
         via_api_ids:
           $ref: '#/$defs/api_ids'
   topological_waves:
@@ -90,6 +115,8 @@ properties:
       - unit_count
       - package_count
       - edge_count
+      - readiness_edge_count
+      - edge_kind_counts
       - state_counts
       - ready_waves
     properties:
@@ -97,6 +124,10 @@ properties:
       unit_count: {type: integer, minimum: 1}
       package_count: {type: integer, minimum: 1}
       edge_count: {type: integer, minimum: 0}
+      readiness_edge_count: {type: integer, minimum: 0}
+      edge_kind_counts:
+        type: object
+        additionalProperties: {type: integer, minimum: 0}
       state_counts:
         type: object
         additionalProperties: {type: integer, minimum: 0}
@@ -123,12 +154,37 @@ $defs:
   provider:
     type: object
     additionalProperties: false
-    required: [id, state, evidence]
+    required:
+      - id
+      - contract_id
+      - kind
+      - state
+      - semantics_state
+      - required_semantics_version
+      - provided_semantics_version
+      - owner
+      - source_contract
+      - evidence
     properties:
       id: {type: string, minLength: 1}
+      contract_id: {type: string, minLength: 1}
+      kind:
+        enum: [fact_provider_implementation, capability_provider_implementation]
       state: {enum: [available, unavailable]}
+      semantics_state: {enum: [complete, incomplete]}
+      required_semantics_version: {type: string, minLength: 1}
+      provided_semantics_version: {type: [string, 'null']}
+      owner: {$ref: '#/$defs/edge_owner'}
+      source_contract: {type: string, minLength: 1}
       evidence:
         $ref: '#/$defs/string_list'
+  edge_owner:
+    type: object
+    additionalProperties: false
+    required: [atomic_unit_id, steward]
+    properties:
+      atomic_unit_id: {pattern: '^AU-[A-Z]+-[0-9]{3}$'}
+      steward: {type: string, minLength: 1}
   gate:
     type: object
     additionalProperties: false
@@ -156,6 +212,8 @@ $defs:
       - phases
       - state
       - dependencies
+      - dependency_kinds
+      - shared_components
       - required_facts
       - required_capabilities
       - prerequisites
@@ -170,6 +228,13 @@ $defs:
         type: array
         uniqueItems: true
         items: {pattern: '^AU-[A-Z]+-[0-9]{3}$'}
+      dependency_kinds:
+        $ref: '#/$defs/string_list'
+      shared_components:
+        type: array
+        minItems: 3
+        uniqueItems: true
+        items: {type: string, minLength: 1}
       required_facts: {$ref: '#/$defs/string_list'}
       required_capabilities: {$ref: '#/$defs/string_list'}
       prerequisites:
@@ -181,6 +246,8 @@ $defs:
           - ownership
           - fixtures
           - providers
+          - provider_availability
+          - provider_semantics
           - dependencies
           - global_gates
       blockers:
