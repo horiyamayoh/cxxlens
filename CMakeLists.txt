@@ -247,6 +247,11 @@ install(
         schemas/cxxlens_generation_result.schema.yaml
         schemas/cxxlens_method_spec.schema.yaml
         schemas/cxxlens_generation_options.schema.yaml
+        schemas/cxxlens_flow_options.schema.yaml
+        schemas/cxxlens_taint_report.schema.yaml
+        schemas/cxxlens_resource_report.schema.yaml
+        schemas/cxxlens_effect_summary.schema.yaml
+        schemas/cxxlens_api_model_pack.schema.yaml
         schemas/cxxlens_virtual_candidate_resolution.schema.yaml
         schemas/cxxlens_workspace_doctor.schema.yaml
         schemas/cxxlens_workspace_context.schema.yaml

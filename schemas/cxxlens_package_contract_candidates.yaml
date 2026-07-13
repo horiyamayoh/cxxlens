@@ -8956,3 +8956,1686 @@ groups:
         expected: All candidates/collisions remain explicit with downgraded guarantee; first-wins and partial commit are forbidden.
   production_implementation_changed: false
   candidate_fingerprint: sha256:8ce8f299252b71f361407b41774291a97ef78dfaee1a74797ca4e9b41dace163
+- issue: '#50'
+  state: candidate
+  packages:
+  - flow
+  - models
+  normative_document: docs/design/package_contract_50.md
+  candidate_headers:
+  - contracts/candidates/50/flow.hpp
+  - contracts/candidates/50/models.hpp
+  usage_examples:
+  - contracts/candidates/50/flow_models_usage.cpp
+  policies:
+  - id: flow.model-pack.v1
+    ownership_and_lifetime:
+    - Models, policies, paths, summaries and reports are immutable detached values bound to one catalog/fact/model snapshot;
+      AST pointers never escape.
+    const_noexcept_thread_safety:
+    - Const observers permit concurrent reads; provider/solver execution is isolated per operation and variant with explicit
+      context.
+    callback_and_exception:
+    - Provider/model callbacks are capability-gated; exceptions become stable failure/unresolved rows and cannot cross the
+      API boundary.
+    execution_context_and_budgets:
+    - Context/path/step/state/fixpoint/time/memory/output and model-I/O budgets are finite typed inputs with cancellation
+      accounting.
+    result_semantics:
+      empty_success: Complete zero paths/findings/summaries/models is success only with available providers, resolved targets
+        and conserved coverage.
+      unresolved: Missing CFG/body/model/alias/dynamic target/variant or unknown external effect remains typed unresolved.
+      unsupported: Unsupported language construct, sensitivity, model kind/version or protocol transition remains explicit.
+      ambiguous: Overload/model/path/state/variant conflicts retain all candidates and never use first-wins.
+      partial: Provider/budget/fixpoint partiality retains valid rows, coverage and downgraded guarantee.
+      failure: Invalid policy/model/protocol, stale snapshot, non-convergence or I/O/schema failure is typed and cannot become
+        clean success.
+    evidence_coverage_guarantee:
+    - Availability, paths, findings, summaries and model bindings carry provider/model versions, evidence, coverage and guarantee
+      conservation.
+    ordering_duplicates_variants:
+    - Canonical semantic IDs/worklist/SCC/order, equal-row provenance merge, unequal conflict rejection and explicit variant
+      divergence are mandatory.
+    schema_and_versioning:
+    - C++ API, CFG/effect providers, model pack and report schemas/lattice semantics versions evolve independently and invalidate
+      stale caches.
+    change_policy:
+    - '#50 owns candidate semantics only; #52 feasibility/cost, #53 integration and #54 freeze remain separate authorities.'
+  - id: flow.semantic-model.v1
+    ownership_and_lifetime:
+    - Models, policies, paths, summaries and reports are immutable detached values bound to one catalog/fact/model snapshot;
+      AST pointers never escape.
+    const_noexcept_thread_safety:
+    - Const observers permit concurrent reads; provider/solver execution is isolated per operation and variant with explicit
+      context.
+    callback_and_exception:
+    - Provider/model callbacks are capability-gated; exceptions become stable failure/unresolved rows and cannot cross the
+      API boundary.
+    execution_context_and_budgets:
+    - Context/path/step/state/fixpoint/time/memory/output and model-I/O budgets are finite typed inputs with cancellation
+      accounting.
+    result_semantics:
+      empty_success: Complete zero paths/findings/summaries/models is success only with available providers, resolved targets
+        and conserved coverage.
+      unresolved: Missing CFG/body/model/alias/dynamic target/variant or unknown external effect remains typed unresolved.
+      unsupported: Unsupported language construct, sensitivity, model kind/version or protocol transition remains explicit.
+      ambiguous: Overload/model/path/state/variant conflicts retain all candidates and never use first-wins.
+      partial: Provider/budget/fixpoint partiality retains valid rows, coverage and downgraded guarantee.
+      failure: Invalid policy/model/protocol, stale snapshot, non-convergence or I/O/schema failure is typed and cannot become
+        clean success.
+    evidence_coverage_guarantee:
+    - Availability, paths, findings, summaries and model bindings carry provider/model versions, evidence, coverage and guarantee
+      conservation.
+    ordering_duplicates_variants:
+    - Canonical semantic IDs/worklist/SCC/order, equal-row provenance merge, unequal conflict rejection and explicit variant
+      divergence are mandatory.
+    schema_and_versioning:
+    - C++ API, CFG/effect providers, model pack and report schemas/lattice semantics versions evolve independently and invalidate
+      stale caches.
+    change_policy:
+    - '#50 owns candidate semantics only; #52 feasibility/cost, #53 integration and #54 freeze remain separate authorities.'
+  - id: flow.taint-lattice.v1
+    ownership_and_lifetime:
+    - Models, policies, paths, summaries and reports are immutable detached values bound to one catalog/fact/model snapshot;
+      AST pointers never escape.
+    const_noexcept_thread_safety:
+    - Const observers permit concurrent reads; provider/solver execution is isolated per operation and variant with explicit
+      context.
+    callback_and_exception:
+    - Provider/model callbacks are capability-gated; exceptions become stable failure/unresolved rows and cannot cross the
+      API boundary.
+    execution_context_and_budgets:
+    - Context/path/step/state/fixpoint/time/memory/output and model-I/O budgets are finite typed inputs with cancellation
+      accounting.
+    result_semantics:
+      empty_success: Complete zero paths/findings/summaries/models is success only with available providers, resolved targets
+        and conserved coverage.
+      unresolved: Missing CFG/body/model/alias/dynamic target/variant or unknown external effect remains typed unresolved.
+      unsupported: Unsupported language construct, sensitivity, model kind/version or protocol transition remains explicit.
+      ambiguous: Overload/model/path/state/variant conflicts retain all candidates and never use first-wins.
+      partial: Provider/budget/fixpoint partiality retains valid rows, coverage and downgraded guarantee.
+      failure: Invalid policy/model/protocol, stale snapshot, non-convergence or I/O/schema failure is typed and cannot become
+        clean success.
+    evidence_coverage_guarantee:
+    - Availability, paths, findings, summaries and model bindings carry provider/model versions, evidence, coverage and guarantee
+      conservation.
+    ordering_duplicates_variants:
+    - Canonical semantic IDs/worklist/SCC/order, equal-row provenance merge, unequal conflict rejection and explicit variant
+      divergence are mandatory.
+    schema_and_versioning:
+    - C++ API, CFG/effect providers, model pack and report schemas/lattice semantics versions evolve independently and invalidate
+      stale caches.
+    change_policy:
+    - '#50 owns candidate semantics only; #52 feasibility/cost, #53 integration and #54 freeze remain separate authorities.'
+  - id: flow.cfg-taint-execution.v1
+    ownership_and_lifetime:
+    - Models, policies, paths, summaries and reports are immutable detached values bound to one catalog/fact/model snapshot;
+      AST pointers never escape.
+    const_noexcept_thread_safety:
+    - Const observers permit concurrent reads; provider/solver execution is isolated per operation and variant with explicit
+      context.
+    callback_and_exception:
+    - Provider/model callbacks are capability-gated; exceptions become stable failure/unresolved rows and cannot cross the
+      API boundary.
+    execution_context_and_budgets:
+    - Context/path/step/state/fixpoint/time/memory/output and model-I/O budgets are finite typed inputs with cancellation
+      accounting.
+    result_semantics:
+      empty_success: Complete zero paths/findings/summaries/models is success only with available providers, resolved targets
+        and conserved coverage.
+      unresolved: Missing CFG/body/model/alias/dynamic target/variant or unknown external effect remains typed unresolved.
+      unsupported: Unsupported language construct, sensitivity, model kind/version or protocol transition remains explicit.
+      ambiguous: Overload/model/path/state/variant conflicts retain all candidates and never use first-wins.
+      partial: Provider/budget/fixpoint partiality retains valid rows, coverage and downgraded guarantee.
+      failure: Invalid policy/model/protocol, stale snapshot, non-convergence or I/O/schema failure is typed and cannot become
+        clean success.
+    evidence_coverage_guarantee:
+    - Availability, paths, findings, summaries and model bindings carry provider/model versions, evidence, coverage and guarantee
+      conservation.
+    ordering_duplicates_variants:
+    - Canonical semantic IDs/worklist/SCC/order, equal-row provenance merge, unequal conflict rejection and explicit variant
+      divergence are mandatory.
+    schema_and_versioning:
+    - C++ API, CFG/effect providers, model pack and report schemas/lattice semantics versions evolve independently and invalidate
+      stale caches.
+    change_policy:
+    - '#50 owns candidate semantics only; #52 feasibility/cost, #53 integration and #54 freeze remain separate authorities.'
+  - id: flow.resource-protocol.v1
+    ownership_and_lifetime:
+    - Models, policies, paths, summaries and reports are immutable detached values bound to one catalog/fact/model snapshot;
+      AST pointers never escape.
+    const_noexcept_thread_safety:
+    - Const observers permit concurrent reads; provider/solver execution is isolated per operation and variant with explicit
+      context.
+    callback_and_exception:
+    - Provider/model callbacks are capability-gated; exceptions become stable failure/unresolved rows and cannot cross the
+      API boundary.
+    execution_context_and_budgets:
+    - Context/path/step/state/fixpoint/time/memory/output and model-I/O budgets are finite typed inputs with cancellation
+      accounting.
+    result_semantics:
+      empty_success: Complete zero paths/findings/summaries/models is success only with available providers, resolved targets
+        and conserved coverage.
+      unresolved: Missing CFG/body/model/alias/dynamic target/variant or unknown external effect remains typed unresolved.
+      unsupported: Unsupported language construct, sensitivity, model kind/version or protocol transition remains explicit.
+      ambiguous: Overload/model/path/state/variant conflicts retain all candidates and never use first-wins.
+      partial: Provider/budget/fixpoint partiality retains valid rows, coverage and downgraded guarantee.
+      failure: Invalid policy/model/protocol, stale snapshot, non-convergence or I/O/schema failure is typed and cannot become
+        clean success.
+    evidence_coverage_guarantee:
+    - Availability, paths, findings, summaries and model bindings carry provider/model versions, evidence, coverage and guarantee
+      conservation.
+    ordering_duplicates_variants:
+    - Canonical semantic IDs/worklist/SCC/order, equal-row provenance merge, unequal conflict rejection and explicit variant
+      divergence are mandatory.
+    schema_and_versioning:
+    - C++ API, CFG/effect providers, model pack and report schemas/lattice semantics versions evolve independently and invalidate
+      stale caches.
+    change_policy:
+    - '#50 owns candidate semantics only; #52 feasibility/cost, #53 integration and #54 freeze remain separate authorities.'
+  - id: flow.effect-fixpoint.v1
+    ownership_and_lifetime:
+    - Models, policies, paths, summaries and reports are immutable detached values bound to one catalog/fact/model snapshot;
+      AST pointers never escape.
+    const_noexcept_thread_safety:
+    - Const observers permit concurrent reads; provider/solver execution is isolated per operation and variant with explicit
+      context.
+    callback_and_exception:
+    - Provider/model callbacks are capability-gated; exceptions become stable failure/unresolved rows and cannot cross the
+      API boundary.
+    execution_context_and_budgets:
+    - Context/path/step/state/fixpoint/time/memory/output and model-I/O budgets are finite typed inputs with cancellation
+      accounting.
+    result_semantics:
+      empty_success: Complete zero paths/findings/summaries/models is success only with available providers, resolved targets
+        and conserved coverage.
+      unresolved: Missing CFG/body/model/alias/dynamic target/variant or unknown external effect remains typed unresolved.
+      unsupported: Unsupported language construct, sensitivity, model kind/version or protocol transition remains explicit.
+      ambiguous: Overload/model/path/state/variant conflicts retain all candidates and never use first-wins.
+      partial: Provider/budget/fixpoint partiality retains valid rows, coverage and downgraded guarantee.
+      failure: Invalid policy/model/protocol, stale snapshot, non-convergence or I/O/schema failure is typed and cannot become
+        clean success.
+    evidence_coverage_guarantee:
+    - Availability, paths, findings, summaries and model bindings carry provider/model versions, evidence, coverage and guarantee
+      conservation.
+    ordering_duplicates_variants:
+    - Canonical semantic IDs/worklist/SCC/order, equal-row provenance merge, unequal conflict rejection and explicit variant
+      divergence are mandatory.
+    schema_and_versioning:
+    - C++ API, CFG/effect providers, model pack and report schemas/lattice semantics versions evolve independently and invalidate
+      stale caches.
+    change_policy:
+    - '#50 owns candidate semantics only; #52 feasibility/cost, #53 integration and #54 freeze remain separate authorities.'
+  registry_owners:
+  - id: registry.flow.errors.v1
+    kind: error_registry
+    owner_atomic_unit: AU-FLOW-005
+    steward: steward.flow
+    entries:
+    - flow.cfg-failed
+    - flow.cfg-stale
+    - flow.cfg-unavailable
+    - flow.cfg-unsupported
+    - flow.cfg-variant-divergent
+    - flow.non-convergent
+    - flow.path-budget-exhausted
+    - flow.policy-invalid
+    behavior: Availability, policy, budget and convergence use stable typed codes, never diagnostic prose.
+  - id: registry.flow.schemas.v1
+    kind: schema_registry
+    owner_atomic_unit: AU-FLOW-005
+    steward: steward.flow
+    entries:
+    - cxxlens.effect-summary-report.v1
+    - cxxlens.flow-options.v1
+    - cxxlens.resource-report.v1
+    - cxxlens.taint-report.v1
+    behavior: Flow schemas are canonical projections of authoritative availability/path/finding/summary rows.
+  - id: registry.flow.capabilities.v1
+    kind: capability_registry
+    owner_atomic_unit: AU-FLOW-005
+    steward: steward.flow
+    entries:
+    - flow.cfg
+    - flow.effect-summaries
+    behavior: CFG/effect provider version and availability are explicit and rechecked at run time.
+  - id: registry.flow.models.v1
+    kind: error_registry
+    owner_atomic_unit: AU-FLOW-003
+    steward: steward.flow
+    entries:
+    - flow.barrier-evidence-insufficient
+    - flow.model-ambiguous
+    - flow.model-conflict
+    - flow.model-invalid
+    behavior: Source/sink/barrier targets and dominance evidence reject conflicts without first-wins.
+  - id: registry.flow.resource.v1
+    kind: error_registry
+    owner_atomic_unit: AU-FLOW-007
+    steward: steward.flow
+    entries:
+    - flow.resource-alias-unresolved
+    - flow.resource-protocol-invalid
+    - flow.resource-state-conflict
+    behavior: Protocol/state/alias failures remain distinct from leak/double-release/use findings.
+  - id: registry.models.errors.v1
+    kind: error_registry
+    owner_atomic_unit: AU-MODEL-004
+    steward: steward.models
+    entries:
+    - models.binding-ambiguous
+    - models.binding-unresolved
+    - models.merge-conflict
+    - models.schema-invalid
+    - models.untrusted-input-rejected
+    - models.version-unsupported
+    behavior: Pack binding/merge/trust/version failures are typed and migrations require explicit paths.
+  - id: registry.models.schemas.v1
+    kind: schema_registry
+    owner_atomic_unit: AU-MODEL-004
+    steward: steward.models
+    entries:
+    - cxxlens.api-model-pack.v1
+    behavior: Pack I/O is canonical UTF-8/LF, bounded, versioned and validates unknown fields/kinds.
+  consumer_boundaries:
+  - owner_package: flow
+    consumer_package: models
+    shared_types:
+    - source_model
+    - sink_model
+    - barrier_model
+    access: value_copy
+    rule: Flow owns public semantic model values; model packs store validated versioned rows without redefining them.
+  - owner_package: models
+    consumer_package: flow
+    shared_types:
+    - effect_kind
+    - api_effects
+    - api_model_pack
+    access: read_only
+    rule: Flow execution consumes an explicit immutable model-pack version and cannot silently substitute another.
+  - owner_package: graph
+    consumer_package: flow
+    shared_types:
+    - semantic call graph
+    - SCC topology
+    access: read_only
+    rule: '#46 graph may provide semantic topology, while CFG nodes/paths remain flow-owned.'
+  - owner_package: flow
+    consumer_package: generate
+    shared_types:
+    - effect_summary_report
+    access: const_reference
+    rule: '#49 may consume versioned summaries but cannot recalculate flow semantics.'
+  - owner_package: models
+    consumer_package: generate
+    shared_types:
+    - api_model_pack
+    access: const_reference
+    rule: Generation model dependency is explicit and pack absence/version drift remains unresolved.
+  - owner_package: flow
+    consumer_package: report
+    shared_types:
+    - taint_report
+    - resource_report
+    - effect_summary_report
+    access: const_reference
+    rule: Reports are bounded pure projections of authoritative flow rows.
+  api_contracts:
+  - api_id: API-FLOW-001
+    atomic_unit: AU-FLOW-001
+    package: flow
+    policy: flow.semantic-model.v1
+    declaration:
+      source: contracts/candidates/50/flow.hpp
+      signature: cxxlens::flow::source_model cxxlens::flow::source_model::call_return(cxxlens::select::call_selector); cxxlens::flow::source_model
+        cxxlens::flow::source_model::parameter(cxxlens::select::symbol_selector,std::size_t); cxxlens::flow::source_model
+        cxxlens::flow::source_model::receiver(cxxlens::select::call_selector); cxxlens::flow::source_model cxxlens::flow::source_model::field(cxxlens::select::symbol_selector);
+        cxxlens::flow::source_model cxxlens::flow::source_model::global(cxxlens::select::symbol_selector); cxxlens::flow::source_model
+        cxxlens::flow::source_model::path(cxxlens::flow::value_path) const; cxxlens::flow::source_model cxxlens::flow::source_model::metadata(std::string,cxxlens::semantic_version,std::string,std::string,std::int32_t)
+        const
+      signature_fingerprint: sha256:e699f888e8ca31f3fdeb90721a96ccf3512316f8db5565b66b07490277368272
+    family_members:
+    - cxxlens::flow::source_model::call_return
+    - cxxlens::flow::source_model::parameter
+    - cxxlens::flow::source_model::receiver
+    - cxxlens::flow::source_model::field
+    - cxxlens::flow::source_model::global
+    - cxxlens::flow::source_model::path
+    - cxxlens::flow::source_model::metadata
+    semantics:
+    - CFG availability, deterministic finite-lattice paths/fixpoints and explicit partial/open-world accounting binds one
+      immutable catalog/fact/model snapshot and never hides unavailable providers as empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-convergent and failure outcomes remain distinct.
+    - Provider/model versions, semantic IDs/order, evidence/coverage/guarantee, budgets, context and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:finding_set
+      - public-type:core:precision_level
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:flow:barrier_effect
+      - public-type:flow:barrier_model
+      - public-type:flow:cfg_availability
+      - public-type:flow:cfg_availability_state
+      - public-type:flow:effect_summary
+      - public-type:flow:effect_summary_report
+      - public-type:flow:flow_node
+      - public-type:flow:flow_options
+      - public-type:flow:flow_path
+      - public-type:flow:flow_sensitivity
+      - public-type:flow:resource_protocol
+      - public-type:flow:resource_report
+      - public-type:flow:resource_transition
+      - public-type:flow:resource_transition_kind
+      - public-type:flow:sink_model
+      - public-type:flow:source_model
+      - public-type:flow:taint_policy
+      - public-type:flow:taint_report
+      - public-type:flow:unknown_call_policy
+      - public-type:flow:value_path
+      - public-type:flow:value_path_kind
+      - public-type:models:api_effects
+      - public-type:models:api_model_pack
+      - public-type:models:effect_kind
+      - public-type:models:model_binding_state
+      - public-type:models:model_pack_options
+      - public-type:models:model_precedence
+      - public-type:models:parameter_effect
+      - public-type:select:call_selector
+      - public-type:select:symbol_selector
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.flow.package_internal_engine
+      - shared.package.graph.package_internal_engine
+      - shared.package.models.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers:
+      - provider.fact.frontend:call
+      - provider.fact.frontend:reference
+      - provider.fact.frontend:symbol
+      schemas: &id002
+      - schema:schemas/cxxlens_api_model_pack.schema.yaml
+      - schema:schemas/cxxlens_effect_summary.schema.yaml
+      - schema:schemas/cxxlens_flow_options.schema.yaml
+      - schema:schemas/cxxlens_resource_report.schema.yaml
+      - schema:schemas/cxxlens_taint_report.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-008
+      - FR-010
+      - QR-004
+      - QR-005
+      design_sections:
+      - §13 API model pack
+      - §18 dataflow/taint/resource
+      - §36.6 flow tests
+      - §39.21 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, provider/model/snapshot requirements, availability,
+        path/state/fixpoint budgets, unresolved/coverage/guarantee, variant and schema/version behavior with a public example.
+    acceptance:
+      positive:
+        id: API-FLOW-001.positive
+        expression: Use a complete deterministic fixture for CFG availability, deterministic finite-lattice paths/fixpoints
+          and explicit partial/open-world accounting.
+        expected: Exact canonical rows/paths/summaries, conserved coverage, versioned evidence and complete guarantee.
+      negative:
+        id: API-FLOW-001.negative
+        expression: Use invalid policy/model/protocol, unavailable CFG, unsupported construct/version, stale snapshot or provider/I/O
+          failure.
+        expected: Typed error/unresolved/availability with no clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-FLOW-001.ambiguous
+        expression: Use overload, virtual/indirect, alias/path, model conflict, variant divergence, recursive SCC or budget-limited
+          candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false convergence are forbidden.
+  - api_id: API-FLOW-002
+    atomic_unit: AU-FLOW-002
+    package: flow
+    policy: flow.semantic-model.v1
+    declaration:
+      source: contracts/candidates/50/flow.hpp
+      signature: cxxlens::flow::sink_model cxxlens::flow::sink_model::call_argument(cxxlens::select::call_selector,std::size_t);
+        cxxlens::flow::sink_model cxxlens::flow::sink_model::call_receiver(cxxlens::select::call_selector); cxxlens::flow::sink_model
+        cxxlens::flow::sink_model::return_value(cxxlens::select::symbol_selector); cxxlens::flow::sink_model cxxlens::flow::sink_model::field_write(cxxlens::select::symbol_selector);
+        cxxlens::flow::sink_model cxxlens::flow::sink_model::global_write(cxxlens::select::symbol_selector); cxxlens::flow::sink_model
+        cxxlens::flow::sink_model::dereference(); cxxlens::flow::sink_model cxxlens::flow::sink_model::array_index(); cxxlens::flow::sink_model
+        cxxlens::flow::sink_model::format_string(); cxxlens::flow::sink_model cxxlens::flow::sink_model::command_execution();
+        cxxlens::flow::sink_model cxxlens::flow::sink_model::file_path_open(); cxxlens::flow::sink_model cxxlens::flow::sink_model::path(cxxlens::flow::value_path)
+        const; cxxlens::flow::sink_model cxxlens::flow::sink_model::metadata(std::string,cxxlens::semantic_version,std::string,std::string,std::int32_t)
+        const
+      signature_fingerprint: sha256:a4d8fe07e7bba316aa21fce1e2e68831230e649adadaea93c001db7598257877
+    family_members:
+    - cxxlens::flow::sink_model::call_argument
+    - cxxlens::flow::sink_model::call_receiver
+    - cxxlens::flow::sink_model::return_value
+    - cxxlens::flow::sink_model::field_write
+    - cxxlens::flow::sink_model::global_write
+    - cxxlens::flow::sink_model::dereference
+    - cxxlens::flow::sink_model::array_index
+    - cxxlens::flow::sink_model::format_string
+    - cxxlens::flow::sink_model::command_execution
+    - cxxlens::flow::sink_model::file_path_open
+    - cxxlens::flow::sink_model::path
+    - cxxlens::flow::sink_model::metadata
+    semantics:
+    - CFG availability, deterministic finite-lattice paths/fixpoints and explicit partial/open-world accounting binds one
+      immutable catalog/fact/model snapshot and never hides unavailable providers as empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-convergent and failure outcomes remain distinct.
+    - Provider/model versions, semantic IDs/order, evidence/coverage/guarantee, budgets, context and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:finding_set
+      - public-type:core:precision_level
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:flow:barrier_effect
+      - public-type:flow:barrier_model
+      - public-type:flow:cfg_availability
+      - public-type:flow:cfg_availability_state
+      - public-type:flow:effect_summary
+      - public-type:flow:effect_summary_report
+      - public-type:flow:flow_node
+      - public-type:flow:flow_options
+      - public-type:flow:flow_path
+      - public-type:flow:flow_sensitivity
+      - public-type:flow:resource_protocol
+      - public-type:flow:resource_report
+      - public-type:flow:resource_transition
+      - public-type:flow:resource_transition_kind
+      - public-type:flow:sink_model
+      - public-type:flow:source_model
+      - public-type:flow:taint_policy
+      - public-type:flow:taint_report
+      - public-type:flow:unknown_call_policy
+      - public-type:flow:value_path
+      - public-type:flow:value_path_kind
+      - public-type:models:api_effects
+      - public-type:models:api_model_pack
+      - public-type:models:effect_kind
+      - public-type:models:model_binding_state
+      - public-type:models:model_pack_options
+      - public-type:models:model_precedence
+      - public-type:models:parameter_effect
+      - public-type:select:call_selector
+      - public-type:select:symbol_selector
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.flow.package_internal_engine
+      - shared.package.graph.package_internal_engine
+      - shared.package.models.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers:
+      - provider.fact.frontend:call
+      - provider.fact.frontend:reference
+      schemas: *id002
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-008
+      - FR-010
+      - QR-004
+      - QR-005
+      design_sections:
+      - §13 API model pack
+      - §18 dataflow/taint/resource
+      - §36.6 flow tests
+      - §39.21 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, provider/model/snapshot requirements, availability,
+        path/state/fixpoint budgets, unresolved/coverage/guarantee, variant and schema/version behavior with a public example.
+    acceptance:
+      positive:
+        id: API-FLOW-002.positive
+        expression: Use a complete deterministic fixture for CFG availability, deterministic finite-lattice paths/fixpoints
+          and explicit partial/open-world accounting.
+        expected: Exact canonical rows/paths/summaries, conserved coverage, versioned evidence and complete guarantee.
+      negative:
+        id: API-FLOW-002.negative
+        expression: Use invalid policy/model/protocol, unavailable CFG, unsupported construct/version, stale snapshot or provider/I/O
+          failure.
+        expected: Typed error/unresolved/availability with no clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-FLOW-002.ambiguous
+        expression: Use overload, virtual/indirect, alias/path, model conflict, variant divergence, recursive SCC or budget-limited
+          candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false convergence are forbidden.
+  - api_id: API-FLOW-003
+    atomic_unit: AU-FLOW-003
+    package: flow
+    policy: flow.semantic-model.v1
+    declaration:
+      source: contracts/candidates/50/flow.hpp
+      signature: cxxlens::flow::barrier_model cxxlens::flow::barrier_model::validation_call(cxxlens::select::call_selector);
+        cxxlens::flow::barrier_model cxxlens::flow::barrier_model::sanitizer_call(cxxlens::select::call_selector); cxxlens::flow::barrier_model
+        cxxlens::flow::barrier_model::bounds_check(); cxxlens::flow::barrier_model cxxlens::flow::barrier_model::null_check();
+        cxxlens::flow::barrier_model cxxlens::flow::barrier_model::effect(cxxlens::flow::barrier_effect,std::string) const;
+        cxxlens::flow::barrier_model cxxlens::flow::barrier_model::path(cxxlens::flow::value_path) const; cxxlens::flow::barrier_model
+        cxxlens::flow::barrier_model::metadata(std::string,cxxlens::semantic_version,std::string,std::string,std::int32_t)
+        const
+      signature_fingerprint: sha256:b5177faca54a108c2641e5a2a9cdef4d3e169c27f5b4e4ddee38f92bdc043695
+    family_members:
+    - cxxlens::flow::barrier_model::validation_call
+    - cxxlens::flow::barrier_model::sanitizer_call
+    - cxxlens::flow::barrier_model::bounds_check
+    - cxxlens::flow::barrier_model::null_check
+    - cxxlens::flow::barrier_model::effect
+    - cxxlens::flow::barrier_model::path
+    - cxxlens::flow::barrier_model::metadata
+    semantics:
+    - CFG availability, deterministic finite-lattice paths/fixpoints and explicit partial/open-world accounting binds one
+      immutable catalog/fact/model snapshot and never hides unavailable providers as empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-convergent and failure outcomes remain distinct.
+    - Provider/model versions, semantic IDs/order, evidence/coverage/guarantee, budgets, context and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:finding_set
+      - public-type:core:precision_level
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:flow:barrier_effect
+      - public-type:flow:barrier_model
+      - public-type:flow:cfg_availability
+      - public-type:flow:cfg_availability_state
+      - public-type:flow:effect_summary
+      - public-type:flow:effect_summary_report
+      - public-type:flow:flow_node
+      - public-type:flow:flow_options
+      - public-type:flow:flow_path
+      - public-type:flow:flow_sensitivity
+      - public-type:flow:resource_protocol
+      - public-type:flow:resource_report
+      - public-type:flow:resource_transition
+      - public-type:flow:resource_transition_kind
+      - public-type:flow:sink_model
+      - public-type:flow:source_model
+      - public-type:flow:taint_policy
+      - public-type:flow:taint_report
+      - public-type:flow:unknown_call_policy
+      - public-type:flow:value_path
+      - public-type:flow:value_path_kind
+      - public-type:models:api_effects
+      - public-type:models:api_model_pack
+      - public-type:models:effect_kind
+      - public-type:models:model_binding_state
+      - public-type:models:model_pack_options
+      - public-type:models:model_precedence
+      - public-type:models:parameter_effect
+      - public-type:select:call_selector
+      - public-type:select:symbol_selector
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.flow.package_internal_engine
+      - shared.package.graph.package_internal_engine
+      - shared.package.models.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers:
+      - provider.fact.frontend:call
+      - provider.fact.frontend:control_flow
+      schemas: *id002
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-008
+      - FR-010
+      - QR-004
+      - QR-005
+      design_sections:
+      - §13 API model pack
+      - §18 dataflow/taint/resource
+      - §36.6 flow tests
+      - §39.21 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, provider/model/snapshot requirements, availability,
+        path/state/fixpoint budgets, unresolved/coverage/guarantee, variant and schema/version behavior with a public example.
+    acceptance:
+      positive:
+        id: API-FLOW-003.positive
+        expression: Use a complete deterministic fixture for CFG availability, deterministic finite-lattice paths/fixpoints
+          and explicit partial/open-world accounting.
+        expected: Exact canonical rows/paths/summaries, conserved coverage, versioned evidence and complete guarantee.
+      negative:
+        id: API-FLOW-003.negative
+        expression: Use invalid policy/model/protocol, unavailable CFG, unsupported construct/version, stale snapshot or provider/I/O
+          failure.
+        expected: Typed error/unresolved/availability with no clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-FLOW-003.ambiguous
+        expression: Use overload, virtual/indirect, alias/path, model conflict, variant divergence, recursive SCC or budget-limited
+          candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false convergence are forbidden.
+  - api_id: API-FLOW-004
+    atomic_unit: AU-FLOW-004
+    package: flow
+    policy: flow.taint-lattice.v1
+    declaration:
+      source: contracts/candidates/50/flow.hpp
+      signature: cxxlens::flow::taint_policy cxxlens::flow::taint_policy::label(std::string) const; cxxlens::flow::taint_policy
+        cxxlens::flow::taint_policy::source(cxxlens::flow::source_model) const; cxxlens::flow::taint_policy cxxlens::flow::taint_policy::sink(cxxlens::flow::sink_model)
+        const; cxxlens::flow::taint_policy cxxlens::flow::taint_policy::barrier(cxxlens::flow::barrier_model) const; cxxlens::flow::taint_policy
+        cxxlens::flow::taint_policy::propagate(std::string,std::string) const; cxxlens::flow::taint_policy cxxlens::flow::taint_policy::interprocedural(bool)
+        const; cxxlens::flow::taint_policy cxxlens::flow::taint_policy::precision(cxxlens::precision_level) const; cxxlens::result<void>
+        cxxlens::flow::taint_policy::validate() const
+      signature_fingerprint: sha256:aa01efc56a151ba7b6206f0a991ef1b39ada2b0fee3c30b1bf2f89fffbae0321
+    family_members:
+    - cxxlens::flow::taint_policy::label
+    - cxxlens::flow::taint_policy::source
+    - cxxlens::flow::taint_policy::sink
+    - cxxlens::flow::taint_policy::barrier
+    - cxxlens::flow::taint_policy::propagate
+    - cxxlens::flow::taint_policy::interprocedural
+    - cxxlens::flow::taint_policy::precision
+    - cxxlens::flow::taint_policy::validate
+    semantics:
+    - CFG availability, deterministic finite-lattice paths/fixpoints and explicit partial/open-world accounting binds one
+      immutable catalog/fact/model snapshot and never hides unavailable providers as empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-convergent and failure outcomes remain distinct.
+    - Provider/model versions, semantic IDs/order, evidence/coverage/guarantee, budgets, context and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:finding_set
+      - public-type:core:precision_level
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:flow:barrier_effect
+      - public-type:flow:barrier_model
+      - public-type:flow:cfg_availability
+      - public-type:flow:cfg_availability_state
+      - public-type:flow:effect_summary
+      - public-type:flow:effect_summary_report
+      - public-type:flow:flow_node
+      - public-type:flow:flow_options
+      - public-type:flow:flow_path
+      - public-type:flow:flow_sensitivity
+      - public-type:flow:resource_protocol
+      - public-type:flow:resource_report
+      - public-type:flow:resource_transition
+      - public-type:flow:resource_transition_kind
+      - public-type:flow:sink_model
+      - public-type:flow:source_model
+      - public-type:flow:taint_policy
+      - public-type:flow:taint_report
+      - public-type:flow:unknown_call_policy
+      - public-type:flow:value_path
+      - public-type:flow:value_path_kind
+      - public-type:models:api_effects
+      - public-type:models:api_model_pack
+      - public-type:models:effect_kind
+      - public-type:models:model_binding_state
+      - public-type:models:model_pack_options
+      - public-type:models:model_precedence
+      - public-type:models:parameter_effect
+      - public-type:select:call_selector
+      - public-type:select:symbol_selector
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.flow.package_internal_engine
+      - shared.package.graph.package_internal_engine
+      - shared.package.models.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers: []
+      schemas: *id002
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-008
+      - FR-010
+      - QR-004
+      - QR-005
+      design_sections:
+      - §13 API model pack
+      - §18 dataflow/taint/resource
+      - §36.6 flow tests
+      - §39.21 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, provider/model/snapshot requirements, availability,
+        path/state/fixpoint budgets, unresolved/coverage/guarantee, variant and schema/version behavior with a public example.
+    acceptance:
+      positive:
+        id: API-FLOW-004.positive
+        expression: Use a complete deterministic fixture for CFG availability, deterministic finite-lattice paths/fixpoints
+          and explicit partial/open-world accounting.
+        expected: Exact canonical rows/paths/summaries, conserved coverage, versioned evidence and complete guarantee.
+      negative:
+        id: API-FLOW-004.negative
+        expression: Use invalid policy/model/protocol, unavailable CFG, unsupported construct/version, stale snapshot or provider/I/O
+          failure.
+        expected: Typed error/unresolved/availability with no clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-FLOW-004.ambiguous
+        expression: Use overload, virtual/indirect, alias/path, model conflict, variant divergence, recursive SCC or budget-limited
+          candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false convergence are forbidden.
+  - api_id: API-FLOW-005
+    atomic_unit: AU-FLOW-005
+    package: flow
+    policy: flow.cfg-taint-execution.v1
+    declaration:
+      source: contracts/candidates/50/flow.hpp
+      signature: cxxlens::result<cxxlens::flow::cfg_availability> cxxlens::flow::inspect_cfg(const cxxlens::workspace&,cxxlens::analysis_scope,cxxlens::execution_context);
+        cxxlens::result<cxxlens::flow::taint_report> cxxlens::flow::run_taint(const cxxlens::workspace&,cxxlens::flow::taint_policy,cxxlens::flow::flow_options)
+      signature_fingerprint: sha256:51150e83fe8a833fa4fb38ac77297e67aea2e96f72884a54f477043b09562ce6
+    family_members:
+    - cxxlens::flow::flow::inspect_cfg
+    - cxxlens::flow::flow::run_taint
+    semantics:
+    - CFG availability, deterministic finite-lattice paths/fixpoints and explicit partial/open-world accounting binds one
+      immutable catalog/fact/model snapshot and never hides unavailable providers as empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-convergent and failure outcomes remain distinct.
+    - Provider/model versions, semantic IDs/order, evidence/coverage/guarantee, budgets, context and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:finding_set
+      - public-type:core:precision_level
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:flow:barrier_effect
+      - public-type:flow:barrier_model
+      - public-type:flow:cfg_availability
+      - public-type:flow:cfg_availability_state
+      - public-type:flow:effect_summary
+      - public-type:flow:effect_summary_report
+      - public-type:flow:flow_node
+      - public-type:flow:flow_options
+      - public-type:flow:flow_path
+      - public-type:flow:flow_sensitivity
+      - public-type:flow:resource_protocol
+      - public-type:flow:resource_report
+      - public-type:flow:resource_transition
+      - public-type:flow:resource_transition_kind
+      - public-type:flow:sink_model
+      - public-type:flow:source_model
+      - public-type:flow:taint_policy
+      - public-type:flow:taint_report
+      - public-type:flow:unknown_call_policy
+      - public-type:flow:value_path
+      - public-type:flow:value_path_kind
+      - public-type:models:api_effects
+      - public-type:models:api_model_pack
+      - public-type:models:effect_kind
+      - public-type:models:model_binding_state
+      - public-type:models:model_pack_options
+      - public-type:models:model_precedence
+      - public-type:models:parameter_effect
+      - public-type:select:call_selector
+      - public-type:select:symbol_selector
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.flow.package_internal_engine
+      - shared.package.graph.package_internal_engine
+      - shared.package.models.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers:
+      - provider.capability.flow-cfg:flow.cfg
+      - provider.fact.frontend:call
+      - provider.fact.frontend:cfg_summary
+      - provider.fact.frontend:flow_summary
+      schemas: *id002
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-RL-006
+      design_sections:
+      - §13 API model pack
+      - §18 dataflow/taint/resource
+      - §36.6 flow tests
+      - §39.21 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, provider/model/snapshot requirements, availability,
+        path/state/fixpoint budgets, unresolved/coverage/guarantee, variant and schema/version behavior with a public example.
+    acceptance:
+      positive:
+        id: API-FLOW-005.positive
+        expression: Use a complete deterministic fixture for CFG availability, deterministic finite-lattice paths/fixpoints
+          and explicit partial/open-world accounting.
+        expected: Exact canonical rows/paths/summaries, conserved coverage, versioned evidence and complete guarantee.
+      negative:
+        id: API-FLOW-005.negative
+        expression: Use invalid policy/model/protocol, unavailable CFG, unsupported construct/version, stale snapshot or provider/I/O
+          failure.
+        expected: Typed error/unresolved/availability with no clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-FLOW-005.ambiguous
+        expression: Use overload, virtual/indirect, alias/path, model conflict, variant divergence, recursive SCC or budget-limited
+          candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false convergence are forbidden.
+  - api_id: API-FLOW-006
+    atomic_unit: AU-FLOW-006
+    package: flow
+    policy: flow.resource-protocol.v1
+    declaration:
+      source: contracts/candidates/50/flow.hpp
+      signature: cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::resource(std::string) const; cxxlens::flow::resource_protocol
+        cxxlens::flow::resource_protocol::initial_state(std::string) const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::terminal_state(std::string)
+        const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::error_state(std::string) const; cxxlens::flow::resource_protocol
+        cxxlens::flow::resource_protocol::transition(cxxlens::flow::resource_transition) const; cxxlens::flow::resource_protocol
+        cxxlens::flow::resource_protocol::acquire(cxxlens::select::call_selector) const; cxxlens::flow::resource_protocol
+        cxxlens::flow::resource_protocol::release(cxxlens::select::call_selector) const; cxxlens::flow::resource_protocol
+        cxxlens::flow::resource_protocol::use(cxxlens::select::call_selector) const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::escape(cxxlens::select::call_selector)
+        const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::invalid_use_message(std::string) const;
+        cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::leak_message(std::string) const; cxxlens::result<void>
+        cxxlens::flow::resource_protocol::validate() const
+      signature_fingerprint: sha256:54173e3c9e4f5c0ddaf9947f98df29e55db091454cede990e608ed8c891cbdee
+    family_members:
+    - cxxlens::flow::resource_protocol::resource
+    - cxxlens::flow::resource_protocol::initial_state
+    - cxxlens::flow::resource_protocol::terminal_state
+    - cxxlens::flow::resource_protocol::error_state
+    - cxxlens::flow::resource_protocol::transition
+    - cxxlens::flow::resource_protocol::acquire
+    - cxxlens::flow::resource_protocol::release
+    - cxxlens::flow::resource_protocol::use
+    - cxxlens::flow::resource_protocol::escape
+    - cxxlens::flow::resource_protocol::invalid_use_message
+    - cxxlens::flow::resource_protocol::leak_message
+    - cxxlens::flow::resource_protocol::validate
+    semantics:
+    - CFG availability, deterministic finite-lattice paths/fixpoints and explicit partial/open-world accounting binds one
+      immutable catalog/fact/model snapshot and never hides unavailable providers as empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-convergent and failure outcomes remain distinct.
+    - Provider/model versions, semantic IDs/order, evidence/coverage/guarantee, budgets, context and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:finding_set
+      - public-type:core:precision_level
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:flow:barrier_effect
+      - public-type:flow:barrier_model
+      - public-type:flow:cfg_availability
+      - public-type:flow:cfg_availability_state
+      - public-type:flow:effect_summary
+      - public-type:flow:effect_summary_report
+      - public-type:flow:flow_node
+      - public-type:flow:flow_options
+      - public-type:flow:flow_path
+      - public-type:flow:flow_sensitivity
+      - public-type:flow:resource_protocol
+      - public-type:flow:resource_report
+      - public-type:flow:resource_transition
+      - public-type:flow:resource_transition_kind
+      - public-type:flow:sink_model
+      - public-type:flow:source_model
+      - public-type:flow:taint_policy
+      - public-type:flow:taint_report
+      - public-type:flow:unknown_call_policy
+      - public-type:flow:value_path
+      - public-type:flow:value_path_kind
+      - public-type:models:api_effects
+      - public-type:models:api_model_pack
+      - public-type:models:effect_kind
+      - public-type:models:model_binding_state
+      - public-type:models:model_pack_options
+      - public-type:models:model_precedence
+      - public-type:models:parameter_effect
+      - public-type:select:call_selector
+      - public-type:select:symbol_selector
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.flow.package_internal_engine
+      - shared.package.graph.package_internal_engine
+      - shared.package.models.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers: []
+      schemas: *id002
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-RL-005
+      design_sections:
+      - §13 API model pack
+      - §18 dataflow/taint/resource
+      - §36.6 flow tests
+      - §39.21 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, provider/model/snapshot requirements, availability,
+        path/state/fixpoint budgets, unresolved/coverage/guarantee, variant and schema/version behavior with a public example.
+    acceptance:
+      positive:
+        id: API-FLOW-006.positive
+        expression: Use a complete deterministic fixture for CFG availability, deterministic finite-lattice paths/fixpoints
+          and explicit partial/open-world accounting.
+        expected: Exact canonical rows/paths/summaries, conserved coverage, versioned evidence and complete guarantee.
+      negative:
+        id: API-FLOW-006.negative
+        expression: Use invalid policy/model/protocol, unavailable CFG, unsupported construct/version, stale snapshot or provider/I/O
+          failure.
+        expected: Typed error/unresolved/availability with no clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-FLOW-006.ambiguous
+        expression: Use overload, virtual/indirect, alias/path, model conflict, variant divergence, recursive SCC or budget-limited
+          candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false convergence are forbidden.
+  - api_id: API-FLOW-007
+    atomic_unit: AU-FLOW-007
+    package: flow
+    policy: flow.resource-protocol.v1
+    declaration:
+      source: contracts/candidates/50/flow.hpp
+      signature: cxxlens::result<cxxlens::flow::resource_report> cxxlens::flow::check_resource_protocol(const cxxlens::workspace&,cxxlens::flow::resource_protocol,cxxlens::flow::flow_options);
+        const cxxlens::finding_set& cxxlens::flow::resource_report::findings() const noexcept; std::span<const cxxlens::flow::flow_path>
+        cxxlens::flow::resource_report::counterexamples() const noexcept; const cxxlens::flow::cfg_availability& cxxlens::flow::resource_report::cfg()
+        const noexcept; const cxxlens::coverage_report& cxxlens::flow::resource_report::coverage() const noexcept; std::span<const
+        cxxlens::unresolved> cxxlens::flow::resource_report::unresolved_items() const noexcept; std::span<const cxxlens::diagnostic>
+        cxxlens::flow::resource_report::diagnostics() const noexcept; cxxlens::result_guarantee cxxlens::flow::resource_report::guarantee()
+        const noexcept; std::string cxxlens::flow::resource_report::to_json() const
+      signature_fingerprint: sha256:e253f22cef7257a2ece2a40858d14687af9280a63bf9a00c292d03599bc42665
+    family_members:
+    - cxxlens::flow::flow::check_resource_protocol
+    - cxxlens::flow::resource_report::findings
+    - cxxlens::flow::resource_report::counterexamples
+    - cxxlens::flow::resource_report::cfg
+    - cxxlens::flow::resource_report::coverage
+    - cxxlens::flow::resource_report::unresolved_items
+    - cxxlens::flow::resource_report::diagnostics
+    - cxxlens::flow::resource_report::guarantee
+    - cxxlens::flow::resource_report::to_json
+    semantics:
+    - CFG availability, deterministic finite-lattice paths/fixpoints and explicit partial/open-world accounting binds one
+      immutable catalog/fact/model snapshot and never hides unavailable providers as empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-convergent and failure outcomes remain distinct.
+    - Provider/model versions, semantic IDs/order, evidence/coverage/guarantee, budgets, context and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:finding_set
+      - public-type:core:precision_level
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:flow:barrier_effect
+      - public-type:flow:barrier_model
+      - public-type:flow:cfg_availability
+      - public-type:flow:cfg_availability_state
+      - public-type:flow:effect_summary
+      - public-type:flow:effect_summary_report
+      - public-type:flow:flow_node
+      - public-type:flow:flow_options
+      - public-type:flow:flow_path
+      - public-type:flow:flow_sensitivity
+      - public-type:flow:resource_protocol
+      - public-type:flow:resource_report
+      - public-type:flow:resource_transition
+      - public-type:flow:resource_transition_kind
+      - public-type:flow:sink_model
+      - public-type:flow:source_model
+      - public-type:flow:taint_policy
+      - public-type:flow:taint_report
+      - public-type:flow:unknown_call_policy
+      - public-type:flow:value_path
+      - public-type:flow:value_path_kind
+      - public-type:models:api_effects
+      - public-type:models:api_model_pack
+      - public-type:models:effect_kind
+      - public-type:models:model_binding_state
+      - public-type:models:model_pack_options
+      - public-type:models:model_precedence
+      - public-type:models:parameter_effect
+      - public-type:select:call_selector
+      - public-type:select:symbol_selector
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.flow.package_internal_engine
+      - shared.package.graph.package_internal_engine
+      - shared.package.models.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers:
+      - provider.capability.flow-cfg:flow.cfg
+      - provider.fact.frontend:call
+      - provider.fact.frontend:cfg_summary
+      schemas: *id002
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-RL-005
+      design_sections:
+      - §13 API model pack
+      - §18 dataflow/taint/resource
+      - §36.6 flow tests
+      - §39.21 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, provider/model/snapshot requirements, availability,
+        path/state/fixpoint budgets, unresolved/coverage/guarantee, variant and schema/version behavior with a public example.
+    acceptance:
+      positive:
+        id: API-FLOW-007.positive
+        expression: Use a complete deterministic fixture for CFG availability, deterministic finite-lattice paths/fixpoints
+          and explicit partial/open-world accounting.
+        expected: Exact canonical rows/paths/summaries, conserved coverage, versioned evidence and complete guarantee.
+      negative:
+        id: API-FLOW-007.negative
+        expression: Use invalid policy/model/protocol, unavailable CFG, unsupported construct/version, stale snapshot or provider/I/O
+          failure.
+        expected: Typed error/unresolved/availability with no clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-FLOW-007.ambiguous
+        expression: Use overload, virtual/indirect, alias/path, model conflict, variant divergence, recursive SCC or budget-limited
+          candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false convergence are forbidden.
+  - api_id: API-FLOW-008
+    atomic_unit: AU-FLOW-008
+    package: flow
+    policy: flow.effect-fixpoint.v1
+    declaration:
+      source: contracts/candidates/50/flow.hpp
+      signature: cxxlens::result<cxxlens::flow::effect_summary_report> cxxlens::flow::build_effect_summaries(const cxxlens::workspace&,cxxlens::analysis_scope,cxxlens::flow::flow_options);
+        std::span<const cxxlens::flow::effect_summary> cxxlens::flow::effect_summary_report::summaries() const noexcept; const
+        cxxlens::flow::cfg_availability& cxxlens::flow::effect_summary_report::cfg() const noexcept; const cxxlens::coverage_report&
+        cxxlens::flow::effect_summary_report::coverage() const noexcept; std::span<const cxxlens::unresolved> cxxlens::flow::effect_summary_report::unresolved_items()
+        const noexcept; std::span<const cxxlens::diagnostic> cxxlens::flow::effect_summary_report::diagnostics() const noexcept;
+        bool cxxlens::flow::effect_summary_report::converged() const noexcept; std::string cxxlens::flow::effect_summary_report::to_json()
+        const
+      signature_fingerprint: sha256:fadb06a4d3396b24cfc8f1535e8d3b82d62d67da4f0d513a6bb357ab9852d633
+    family_members:
+    - cxxlens::flow::flow::build_effect_summaries
+    - cxxlens::flow::effect_summary_report::summaries
+    - cxxlens::flow::effect_summary_report::cfg
+    - cxxlens::flow::effect_summary_report::coverage
+    - cxxlens::flow::effect_summary_report::unresolved_items
+    - cxxlens::flow::effect_summary_report::diagnostics
+    - cxxlens::flow::effect_summary_report::converged
+    - cxxlens::flow::effect_summary_report::to_json
+    semantics:
+    - CFG availability, deterministic finite-lattice paths/fixpoints and explicit partial/open-world accounting binds one
+      immutable catalog/fact/model snapshot and never hides unavailable providers as empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-convergent and failure outcomes remain distinct.
+    - Provider/model versions, semantic IDs/order, evidence/coverage/guarantee, budgets, context and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:finding_set
+      - public-type:core:precision_level
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:flow:barrier_effect
+      - public-type:flow:barrier_model
+      - public-type:flow:cfg_availability
+      - public-type:flow:cfg_availability_state
+      - public-type:flow:effect_summary
+      - public-type:flow:effect_summary_report
+      - public-type:flow:flow_node
+      - public-type:flow:flow_options
+      - public-type:flow:flow_path
+      - public-type:flow:flow_sensitivity
+      - public-type:flow:resource_protocol
+      - public-type:flow:resource_report
+      - public-type:flow:resource_transition
+      - public-type:flow:resource_transition_kind
+      - public-type:flow:sink_model
+      - public-type:flow:source_model
+      - public-type:flow:taint_policy
+      - public-type:flow:taint_report
+      - public-type:flow:unknown_call_policy
+      - public-type:flow:value_path
+      - public-type:flow:value_path_kind
+      - public-type:models:api_effects
+      - public-type:models:api_model_pack
+      - public-type:models:effect_kind
+      - public-type:models:model_binding_state
+      - public-type:models:model_pack_options
+      - public-type:models:model_precedence
+      - public-type:models:parameter_effect
+      - public-type:select:call_selector
+      - public-type:select:symbol_selector
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.flow.package_internal_engine
+      - shared.package.graph.package_internal_engine
+      - shared.package.models.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers:
+      - provider.capability.flow-cfg:flow.cfg
+      - provider.capability.flow-effect-summaries:flow.effect-summaries
+      - provider.fact.frontend:call
+      - provider.fact.frontend:cfg_summary
+      - provider.fact.frontend:effect_summary
+      schemas: *id002
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-008
+      - FR-010
+      - QR-004
+      - QR-005
+      design_sections:
+      - §13 API model pack
+      - §18 dataflow/taint/resource
+      - §36.6 flow tests
+      - §39.21 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, provider/model/snapshot requirements, availability,
+        path/state/fixpoint budgets, unresolved/coverage/guarantee, variant and schema/version behavior with a public example.
+    acceptance:
+      positive:
+        id: API-FLOW-008.positive
+        expression: Use a complete deterministic fixture for CFG availability, deterministic finite-lattice paths/fixpoints
+          and explicit partial/open-world accounting.
+        expected: Exact canonical rows/paths/summaries, conserved coverage, versioned evidence and complete guarantee.
+      negative:
+        id: API-FLOW-008.negative
+        expression: Use invalid policy/model/protocol, unavailable CFG, unsupported construct/version, stale snapshot or provider/I/O
+          failure.
+        expected: Typed error/unresolved/availability with no clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-FLOW-008.ambiguous
+        expression: Use overload, virtual/indirect, alias/path, model conflict, variant divergence, recursive SCC or budget-limited
+          candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false convergence are forbidden.
+  - api_id: API-MODEL-001
+    atomic_unit: AU-MODEL-001
+    package: models
+    policy: flow.model-pack.v1
+    declaration:
+      source: contracts/candidates/50/models.hpp
+      signature: cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::empty(std::string,cxxlens::semantic_version)
+      signature_fingerprint: sha256:b8df1aee884666c26f1cbe61c1f55d850adc76ac4f62bd008e7f5a4b28d8eeed
+    family_members:
+    - cxxlens::models::api_model_pack::empty
+    semantics:
+    - versioned exact model binding, conflict-aware merge and bounded trusted/untrusted I/O binds one immutable catalog/fact/model
+      snapshot and never hides unavailable providers as empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-convergent and failure outcomes remain distinct.
+    - Provider/model versions, semantic IDs/order, evidence/coverage/guarantee, budgets, context and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:finding_set
+      - public-type:core:precision_level
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:flow:barrier_effect
+      - public-type:flow:barrier_model
+      - public-type:flow:cfg_availability
+      - public-type:flow:cfg_availability_state
+      - public-type:flow:effect_summary
+      - public-type:flow:effect_summary_report
+      - public-type:flow:flow_node
+      - public-type:flow:flow_options
+      - public-type:flow:flow_path
+      - public-type:flow:flow_sensitivity
+      - public-type:flow:resource_protocol
+      - public-type:flow:resource_report
+      - public-type:flow:resource_transition
+      - public-type:flow:resource_transition_kind
+      - public-type:flow:sink_model
+      - public-type:flow:source_model
+      - public-type:flow:taint_policy
+      - public-type:flow:taint_report
+      - public-type:flow:unknown_call_policy
+      - public-type:flow:value_path
+      - public-type:flow:value_path_kind
+      - public-type:models:api_effects
+      - public-type:models:api_model_pack
+      - public-type:models:effect_kind
+      - public-type:models:model_binding_state
+      - public-type:models:model_pack_options
+      - public-type:models:model_precedence
+      - public-type:models:parameter_effect
+      - public-type:select:call_selector
+      - public-type:select:symbol_selector
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.flow.package_internal_engine
+      - shared.package.graph.package_internal_engine
+      - shared.package.models.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers: []
+      schemas: *id002
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-008
+      - FR-010
+      - QR-004
+      - QR-005
+      design_sections:
+      - §13 API model pack
+      - §18 dataflow/taint/resource
+      - §36.6 flow tests
+      - §39.21 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, provider/model/snapshot requirements, availability,
+        path/state/fixpoint budgets, unresolved/coverage/guarantee, variant and schema/version behavior with a public example.
+    acceptance:
+      positive:
+        id: API-MODEL-001.positive
+        expression: Use a complete deterministic fixture for versioned exact model binding, conflict-aware merge and bounded
+          trusted/untrusted I/O.
+        expected: Exact canonical rows/paths/summaries, conserved coverage, versioned evidence and complete guarantee.
+      negative:
+        id: API-MODEL-001.negative
+        expression: Use invalid policy/model/protocol, unavailable CFG, unsupported construct/version, stale snapshot or provider/I/O
+          failure.
+        expected: Typed error/unresolved/availability with no clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-MODEL-001.ambiguous
+        expression: Use overload, virtual/indirect, alias/path, model conflict, variant divergence, recursive SCC or budget-limited
+          candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false convergence are forbidden.
+  - api_id: API-MODEL-002
+    atomic_unit: AU-MODEL-002
+    package: models
+    policy: flow.model-pack.v1
+    declaration:
+      source: contracts/candidates/50/models.hpp
+      signature: cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::function(std::string,cxxlens::models::api_effects)
+        const; cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::method(std::string,std::string,cxxlens::models::api_effects)
+        const; cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::replacement(std::string,std::string)
+        const; cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::source(std::string,cxxlens::flow::source_model)
+        const; cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::sink(std::string,cxxlens::flow::sink_model)
+        const; cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::barrier(std::string,cxxlens::flow::barrier_model)
+        const
+      signature_fingerprint: sha256:72b1ee2bce292c265b570401bd275590b4737c37ddbeac8cf7a229c71edcf757
+    family_members:
+    - cxxlens::models::api_model_pack::function
+    - cxxlens::models::api_model_pack::method
+    - cxxlens::models::api_model_pack::replacement
+    - cxxlens::models::api_model_pack::source
+    - cxxlens::models::api_model_pack::sink
+    - cxxlens::models::api_model_pack::barrier
+    semantics:
+    - versioned exact model binding, conflict-aware merge and bounded trusted/untrusted I/O binds one immutable catalog/fact/model
+      snapshot and never hides unavailable providers as empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-convergent and failure outcomes remain distinct.
+    - Provider/model versions, semantic IDs/order, evidence/coverage/guarantee, budgets, context and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:finding_set
+      - public-type:core:precision_level
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:flow:barrier_effect
+      - public-type:flow:barrier_model
+      - public-type:flow:cfg_availability
+      - public-type:flow:cfg_availability_state
+      - public-type:flow:effect_summary
+      - public-type:flow:effect_summary_report
+      - public-type:flow:flow_node
+      - public-type:flow:flow_options
+      - public-type:flow:flow_path
+      - public-type:flow:flow_sensitivity
+      - public-type:flow:resource_protocol
+      - public-type:flow:resource_report
+      - public-type:flow:resource_transition
+      - public-type:flow:resource_transition_kind
+      - public-type:flow:sink_model
+      - public-type:flow:source_model
+      - public-type:flow:taint_policy
+      - public-type:flow:taint_report
+      - public-type:flow:unknown_call_policy
+      - public-type:flow:value_path
+      - public-type:flow:value_path_kind
+      - public-type:models:api_effects
+      - public-type:models:api_model_pack
+      - public-type:models:effect_kind
+      - public-type:models:model_binding_state
+      - public-type:models:model_pack_options
+      - public-type:models:model_precedence
+      - public-type:models:parameter_effect
+      - public-type:select:call_selector
+      - public-type:select:symbol_selector
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.flow.package_internal_engine
+      - shared.package.graph.package_internal_engine
+      - shared.package.models.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers:
+      - provider.fact.frontend:symbol
+      - provider.fact.frontend:type
+      schemas: *id002
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-008
+      - FR-010
+      - QR-004
+      - QR-005
+      design_sections:
+      - §13 API model pack
+      - §18 dataflow/taint/resource
+      - §36.6 flow tests
+      - §39.21 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, provider/model/snapshot requirements, availability,
+        path/state/fixpoint budgets, unresolved/coverage/guarantee, variant and schema/version behavior with a public example.
+    acceptance:
+      positive:
+        id: API-MODEL-002.positive
+        expression: Use a complete deterministic fixture for versioned exact model binding, conflict-aware merge and bounded
+          trusted/untrusted I/O.
+        expected: Exact canonical rows/paths/summaries, conserved coverage, versioned evidence and complete guarantee.
+      negative:
+        id: API-MODEL-002.negative
+        expression: Use invalid policy/model/protocol, unavailable CFG, unsupported construct/version, stale snapshot or provider/I/O
+          failure.
+        expected: Typed error/unresolved/availability with no clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-MODEL-002.ambiguous
+        expression: Use overload, virtual/indirect, alias/path, model conflict, variant divergence, recursive SCC or budget-limited
+          candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false convergence are forbidden.
+  - api_id: API-MODEL-003
+    atomic_unit: AU-MODEL-003
+    package: models
+    policy: flow.model-pack.v1
+    declaration:
+      source: contracts/candidates/50/models.hpp
+      signature: cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::merge(const cxxlens::models::api_model_pack&,cxxlens::models::model_precedence)
+        const
+      signature_fingerprint: sha256:ff1b159316602b9d0c333dc7a15ff5b7cf55a2100907395fdc35e400e26c5cc4
+    family_members:
+    - cxxlens::models::api_model_pack::merge
+    semantics:
+    - versioned exact model binding, conflict-aware merge and bounded trusted/untrusted I/O binds one immutable catalog/fact/model
+      snapshot and never hides unavailable providers as empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-convergent and failure outcomes remain distinct.
+    - Provider/model versions, semantic IDs/order, evidence/coverage/guarantee, budgets, context and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:finding_set
+      - public-type:core:precision_level
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:flow:barrier_effect
+      - public-type:flow:barrier_model
+      - public-type:flow:cfg_availability
+      - public-type:flow:cfg_availability_state
+      - public-type:flow:effect_summary
+      - public-type:flow:effect_summary_report
+      - public-type:flow:flow_node
+      - public-type:flow:flow_options
+      - public-type:flow:flow_path
+      - public-type:flow:flow_sensitivity
+      - public-type:flow:resource_protocol
+      - public-type:flow:resource_report
+      - public-type:flow:resource_transition
+      - public-type:flow:resource_transition_kind
+      - public-type:flow:sink_model
+      - public-type:flow:source_model
+      - public-type:flow:taint_policy
+      - public-type:flow:taint_report
+      - public-type:flow:unknown_call_policy
+      - public-type:flow:value_path
+      - public-type:flow:value_path_kind
+      - public-type:models:api_effects
+      - public-type:models:api_model_pack
+      - public-type:models:effect_kind
+      - public-type:models:model_binding_state
+      - public-type:models:model_pack_options
+      - public-type:models:model_precedence
+      - public-type:models:parameter_effect
+      - public-type:select:call_selector
+      - public-type:select:symbol_selector
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.flow.package_internal_engine
+      - shared.package.graph.package_internal_engine
+      - shared.package.models.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers: []
+      schemas: *id002
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-008
+      - FR-010
+      - QR-004
+      - QR-005
+      design_sections:
+      - §13 API model pack
+      - §18 dataflow/taint/resource
+      - §36.6 flow tests
+      - §39.21 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, provider/model/snapshot requirements, availability,
+        path/state/fixpoint budgets, unresolved/coverage/guarantee, variant and schema/version behavior with a public example.
+    acceptance:
+      positive:
+        id: API-MODEL-003.positive
+        expression: Use a complete deterministic fixture for versioned exact model binding, conflict-aware merge and bounded
+          trusted/untrusted I/O.
+        expected: Exact canonical rows/paths/summaries, conserved coverage, versioned evidence and complete guarantee.
+      negative:
+        id: API-MODEL-003.negative
+        expression: Use invalid policy/model/protocol, unavailable CFG, unsupported construct/version, stale snapshot or provider/I/O
+          failure.
+        expected: Typed error/unresolved/availability with no clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-MODEL-003.ambiguous
+        expression: Use overload, virtual/indirect, alias/path, model conflict, variant divergence, recursive SCC or budget-limited
+          candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false convergence are forbidden.
+  - api_id: API-MODEL-004
+    atomic_unit: AU-MODEL-004
+    package: models
+    policy: flow.model-pack.v1
+    declaration:
+      source: contracts/candidates/50/models.hpp
+      signature: cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::load(cxxlens::path,cxxlens::models::model_pack_options);
+        cxxlens::result<void> cxxlens::models::api_model_pack::save(cxxlens::path,cxxlens::models::model_pack_options) const;
+        std::string_view cxxlens::models::api_model_pack::id() const noexcept; cxxlens::semantic_version cxxlens::models::api_model_pack::version()
+        const noexcept; std::span<const cxxlens::diagnostic> cxxlens::models::api_model_pack::diagnostics() const noexcept;
+        std::span<const cxxlens::unresolved> cxxlens::models::api_model_pack::unresolved_items() const noexcept; std::string
+        cxxlens::models::api_model_pack::to_json() const
+      signature_fingerprint: sha256:045639a5b50d6fcca083e69b1468a497b967d70893b41a5f41c5fcf81cf66283
+    family_members:
+    - cxxlens::models::api_model_pack::load
+    - cxxlens::models::api_model_pack::save
+    - cxxlens::models::api_model_pack::id
+    - cxxlens::models::api_model_pack::version
+    - cxxlens::models::api_model_pack::diagnostics
+    - cxxlens::models::api_model_pack::unresolved_items
+    - cxxlens::models::api_model_pack::to_json
+    semantics:
+    - versioned exact model binding, conflict-aware merge and bounded trusted/untrusted I/O binds one immutable catalog/fact/model
+      snapshot and never hides unavailable providers as empty success.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-convergent and failure outcomes remain distinct.
+    - Provider/model versions, semantic IDs/order, evidence/coverage/guarantee, budgets, context and variants are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:confidence
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:finding_set
+      - public-type:core:precision_level
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:semantic_version
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:flow:barrier_effect
+      - public-type:flow:barrier_model
+      - public-type:flow:cfg_availability
+      - public-type:flow:cfg_availability_state
+      - public-type:flow:effect_summary
+      - public-type:flow:effect_summary_report
+      - public-type:flow:flow_node
+      - public-type:flow:flow_options
+      - public-type:flow:flow_path
+      - public-type:flow:flow_sensitivity
+      - public-type:flow:resource_protocol
+      - public-type:flow:resource_report
+      - public-type:flow:resource_transition
+      - public-type:flow:resource_transition_kind
+      - public-type:flow:sink_model
+      - public-type:flow:source_model
+      - public-type:flow:taint_policy
+      - public-type:flow:taint_report
+      - public-type:flow:unknown_call_policy
+      - public-type:flow:value_path
+      - public-type:flow:value_path_kind
+      - public-type:models:api_effects
+      - public-type:models:api_model_pack
+      - public-type:models:effect_kind
+      - public-type:models:model_binding_state
+      - public-type:models:model_pack_options
+      - public-type:models:model_precedence
+      - public-type:models:parameter_effect
+      - public-type:select:call_selector
+      - public-type:select:symbol_selector
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.flow.package_internal_engine
+      - shared.package.graph.package_internal_engine
+      - shared.package.models.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers: []
+      schemas: *id002
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-008
+      - FR-010
+      - QR-004
+      - QR-005
+      design_sections:
+      - §13 API model pack
+      - §18 dataflow/taint/resource
+      - §36.6 flow tests
+      - §39.21 package candidate
+      doxygen_obligation: Document exact types, immutable ownership/threading, provider/model/snapshot requirements, availability,
+        path/state/fixpoint budgets, unresolved/coverage/guarantee, variant and schema/version behavior with a public example.
+    acceptance:
+      positive:
+        id: API-MODEL-004.positive
+        expression: Use a complete deterministic fixture for versioned exact model binding, conflict-aware merge and bounded
+          trusted/untrusted I/O.
+        expected: Exact canonical rows/paths/summaries, conserved coverage, versioned evidence and complete guarantee.
+      negative:
+        id: API-MODEL-004.negative
+        expression: Use invalid policy/model/protocol, unavailable CFG, unsupported construct/version, stale snapshot or provider/I/O
+          failure.
+        expected: Typed error/unresolved/availability with no clean-empty or completeness overclaim.
+      ambiguous:
+        id: API-MODEL-004.ambiguous
+        expression: Use overload, virtual/indirect, alias/path, model conflict, variant divergence, recursive SCC or budget-limited
+          candidates.
+        expected: All candidates/conflicts/partial rows remain explicit; first-wins and false convergence are forbidden.
+  production_implementation_changed: false
+  candidate_fingerprint: sha256:2cbc4efec8cc4784fe10df0d4ac5048d943b73ff5d3d677afc6991d7c7a569ad

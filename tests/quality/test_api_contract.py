@@ -43,7 +43,7 @@ class ApiContractTest(unittest.TestCase):
         )
         self.assertEqual(
             summary["contract_state_counts"],
-            {"candidate": 18, "unresolved": 4},
+            {"candidate": 20, "unresolved": 2},
         )
 
     def test_duplicate_id_fixture(self) -> None:

@@ -220,6 +220,28 @@ class PackageContractCandidateTest(unittest.TestCase):
         result = load("cxxlens_generation_result.schema.yaml")
         self.assertIn("rollback_failed", result["properties"]["state"]["enum"])
 
+    def test_positive_issue_50_candidate_and_flow_model_schemas(self) -> None:
+        group = next(row for row in self.manifest["groups"] if row["issue"] == "#50")
+        self.assertEqual(group["packages"], ["flow", "models"])
+        self.assertEqual(len(group["api_contracts"]), 12)
+        self.assertFalse(group["production_implementation_changed"])
+        for name in (
+            "cxxlens_flow_options.schema.yaml",
+            "cxxlens_taint_report.schema.yaml",
+            "cxxlens_resource_report.schema.yaml",
+            "cxxlens_effect_summary.schema.yaml",
+            "cxxlens_api_model_pack.schema.yaml",
+        ):
+            jsonschema.Draft202012Validator.check_schema(load(name))
+        taint = load("cxxlens_taint_report.schema.yaml")
+        states = set(taint["$defs"]["cfg"]["properties"]["state"]["enum"])
+        self.assertEqual(states, {"available", "absent", "unsupported", "failed", "partial", "stale", "variant_divergent"})
+        options = load("cxxlens_flow_options.schema.yaml")
+        for name in ("max_paths", "max_steps", "max_states", "widening_after_iterations"):
+            self.assertEqual(options["properties"][name]["minimum"], 1)
+        pack = load("cxxlens_api_model_pack.schema.yaml")
+        self.assertEqual(pack["properties"]["compatibility"]["properties"]["unknown_kind_policy"]["const"], "reject")
+
     def test_missing_assigned_api_is_rejected(self) -> None:
         document = copy.deepcopy(self.manifest)
         group = document["groups"][0]

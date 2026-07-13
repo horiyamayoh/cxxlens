@@ -408,8 +408,29 @@ public_types:
   owner_atomic_unit: AU-FACT-001
   steward: integration.package.facts
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-facts
+- id: public-type:flow:barrier_effect
+  type: barrier_effect
+  package: flow
+  header: <cxxlens/flow.hpp>
+  owner_atomic_unit: AU-FLOW-001
+  steward: integration.package.flow
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-flow
 - id: public-type:flow:barrier_model
   type: barrier_model
+  package: flow
+  header: <cxxlens/flow.hpp>
+  owner_atomic_unit: AU-FLOW-001
+  steward: integration.package.flow
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-flow
+- id: public-type:flow:cfg_availability
+  type: cfg_availability
+  package: flow
+  header: <cxxlens/flow.hpp>
+  owner_atomic_unit: AU-FLOW-001
+  steward: integration.package.flow
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-flow
+- id: public-type:flow:cfg_availability_state
+  type: cfg_availability_state
   package: flow
   header: <cxxlens/flow.hpp>
   owner_atomic_unit: AU-FLOW-001
@@ -422,8 +443,22 @@ public_types:
   owner_atomic_unit: AU-FLOW-001
   steward: integration.package.flow
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-flow
+- id: public-type:flow:effect_summary_report
+  type: effect_summary_report
+  package: flow
+  header: <cxxlens/flow.hpp>
+  owner_atomic_unit: AU-FLOW-001
+  steward: integration.package.flow
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-flow
 - id: public-type:flow:flow_node
   type: flow_node
+  package: flow
+  header: <cxxlens/flow.hpp>
+  owner_atomic_unit: AU-FLOW-001
+  steward: integration.package.flow
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-flow
+- id: public-type:flow:flow_options
+  type: flow_options
   package: flow
   header: <cxxlens/flow.hpp>
   owner_atomic_unit: AU-FLOW-001
@@ -436,8 +471,36 @@ public_types:
   owner_atomic_unit: AU-FLOW-001
   steward: integration.package.flow
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-flow
+- id: public-type:flow:flow_sensitivity
+  type: flow_sensitivity
+  package: flow
+  header: <cxxlens/flow.hpp>
+  owner_atomic_unit: AU-FLOW-001
+  steward: integration.package.flow
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-flow
 - id: public-type:flow:resource_protocol
   type: resource_protocol
+  package: flow
+  header: <cxxlens/flow.hpp>
+  owner_atomic_unit: AU-FLOW-001
+  steward: integration.package.flow
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-flow
+- id: public-type:flow:resource_report
+  type: resource_report
+  package: flow
+  header: <cxxlens/flow.hpp>
+  owner_atomic_unit: AU-FLOW-001
+  steward: integration.package.flow
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-flow
+- id: public-type:flow:resource_transition
+  type: resource_transition
+  package: flow
+  header: <cxxlens/flow.hpp>
+  owner_atomic_unit: AU-FLOW-001
+  steward: integration.package.flow
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-flow
+- id: public-type:flow:resource_transition_kind
+  type: resource_transition_kind
   package: flow
   header: <cxxlens/flow.hpp>
   owner_atomic_unit: AU-FLOW-001
@@ -466,6 +529,27 @@ public_types:
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-flow
 - id: public-type:flow:taint_report
   type: taint_report
+  package: flow
+  header: <cxxlens/flow.hpp>
+  owner_atomic_unit: AU-FLOW-001
+  steward: integration.package.flow
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-flow
+- id: public-type:flow:unknown_call_policy
+  type: unknown_call_policy
+  package: flow
+  header: <cxxlens/flow.hpp>
+  owner_atomic_unit: AU-FLOW-001
+  steward: integration.package.flow
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-flow
+- id: public-type:flow:value_path
+  type: value_path
+  package: flow
+  header: <cxxlens/flow.hpp>
+  owner_atomic_unit: AU-FLOW-001
+  steward: integration.package.flow
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-flow
+- id: public-type:flow:value_path_kind
+  type: value_path_kind
   package: flow
   header: <cxxlens/flow.hpp>
   owner_atomic_unit: AU-FLOW-001
@@ -837,6 +921,27 @@ public_types:
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-models
 - id: public-type:models:effect_kind
   type: effect_kind
+  package: models
+  header: <cxxlens/models.hpp>
+  owner_atomic_unit: AU-MODEL-001
+  steward: integration.package.models
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-models
+- id: public-type:models:model_binding_state
+  type: model_binding_state
+  package: models
+  header: <cxxlens/models.hpp>
+  owner_atomic_unit: AU-MODEL-001
+  steward: integration.package.models
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-models
+- id: public-type:models:model_pack_options
+  type: model_pack_options
+  package: models
+  header: <cxxlens/models.hpp>
+  owner_atomic_unit: AU-MODEL-001
+  steward: integration.package.models
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-models
+- id: public-type:models:model_precedence
+  type: model_precedence
   package: models
   header: <cxxlens/models.hpp>
   owner_atomic_unit: AU-MODEL-001
@@ -1908,6 +2013,22 @@ shared_components:
   semantics_version: cxxlens.package.workspace.v1
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-workspace
 providers:
+- id: provider.capability.flow-cfg:flow.cfg
+  contract_id: provider.capability.flow-cfg
+  kind: capability_provider_implementation
+  subject: flow.cfg
+  owner_atomic_unit: AU-FLOW-005
+  steward: steward.flow
+  semantics_version: cxxlens.capability.flow-cfg.v1
+  source_contract: docs/design/package_contract_50.md#ownership-values-and-availability
+- id: provider.capability.flow-effect-summaries:flow.effect-summaries
+  contract_id: provider.capability.flow-effect-summaries
+  kind: capability_provider_implementation
+  subject: flow.effect-summaries
+  owner_atomic_unit: AU-FLOW-008
+  steward: steward.flow
+  semantics_version: cxxlens.capability.flow-effect-summaries.v1
+  source_contract: docs/design/package_contract_50.md#resource-protocol-and-effect-summaries
 - id: provider.capability.include-cleaner:include.cleaner
   contract_id: provider.capability.include-cleaner
   kind: capability_provider_implementation
@@ -2176,6 +2297,11 @@ schemas:
   owner_atomic_unit: AU-CORE-001
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_api_model_pack.schema.yaml
+  path: schemas/cxxlens_api_model_pack.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
 - id: schema:schemas/cxxlens_api_test_coverage.schema.yaml
   path: schemas/cxxlens_api_test_coverage.schema.yaml
   owner_atomic_unit: AU-CORE-001
@@ -2226,6 +2352,11 @@ schemas:
   owner_atomic_unit: AU-CORE-001
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_effect_summary.schema.yaml
+  path: schemas/cxxlens_effect_summary.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
 - id: schema:schemas/cxxlens_error.schema.yaml
   path: schemas/cxxlens_error.schema.yaml
   owner_atomic_unit: AU-CORE-001
@@ -2273,6 +2404,11 @@ schemas:
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
 - id: schema:schemas/cxxlens_finding_set.schema.yaml
   path: schemas/cxxlens_finding_set.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_flow_options.schema.yaml
+  path: schemas/cxxlens_flow_options.schema.yaml
   owner_atomic_unit: AU-CORE-001
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
@@ -2391,6 +2527,11 @@ schemas:
   owner_atomic_unit: AU-CORE-001
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_resource_report.schema.yaml
+  path: schemas/cxxlens_resource_report.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
 - id: schema:schemas/cxxlens_rule.schema.yaml
   path: schemas/cxxlens_rule.schema.yaml
   owner_atomic_unit: AU-CORE-001
@@ -2431,6 +2572,11 @@ schemas:
   owner_atomic_unit: AU-CORE-001
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_taint_report.schema.yaml
+  path: schemas/cxxlens_taint_report.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
 - id: schema:schemas/cxxlens_testing_fixture.schema.yaml
   path: schemas/cxxlens_testing_fixture.schema.yaml
   owner_atomic_unit: AU-CORE-001
@@ -2462,8 +2608,8 @@ schemas:
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
 summary:
-  public_type_count: 206
+  public_type_count: 221
   shared_component_count: 66
-  provider_subject_count: 24
-  schema_count: 72
-semantic_digest: sha256:66908a27ba0e35e94eede43c163a30e5e6571cedc25ab49c2d55592a504544c7
+  provider_subject_count: 26
+  schema_count: 77
+semantic_digest: sha256:bcd461d6af290ff065bd626cda126d4cb21ac5ddf32479d81b70ea9a943190ba

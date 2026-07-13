@@ -2,10 +2,10 @@
   "dependency_requests": [
     {
       "blocked_api_ids": [
-        "API-FLOW-001"
+        "API-QA-001"
       ],
-      "request_id": "DR-AU-FLOW-001-001",
-      "requesting_atomic_unit": "AU-FLOW-001",
+      "request_id": "DR-AU-QA-001-001",
+      "requesting_atomic_unit": "AU-QA-001",
       "state": "pending"
     }
   ],
@@ -2116,6 +2116,40 @@
       "to": "AU-WS-008",
       "via_api_ids": [
         "API-WS-008"
+      ]
+    },
+    {
+      "component_id": "provider.capability.flow-cfg.flow.cfg",
+      "from": "AU-FLOW-007",
+      "kind": "capability_provider_implementation",
+      "owner": {
+        "atomic_unit_id": "AU-FLOW-005",
+        "steward": "steward.flow"
+      },
+      "reason": "flow.cfg requires its declared implementation provider",
+      "required_semantics_version": "cxxlens.capability.flow-cfg.v1",
+      "scope": "readiness",
+      "source_contract": "docs/design/package_contract_50.md#ownership-values-and-availability",
+      "to": "AU-FLOW-005",
+      "via_api_ids": [
+        "API-FLOW-007"
+      ]
+    },
+    {
+      "component_id": "provider.capability.flow-cfg.flow.cfg",
+      "from": "AU-FLOW-008",
+      "kind": "capability_provider_implementation",
+      "owner": {
+        "atomic_unit_id": "AU-FLOW-005",
+        "steward": "steward.flow"
+      },
+      "reason": "flow.cfg requires its declared implementation provider",
+      "required_semantics_version": "cxxlens.capability.flow-cfg.v1",
+      "scope": "readiness",
+      "source_contract": "docs/design/package_contract_50.md#ownership-values-and-availability",
+      "to": "AU-FLOW-005",
+      "via_api_ids": [
+        "API-FLOW-008"
       ]
     },
     {
@@ -10371,14 +10405,14 @@
     }
   ],
   "input_fingerprints": {
-    "contract_ownership_registry": "sha256:713f86fe0cc61bfb441178289037db87b823de6c209152b1e1538c8518e435c3",
-    "dependency_requests": "sha256:5092a12eeaed7c5d01988775af00f06e35b6c1856684751f154bcb8c9e9ddb22",
+    "contract_ownership_registry": "sha256:1016b7856d8aba275feb72c52f44f16b43ce91fc72841f5344ab1b4249365c0b",
+    "dependency_requests": "sha256:b277d05da7d235c6c60c5feb2c2e412569e35c21a1ab41621c51b35bd060eceb",
     "global_contract_conventions": "sha256:cdf3166db0b38fb9230602ff5ba273baf9e7e253d61d6c2fc75d21f0fea1238c",
     "m0": "sha256:9e32e99675512405e1247fd92b8cfcbc5c6e99ab9dc0378833482541c0538f19",
     "m1": "sha256:330670610fc393f8fd9a79493477b28f45c22f863fddaa35dae8a074a4deb567",
     "m2": "sha256:7f2d5d01ef9c074e1bfdc7920c51ea60d2520ae5e6b878467f94c670c144df27",
-    "ownership": "sha256:833fbeeb62b60ffb7cc294b6cd7fc20dd4313ef98e0567be03716050f0e42a6e",
-    "task_packets": "sha256:9bfa9a8b51f2dc97ceb06ff8ba11dbe169819a5b33a2efaa1e37c3a5184e1374"
+    "ownership": "sha256:443b090bc736fbbc8580874c1b7bee44792522644768392ba6eeb015af74feff",
+    "task_packets": "sha256:dbc79912a1c789ca751ad01694bd51a85db2c35c755e6e57cf4631e62efa77cf"
   },
   "nodes": [
     {
@@ -11750,11 +11784,11 @@
         {
           "chain": [
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-001"
+          "subject": "API-FLOW-001"
         },
         {
           "chain": [
@@ -11768,46 +11802,10 @@
         {
           "chain": [
             "AU-FLOW-001",
-            "dependency-request-open:DR-AU-FLOW-001-001"
-          ],
-          "code": "dependency-request-open",
-          "steward": "generator.catalog",
-          "subject": "DR-AU-FLOW-001-001"
-        },
-        {
-          "chain": [
-            "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-001"
-        },
-        {
-          "chain": [
-            "AU-FLOW-001",
-            "exact_declaration_unresolved:API-FLOW-001"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-001"
-        },
-        {
-          "chain": [
-            "AU-FLOW-001",
             "fixtures-missing:AU-FLOW-001"
           ],
           "code": "fixtures-missing",
           "steward": "steward.testing",
-          "subject": "AU-FLOW-001"
-        },
-        {
-          "chain": [
-            "AU-FLOW-001",
-            "frozen-skeleton-missing:AU-FLOW-001"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
           "subject": "AU-FLOW-001"
         }
       ],
@@ -11821,12 +11819,12 @@
         "M7"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -11860,11 +11858,11 @@
         {
           "chain": [
             "AU-FLOW-002",
-            "contract-candidate-missing:AU-FLOW-002"
+            "candidate_declaration_not_integrated:API-FLOW-002"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-002"
+          "subject": "API-FLOW-002"
         },
         {
           "chain": [
@@ -11878,24 +11876,6 @@
         {
           "chain": [
             "AU-FLOW-002",
-            "exact-contract-missing:AU-FLOW-002"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-002"
-        },
-        {
-          "chain": [
-            "AU-FLOW-002",
-            "exact_declaration_unresolved:API-FLOW-002"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-002"
-        },
-        {
-          "chain": [
-            "AU-FLOW-002",
             "fixtures-missing:AU-FLOW-002"
           ],
           "code": "fixtures-missing",
@@ -11905,18 +11885,9 @@
         {
           "chain": [
             "AU-FLOW-002",
-            "frozen-skeleton-missing:AU-FLOW-002"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-002"
-        },
-        {
-          "chain": [
-            "AU-FLOW-002",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11927,7 +11898,7 @@
             "AU-FLOW-002",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11938,7 +11909,7 @@
             "AU-FLOW-002",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -11959,12 +11930,12 @@
         "M7"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": false,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -11996,11 +11967,11 @@
         {
           "chain": [
             "AU-FLOW-003",
-            "contract-candidate-missing:AU-FLOW-003"
+            "candidate_declaration_not_integrated:API-FLOW-003"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-003"
+          "subject": "API-FLOW-003"
         },
         {
           "chain": [
@@ -12010,24 +11981,6 @@
           "code": "contract-freeze-missing",
           "steward": "generator.catalog",
           "subject": "AU-FLOW-003"
-        },
-        {
-          "chain": [
-            "AU-FLOW-003",
-            "exact-contract-missing:AU-FLOW-003"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-003"
-        },
-        {
-          "chain": [
-            "AU-FLOW-003",
-            "exact_declaration_unresolved:API-FLOW-003"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-003"
         },
         {
           "chain": [
@@ -12050,18 +12003,9 @@
         {
           "chain": [
             "AU-FLOW-003",
-            "frozen-skeleton-missing:AU-FLOW-003"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-003"
-        },
-        {
-          "chain": [
-            "AU-FLOW-003",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12072,7 +12016,7 @@
             "AU-FLOW-003",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12083,7 +12027,7 @@
             "AU-FLOW-003",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12104,12 +12048,12 @@
         "M7"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": false,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -12141,11 +12085,11 @@
         {
           "chain": [
             "AU-FLOW-004",
-            "contract-candidate-missing:AU-FLOW-004"
+            "candidate_declaration_not_integrated:API-FLOW-004"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-004"
+          "subject": "API-FLOW-004"
         },
         {
           "chain": [
@@ -12159,24 +12103,6 @@
         {
           "chain": [
             "AU-FLOW-004",
-            "exact-contract-missing:AU-FLOW-004"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-004"
-        },
-        {
-          "chain": [
-            "AU-FLOW-004",
-            "exact_declaration_unresolved:API-FLOW-004"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-004"
-        },
-        {
-          "chain": [
-            "AU-FLOW-004",
             "fixtures-missing:AU-FLOW-004"
           ],
           "code": "fixtures-missing",
@@ -12186,18 +12112,9 @@
         {
           "chain": [
             "AU-FLOW-004",
-            "frozen-skeleton-missing:AU-FLOW-004"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-004"
-        },
-        {
-          "chain": [
-            "AU-FLOW-004",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12208,7 +12125,7 @@
             "AU-FLOW-004",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12219,7 +12136,7 @@
             "AU-FLOW-004",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12238,12 +12155,12 @@
         "M7"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": false,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -12270,11 +12187,20 @@
         {
           "chain": [
             "AU-FLOW-005",
-            "contract-candidate-missing:AU-FLOW-005"
+            "candidate_declaration_not_integrated:API-FLOW-005"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-005"
+          "subject": "API-FLOW-005"
+        },
+        {
+          "chain": [
+            "AU-FLOW-005",
+            "capability-provider-unavailable:flow.cfg"
+          ],
+          "code": "capability-provider-unavailable",
+          "steward": "steward.repository",
+          "subject": "flow.cfg"
         },
         {
           "chain": [
@@ -12284,24 +12210,6 @@
           "code": "contract-freeze-missing",
           "steward": "generator.catalog",
           "subject": "AU-FLOW-005"
-        },
-        {
-          "chain": [
-            "AU-FLOW-005",
-            "exact-contract-missing:AU-FLOW-005"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-005"
-        },
-        {
-          "chain": [
-            "AU-FLOW-005",
-            "exact_declaration_unresolved:API-FLOW-005"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-005"
         },
         {
           "chain": [
@@ -12333,18 +12241,9 @@
         {
           "chain": [
             "AU-FLOW-005",
-            "frozen-skeleton-missing:AU-FLOW-005"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-005"
-        },
-        {
-          "chain": [
-            "AU-FLOW-005",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12355,7 +12254,7 @@
             "AU-FLOW-005",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12366,7 +12265,7 @@
             "AU-FLOW-005",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12387,20 +12286,22 @@
         "M7"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": false,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
         "provider_availability": false,
-        "provider_semantics": true,
+        "provider_semantics": false,
         "providers": false
       },
-      "required_capabilities": [],
+      "required_capabilities": [
+        "flow.cfg"
+      ],
       "required_facts": [
         "call",
         "cfg_summary",
@@ -12408,6 +12309,7 @@
       ],
       "shard_id": "shard.au-flow-005",
       "shared_components": [
+        "provider.capability.flow-cfg.flow.cfg",
         "provider.fact.frontend.call",
         "provider.fact.frontend.cfg_summary",
         "provider.fact.frontend.flow_summary",
@@ -12426,11 +12328,11 @@
         {
           "chain": [
             "AU-FLOW-006",
-            "contract-candidate-missing:AU-FLOW-006"
+            "candidate_declaration_not_integrated:API-FLOW-006"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-006"
+          "subject": "API-FLOW-006"
         },
         {
           "chain": [
@@ -12444,24 +12346,6 @@
         {
           "chain": [
             "AU-FLOW-006",
-            "exact-contract-missing:AU-FLOW-006"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-006"
-        },
-        {
-          "chain": [
-            "AU-FLOW-006",
-            "exact_declaration_unresolved:API-FLOW-006"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-006"
-        },
-        {
-          "chain": [
-            "AU-FLOW-006",
             "fixtures-missing:AU-FLOW-006"
           ],
           "code": "fixtures-missing",
@@ -12471,18 +12355,9 @@
         {
           "chain": [
             "AU-FLOW-006",
-            "frozen-skeleton-missing:AU-FLOW-006"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-006"
-        },
-        {
-          "chain": [
-            "AU-FLOW-006",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12493,7 +12368,7 @@
             "AU-FLOW-006",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12504,7 +12379,7 @@
             "AU-FLOW-006",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12523,12 +12398,12 @@
         "M7"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": false,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -12555,11 +12430,20 @@
         {
           "chain": [
             "AU-FLOW-007",
-            "contract-candidate-missing:AU-FLOW-007"
+            "candidate_declaration_not_integrated:API-FLOW-007"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-007"
+          "subject": "API-FLOW-007"
+        },
+        {
+          "chain": [
+            "AU-FLOW-007",
+            "capability-provider-unavailable:flow.cfg"
+          ],
+          "code": "capability-provider-unavailable",
+          "steward": "steward.repository",
+          "subject": "flow.cfg"
         },
         {
           "chain": [
@@ -12569,24 +12453,6 @@
           "code": "contract-freeze-missing",
           "steward": "generator.catalog",
           "subject": "AU-FLOW-007"
-        },
-        {
-          "chain": [
-            "AU-FLOW-007",
-            "exact-contract-missing:AU-FLOW-007"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-007"
-        },
-        {
-          "chain": [
-            "AU-FLOW-007",
-            "exact_declaration_unresolved:API-FLOW-007"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-007"
         },
         {
           "chain": [
@@ -12609,18 +12475,20 @@
         {
           "chain": [
             "AU-FLOW-007",
-            "frozen-skeleton-missing:AU-FLOW-007"
+            "provider.capability.flow-cfg.flow.cfg",
+            "AU-FLOW-005",
+            "candidate_declaration_not_integrated:API-FLOW-005"
           ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-007"
+          "code": "shared-component-not-complete",
+          "steward": "steward.flow",
+          "subject": "provider.capability.flow-cfg.flow.cfg"
         },
         {
           "chain": [
             "AU-FLOW-007",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12631,7 +12499,7 @@
             "AU-FLOW-007",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12642,7 +12510,7 @@
             "AU-FLOW-007",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12651,9 +12519,11 @@
       ],
       "dependencies": [
         "AU-FLOW-001",
+        "AU-FLOW-005",
         "AU-WS-005"
       ],
       "dependency_kinds": [
+        "capability_provider_implementation",
         "fact_provider_implementation",
         "package_internal_engine",
         "schema_fixture_contract",
@@ -12663,26 +12533,29 @@
         "M7"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": false,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
         "provider_availability": false,
-        "provider_semantics": true,
+        "provider_semantics": false,
         "providers": false
       },
-      "required_capabilities": [],
+      "required_capabilities": [
+        "flow.cfg"
+      ],
       "required_facts": [
         "call",
         "cfg_summary"
       ],
       "shard_id": "shard.au-flow-007",
       "shared_components": [
+        "provider.capability.flow-cfg.flow.cfg",
         "provider.fact.frontend.call",
         "provider.fact.frontend.cfg_summary",
         "shared.package.flow.package_internal_engine",
@@ -12700,11 +12573,29 @@
         {
           "chain": [
             "AU-FLOW-008",
-            "contract-candidate-missing:AU-FLOW-008"
+            "candidate_declaration_not_integrated:API-FLOW-008"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-008"
+          "subject": "API-FLOW-008"
+        },
+        {
+          "chain": [
+            "AU-FLOW-008",
+            "capability-provider-unavailable:flow.cfg"
+          ],
+          "code": "capability-provider-unavailable",
+          "steward": "steward.repository",
+          "subject": "flow.cfg"
+        },
+        {
+          "chain": [
+            "AU-FLOW-008",
+            "capability-provider-unavailable:flow.effect-summaries"
+          ],
+          "code": "capability-provider-unavailable",
+          "steward": "steward.repository",
+          "subject": "flow.effect-summaries"
         },
         {
           "chain": [
@@ -12714,24 +12605,6 @@
           "code": "contract-freeze-missing",
           "steward": "generator.catalog",
           "subject": "AU-FLOW-008"
-        },
-        {
-          "chain": [
-            "AU-FLOW-008",
-            "exact-contract-missing:AU-FLOW-008"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-008"
-        },
-        {
-          "chain": [
-            "AU-FLOW-008",
-            "exact_declaration_unresolved:API-FLOW-008"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-008"
         },
         {
           "chain": [
@@ -12763,18 +12636,20 @@
         {
           "chain": [
             "AU-FLOW-008",
-            "frozen-skeleton-missing:AU-FLOW-008"
+            "provider.capability.flow-cfg.flow.cfg",
+            "AU-FLOW-005",
+            "candidate_declaration_not_integrated:API-FLOW-005"
           ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-008"
+          "code": "shared-component-not-complete",
+          "steward": "steward.flow",
+          "subject": "provider.capability.flow-cfg.flow.cfg"
         },
         {
           "chain": [
             "AU-FLOW-008",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12785,7 +12660,7 @@
             "AU-FLOW-008",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12796,7 +12671,7 @@
             "AU-FLOW-008",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.flow",
@@ -12805,9 +12680,11 @@
       ],
       "dependencies": [
         "AU-FLOW-001",
+        "AU-FLOW-005",
         "AU-WS-005"
       ],
       "dependency_kinds": [
+        "capability_provider_implementation",
         "fact_provider_implementation",
         "package_internal_engine",
         "schema_fixture_contract",
@@ -12817,20 +12694,23 @@
         "M7"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": false,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
         "provider_availability": false,
-        "provider_semantics": true,
+        "provider_semantics": false,
         "providers": false
       },
-      "required_capabilities": [],
+      "required_capabilities": [
+        "flow.cfg",
+        "flow.effect-summaries"
+      ],
       "required_facts": [
         "call",
         "cfg_summary",
@@ -12838,6 +12718,8 @@
       ],
       "shard_id": "shard.au-flow-008",
       "shared_components": [
+        "provider.capability.flow-cfg.flow.cfg",
+        "provider.capability.flow-effect-summaries.flow.effect-summaries",
         "provider.fact.frontend.call",
         "provider.fact.frontend.cfg_summary",
         "provider.fact.frontend.effect_summary",
@@ -14963,11 +14845,11 @@
         {
           "chain": [
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-MODEL-001"
+          "subject": "API-MODEL-001"
         },
         {
           "chain": [
@@ -14981,37 +14863,10 @@
         {
           "chain": [
             "AU-MODEL-001",
-            "exact-contract-missing:AU-MODEL-001"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-MODEL-001"
-        },
-        {
-          "chain": [
-            "AU-MODEL-001",
-            "exact_declaration_unresolved:API-MODEL-001"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-MODEL-001"
-        },
-        {
-          "chain": [
-            "AU-MODEL-001",
             "fixtures-missing:AU-MODEL-001"
           ],
           "code": "fixtures-missing",
           "steward": "steward.testing",
-          "subject": "AU-MODEL-001"
-        },
-        {
-          "chain": [
-            "AU-MODEL-001",
-            "frozen-skeleton-missing:AU-MODEL-001"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
           "subject": "AU-MODEL-001"
         }
       ],
@@ -15021,12 +14876,12 @@
         "M3"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -15053,11 +14908,11 @@
         {
           "chain": [
             "AU-MODEL-002",
-            "contract-candidate-missing:AU-MODEL-002"
+            "candidate_declaration_not_integrated:API-MODEL-002"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-MODEL-002"
+          "subject": "API-MODEL-002"
         },
         {
           "chain": [
@@ -15071,24 +14926,6 @@
         {
           "chain": [
             "AU-MODEL-002",
-            "exact-contract-missing:AU-MODEL-002"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-MODEL-002"
-        },
-        {
-          "chain": [
-            "AU-MODEL-002",
-            "exact_declaration_unresolved:API-MODEL-002"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-MODEL-002"
-        },
-        {
-          "chain": [
-            "AU-MODEL-002",
             "fixtures-missing:AU-MODEL-002"
           ],
           "code": "fixtures-missing",
@@ -15098,18 +14935,9 @@
         {
           "chain": [
             "AU-MODEL-002",
-            "frozen-skeleton-missing:AU-MODEL-002"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-MODEL-002"
-        },
-        {
-          "chain": [
-            "AU-MODEL-002",
             "shared.package.models.package_internal_engine",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.models",
@@ -15120,7 +14948,7 @@
             "AU-MODEL-002",
             "shared.package.models.schema_fixture_contract",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.models",
@@ -15131,7 +14959,7 @@
             "AU-MODEL-002",
             "shared.package.models.shared_public_type",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.models",
@@ -15152,12 +14980,12 @@
         "M3"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": false,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -15189,11 +15017,11 @@
         {
           "chain": [
             "AU-MODEL-003",
-            "contract-candidate-missing:AU-MODEL-003"
+            "candidate_declaration_not_integrated:API-MODEL-003"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-MODEL-003"
+          "subject": "API-MODEL-003"
         },
         {
           "chain": [
@@ -15207,24 +15035,6 @@
         {
           "chain": [
             "AU-MODEL-003",
-            "exact-contract-missing:AU-MODEL-003"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-MODEL-003"
-        },
-        {
-          "chain": [
-            "AU-MODEL-003",
-            "exact_declaration_unresolved:API-MODEL-003"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-MODEL-003"
-        },
-        {
-          "chain": [
-            "AU-MODEL-003",
             "fixtures-missing:AU-MODEL-003"
           ],
           "code": "fixtures-missing",
@@ -15234,18 +15044,9 @@
         {
           "chain": [
             "AU-MODEL-003",
-            "frozen-skeleton-missing:AU-MODEL-003"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-MODEL-003"
-        },
-        {
-          "chain": [
-            "AU-MODEL-003",
             "shared.package.models.package_internal_engine",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.models",
@@ -15256,7 +15057,7 @@
             "AU-MODEL-003",
             "shared.package.models.schema_fixture_contract",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.models",
@@ -15267,7 +15068,7 @@
             "AU-MODEL-003",
             "shared.package.models.shared_public_type",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.models",
@@ -15286,12 +15087,12 @@
         "M3"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": false,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -15318,11 +15119,11 @@
         {
           "chain": [
             "AU-MODEL-004",
-            "contract-candidate-missing:AU-MODEL-004"
+            "candidate_declaration_not_integrated:API-MODEL-004"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-MODEL-004"
+          "subject": "API-MODEL-004"
         },
         {
           "chain": [
@@ -15336,24 +15137,6 @@
         {
           "chain": [
             "AU-MODEL-004",
-            "exact-contract-missing:AU-MODEL-004"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-MODEL-004"
-        },
-        {
-          "chain": [
-            "AU-MODEL-004",
-            "exact_declaration_unresolved:API-MODEL-004"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-MODEL-004"
-        },
-        {
-          "chain": [
-            "AU-MODEL-004",
             "fixtures-missing:AU-MODEL-004"
           ],
           "code": "fixtures-missing",
@@ -15363,18 +15146,9 @@
         {
           "chain": [
             "AU-MODEL-004",
-            "frozen-skeleton-missing:AU-MODEL-004"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-MODEL-004"
-        },
-        {
-          "chain": [
-            "AU-MODEL-004",
             "shared.package.models.package_internal_engine",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.models",
@@ -15385,7 +15159,7 @@
             "AU-MODEL-004",
             "shared.package.models.schema_fixture_contract",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.models",
@@ -15396,7 +15170,7 @@
             "AU-MODEL-004",
             "shared.package.models.shared_public_type",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "steward": "integration.package.models",
@@ -15415,12 +15189,12 @@
         "M3"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": false,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -15461,6 +15235,15 @@
           "code": "contract-freeze-missing",
           "steward": "generator.catalog",
           "subject": "AU-QA-001"
+        },
+        {
+          "chain": [
+            "AU-QA-001",
+            "dependency-request-open:DR-AU-QA-001-001"
+          ],
+          "code": "dependency-request-open",
+          "steward": "generator.catalog",
+          "subject": "DR-AU-QA-001-001"
         },
         {
           "chain": [
@@ -25375,6 +25158,40 @@
   "providers": {
     "capabilities": [
       {
+        "contract_id": "provider.capability.flow-cfg.flow.cfg",
+        "evidence": [
+          "provider_unavailable:capability_provider_implementation:flow.cfg"
+        ],
+        "id": "flow.cfg",
+        "kind": "capability_provider_implementation",
+        "owner": {
+          "atomic_unit_id": "AU-FLOW-005",
+          "steward": "steward.flow"
+        },
+        "provided_semantics_version": null,
+        "required_semantics_version": "cxxlens.capability.flow-cfg.v1",
+        "semantics_state": "incomplete",
+        "source_contract": "docs/design/package_contract_50.md#ownership-values-and-availability",
+        "state": "unavailable"
+      },
+      {
+        "contract_id": "provider.capability.flow-effect-summaries.flow.effect-summaries",
+        "evidence": [
+          "provider_unavailable:capability_provider_implementation:flow.effect-summaries"
+        ],
+        "id": "flow.effect-summaries",
+        "kind": "capability_provider_implementation",
+        "owner": {
+          "atomic_unit_id": "AU-FLOW-008",
+          "steward": "steward.flow"
+        },
+        "provided_semantics_version": null,
+        "required_semantics_version": "cxxlens.capability.flow-effect-summaries.v1",
+        "semantics_state": "incomplete",
+        "source_contract": "docs/design/package_contract_50.md#resource-protocol-and-effect-summaries",
+        "state": "unavailable"
+      },
+      {
         "contract_id": "provider.capability.include-cleaner.include.cleaner",
         "evidence": [
           "provider_unavailable:capability_provider_implementation:include.cleaner"
@@ -25770,7 +25587,7 @@
     ]
   },
   "schema": "cxxlens.api-ready.v1",
-  "semantic_digest": "sha256:44d7364fa05400a9089df45f7f613be4e615d43e08c3064afedd03c4dc332404",
+  "semantic_digest": "sha256:0831b51b1d8318836e02afa578d777c1a6882411c745f2c7e3ceeb94be44ac13",
   "shards": [
     {
       "acceptance_command": {
@@ -60105,10 +59922,10 @@
   ],
   "summary": {
     "api_count": 124,
-    "edge_count": 604,
+    "edge_count": 606,
     "edge_kind_counts": {
       "api_dependency": 34,
-      "capability_provider_implementation": 5,
+      "capability_provider_implementation": 7,
       "fact_provider_implementation": 135,
       "package_integration_prerequisite": 124,
       "package_internal_engine": 102,
@@ -60116,7 +59933,7 @@
       "shared_public_type": 102
     },
     "package_count": 22,
-    "readiness_edge_count": 480,
+    "readiness_edge_count": 482,
     "ready_waves": [],
     "state_counts": {
       "blocked": 77,
@@ -60208,8 +60025,6 @@
       "AU-FLOW-004",
       "AU-FLOW-005",
       "AU-FLOW-006",
-      "AU-FLOW-007",
-      "AU-FLOW-008",
       "AU-FUZZ-002",
       "AU-FUZZ-003",
       "AU-GRAPH-002",
@@ -60244,6 +60059,8 @@
       "AU-TF-009"
     ],
     [
+      "AU-FLOW-007",
+      "AU-FLOW-008",
       "AU-GEN-002",
       "AU-GRAPH-005",
       "AU-REPORT-001",

@@ -14,7 +14,7 @@
       "package_id": "configuration",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:6bf809aa59689effae99624530c2a85a1470549ade1c6e321f47cfc5a28b071d"
+      "task_packet_digest": "sha256:f74f473c853194d43ebdf3f48eabeac696550492f5b2987813f973c4b90a2fcc"
     },
     {
       "api_id": "API-CFG-002",
@@ -30,7 +30,7 @@
       "package_id": "configuration",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:640bc1aabc3a41a754aeaf481577b7879efcf396d38a313c655e67976305bd69"
+      "task_packet_digest": "sha256:645d46f9506845683418ea03a7d2f7b09131366e3c92dc40c829256ad09d23e1"
     },
     {
       "api_id": "API-CFG-003",
@@ -46,7 +46,7 @@
       "package_id": "configuration",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:d06320217caa29faa57f6d19cc1e20580940f0889eba2112454fc14e346548ce"
+      "task_packet_digest": "sha256:16d11d51b29c2168edf263a12bf1773fe06712297e3abf1268321574bc0484be"
     },
     {
       "api_id": "API-CFG-004",
@@ -62,7 +62,7 @@
       "package_id": "configuration",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:71dee6665e5bf4d11f2481ad1c99cf9fa7e48b3503584ac89899cd2d88ff4329"
+      "task_packet_digest": "sha256:5a986dcaff193116602ec4741c0954821514ad394db9ad036c8e8d0a2b921f11"
     },
     {
       "api_id": "API-COPY-001",
@@ -109,7 +109,7 @@
       "package_id": "copy",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:b947f6f14d69d72edc65e9d60c376fef23a3525bee671059ebd98f668e794bd3"
+      "task_packet_digest": "sha256:80240746a07f100bbc0ac453b08b03beec8c384045b1a9b3322284b20f769554"
     },
     {
       "api_id": "API-COPY-002",
@@ -192,7 +192,7 @@
       "package_id": "copy",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:3cb3419d4a05d5b57669ef51f0e2a1f1bff62896970d65579dfd8d7fa02376f0"
+      "task_packet_digest": "sha256:6806ac3300217fca22136d03427148eab4c7eab579f426b6f9f123e6ed2c7c11"
     },
     {
       "api_id": "API-CORE-001",
@@ -208,7 +208,7 @@
       "package_id": "core",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:6de998e1609d13a24994327f2751ae1890d5e44799a9582f11024d3ebed3f8fb"
+      "task_packet_digest": "sha256:bd19b84f099fa1734f444d0b8c1123dd6f10b6f300e5f93c311afa69b7798769"
     },
     {
       "api_id": "API-CORE-002",
@@ -224,7 +224,7 @@
       "package_id": "core",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:560e4149402ccba01786a9c9dc6c61484f8956956d4158baa29646703b2b7e05"
+      "task_packet_digest": "sha256:393ea9befe587c8d929396bd56a55e4b6124cae5a622934d9a97a6abd191d511"
     },
     {
       "api_id": "API-CORE-003",
@@ -240,7 +240,7 @@
       "package_id": "core",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:93787f34d57d5b0c2af7f40cac5fea93e0018490744f9f11e1e3e8112f155750"
+      "task_packet_digest": "sha256:bf3b8c58670999f6247640bea95389c1e3a5c471b14ce9c3d1f1ef784d3af297"
     },
     {
       "api_id": "API-CORE-004",
@@ -256,7 +256,7 @@
       "package_id": "core",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:30d3d5c9fc0efb038ffac7653ade0712f1dc03386d562391a5a4aa3fc3819a43"
+      "task_packet_digest": "sha256:dbb7472a33f0c3d049237f9b9ffb2faac799e4dc66ec6e7a30f3973bbde5292c"
     },
     {
       "api_id": "API-CORE-005",
@@ -303,7 +303,7 @@
       "package_id": "core",
       "phase": "M0",
       "state": "blocked",
-      "task_packet_digest": "sha256:087ee187fc18b3d32b3c900598c294e2563e8c2ae2a6fb76c1e0a669ff794bbc"
+      "task_packet_digest": "sha256:c5fd111162ac8086bc1cd828f8a82275723b9aec107e8ed8a92905e3270d7876"
     },
     {
       "api_id": "API-CORE-006",
@@ -361,7 +361,7 @@
       "package_id": "core",
       "phase": "M0",
       "state": "blocked",
-      "task_packet_digest": "sha256:8c72408879312804f18fb5276f833609d2ef5463ffd07e7c6622814be6ca8692"
+      "task_packet_digest": "sha256:235e451910a99b343bdca66c84ba265af17787630b3859240ea0f2bcba656db7"
     },
     {
       "api_id": "API-EXP-001",
@@ -408,7 +408,7 @@
       "package_id": "explain",
       "phase": "M2",
       "state": "blocked",
-      "task_packet_digest": "sha256:44761b4c06816b36589a8fa5e9b7c0ede1dcecf124bcca8d92aa0c7b5bd117cd"
+      "task_packet_digest": "sha256:6a229e791f53bd4d167fe9533c512a2d046d8eabf86b3d78e934f62a4c010162"
     },
     {
       "api_id": "API-EXP-002",
@@ -424,7 +424,7 @@
       "package_id": "explain",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:79f278032fa70020e26a74ce7a701807af7800dba14c4a056161762334557a90"
+      "task_packet_digest": "sha256:0c5b6f8177a9a284202efd2360650cd5b29b058c13c0d4562b889458dab116fe"
     },
     {
       "api_id": "API-EXP-003",
@@ -471,7 +471,7 @@
       "package_id": "explain",
       "phase": "M2",
       "state": "blocked",
-      "task_packet_digest": "sha256:69cd71582977ddbe0781fff7c4e164966fac636f89d3a1f5e483b2f7a5d378ee"
+      "task_packet_digest": "sha256:059306be8ad3abb7ca7bbd66cfcd4a2e796334db2d30ef698f35aade1af7ced8"
     },
     {
       "api_id": "API-EXP-004",
@@ -518,7 +518,7 @@
       "package_id": "explain",
       "phase": "M0",
       "state": "blocked",
-      "task_packet_digest": "sha256:ea9d65626b1be246246a45dd1c15021917c2f9153b11914f74ef484507b590ae"
+      "task_packet_digest": "sha256:7a97b295d5aaa4a05056d9f496e1e4c7a9921b88922bd2a59ba3cef2d031078f"
     },
     {
       "api_id": "API-FACT-001",
@@ -534,7 +534,7 @@
       "package_id": "facts",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:8f350e1cd6a8839bf48a0fd11efda0798d7ca075899ca541135aba76eefa8c67"
+      "task_packet_digest": "sha256:fd2db7ac01aa892034da691d73f4fb57ec924909b357d32f812174eb9475b4be"
     },
     {
       "api_id": "API-FACT-002",
@@ -550,7 +550,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:b63445e85e8329a11cdab45aa60c49a496a1892570f5310f72c80cc68dffa3c9"
+      "task_packet_digest": "sha256:67c039e38fa33e58f68b37b34333d3dbe200b25c56c1475aff93d4791704ad12"
     },
     {
       "api_id": "API-FACT-003",
@@ -566,7 +566,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:2b71298a6d390de1acc1d8810bc73631e2df671db06328d86b30961cab8bcda8"
+      "task_packet_digest": "sha256:efba12f97fe5351ec22b767f7e352f80ac6d96d4ffff5cc324b563aaa3f05eb4"
     },
     {
       "api_id": "API-FACT-004",
@@ -582,7 +582,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:e4e4c107ddc4362eca553bcb3bb20a5368f0d4e7540bf1d0ed7609d47a53e856"
+      "task_packet_digest": "sha256:caac470148ed38ce1caf3b3f7c6d97bf0e6088c47c1f17e1880794f9a81b930b"
     },
     {
       "api_id": "API-FACT-005",
@@ -598,7 +598,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:074c1cfa5f2079e696664db6a29385849b05f0a144b0d03347fb1c9d1ba595e7"
+      "task_packet_digest": "sha256:0073d788ea4504819a6b73736d825a328b8dd0f3be930b4155f99f2bc95bfc17"
     },
     {
       "api_id": "API-FACT-006",
@@ -614,7 +614,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:f9d1279b664db1b034296e3378cf7d692089fcdeee7a72af1f80e45837d2c075"
+      "task_packet_digest": "sha256:cba82c87b1d51401bd5d9ad606625ae9b8df1b428c51d5ddae63f5c81067f389"
     },
     {
       "api_id": "API-FACT-007",
@@ -630,7 +630,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:b1374cf91e8829221ebd53bcfe8c300798c67a2b28352b866f93349f6cb52b6f"
+      "task_packet_digest": "sha256:ea039ee1e3673b787539f7769734a45a76d2923022402f1a4eec1af212e25bb3"
     },
     {
       "api_id": "API-FACT-008",
@@ -646,7 +646,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:bba24a89a223ff09216f382beebe367b7c6843321a204400db4eb6486a417081"
+      "task_packet_digest": "sha256:c0e9ba6edd933551f52834955b7de9fd125ed579a751893abc2eb7509522c451"
     },
     {
       "api_id": "API-FACT-009",
@@ -662,7 +662,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:a620e83a122e2d6fd8bd6b88e7078a39226ce24d0da9169ffc9058b5fc2d054d"
+      "task_packet_digest": "sha256:f03a0e94d2ddce02643c661aa787bd44b8810d7838eb4be8181b28ba615e346e"
     },
     {
       "api_id": "API-FACT-010",
@@ -678,7 +678,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:73d78b999cc2b87b8f92de938f381d61e21a28cfaeaaf72aa77c2c40b111c5b4"
+      "task_packet_digest": "sha256:bca8dd0e1ab1e13b1c3ad9db877665685e1d37513300062138d485d0058b2ab3"
     },
     {
       "api_id": "API-FLOW-001",
@@ -687,12 +687,12 @@
         {
           "chain": [
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-001"
+          "subject": "API-FLOW-001"
         },
         {
           "chain": [
@@ -707,65 +707,25 @@
         {
           "chain": [
             "AU-FLOW-001",
-            "dependency-request-open:DR-AU-FLOW-001-001"
-          ],
-          "code": "dependency-request-open",
-          "resolution_issue": 28,
-          "steward": "generator.catalog",
-          "subject": "DR-AU-FLOW-001-001"
-        },
-        {
-          "chain": [
-            "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-001"
-        },
-        {
-          "chain": [
-            "AU-FLOW-001",
-            "exact_declaration_unresolved:API-FLOW-001"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-001"
-        },
-        {
-          "chain": [
-            "AU-FLOW-001",
             "fixtures-missing:AU-FLOW-001"
           ],
           "code": "fixtures-missing",
           "resolution_issue": 1,
           "steward": "steward.testing",
           "subject": "AU-FLOW-001"
-        },
-        {
-          "chain": [
-            "AU-FLOW-001",
-            "frozen-skeleton-missing:AU-FLOW-001"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-001"
         }
       ],
       "contract_owner_issue": "#50",
-      "contract_state": "unresolved",
-      "contract_transition_issue": "#42",
-      "declaration_status": "unresolved",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#50",
+      "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "unimplemented",
       "kind": "static_factory_family",
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:448d1b9e11d23aff19f5f0b757ad14beb038cb429f6d1d2039ec2ebe413a817c"
+      "task_packet_digest": "sha256:bdd8359585067b04dd698851f525b96ff5b70dbb84763f2313f1545739c886a9"
     },
     {
       "api_id": "API-FLOW-002",
@@ -774,12 +734,12 @@
         {
           "chain": [
             "AU-FLOW-002",
-            "contract-candidate-missing:AU-FLOW-002"
+            "candidate_declaration_not_integrated:API-FLOW-002"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-002"
+          "subject": "API-FLOW-002"
         },
         {
           "chain": [
@@ -794,26 +754,6 @@
         {
           "chain": [
             "AU-FLOW-002",
-            "exact-contract-missing:AU-FLOW-002"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-002"
-        },
-        {
-          "chain": [
-            "AU-FLOW-002",
-            "exact_declaration_unresolved:API-FLOW-002"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-002"
-        },
-        {
-          "chain": [
-            "AU-FLOW-002",
             "fixtures-missing:AU-FLOW-002"
           ],
           "code": "fixtures-missing",
@@ -824,19 +764,9 @@
         {
           "chain": [
             "AU-FLOW-002",
-            "frozen-skeleton-missing:AU-FLOW-002"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-002"
-        },
-        {
-          "chain": [
-            "AU-FLOW-002",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -848,7 +778,7 @@
             "AU-FLOW-002",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -860,7 +790,7 @@
             "AU-FLOW-002",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -869,16 +799,16 @@
         }
       ],
       "contract_owner_issue": "#50",
-      "contract_state": "unresolved",
-      "contract_transition_issue": "#42",
-      "declaration_status": "unresolved",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#50",
+      "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "unimplemented",
       "kind": "static_factory_family",
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:7f3ba1d9fd5a2010b619635aab515472355bff57bceaf6f2b28785f568667db5"
+      "task_packet_digest": "sha256:d4a59357dd18d46eff35173901a987fe334be91cbfb37274d68c6c5d830b91e1"
     },
     {
       "api_id": "API-FLOW-003",
@@ -887,12 +817,12 @@
         {
           "chain": [
             "AU-FLOW-003",
-            "contract-candidate-missing:AU-FLOW-003"
+            "candidate_declaration_not_integrated:API-FLOW-003"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-003"
+          "subject": "API-FLOW-003"
         },
         {
           "chain": [
@@ -903,26 +833,6 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "AU-FLOW-003"
-        },
-        {
-          "chain": [
-            "AU-FLOW-003",
-            "exact-contract-missing:AU-FLOW-003"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-003"
-        },
-        {
-          "chain": [
-            "AU-FLOW-003",
-            "exact_declaration_unresolved:API-FLOW-003"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-003"
         },
         {
           "chain": [
@@ -947,19 +857,9 @@
         {
           "chain": [
             "AU-FLOW-003",
-            "frozen-skeleton-missing:AU-FLOW-003"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-003"
-        },
-        {
-          "chain": [
-            "AU-FLOW-003",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -971,7 +871,7 @@
             "AU-FLOW-003",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -983,7 +883,7 @@
             "AU-FLOW-003",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -992,16 +892,16 @@
         }
       ],
       "contract_owner_issue": "#50",
-      "contract_state": "unresolved",
-      "contract_transition_issue": "#42",
-      "declaration_status": "unresolved",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#50",
+      "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "unimplemented",
       "kind": "static_factory_family",
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:dbad5f15fd6b0c31ea1cee90ed10d182705fe4a0c2d2c42a8ec8d94c57d8222b"
+      "task_packet_digest": "sha256:abf7f207ba14b424cba76ca960a15a7e41fb1226ae189507cfdb99c823cb3373"
     },
     {
       "api_id": "API-FLOW-004",
@@ -1010,12 +910,12 @@
         {
           "chain": [
             "AU-FLOW-004",
-            "contract-candidate-missing:AU-FLOW-004"
+            "candidate_declaration_not_integrated:API-FLOW-004"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-004"
+          "subject": "API-FLOW-004"
         },
         {
           "chain": [
@@ -1030,26 +930,6 @@
         {
           "chain": [
             "AU-FLOW-004",
-            "exact-contract-missing:AU-FLOW-004"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-004"
-        },
-        {
-          "chain": [
-            "AU-FLOW-004",
-            "exact_declaration_unresolved:API-FLOW-004"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-004"
-        },
-        {
-          "chain": [
-            "AU-FLOW-004",
             "fixtures-missing:AU-FLOW-004"
           ],
           "code": "fixtures-missing",
@@ -1060,19 +940,9 @@
         {
           "chain": [
             "AU-FLOW-004",
-            "frozen-skeleton-missing:AU-FLOW-004"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-004"
-        },
-        {
-          "chain": [
-            "AU-FLOW-004",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -1084,7 +954,7 @@
             "AU-FLOW-004",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -1096,7 +966,7 @@
             "AU-FLOW-004",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -1105,16 +975,16 @@
         }
       ],
       "contract_owner_issue": "#50",
-      "contract_state": "unresolved",
-      "contract_transition_issue": "#42",
-      "declaration_status": "unresolved",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#50",
+      "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "unimplemented",
       "kind": "builder_family",
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:deb530ed4a903a6f561ff3bbf111d1ce5c7531a1648f46e6c45c320fbdaffbc2"
+      "task_packet_digest": "sha256:8eda3091f937da128d803359ce66f51574c51d8b800bcd4073989e78ee0144d9"
     },
     {
       "api_id": "API-FLOW-005",
@@ -1123,12 +993,22 @@
         {
           "chain": [
             "AU-FLOW-005",
-            "contract-candidate-missing:AU-FLOW-005"
+            "candidate_declaration_not_integrated:API-FLOW-005"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-005"
+          "subject": "API-FLOW-005"
+        },
+        {
+          "chain": [
+            "AU-FLOW-005",
+            "capability-provider-unavailable:flow.cfg"
+          ],
+          "code": "capability-provider-unavailable",
+          "resolution_issue": 1,
+          "steward": "steward.repository",
+          "subject": "flow.cfg"
         },
         {
           "chain": [
@@ -1139,26 +1019,6 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "AU-FLOW-005"
-        },
-        {
-          "chain": [
-            "AU-FLOW-005",
-            "exact-contract-missing:AU-FLOW-005"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-005"
-        },
-        {
-          "chain": [
-            "AU-FLOW-005",
-            "exact_declaration_unresolved:API-FLOW-005"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-005"
         },
         {
           "chain": [
@@ -1193,19 +1053,9 @@
         {
           "chain": [
             "AU-FLOW-005",
-            "frozen-skeleton-missing:AU-FLOW-005"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-005"
-        },
-        {
-          "chain": [
-            "AU-FLOW-005",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -1217,7 +1067,7 @@
             "AU-FLOW-005",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -1229,7 +1079,7 @@
             "AU-FLOW-005",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -1238,16 +1088,16 @@
         }
       ],
       "contract_owner_issue": "#50",
-      "contract_state": "unresolved",
-      "contract_transition_issue": "#42",
-      "declaration_status": "unresolved",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#50",
+      "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "unimplemented",
-      "kind": "free_function",
+      "kind": "free_function_family",
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:9f87f6a5682e1781c038210f8d352e43ca615254dd245b122ece303ae4527415"
+      "task_packet_digest": "sha256:02efbb417d7e44a27db25992c7f6a8367c0567bb08d91a2b1394854a1128d055"
     },
     {
       "api_id": "API-FLOW-006",
@@ -1256,12 +1106,12 @@
         {
           "chain": [
             "AU-FLOW-006",
-            "contract-candidate-missing:AU-FLOW-006"
+            "candidate_declaration_not_integrated:API-FLOW-006"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-006"
+          "subject": "API-FLOW-006"
         },
         {
           "chain": [
@@ -1276,26 +1126,6 @@
         {
           "chain": [
             "AU-FLOW-006",
-            "exact-contract-missing:AU-FLOW-006"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-006"
-        },
-        {
-          "chain": [
-            "AU-FLOW-006",
-            "exact_declaration_unresolved:API-FLOW-006"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-006"
-        },
-        {
-          "chain": [
-            "AU-FLOW-006",
             "fixtures-missing:AU-FLOW-006"
           ],
           "code": "fixtures-missing",
@@ -1306,19 +1136,9 @@
         {
           "chain": [
             "AU-FLOW-006",
-            "frozen-skeleton-missing:AU-FLOW-006"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-006"
-        },
-        {
-          "chain": [
-            "AU-FLOW-006",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -1330,7 +1150,7 @@
             "AU-FLOW-006",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -1342,7 +1162,7 @@
             "AU-FLOW-006",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -1351,16 +1171,16 @@
         }
       ],
       "contract_owner_issue": "#50",
-      "contract_state": "unresolved",
-      "contract_transition_issue": "#42",
-      "declaration_status": "unresolved",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#50",
+      "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "unimplemented",
       "kind": "builder_family",
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:b977837315cc0756d2312a1ed0570a25a14ad5a1d6cdf9985bb9922228c0800b"
+      "task_packet_digest": "sha256:4e2f94d90d27ae158fb44d6a45578ebb899097575b959b5ff8f0ef66e67ff671"
     },
     {
       "api_id": "API-FLOW-007",
@@ -1369,12 +1189,22 @@
         {
           "chain": [
             "AU-FLOW-007",
-            "contract-candidate-missing:AU-FLOW-007"
+            "candidate_declaration_not_integrated:API-FLOW-007"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-007"
+          "subject": "API-FLOW-007"
+        },
+        {
+          "chain": [
+            "AU-FLOW-007",
+            "capability-provider-unavailable:flow.cfg"
+          ],
+          "code": "capability-provider-unavailable",
+          "resolution_issue": 1,
+          "steward": "steward.repository",
+          "subject": "flow.cfg"
         },
         {
           "chain": [
@@ -1385,26 +1215,6 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "AU-FLOW-007"
-        },
-        {
-          "chain": [
-            "AU-FLOW-007",
-            "exact-contract-missing:AU-FLOW-007"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-007"
-        },
-        {
-          "chain": [
-            "AU-FLOW-007",
-            "exact_declaration_unresolved:API-FLOW-007"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-007"
         },
         {
           "chain": [
@@ -1429,19 +1239,21 @@
         {
           "chain": [
             "AU-FLOW-007",
-            "frozen-skeleton-missing:AU-FLOW-007"
+            "provider.capability.flow-cfg.flow.cfg",
+            "AU-FLOW-005",
+            "candidate_declaration_not_integrated:API-FLOW-005"
           ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-007"
+          "code": "shared-component-not-complete",
+          "resolution_issue": 1,
+          "steward": "steward.flow",
+          "subject": "provider.capability.flow-cfg.flow.cfg"
         },
         {
           "chain": [
             "AU-FLOW-007",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -1453,7 +1265,7 @@
             "AU-FLOW-007",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -1465,7 +1277,7 @@
             "AU-FLOW-007",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -1474,16 +1286,16 @@
         }
       ],
       "contract_owner_issue": "#50",
-      "contract_state": "unresolved",
-      "contract_transition_issue": "#42",
-      "declaration_status": "unresolved",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#50",
+      "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "unimplemented",
       "kind": "free_function",
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:5bb5ad2706c9f67dcf15fda3d5d7b07d85553b06914a30db3ff0f6d0579eca76"
+      "task_packet_digest": "sha256:3567514519fae51f9efacb6bb68e48fae04c95f77049a3d4a8b61d8c8bd0f714"
     },
     {
       "api_id": "API-FLOW-008",
@@ -1492,12 +1304,32 @@
         {
           "chain": [
             "AU-FLOW-008",
-            "contract-candidate-missing:AU-FLOW-008"
+            "candidate_declaration_not_integrated:API-FLOW-008"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-008"
+          "subject": "API-FLOW-008"
+        },
+        {
+          "chain": [
+            "AU-FLOW-008",
+            "capability-provider-unavailable:flow.cfg"
+          ],
+          "code": "capability-provider-unavailable",
+          "resolution_issue": 1,
+          "steward": "steward.repository",
+          "subject": "flow.cfg"
+        },
+        {
+          "chain": [
+            "AU-FLOW-008",
+            "capability-provider-unavailable:flow.effect-summaries"
+          ],
+          "code": "capability-provider-unavailable",
+          "resolution_issue": 1,
+          "steward": "steward.repository",
+          "subject": "flow.effect-summaries"
         },
         {
           "chain": [
@@ -1508,26 +1340,6 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "AU-FLOW-008"
-        },
-        {
-          "chain": [
-            "AU-FLOW-008",
-            "exact-contract-missing:AU-FLOW-008"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-008"
-        },
-        {
-          "chain": [
-            "AU-FLOW-008",
-            "exact_declaration_unresolved:API-FLOW-008"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-008"
         },
         {
           "chain": [
@@ -1562,19 +1374,21 @@
         {
           "chain": [
             "AU-FLOW-008",
-            "frozen-skeleton-missing:AU-FLOW-008"
+            "provider.capability.flow-cfg.flow.cfg",
+            "AU-FLOW-005",
+            "candidate_declaration_not_integrated:API-FLOW-005"
           ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-008"
+          "code": "shared-component-not-complete",
+          "resolution_issue": 1,
+          "steward": "steward.flow",
+          "subject": "provider.capability.flow-cfg.flow.cfg"
         },
         {
           "chain": [
             "AU-FLOW-008",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -1586,7 +1400,7 @@
             "AU-FLOW-008",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -1598,7 +1412,7 @@
             "AU-FLOW-008",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -1607,16 +1421,16 @@
         }
       ],
       "contract_owner_issue": "#50",
-      "contract_state": "unresolved",
-      "contract_transition_issue": "#42",
-      "declaration_status": "unresolved",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#50",
+      "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "unimplemented",
       "kind": "free_function",
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:3289e5045ef28b80bcc23b172038271d02b156fdb02c09ed05d241e0881d42e8"
+      "task_packet_digest": "sha256:418e1f92bc7aa8a392bb1471ab30a2154cc453c99830579ba4576520c4a594c2"
     },
     {
       "api_id": "API-FUZZ-001",
@@ -1663,7 +1477,7 @@
       "package_id": "fuzz",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:98905c5f8430fb1a19cc4d5ef7574349fdb375beedb23168f4f872b4109b19c9"
+      "task_packet_digest": "sha256:d85ace2d6c73f27e8af2b941a0b4c3042e421ac268333d572f2db11c1d2440de"
     },
     {
       "api_id": "API-FUZZ-002",
@@ -1746,7 +1560,7 @@
       "package_id": "fuzz",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:89f435150ca5e5d4f37d3569dce0060978f379e8c81e6f902f2a282dfb1ff9aa"
+      "task_packet_digest": "sha256:0cd05cc79cfc7d3d7684f8aae3cb28359c0898416a1065e495325f8513209562"
     },
     {
       "api_id": "API-FUZZ-003",
@@ -1829,7 +1643,7 @@
       "package_id": "fuzz",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:2c153903e724c30d5372f194bddb0e89a2350027081d37cf9d312acc8ec2c808"
+      "task_packet_digest": "sha256:f0fd3fac919160fca2edf40e274b648bd917d73d0ffb2b7c49adfa56bd864a4f"
     },
     {
       "api_id": "API-GEN-001",
@@ -1876,7 +1690,7 @@
       "package_id": "generate",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:d7b9193fa8911e6fa9c2597c73f0b7cc639384648ea8805392d845a06e93c34b"
+      "task_packet_digest": "sha256:9275ccd92feca892399592f3b1eda2065ee0b4758e381ef919724d2bcad55be1"
     },
     {
       "api_id": "API-GEN-002",
@@ -1970,7 +1784,7 @@
       "package_id": "generate",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:1907c5426b879af27a706ed7da2742c3532dee088e0027dbcd906013bc247a03"
+      "task_packet_digest": "sha256:4bce47070175ffd47c5716cccb9cba62080e06e01c47a44c8b06daa97561377a"
     },
     {
       "api_id": "API-GRAPH-001",
@@ -2017,7 +1831,7 @@
       "package_id": "graph",
       "phase": "M2",
       "state": "blocked",
-      "task_packet_digest": "sha256:c8833d39ef8e06a389e547bff9a6111ec8c179278bcdfc9b7c26954f6ac74ddf"
+      "task_packet_digest": "sha256:5e3f1896c099e00bca4dfb34555c9b0d2b82f1a67e3d5f141defc910c9e93b47"
     },
     {
       "api_id": "API-GRAPH-002",
@@ -2100,7 +1914,7 @@
       "package_id": "graph",
       "phase": "M2",
       "state": "blocked",
-      "task_packet_digest": "sha256:86b472e4416648bb074d59fdb3fdaca0f279449ccb14f499cfab2719a6de0f0c"
+      "task_packet_digest": "sha256:92ecf11150095109c4e41b23c0ab921d9a49e88e359570bc660ad1b008232f0f"
     },
     {
       "api_id": "API-GRAPH-003",
@@ -2183,7 +1997,7 @@
       "package_id": "graph",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:efd44472fd7eb4fd021fea1b22c09ef31f455ca255afe5f4c710214cfeee2fa5"
+      "task_packet_digest": "sha256:ae830f99fb18781a12b664a5f9d914b6cd700c26d404b7d2e0fe9513c04c00cc"
     },
     {
       "api_id": "API-GRAPH-004",
@@ -2266,7 +2080,7 @@
       "package_id": "graph",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:d996e4f04e5eb0058f2d0e63522298546212d63b2d3aec535c9977005c6cb71a"
+      "task_packet_digest": "sha256:f1e26ca5b62eeadcd042fe3926ea4ebbb84e8a6003230c5c6edd29ee133d17f1"
     },
     {
       "api_id": "API-GRAPH-005",
@@ -2349,7 +2163,7 @@
       "package_id": "graph",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:9eb4e0e4aa088f3661cfc9efa59e5dba026b47c9bdbd4018f598d579b643e8ac"
+      "task_packet_digest": "sha256:137327f3b9302ba55caff38d93cc8c555c169754a9e150d1f37120deaaca9bc4"
     },
     {
       "api_id": "API-GRAPH-006",
@@ -2432,7 +2246,7 @@
       "package_id": "graph",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:50c9ed3720e7d94105b9aad3b323a3b6ce6a8794cebff8c11f7f42319f34b187"
+      "task_packet_digest": "sha256:eb9243ece583f150c24d15f08b1bc194bf8ff5c726248eda5edae55f102f3fa4"
     },
     {
       "api_id": "API-INT-001",
@@ -2448,7 +2262,7 @@
       "package_id": "interop",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:fd4bb644e79b3cc736906c3d85c9afcd2b6aac033e7cfe920f39d1a43917d01a"
+      "task_packet_digest": "sha256:a72b36a8ec6a4aea2f57c20e8e18abe646b01f80755085b102eaf7fc85ae9eb8"
     },
     {
       "api_id": "API-INT-002",
@@ -2464,7 +2278,7 @@
       "package_id": "interop",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:d03ff5adb54458085f6a251a89b425c907f9540a29760e47cf1f32e9cec0e61c"
+      "task_packet_digest": "sha256:c92c0a02540eb0a9ff31342b945d0240d2a607912af7f08bf0a4a3d069057d61"
     },
     {
       "api_id": "API-INT-003",
@@ -2511,7 +2325,7 @@
       "package_id": "interop",
       "phase": "M1",
       "state": "blocked",
-      "task_packet_digest": "sha256:2a6ac2ccb6a6493edf79dae3c3065b0c63825c5d0796e07fcf3cc864d5a2712b"
+      "task_packet_digest": "sha256:b5e3390766f974c70873d1fe765f9d7d06f3efa96a814628d8890bf1f2eb9896"
     },
     {
       "api_id": "API-INT-004",
@@ -2558,7 +2372,7 @@
       "package_id": "interop",
       "phase": "M1",
       "state": "blocked",
-      "task_packet_digest": "sha256:55a78eeaa3e8b45a7ed71bf2740036f27b76e4e24ffcf3704b355a3bcae81272"
+      "task_packet_digest": "sha256:538810d8fd3ba04a769cfd6ea48c15d1efb2119bb38eaf5451f094d18f012ab4"
     },
     {
       "api_id": "API-METHOD-001",
@@ -2605,7 +2419,7 @@
       "package_id": "method_harness",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:b1b4565b4357366d5b4772397caa0f3e72729c066fe6bda08986a2b733075895"
+      "task_packet_digest": "sha256:6bdd9ed94757596ae12db33f9afb9f71457d6642f9c4bd5349971a5c8680dec6"
     },
     {
       "api_id": "API-METHOD-002",
@@ -2688,7 +2502,7 @@
       "package_id": "method_harness",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:25e20e9b306455ac2e8ef404b59424a013d59bc2d877382698270614dcfdc18d"
+      "task_packet_digest": "sha256:e36f951c65c67343d79337da7ae80403e61a6d9cc546d14e6da5d1a7c9bc46a7"
     },
     {
       "api_id": "API-METHOD-003",
@@ -2771,7 +2585,7 @@
       "package_id": "method_harness",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:7a39fbd4d34221239f493fb3a54967227fdac094bd78f8accd219e5d9d359e6d"
+      "task_packet_digest": "sha256:32b81fa48882036746ec2f8408683401526d7ed2b522d10a6277cfd6ca38b819"
     },
     {
       "api_id": "API-METHOD-004",
@@ -2874,7 +2688,7 @@
       "package_id": "method_harness",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:08d1454a340c4ed08b7542fe003ecbc8f959155af8fa88bebcb9a0afbed8643b"
+      "task_packet_digest": "sha256:19c4489b6443413c555a3bfdea2db84c1b61844d40684f5c9a460c2533205e01"
     },
     {
       "api_id": "API-METHOD-005",
@@ -2967,7 +2781,7 @@
       "package_id": "method_harness",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:be762934cc13fbdbe795df088f4ca1576924be3f54c2c1cd61882b7ab98b202c"
+      "task_packet_digest": "sha256:f1918b5b351cedc1b7db2c08566c449bb456898b8bdf4f654a9b0e6f20753397"
     },
     {
       "api_id": "API-MOCK-001",
@@ -3014,7 +2828,7 @@
       "package_id": "mock",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:f098603f113218b375b835ce93fed7055f9a068fd107d3815cc1c2b3d4cb4c8f"
+      "task_packet_digest": "sha256:c0c13c818f2aa10426c95f6061ebf942f0550f44cfabbb540196cc96e71defd5"
     },
     {
       "api_id": "API-MOCK-002",
@@ -3097,7 +2911,7 @@
       "package_id": "mock",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:ac0e6ad02398336aaae11e540a5dc93aee9964b83bfd99e32971c59252366407"
+      "task_packet_digest": "sha256:a092aa413d16971fa29e47606dafb6b4510b75d33c9efb72f70345ae9fee61cc"
     },
     {
       "api_id": "API-MOCK-003",
@@ -3180,7 +2994,7 @@
       "package_id": "mock",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:7ea8e41ea338a7e670880210f7cc9a1c4c7b2848afc8cc41f3ace542dcfdcb41"
+      "task_packet_digest": "sha256:b47473a6010ab7a5a46066dab365ee978235c503ade0baa463ada116c04be135"
     },
     {
       "api_id": "API-MODEL-001",
@@ -3189,12 +3003,12 @@
         {
           "chain": [
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-MODEL-001"
+          "subject": "API-MODEL-001"
         },
         {
           "chain": [
@@ -3209,55 +3023,25 @@
         {
           "chain": [
             "AU-MODEL-001",
-            "exact-contract-missing:AU-MODEL-001"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-MODEL-001"
-        },
-        {
-          "chain": [
-            "AU-MODEL-001",
-            "exact_declaration_unresolved:API-MODEL-001"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-MODEL-001"
-        },
-        {
-          "chain": [
-            "AU-MODEL-001",
             "fixtures-missing:AU-MODEL-001"
           ],
           "code": "fixtures-missing",
           "resolution_issue": 1,
           "steward": "steward.testing",
           "subject": "AU-MODEL-001"
-        },
-        {
-          "chain": [
-            "AU-MODEL-001",
-            "frozen-skeleton-missing:AU-MODEL-001"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-MODEL-001"
         }
       ],
       "contract_owner_issue": "#50",
-      "contract_state": "unresolved",
-      "contract_transition_issue": "#42",
-      "declaration_status": "unresolved",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#50",
+      "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "unimplemented",
       "kind": "static_factory",
       "package_id": "models",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:786a16197c8698a911d8e766ba89752fe6c218b4fdc111b927a846d1e7753a7c"
+      "task_packet_digest": "sha256:aaef42e6cee362fb5c320c42fe1341e577a94b227f719d432ffc24cb05bd5cab"
     },
     {
       "api_id": "API-MODEL-002",
@@ -3266,12 +3050,12 @@
         {
           "chain": [
             "AU-MODEL-002",
-            "contract-candidate-missing:AU-MODEL-002"
+            "candidate_declaration_not_integrated:API-MODEL-002"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-MODEL-002"
+          "subject": "API-MODEL-002"
         },
         {
           "chain": [
@@ -3286,26 +3070,6 @@
         {
           "chain": [
             "AU-MODEL-002",
-            "exact-contract-missing:AU-MODEL-002"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-MODEL-002"
-        },
-        {
-          "chain": [
-            "AU-MODEL-002",
-            "exact_declaration_unresolved:API-MODEL-002"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-MODEL-002"
-        },
-        {
-          "chain": [
-            "AU-MODEL-002",
             "fixtures-missing:AU-MODEL-002"
           ],
           "code": "fixtures-missing",
@@ -3316,19 +3080,9 @@
         {
           "chain": [
             "AU-MODEL-002",
-            "frozen-skeleton-missing:AU-MODEL-002"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-MODEL-002"
-        },
-        {
-          "chain": [
-            "AU-MODEL-002",
             "shared.package.models.package_internal_engine",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -3340,7 +3094,7 @@
             "AU-MODEL-002",
             "shared.package.models.schema_fixture_contract",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -3352,7 +3106,7 @@
             "AU-MODEL-002",
             "shared.package.models.shared_public_type",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -3361,16 +3115,16 @@
         }
       ],
       "contract_owner_issue": "#50",
-      "contract_state": "unresolved",
-      "contract_transition_issue": "#42",
-      "declaration_status": "unresolved",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#50",
+      "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "unimplemented",
       "kind": "builder_family",
       "package_id": "models",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:658e11cac6a0edd56fc1538f1847113af1406e8b7bc370943127f635cab45745"
+      "task_packet_digest": "sha256:0216e744b27486d120e664ec5e097efe8b4eb66625e98aa65f04a5199ab8e5b4"
     },
     {
       "api_id": "API-MODEL-003",
@@ -3379,12 +3133,12 @@
         {
           "chain": [
             "AU-MODEL-003",
-            "contract-candidate-missing:AU-MODEL-003"
+            "candidate_declaration_not_integrated:API-MODEL-003"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-MODEL-003"
+          "subject": "API-MODEL-003"
         },
         {
           "chain": [
@@ -3399,26 +3153,6 @@
         {
           "chain": [
             "AU-MODEL-003",
-            "exact-contract-missing:AU-MODEL-003"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-MODEL-003"
-        },
-        {
-          "chain": [
-            "AU-MODEL-003",
-            "exact_declaration_unresolved:API-MODEL-003"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-MODEL-003"
-        },
-        {
-          "chain": [
-            "AU-MODEL-003",
             "fixtures-missing:AU-MODEL-003"
           ],
           "code": "fixtures-missing",
@@ -3429,19 +3163,9 @@
         {
           "chain": [
             "AU-MODEL-003",
-            "frozen-skeleton-missing:AU-MODEL-003"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-MODEL-003"
-        },
-        {
-          "chain": [
-            "AU-MODEL-003",
             "shared.package.models.package_internal_engine",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -3453,7 +3177,7 @@
             "AU-MODEL-003",
             "shared.package.models.schema_fixture_contract",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -3465,7 +3189,7 @@
             "AU-MODEL-003",
             "shared.package.models.shared_public_type",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -3474,16 +3198,16 @@
         }
       ],
       "contract_owner_issue": "#50",
-      "contract_state": "unresolved",
-      "contract_transition_issue": "#42",
-      "declaration_status": "unresolved",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#50",
+      "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "unimplemented",
       "kind": "method",
       "package_id": "models",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:dc66c1b3d7601e278eb4beae55568dd61741d1fcb8b6cabf237dc9bb27b15fe3"
+      "task_packet_digest": "sha256:ea615b9226714b39c41e085b1630ef088bfebdc6be07431ede622051c378c6b9"
     },
     {
       "api_id": "API-MODEL-004",
@@ -3492,12 +3216,12 @@
         {
           "chain": [
             "AU-MODEL-004",
-            "contract-candidate-missing:AU-MODEL-004"
+            "candidate_declaration_not_integrated:API-MODEL-004"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-MODEL-004"
+          "subject": "API-MODEL-004"
         },
         {
           "chain": [
@@ -3512,26 +3236,6 @@
         {
           "chain": [
             "AU-MODEL-004",
-            "exact-contract-missing:AU-MODEL-004"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-MODEL-004"
-        },
-        {
-          "chain": [
-            "AU-MODEL-004",
-            "exact_declaration_unresolved:API-MODEL-004"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-MODEL-004"
-        },
-        {
-          "chain": [
-            "AU-MODEL-004",
             "fixtures-missing:AU-MODEL-004"
           ],
           "code": "fixtures-missing",
@@ -3542,19 +3246,9 @@
         {
           "chain": [
             "AU-MODEL-004",
-            "frozen-skeleton-missing:AU-MODEL-004"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-MODEL-004"
-        },
-        {
-          "chain": [
-            "AU-MODEL-004",
             "shared.package.models.package_internal_engine",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -3566,7 +3260,7 @@
             "AU-MODEL-004",
             "shared.package.models.schema_fixture_contract",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -3578,7 +3272,7 @@
             "AU-MODEL-004",
             "shared.package.models.shared_public_type",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -3587,16 +3281,16 @@
         }
       ],
       "contract_owner_issue": "#50",
-      "contract_state": "unresolved",
-      "contract_transition_issue": "#42",
-      "declaration_status": "unresolved",
+      "contract_state": "candidate",
+      "contract_transition_issue": "#50",
+      "declaration_status": "exact",
       "dispatch_authorized": false,
       "implementation_state": "unimplemented",
       "kind": "method_family",
       "package_id": "models",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:aeb93cc6c7e0db376e5ae2183a7566b98097a5c8c4d1ff48ef5febe09965b1ca"
+      "task_packet_digest": "sha256:bc311597e0cb85f6bcc840fdb134335033f83820869f4f45b9408b3d088c6678"
     },
     {
       "api_id": "API-QA-001",
@@ -3621,6 +3315,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "AU-QA-001"
+        },
+        {
+          "chain": [
+            "AU-QA-001",
+            "dependency-request-open:DR-AU-QA-001-001"
+          ],
+          "code": "dependency-request-open",
+          "resolution_issue": 28,
+          "steward": "generator.catalog",
+          "subject": "DR-AU-QA-001-001"
         },
         {
           "chain": [
@@ -3673,7 +3377,7 @@
       "package_id": "qa",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:615c08e63506200190e15a99e51f86364bc124c01bbbc77c9a210d05230a0249"
+      "task_packet_digest": "sha256:263ca99d4131db52cfe30a4e7dbfcbd237acc0580947ed6c37612e33f03a3754"
     },
     {
       "api_id": "API-QA-002",
@@ -3786,7 +3490,7 @@
       "package_id": "qa",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:860bbc9e0e78d9b1c041562c02912d90020226505513c00ac4cfc90acd6444ea"
+      "task_packet_digest": "sha256:d07203f39a1c18426d561fb689461b22e85fb0386a32fa68ace1aaaa450e7faa"
     },
     {
       "api_id": "API-QA-003",
@@ -3921,7 +3625,7 @@
       "package_id": "qa",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:ab943a0342ef49ab86aca103a9e0ae833edc4c1bfafe80cb7d735129e806be02"
+      "task_packet_digest": "sha256:3a229388ffbb31b2c45e7a491b4932e76591d32e9bbfdb306c94609125dccb4d"
     },
     {
       "api_id": "API-QA-004",
@@ -4056,7 +3760,7 @@
       "package_id": "qa",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:459bf66c102c373efe149877568b0b08b53c255919942f98fb9cac4e1c1508c2"
+      "task_packet_digest": "sha256:c4c20fba38ea8b03e62e24961673344961ac7a22263a170564a9186938720107"
     },
     {
       "api_id": "API-REPORT-001",
@@ -4114,7 +3818,7 @@
       "package_id": "report",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:6af829ec98c25c17aa2df14b37fe52a673c3582ffcf89a1cab825c6fc0e16df4"
+      "task_packet_digest": "sha256:190958d0472d88deabbddff6c42b5852ed37743e569b7fe50513e830ff25ba09"
     },
     {
       "api_id": "API-REPORT-002",
@@ -4208,7 +3912,7 @@
       "package_id": "report",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:9c9a71b03c3e51f27730330ebaf152e1d4190af8841a219282938a0cd587bc54"
+      "task_packet_digest": "sha256:771f63a4b55333c23ba5b60580f1c847f3d83d7333d9e713933e5994f89360e0"
     },
     {
       "api_id": "API-REPORT-003",
@@ -4302,7 +4006,7 @@
       "package_id": "report",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:e06acb8d0bf1f2b6d519d2ee401cac9ff0850d2c38558e1d191e178d37a5ef6e"
+      "task_packet_digest": "sha256:719adb5171ef69c2ffdb1c57e5c30ece20c87b6b255b00efdfc6926324a41f8d"
     },
     {
       "api_id": "API-REPORT-004",
@@ -4396,7 +4100,7 @@
       "package_id": "report",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:8b7f59fad8852ead3a235df0bb6253b38d2e892010d794c1c0c587756300c445"
+      "task_packet_digest": "sha256:1e341ba0398401d572d9f7d9176903aa66c4845598ae2ead7070c4ec0ad07709"
     },
     {
       "api_id": "API-RULE-001",
@@ -4443,7 +4147,7 @@
       "package_id": "rules",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:0f4a25209a5f3377d3e297d846888f98bede0e7dd52ea128b9a7f1f3e85c8f44"
+      "task_packet_digest": "sha256:5d5d8ebd3041f3c7108e0713de9b0add0fa3fd053ceac2ac7b10967231de2547"
     },
     {
       "api_id": "API-RULE-002",
@@ -4537,7 +4241,7 @@
       "package_id": "rules",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:82b1f98af526fb0bc39a270d100f26c882679872b5c43df3f62e27b611d80e0d"
+      "task_packet_digest": "sha256:0036b0389b5bf969fa529a685460a61bdbca31cc90b15d4f106a3b6f20990a4c"
     },
     {
       "api_id": "API-RULE-003",
@@ -4631,7 +4335,7 @@
       "package_id": "rules",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:34aa7d8e8129bd3ab0380ce23951b0759ecbea2751e9ea9562374cf7bca5d989"
+      "task_packet_digest": "sha256:f498cfd31545ab4162f67c48c9132bd9447d58bd4b3c3804887638c735955aaf"
     },
     {
       "api_id": "API-RULE-004",
@@ -4725,7 +4429,7 @@
       "package_id": "rules",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:00ba67e338e3196d9141edafa65b08a966bd31ae6d616c7285dc12baeb81ab3a"
+      "task_packet_digest": "sha256:802188030636ce072b29d46565383e444a9ebac368ab8e4ff74b2d1a08239ae1"
     },
     {
       "api_id": "API-RULE-005",
@@ -4808,7 +4512,7 @@
       "package_id": "rules",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:7aaff8f9d01d3796d359042d548990e34cf83cebfbfe22ce17b9bdab6f88cafc"
+      "task_packet_digest": "sha256:53f91b69e100da763e9d9df45946a9a118c637ac36547adbf296aaf4e1116db7"
     },
     {
       "api_id": "API-RV-001",
@@ -4885,7 +4589,7 @@
       "package_id": "review",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:9bd2579681c96cc6a912700dbe32c27a6c1c49e7f504230cc53103261f2eb078"
+      "task_packet_digest": "sha256:6fbd6c38231a40e40e75c691ceb915e0ed6f0d05d5c17910766921c4163926c7"
     },
     {
       "api_id": "API-RV-002",
@@ -4998,7 +4702,7 @@
       "package_id": "review",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:b660aad483d2fb095bfe8978408c64ff663abe8add4b662b3bca567fb3f549fc"
+      "task_packet_digest": "sha256:25b5d84872b7f412534bbafe863bba969304fdcf3eb02f3e83216306a96d76d6"
     },
     {
       "api_id": "API-RV-003",
@@ -5111,7 +4815,7 @@
       "package_id": "review",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:9fd449af9de59981597d6ad82c568e316e85cc20c9d61bd82f9235db97f0f863"
+      "task_packet_digest": "sha256:250a14ffcc39b6cd04ee134f897150494d4fd1baf4a7d8b909e990fa1d0384f5"
     },
     {
       "api_id": "API-RV-004",
@@ -5224,7 +4928,7 @@
       "package_id": "review",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:9307454a6e7a506a55e362052f6a1186f5202669bf5d002ba405bcec0fe5ddbf"
+      "task_packet_digest": "sha256:5bca909ed8fd7c33a17116b34df8ab93befddfb99c7fd350099807f95f745349"
     },
     {
       "api_id": "API-RV-005",
@@ -5347,7 +5051,7 @@
       "package_id": "review",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:4387a27d87d5030af5c07b93bdb729aeb19e2f4512d701ff18f19dd0d0f01dc4"
+      "task_packet_digest": "sha256:f1f864e7e9e00327764ecfe991c007427266676dd585e24d0a3ac1fc4a06cf6f"
     },
     {
       "api_id": "API-SEL-001",
@@ -5363,7 +5067,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:c1a8e464f4aad4731e53d61990cfdb32c3805716191b68e379896b67b8aa7dae"
+      "task_packet_digest": "sha256:2e103f2cd917c77f7ba26ed4b805ee63110e3ba5fb74e79295008fd85f13bbc7"
     },
     {
       "api_id": "API-SEL-002",
@@ -5379,7 +5083,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:43da7518a0d7b299ed49933b978f301b0311f96d1f5b49cd28a1b3cbb6a0fa20"
+      "task_packet_digest": "sha256:ae93857b9fcb3f356d7ec3a8fa50eb711529828e64d84f50232d3aafbe6eb045"
     },
     {
       "api_id": "API-SEL-003",
@@ -5395,7 +5099,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:3858be12d1f3831600fb911049e16e2169a56dfe4de8216c5b300f5e6fbf4e89"
+      "task_packet_digest": "sha256:386052ffd1d14f0877bbfd3f225cf3daf2a008f3cc6744bb79e5cd0ee647e705"
     },
     {
       "api_id": "API-SEL-004",
@@ -5452,7 +5156,7 @@
       "package_id": "select",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:b864cdeb9a4d0c6709a6b92f54768a82be01a57c9808759213b44aee2b4bf4d1"
+      "task_packet_digest": "sha256:68effea4ad06d89d96c4fb71371baad2cfe2c83c0500fc753cc560467a52a572"
     },
     {
       "api_id": "API-SEL-005",
@@ -5499,7 +5203,7 @@
       "package_id": "select",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:39a689396aa19f7e4e23b6897699f66a8249a6c00f082826a64af8b820112b9f"
+      "task_packet_digest": "sha256:baea20ed083b106d7a3d1156eb604a1665acb3061941c482a60fd09862dc727f"
     },
     {
       "api_id": "API-SEL-006",
@@ -5515,7 +5219,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:2f302420f84cad37a33456b53a3130dc242b1548f82d866bcded9145f76eb448"
+      "task_packet_digest": "sha256:4a15c975edb9bfc7800b0e97db2c79f5ef0fcd26eb361407fddc5b29883bdc05"
     },
     {
       "api_id": "API-SEL-007",
@@ -5562,7 +5266,7 @@
       "package_id": "select",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:61ce0cc291f75c0e7feb30076486fe04a5e97ad562775bdd9180597bfbbedb1d"
+      "task_packet_digest": "sha256:52d382af209ab5be4dde49385102c49c71ef60f0bc7a80ffbc5f16f2f602f961"
     },
     {
       "api_id": "API-SEL-008",
@@ -5578,7 +5282,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:1cdd8bcf4ad981bdd999bf227a3e29a0fc1c963b6beb29f0ee379d034e6ec793"
+      "task_packet_digest": "sha256:18b1c96c8fdc70a62e2afa742854a192ed5d923d169e6c99c9120875a639719e"
     },
     {
       "api_id": "API-SEL-009",
@@ -5594,7 +5298,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:68cc22810c84ae3ea417ff5fd631a8a5152403b82c955cf322126dbad5f54af0"
+      "task_packet_digest": "sha256:09b88224c955db0e01e244f1cb18aa89237fd2405dbfaa3e27723e301c77a1e7"
     },
     {
       "api_id": "API-SEL-010",
@@ -5610,7 +5314,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:c206ed8c459259168e5c8ca830b718eb5e286f5dee9ade730550b09dba603916"
+      "task_packet_digest": "sha256:2d23187112e62d5371109c36b358b4e285fceb6204f15c28f522acd6479cc943"
     },
     {
       "api_id": "API-SEL-011",
@@ -5626,7 +5330,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:2435c2d20b5ce08e529da38ee6daa18f0a3d153003f966201d9b657c5af8a40e"
+      "task_packet_digest": "sha256:94ef8368d9adc1f38b0f0a1a6af6e0401971ff0e0dac78a854691e9a81972bf6"
     },
     {
       "api_id": "API-SRCH-001",
@@ -5673,7 +5377,7 @@
       "package_id": "search",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:d9083b93467260be4e751d62b88d427f11f8e1ba4c941bd4e4e0047293cc3dea"
+      "task_packet_digest": "sha256:e3a17c623b1698e274a0f370df21471472ce24ec483727fb4745cad3d215c36a"
     },
     {
       "api_id": "API-SRCH-002",
@@ -5720,7 +5424,7 @@
       "package_id": "search",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:d1fdb554776f205d43aa7c41ced49902260d041ee9ac06b20d24afa1c4073d3c"
+      "task_packet_digest": "sha256:87ffe14f9819733b3e6a0ab4526c190e892e5a6feea272c1debbddcec259c7ea"
     },
     {
       "api_id": "API-SRCH-003",
@@ -5736,7 +5440,7 @@
       "package_id": "search",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:7c84902c71369ab667c8383f9a26d3f809ea32371058cf232d2423c7a8f50406"
+      "task_packet_digest": "sha256:79653187c4188f5fd250edd58db7bf1dd727e544512dafaf9eb1bb19175c818e"
     },
     {
       "api_id": "API-SRCH-004",
@@ -5752,7 +5456,7 @@
       "package_id": "search",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:f8b651ebad85c264769042453add1d4326456e34e3651b30fdaaa955c8ca3510"
+      "task_packet_digest": "sha256:df92cdcc2768e7bebf8d5190c3c4c469343e27badccb7d8cde64b2b3c95b269f"
     },
     {
       "api_id": "API-SRCH-005",
@@ -5768,7 +5472,7 @@
       "package_id": "search",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:e86d0802b2f00a602e370e775282aaf67740805a81db7c0b499349f84443f9c9"
+      "task_packet_digest": "sha256:85975984e85f077e87726e66a8f63e9dbe32eb1b7bdffa8d64cf83a11de41339"
     },
     {
       "api_id": "API-SRCH-006",
@@ -5784,7 +5488,7 @@
       "package_id": "search",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:4cf5c13a46eb90ff08a8d9f4c96fad42f93bf3b03a0aab88711208e3e7521e7c"
+      "task_packet_digest": "sha256:bceb9c51c9c12db80abc16888af1ee48fbb90c971c85daba857477b43583afbf"
     },
     {
       "api_id": "API-SRCH-007",
@@ -5800,7 +5504,7 @@
       "package_id": "search",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:e35c373b09af887992ef9a19533419073f03983e5203d7b13829e86995ca4e54"
+      "task_packet_digest": "sha256:e6282cdbcd9ad0b4fa851cc90f3342dae464edef6225333098d34ad34dcab049"
     },
     {
       "api_id": "API-SRCH-008",
@@ -5847,7 +5551,7 @@
       "package_id": "search",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:fb51af5645450ebb66dccc804f11fc1ec9f0feff038dfce2cb6e9f457f0de35b"
+      "task_packet_digest": "sha256:26e6389956c191b848403029403f2ead622ad771f5718cfa60259bb3ede02716"
     },
     {
       "api_id": "API-SRCH-009",
@@ -5894,7 +5598,7 @@
       "package_id": "search",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:eb4da7eee970a7f22331e21b4f41595a28cb0df5463da4d065ac1c0df30aae40"
+      "task_packet_digest": "sha256:da4a7b727c2f3a2f8ab63fbe0b3a6e6e1a4cb1b34470fa258fee4fbae1895333"
     },
     {
       "api_id": "API-SRCH-010",
@@ -5951,7 +5655,7 @@
       "package_id": "search",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:5d361b75d956751b6aec3019a9a8511ef481407cbe6f14b93cd5d384c31225fe"
+      "task_packet_digest": "sha256:b1b50541affb40419511ae3c09a688427c1ada86c5163b1bb419fee1c66f71e2"
     },
     {
       "api_id": "API-TEST-001",
@@ -5967,7 +5671,7 @@
       "package_id": "testing",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:a1b1ef2c10ef59d3b5e918a04f3b9ffbee9d3675f40307d7543a228bbbed7bc2"
+      "task_packet_digest": "sha256:1112ba79bca952c665eae67d808b7fea6c9311ddaf0688aea6387f02bfb7d9ec"
     },
     {
       "api_id": "API-TEST-002",
@@ -5983,7 +5687,7 @@
       "package_id": "testing",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:71934405b5ade72d6fb95fa657f1b293f2432f230f6a1382544916b1caf7cbc8"
+      "task_packet_digest": "sha256:a210e4e49286bc359d1fff1245f5054c8ff5b6c61075b3a25435cd57a12884db"
     },
     {
       "api_id": "API-TEST-003",
@@ -6095,7 +5799,7 @@
       "package_id": "testing",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:0a10f102d153283071214a67c94020d3039894906981920e9943d65089e4641e"
+      "task_packet_digest": "sha256:36ef631b9223ac5bae9ba4b3f380372781f62d1040203a0a64278f284edc258f"
     },
     {
       "api_id": "API-TEST-004",
@@ -6174,7 +5878,7 @@
       "package_id": "testing",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:d45b25ea6920a7ee3dd848c9959835c05da88f7e3132612e9a36eca28fdf540d"
+      "task_packet_digest": "sha256:a2b54fcebbfd5046f98ac99b89f971c3e1ee2042777e2d72e914c7b6e6cd60c5"
     },
     {
       "api_id": "API-TEST-005",
@@ -6190,7 +5894,7 @@
       "package_id": "testing",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:dfd4287688ed211c775efba3035107d4ed2e1d08e61905c8a76341b5a6965b50"
+      "task_packet_digest": "sha256:611bd770943562f999336ee1736d4538c89476fd0ad74d53ba082dea7045c4e8"
     },
     {
       "api_id": "API-TEST-006",
@@ -6206,7 +5910,7 @@
       "package_id": "testing",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:71cfe3c69284cf0e2f629a81924b6e722419a38a20a9ed87f367e13791d88f46"
+      "task_packet_digest": "sha256:151d555f0e99c47037f3cb548849864cc10336042cf7f9ddf55050e7527a6aba"
     },
     {
       "api_id": "API-TEST-007",
@@ -6222,7 +5926,7 @@
       "package_id": "testing",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:26b6ad4a7e376850ca28eb077166f8d77306a6976e7ff050b7332012260a013c"
+      "task_packet_digest": "sha256:36077d8b37e61f53b48929e2a3d3952f243038c339ae1643c5ad39091c2a80ed"
     },
     {
       "api_id": "API-TF-001",
@@ -6269,7 +5973,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:eb1ccafd65f2585261d14637c2bc901087445c6a9ab2ce71c4e389fc167c002b"
+      "task_packet_digest": "sha256:adf216b98517c668e3c9f2b07041ecf5e9ca6ec7ef2159fe202cf0c541ee73b6"
     },
     {
       "api_id": "API-TF-002",
@@ -6352,7 +6056,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:ede0cf1a8e65fb43b3dc4ecd72795d1ce34eafd8675543ff5f59e88d95423f19"
+      "task_packet_digest": "sha256:5cb71e273793b6a865ee3fc825d0036afe484facd0879f9e6c1bb6da28d0432f"
     },
     {
       "api_id": "API-TF-003",
@@ -6435,7 +6139,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:bd86d1b48364c45e33fcc84d5c1ef4f86bb2c87d19980d51ed0f55af946cbdef"
+      "task_packet_digest": "sha256:b7c0bc0a926a9b6880c4204cb8f0b4b8277cbc881b18560d19a8d7bb6aedba52"
     },
     {
       "api_id": "API-TF-004",
@@ -6518,7 +6222,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:47d0c2d687fa382759929ba9cb299bb90305683abc55cb3dacf649b1c35adf1c"
+      "task_packet_digest": "sha256:520c027dffe622e55bf2e49bf9c16078163e4cbe9453a325665f72b8d60b41b6"
     },
     {
       "api_id": "API-TF-005",
@@ -6601,7 +6305,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:81df8a02a2f2616f4ea5fb9d7d0a68c35cf04e36fa11988b657104184dfabbae"
+      "task_packet_digest": "sha256:82e59c37563d35c8e2cb4c02c39a6fc7c321cfe72a5d854be088a7f25287f768"
     },
     {
       "api_id": "API-TF-006",
@@ -6694,7 +6398,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:e27731eebc71cfb308295d9fd0ecc0a7231ac10a7f8a9fa87926d125a712e020"
+      "task_packet_digest": "sha256:b67e8325c4757335dc7afa8f89b20ae958d7ef7b33e2829c4175706f55205860"
     },
     {
       "api_id": "API-TF-007",
@@ -6777,7 +6481,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:5779b53a305ce6b1941bb6a638d8d9517cc4b8e2e4d09981bf53d3cecc060739"
+      "task_packet_digest": "sha256:f5d763d1584ccbc9a10a97ee59b5ceb96215b0833bb6f12fb3832d028601bee8"
     },
     {
       "api_id": "API-TF-008",
@@ -6860,7 +6564,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:360fc7b7655ba77d3a8fe12d31d33dac8dea7a74c974be66bbf7a659d30ba435"
+      "task_packet_digest": "sha256:1c55ec593849e6c014b3a9ff2fa751b2bdc8ea9fea02925893194b61905749f1"
     },
     {
       "api_id": "API-TF-009",
@@ -6943,7 +6647,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:3e6ae546918f800b5b839b1ec5fda8c8774d5802452e52e129d77baac1163278"
+      "task_packet_digest": "sha256:898e350570938124ed07d5b0d41c436f25b6ac7e03f4eee74dca7f9089664f6b"
     },
     {
       "api_id": "API-WS-001",
@@ -6959,7 +6663,7 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:635a13857da707905e2e6b2aa2c19cde86ecc00c9c32559265febce7e44a9c1e"
+      "task_packet_digest": "sha256:f068cd7827f567b8f6ceb291cf3bf45b9d2351129ce63d8adc1447981ac39fd7"
     },
     {
       "api_id": "API-WS-002",
@@ -6975,7 +6679,7 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:66734b7fe13dec8906edd018028a8d8f2b132bb0dff621453087b8c1b990d0a8"
+      "task_packet_digest": "sha256:70d4503e3a9006399fc70f4478b445772e71830f6e5d21ff025726bdfa89efcd"
     },
     {
       "api_id": "API-WS-003",
@@ -6991,7 +6695,7 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:53628bfba8821a6642fee9a54378c7829769ed2eb65fd3dcfff4411d5f122b37"
+      "task_packet_digest": "sha256:884a42f05fbe68e66f942d78853f1c96e3d89806ffabccba25ff1de2e6cd96d2"
     },
     {
       "api_id": "API-WS-004",
@@ -7007,7 +6711,7 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:66a721fa4553b40df5e1ae89d4b30f26526d9476ac7700d0585f3eb6d099e0a0"
+      "task_packet_digest": "sha256:55ee65060b0dd6eb0b52c1a99973f1755e079822d70132686b94dc7d74b93675"
     },
     {
       "api_id": "API-WS-005",
@@ -7023,7 +6727,7 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:1c26e77e9035204b0a92d1f86dff658d62072d289cdd650f8d558b92596e3d7c"
+      "task_packet_digest": "sha256:9f954124677217d102084ac02c1d88acbbf43a0512438ca6ebaa360e45a6aba4"
     },
     {
       "api_id": "API-WS-006",
@@ -7039,7 +6743,7 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:cab7dba5c71a108d79d90c15ed546c0e747c36473e6fbce0ab7e22ce55018a88"
+      "task_packet_digest": "sha256:25155040fa11e7dd9ef49406992c5aead0a6b440acfdb4b317a5e8d60028b212"
     },
     {
       "api_id": "API-WS-007",
@@ -7055,7 +6759,7 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:29b503a4473b0d0b8406f8e700b77465bb130262ebe161e8a026e063f08579d6"
+      "task_packet_digest": "sha256:5d08c8bb1e962c2d59156a02cacd51b1ead0e960124785953466862854336e2c"
     },
     {
       "api_id": "API-WS-008",
@@ -7071,7 +6775,7 @@
       "package_id": "workspace",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:ba3537fb54cabdc546e6ad74bbeda345a20b8fccb0c2cf86ca5c889255622690"
+      "task_packet_digest": "sha256:48149490a608f5d2ee350d20bd38fd90e91771064bd547980e728a3610786c09"
     }
   ],
   "authorization": {
@@ -7083,21 +6787,21 @@
     "validity": {
       "basis": "exact-source-and-observed-gates",
       "expires_on": "source-workflow-gate-or-input-drift",
-      "fingerprint_digest": "sha256:6ca881838a54524a6ea8be9537f94450db8c0bffb8c57e1a7ddbacf7b7a52726",
+      "fingerprint_digest": "sha256:6ae607f7bdf38a31d929780d017907e705f0a9d01a3a83c37803585840e01560",
       "state": "unverified"
     }
   },
   "catalog_audit": {
     "api_count": 124,
-    "candidate_contract_package_count": 18,
+    "candidate_contract_package_count": 20,
     "dangling_api_dependency_count": 0,
     "duplicate_api_count": 0,
     "evidence_free_conformant_count": 0,
-    "exact_declaration_count": 103,
+    "exact_declaration_count": 115,
     "frozen_contract_package_count": 0,
     "invalid_contract_transition_count": 0,
     "package_count": 22,
-    "unresolved_declaration_count": 21,
+    "unresolved_declaration_count": 9,
     "unresolved_ready_signature_count": 0
   },
   "checks": [
@@ -7120,10 +6824,10 @@
       "code": "runner.not-ready"
     },
     "dependency_request": {
-      "atomic_unit_id": "AU-FLOW-001",
+      "atomic_unit_id": "AU-QA-001",
       "open_blocker_observed": true,
       "report_reissued": true,
-      "request_id": "DR-AU-FLOW-001-001",
+      "request_id": "DR-AU-QA-001-001",
       "resolved_blocker_removed": true,
       "transition_order": [
         "pending",
@@ -7144,7 +6848,7 @@
         "api_id": "API-COPY-001",
         "atomic_unit_id": "AU-COPY-001",
         "kind": "free_function",
-        "packet_digest": "sha256:b947f6f14d69d72edc65e9d60c376fef23a3525bee671059ebd98f668e794bd3",
+        "packet_digest": "sha256:80240746a07f100bbc0ac453b08b03beec8c384045b1a9b3322284b20f769554",
         "phase": "M6",
         "shard_digest": "sha256:18c87c4c640f39c4e80809eaed8b385d4ea46e737f63b341251d49e264332e84",
         "start_authorized": false,
@@ -7162,7 +6866,7 @@
         "api_id": "API-FACT-002",
         "atomic_unit_id": "AU-FACT-002",
         "kind": "method",
-        "packet_digest": "sha256:b63445e85e8329a11cdab45aa60c49a496a1892570f5310f72c80cc68dffa3c9",
+        "packet_digest": "sha256:67c039e38fa33e58f68b37b34333d3dbe200b25c56c1475aff93d4791704ad12",
         "phase": "M1",
         "shard_digest": "sha256:a6504479ade54c8e1d2300faa842ece5bee90b2c9dc7b9fb3c478e64181c9c92",
         "start_authorized": false,
@@ -7180,7 +6884,7 @@
         "api_id": "API-CFG-003",
         "atomic_unit_id": "AU-CFG-003",
         "kind": "method_family",
-        "packet_digest": "sha256:d06320217caa29faa57f6d19cc1e20580940f0889eba2112454fc14e346548ce",
+        "packet_digest": "sha256:16d11d51b29c2168edf263a12bf1773fe06712297e3abf1268321574bc0484be",
         "phase": "M0",
         "shard_digest": "sha256:9e855b296298f42106a01eb28242729c2a7e6ece47f1fdb01ef05e1deb2d2b1e",
         "start_authorized": false,
@@ -7198,7 +6902,7 @@
         "api_id": "API-FLOW-004",
         "atomic_unit_id": "AU-FLOW-004",
         "kind": "builder_family",
-        "packet_digest": "sha256:deb530ed4a903a6f561ff3bbf111d1ce5c7531a1648f46e6c45c320fbdaffbc2",
+        "packet_digest": "sha256:8eda3091f937da128d803359ce66f51574c51d8b800bcd4073989e78ee0144d9",
         "phase": "M7",
         "shard_digest": "sha256:5f9955687c7ac6ca15598af95745b818fb32f398a1fcdcd7b6ff35dfb1997bc0",
         "start_authorized": false,
@@ -7216,7 +6920,7 @@
         "api_id": "API-CFG-001",
         "atomic_unit_id": "AU-CFG-001",
         "kind": "static_factory",
-        "packet_digest": "sha256:6bf809aa59689effae99624530c2a85a1470549ade1c6e321f47cfc5a28b071d",
+        "packet_digest": "sha256:f74f473c853194d43ebdf3f48eabeac696550492f5b2987813f973c4b90a2fcc",
         "phase": "M0",
         "shard_digest": "sha256:d9df4256387eaa53c053ee711a7dc3700331bccba8cda4d9f75945e8004f2eec",
         "start_authorized": false,
@@ -7493,30 +7197,30 @@
     "atomic_unit_count": 124,
     "cycle_count": 0,
     "dangling_edge_count": 0,
-    "dependency_edge_count": 604,
+    "dependency_edge_count": 606,
     "package_integration_shard_count": 22,
     "packet_count": 124,
     "provider_ambiguity_count": 0,
     "reserved_path_count": 11,
-    "tracked_path_count": 433,
+    "tracked_path_count": 442,
     "unowned_path_count": 0,
     "write_overlap_count": 0
   },
   "input_fingerprints": {
-    "audit_policy": "sha256:ebbbaebfedb041e1582cc2ada9ed347719a02265540d271ee1ff778d59c4b7ed",
-    "build_gates": "sha256:ca6910c02b11fbdb64ac09ab718b5bd82493dd9398c772a48aad30891852ff3b",
-    "catalog": "sha256:f398a99009220383e45232dc3e6012d2c2c118c10dc2809e9c77f929ef8b6c88",
-    "contract_ownership_registry": "sha256:713f86fe0cc61bfb441178289037db87b823de6c209152b1e1538c8518e435c3",
-    "dependency_requests": "sha256:5092a12eeaed7c5d01988775af00f06e35b6c1856684751f154bcb8c9e9ddb22",
-    "design_package": "sha256:9fb2fce829801ecbf4b16a6bc3a50fbdb5d1821176ce8a6859d4ac93085db7d1",
+    "audit_policy": "sha256:56cae68d36699d1b63ce981fcc59bfea2c3bfca0b6b8b1099376ffa1fa8ec669",
+    "build_gates": "sha256:a7976c298b03d1bd2639e1f6e69985506b908bc5bf3c8f0522666eb1e2b9c980",
+    "catalog": "sha256:557b29ca0335ed0d5a130773e28f73263e3593d1351e8eae84a0db34c8d8fd2e",
+    "contract_ownership_registry": "sha256:1016b7856d8aba275feb72c52f44f16b43ce91fc72841f5344ab1b4249365c0b",
+    "dependency_requests": "sha256:b277d05da7d235c6c60c5feb2c2e412569e35c21a1ab41621c51b35bd060eceb",
+    "design_package": "sha256:c0c0cb3617d1c0f320f431036325de3eccc42b87310d6823d5fdf7d7ffb9eeb6",
     "global_contract_conventions": "sha256:cdf3166db0b38fb9230602ff5ba273baf9e7e253d61d6c2fc75d21f0fea1238c",
     "m0": "sha256:9e32e99675512405e1247fd92b8cfcbc5c6e99ab9dc0378833482541c0538f19",
     "m1": "sha256:330670610fc393f8fd9a79493477b28f45c22f863fddaa35dae8a074a4deb567",
     "m2": "sha256:7f2d5d01ef9c074e1bfdc7920c51ea60d2520ae5e6b878467f94c670c144df27",
-    "ownership": "sha256:833fbeeb62b60ffb7cc294b6cd7fc20dd4313ef98e0567be03716050f0e42a6e",
+    "ownership": "sha256:443b090bc736fbbc8580874c1b7bee44792522644768392ba6eeb015af74feff",
     "quality_workflow": "sha256:f8fc4c3623c6ff6c81204823ee49dcb1fc457de5a7dcffbc0a8d9957cac743b5",
-    "ready_report": "sha256:44d7364fa05400a9089df45f7f613be4e615d43e08c3064afedd03c4dc332404",
-    "task_packets": "sha256:9bfa9a8b51f2dc97ceb06ff8ba11dbe169819a5b33a2efaa1e37c3a5184e1374"
+    "ready_report": "sha256:0831b51b1d8318836e02afa578d777c1a6882411c745f2c7e3ceeb94be44ac13",
+    "task_packets": "sha256:dbc79912a1c789ca751ad01694bd51a85db2c35c755e6e57cf4631e62efa77cf"
   },
   "policy": {
     "dispatch_scope": "manifest_ready_units_only",
@@ -7532,7 +7236,7 @@
     "waivers_allowed": false
   },
   "schema": "cxxlens.readiness.authorization.v1",
-  "semantic_digest": "sha256:701f23d96df650e77cb3e886a5f90bb0f32c05de3e81115b0e924827047e05ac",
+  "semantic_digest": "sha256:d3783cf3f7693c368262909ead3f7504f0dd00d5499f5ce013aa0de1dbb796ef",
   "source_identity": {
     "binding": "unbound",
     "commit_sha": null,
@@ -8193,12 +7897,12 @@
         {
           "chain": [
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-001"
+          "subject": "API-FLOW-001"
         },
         {
           "chain": [
@@ -8213,51 +7917,11 @@
         {
           "chain": [
             "AU-FLOW-001",
-            "dependency-request-open:DR-AU-FLOW-001-001"
-          ],
-          "code": "dependency-request-open",
-          "resolution_issue": 28,
-          "steward": "generator.catalog",
-          "subject": "DR-AU-FLOW-001-001"
-        },
-        {
-          "chain": [
-            "AU-FLOW-001",
-            "exact-contract-missing:AU-FLOW-001"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-001"
-        },
-        {
-          "chain": [
-            "AU-FLOW-001",
-            "exact_declaration_unresolved:API-FLOW-001"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-001"
-        },
-        {
-          "chain": [
-            "AU-FLOW-001",
             "fixtures-missing:AU-FLOW-001"
           ],
           "code": "fixtures-missing",
           "resolution_issue": 1,
           "steward": "steward.testing",
-          "subject": "AU-FLOW-001"
-        },
-        {
-          "chain": [
-            "AU-FLOW-001",
-            "frozen-skeleton-missing:AU-FLOW-001"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
           "subject": "AU-FLOW-001"
         }
       ],
@@ -8278,12 +7942,12 @@
         {
           "chain": [
             "AU-FLOW-002",
-            "contract-candidate-missing:AU-FLOW-002"
+            "candidate_declaration_not_integrated:API-FLOW-002"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-002"
+          "subject": "API-FLOW-002"
         },
         {
           "chain": [
@@ -8298,26 +7962,6 @@
         {
           "chain": [
             "AU-FLOW-002",
-            "exact-contract-missing:AU-FLOW-002"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-002"
-        },
-        {
-          "chain": [
-            "AU-FLOW-002",
-            "exact_declaration_unresolved:API-FLOW-002"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-002"
-        },
-        {
-          "chain": [
-            "AU-FLOW-002",
             "fixtures-missing:AU-FLOW-002"
           ],
           "code": "fixtures-missing",
@@ -8328,19 +7972,9 @@
         {
           "chain": [
             "AU-FLOW-002",
-            "frozen-skeleton-missing:AU-FLOW-002"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-002"
-        },
-        {
-          "chain": [
-            "AU-FLOW-002",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -8352,7 +7986,7 @@
             "AU-FLOW-002",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -8364,7 +7998,7 @@
             "AU-FLOW-002",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -8389,12 +8023,12 @@
         {
           "chain": [
             "AU-FLOW-003",
-            "contract-candidate-missing:AU-FLOW-003"
+            "candidate_declaration_not_integrated:API-FLOW-003"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-003"
+          "subject": "API-FLOW-003"
         },
         {
           "chain": [
@@ -8405,26 +8039,6 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "AU-FLOW-003"
-        },
-        {
-          "chain": [
-            "AU-FLOW-003",
-            "exact-contract-missing:AU-FLOW-003"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-003"
-        },
-        {
-          "chain": [
-            "AU-FLOW-003",
-            "exact_declaration_unresolved:API-FLOW-003"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-003"
         },
         {
           "chain": [
@@ -8449,19 +8063,9 @@
         {
           "chain": [
             "AU-FLOW-003",
-            "frozen-skeleton-missing:AU-FLOW-003"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-003"
-        },
-        {
-          "chain": [
-            "AU-FLOW-003",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -8473,7 +8077,7 @@
             "AU-FLOW-003",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -8485,7 +8089,7 @@
             "AU-FLOW-003",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -8510,12 +8114,12 @@
         {
           "chain": [
             "AU-FLOW-004",
-            "contract-candidate-missing:AU-FLOW-004"
+            "candidate_declaration_not_integrated:API-FLOW-004"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-004"
+          "subject": "API-FLOW-004"
         },
         {
           "chain": [
@@ -8530,26 +8134,6 @@
         {
           "chain": [
             "AU-FLOW-004",
-            "exact-contract-missing:AU-FLOW-004"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-004"
-        },
-        {
-          "chain": [
-            "AU-FLOW-004",
-            "exact_declaration_unresolved:API-FLOW-004"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-004"
-        },
-        {
-          "chain": [
-            "AU-FLOW-004",
             "fixtures-missing:AU-FLOW-004"
           ],
           "code": "fixtures-missing",
@@ -8560,19 +8144,9 @@
         {
           "chain": [
             "AU-FLOW-004",
-            "frozen-skeleton-missing:AU-FLOW-004"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-004"
-        },
-        {
-          "chain": [
-            "AU-FLOW-004",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -8584,7 +8158,7 @@
             "AU-FLOW-004",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -8596,7 +8170,7 @@
             "AU-FLOW-004",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -8621,12 +8195,22 @@
         {
           "chain": [
             "AU-FLOW-005",
-            "contract-candidate-missing:AU-FLOW-005"
+            "candidate_declaration_not_integrated:API-FLOW-005"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-005"
+          "subject": "API-FLOW-005"
+        },
+        {
+          "chain": [
+            "AU-FLOW-005",
+            "capability-provider-unavailable:flow.cfg"
+          ],
+          "code": "capability-provider-unavailable",
+          "resolution_issue": 1,
+          "steward": "steward.repository",
+          "subject": "flow.cfg"
         },
         {
           "chain": [
@@ -8637,26 +8221,6 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "AU-FLOW-005"
-        },
-        {
-          "chain": [
-            "AU-FLOW-005",
-            "exact-contract-missing:AU-FLOW-005"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-005"
-        },
-        {
-          "chain": [
-            "AU-FLOW-005",
-            "exact_declaration_unresolved:API-FLOW-005"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-005"
         },
         {
           "chain": [
@@ -8691,19 +8255,9 @@
         {
           "chain": [
             "AU-FLOW-005",
-            "frozen-skeleton-missing:AU-FLOW-005"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-005"
-        },
-        {
-          "chain": [
-            "AU-FLOW-005",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -8715,7 +8269,7 @@
             "AU-FLOW-005",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -8727,7 +8281,7 @@
             "AU-FLOW-005",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -8752,12 +8306,12 @@
         {
           "chain": [
             "AU-FLOW-006",
-            "contract-candidate-missing:AU-FLOW-006"
+            "candidate_declaration_not_integrated:API-FLOW-006"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-006"
+          "subject": "API-FLOW-006"
         },
         {
           "chain": [
@@ -8772,26 +8326,6 @@
         {
           "chain": [
             "AU-FLOW-006",
-            "exact-contract-missing:AU-FLOW-006"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-006"
-        },
-        {
-          "chain": [
-            "AU-FLOW-006",
-            "exact_declaration_unresolved:API-FLOW-006"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-006"
-        },
-        {
-          "chain": [
-            "AU-FLOW-006",
             "fixtures-missing:AU-FLOW-006"
           ],
           "code": "fixtures-missing",
@@ -8802,19 +8336,9 @@
         {
           "chain": [
             "AU-FLOW-006",
-            "frozen-skeleton-missing:AU-FLOW-006"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-006"
-        },
-        {
-          "chain": [
-            "AU-FLOW-006",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -8826,7 +8350,7 @@
             "AU-FLOW-006",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -8838,7 +8362,7 @@
             "AU-FLOW-006",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -8863,12 +8387,22 @@
         {
           "chain": [
             "AU-FLOW-007",
-            "contract-candidate-missing:AU-FLOW-007"
+            "candidate_declaration_not_integrated:API-FLOW-007"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-007"
+          "subject": "API-FLOW-007"
+        },
+        {
+          "chain": [
+            "AU-FLOW-007",
+            "capability-provider-unavailable:flow.cfg"
+          ],
+          "code": "capability-provider-unavailable",
+          "resolution_issue": 1,
+          "steward": "steward.repository",
+          "subject": "flow.cfg"
         },
         {
           "chain": [
@@ -8879,26 +8413,6 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "AU-FLOW-007"
-        },
-        {
-          "chain": [
-            "AU-FLOW-007",
-            "exact-contract-missing:AU-FLOW-007"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-007"
-        },
-        {
-          "chain": [
-            "AU-FLOW-007",
-            "exact_declaration_unresolved:API-FLOW-007"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-007"
         },
         {
           "chain": [
@@ -8923,19 +8437,21 @@
         {
           "chain": [
             "AU-FLOW-007",
-            "frozen-skeleton-missing:AU-FLOW-007"
+            "provider.capability.flow-cfg.flow.cfg",
+            "AU-FLOW-005",
+            "candidate_declaration_not_integrated:API-FLOW-005"
           ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-007"
+          "code": "shared-component-not-complete",
+          "resolution_issue": 1,
+          "steward": "steward.flow",
+          "subject": "provider.capability.flow-cfg.flow.cfg"
         },
         {
           "chain": [
             "AU-FLOW-007",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -8947,7 +8463,7 @@
             "AU-FLOW-007",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -8959,7 +8475,7 @@
             "AU-FLOW-007",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -8973,7 +8489,7 @@
       "shard_digest": "sha256:3591e52c080d05535aef40fa3cf3876761fa161d6a36b9fca06b2aadc733f780",
       "shard_id": "shard.au-flow-007",
       "state": "blocked",
-      "topological_wave": 3
+      "topological_wave": 4
     },
     {
       "api_ids": [
@@ -8984,12 +8500,32 @@
         {
           "chain": [
             "AU-FLOW-008",
-            "contract-candidate-missing:AU-FLOW-008"
+            "candidate_declaration_not_integrated:API-FLOW-008"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-FLOW-008"
+          "subject": "API-FLOW-008"
+        },
+        {
+          "chain": [
+            "AU-FLOW-008",
+            "capability-provider-unavailable:flow.cfg"
+          ],
+          "code": "capability-provider-unavailable",
+          "resolution_issue": 1,
+          "steward": "steward.repository",
+          "subject": "flow.cfg"
+        },
+        {
+          "chain": [
+            "AU-FLOW-008",
+            "capability-provider-unavailable:flow.effect-summaries"
+          ],
+          "code": "capability-provider-unavailable",
+          "resolution_issue": 1,
+          "steward": "steward.repository",
+          "subject": "flow.effect-summaries"
         },
         {
           "chain": [
@@ -9000,26 +8536,6 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "AU-FLOW-008"
-        },
-        {
-          "chain": [
-            "AU-FLOW-008",
-            "exact-contract-missing:AU-FLOW-008"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-FLOW-008"
-        },
-        {
-          "chain": [
-            "AU-FLOW-008",
-            "exact_declaration_unresolved:API-FLOW-008"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-FLOW-008"
         },
         {
           "chain": [
@@ -9054,19 +8570,21 @@
         {
           "chain": [
             "AU-FLOW-008",
-            "frozen-skeleton-missing:AU-FLOW-008"
+            "provider.capability.flow-cfg.flow.cfg",
+            "AU-FLOW-005",
+            "candidate_declaration_not_integrated:API-FLOW-005"
           ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-FLOW-008"
+          "code": "shared-component-not-complete",
+          "resolution_issue": 1,
+          "steward": "steward.flow",
+          "subject": "provider.capability.flow-cfg.flow.cfg"
         },
         {
           "chain": [
             "AU-FLOW-008",
             "shared.package.flow.package_internal_engine",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -9078,7 +8596,7 @@
             "AU-FLOW-008",
             "shared.package.flow.schema_fixture_contract",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -9090,7 +8608,7 @@
             "AU-FLOW-008",
             "shared.package.flow.shared_public_type",
             "AU-FLOW-001",
-            "contract-candidate-missing:AU-FLOW-001"
+            "candidate_declaration_not_integrated:API-FLOW-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -9104,7 +8622,7 @@
       "shard_digest": "sha256:9936c12ee8ba2ddf1e62985b753399074ccee38a193679ac98bf4b20452ee4fc",
       "shard_id": "shard.au-flow-008",
       "state": "blocked",
-      "topological_wave": 3
+      "topological_wave": 4
     },
     {
       "api_ids": [
@@ -10633,12 +10151,12 @@
         {
           "chain": [
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-MODEL-001"
+          "subject": "API-MODEL-001"
         },
         {
           "chain": [
@@ -10653,41 +10171,11 @@
         {
           "chain": [
             "AU-MODEL-001",
-            "exact-contract-missing:AU-MODEL-001"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-MODEL-001"
-        },
-        {
-          "chain": [
-            "AU-MODEL-001",
-            "exact_declaration_unresolved:API-MODEL-001"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-MODEL-001"
-        },
-        {
-          "chain": [
-            "AU-MODEL-001",
             "fixtures-missing:AU-MODEL-001"
           ],
           "code": "fixtures-missing",
           "resolution_issue": 1,
           "steward": "steward.testing",
-          "subject": "AU-MODEL-001"
-        },
-        {
-          "chain": [
-            "AU-MODEL-001",
-            "frozen-skeleton-missing:AU-MODEL-001"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
           "subject": "AU-MODEL-001"
         }
       ],
@@ -10708,12 +10196,12 @@
         {
           "chain": [
             "AU-MODEL-002",
-            "contract-candidate-missing:AU-MODEL-002"
+            "candidate_declaration_not_integrated:API-MODEL-002"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-MODEL-002"
+          "subject": "API-MODEL-002"
         },
         {
           "chain": [
@@ -10728,26 +10216,6 @@
         {
           "chain": [
             "AU-MODEL-002",
-            "exact-contract-missing:AU-MODEL-002"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-MODEL-002"
-        },
-        {
-          "chain": [
-            "AU-MODEL-002",
-            "exact_declaration_unresolved:API-MODEL-002"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-MODEL-002"
-        },
-        {
-          "chain": [
-            "AU-MODEL-002",
             "fixtures-missing:AU-MODEL-002"
           ],
           "code": "fixtures-missing",
@@ -10758,19 +10226,9 @@
         {
           "chain": [
             "AU-MODEL-002",
-            "frozen-skeleton-missing:AU-MODEL-002"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-MODEL-002"
-        },
-        {
-          "chain": [
-            "AU-MODEL-002",
             "shared.package.models.package_internal_engine",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -10782,7 +10240,7 @@
             "AU-MODEL-002",
             "shared.package.models.schema_fixture_contract",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -10794,7 +10252,7 @@
             "AU-MODEL-002",
             "shared.package.models.shared_public_type",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -10819,12 +10277,12 @@
         {
           "chain": [
             "AU-MODEL-003",
-            "contract-candidate-missing:AU-MODEL-003"
+            "candidate_declaration_not_integrated:API-MODEL-003"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-MODEL-003"
+          "subject": "API-MODEL-003"
         },
         {
           "chain": [
@@ -10839,26 +10297,6 @@
         {
           "chain": [
             "AU-MODEL-003",
-            "exact-contract-missing:AU-MODEL-003"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-MODEL-003"
-        },
-        {
-          "chain": [
-            "AU-MODEL-003",
-            "exact_declaration_unresolved:API-MODEL-003"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-MODEL-003"
-        },
-        {
-          "chain": [
-            "AU-MODEL-003",
             "fixtures-missing:AU-MODEL-003"
           ],
           "code": "fixtures-missing",
@@ -10869,19 +10307,9 @@
         {
           "chain": [
             "AU-MODEL-003",
-            "frozen-skeleton-missing:AU-MODEL-003"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-MODEL-003"
-        },
-        {
-          "chain": [
-            "AU-MODEL-003",
             "shared.package.models.package_internal_engine",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -10893,7 +10321,7 @@
             "AU-MODEL-003",
             "shared.package.models.schema_fixture_contract",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -10905,7 +10333,7 @@
             "AU-MODEL-003",
             "shared.package.models.shared_public_type",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -10930,12 +10358,12 @@
         {
           "chain": [
             "AU-MODEL-004",
-            "contract-candidate-missing:AU-MODEL-004"
+            "candidate_declaration_not_integrated:API-MODEL-004"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "resolution_issue": 27,
           "steward": "generator.catalog",
-          "subject": "AU-MODEL-004"
+          "subject": "API-MODEL-004"
         },
         {
           "chain": [
@@ -10950,26 +10378,6 @@
         {
           "chain": [
             "AU-MODEL-004",
-            "exact-contract-missing:AU-MODEL-004"
-          ],
-          "code": "exact-contract-missing",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "AU-MODEL-004"
-        },
-        {
-          "chain": [
-            "AU-MODEL-004",
-            "exact_declaration_unresolved:API-MODEL-004"
-          ],
-          "code": "exact_declaration_unresolved",
-          "resolution_issue": 27,
-          "steward": "generator.catalog",
-          "subject": "API-MODEL-004"
-        },
-        {
-          "chain": [
-            "AU-MODEL-004",
             "fixtures-missing:AU-MODEL-004"
           ],
           "code": "fixtures-missing",
@@ -10980,19 +10388,9 @@
         {
           "chain": [
             "AU-MODEL-004",
-            "frozen-skeleton-missing:AU-MODEL-004"
-          ],
-          "code": "frozen-skeleton-missing",
-          "resolution_issue": 28,
-          "steward": "steward.ownership",
-          "subject": "AU-MODEL-004"
-        },
-        {
-          "chain": [
-            "AU-MODEL-004",
             "shared.package.models.package_internal_engine",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -11004,7 +10402,7 @@
             "AU-MODEL-004",
             "shared.package.models.schema_fixture_contract",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -11016,7 +10414,7 @@
             "AU-MODEL-004",
             "shared.package.models.shared_public_type",
             "AU-MODEL-001",
-            "contract-candidate-missing:AU-MODEL-001"
+            "candidate_declaration_not_integrated:API-MODEL-001"
           ],
           "code": "shared-component-not-complete",
           "resolution_issue": 1,
@@ -11057,6 +10455,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "AU-QA-001"
+        },
+        {
+          "chain": [
+            "AU-QA-001",
+            "dependency-request-open:DR-AU-QA-001-001"
+          ],
+          "code": "dependency-request-open",
+          "resolution_issue": 28,
+          "steward": "generator.catalog",
+          "subject": "DR-AU-QA-001-001"
         },
         {
           "chain": [

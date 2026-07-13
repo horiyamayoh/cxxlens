@@ -124,6 +124,11 @@ add_custom_target(
     "-I${CMAKE_CURRENT_SOURCE_DIR}/contracts/candidates/48"
     "-I${CMAKE_CURRENT_SOURCE_DIR}/contracts/candidates/49"
     "${CMAKE_CURRENT_SOURCE_DIR}/contracts/candidates/49/generate_usage.cpp"
+  COMMAND
+    "${CMAKE_CXX_COMPILER}" -std=c++23 -fsyntax-only
+    "-I${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "-I${CMAKE_CURRENT_SOURCE_DIR}/contracts/candidates/50"
+    "${CMAKE_CURRENT_SOURCE_DIR}/contracts/candidates/50/flow_models_usage.cpp"
   VERBATIM)
 
 add_custom_target(

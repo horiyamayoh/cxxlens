@@ -5,21 +5,21 @@
         "The declaration has a source-bound signature fingerprint and regenerated task packet."
       ],
       "blocked_api_ids": [
-        "API-FLOW-001"
+        "API-QA-001"
       ],
       "evidence": [
-        "API-FLOW-001:exact_declaration_unresolved",
-        "sha256:33e8af34c20e6cbd4b0eef8ab2c4d00d3bab1a87210672d3172e3fd67d417611"
+        "API-QA-001:exact_declaration_unresolved",
+        "sha256:c409672c7787eea9647e6fbe9b9b3b48ca6bb70603dc24a32d239cb7fa8df07b"
       ],
       "kind": "missing_contract",
-      "request_id": "DR-AU-FLOW-001-001",
+      "request_id": "DR-AU-QA-001-001",
       "requested_behavior": [
         "Publish an exact declaration through the authoritative API catalog change process."
       ],
-      "requesting_atomic_unit": "AU-FLOW-001",
+      "requesting_atomic_unit": "AU-QA-001",
       "resolution": null,
       "schema": "cxxlens.dependency-request.v1",
-      "semantic_digest": "sha256:85ab1e7a8366b4af683d37696e62381801c68e02bc24be5e712e21af8a87509f",
+      "semantic_digest": "sha256:cb85a123f03604e4114c18d4bf211ca7099371f130853c3ad2780438ada9e725",
       "state": "pending",
       "steward_target": "generator.catalog"
     }

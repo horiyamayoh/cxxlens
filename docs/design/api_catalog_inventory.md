@@ -30,14 +30,14 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-FACT-008 | facts | <cxxlens/facts.hpp> | fact_store::includes() | AU-FACT-008 | conformant | candidate |
 | API-FACT-009 | facts | <cxxlens/facts.hpp> | fact_store::macros() | AU-FACT-009 | conformant | candidate |
 | API-FACT-010 | facts | <cxxlens/facts.hpp> | fact_store::coverage(fact_profile,analysis_scope) | AU-FACT-010 | conformant | candidate |
-| API-FLOW-001 | flow | <cxxlens/flow.hpp> | source_model factories | AU-FLOW-001 | unimplemented | unresolved |
-| API-FLOW-002 | flow | <cxxlens/flow.hpp> | sink_model factories | AU-FLOW-002 | unimplemented | unresolved |
-| API-FLOW-003 | flow | <cxxlens/flow.hpp> | barrier_model factories | AU-FLOW-003 | unimplemented | unresolved |
-| API-FLOW-004 | flow | <cxxlens/flow.hpp> | taint_policy builder family | AU-FLOW-004 | unimplemented | unresolved |
-| API-FLOW-005 | flow | <cxxlens/flow.hpp> | flow::run_taint | AU-FLOW-005 | unimplemented | unresolved |
-| API-FLOW-006 | flow | <cxxlens/flow.hpp> | resource_protocol builder family | AU-FLOW-006 | unimplemented | unresolved |
-| API-FLOW-007 | flow | <cxxlens/flow.hpp> | flow::check_resource_protocol | AU-FLOW-007 | unimplemented | unresolved |
-| API-FLOW-008 | flow | <cxxlens/flow.hpp> | flow::build_effect_summaries | AU-FLOW-008 | unimplemented | unresolved |
+| API-FLOW-001 | flow | <cxxlens/flow.hpp> | source_model factories | AU-FLOW-001 | unimplemented | candidate |
+| API-FLOW-002 | flow | <cxxlens/flow.hpp> | sink_model factories | AU-FLOW-002 | unimplemented | candidate |
+| API-FLOW-003 | flow | <cxxlens/flow.hpp> | barrier_model factories | AU-FLOW-003 | unimplemented | candidate |
+| API-FLOW-004 | flow | <cxxlens/flow.hpp> | taint_policy builder family | AU-FLOW-004 | unimplemented | candidate |
+| API-FLOW-005 | flow | <cxxlens/flow.hpp> | flow::run_taint | AU-FLOW-005 | unimplemented | candidate |
+| API-FLOW-006 | flow | <cxxlens/flow.hpp> | resource_protocol builder family | AU-FLOW-006 | unimplemented | candidate |
+| API-FLOW-007 | flow | <cxxlens/flow.hpp> | flow::check_resource_protocol | AU-FLOW-007 | unimplemented | candidate |
+| API-FLOW-008 | flow | <cxxlens/flow.hpp> | flow::build_effect_summaries | AU-FLOW-008 | unimplemented | candidate |
 | API-FUZZ-001 | fuzz | <cxxlens/generate.hpp> | fuzz::generator::for_function | AU-FUZZ-001 | unimplemented | candidate |
 | API-FUZZ-002 | fuzz | <cxxlens/generate.hpp> | fuzz::generator::{input,infer_inputs,options} | AU-FUZZ-002 | unimplemented | candidate |
 | API-FUZZ-003 | fuzz | <cxxlens/generate.hpp> | fuzz::generator::plan | AU-FUZZ-003 | unimplemented | candidate |
@@ -61,10 +61,10 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-MOCK-001 | mock | <cxxlens/generate.hpp> | mock::generator::{for_class,for_symbol,for_c_api_header} | AU-MOCK-001 | unimplemented | candidate |
 | API-MOCK-002 | mock | <cxxlens/generate.hpp> | mock::generator::{options,include_method,exclude_method} | AU-MOCK-002 | unimplemented | candidate |
 | API-MOCK-003 | mock | <cxxlens/generate.hpp> | mock::generator::plan | AU-MOCK-003 | unimplemented | candidate |
-| API-MODEL-001 | models | <cxxlens/models.hpp> | api_model_pack::empty(id,version) | AU-MODEL-001 | unimplemented | unresolved |
-| API-MODEL-002 | models | <cxxlens/models.hpp> | api_model_pack::{function,method,replacement,source,sink,barrier} | AU-MODEL-002 | unimplemented | unresolved |
-| API-MODEL-003 | models | <cxxlens/models.hpp> | api_model_pack::merge | AU-MODEL-003 | unimplemented | unresolved |
-| API-MODEL-004 | models | <cxxlens/models.hpp> | api_model_pack::{load,save,to_json} | AU-MODEL-004 | unimplemented | unresolved |
+| API-MODEL-001 | models | <cxxlens/models.hpp> | api_model_pack::empty(id,version) | AU-MODEL-001 | unimplemented | candidate |
+| API-MODEL-002 | models | <cxxlens/models.hpp> | api_model_pack::{function,method,replacement,source,sink,barrier} | AU-MODEL-002 | unimplemented | candidate |
+| API-MODEL-003 | models | <cxxlens/models.hpp> | api_model_pack::merge | AU-MODEL-003 | unimplemented | candidate |
+| API-MODEL-004 | models | <cxxlens/models.hpp> | api_model_pack::{load,save,to_json} | AU-MODEL-004 | unimplemented | candidate |
 | API-QA-001 | qa | <cxxlens/qa.hpp> | qa::profile factory/builder family | AU-QA-001 | unimplemented | unresolved |
 | API-QA-002 | qa | <cxxlens/qa.hpp> | qa::workflow::{for_project,use,process_policy_,import_coverage,associate_with} | AU-QA-002 | unimplemented | unresolved |
 | API-QA-003 | qa | <cxxlens/qa.hpp> | qa::workflow::run | AU-QA-003 | unimplemented | unresolved |

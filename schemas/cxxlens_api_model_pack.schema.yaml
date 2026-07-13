@@ -1,0 +1,33 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.api-model-pack.v1.schema.yaml
+title: cxxlens API model pack v1
+type: object
+additionalProperties: false
+required: [schema, id, version, trust, rows, diagnostics, unresolved]
+properties:
+  schema: {const: cxxlens.api-model-pack.v1}
+  id: {type: string, pattern: '^[a-z][a-z0-9.-]*$'}
+  version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$'}
+  trust: {enum: [builtin, project, user_untrusted]}
+  rows:
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, kind, key, state, value, provenance]
+      properties:
+        id: {type: string, minLength: 1}
+        kind: {enum: [function, method, replacement, source, sink, barrier]}
+        key: {type: object}
+        state: {enum: [exact, ambiguous, unresolved, unsupported]}
+        value: {type: object}
+        provenance: {type: array, items: {type: object}}
+  diagnostics: {type: array, items: {type: object}}
+  unresolved: {type: array, items: {type: object}}
+  compatibility:
+    type: object
+    additionalProperties: false
+    properties:
+      minimum_reader: {type: string, minLength: 1}
+      unknown_field_policy: {enum: [reject, preserve_forward_compatible]}
+      unknown_kind_policy: {const: reject}

@@ -913,10 +913,12 @@ packages:
       blockers: []
 - id: models
   contract:
-    state: unresolved
+    state: candidate
     owner_issue: '#50'
-    transition_issue: '#42'
+    transition_issue: '#50'
     conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-50
+    candidate_fingerprint: sha256:2cbc4efec8cc4784fe10df0d4ac5048d943b73ff5d3d677afc6991d7c7a569ad
   header: <cxxlens/models.hpp>
   purpose: Versioned project API effects, replacements and flow models.
   public_types:
@@ -924,6 +926,9 @@ packages:
   - parameter_effect
   - api_effects
   - api_model_pack
+  - model_binding_state
+  - model_precedence
+  - model_pack_options
   apis:
   - id: API-MODEL-001
     symbol: api_model_pack::empty(id,version)
@@ -932,17 +937,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/50/models.hpp
+      signature: cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::empty(std::string,cxxlens::semantic_version)
+      signature_fingerprint: sha256:b8df1aee884666c26f1cbe61c1f55d850adc76ac4f62bd008e7f5a4b28d8eeed
     atomic_unit:
       id: AU-MODEL-001
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-MODEL-002
     symbol: api_model_pack::{function,method,replacement,source,sink,barrier}
     kind: builder_family
@@ -957,17 +962,23 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/50/models.hpp
+      signature: cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::function(std::string,cxxlens::models::api_effects)
+        const; cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::method(std::string,std::string,cxxlens::models::api_effects)
+        const; cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::replacement(std::string,std::string)
+        const; cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::source(std::string,cxxlens::flow::source_model)
+        const; cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::sink(std::string,cxxlens::flow::sink_model)
+        const; cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::barrier(std::string,cxxlens::flow::barrier_model)
+        const
+      signature_fingerprint: sha256:72b1ee2bce292c265b570401bd275590b4737c37ddbeac8cf7a229c71edcf757
     atomic_unit:
       id: AU-MODEL-002
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-MODEL-003
     symbol: api_model_pack::merge
     kind: method
@@ -977,17 +988,18 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/50/models.hpp
+      signature: cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::merge(const cxxlens::models::api_model_pack&,cxxlens::models::model_precedence)
+        const
+      signature_fingerprint: sha256:ff1b159316602b9d0c333dc7a15ff5b7cf55a2100907395fdc35e400e26c5cc4
     atomic_unit:
       id: AU-MODEL-003
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-MODEL-004
     symbol: api_model_pack::{load,save,to_json}
     kind: method_family
@@ -998,17 +1010,22 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/50/models.hpp
+      signature: cxxlens::result<cxxlens::models::api_model_pack> cxxlens::models::api_model_pack::load(cxxlens::path,cxxlens::models::model_pack_options);
+        cxxlens::result<void> cxxlens::models::api_model_pack::save(cxxlens::path,cxxlens::models::model_pack_options) const;
+        std::string_view cxxlens::models::api_model_pack::id() const noexcept; cxxlens::semantic_version cxxlens::models::api_model_pack::version()
+        const noexcept; std::span<const cxxlens::diagnostic> cxxlens::models::api_model_pack::diagnostics() const noexcept;
+        std::span<const cxxlens::unresolved> cxxlens::models::api_model_pack::unresolved_items() const noexcept; std::string
+        cxxlens::models::api_model_pack::to_json() const
+      signature_fingerprint: sha256:045639a5b50d6fcca083e69b1468a497b967d70893b41a5f41c5fcf81cf66283
     atomic_unit:
       id: AU-MODEL-004
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
 - id: select
   contract:
     state: candidate
@@ -2158,22 +2175,36 @@ packages:
       apis: []
 - id: flow
   contract:
-    state: unresolved
+    state: candidate
     owner_issue: '#50'
-    transition_issue: '#42'
+    transition_issue: '#50'
     conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-50
+    candidate_fingerprint: sha256:2cbc4efec8cc4784fe10df0d4ac5048d943b73ff5d3d677afc6991d7c7a569ad
   header: <cxxlens/flow.hpp>
   purpose: CFG/dataflow, taint and resource protocol analyses.
   public_types:
+  - cfg_availability_state
+  - cfg_availability
+  - value_path_kind
+  - value_path
   - flow_node
   - flow_path
   - source_model
   - sink_model
+  - barrier_effect
   - barrier_model
+  - flow_sensitivity
+  - unknown_call_policy
+  - flow_options
   - taint_policy
   - taint_report
+  - resource_transition_kind
+  - resource_transition
   - resource_protocol
+  - resource_report
   - effect_summary
+  - effect_summary_report
   apis:
   - id: API-FLOW-001
     symbol: source_model factories
@@ -2188,17 +2219,22 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/50/flow.hpp
+      signature: cxxlens::flow::source_model cxxlens::flow::source_model::call_return(cxxlens::select::call_selector); cxxlens::flow::source_model
+        cxxlens::flow::source_model::parameter(cxxlens::select::symbol_selector,std::size_t); cxxlens::flow::source_model
+        cxxlens::flow::source_model::receiver(cxxlens::select::call_selector); cxxlens::flow::source_model cxxlens::flow::source_model::field(cxxlens::select::symbol_selector);
+        cxxlens::flow::source_model cxxlens::flow::source_model::global(cxxlens::select::symbol_selector); cxxlens::flow::source_model
+        cxxlens::flow::source_model::path(cxxlens::flow::value_path) const; cxxlens::flow::source_model cxxlens::flow::source_model::metadata(std::string,cxxlens::semantic_version,std::string,std::string,std::int32_t)
+        const
+      signature_fingerprint: sha256:e699f888e8ca31f3fdeb90721a96ccf3512316f8db5565b66b07490277368272
     atomic_unit:
       id: AU-FLOW-001
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-FLOW-002
     symbol: sink_model factories
     kind: static_factory_family
@@ -2211,17 +2247,25 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/50/flow.hpp
+      signature: cxxlens::flow::sink_model cxxlens::flow::sink_model::call_argument(cxxlens::select::call_selector,std::size_t);
+        cxxlens::flow::sink_model cxxlens::flow::sink_model::call_receiver(cxxlens::select::call_selector); cxxlens::flow::sink_model
+        cxxlens::flow::sink_model::return_value(cxxlens::select::symbol_selector); cxxlens::flow::sink_model cxxlens::flow::sink_model::field_write(cxxlens::select::symbol_selector);
+        cxxlens::flow::sink_model cxxlens::flow::sink_model::global_write(cxxlens::select::symbol_selector); cxxlens::flow::sink_model
+        cxxlens::flow::sink_model::dereference(); cxxlens::flow::sink_model cxxlens::flow::sink_model::array_index(); cxxlens::flow::sink_model
+        cxxlens::flow::sink_model::format_string(); cxxlens::flow::sink_model cxxlens::flow::sink_model::command_execution();
+        cxxlens::flow::sink_model cxxlens::flow::sink_model::file_path_open(); cxxlens::flow::sink_model cxxlens::flow::sink_model::path(cxxlens::flow::value_path)
+        const; cxxlens::flow::sink_model cxxlens::flow::sink_model::metadata(std::string,cxxlens::semantic_version,std::string,std::string,std::int32_t)
+        const
+      signature_fingerprint: sha256:a4d8fe07e7bba316aa21fce1e2e68831230e649adadaea93c001db7598257877
     atomic_unit:
       id: AU-FLOW-002
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-FLOW-003
     symbol: barrier_model factories
     kind: static_factory_family
@@ -2234,17 +2278,23 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/50/flow.hpp
+      signature: cxxlens::flow::barrier_model cxxlens::flow::barrier_model::validation_call(cxxlens::select::call_selector);
+        cxxlens::flow::barrier_model cxxlens::flow::barrier_model::sanitizer_call(cxxlens::select::call_selector); cxxlens::flow::barrier_model
+        cxxlens::flow::barrier_model::bounds_check(); cxxlens::flow::barrier_model cxxlens::flow::barrier_model::null_check();
+        cxxlens::flow::barrier_model cxxlens::flow::barrier_model::effect(cxxlens::flow::barrier_effect,std::string) const;
+        cxxlens::flow::barrier_model cxxlens::flow::barrier_model::path(cxxlens::flow::value_path) const; cxxlens::flow::barrier_model
+        cxxlens::flow::barrier_model::metadata(std::string,cxxlens::semantic_version,std::string,std::string,std::int32_t)
+        const
+      signature_fingerprint: sha256:b5177faca54a108c2641e5a2a9cdef4d3e169c27f5b4e4ddee38f92bdc043695
     atomic_unit:
       id: AU-FLOW-003
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-FLOW-004
     symbol: taint_policy builder family
     kind: builder_family
@@ -2252,20 +2302,25 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/50/flow.hpp
+      signature: cxxlens::flow::taint_policy cxxlens::flow::taint_policy::label(std::string) const; cxxlens::flow::taint_policy
+        cxxlens::flow::taint_policy::source(cxxlens::flow::source_model) const; cxxlens::flow::taint_policy cxxlens::flow::taint_policy::sink(cxxlens::flow::sink_model)
+        const; cxxlens::flow::taint_policy cxxlens::flow::taint_policy::barrier(cxxlens::flow::barrier_model) const; cxxlens::flow::taint_policy
+        cxxlens::flow::taint_policy::propagate(std::string,std::string) const; cxxlens::flow::taint_policy cxxlens::flow::taint_policy::interprocedural(bool)
+        const; cxxlens::flow::taint_policy cxxlens::flow::taint_policy::precision(cxxlens::precision_level) const; cxxlens::result<void>
+        cxxlens::flow::taint_policy::validate() const
+      signature_fingerprint: sha256:aa01efc56a151ba7b6206f0a991ef1b39ada2b0fee3c30b1bf2f89fffbae0321
     atomic_unit:
       id: AU-FLOW-004
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-FLOW-005
     symbol: flow::run_taint
-    kind: free_function
+    kind: free_function_family
     phase: M7
     use_cases:
     - UC-RL-006
@@ -2276,6 +2331,8 @@ packages:
       - flow_summary
       minimum_precision: local_flow
       apis: []
+      capabilities:
+      - flow.cfg
     llvm:
       components:
       - clangAnalysis
@@ -2289,17 +2346,18 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/50/flow.hpp
+      signature: cxxlens::result<cxxlens::flow::cfg_availability> cxxlens::flow::inspect_cfg(const cxxlens::workspace&,cxxlens::analysis_scope,cxxlens::execution_context);
+        cxxlens::result<cxxlens::flow::taint_report> cxxlens::flow::run_taint(const cxxlens::workspace&,cxxlens::flow::taint_policy,cxxlens::flow::flow_options)
+      signature_fingerprint: sha256:51150e83fe8a833fa4fb38ac77297e67aea2e96f72884a54f477043b09562ce6
     atomic_unit:
       id: AU-FLOW-005
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-FLOW-006
     symbol: resource_protocol builder family
     kind: builder_family
@@ -2309,17 +2367,26 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/50/flow.hpp
+      signature: cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::resource(std::string) const; cxxlens::flow::resource_protocol
+        cxxlens::flow::resource_protocol::initial_state(std::string) const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::terminal_state(std::string)
+        const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::error_state(std::string) const; cxxlens::flow::resource_protocol
+        cxxlens::flow::resource_protocol::transition(cxxlens::flow::resource_transition) const; cxxlens::flow::resource_protocol
+        cxxlens::flow::resource_protocol::acquire(cxxlens::select::call_selector) const; cxxlens::flow::resource_protocol
+        cxxlens::flow::resource_protocol::release(cxxlens::select::call_selector) const; cxxlens::flow::resource_protocol
+        cxxlens::flow::resource_protocol::use(cxxlens::select::call_selector) const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::escape(cxxlens::select::call_selector)
+        const; cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::invalid_use_message(std::string) const;
+        cxxlens::flow::resource_protocol cxxlens::flow::resource_protocol::leak_message(std::string) const; cxxlens::result<void>
+        cxxlens::flow::resource_protocol::validate() const
+      signature_fingerprint: sha256:54173e3c9e4f5c0ddaf9947f98df29e55db091454cede990e608ed8c891cbdee
     atomic_unit:
       id: AU-FLOW-006
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-FLOW-007
     symbol: flow::check_resource_protocol
     kind: free_function
@@ -2332,20 +2399,28 @@ packages:
       - cfg_summary
       minimum_precision: local_flow
       apis: []
+      capabilities:
+      - flow.cfg
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/50/flow.hpp
+      signature: cxxlens::result<cxxlens::flow::resource_report> cxxlens::flow::check_resource_protocol(const cxxlens::workspace&,cxxlens::flow::resource_protocol,cxxlens::flow::flow_options);
+        const cxxlens::finding_set& cxxlens::flow::resource_report::findings() const noexcept; std::span<const cxxlens::flow::flow_path>
+        cxxlens::flow::resource_report::counterexamples() const noexcept; const cxxlens::flow::cfg_availability& cxxlens::flow::resource_report::cfg()
+        const noexcept; const cxxlens::coverage_report& cxxlens::flow::resource_report::coverage() const noexcept; std::span<const
+        cxxlens::unresolved> cxxlens::flow::resource_report::unresolved_items() const noexcept; std::span<const cxxlens::diagnostic>
+        cxxlens::flow::resource_report::diagnostics() const noexcept; cxxlens::result_guarantee cxxlens::flow::resource_report::guarantee()
+        const noexcept; std::string cxxlens::flow::resource_report::to_json() const
+      signature_fingerprint: sha256:e253f22cef7257a2ece2a40858d14687af9280a63bf9a00c292d03599bc42665
     atomic_unit:
       id: AU-FLOW-007
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-FLOW-008
     symbol: flow::build_effect_summaries
     kind: free_function
@@ -2357,20 +2432,29 @@ packages:
       - effect_summary
       minimum_precision: interprocedural_summary
       apis: []
+      capabilities:
+      - flow.cfg
+      - flow.effect-summaries
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/50/flow.hpp
+      signature: cxxlens::result<cxxlens::flow::effect_summary_report> cxxlens::flow::build_effect_summaries(const cxxlens::workspace&,cxxlens::analysis_scope,cxxlens::flow::flow_options);
+        std::span<const cxxlens::flow::effect_summary> cxxlens::flow::effect_summary_report::summaries() const noexcept; const
+        cxxlens::flow::cfg_availability& cxxlens::flow::effect_summary_report::cfg() const noexcept; const cxxlens::coverage_report&
+        cxxlens::flow::effect_summary_report::coverage() const noexcept; std::span<const cxxlens::unresolved> cxxlens::flow::effect_summary_report::unresolved_items()
+        const noexcept; std::span<const cxxlens::diagnostic> cxxlens::flow::effect_summary_report::diagnostics() const noexcept;
+        bool cxxlens::flow::effect_summary_report::converged() const noexcept; std::string cxxlens::flow::effect_summary_report::to_json()
+        const
+      signature_fingerprint: sha256:fadb06a4d3396b24cfc8f1535e8d3b82d62d67da4f0d513a6bb357ab9852d633
     atomic_unit:
       id: AU-FLOW-008
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
 - id: transform
   contract:
     state: candidate
@@ -4232,8 +4316,8 @@ summary:
     implemented: 0
     conformant: 47
   contract_state_counts:
-    candidate: 18
-    unresolved: 4
+    candidate: 20
+    unresolved: 2
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.
@@ -4273,6 +4357,8 @@ registries:
   - symbol
   - type
   capabilities:
+  - flow.cfg
+  - flow.effect-summaries
   - include.cleaner
   - interop.clang
   - qa.coverage
@@ -4440,6 +4526,54 @@ registries:
     semantics_version: cxxlens.package.workspace.v1
     source_contract: schemas/cxxlens_public_api_contract.yaml#package-workspace
   provider_implementation_contracts:
+  - id: provider.capability.flow-cfg
+    kind: capability_provider_implementation
+    subjects:
+    - flow.cfg
+    owner_atomic_unit: AU-FLOW-005
+    steward: steward.flow
+    semantics_version: cxxlens.capability.flow-cfg.v1
+    source_contract: docs/design/package_contract_50.md#ownership-values-and-availability
+  - id: provider.capability.flow-effect-summaries
+    kind: capability_provider_implementation
+    subjects:
+    - flow.effect-summaries
+    owner_atomic_unit: AU-FLOW-008
+    steward: steward.flow
+    semantics_version: cxxlens.capability.flow-effect-summaries.v1
+    source_contract: docs/design/package_contract_50.md#resource-protocol-and-effect-summaries
+  - id: provider.capability.include-cleaner
+    kind: capability_provider_implementation
+    subjects:
+    - include.cleaner
+    owner_atomic_unit: AU-WS-005
+    steward: steward.repository
+    semantics_version: cxxlens.capability.include-cleaner.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#capability-include-cleaner
+  - id: provider.capability.interop-clang
+    kind: capability_provider_implementation
+    subjects:
+    - interop.clang
+    owner_atomic_unit: AU-INT-001
+    steward: steward.interop
+    semantics_version: cxxlens.capability.interop-clang.v1
+    source_contract: schemas/cxxlens_m1_completion.yaml
+  - id: provider.capability.qa-coverage
+    kind: capability_provider_implementation
+    subjects:
+    - qa.coverage
+    owner_atomic_unit: AU-QA-002
+    steward: steward.qa
+    semantics_version: cxxlens.capability.qa-coverage.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#capability-qa-coverage
+  - id: provider.capability.qa-sanitizers
+    kind: capability_provider_implementation
+    subjects:
+    - qa.sanitizers
+    owner_atomic_unit: AU-QA-001
+    steward: steward.qa
+    semantics_version: cxxlens.capability.qa-sanitizers.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#capability-qa-sanitizers
   - id: provider.fact.compile-command
     kind: fact_provider_implementation
     subjects:
@@ -4481,38 +4615,6 @@ registries:
     steward: steward.facts
     semantics_version: cxxlens.fact-provider.frontend.v1
     source_contract: schemas/cxxlens_m1_completion.yaml
-  - id: provider.capability.include-cleaner
-    kind: capability_provider_implementation
-    subjects:
-    - include.cleaner
-    owner_atomic_unit: AU-WS-005
-    steward: steward.repository
-    semantics_version: cxxlens.capability.include-cleaner.v1
-    source_contract: schemas/cxxlens_public_api_contract.yaml#capability-include-cleaner
-  - id: provider.capability.interop-clang
-    kind: capability_provider_implementation
-    subjects:
-    - interop.clang
-    owner_atomic_unit: AU-INT-001
-    steward: steward.interop
-    semantics_version: cxxlens.capability.interop-clang.v1
-    source_contract: schemas/cxxlens_m1_completion.yaml
-  - id: provider.capability.qa-coverage
-    kind: capability_provider_implementation
-    subjects:
-    - qa.coverage
-    owner_atomic_unit: AU-QA-002
-    steward: steward.qa
-    semantics_version: cxxlens.capability.qa-coverage.v1
-    source_contract: schemas/cxxlens_public_api_contract.yaml#capability-qa-coverage
-  - id: provider.capability.qa-sanitizers
-    kind: capability_provider_implementation
-    subjects:
-    - qa.sanitizers
-    owner_atomic_unit: AU-QA-001
-    steward: steward.qa
-    semantics_version: cxxlens.capability.qa-sanitizers.v1
-    source_contract: schemas/cxxlens_public_api_contract.yaml#capability-qa-sanitizers
   implementation_states:
   - unimplemented
   - implemented

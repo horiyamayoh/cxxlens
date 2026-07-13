@@ -3698,6 +3698,21 @@ rollback/recovery を共有するが、artifact lifecycle を source-range edit 
 ODR/macro/type closure、fuzz は有限 input inference と risk disclosure を保持する。unsafe/ambiguous target を
 first-wins や fallback で選ばない。#52 が高リスク検証、#53 が header 統合、#54 が frozen 遷移を所有する。
 
+### 39.21 flow・models package candidate
+
+Issue #50 の規範契約は `docs/design/package_contract_50.md` と
+`schemas/cxxlens_package_contract_candidates.yaml#issue-50` である。`models` は versioned API effect /
+replacement / source / sink / barrier pack row を所有し、`flow` は source/sink/barrier value、CFG
+availability、taint/resource path/report、effect summary execution を所有する。`flow.cfg` と
+`flow.effect-summaries` は versioned capability/provider とし、absent/unsupported/failed/partial/stale/
+variant-divergent を empty success に変換しない。
+
+全解析は有限 path/context/step/state/time/memory/output budget と deterministic worklist/SCC/fixpoint/
+widening を用い、non-convergence と partial coverage/guarantee を保存する。barrier は dominating CFG
+evidence、resource finding は counterexample path、effect summary は model/context/variant/version identity を
+必要とする。model pack merge/load/save は conflict/precedence/trust/unknown version を fail-closed に扱い、
+first-wins や暗黙 migration を禁止する。#52 が高リスク検証、#53 が header 統合、#54 が freeze を所有する。
+
 ---
 
 ## 40. Public API inventory

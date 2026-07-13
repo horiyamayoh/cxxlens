@@ -1,0 +1,44 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.taint-report.v1.schema.yaml
+title: cxxlens taint report v1
+type: object
+additionalProperties: false
+required: [schema, snapshot, cfg, paths, findings, diagnostics, unresolved, coverage, guarantee]
+properties:
+  schema: {const: cxxlens.taint-report.v1}
+  snapshot: {type: string, minLength: 1}
+  cfg: {$ref: '#/$defs/cfg'}
+  paths:
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, source, sink, steps, labels, barriers, variants, evidence, guarantee]
+      properties:
+        id: {type: string, minLength: 1}
+        source: {type: object}
+        sink: {type: object}
+        steps: {type: array, items: {type: object}}
+        labels: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
+        barriers: {type: array, items: {type: object}}
+        variants: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
+        evidence: {type: array, items: {type: object}}
+        guarantee: {enum: [exact, conservative, partial, unknown]}
+  findings: {type: array, items: {type: object}}
+  diagnostics: {type: array, items: {type: object}}
+  unresolved: {type: array, items: {type: object}}
+  coverage: {type: object}
+  guarantee: {enum: [exact, conservative, partial, unknown]}
+$defs:
+  cfg:
+    type: object
+    additionalProperties: false
+    required: [state, provider_version, available_variants, unavailable_variants, diagnostics, unresolved, coverage]
+    properties:
+      state: {enum: [available, absent, unsupported, failed, partial, stale, variant_divergent]}
+      provider_version: {type: string, minLength: 1}
+      available_variants: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
+      unavailable_variants: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
+      diagnostics: {type: array, items: {type: object}}
+      unresolved: {type: array, items: {type: object}}
+      coverage: {type: object}
