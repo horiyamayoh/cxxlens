@@ -80,12 +80,140 @@ namespace
 			  "[" + (reverse ? second + "," + first : first + "," + second) + "]");
 		return root;
 	}
+
+	void require_failure(const cxxlens::workspace_options& options,
+						 const std::string_view code,
+						 const std::string_view reason)
+	{
+		const auto opened = cxxlens::workspace::open(options);
+		require(!opened && opened.error().code.value == code &&
+					opened.error().attributes.contains("offset") &&
+					opened.error().attributes.at("reason") == reason,
+				"compile database failure reason/offset was not stable");
+	}
+
+	void check_json_conformance(const std::filesystem::path& base)
+	{
+		const auto root = base / "json-conformance";
+		const std::string unicode_name = "unicode-\xCE\xA9-\xF0\x9F\x98\x80.cpp";
+		const std::string unicode_define = "-DNAME=\xCE\xA9-\xF0\x9F\x98\x80";
+		write(root / unicode_name, "int unicode_value;\n");
+		const auto directory = json_path(root);
+		write(root / "unicode.json",
+			  "[{\"directory\":\"" + directory +
+				  "\",\"file\":\"unicode-\\u03A9-\\uD83D\\uDE00.cpp\","
+				  "\"arguments\":[\"clang++\",\"-DNAME=\\u03A9-\\uD83D\\uDE00\","
+				  "\"unicode-\\u03A9-\\uD83D\\uDE00.cpp\"],"
+				  "\"vendor_number\":-12.5e+2,\"vendor_bool\":true,\"vendor_null\":null,"
+				  "\"vendor_nested\":{\"values\":[false,null,0,1.25E-3]}}]");
+		const auto unicode = cxxlens::workspace::open(
+			cxxlens::workspace_options::from_compilation_database(root / "unicode.json"));
+		require(
+			unicode && unicode.value().compile_units().size() == 1U &&
+				unicode.value().compile_units().front().command().file.filename() == unicode_name &&
+				unicode.value().compile_units().front().command().arguments.at(1) == unicode_define,
+			"escaped BMP/surrogate Unicode or unknown scalar fields were not decoded");
+
+		const auto large_root = base / "large-json";
+		write(large_root / "source.cpp", "int large_database;\n");
+		std::string large_database = "[{\"directory\":\"" + json_path(large_root) +
+			"\",\"file\":\"source.cpp\",\"arguments\":[\"clang++\",\"source.cpp\"],"
+			"\"vendor_padding\":\"";
+		large_database.append(std::size_t{17U} * 1024U * 1024U, 'x');
+		large_database += "\"}]";
+		write(large_root / "compile_commands.json", large_database);
+		auto large_options = cxxlens::workspace_options::from_compilation_database(
+			large_root / "compile_commands.json");
+		const auto large = cxxlens::workspace::open(large_options);
+		require(large && large.value().compile_units().size() == 1U &&
+					large_database.size() > std::size_t{16U} * 1024U * 1024U,
+				"valid compilation database larger than the former 16 MiB cap was rejected");
+
+		auto byte_limited_options = large_options;
+		byte_limited_options.compilation_database_byte_budget = std::size_t{16U} * 1024U * 1024U;
+		const auto byte_limited = cxxlens::workspace::open(byte_limited_options);
+		require(!byte_limited && byte_limited.error().code.value == "core.budget-exhausted" &&
+					byte_limited.error().attributes.at("reason") ==
+						"compilation-database-byte-budget" &&
+					byte_limited.error().attributes.contains("limit") &&
+					byte_limited.error().attributes.contains("observed"),
+				"pre-read compilation database byte budget was not structured");
+		auto invalid_budget_options = large_options;
+		invalid_budget_options.compilation_database_byte_budget = 0U;
+		const auto invalid_budget = cxxlens::workspace::open(invalid_budget_options);
+		require(!invalid_budget && invalid_budget.error().code.value == "core.invalid-argument" &&
+					invalid_budget.error().attributes.at("reason") ==
+						"compilation-database-byte-budget-zero",
+				"zero compilation database budget was accepted as unlimited");
+		auto string_limited_options = large_options;
+		string_limited_options.compilation_database_string_byte_budget = 1024U;
+		const auto string_limited = cxxlens::workspace::open(string_limited_options);
+		require(!string_limited && string_limited.error().code.value == "core.budget-exhausted" &&
+					string_limited.error().attributes.at("reason") ==
+						"compilation-database-string-byte-budget" &&
+					string_limited.error().attributes.contains("offset"),
+				"decoded JSON string budget was not enforced");
+
+		auto entry_limited_options =
+			cxxlens::workspace_options::from_compilation_database(root / "unicode.json");
+		entry_limited_options.compilation_database_entry_budget = 3U;
+		const auto entry_limited = cxxlens::workspace::open(entry_limited_options);
+		require(!entry_limited && entry_limited.error().code.value == "core.budget-exhausted" &&
+					entry_limited.error().attributes.at("reason") ==
+						"compilation-database-entry-budget",
+				"JSON container entry budget was not enforced");
+
+		std::string depth_bomb(66U, '[');
+		depth_bomb += "null";
+		depth_bomb.append(66U, ']');
+		write(root / "depth.json", depth_bomb);
+		auto depth_options =
+			cxxlens::workspace_options::from_compilation_database(root / "depth.json");
+		depth_options.compilation_database_nesting_budget = 8U;
+		const auto depth_limited = cxxlens::workspace::open(depth_options);
+		require(!depth_limited && depth_limited.error().code.value == "core.budget-exhausted" &&
+					depth_limited.error().attributes.at("reason") ==
+						"compilation-database-nesting-budget",
+				"JSON nesting budget did not reject a depth bomb");
+
+		const auto invalid = base / "invalid-json";
+		write(invalid / "malformed-unicode.json", R"(["\u12G4"])");
+		require_failure(cxxlens::workspace_options::from_compilation_database(
+							invalid / "malformed-unicode.json"),
+						"workspace.compile-database-invalid",
+						"malformed-unicode-escape");
+		write(invalid / "high-surrogate.json", R"(["\uD800x"])");
+		require_failure(
+			cxxlens::workspace_options::from_compilation_database(invalid / "high-surrogate.json"),
+			"workspace.compile-database-invalid",
+			"unpaired-high-surrogate");
+		write(invalid / "low-surrogate.json", R"(["\uDC00"])");
+		require_failure(
+			cxxlens::workspace_options::from_compilation_database(invalid / "low-surrogate.json"),
+			"workspace.compile-database-invalid",
+			"unpaired-low-surrogate");
+		write(invalid / "number.json", R"([{"vendor":01}])");
+		require_failure(
+			cxxlens::workspace_options::from_compilation_database(invalid / "number.json"),
+			"workspace.compile-database-invalid",
+			"invalid-number");
+		std::string invalid_utf8{"[\""};
+		invalid_utf8.push_back(static_cast<char>(0xC0U));
+		invalid_utf8.push_back(static_cast<char>(0xAFU));
+		invalid_utf8 += "\"]";
+		write(invalid / "utf8.json", invalid_utf8);
+		require_failure(
+			cxxlens::workspace_options::from_compilation_database(invalid / "utf8.json"),
+			"workspace.compile-database-invalid",
+			"invalid-utf8");
+	}
 } // namespace
 
 int main(int argc, char** argv)
 {
 	const auto base = std::filesystem::temp_directory_path() / "cxxlens-workspace-catalog-test";
 	std::filesystem::remove_all(base);
+	check_json_conformance(base);
 	const auto root_a = make_root(base, "checkout-a", false);
 	const auto root_b = make_root(base, "relocated-checkout-b", true);
 	const auto collision_a = make_same_basename_root(base, "collision-checkout-a", false);

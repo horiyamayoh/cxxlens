@@ -233,6 +233,8 @@ packages:
     errors:
     - workspace.compile-database-not-found
     - workspace.compile-database-invalid
+    guarantees:
+    - Defaults to explicit nonzero byte, entry, decoded-string, and nesting budgets.
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -243,6 +245,7 @@ packages:
     implementation_evidence:
     - include/cxxlens/workspace.hpp
     - src/workspace/catalog.cpp
+    - docs/development/workspace-catalog.md
     - tests/unit/workspace/workspace_catalog_test.cpp
     atomic_unit:
       id: AU-WS-001
@@ -270,8 +273,14 @@ packages:
       - CompilerInvocation::CreateFromArgs
     guarantees:
     - Preserves all relevant commands as build variants; does not first-win.
+    - Decodes RFC 8259 Unicode and safely ignores unknown scalar extension fields.
+    - Applies caller-configurable compilation database budgets before read and during parse.
     errors:
+    - core.budget-exhausted
+    - core.invalid-argument
     - workspace.compile-command-ambiguous
+    - workspace.compile-database-invalid
+    - workspace.compile-database-not-found
     - workspace.resource-dir-not-found
     contract_maturity: contract-defined
     implementation_state: conformant
@@ -283,6 +292,7 @@ packages:
     implementation_evidence:
     - include/cxxlens/workspace.hpp
     - src/workspace/catalog.cpp
+    - docs/development/workspace-catalog.md
     - schemas/cxxlens_workspace_context.schema.yaml
     - tests/unit/workspace/workspace_catalog_test.cpp
     atomic_unit:

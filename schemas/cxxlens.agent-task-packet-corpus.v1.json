@@ -1670,7 +1670,7 @@
       "readiness_state": "complete"
     }
   ],
-  "catalog_fingerprint": "sha256:1d88d58f684a44ee82fff9e2cc8757630609890b49623aca2ae34b1d1aba7538",
+  "catalog_fingerprint": "sha256:e3d21770bd83c2ea192697165da6671b511fd8acc238af24ceea240f8fe73fff",
   "packets": [
     {
       "acceptance_commands": [
@@ -2503,11 +2503,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -2668,7 +2668,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:942a726b95ce57e592c24bb691bd56471ca3507b80a53a08d47362ec38f466b6",
+      "semantic_digest": "sha256:4f300cd83bb6487ea7eea102393c5246e290fe79dd18d5be8d38bbb87a86296e",
       "symbol": "copy::public_surface",
       "traceability": {
         "requirements": [],
@@ -2738,11 +2738,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -2882,7 +2882,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:4b772c8bd20211f49b6cdc598d0843a86af28e48f0b96c57a065776261140ade",
+      "semantic_digest": "sha256:855fd436d718104d9c561bbe176fc9728ba0d0f48f6a73ad8ee362301160fed0",
       "symbol": "copy::required_types",
       "traceability": {
         "requirements": [],
@@ -3739,11 +3739,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -3852,7 +3852,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:5826c613685f0e2201505a9990254253b0ade5516f2d387de16a7914515c14de",
+      "semantic_digest": "sha256:477c2c3e94a2e438492eb7a03e59f0cb2b0301af2d12cc307029953c0924c758",
       "symbol": "finding::{id,why,unresolved_items,explain,to_json}",
       "traceability": {
         "requirements": [],
@@ -3920,11 +3920,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -4033,7 +4033,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:7fc436fd3fb21ff5fff3d9e66f6e7f8717aec61a80797c0d372edde4fb8e4058",
+      "semantic_digest": "sha256:7a501f531933b17d2faa536c6e8742fb5abe9f67bdbad633184ef558e0c40196",
       "symbol": "finding_set::{minimum_confidence,minimum_severity,to_json,to_markdown,to_sarif}",
       "traceability": {
         "requirements": [],
@@ -4101,11 +4101,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -4214,7 +4214,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:07bf3c2e83c2cf33cf273e2e952345c39e288a95da22688ce952fbb150bc505d",
+      "semantic_digest": "sha256:e75344d1a2d48a4b91c92fb2d20b2b24c8243f4f12475e62ced29eba8855eca2",
       "symbol": "explain::{selector,finding,coverage,edit_plan,generation_plan}",
       "traceability": {
         "requirements": [],
@@ -4528,11 +4528,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -4640,7 +4640,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:7a539d837f44a2898ecb07709ef9341d443a0bee2de0df6eb8bcd63a0a72ed49",
+      "semantic_digest": "sha256:8e025e2cee384946e2d631761bf4342ef105fb28e00c8b62c88161dc7b75f3d1",
       "symbol": "explain::{for_selector,for_rule,for_codemod,for_generation}",
       "traceability": {
         "requirements": [],
@@ -4708,11 +4708,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -4817,7 +4817,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:5ecbfc5bbfcd838738ee74862a7a9ade98bfcc690c81d6690c82dff2c49e3c76",
+      "semantic_digest": "sha256:570946dbf8c2c77d26679f5556bf1af1651eb1b1f635bcce915393029420d01d",
       "symbol": "explain::api_catalog_json",
       "traceability": {
         "requirements": [],
@@ -6938,11 +6938,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -7081,7 +7081,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:ea2c52d73418c31fa6998d172dfb59b6fff8660dfd1985783e34a380064159b0",
+      "semantic_digest": "sha256:d9cb2f08c2e05666d4484cb523708be848a99032d5f08229f4ad7a50fd70f382",
       "symbol": "source_model factories",
       "traceability": {
         "requirements": [],
@@ -7149,11 +7149,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -7282,7 +7282,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:74884f9dc19e5ac10820a1d33d75455b09219d0320bb326aeb889906c2c5507e",
+      "semantic_digest": "sha256:709adb4ca5cd72f4d0240729088623f9840cddee04066ce9dc36b6d8a64b374c",
       "symbol": "sink_model factories",
       "traceability": {
         "requirements": [],
@@ -7350,11 +7350,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -7483,7 +7483,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:e229d199bb2b9d6c4dc82be78302e61290b5dd00db84ea6733666bac78935d93",
+      "semantic_digest": "sha256:6db231fdb7c97eeb81e45d537c837c2dfd4ffa85c5220ffff75e138986b86dba",
       "symbol": "barrier_model factories",
       "traceability": {
         "requirements": [],
@@ -7551,11 +7551,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -7660,7 +7660,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:b4a43257b570b0fe5be210b1b963d525f17a7571f1654e46baebae0ed459da47",
+      "semantic_digest": "sha256:3aac34d84bbd27bad4991b405c901c0df00e20c7bc7eca704bd5fd32cc5b56f9",
       "symbol": "taint_policy builder family",
       "traceability": {
         "requirements": [],
@@ -7732,11 +7732,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -7876,7 +7876,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:da4be4533f59398f8691047d5fbe2ef22efb98bbe660b674bb73528014aa41e6",
+      "semantic_digest": "sha256:31b04cac445d99dd3fb6ab74fdffc118a56d1ab766d636099d1e76310109a26c",
       "symbol": "flow::run_taint",
       "traceability": {
         "requirements": [],
@@ -7946,11 +7946,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -8055,7 +8055,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:2171495479df43cfb73f322dc4859aff09839d586aaf7f73fb48ab3ecafe8dfe",
+      "semantic_digest": "sha256:79936a2599e90e04b4f81430966b46e874e9601c3db4f3525045c5634ea8b16a",
       "symbol": "resource_protocol builder family",
       "traceability": {
         "requirements": [],
@@ -8125,11 +8125,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -8258,7 +8258,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:746f0ff51d460cf8831775cf19be3e966703de3f5c96419d742a1d259fcf573c",
+      "semantic_digest": "sha256:b783363bbea49203d96fc0d0bdfcaa9e9479c3a450db6273be5d7125bcfabd4c",
       "symbol": "flow::check_resource_protocol",
       "traceability": {
         "requirements": [],
@@ -8328,11 +8328,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -8472,7 +8472,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:4e73476c9a0ffcdc3697f1ecc70a86ecb422c0cb187819ac5ed9f13b3fa97b02",
+      "semantic_digest": "sha256:66b93b642f0485badbdaa4b8d8544956cd700f801b3b37bc99c6797dd990ad1f",
       "symbol": "flow::build_effect_summaries",
       "traceability": {
         "requirements": [],
@@ -8540,11 +8540,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -8672,7 +8672,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:1cd9acf058354bedb87b7510526013ab18a722962aad37930db782f58ccc36a4",
+      "semantic_digest": "sha256:69103b1029cb2af7491ae9f4fdd1d8091afe9cde8269ba3f2f5ed34928dcb8d1",
       "symbol": "fuzz::generator::for_function",
       "traceability": {
         "requirements": [],
@@ -8742,11 +8742,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -8853,7 +8853,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:7a1b59520a0fd6c845740a58788f68c9c2860798028449db171eff8369e10354",
+      "semantic_digest": "sha256:8a0a6a363d5c8fa376d873392b47560dcb041a8f1198dbda9ffb6552692debe1",
       "symbol": "fuzz::generator::{input,infer_inputs,options}",
       "traceability": {
         "requirements": [],
@@ -8923,11 +8923,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -9067,7 +9067,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:78db0b11a870d9b874ebefd948dc68d8d3dcbb1bcaf4705c6933e5710ec40260",
+      "semantic_digest": "sha256:90fc0dd05157c19eeaf4445698726f1f2a67a0e71c90da68a2204d352bc71387",
       "symbol": "fuzz::generator::plan",
       "traceability": {
         "requirements": [],
@@ -9139,11 +9139,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -9254,7 +9254,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:9d5eca4c7a170235753326ae0a9739ceaf60295880073c6e17c6a4a06d1ae6c4",
+      "semantic_digest": "sha256:a23efcd2a5ba66ae735c863681461b838cc6b350f2c066c975320155e7519018",
       "symbol": "generation_plan::{census,decisions,artifacts,diagnostics,unresolved_items,coverage,preview,to_json,to_markdown}",
       "traceability": {
         "requirements": [],
@@ -9328,11 +9328,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -9437,7 +9437,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:c9625e470e09ce34557da8902b2abcb1e14d58f7de65f8ccb62e41aca2f80371",
+      "semantic_digest": "sha256:27d89ac892c1554513722449a67068a170e86a503a971a2c83af90fe7b21a25f",
       "symbol": "generation_plan::apply",
       "traceability": {
         "requirements": [],
@@ -9505,11 +9505,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -9626,7 +9626,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:5851786ba51decb7a8cacecad9b0b5850f0ba5f17f36bf127f7182bb104fbde7",
+      "semantic_digest": "sha256:124fdc020d939b92fe7ac8cae179f19d0d9a762cdfc4e918d622ea07d22a5c1c",
       "symbol": "graph::class_hierarchy",
       "traceability": {
         "requirements": [],
@@ -9696,11 +9696,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -9818,7 +9818,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:379f6df3fa536a15272030a45a44bd647c3e6367e112ca829a99c132e987b4ac",
+      "semantic_digest": "sha256:6857944c393658e11032f4de9fee1c661393db1d3350ec1a9ba0c2ba5609b57a",
       "symbol": "graph::override_graph",
       "traceability": {
         "requirements": [],
@@ -9888,11 +9888,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -10010,7 +10010,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:3701e8e2a35c1b858f0313305eea4e3cd3a4fc477a613f1a9b3897e1d9fde2ee",
+      "semantic_digest": "sha256:3462b52426ba7f55bb2053348b83c3dcc30d7d25a3ed49f1ce92786f85adcb87",
       "symbol": "graph::call_graph",
       "traceability": {
         "requirements": [],
@@ -10080,11 +10080,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -10202,7 +10202,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:0f7cdceb3dae7207ccf1cd6fe0a1c2a89b4eb23473b8c214ac0c2154a28c7987",
+      "semantic_digest": "sha256:fd04edd5f585ca198503d5cbf7b8942e97889414ad772be5820abcd632b30bc3",
       "symbol": "graph::include_graph",
       "traceability": {
         "requirements": [],
@@ -10272,11 +10272,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -10416,7 +10416,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:b975fbb34334bcabf1006cf8f5e678f60643a334190a340ede1a03297a8f516f",
+      "semantic_digest": "sha256:7bfb618c71af4b5f6a0e2ae2af355cc78ad12115226c904a090fc874f97fe220",
       "symbol": "impact_query builder and run",
       "traceability": {
         "requirements": [],
@@ -10486,11 +10486,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -10597,7 +10597,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:1ee107cc0ac684340974424de8e8115b69d2bf194b2350fb664a363bc027e1e2",
+      "semantic_digest": "sha256:e72d03f424623070a80837da41f7b1868a250a00bf2562a33245654b33e5775a",
       "symbol": "semantic_graph::{subgraph,to_json,to_dot}",
       "traceability": {
         "requirements": [],
@@ -11091,11 +11091,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -11203,7 +11203,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:e5050272aeb5b31a76f5fa9edba94385dfeee1d3ccef14eb685c6e9ff38ffc50",
+      "semantic_digest": "sha256:aa25245bd79854c57ab6ac78ec8a5b2dde83ca0dbde15c5f875cacf2144cb2f6",
       "symbol": "fact_sink::{emit,emit_custom,emit_evidence,mark_partial}",
       "traceability": {
         "requirements": [],
@@ -11274,11 +11274,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -11384,7 +11384,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:160bd1476ae6015de8ea078e0eb1905e467f9c52f9febe6e9e8df96630503e1c",
+      "semantic_digest": "sha256:56a83926ba675a2bdad7d43ae8b3ace481c14ebe0620d969fbfc3e7db2eb2f19",
       "symbol": "interop::{register_extractor,unregister_extractor}",
       "traceability": {
         "requirements": [],
@@ -11454,11 +11454,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -11561,7 +11561,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:a07d65171c011b176760590a2e26eab11e1fd7b7ff168014d45774be4c645936",
+      "semantic_digest": "sha256:257ae4b8a641678cc803c788ecea004a5a394f816022235616d2e85e58efc71b",
       "symbol": "method_harness::parse_method_spec",
       "traceability": {
         "requirements": [],
@@ -11635,11 +11635,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -11768,7 +11768,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:97b164e0361a489a4932c6859dc974011c37ef5b5a29facd52f6e0406f3b5c80",
+      "semantic_digest": "sha256:1fc927cb0365dd55804f271c64aea16048c2fa8fcfe473d02924eeab06be03dc",
       "symbol": "method_harness::resolve_method",
       "traceability": {
         "requirements": [],
@@ -11838,11 +11838,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -11949,7 +11949,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:a218478e8f31a71f502d702cd986d91f3536fed47e22d14816ac08108ca958e8",
+      "semantic_digest": "sha256:8f4c7ab1f6a09af50235d737998a90852608da14e55b23363c99f7cb8cc4f00e",
       "symbol": "method_harness::generator::{for_method,for_symbol,options}",
       "traceability": {
         "requirements": [],
@@ -12017,11 +12017,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -12172,7 +12172,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:a8088bb1889933e5b932c62876fca6a9dad3f5e880d0172ef7d94d87ccb82cd0",
+      "semantic_digest": "sha256:c536a05a6099a5b0013f917a6013b9408f4c7f0ce56bc2080bbe31e01439ebba",
       "symbol": "method_harness::generator::inspect",
       "traceability": {
         "requirements": [],
@@ -12242,11 +12242,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -12405,7 +12405,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:0a403dcd18e524ee4422e4b6d894a4efa026d53952e3df13645930d9c4b6a475",
+      "semantic_digest": "sha256:44fb66d03d1fc92bd8d29adc4e3f60cc2a7e4f5678411dbec449d8ad66e53a1e",
       "symbol": "method_harness::generator::plan",
       "traceability": {
         "requirements": [],
@@ -12475,11 +12475,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -12609,7 +12609,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:aa92b2703ceaa2ba66fa54d104353c95d3a6190b7ca222dc2eef6f05ca41c82b",
+      "semantic_digest": "sha256:1a7183ecf9ff04ee8b27b54a1c5684e5aa7ba4e97582805658dc1c83c79f83ed",
       "symbol": "mock::generator::{for_class,for_symbol,for_c_api_header}",
       "traceability": {
         "requirements": [],
@@ -12681,11 +12681,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -12792,7 +12792,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:26f18133eb758d6cb78cd5c09306068306ace78d2b550d80c972060f82884151",
+      "semantic_digest": "sha256:c225345f402b715f495fed21899797f26d76e124a554b0776e0823187433c14d",
       "symbol": "mock::generator::{options,include_method,exclude_method}",
       "traceability": {
         "requirements": [],
@@ -12866,11 +12866,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -13043,7 +13043,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:2fbdaba5fb0dabafe42ebf66fde8313698a9b841a3454e6c55c97a5508af40dd",
+      "semantic_digest": "sha256:c0ac08cbd904bbfa3d0fafd530d3cc8ed423412fafd31170e01e7460d60e0a3e",
       "symbol": "mock::generator::plan",
       "traceability": {
         "requirements": [],
@@ -13115,11 +13115,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -13222,7 +13222,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:b91914f8e5bac69cf186e5dc48eed9305b465368dad7b79673be63eb4b717382",
+      "semantic_digest": "sha256:894bb7c5bc157b5775fa66bed4f0ae15f80de69cabfdf46dba7c1846a0d13b32",
       "symbol": "api_model_pack::empty(id,version)",
       "traceability": {
         "requirements": [],
@@ -13292,11 +13292,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -13430,7 +13430,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:4be12d433f9f30a5adfb43b5fee9e5cb1894fa024e8abb0c6c983f48bfb5ee66",
+      "semantic_digest": "sha256:235033f7a5543a016d1f263a374ad006574b73d409f9322093e14611d32c87ef",
       "symbol": "api_model_pack::{function,method,replacement,source,sink,barrier}",
       "traceability": {
         "requirements": [],
@@ -13500,11 +13500,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -13609,7 +13609,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:521e118e06905d214d91c7e86daed59faca02ae7261c19c24e8588774f8e2acd",
+      "semantic_digest": "sha256:eb667a5cbdedf1eb83c70057ee0acff315ed11728332fa7b6ca17457638b7a40",
       "symbol": "api_model_pack::merge",
       "traceability": {
         "requirements": [],
@@ -13680,11 +13680,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -13791,7 +13791,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:209001de9cd9b721b3fadb1e1a413b1157f8ff7584e62f2064f204d089174f84",
+      "semantic_digest": "sha256:e588bd97991f3779d598f570a036488cab0c10aa2e5f29fa72cf0b398cf22e88",
       "symbol": "api_model_pack::{load,save,to_json}",
       "traceability": {
         "requirements": [],
@@ -13859,11 +13859,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -13966,7 +13966,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:f4f8cf964c46cd19ef578eeef0b094db9310deccd36cc2b25716d38f3b0f3ee2",
+      "semantic_digest": "sha256:01d5e9a6673548c95bb1ea70c404968bac98864dbe706f9baaadb2554e1e048c",
       "symbol": "qa::profile factory/builder family",
       "traceability": {
         "requirements": [],
@@ -14037,11 +14037,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -14150,7 +14150,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:103c1343e282049a0f466427a32aa8652da62ce8ed870a3f880495a54fcdd5ce",
+      "semantic_digest": "sha256:1d548748bbaba386dfb951777dddae1eecffa9ae878451bcaaf7d2485b76ffb3",
       "symbol": "qa::workflow::{for_project,use,process_policy_,import_coverage,associate_with}",
       "traceability": {
         "requirements": [],
@@ -14226,11 +14226,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -14347,7 +14347,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:f53bcd5943bea3f4c24ff58d3b63e6723bf8c138b175436ef9561495afd8d151",
+      "semantic_digest": "sha256:8b948a84f803e94cee8236f43806f2cf0b5ed8daaacaf1a9cd7e323cf7fc7f64",
       "symbol": "qa::workflow::run",
       "traceability": {
         "requirements": [],
@@ -14419,11 +14419,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -14541,7 +14541,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:00ebf519a6f6ee5f2a4d6e6153eef08944ed2078a8311da29111ba90e40e6873",
+      "semantic_digest": "sha256:6a1e0d4f69af25bd994643f30747fdf947ad970b798e011cf09269142fe3ff2a",
       "symbol": "qa::import_source_coverage",
       "traceability": {
         "requirements": [],
@@ -14615,11 +14615,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -14722,7 +14722,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:3ef91e45f4cee3dfa6d1d0c4bb2c8223d86ee98291fb09f5188c925700b46177",
+      "semantic_digest": "sha256:8d295dd341cae7b5c3982a2f259aed67e53c8a32db104d257ad481a12e5d4017",
       "symbol": "report::render(finding_set)",
       "traceability": {
         "requirements": [],
@@ -14794,11 +14794,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -14903,7 +14903,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:4229cdc1e79a5cbbb015624563a0261c6f1cd00cdfc7306a3327be5bfe82cf1a",
+      "semantic_digest": "sha256:d01c8bf5019cce82ab5b49d88dfefd1d6bf8041608532b1799dc38d553c92063",
       "symbol": "report::render(edit_plan)",
       "traceability": {
         "requirements": [],
@@ -14975,11 +14975,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -15084,7 +15084,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:f0c9d2b67d95b78ca2e8f688022bfe3657e3e14b2a521a2fc1d16ca09bfabad6",
+      "semantic_digest": "sha256:f93ddadf2462a179d93bd4e4746a1ce593669e04b4ca219889303f454dcd540c",
       "symbol": "report::render(generation_plan)",
       "traceability": {
         "requirements": [],
@@ -15156,11 +15156,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -15265,7 +15265,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:68d56b9afd16c737555ac61c933fdd672f617a67fbd172942b2e82209150f2b6",
+      "semantic_digest": "sha256:4165ddb4699bd7a1e0918fcf31b4f11ff4f4c8b492a89271d927689f54094394",
       "symbol": "report::render(review_report)",
       "traceability": {
         "requirements": [],
@@ -15333,11 +15333,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -15440,7 +15440,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:574fe31cc84804018b90409df976b8a8a5bde1599de9aa8f3706ca0393f59172",
+      "semantic_digest": "sha256:f9eb3799be66baeb99f682edab399549601cf48f98eccb5457c8e2ffb6c84595",
       "symbol": "rules::make_rule",
       "traceability": {
         "requirements": [],
@@ -15513,11 +15513,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -15683,7 +15683,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:05202ed83d6e24bb647db935c26dd447518a99d03112167274a90b1b08cb38eb",
+      "semantic_digest": "sha256:11b03cb06226ec456dc140f8067af115165dbb0c991105520377998e97d4a77c",
       "symbol": "rule_builder::{metadata,when,unless,scope,severity_level,confidence_at_least,diagnose,note,fix,explain,build}",
       "traceability": {
         "requirements": [],
@@ -15753,11 +15753,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -15913,7 +15913,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:cc3a586cdb4c5e04faf7154d45dbaff0b450ebb83f8a27a707826efb0bc8859b",
+      "semantic_digest": "sha256:e6746ea95aec0db4b05786b681aeb21e52825111e7fff71faaaa1a35e25e8ffa",
       "symbol": "rule::run",
       "traceability": {
         "requirements": [],
@@ -15981,11 +15981,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -16093,7 +16093,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:b62a4a792c680f6bf308c11519d71c2186176f97bae3b44c32b44e77f2ad9c8b",
+      "semantic_digest": "sha256:63eb75a391c24ac9172c94f67505fa2fe59a6268af935e627175b271e7be6e08",
       "symbol": "rule_pack::{add,enable,disable,run}",
       "traceability": {
         "requirements": [],
@@ -16163,11 +16163,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -16272,7 +16272,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:145a43d794748d4009b4972317337bf7dcdb6808ac8ae25dd2b851a464c6af26",
+      "semantic_digest": "sha256:26a47920d6521e92b667b331d276efd8003e2142d994d20f43c5d8592709f69a",
       "symbol": "suppression_policy builder family",
       "traceability": {
         "requirements": [],
@@ -16344,11 +16344,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -16455,7 +16455,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:5e3d46d58bf5ec2435affcf24e08805a346ae31772fc30c6507e0e65e0b5761e",
+      "semantic_digest": "sha256:80edb8426e96fdcd8bdaec45fffdd6005dc4446d5d774c2d70939297f26c718c",
       "symbol": "diff_view::{from_unified_diff,from_git,contains,changed_files,to_json}",
       "traceability": {
         "requirements": [],
@@ -16527,11 +16527,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -16639,7 +16639,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:1ea1331bd174117eb25a175d77923f4a53ca1c2e0388f283c5ad7c9b76bed1a6",
+      "semantic_digest": "sha256:c8b70ca73843c435d586a40fd1242819c5ec4875b07c300a40f0516af43ae309",
       "symbol": "baseline::{load,save,contains_equivalent,to_json}",
       "traceability": {
         "requirements": [],
@@ -16709,11 +16709,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -16818,7 +16818,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:6bec6b080bbfdc40f11d5d6a8d7dc5c688d75aa0bc88acf66697aa3457745f60",
+      "semantic_digest": "sha256:90cd74c4b1fdb24c630d1225fc79be4260ab0c027d5125f416075a4ab1c845c0",
       "symbol": "gate_policy factory/builder family",
       "traceability": {
         "requirements": [],
@@ -16888,11 +16888,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -16997,7 +16997,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:d78d0e1bc91a0231b737d129707456c0548aec434eb1952335f69b5875edf766",
+      "semantic_digest": "sha256:3f206f91d94b01037bee2c5cd53d039eb31f4cbe2dd45195051c1a5d1d82b6ac",
       "symbol": "review::workflow builder family",
       "traceability": {
         "requirements": [],
@@ -17067,11 +17067,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -17222,7 +17222,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:b631046dcbadd8432be0dae801483d540fbb5f1510d89db8a68d7d289be74e5c",
+      "semantic_digest": "sha256:f9cb62adfce03273d93ee50edc1d38769d91cd560780201d76f901a3859ca0c4",
       "symbol": "review::workflow::run",
       "traceability": {
         "requirements": [],
@@ -17976,11 +17976,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -18120,7 +18120,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:975c98bd89939643c5ed799f2ee5d00c31249ba975bf1d0f19c410d78a3e6e86",
+      "semantic_digest": "sha256:149393c6726491e8682251d0830f687aab6d13ec5a3216962fb0921f37e3dfce",
       "symbol": "expression_selector builder family",
       "traceability": {
         "requirements": [],
@@ -18188,11 +18188,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -18310,7 +18310,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:72754ef3cca9f0202b30f1a351f3da7a08596a3dee9cbd50b4c0a5324437ab95",
+      "semantic_digest": "sha256:33a6f33fc8a5316c9ddb22c1e6313023d8f7d6593e0493f4e727ce45caafd846",
       "symbol": "reference_selector builder family",
       "traceability": {
         "requirements": [],
@@ -18640,11 +18640,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -18749,7 +18749,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:0cdb381c0d07621d0110fc64b95c4b57e23573d69dc3542eead3630a5e0979fe",
+      "semantic_digest": "sha256:5c5e09f0a297aec72504fba868c5fdcdf77e98c29f2053bec6c25e4dd2d2664b",
       "symbol": "conversion/include/macro selector families",
       "traceability": {
         "requirements": [],
@@ -19604,11 +19604,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -19726,7 +19726,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:c787f31ae390013181c40910ffaffdd4a6250e8cc92c136febdd209fe406d1d4",
+      "semantic_digest": "sha256:d5a9c94a221b20edfa5b8c40ede28cfcc016181f6e81638ec8e02f4f54c26302",
       "symbol": "search::symbols",
       "traceability": {
         "requirements": [],
@@ -19796,11 +19796,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -19929,7 +19929,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:efc0de86ccbedfbfc61c8ffe0ace85580bc550dd014b44e66efedb32fc3118bb",
+      "semantic_digest": "sha256:6afc274a3a6b00beecfb39fcf491488c0744992a50c4149c78da1c340564454a",
       "symbol": "search::references",
       "traceability": {
         "requirements": [],
@@ -21134,11 +21134,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -21267,7 +21267,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:f99b8b8551083df8f77e36169d192ddbc1bc83b28612e54b74e927d0c22ffe60",
+      "semantic_digest": "sha256:65d6c2bba541565dfaa21ba51ca198a975e07f223be2f01328d233eb7fa34e39",
       "symbol": "search::includes",
       "traceability": {
         "requirements": [],
@@ -21337,11 +21337,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -21459,7 +21459,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:6dc468c78006cd0d0d66d16b55350bb73561df550ef79bba77a7454e22a474b8",
+      "semantic_digest": "sha256:c0b347999afa0c672e99c55f0d759af4c8cdf7f9955ec294b1a67f1a1f95c59e",
       "symbol": "search::macros",
       "traceability": {
         "requirements": [],
@@ -21529,11 +21529,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -21651,7 +21651,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:87ac0cb8dc530450049c7201669010aaab4901c0a96aba0c4279a0dd6377295e",
+      "semantic_digest": "sha256:6ff682123b9ff45b0ab951493142724f447b13ffbfef3ef79d43fab3fdb2e460",
       "symbol": "search::conversions",
       "traceability": {
         "requirements": [],
@@ -22122,11 +22122,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -22231,7 +22231,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:08eb3d23439538309a8c13eb401d2bc62059d7f6a854e5e759e8987ee3ea53ec",
+      "semantic_digest": "sha256:6aa1b5e657aba779fae79d599587811a492654661083a9baafaf2be30f808cb4",
       "symbol": "edit_plan_assertion builder/check",
       "traceability": {
         "requirements": [],
@@ -22299,11 +22299,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -22408,7 +22408,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:d5629540378894261a2f03bd4b3c0854441737f9c3ed0db08069525a1f292237",
+      "semantic_digest": "sha256:4daf14ec9ca27765ae3077820201dc78e8c270ad28d52c5216e945486d968c0a",
       "symbol": "generation_plan_assertion builder/check",
       "traceability": {
         "requirements": [],
@@ -23100,11 +23100,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -23232,7 +23232,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:5d480a37caad5f5d60ab81b74afdcd112718610a7600a4e98f84107e4e07d6cf",
+      "semantic_digest": "sha256:258097923b2da3bee953b413cb9b78ac45c78086e9c715b369338308178c3d0c",
       "symbol": "transform::replace_function_call",
       "traceability": {
         "requirements": [],
@@ -23302,11 +23302,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -23457,7 +23457,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:cd2beec30bacdb16780b91fc66fb05111e0b6f433169fc2d2a9e6121c165eab4",
+      "semantic_digest": "sha256:a3512721bf16ddf695b0c61ab5b930a79c63fa50cf550d0df7c259d610140730",
       "symbol": "transform::replace_method_call",
       "traceability": {
         "requirements": [],
@@ -23527,11 +23527,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -23649,7 +23649,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:c56cc80236d9984aeb11d9a8aa3a77c49b0acf9a589b34b670ca033dcd5e318d",
+      "semantic_digest": "sha256:bac7390f3c4bfe528e4f7398e0b4dacedf3fa74cc337e7180bead538afc3c60d",
       "symbol": "transform::rewrite_calls",
       "traceability": {
         "requirements": [],
@@ -23717,11 +23717,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -23861,7 +23861,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:180afaac4361e65e0f12676cbe1536ad6ede7016a81f7eaf4096d38a2365e5b8",
+      "semantic_digest": "sha256:8a36b6f37cb09d0ff0c92fe79d5dffe426aba6781b5097677edcd6ac44b88ce6",
       "symbol": "transform::rename_symbol",
       "traceability": {
         "requirements": [],
@@ -23931,11 +23931,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -24064,7 +24064,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:794eee99108d8c54ab369d55168a92e7594905d8a4a5e3b79fe0ba60d1ea0e08",
+      "semantic_digest": "sha256:c737764c4c657605c702add8b85f3aef913d4ea271fd839eed7fb2eba9741d7c",
       "symbol": "transform::add_include_where_needed",
       "traceability": {
         "requirements": [],
@@ -24134,11 +24134,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -24279,7 +24279,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:45c92c8801a3fbc851e4d3c109f49ef16b49cab4d0d84c741eb12c5ba54f5659",
+      "semantic_digest": "sha256:689234534dbb3cc47eaf91d5ec904f6148fc879dc7caf3f02b3aeb33cfb6668d",
       "symbol": "transform::remove_unused_includes",
       "traceability": {
         "requirements": [],
@@ -24356,11 +24356,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -24516,7 +24516,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:9f8f72c205df8069900dc28dd44e90565970b1a852eeb6cae874a7ae2b847e62",
+      "semantic_digest": "sha256:3dca9dffd249026b1e0f060516f6c527c39ca6c4ca1c2b29404f8fb6a79a2bb2",
       "symbol": "codemod::plan",
       "traceability": {
         "requirements": [],
@@ -24588,11 +24588,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -24697,7 +24697,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:15e757954464b8a68c26bd2c51170252a3aba776e07c379b98687e206d713b78",
+      "semantic_digest": "sha256:87e27d578bc2558e1228430e773dfb1a2ae562946cb71fe3b380934dcc8efb03",
       "symbol": "edit_plan::preview_unified_diff",
       "traceability": {
         "requirements": [],
@@ -24773,11 +24773,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:07b1a84b3db806a98236eab7f4d1d4da2781d45c1444dfa3efebac6894a61183",
+        "contract_fingerprint": "sha256:3ba5aada37edc1b64d3e7260b14be52e19df529ff55b1af2c24654fac4ec128f",
         "signature": null,
         "signature_fingerprint": null,
         "source": "docs/design/cxxlens_integrated_design_ja.md",
-        "source_fingerprint": "sha256:5fe09cc1a1fdbd6a69b37fd04a616e970854eaa4ea6dd24b44364fc10c196b67",
+        "source_fingerprint": "sha256:7d9d89c2fcadbcd576b4264c056fe474d3235143a41d0242fe54d2053651ecf7",
         "status": "unresolved"
       },
       "dependencies": {
@@ -24882,7 +24882,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:31558f4765c63d991fe2cd8544b7e6292459bd1471761fd260ecc909f52269e7",
+      "semantic_digest": "sha256:c84050d7b64502eaaa4a0b4c918d1d822f95ef6bb0ed712a667058a3ef11e6cb",
       "symbol": "edit_plan::apply",
       "traceability": {
         "requirements": [],
@@ -24941,7 +24941,9 @@
           "workspace.compile-database-invalid",
           "workspace.compile-database-not-found"
         ],
-        "guarantees": [],
+        "guarantees": [
+          "Defaults to explicit nonzero byte, entry, decoded-string, and nesting budgets."
+        ],
         "side_effects": []
       },
       "contract_maturity": "contract-defined",
@@ -24953,11 +24955,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:33884df5226437a106f6fb2313df11d53130552dc17ea9b3039d8b79f93d89ad",
+        "contract_fingerprint": "sha256:6d306c6485f419d04533423b7445f722acf014ec81a81b659fc173701ef41f40",
         "signature": "cxxlens::workspace_options cxxlens::workspace_options::from_compilation_database(cxxlens::path)",
         "signature_fingerprint": "sha256:3749a527bc7c8b1bdcdd68fb1ae22a6ddd580fb11ae84a2dfe7c0a6b5286151e",
         "source": "include/cxxlens/workspace.hpp",
-        "source_fingerprint": "sha256:3618067366f712a2c50e414ebf2d4a93e07f63e908f6538c2c03c4399a61c58c",
+        "source_fingerprint": "sha256:50a4706c419c5407621415859a505f14385f05ec2d6e3081d03f5fd65c210800",
         "status": "exact"
       },
       "dependencies": {
@@ -25050,6 +25052,7 @@
         "state": "complete"
       },
       "implementation_evidence": [
+        "docs/development/workspace-catalog.md",
         "include/cxxlens/workspace.hpp",
         "src/workspace/catalog.cpp",
         "tests/unit/workspace/workspace_catalog_test.cpp"
@@ -25080,7 +25083,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:4d100803ac7dbb260a6ed7e1299a9436e01d7e3fda7d2513130f423a2a6f9743",
+      "semantic_digest": "sha256:c2126966549460fdc44c876e0835bf4ae4aea0d8d726809dd551ef79965af3ae",
       "symbol": "workspace_options::from_compilation_database(path)",
       "traceability": {
         "requirements": [
@@ -25139,10 +25142,16 @@
       "atomic_unit_id": "AU-WS-002",
       "behavior": {
         "errors": [
+          "core.budget-exhausted",
+          "core.invalid-argument",
           "workspace.compile-command-ambiguous",
+          "workspace.compile-database-invalid",
+          "workspace.compile-database-not-found",
           "workspace.resource-dir-not-found"
         ],
         "guarantees": [
+          "Applies caller-configurable compilation database budgets before read and during parse.",
+          "Decodes RFC 8259 Unicode and safely ignores unknown scalar extension fields.",
           "Preserves all relevant commands as build variants; does not first-win."
         ],
         "side_effects": []
@@ -25156,11 +25165,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:061e64355e3c1def624dff2e4fb86fdbbd1000f196c88bd2f19c431ac7c2ba93",
+        "contract_fingerprint": "sha256:9c9118efafddeb35685fc2767ca498c845bd34d62447c8e7b0057a588c1be6af",
         "signature": "cxxlens::result<cxxlens::workspace> cxxlens::workspace::open(cxxlens::workspace_options, cxxlens::execution_context)",
         "signature_fingerprint": "sha256:d7940b317f42ce7f19da9161d748d2f7985a45483c9fc2b988dfee7f2741c60b",
         "source": "include/cxxlens/workspace.hpp",
-        "source_fingerprint": "sha256:3618067366f712a2c50e414ebf2d4a93e07f63e908f6538c2c03c4399a61c58c",
+        "source_fingerprint": "sha256:50a4706c419c5407621415859a505f14385f05ec2d6e3081d03f5fd65c210800",
         "status": "exact"
       },
       "dependencies": {
@@ -25267,6 +25276,7 @@
         "state": "complete"
       },
       "implementation_evidence": [
+        "docs/development/workspace-catalog.md",
         "include/cxxlens/workspace.hpp",
         "schemas/cxxlens_workspace_context.schema.yaml",
         "src/workspace/catalog.cpp",
@@ -25298,7 +25308,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:5b3928faa4dec31ae78f37e035c92ede10b9f77f4564ebc5053e7eb50965fc38",
+      "semantic_digest": "sha256:f9bb358279d7fb879cbe8e088c77264588b46751e3c7619048e0070b50bfaa41",
       "symbol": "workspace::open(workspace_options, execution_context)",
       "traceability": {
         "requirements": [
@@ -25373,11 +25383,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:5d373a86292243007b284753cd6c987cf3a8a49500446fc6aae5fc6287d8002f",
+        "contract_fingerprint": "sha256:608abb3cce4a702775fb0b6369cb9d37f0eaee66442f72c26f43dc37c04794d3",
         "signature": "std::vector<cxxlens::compile_unit> cxxlens::workspace::compile_units() const",
         "signature_fingerprint": "sha256:753a9b4d1bb989afc258d64ab87357df61b916f7af1d2a496e449742250f0756",
         "source": "include/cxxlens/workspace.hpp",
-        "source_fingerprint": "sha256:3618067366f712a2c50e414ebf2d4a93e07f63e908f6538c2c03c4399a61c58c",
+        "source_fingerprint": "sha256:50a4706c419c5407621415859a505f14385f05ec2d6e3081d03f5fd65c210800",
         "status": "exact"
       },
       "dependencies": {
@@ -25490,7 +25500,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:5a16b613bb64d0e5cf1ca43fe6ec46f73751e0f12e2a8c14f67b58aacbdf3371",
+      "semantic_digest": "sha256:09bf36fbb9985b63f09b5356d6ef06003529b261f01c0f8cb12b5266db678837",
       "symbol": "workspace::compile_units()",
       "traceability": {
         "requirements": [
@@ -25563,11 +25573,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:5a1b1a96d49164168d497682b98c5165fd6bf4cc8df7de79eab799555390b745",
+        "contract_fingerprint": "sha256:e3b6b6feb1b526fd9f2e4fd58acf26fda8b31799c8d2a3c39ea9b83013d56c3d",
         "signature": "std::vector<cxxlens::compile_unit> cxxlens::workspace::command_for(cxxlens::path) const",
         "signature_fingerprint": "sha256:4b6fa3a1a7a0fa6e2d783b5c82b42f09fc59dac61418229be04a9271b012b650",
         "source": "include/cxxlens/workspace.hpp",
-        "source_fingerprint": "sha256:3618067366f712a2c50e414ebf2d4a93e07f63e908f6538c2c03c4399a61c58c",
+        "source_fingerprint": "sha256:50a4706c419c5407621415859a505f14385f05ec2d6e3081d03f5fd65c210800",
         "status": "exact"
       },
       "dependencies": {
@@ -25680,7 +25690,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:c197bea0c8d8f8837aa81f2f5356e1e826ea802deaca3a4730bfde9e046806c8",
+      "semantic_digest": "sha256:f715887032fe6985be98bcd4fed18856616b04c411ae0bfb341aa64810d43585",
       "symbol": "workspace::command_for(path)",
       "traceability": {
         "requirements": [
@@ -25760,11 +25770,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:ebf2de1ffa043a667faf0feb87418e4506d744c6e94a0f6fb6d121b291370b75",
+        "contract_fingerprint": "sha256:f80cb7aac418b65392ff81aea80755fa76f59a9630bccc73cdc27e7812ff5419",
         "signature": "cxxlens::result<void> cxxlens::workspace::ensure(cxxlens::fact_profile, cxxlens::analysis_scope, cxxlens::execution_context) const",
         "signature_fingerprint": "sha256:5c614f83d10df4a9401230ee2f2cd91c170d6005fa37444db4ad468983eda97e",
         "source": "include/cxxlens/workspace.hpp",
-        "source_fingerprint": "sha256:3618067366f712a2c50e414ebf2d4a93e07f63e908f6538c2c03c4399a61c58c",
+        "source_fingerprint": "sha256:50a4706c419c5407621415859a505f14385f05ec2d6e3081d03f5fd65c210800",
         "status": "exact"
       },
       "dependencies": {
@@ -25895,7 +25905,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:7c715225788d828934c13ab4ef90812bcbbf22bfcb1192dfdb371bd9fc69a6c8",
+      "semantic_digest": "sha256:95cd97861146ab79332dc2a7e36b67bfcf8b60d2816c004a7a191e42e99e9978",
       "symbol": "workspace::ensure(fact_profile, analysis_scope, execution_context)",
       "traceability": {
         "requirements": [
@@ -25970,11 +25980,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:4d4c742966c43a48b29121e3b8b8452bee5f39e2899c5426af59dbcc29b331e8",
+        "contract_fingerprint": "sha256:f84b6bd5588c6eda0a45487db8442a9ab227850d365d8c50595085cfe3d45683",
         "signature": "cxxlens::fact_store cxxlens::workspace::facts() const",
         "signature_fingerprint": "sha256:d84d450bfea28ad01b6476388f3eea89406bcd28f8e0f03a13db5db6fbda8359",
         "source": "include/cxxlens/workspace.hpp",
-        "source_fingerprint": "sha256:3618067366f712a2c50e414ebf2d4a93e07f63e908f6538c2c03c4399a61c58c",
+        "source_fingerprint": "sha256:50a4706c419c5407621415859a505f14385f05ec2d6e3081d03f5fd65c210800",
         "status": "exact"
       },
       "dependencies": {
@@ -26089,7 +26099,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:e904f0e16a4a4740586447d17c40eff11ae0db3d2621ecae35cb8b9f71b914e7",
+      "semantic_digest": "sha256:b22ba85915f2d62f280c9f90f318c7ce9cf1eb3d2f5d666d08ac579ee86c4fdc",
       "symbol": "workspace::facts()",
       "traceability": {
         "requirements": [
@@ -26163,11 +26173,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:752cc20daef68dfc49b1bef2e29b92964ca501b81959878b36e6cd875bc73345",
+        "contract_fingerprint": "sha256:245a1516e2b16460d5f6ec3dff97f67c2168ebcf0b3e2b0eec8dc30119bfad93",
         "signature": "cxxlens::result<cxxlens::doctor_report> cxxlens::workspace::doctor(cxxlens::execution_context) const",
         "signature_fingerprint": "sha256:eb99e571b55bd15cfb849429febe0ab41b40a638f671b4b792bad07c4cc68553",
         "source": "include/cxxlens/workspace.hpp",
-        "source_fingerprint": "sha256:3618067366f712a2c50e414ebf2d4a93e07f63e908f6538c2c03c4399a61c58c",
+        "source_fingerprint": "sha256:50a4706c419c5407621415859a505f14385f05ec2d6e3081d03f5fd65c210800",
         "status": "exact"
       },
       "dependencies": {
@@ -26282,7 +26292,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:eaab5b50f1e12501504bfbe5ca1623a79fe27b243f0762d624e08c5cd5898ade",
+      "semantic_digest": "sha256:fdf1632f7a9a5cc62533ebafc6cb69c6a0a8b8da338e2d6b0f9e6bbb2a848eec",
       "symbol": "workspace::doctor(execution_context)",
       "traceability": {
         "requirements": [
@@ -26352,11 +26362,11 @@
         ]
       },
       "declaration": {
-        "contract_fingerprint": "sha256:f1967d4b4c099131fd6967f3304f270662293b95c0b953632d99d01fb0eb1c15",
+        "contract_fingerprint": "sha256:7e754e655739c390c6e0b7117584d2f5862cb9c615e4bac31f3410b6d1a54226",
         "signature": "cxxlens::analysis_scope cxxlens::analysis_scope::all(); cxxlens::analysis_scope cxxlens::analysis_scope::files(std::vector<cxxlens::path>); cxxlens::analysis_scope cxxlens::analysis_scope::compile_units(std::vector<cxxlens::compile_unit_id>); cxxlens::analysis_scope cxxlens::analysis_scope::changed_files(std::vector<cxxlens::path>); cxxlens::analysis_scope cxxlens::analysis_scope::include_headers(bool) const; cxxlens::analysis_scope cxxlens::analysis_scope::variants(std::vector<cxxlens::build_variant_id>) const; std::string cxxlens::analysis_scope::to_json() const",
         "signature_fingerprint": "sha256:dade0894af26e531e563987ac02c4c44d3e843c3396c4b66fd7e60bcf684b0e0",
         "source": "include/cxxlens/workspace.hpp",
-        "source_fingerprint": "sha256:3618067366f712a2c50e414ebf2d4a93e07f63e908f6538c2c03c4399a61c58c",
+        "source_fingerprint": "sha256:50a4706c419c5407621415859a505f14385f05ec2d6e3081d03f5fd65c210800",
         "status": "exact"
       },
       "dependencies": {
@@ -26476,7 +26486,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:f341af7b7ccbc4b24aa19d452c9b03e524ca06766d739b707449eaea1ef480a9",
+      "semantic_digest": "sha256:4d8e6b852e26578f8ff7790ce9215d9196845ef1761c36fa1835448914de1314",
       "symbol": "analysis_scope::{all,files,compile_units,changed_files,include_headers,variants}",
       "traceability": {
         "requirements": [
@@ -26487,7 +26497,7 @@
     }
   ],
   "schema": "cxxlens.agent-task-packet-corpus.v1",
-  "semantic_digest": "sha256:7d31b7ec195cb8a4b6ad5567dff8b24cf2b52fcef2412f4d91b831f3dbaccfb5",
+  "semantic_digest": "sha256:11363751d974223df6fd5f743aaa589eebbde128a3142c35411c1b466c8d6a3c",
   "summary": {
     "api_count": 124,
     "atomic_unit_count": 124,

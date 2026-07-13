@@ -40,6 +40,13 @@ for required in (
     "cxxlens.workspace-cache.v2",
     "infer_project_root",
     "source-outside-project-root",
+    "parse_hexadecimal_quad",
+    "unpaired-high-surrogate",
+    "unpaired-low-surrogate",
+    "invalid-utf8",
+    "parse_number",
+    "compilation-database-byte-budget",
+    'request.operation = "workspace.compile-database.stat"',
 ):
     if required not in implementation:
         failures.append(f"workspace invariant branch missing: {required}")
@@ -50,6 +57,11 @@ for fixture in (
     "plugin flag accepted",
     "stale source was not detected",
     "header inference evidence missing",
+    "escaped BMP/surrogate Unicode or unknown scalar fields were not decoded",
+    "valid compilation database larger than the former 16 MiB cap was rejected",
+    "pre-read compilation database byte budget was not structured",
+    "JSON nesting budget did not reject a depth bomb",
+    "compile database failure reason/offset was not stable",
 ):
     if fixture not in tests:
         failures.append(f"workspace acceptance fixture missing: {fixture}")

@@ -9827,12 +9827,12 @@
     }
   ],
   "input_fingerprints": {
-    "dependency_requests": "sha256:50f9e916250c5ea7378f5e1c7870f446b81c7e9caa2289e5cf88a599f4caffc0",
+    "dependency_requests": "sha256:b019e18ea094f94addf8e87d6c07d6853bd76f1e5899907aa65221fe16cc7229",
     "m0": "sha256:b0e967a78fa4d8e936d54a60bea16c59feb57ad8cbcef645628e9651c1d0b617",
     "m1": "sha256:0e5bf5dd8568f14394199e2deb51649bbd2743170812de12fd098b54caaa142f",
     "m2": "sha256:448a5141f4c6e1045b5ff0ddae6126054be2a0cb261cfd2b227b1e1ce741e9c7",
-    "ownership": "sha256:cdc07ee3f040667278c9d0d97d83054a41e58ecaf9891b9d3521dbb80002a1b6",
-    "task_packets": "sha256:7d31b7ec195cb8a4b6ad5567dff8b24cf2b52fcef2412f4d91b831f3dbaccfb5"
+    "ownership": "sha256:7cf1d60c29d518f1d626bc25150e643826f11d9f6363c309cfc217988f014fd0",
+    "task_packets": "sha256:11363751d974223df6fd5f743aaa589eebbde128a3142c35411c1b466c8d6a3c"
   },
   "nodes": [
     {
@@ -23608,14 +23608,14 @@
           "atomic_unit_id": "AU-WS-001",
           "execution_result_path": "build/dev-clang/agent-results/AU-WS-001.json",
           "required_execution_status": "passed",
-          "shard_digest": "sha256:a77f3544c1014c620ecf8b2fb150673bae0c44b4ee7b50ad5c989652b7766752",
+          "shard_digest": "sha256:d9592f4fbd537b275bb7c782bdad4ce79b39ba5606971f8cd8628654d97bc894",
           "shard_id": "shard.au-ws-001"
         },
         {
           "atomic_unit_id": "AU-WS-002",
           "execution_result_path": "build/dev-clang/agent-results/AU-WS-002.json",
           "required_execution_status": "passed",
-          "shard_digest": "sha256:7df7ef8f745582a93e7cbb43b54e45f38e7c1774fb50f0b11e289d451e0ec208",
+          "shard_digest": "sha256:34c9087c60150aaec434438e21d92ff336026d482d9a6e53de1f94fd7aa82d93",
           "shard_id": "shard.au-ws-002"
         },
         {
@@ -23776,7 +23776,7 @@
       ],
       "package_id": "workspace",
       "package_integration_role": "integration.package.workspace",
-      "semantic_digest": "sha256:7a04185710057d60c655c7f3dc926dc55eb342e62551d7bbc3d1f908e8f76f9e",
+      "semantic_digest": "sha256:a212863a066a237f9dd6d4773fefd5eb405489817bec4830cc9e5278bf3447d5",
       "state": "verification"
     }
   ],
@@ -24178,7 +24178,7 @@
     ]
   },
   "schema": "cxxlens.api-ready.v1",
-  "semantic_digest": "sha256:8f734d878a6383a00df08fab2be9fb4e1d2ad83f20418867fea4e866ce34ae2e",
+  "semantic_digest": "sha256:2231b809246a934760afa51b21f9ad1ea831c7e278e81b5bba284ba216c3be29",
   "shards": [
     {
       "acceptance_command": {
@@ -56580,11 +56580,12 @@
       ],
       "package_integration_role": "integration.package.workspace",
       "selected_evidence_paths": [
+        "docs/development/workspace-catalog.md",
         "include/cxxlens/workspace.hpp",
         "src/workspace/catalog.cpp",
         "tests/unit/workspace/workspace_catalog_test.cpp"
       ],
-      "semantic_digest": "sha256:a77f3544c1014c620ecf8b2fb150673bae0c44b4ee7b50ad5c989652b7766752",
+      "semantic_digest": "sha256:d9592f4fbd537b275bb7c782bdad4ce79b39ba5606971f8cd8628654d97bc894",
       "state": "verification"
     },
     {
@@ -56866,12 +56867,13 @@
       ],
       "package_integration_role": "integration.package.workspace",
       "selected_evidence_paths": [
+        "docs/development/workspace-catalog.md",
         "include/cxxlens/workspace.hpp",
         "schemas/cxxlens_workspace_context.schema.yaml",
         "src/workspace/catalog.cpp",
         "tests/unit/workspace/workspace_catalog_test.cpp"
       ],
-      "semantic_digest": "sha256:7df7ef8f745582a93e7cbb43b54e45f38e7c1774fb50f0b11e289d451e0ec208",
+      "semantic_digest": "sha256:34c9087c60150aaec434438e21d92ff336026d482d9a6e53de1f94fd7aa82d93",
       "state": "verification"
     },
     {

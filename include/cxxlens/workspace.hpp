@@ -93,12 +93,26 @@ namespace cxxlens
 		system_header_policy system_headers{system_header_policy::exclude};
 		/** @brief Optional configuration file captured by the snapshot. */
 		std::optional<path> configuration_file;
+		/** @brief Maximum compilation database bytes read and parsed.
+		 * @note The 256 MiB default supports large monorepos while retaining a pre-read bound. Zero
+		 * is invalid. */
+		std::size_t compilation_database_byte_budget{std::size_t{256U} * 1024U * 1024U};
+		/** @brief Maximum elements or members in any compilation database JSON container.
+		 * @note The default is one million; zero is invalid. */
+		std::size_t compilation_database_entry_budget{1'000'000U};
+		/** @brief Maximum decoded UTF-8 bytes in one compilation database JSON string.
+		 * @note The default is 64 MiB; zero is invalid. */
+		std::size_t compilation_database_string_byte_budget{std::size_t{64U} * 1024U * 1024U};
+		/** @brief Maximum compilation database JSON container nesting depth.
+		 * @note The default is 64; zero is invalid. */
+		std::size_t compilation_database_nesting_budget{64U};
 
 		/** @brief Construct options from a build directory or compilation database file.
 		 * @param[in] build_or_json Directory or `compile_commands.json` path. @retval value
 		 * Options.
 		 * @pre Path is lexical input. @post No filesystem access occurs.
-		 * @note A directory is resolved to `compile_commands.json` by `workspace::open`.
+		 * @note A directory is resolved to `compile_commands.json` by `workspace::open`; resource
+		 * budgets retain their documented fail-closed defaults.
 		 * @code{.cpp}
 		 * #include <cxxlens/workspace.hpp>
 		 * int main(){auto o=cxxlens::workspace_options::from_compilation_database("build");return

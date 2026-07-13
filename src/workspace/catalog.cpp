@@ -2,6 +2,7 @@
 #include <array>
 #include <cctype>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <map>
 #include <ranges>
@@ -33,7 +34,15 @@ namespace cxxlens
 		{
 			using array = std::vector<database_value>;
 			using object = std::map<std::string, database_value>;
-			std::variant<std::string, array, object> value;
+			std::variant<std::monostate, std::string, array, object> value;
+		};
+
+		struct database_limits
+		{
+			std::size_t bytes{};
+			std::size_t entries{};
+			std::size_t string_bytes{};
+			std::size_t nesting{};
 		};
 
 		[[nodiscard]] error
@@ -49,33 +58,62 @@ namespace cxxlens
 			return failure;
 		}
 
+		[[nodiscard]] error database_budget_error(std::string reason,
+												  const std::uintmax_t limit,
+												  const std::uintmax_t observed,
+												  const path& source = {})
+		{
+			auto failure = workspace_error("core.budget-exhausted", std::move(reason), source);
+			failure.message = "Workspace compilation database budget is exhausted";
+			failure.attributes.emplace("limit", std::to_string(limit));
+			failure.attributes.emplace("observed", std::to_string(observed));
+			return failure;
+		}
+
 		class database_parser
 		{
 		  public:
-			explicit database_parser(std::string_view input) : input_{input} {}
+			database_parser(const std::string_view input, const database_limits limits)
+				: input_{input}, limits_{limits}
+			{
+			}
 
 			[[nodiscard]] result<database_value> parse()
 			{
-				constexpr std::size_t maximum_database_bytes = std::size_t{16U} * 1024U * 1024U;
-				if (input_.size() > maximum_database_bytes)
-					return workspace_error("workspace.compile-database-invalid", "size-limit");
+				if (input_.size() > limits_.bytes)
+					return database_budget_error(
+						"compilation-database-byte-budget", limits_.bytes, input_.size());
 				auto value = parse_value(0U);
 				skip_space();
 				if (!value || position_ != input_.size())
-					return value ? result<database_value>{workspace_error(
-									   "workspace.compile-database-invalid", "trailing-data")}
-								 : value;
+					return value ? result<database_value>{invalid("trailing-data")} : value;
 				return value;
 			}
 
 		  private:
+			[[nodiscard]] error invalid(std::string reason) const
+			{
+				auto failure =
+					workspace_error("workspace.compile-database-invalid", std::move(reason));
+				failure.attributes.emplace("offset", std::to_string(position_));
+				return failure;
+			}
+
+			[[nodiscard]] error
+			budget(std::string reason, const std::size_t limit, const std::size_t observed) const
+			{
+				auto failure = database_budget_error(std::move(reason), limit, observed);
+				failure.attributes.emplace("offset", std::to_string(position_));
+				return failure;
+			}
+
 			[[nodiscard]] result<database_value> parse_value(std::size_t depth)
 			{
-				if (depth > 64U)
-					return workspace_error("workspace.compile-database-invalid", "depth-limit");
+				if (depth > limits_.nesting)
+					return budget("compilation-database-nesting-budget", limits_.nesting, depth);
 				skip_space();
 				if (position_ >= input_.size())
-					return workspace_error("workspace.compile-database-invalid", "value-missing");
+					return invalid("value-missing");
 				if (input_[position_] == '"')
 				{
 					auto value = parse_string();
@@ -86,8 +124,15 @@ namespace cxxlens
 					return parse_array(depth + 1U);
 				if (input_[position_] == '{')
 					return parse_object(depth + 1U);
-				return workspace_error("workspace.compile-database-invalid",
-									   "unsupported-json-value");
+				if (input_[position_] == 't')
+					return parse_literal("true");
+				if (input_[position_] == 'f')
+					return parse_literal("false");
+				if (input_[position_] == 'n')
+					return parse_literal("null");
+				if (input_[position_] == '-' || is_digit(input_[position_]))
+					return parse_number();
+				return invalid("json-value-invalid");
 			}
 
 			[[nodiscard]] result<database_value> parse_array(std::size_t depth)
@@ -99,6 +144,10 @@ namespace cxxlens
 					return database_value{std::move(output)};
 				while (true)
 				{
+					if (output.size() >= limits_.entries)
+						return budget("compilation-database-entry-budget",
+									  limits_.entries,
+									  output.size() + 1U);
 					auto value = parse_value(depth);
 					if (!value)
 						return std::move(value.error());
@@ -107,8 +156,7 @@ namespace cxxlens
 					if (consume(']'))
 						return database_value{std::move(output)};
 					if (!consume(','))
-						return workspace_error("workspace.compile-database-invalid",
-											   "array-comma-missing");
+						return invalid("array-comma-missing");
 				}
 			}
 
@@ -121,84 +169,260 @@ namespace cxxlens
 					return database_value{std::move(output)};
 				while (true)
 				{
+					if (output.size() >= limits_.entries)
+						return budget("compilation-database-entry-budget",
+									  limits_.entries,
+									  output.size() + 1U);
 					auto key = parse_string();
 					if (!key)
 						return std::move(key.error());
 					skip_space();
 					if (!consume(':'))
-						return workspace_error("workspace.compile-database-invalid",
-											   "object-colon-missing");
+						return invalid("object-colon-missing");
 					auto value = parse_value(depth);
 					if (!value)
 						return std::move(value.error());
 					if (!output.emplace(std::move(key.value()), std::move(value.value())).second)
-						return workspace_error("workspace.compile-database-invalid",
-											   "duplicate-json-key");
+						return invalid("duplicate-json-key");
 					skip_space();
 					if (consume('}'))
 						return database_value{std::move(output)};
 					if (!consume(','))
-						return workspace_error("workspace.compile-database-invalid",
-											   "object-comma-missing");
+						return invalid("object-comma-missing");
 				}
 			}
 
 			[[nodiscard]] result<std::string> parse_string()
 			{
 				if (!consume('"'))
-					return workspace_error("workspace.compile-database-invalid", "string-expected");
+					return invalid("string-expected");
 				std::string output;
 				while (position_ < input_.size())
 				{
 					const char value = input_[position_++];
 					if (value == '"')
+					{
+						if (!detail::json::valid_utf8(output))
+							return invalid("invalid-utf8");
 						return output;
+					}
 					if (static_cast<unsigned char>(value) < 0x20U)
-						return workspace_error("workspace.compile-database-invalid",
-											   "control-character");
+						return invalid("control-character");
 					if (value != '\\')
 					{
-						output.push_back(value);
+						if (auto appended = append_character(output, value); !appended)
+							return std::move(appended.error());
 						continue;
 					}
 					if (position_ >= input_.size())
-						return workspace_error("workspace.compile-database-invalid",
-											   "short-escape");
+						return invalid("short-escape");
 					const char escaped = input_[position_++];
+					char decoded{};
 					switch (escaped)
 					{
 						case '"':
 						case '\\':
 						case '/':
-							output.push_back(escaped);
+							decoded = escaped;
 							break;
 						case 'b':
-							output.push_back('\b');
+							decoded = '\b';
 							break;
 						case 'f':
-							output.push_back('\f');
+							decoded = '\f';
 							break;
 						case 'n':
-							output.push_back('\n');
+							decoded = '\n';
 							break;
 						case 'r':
-							output.push_back('\r');
+							decoded = '\r';
 							break;
 						case 't':
-							output.push_back('\t');
+							decoded = '\t';
 							break;
+						case 'u':
+						{
+							auto appended = append_unicode_escape(output);
+							if (!appended)
+								return std::move(appended.error());
+							continue;
+						}
 						default:
-							return workspace_error("workspace.compile-database-invalid",
-												   "unsupported-escape");
+							return invalid("unsupported-escape");
 					}
+					if (auto appended = append_character(output, decoded); !appended)
+						return std::move(appended.error());
 				}
-				return workspace_error("workspace.compile-database-invalid", "unterminated-string");
+				return invalid("unterminated-string");
+			}
+
+			[[nodiscard]] result<void> append_unicode_escape(std::string& output)
+			{
+				auto first = parse_hexadecimal_quad();
+				if (!first)
+					return std::move(first.error());
+				std::uint32_t code_point = first.value();
+				if (code_point >= 0xD800U && code_point <= 0xDBFFU)
+				{
+					if (position_ + 2U > input_.size() || input_[position_] != '\\' ||
+						input_[position_ + 1U] != 'u')
+						return invalid("unpaired-high-surrogate");
+					position_ += 2U;
+					auto second = parse_hexadecimal_quad();
+					if (!second)
+						return std::move(second.error());
+					if (second.value() < 0xDC00U || second.value() > 0xDFFFU)
+						return invalid("unpaired-high-surrogate");
+					code_point =
+						0x10000U + ((code_point - 0xD800U) << 10U) + (second.value() - 0xDC00U);
+				}
+				else if (code_point >= 0xDC00U && code_point <= 0xDFFFU)
+					return invalid("unpaired-low-surrogate");
+				return append_code_point(output, code_point);
+			}
+
+			[[nodiscard]] result<std::uint32_t> parse_hexadecimal_quad()
+			{
+				if (position_ + 4U > input_.size())
+					return invalid("malformed-unicode-escape");
+				std::uint32_t output{};
+				for (std::size_t index = 0U; index < 4U; ++index)
+				{
+					const char value = input_[position_++];
+					output <<= 4U;
+					if (value >= '0' && value <= '9')
+						output |= static_cast<std::uint32_t>(value - '0');
+					else if (value >= 'a' && value <= 'f')
+						output |= static_cast<std::uint32_t>(value - 'a' + 10);
+					else if (value >= 'A' && value <= 'F')
+						output |= static_cast<std::uint32_t>(value - 'A' + 10);
+					else
+						return invalid("malformed-unicode-escape");
+				}
+				return output;
+			}
+
+			[[nodiscard]] result<void> append_character(std::string& output, const char value) const
+			{
+				if (output.size() >= limits_.string_bytes)
+					return budget("compilation-database-string-byte-budget",
+								  limits_.string_bytes,
+								  output.size() + 1U);
+				output.push_back(value);
+				return {};
+			}
+
+			[[nodiscard]] result<void> append_code_point(std::string& output,
+														 const std::uint32_t code_point) const
+			{
+				std::array<char, 4U> encoded{};
+				std::size_t size{};
+				if (code_point <= 0x7FU)
+				{
+					encoded[0] = static_cast<char>(code_point);
+					size = 1U;
+				}
+				else if (code_point <= 0x7FFU)
+				{
+					encoded[0] = static_cast<char>(0xC0U | (code_point >> 6U));
+					encoded[1] = static_cast<char>(0x80U | (code_point & 0x3FU));
+					size = 2U;
+				}
+				else if (code_point <= 0xFFFFU)
+				{
+					encoded[0] = static_cast<char>(0xE0U | (code_point >> 12U));
+					encoded[1] = static_cast<char>(0x80U | ((code_point >> 6U) & 0x3FU));
+					encoded[2] = static_cast<char>(0x80U | (code_point & 0x3FU));
+					size = 3U;
+				}
+				else
+				{
+					encoded[0] = static_cast<char>(0xF0U | (code_point >> 18U));
+					encoded[1] = static_cast<char>(0x80U | ((code_point >> 12U) & 0x3FU));
+					encoded[2] = static_cast<char>(0x80U | ((code_point >> 6U) & 0x3FU));
+					encoded[3] = static_cast<char>(0x80U | (code_point & 0x3FU));
+					size = 4U;
+				}
+				if (output.size() > limits_.string_bytes ||
+					size > limits_.string_bytes - output.size())
+					return budget("compilation-database-string-byte-budget",
+								  limits_.string_bytes,
+								  output.size() + size);
+				output.append(encoded.data(), size);
+				return {};
+			}
+
+			[[nodiscard]] result<database_value> parse_literal(const std::string_view expected)
+			{
+				if (input_.substr(position_, expected.size()) != expected)
+					return invalid("invalid-literal");
+				position_ += expected.size();
+				if (!value_delimiter())
+					return invalid("invalid-literal");
+				return database_value{std::monostate{}};
+			}
+
+			[[nodiscard]] result<database_value> parse_number()
+			{
+				if (consume('-') && position_ >= input_.size())
+					return invalid("invalid-number");
+				if (consume('0'))
+				{
+					if (position_ < input_.size() && is_digit(input_[position_]))
+						return invalid("invalid-number");
+				}
+				else
+				{
+					if (position_ >= input_.size() || input_[position_] < '1' ||
+						input_[position_] > '9')
+						return invalid("invalid-number");
+					while (position_ < input_.size() && is_digit(input_[position_]))
+						++position_;
+				}
+				if (consume('.'))
+				{
+					if (position_ >= input_.size() || !is_digit(input_[position_]))
+						return invalid("invalid-number");
+					while (position_ < input_.size() && is_digit(input_[position_]))
+						++position_;
+				}
+				if (position_ < input_.size() &&
+					(input_[position_] == 'e' || input_[position_] == 'E'))
+				{
+					++position_;
+					if (position_ < input_.size() &&
+						(input_[position_] == '+' || input_[position_] == '-'))
+						++position_;
+					if (position_ >= input_.size() || !is_digit(input_[position_]))
+						return invalid("invalid-number");
+					while (position_ < input_.size() && is_digit(input_[position_]))
+						++position_;
+				}
+				if (!value_delimiter())
+					return invalid("invalid-number");
+				return database_value{std::monostate{}};
+			}
+
+			[[nodiscard]] bool value_delimiter() const
+			{
+				return position_ >= input_.size() || json_space(input_[position_]) ||
+					input_[position_] == ',' || input_[position_] == ']' ||
+					input_[position_] == '}';
+			}
+
+			[[nodiscard]] static bool is_digit(const char value)
+			{
+				return value >= '0' && value <= '9';
+			}
+
+			[[nodiscard]] static bool json_space(const char value)
+			{
+				return value == ' ' || value == '\t' || value == '\n' || value == '\r';
 			}
 
 			void skip_space()
 			{
-				while (position_ < input_.size() &&
-					   std::isspace(static_cast<unsigned char>(input_[position_])) != 0)
+				while (position_ < input_.size() && json_space(input_[position_]))
 					++position_;
 			}
 			[[nodiscard]] bool consume(char expected)
@@ -212,6 +436,7 @@ namespace cxxlens
 			}
 
 			std::string_view input_;
+			database_limits limits_;
 			std::size_t position_{};
 		};
 
@@ -767,6 +992,18 @@ namespace cxxlens
 			return workspace_error("core.cancelled", "cancelled");
 		if (!files)
 			return workspace_error("core.invalid-argument", "filesystem-port-missing");
+		if (options.compilation_database_byte_budget == 0U)
+			return workspace_error("core.invalid-argument",
+								   "compilation-database-byte-budget-zero");
+		if (options.compilation_database_entry_budget == 0U)
+			return workspace_error("core.invalid-argument",
+								   "compilation-database-entry-budget-zero");
+		if (options.compilation_database_string_byte_budget == 0U)
+			return workspace_error("core.invalid-argument",
+								   "compilation-database-string-byte-budget-zero");
+		if (options.compilation_database_nesting_budget == 0U)
+			return workspace_error("core.invalid-argument",
+								   "compilation-database-nesting-budget-zero");
 		const auto& filesystem = *files;
 		path database = options.compilation_database;
 		if (database.extension() != ".json")
@@ -779,11 +1016,27 @@ namespace cxxlens
 		if (!database_path)
 			return workspace_error(
 				"workspace.compile-database-not-found", "database-not-found", database);
+		request.operation = "workspace.compile-database.stat";
+		auto database_status = filesystem.stat(database_path.value(), request);
+		if (!database_status || !database_status.value().exists || !database_status.value().regular)
+			return workspace_error(
+				"workspace.compile-database-not-found", "database-not-found", database);
+		if (database_status.value().size > options.compilation_database_byte_budget)
+			return database_budget_error("compilation-database-byte-budget",
+										 options.compilation_database_byte_budget,
+										 database_status.value().size,
+										 database_path.value());
+		request.operation = "workspace.compile-database.read";
 		auto content = filesystem.read(database_path.value(), request);
 		if (!content)
 			return workspace_error(
 				"workspace.compile-database-not-found", "database-not-found", database);
-		auto parsed = database_parser{content.value()}.parse();
+		auto parsed = database_parser{content.value(),
+									  {options.compilation_database_byte_budget,
+									   options.compilation_database_entry_budget,
+									   options.compilation_database_string_byte_budget,
+									   options.compilation_database_nesting_budget}}
+						  .parse();
 		if (!parsed || !std::holds_alternative<database_value::array>(parsed.value().value))
 			return parsed ? result<workspace>{workspace_error("workspace.compile-database-invalid",
 															  "root-not-array")}
