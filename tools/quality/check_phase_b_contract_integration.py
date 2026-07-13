@@ -275,10 +275,18 @@ def validate_metadata(root: pathlib.Path) -> tuple[dict[str, Any], dict[str, Any
             if scenario not in text:
                 fail(f"{example['package']}: example omits {scenario} scenario")
 
-    if conventions["contract_state"] != "candidate" or high_risk["gate"]["state"] != "validated":
-        fail("Phase B integration requires candidate conventions and validated #52 gate")
-    if any(package["contract"]["state"] != "candidate" for package in packages):
-        fail("#53 must not perform the final frozen transition")
+    if (
+        conventions["contract_state"] not in {"candidate", "frozen"}
+        or high_risk["gate"]["state"] != "validated"
+    ):
+        fail("Phase B integration requires candidate/frozen conventions and validated #52 gate")
+    package_states = {package["contract"]["state"] for package in packages}
+    if package_states not in ({"candidate"}, {"frozen"}):
+        fail("Phase B integration rejects mixed or unsupported contract states")
+    if package_states == {"frozen"} and any(
+        package["contract"]["transition_issue"] != "#54" for package in packages
+    ):
+        fail("frozen package contracts must be authorized by #54")
 
     return manifest, {
         "counts": actual_counts,

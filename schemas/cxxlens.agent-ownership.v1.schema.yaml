@@ -23,10 +23,11 @@ properties:
   global_contract_fingerprints:
     type: object
     additionalProperties: false
-    required: [conventions, ownership_registry]
+    required: [conventions, ownership_registry, candidate_acceptance]
     properties:
       conventions: {$ref: '#/$defs/digest'}
       ownership_registry: {$ref: '#/$defs/digest'}
+      candidate_acceptance: {$ref: '#/$defs/digest'}
   repository_paths_digest:
     $ref: '#/$defs/digest'
   semantic_digest:

@@ -134,6 +134,13 @@ def validate_conventions(
     catalog_packages = {package["id"] for package in catalog["packages"]}
     if owners != EXPECTED_PACKAGE_ISSUES or set(owners) != catalog_packages:
         fail("package candidate owners must cover all 22 catalog packages exactly once")
+    catalog_states = {package["contract"]["state"] for package in catalog["packages"]}
+    if catalog_states != {conventions["contract_state"]}:
+        fail("global convention state differs from catalog package contract states")
+    if conventions["transition_issue"] != (
+        "#54" if conventions["contract_state"] == "frozen" else "#42"
+    ):
+        fail("global convention transition authority differs from contract state")
 
     transitions = {
         (row["from"], row["to"], row["authority"])

@@ -84,6 +84,7 @@ properties:
             - kind
             - phase
             - contract_maturity
+            - contract_traceability
             - implementation_state
             - declaration
             - atomic_unit
@@ -91,6 +92,12 @@ properties:
             properties:
               id:
                 pattern: ^API-[A-Z]+-[0-9]{3}$
+              contract_traceability:
+                type: array
+                minItems: 1
+                uniqueItems: true
+                items:
+                  pattern: '^(UC-[A-Z]+|FR|QR)-[0-9]{3}$'
               declaration:
                 type: object
                 required: [status, source, signature, signature_fingerprint]

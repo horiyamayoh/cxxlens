@@ -117,7 +117,7 @@ class TaskPacketTest(unittest.TestCase):
         )
         self.assertEqual(
             set(generated["global_contract_fingerprints"]),
-            {"conventions", "ownership_registry"},
+            {"conventions", "ownership_registry", "candidate_acceptance"},
         )
         api_ids = [packet["api_id"] for packet in generated["packets"]]
         member_ids = [
@@ -157,13 +157,10 @@ class TaskPacketTest(unittest.TestCase):
                 {"positive", "negative", "ambiguous"},
             )
             for fixture in packet["fixtures"]:
-                if packet["generation"]["state"] == "complete":
-                    self.assertEqual(len(fixture["case_ids"]), 1)
-                    self.assertEqual(len(fixture["test_ids"]), 1)
-                    self.assertEqual(len(fixture["expected_outcomes"]), 1)
-                    self.assertEqual(len(fixture["evidence_candidates"]), 1)
-                else:
-                    self.assertEqual(fixture["case_ids"], [])
+                self.assertEqual(len(fixture["case_ids"]), 1)
+                self.assertEqual(len(fixture["test_ids"]), 1)
+                self.assertEqual(len(fixture["expected_outcomes"]), 1)
+                self.assertEqual(len(fixture["evidence_candidates"]), 1)
             self.assertTrue(
                 all(isinstance(command["argv"], list) for command in packet["acceptance_commands"])
             )

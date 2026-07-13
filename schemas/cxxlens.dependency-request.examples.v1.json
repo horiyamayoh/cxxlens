@@ -2,24 +2,24 @@
   "requests": [
     {
       "acceptance_criteria": [
-        "The candidate declaration is compiled through its public package boundary with regenerated readiness evidence."
+        "The frozen declaration is exercised through its public package boundary with regenerated readiness evidence."
       ],
       "blocked_api_ids": [
         "API-COPY-001"
       ],
       "evidence": [
-        "API-COPY-001:candidate_declaration_not_integrated",
-        "sha256:65fed85d3b9affe4bae9c6037d781528bcd1193b7d7a38465002b7073b8a26d5"
+        "API-COPY-001:phase_c_implementation_fixture_pending",
+        "sha256:093a7df04259f4ee07e7fe22de67d7849271eacc1048d08aa8411b669438b825"
       ],
       "kind": "missing_fixture",
       "request_id": "DR-AU-COPY-001-001",
       "requested_behavior": [
-        "Publish the positive, negative and ambiguous integration fixtures for the exact declaration."
+        "Publish the production-backed positive, negative and ambiguous Phase C implementation fixtures."
       ],
       "requesting_atomic_unit": "AU-COPY-001",
       "resolution": null,
       "schema": "cxxlens.dependency-request.v1",
-      "semantic_digest": "sha256:02851863da450bc4d3bbeed6f39adee26824f604ee58954556890346de831355",
+      "semantic_digest": "sha256:076c6112bbfcfad0f77b74659167891c8373f1beb9a09bcb2d6cd8e6e882bccf",
       "state": "pending",
       "steward_target": "integration.package.copy"
     }

@@ -81,6 +81,12 @@ def global_contract_fingerprints() -> dict[str, str]:
             encoding="utf-8"
         )
     )
+    candidates = yaml.safe_load(
+        (
+            REPOSITORY_ROOT
+            / "schemas/cxxlens_package_contract_candidates.yaml"
+        ).read_text(encoding="utf-8")
+    )
     return {
         "conventions": digest(
             {
@@ -104,6 +110,7 @@ def global_contract_fingerprints() -> dict[str, str]:
                 ),
             }
         ),
+        "candidate_acceptance": digest(canonicalize_catalog_value(candidates)),
     }
 
 
@@ -287,7 +294,9 @@ def acceptance_commands() -> list[dict[str, Any]]:
 
 
 def fixture_requirements(
-    api: dict[str, Any], coverage: dict[str, Any] | None
+    api: dict[str, Any],
+    coverage: dict[str, Any] | None,
+    candidate_acceptance: dict[str, dict[str, str]],
 ) -> list[dict[str, Any]]:
     references = {
         "positive": "docs/design/cxxlens_integrated_design_ja.md#36.14-positive",
@@ -301,22 +310,57 @@ def fixture_requirements(
     requirements = []
     for category in ("positive", "negative", "ambiguous"):
         fixture = cases.get(category)
+        candidate = candidate_acceptance[category]
         requirements.append(
             {
                 "category": category,
                 "required": True,
                 "contract_reference": references[category],
-                "case_ids": [] if fixture is None else [fixture["id"]],
-                "test_ids": [] if fixture is None else [fixture["test_id"]],
-                "expected_outcomes": []
+                "case_ids": [candidate["id"]] if fixture is None else [fixture["id"]],
+                "test_ids": [candidate["test_id"]]
+                if fixture is None
+                else [fixture["test_id"]],
+                "expected_outcomes": [candidate["expected_outcome"]]
                 if fixture is None
                 else [fixture["expected_outcome"]],
-                "evidence_candidates": []
+                "evidence_candidates": [candidate["evidence_path"]]
                 if fixture is None
                 else [fixture["evidence_path"]],
             }
         )
     return requirements
+
+
+def candidate_acceptance_lookup() -> dict[str, dict[str, dict[str, str]]]:
+    candidates = yaml.safe_load(
+        (
+            REPOSITORY_ROOT
+            / "schemas/cxxlens_package_contract_candidates.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    integration = yaml.safe_load(
+        (
+            REPOSITORY_ROOT / "schemas/cxxlens_phase_b_contract_integration.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    examples = {
+        row["package"]: row["source"] for row in integration["package_examples"]
+    }
+    result: dict[str, dict[str, dict[str, str]]] = {}
+    for group in candidates["groups"]:
+        for contract in group["api_contracts"]:
+            api_id = contract["api_id"]
+            package = contract["package"]
+            result[api_id] = {
+                category: {
+                    "id": contract["acceptance"][category]["id"],
+                    "test_id": f"phase-b.package.{package}.{category}",
+                    "expected_outcome": contract["acceptance"][category]["expected"],
+                    "evidence_path": examples[package],
+                }
+                for category in ("positive", "negative", "ambiguous")
+            }
+    return result
 
 
 def make_packet(
@@ -328,6 +372,7 @@ def make_packet(
     shared_contracts: dict[str, dict[str, Any]],
     providers: dict[tuple[str, str], dict[str, Any]],
     coverage: dict[str, Any] | None,
+    candidate_acceptance: dict[str, dict[str, str]],
     contract_fingerprints: dict[str, str],
 ) -> dict[str, Any]:
     api_id = api["id"]
@@ -392,8 +437,18 @@ def make_packet(
             "components": components,
         },
         "traceability": {
-            "use_cases": sorted(api.get("use_cases", [])),
-            "requirements": sorted(api.get("requirements", [])),
+            "use_cases": sorted(
+                item
+                for item in api.get("contract_traceability", api.get("use_cases", []))
+                if item.startswith("UC-")
+            ),
+            "requirements": sorted(
+                item
+                for item in api.get(
+                    "contract_traceability", api.get("requirements", [])
+                )
+                if not item.startswith("UC-")
+            ),
         },
         "behavior": {
             "errors": normalized_strings(api.get("errors")),
@@ -419,7 +474,7 @@ def make_packet(
                 "contract_reference": "docs/design/cxxlens_integrated_design_ja.md#39.12-schema",
             },
         },
-        "fixtures": fixture_requirements(api, coverage),
+        "fixtures": fixture_requirements(api, coverage, candidate_acceptance),
         "acceptance_commands": acceptance_commands(),
         "coordination": {
             "ownership_contract": "cxxlens.agent-ownership.v1",
@@ -486,6 +541,12 @@ def generate_corpus(
     coverage_by_api = {
         row["api_id"]: row for row in coverage_document.get("apis", [])
     }
+    candidate_acceptance = candidate_acceptance_lookup()
+    if set(candidate_acceptance) != {api["id"] for _, api in entries}:
+        fail(
+            "task_packet.candidate-acceptance-coverage",
+            "candidate acceptance must cover every catalog API exactly once",
+        )
     contract_fingerprints = global_contract_fingerprints()
     packets = [
         make_packet(
@@ -497,6 +558,7 @@ def generate_corpus(
             shared_contracts,
             providers,
             coverage_by_api.get(api["id"]),
+            candidate_acceptance[api["id"]],
             contract_fingerprints,
         )
         for package, api in entries

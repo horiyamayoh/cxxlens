@@ -19,10 +19,10 @@ conformant_catalog_ids:
 - API-SRCH-006
 - API-SRCH-007
 deferred_catalog:
-- {id: API-EXP-001, blocker: candidate_declaration_not_integrated}
-- {id: API-EXP-003, blocker: candidate_declaration_not_integrated}
-- {id: API-GRAPH-001, blocker: candidate_declaration_not_integrated}
-- {id: API-GRAPH-002, blocker: candidate_declaration_not_integrated}
+- {id: API-EXP-001, blocker: phase_c_implementation_missing}
+- {id: API-EXP-003, blocker: phase_c_implementation_missing}
+- {id: API-GRAPH-001, blocker: phase_c_implementation_missing}
+- {id: API-GRAPH-002, blocker: phase_c_implementation_missing}
 stable_public_headers:
 - include/cxxlens/cxxlens.hpp
 - include/cxxlens/explain.hpp

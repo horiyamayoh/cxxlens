@@ -98,7 +98,7 @@ class OwnershipTest(unittest.TestCase):
         )
         self.assertEqual(
             generated["summary"]["contract_state_counts"],
-            {"candidate": 124},
+            {"frozen": 124},
         )
         self.assertEqual(
             generated["global_contract_fingerprints"],

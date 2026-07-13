@@ -161,6 +161,32 @@ add_custom_target(
   USES_TERMINAL VERBATIM)
 
 add_custom_target(
+  cxxlens-public-api-contract-freeze-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_public_api_contract_freeze.py"
+    check --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_public_api_contract_freeze.py"
+  VERBATIM)
+add_dependencies(cxxlens-public-api-contract-freeze-check
+                 cxxlens-readiness-audit-check)
+add_dependencies(cxxlens-public-api-contract-freeze-check
+                 cxxlens-phase-b-contract-integration)
+
+add_custom_target(
+  cxxlens-public-api-contract-freeze
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_public_api_contract_freeze.py"
+    report --root "${CMAKE_CURRENT_SOURCE_DIR}" --integration-report
+    "${CMAKE_BINARY_DIR}/phase-b-contract-integration-report.json" --output
+    "${CMAKE_BINARY_DIR}/public-api-contract-freeze.json"
+  DEPENDS cxxlens-quality
+  USES_TERMINAL VERBATIM)
+
+add_custom_target(
   cxxlens-api-contract-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -409,6 +435,7 @@ add_dependencies(
   cxxlens-public-boundary-check
   cxxlens-preprocessor-contract-check
   cxxlens-provisioning-contract-check
+  cxxlens-public-api-contract-freeze-check
   cxxlens-readiness-audit-check
   cxxlens-runtime-port-check
   cxxlens-scheduler-contract-check

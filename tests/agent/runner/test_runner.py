@@ -118,7 +118,7 @@ class RunnerTest(unittest.TestCase):
         ]
         self.assertEqual(len(candidate_nodes), 124)
         self.assertTrue(
-            all(not node["prerequisites"]["contract_frozen"] for node in generated["nodes"])
+            all(node["prerequisites"]["contract_frozen"] for node in generated["nodes"])
         )
         wave_units = [unit for wave in generated["topological_waves"] for unit in wave]
         node_units = [node["atomic_unit_id"] for node in generated["nodes"]]

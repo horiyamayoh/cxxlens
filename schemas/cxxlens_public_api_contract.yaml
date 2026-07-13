@@ -1,7 +1,7 @@
 schema: cxxlens.api-catalog.v2
 document_id: CXXLENS-SRAD-001
-document_version: 2.1.0-draft
-generated_on: '2026-07-12'
+document_version: 2.2.0
+generated_on: '2026-07-13'
 language: C++23
 llvm_baseline:
   major: 22
@@ -14,9 +14,9 @@ stability:
 packages:
 - id: core
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#43'
-    transition_issue: '#43'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-43
     candidate_fingerprint: sha256:12ff14d27a96a78edb062e7263f4221f8b602e7347dc556c549715d3cd12cb4c
@@ -69,6 +69,8 @@ packages:
     - FR-018
     guarantees:
     - Returns all relevant product/schema/LLVM versions.
+    contract_traceability:
+    - FR-018
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -96,6 +98,8 @@ packages:
     - Never represents an unavailable capability as an empty successful result.
     requirements:
     - QR-010
+    contract_traceability:
+    - QR-010
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -122,6 +126,9 @@ packages:
     guarantees:
     - Structured evidence is authoritative; prose is a projection.
     requirements:
+    - FR-008
+    - FR-011
+    contract_traceability:
     - FR-008
     - FR-011
     contract_maturity: contract-defined
@@ -152,6 +159,9 @@ packages:
     guarantees:
     - Complete accounting of requested, covered, excluded, failed, unresolved and not-applicable units.
     requirements:
+    - FR-008
+    - FR-010
+    contract_traceability:
     - FR-008
     - FR-010
     contract_maturity: contract-defined
@@ -188,6 +198,10 @@ packages:
     errors:
     - core.internal-invariant-violation
     - core.schema-validation-failed
+    contract_traceability:
+    - FR-008
+    - FR-011
+    - QR-001
     contract_maturity: contract-defined
     implementation_state: unimplemented
     declaration:
@@ -209,7 +223,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-CORE-006
     symbol: finding_set::{minimum_confidence,minimum_severity,to_json,to_markdown,to_sarif}
     kind: method_family
@@ -219,6 +233,10 @@ packages:
       - API-CORE-005
     errors:
     - core.internal-invariant-violation
+    contract_traceability:
+    - FR-008
+    - FR-011
+    - QR-001
     contract_maturity: contract-defined
     implementation_state: unimplemented
     declaration:
@@ -236,12 +254,12 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
 - id: workspace
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#44'
-    transition_issue: '#44'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-44
     candidate_fingerprint: sha256:11b9a004c59d3895821ecf302cfcd08d7ec2ef5cbcb1fffaf722e7843c058a5c
@@ -280,6 +298,9 @@ packages:
     - workspace.compile-database-invalid
     guarantees:
     - Defaults to explicit nonzero byte, entry, decoded-string, and nesting budgets.
+    contract_traceability:
+    - FR-001
+    - QR-007
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -331,6 +352,11 @@ packages:
     - workspace.compile-database-invalid
     - workspace.compile-database-not-found
     - workspace.resource-dir-not-found
+    contract_traceability:
+    - FR-001
+    - FR-002
+    - QR-001
+    - QR-007
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -359,6 +385,9 @@ packages:
     - QR-001
     guarantees:
     - Returns canonical deterministic order.
+    contract_traceability:
+    - FR-002
+    - QR-001
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -385,6 +414,9 @@ packages:
     - FR-002
     guarantees:
     - Returns zero, one or many commands; ambiguity is visible.
+    contract_traceability:
+    - FR-001
+    - FR-002
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -434,6 +466,13 @@ packages:
     - parse.timeout
     - core.cancelled
     - facts.transaction-failed
+    contract_traceability:
+    - FR-005
+    - FR-010
+    - QR-004
+    - QR-005
+    - QR-011
+    - QR-012
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -469,6 +508,9 @@ packages:
     requirements:
     - FR-005
     - QR-001
+    contract_traceability:
+    - FR-005
+    - QR-001
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -502,6 +544,8 @@ packages:
     errors:
     - workspace.compile-database-invalid
     - workspace.resource-dir-not-found
+    contract_traceability:
+    - QR-010
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -527,6 +571,8 @@ packages:
     phase: M0
     requirements:
     - QR-001
+    contract_traceability:
+    - QR-001
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -551,9 +597,9 @@ packages:
       blockers: []
 - id: facts
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#44'
-    transition_issue: '#44'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-44
     candidate_fingerprint: sha256:11b9a004c59d3895821ecf302cfcd08d7ec2ef5cbcb1fffaf722e7843c058a5c
@@ -579,6 +625,9 @@ packages:
     symbol: fact_profile::{minimal,semantic_search,refactor,generation,flow,full,include,exclude,precision}
     kind: method_family
     phase: M0
+    contract_traceability:
+    - FR-005
+    - QR-001
     contract_maturity: contract-defined
     requirements:
     - FR-005
@@ -612,6 +661,9 @@ packages:
     guarantees:
     - Queries one immutable fact snapshot.
     requirements:
+    - FR-005
+    - QR-001
+    contract_traceability:
     - FR-005
     - QR-001
     contract_maturity: contract-defined
@@ -648,6 +700,9 @@ packages:
     requirements:
     - FR-005
     - QR-001
+    contract_traceability:
+    - FR-005
+    - QR-001
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -680,6 +735,9 @@ packages:
     guarantees:
     - Results are detached from AST lifetime and deterministically ordered.
     requirements:
+    - FR-005
+    - QR-001
+    contract_traceability:
     - FR-005
     - QR-001
     contract_maturity: contract-defined
@@ -717,6 +775,10 @@ packages:
     - FR-005
     - FR-009
     - QR-001
+    contract_traceability:
+    - FR-005
+    - FR-009
+    - QR-001
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -749,6 +811,9 @@ packages:
     guarantees:
     - Results are detached from AST lifetime and deterministically ordered.
     requirements:
+    - FR-005
+    - QR-001
+    contract_traceability:
     - FR-005
     - QR-001
     contract_maturity: contract-defined
@@ -785,6 +850,9 @@ packages:
     requirements:
     - FR-005
     - QR-001
+    contract_traceability:
+    - FR-005
+    - QR-001
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -817,6 +885,9 @@ packages:
     guarantees:
     - Results are detached from AST lifetime and deterministically ordered.
     requirements:
+    - FR-005
+    - QR-001
+    contract_traceability:
     - FR-005
     - QR-001
     contract_maturity: contract-defined
@@ -854,6 +925,10 @@ packages:
     - FR-003
     - FR-005
     - QR-001
+    contract_traceability:
+    - FR-003
+    - FR-005
+    - QR-001
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -888,6 +963,9 @@ packages:
     requirements:
     - FR-008
     - QR-001
+    contract_traceability:
+    - FR-008
+    - QR-001
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -913,9 +991,9 @@ packages:
       blockers: []
 - id: models
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#50'
-    transition_issue: '#50'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-50
     candidate_fingerprint: sha256:ff9d40744eeff0c0d6d866875fb78fb40a359df61b38ed5c7f0742a6b715ba29
@@ -934,6 +1012,11 @@ packages:
     symbol: api_model_pack::empty(id,version)
     kind: static_factory
     phase: M3
+    contract_traceability:
+    - FR-008
+    - FR-010
+    - QR-004
+    - QR-005
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -947,7 +1030,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-MODEL-002
     symbol: api_model_pack::{function,method,replacement,source,sink,barrier}
     kind: builder_family
@@ -959,6 +1042,11 @@ packages:
       apis: []
     guarantees:
     - Model bindings are exact/ambiguous/unresolved and versioned.
+    contract_traceability:
+    - FR-008
+    - FR-010
+    - QR-004
+    - QR-005
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -978,13 +1066,18 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-MODEL-003
     symbol: api_model_pack::merge
     kind: method
     phase: M3
     errors:
     - workspace.model-load-failed
+    contract_traceability:
+    - FR-008
+    - FR-010
+    - QR-004
+    - QR-005
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -999,7 +1092,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-MODEL-004
     symbol: api_model_pack::{load,save,to_json}
     kind: method_family
@@ -1007,6 +1100,11 @@ packages:
     errors:
     - core.schema-validation-failed
     - workspace.model-load-failed
+    contract_traceability:
+    - FR-008
+    - FR-010
+    - QR-004
+    - QR-005
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -1025,12 +1123,12 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
 - id: select
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#45'
-    transition_issue: '#45'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-45
     candidate_fingerprint: sha256:9bb0cb68c4121996a9dd550df67e070c1d0c04d3609e1399d777c2705b5f7008
@@ -1060,6 +1158,9 @@ packages:
       facts:
       - file
       apis: []
+    contract_traceability:
+    - FR-007
+    - QR-001
     contract_maturity: stable
     implementation_state: conformant
     declaration:
@@ -1096,6 +1197,10 @@ packages:
       - symbol
       minimum_precision: workspace_semantic
       apis: []
+    contract_traceability:
+    - FR-006
+    - FR-007
+    - QR-001
     contract_maturity: stable
     implementation_state: conformant
     declaration:
@@ -1142,6 +1247,10 @@ packages:
       - type
       minimum_precision: local_semantic
       apis: []
+    contract_traceability:
+    - FR-006
+    - FR-007
+    - QR-001
     contract_maturity: stable
     implementation_state: conformant
     declaration:
@@ -1180,6 +1289,8 @@ packages:
       - reference
       minimum_precision: local_semantic
       apis: []
+    contract_traceability:
+    - QR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -1201,7 +1312,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-SEL-005
     symbol: reference_selector builder family
     kind: builder_family
@@ -1213,6 +1324,9 @@ packages:
       facts:
       - reference
       apis: []
+    contract_traceability:
+    - UC-SR-003
+    - UC-SR-004
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -1235,7 +1349,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-SEL-006
     symbol: call_selector builder family
     kind: builder_family
@@ -1255,6 +1369,12 @@ packages:
       - type
       minimum_precision: workspace_semantic
       apis: []
+    contract_traceability:
+    - FR-007
+    - FR-009
+    - QR-001
+    - UC-SR-001
+    - UC-SR-002
     contract_maturity: stable
     implementation_state: conformant
     declaration:
@@ -1296,6 +1416,10 @@ packages:
     - UC-SR-006
     - UC-SR-007
     - UC-SR-008
+    contract_traceability:
+    - UC-SR-006
+    - UC-SR-007
+    - UC-SR-008
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -1324,12 +1448,15 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-SEL-008
     symbol: any_symbol/function/method/record/variable/macro/type helpers
     kind: free_function_family
     phase: M2
     requirements:
+    - FR-006
+    - FR-007
+    contract_traceability:
     - FR-006
     - FR-007
     contract_maturity: stable
@@ -1362,6 +1489,11 @@ packages:
     use_cases:
     - UC-SR-001
     - UC-SR-002
+    contract_traceability:
+    - FR-007
+    - FR-009
+    - UC-SR-001
+    - UC-SR-002
     contract_maturity: stable
     implementation_state: conformant
     declaration:
@@ -1391,6 +1523,10 @@ packages:
     errors:
     - select.invalid-expression
     - select.type-mismatch
+    contract_traceability:
+    - FR-007
+    - FR-018
+    - QR-001
     contract_maturity: stable
     implementation_state: conformant
     declaration:
@@ -1420,6 +1556,8 @@ packages:
     requirements:
     - FR-007
     notes: Type-erases a typed selector without changing its semantics.
+    contract_traceability:
+    - FR-007
     contract_maturity: stable
     implementation_state: conformant
     declaration:
@@ -1441,9 +1579,9 @@ packages:
       blockers: []
 - id: search
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#45'
-    transition_issue: '#45'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-45
     candidate_fingerprint: sha256:9bb0cb68c4121996a9dd550df67e070c1d0c04d3609e1399d777c2705b5f7008
@@ -1475,6 +1613,8 @@ packages:
     - Canonical symbol identity within coverage.
     errors:
     - search.required-facts-unavailable
+    contract_traceability:
+    - UC-SR-003
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -1488,7 +1628,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-SRCH-002
     symbol: search::references
     kind: free_function
@@ -1510,6 +1650,9 @@ packages:
       - DeclRefExpr
       - MemberExpr
       - TypeLoc
+    contract_traceability:
+    - UC-SR-003
+    - UC-SR-004
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -1523,7 +1666,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-SRCH-003
     symbol: search::calls
     kind: free_function
@@ -1556,6 +1699,14 @@ packages:
     - FR-009
     - QR-001
     - QR-002
+    contract_traceability:
+    - FR-007
+    - FR-008
+    - FR-009
+    - QR-001
+    - QR-002
+    - UC-SR-001
+    - UC-SR-002
     contract_maturity: stable
     implementation_state: conformant
     declaration:
@@ -1593,6 +1744,11 @@ packages:
     - FR-007
     - FR-008
     - QR-001
+    contract_traceability:
+    - FR-007
+    - FR-008
+    - QR-001
+    - UC-SR-001
     contract_maturity: stable
     implementation_state: conformant
     declaration:
@@ -1631,6 +1787,13 @@ packages:
     - FR-009
     - QR-001
     - QR-002
+    contract_traceability:
+    - FR-007
+    - FR-008
+    - FR-009
+    - QR-001
+    - QR-002
+    - UC-SR-002
     contract_maturity: stable
     implementation_state: conformant
     declaration:
@@ -1669,6 +1832,11 @@ packages:
     - FR-008
     - FR-009
     - QR-001
+    contract_traceability:
+    - FR-008
+    - FR-009
+    - QR-001
+    - UC-GR-001
     contract_maturity: stable
     implementation_state: conformant
     declaration:
@@ -1707,6 +1875,11 @@ packages:
     - FR-008
     - FR-009
     - QR-001
+    contract_traceability:
+    - FR-008
+    - FR-009
+    - QR-001
+    - UC-GR-001
     contract_maturity: stable
     implementation_state: conformant
     declaration:
@@ -1743,6 +1916,8 @@ packages:
       - clangIncludeCleaner
       primary_apis:
       - PPCallbacks::InclusionDirective
+    contract_traceability:
+    - UC-SR-008
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -1756,7 +1931,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-SRCH-009
     symbol: search::macros
     kind: free_function
@@ -1772,6 +1947,8 @@ packages:
       - clangLex
       primary_apis:
       - PPCallbacks::MacroExpands
+    contract_traceability:
+    - UC-SR-007
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -1785,7 +1962,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-SRCH-010
     symbol: search::conversions
     kind: free_function
@@ -1801,6 +1978,8 @@ packages:
       - clangAST
       primary_apis:
       - ImplicitCastExpr
+    contract_traceability:
+    - UC-SR-006
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -1814,12 +1993,12 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
 - id: graph
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#46'
-    transition_issue: '#46'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-46
     candidate_fingerprint: sha256:6993968a9393a4f465aa9038b8ff58d236a44f0a5d7d3aa438882fdfa6a400e2
@@ -1852,6 +2031,8 @@ packages:
       - inheritance
       minimum_precision: workspace_semantic
       apis: []
+    contract_traceability:
+    - UC-GR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -1865,7 +2046,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-GRAPH-002
     symbol: graph::override_graph
     kind: free_function
@@ -1877,6 +2058,8 @@ packages:
       - override_relation
       minimum_precision: workspace_semantic
       apis: []
+    contract_traceability:
+    - UC-GR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -1890,7 +2073,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-GRAPH-003
     symbol: graph::call_graph
     kind: free_function
@@ -1902,6 +2085,8 @@ packages:
       - call
       minimum_precision: workspace_semantic
       apis: []
+    contract_traceability:
+    - UC-GR-002
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -1915,7 +2100,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-GRAPH-004
     symbol: graph::include_graph
     kind: free_function
@@ -1927,6 +2112,8 @@ packages:
       - include_relation
       minimum_precision: workspace_semantic
       apis: []
+    contract_traceability:
+    - UC-SR-008
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -1940,7 +2127,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-GRAPH-005
     symbol: impact_query builder and run
     kind: builder_operation
@@ -1955,6 +2142,8 @@ packages:
       apis:
       - API-SEL-010
       minimum_precision: workspace_semantic
+    contract_traceability:
+    - UC-GR-003
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -1977,11 +2166,13 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-GRAPH-006
     symbol: semantic_graph::{subgraph,to_json,to_dot}
     kind: method_family
     phase: M3
+    contract_traceability:
+    - QR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2002,12 +2193,12 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
 - id: rules
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#47'
-    transition_issue: '#47'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-47
     candidate_fingerprint: sha256:139632fb5016e56fbf7085ca6a93e7cc23e40bdfd0063ce18b2910e5e742c956
@@ -2032,6 +2223,9 @@ packages:
     use_cases:
     - UC-RL-001
     - UC-RL-002
+    contract_traceability:
+    - UC-RL-001
+    - UC-RL-002
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2045,7 +2239,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
     requires:
       apis: []
   - id: API-RULE-002
@@ -2060,6 +2254,8 @@ packages:
       - API-TF-007
     errors:
     - rules.invalid-metadata
+    contract_traceability:
+    - QR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2081,7 +2277,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-RULE-003
     symbol: rule::run
     kind: method
@@ -2094,6 +2290,8 @@ packages:
       - API-SEL-010
     guarantees:
     - Finding identity is stable and every result carries evidence/coverage.
+    contract_traceability:
+    - QR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2110,12 +2308,14 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-RULE-004
     symbol: rule_pack::{add,enable,disable,run}
     kind: method_family
     phase: M4
     notes: Shares extraction and query subexpressions across rules.
+    contract_traceability:
+    - QR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2134,7 +2334,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
     requires:
       apis:
       - API-RULE-003
@@ -2146,6 +2346,8 @@ packages:
     - UC-RL-003
     errors:
     - rules.suppression-invalid
+    contract_traceability:
+    - UC-RL-003
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2170,14 +2372,14 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
     requires:
       apis: []
 - id: flow
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#50'
-    transition_issue: '#50'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-50
     candidate_fingerprint: sha256:ff9d40744eeff0c0d6d866875fb78fb40a359df61b38ed5c7f0742a6b715ba29
@@ -2216,6 +2418,11 @@ packages:
       - reference
       - symbol
       apis: []
+    contract_traceability:
+    - FR-008
+    - FR-010
+    - QR-004
+    - QR-005
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2234,7 +2441,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-FLOW-002
     symbol: sink_model factories
     kind: static_factory_family
@@ -2244,6 +2451,11 @@ packages:
       - call
       - reference
       apis: []
+    contract_traceability:
+    - FR-008
+    - FR-010
+    - QR-004
+    - QR-005
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2265,7 +2477,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-FLOW-003
     symbol: barrier_model factories
     kind: static_factory_family
@@ -2275,6 +2487,11 @@ packages:
       - call
       - control_flow
       apis: []
+    contract_traceability:
+    - FR-008
+    - FR-010
+    - QR-004
+    - QR-005
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2294,11 +2511,16 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-FLOW-004
     symbol: taint_policy builder family
     kind: builder_family
     phase: M7
+    contract_traceability:
+    - FR-008
+    - FR-010
+    - QR-004
+    - QR-005
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2317,7 +2539,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-FLOW-005
     symbol: flow::run_taint
     kind: free_function_family
@@ -2343,6 +2565,8 @@ packages:
     - flow.cfg-unavailable
     - flow.non-convergent
     - flow.path-budget-exhausted
+    contract_traceability:
+    - UC-RL-006
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2357,12 +2581,14 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-FLOW-006
     symbol: resource_protocol builder family
     kind: builder_family
     phase: M7
     use_cases:
+    - UC-RL-005
+    contract_traceability:
     - UC-RL-005
     contract_maturity: planned
     implementation_state: unimplemented
@@ -2386,7 +2612,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-FLOW-007
     symbol: flow::check_resource_protocol
     kind: free_function
@@ -2401,6 +2627,8 @@ packages:
       apis: []
       capabilities:
       - flow.cfg
+    contract_traceability:
+    - UC-RL-005
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2420,7 +2648,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-FLOW-008
     symbol: flow::build_effect_summaries
     kind: free_function
@@ -2435,6 +2663,11 @@ packages:
       capabilities:
       - flow.cfg
       - flow.effect-summaries
+    contract_traceability:
+    - FR-008
+    - FR-010
+    - QR-004
+    - QR-005
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2454,12 +2687,12 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
 - id: transform
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#48'
-    transition_issue: '#48'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-48
     candidate_fingerprint: sha256:7f18fade87f89da2014f84a0dc9725e6225f67cca3c044bebd5c44f557158038
@@ -2500,6 +2733,8 @@ packages:
       - symbol
       minimum_precision: workspace_semantic
       apis: []
+    contract_traceability:
+    - UC-TF-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2513,7 +2748,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-TF-002
     symbol: transform::replace_method_call
     kind: free_function
@@ -2528,6 +2763,8 @@ packages:
       - type
       minimum_precision: workspace_semantic
       apis: []
+    contract_traceability:
+    - UC-TF-002
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2541,7 +2778,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-TF-003
     symbol: transform::rewrite_calls
     kind: free_function
@@ -2552,6 +2789,8 @@ packages:
       minimum_precision: local_semantic
       apis:
       - API-SEL-006
+    contract_traceability:
+    - QR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2565,7 +2804,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-TF-004
     symbol: transform::rename_symbol
     kind: free_function
@@ -2580,6 +2819,8 @@ packages:
       minimum_precision: workspace_semantic
       apis:
       - API-SEL-003
+    contract_traceability:
+    - UC-TF-004
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2593,7 +2834,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-TF-005
     symbol: transform::add_include_where_needed
     kind: free_function
@@ -2606,6 +2847,8 @@ packages:
       - symbol
       apis:
       - API-SEL-003
+    contract_traceability:
+    - UC-TF-005
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2619,7 +2862,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-TF-006
     symbol: transform::remove_unused_includes
     kind: free_function
@@ -2633,6 +2876,8 @@ packages:
       capabilities:
       - include.cleaner
       apis: []
+    contract_traceability:
+    - UC-TF-005
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2646,7 +2891,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-TF-007
     symbol: codemod::plan
     kind: method
@@ -2673,6 +2918,8 @@ packages:
     - transform.macro-edit-rejected
     - transform.variant-divergence
     - transform.reparse-failed
+    contract_traceability:
+    - UC-TF-003
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2688,13 +2935,15 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-TF-008
     symbol: edit_plan::preview_unified_diff
     kind: method
     phase: M4
     guarantees:
     - Pure deterministic projection of validated edits.
+    contract_traceability:
+    - QR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2714,7 +2963,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
     requires:
       apis: []
   - id: API-TF-009
@@ -2728,6 +2977,8 @@ packages:
     - transform.writer-lock-conflict
     - transform.commit-failed
     side_effects: dry_run or transactional workspace write
+    contract_traceability:
+    - QR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2747,14 +2998,14 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
     requires:
       apis: []
 - id: generate
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#49'
-    transition_issue: '#49'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-49
     candidate_fingerprint: sha256:55a96e5b61bfc360a321c21b65e6a1908e7fecc5f7ef470fa80985636832a007
@@ -2777,6 +3028,10 @@ packages:
     phase: M5
     guarantees:
     - All relevant surfaces and required decision axes are accounted for.
+    contract_traceability:
+    - FR-015
+    - FR-016
+    - FR-017
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2798,7 +3053,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-GEN-002
     symbol: generation_plan::apply
     kind: method
@@ -2808,6 +3063,10 @@ packages:
     - generate.structural-audit-failed
     - generate.artifact-quarantined
     side_effects: dry_run or transactional artifact write
+    contract_traceability:
+    - FR-015
+    - FR-016
+    - FR-017
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2830,15 +3089,15 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
     requires:
       apis:
       - API-TF-009
 - id: mock
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#49'
-    transition_issue: '#49'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-49
     candidate_fingerprint: sha256:55a96e5b61bfc360a321c21b65e6a1908e7fecc5f7ef470fa80985636832a007
@@ -2868,6 +3127,10 @@ packages:
       - symbol
       - type
       apis: []
+    contract_traceability:
+    - UC-GN-002
+    - UC-GN-003
+    - UC-GN-007
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2883,11 +3146,15 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-MOCK-002
     symbol: mock::generator::{options,include_method,exclude_method}
     kind: builder_family
     phase: M5
+    contract_traceability:
+    - FR-015
+    - FR-016
+    - FR-017
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2904,7 +3171,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-MOCK-003
     symbol: mock::generator::plan
     kind: method
@@ -2937,6 +3204,10 @@ packages:
     - generate.surface-census-incomplete
     - generate.type-unspellable
     - generate.variant-artifact-conflict
+    contract_traceability:
+    - UC-GN-001
+    - UC-GN-002
+    - UC-GN-003
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2951,12 +3222,12 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
 - id: method_harness
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#49'
-    transition_issue: '#49'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-49
     candidate_fingerprint: sha256:55a96e5b61bfc360a321c21b65e6a1908e7fecc5f7ef470fa80985636832a007
@@ -2981,6 +3252,8 @@ packages:
     - UC-GN-004
     errors:
     - core.invalid-argument
+    contract_traceability:
+    - UC-GN-004
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -2994,7 +3267,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-METHOD-002
     symbol: method_harness::resolve_method
     kind: free_function
@@ -3018,6 +3291,8 @@ packages:
     - Never selects the first overload on ambiguity.
     errors:
     - select.ambiguous-name
+    contract_traceability:
+    - UC-GN-004
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3032,11 +3307,15 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-METHOD-003
     symbol: method_harness::generator::{for_method,for_symbol,options}
     kind: builder_family
     phase: M6
+    contract_traceability:
+    - FR-015
+    - FR-016
+    - FR-017
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3053,7 +3332,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-METHOD-004
     symbol: method_harness::generator::inspect
     kind: method
@@ -3072,6 +3351,10 @@ packages:
       - clangAnalysis
       primary_apis:
       - CFG::buildCFG
+    contract_traceability:
+    - FR-015
+    - FR-016
+    - FR-017
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3086,7 +3369,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-METHOD-005
     symbol: method_harness::generator::plan
     kind: method
@@ -3103,6 +3386,8 @@ packages:
       apis: []
     guarantees:
     - Unsafe this/lifetime/virtual/ODR cases are classified rather than forced through an unsafe fallback.
+    contract_traceability:
+    - UC-GN-005
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3117,12 +3402,12 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
 - id: copy
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#49'
-    transition_issue: '#49'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-49
     candidate_fingerprint: sha256:55a96e5b61bfc360a321c21b65e6a1908e7fecc5f7ef470fa80985636832a007
@@ -3150,6 +3435,8 @@ packages:
     errors:
     - generate.odr-risk-rejected
     - generate.macro-surface-rejected
+    contract_traceability:
+    - UC-GN-006
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3163,7 +3450,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-COPY-002
     symbol: copy::required_types
     kind: free_function
@@ -3176,6 +3463,8 @@ packages:
       - include_relation
       - type
       apis: []
+    contract_traceability:
+    - UC-GN-006
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3189,12 +3478,12 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
 - id: fuzz
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#49'
-    transition_issue: '#49'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-49
     candidate_fingerprint: sha256:55a96e5b61bfc360a321c21b65e6a1908e7fecc5f7ef470fa80985636832a007
@@ -3217,6 +3506,8 @@ packages:
       - symbol
       - type
       apis: []
+    contract_traceability:
+    - UC-GN-008
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3230,11 +3521,15 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-FUZZ-002
     symbol: fuzz::generator::{input,infer_inputs,options}
     kind: builder_family
     phase: M6
+    contract_traceability:
+    - FR-015
+    - FR-016
+    - FR-017
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3250,7 +3545,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-FUZZ-003
     symbol: fuzz::generator::plan
     kind: method
@@ -3266,6 +3561,8 @@ packages:
       apis: []
     guarantees:
     - Unsupported ownership, pointer-length or object invariants remain explicit.
+    contract_traceability:
+    - UC-GN-008
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3280,12 +3577,12 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
 - id: qa
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#51'
-    transition_issue: '#51'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-51
     candidate_fingerprint: sha256:34e502b3aa40015c99bbb1f351831fe4d0f7313f6f2e1ce6ecb4121ec3e59b79
@@ -3310,6 +3607,11 @@ packages:
     use_cases:
     - UC-QA-001
     - UC-QA-002
+    contract_traceability:
+    - UC-QA-001
+    - UC-QA-002
+    - QR-004
+    - QR-008
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3330,11 +3632,16 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-QA-002
     symbol: qa::workflow::{for_project,use,process_policy_,import_coverage,associate_with}
     kind: builder_family
     phase: M8
+    contract_traceability:
+    - UC-QA-001
+    - UC-QA-002
+    - QR-004
+    - QR-008
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3351,7 +3658,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-QA-003
     symbol: qa::workflow::run
     kind: method
@@ -3369,6 +3676,11 @@ packages:
     - qa.build-failed
     - qa.report-parse-failed
     side_effects: allowlisted external build/test execution
+    contract_traceability:
+    - UC-QA-001
+    - UC-QA-002
+    - QR-004
+    - QR-008
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3382,7 +3694,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-QA-004
     symbol: qa::import_source_coverage
     kind: free_function
@@ -3399,6 +3711,11 @@ packages:
       primary_apis: []
     errors:
     - qa.coverage-missing
+    contract_traceability:
+    - UC-QA-001
+    - UC-QA-002
+    - QR-004
+    - QR-008
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3412,12 +3729,12 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
 - id: review
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#51'
-    transition_issue: '#51'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-51
     candidate_fingerprint: sha256:34e502b3aa40015c99bbb1f351831fe4d0f7313f6f2e1ce6ecb4121ec3e59b79
@@ -3444,6 +3761,11 @@ packages:
     - UC-RV-001
     errors:
     - review.diff-invalid
+    contract_traceability:
+    - UC-RV-001
+    - UC-RV-002
+    - QR-004
+    - QR-008
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3463,7 +3785,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-RV-002
     symbol: baseline::{load,save,contains_equivalent,to_json}
     kind: method_family
@@ -3472,6 +3794,11 @@ packages:
     - UC-RV-002
     errors:
     - review.baseline-invalid
+    contract_traceability:
+    - UC-RV-001
+    - UC-RV-002
+    - QR-004
+    - QR-008
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3491,13 +3818,18 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-RV-003
     symbol: gate_policy factory/builder family
     kind: builder_family
     phase: M8
     use_cases:
     - UC-RV-002
+    contract_traceability:
+    - UC-RV-001
+    - UC-RV-002
+    - QR-004
+    - QR-008
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3517,11 +3849,16 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-RV-004
     symbol: review::workflow builder family
     kind: builder_family
     phase: M8
+    contract_traceability:
+    - UC-RV-001
+    - UC-RV-002
+    - QR-004
+    - QR-008
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3539,7 +3876,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-RV-005
     symbol: review::workflow::run
     kind: method
@@ -3557,6 +3894,11 @@ packages:
       apis: []
     errors:
     - review.gate-failed
+    contract_traceability:
+    - UC-RV-001
+    - UC-RV-002
+    - QR-004
+    - QR-008
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3571,12 +3913,12 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
 - id: report
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#47'
-    transition_issue: '#47'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-47
     candidate_fingerprint: sha256:139632fb5016e56fbf7085ca6a93e7cc23e40bdfd0063ce18b2910e5e742c956
@@ -3596,6 +3938,8 @@ packages:
     - Pure projection from authoritative rows; deterministic when requested.
     errors:
     - report.format-unsupported
+    contract_traceability:
+    - QR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3609,7 +3953,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
     requires:
       apis:
       - API-CORE-006
@@ -3621,6 +3965,8 @@ packages:
     - Pure projection from authoritative rows; deterministic when requested.
     errors:
     - report.format-unsupported
+    contract_traceability:
+    - QR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3634,7 +3980,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
     requires:
       apis:
       - API-TF-008
@@ -3646,6 +3992,8 @@ packages:
     - Pure projection from authoritative rows; deterministic when requested.
     errors:
     - report.format-unsupported
+    contract_traceability:
+    - QR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3659,7 +4007,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
     requires:
       apis:
       - API-GEN-001
@@ -3671,6 +4019,8 @@ packages:
     - Pure projection from authoritative rows; deterministic when requested.
     errors:
     - report.format-unsupported
+    contract_traceability:
+    - QR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3684,15 +4034,15 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
     requires:
       apis:
       - API-RV-005
 - id: explain
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#45'
-    transition_issue: '#45'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-45
     candidate_fingerprint: sha256:9bb0cb68c4121996a9dd550df67e070c1d0c04d3609e1399d777c2705b5f7008
@@ -3707,6 +4057,8 @@ packages:
     symbol: explain::{selector,finding,coverage,edit_plan,generation_plan}
     kind: free_function_family
     phase: M2
+    contract_traceability:
+    - QR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3724,7 +4076,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-EXP-002
     symbol: explain::why_not_matched
     kind: free_function
@@ -3736,6 +4088,10 @@ packages:
     guarantees:
     - Reports predicate rejection counts and unresolved prerequisites.
     requirements:
+    - FR-008
+    - FR-018
+    - QR-001
+    contract_traceability:
     - FR-008
     - FR-018
     - QR-001
@@ -3762,6 +4118,8 @@ packages:
     symbol: explain::{for_selector,for_rule,for_codemod,for_generation}
     kind: free_function_family
     phase: M2
+    contract_traceability:
+    - QR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3778,11 +4136,13 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-EXP-004
     symbol: explain::api_catalog_json
     kind: free_function
     phase: M0
+    contract_traceability:
+    - QR-001
     contract_maturity: contract-defined
     implementation_state: unimplemented
     declaration:
@@ -3796,12 +4156,12 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
 - id: testing
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#43'
-    transition_issue: '#43'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-43
     candidate_fingerprint: sha256:12ff14d27a96a78edb062e7263f4221f8b602e7347dc556c549715d3cd12cb4c
@@ -3837,6 +4197,9 @@ packages:
     - QR-001
     errors:
     - testing.fixture-invalid
+    contract_traceability:
+    - FR-020
+    - QR-001
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -3880,6 +4243,8 @@ packages:
     - FR-008
     errors:
     - testing.assertion-failed
+    contract_traceability:
+    - FR-008
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -3915,6 +4280,9 @@ packages:
     errors:
     - testing.assertion-failed
     side_effects: dry-run overlay validation only; never applies source edits
+    contract_traceability:
+    - FR-012
+    - QR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3932,8 +4300,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
-      - dependency_contract_not_candidate
+      - phase_c_implementation_missing
   - id: API-TEST-004
     symbol: generation_plan_assertion builder/check
     kind: method_family
@@ -3945,6 +4312,9 @@ packages:
     errors:
     - testing.assertion-failed
     side_effects: dry-run overlay validation only; never emits artifacts
+    contract_traceability:
+    - FR-013
+    - QR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -3962,8 +4332,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
-      - dependency_contract_not_candidate
+      - phase_c_implementation_missing
   - id: API-TEST-005
     symbol: testing::{check_property,check_determinism}
     kind: function_template
@@ -3974,6 +4343,8 @@ packages:
     guarantees:
     - Compares semantic outputs across parallelism, order and root relocation.
     requirements:
+    - QR-001
+    contract_traceability:
     - QR-001
     contract_maturity: contract-defined
     implementation_state: conformant
@@ -4007,6 +4378,8 @@ packages:
     errors:
     - testing.json-invalid
     - testing.schema-mismatch
+    contract_traceability:
+    - QR-009
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -4052,6 +4425,13 @@ packages:
     - testing.fixture-invalid
     - core.cancelled
     - core.deadline-exceeded
+    contract_traceability:
+    - FR-001
+    - FR-005
+    - FR-020
+    - QR-001
+    - QR-002
+    - QR-004
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -4074,9 +4454,9 @@ packages:
       blockers: []
 - id: interop
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#44'
-    transition_issue: '#44'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-44
     candidate_fingerprint: sha256:11b9a004c59d3895821ecf302cfcd08d7ec2ef5cbcb1fffaf722e7843c058a5c
@@ -4101,6 +4481,10 @@ packages:
       capabilities:
       - interop.clang
       apis: []
+    contract_traceability:
+    - FR-018
+    - QR-003
+    - QR-010
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -4161,6 +4545,17 @@ packages:
     - core.invalid-argument
     - parse.frontend-failed
     - parse.timeout
+    contract_traceability:
+    - FR-004
+    - FR-019
+    - FR-020
+    - QR-001
+    - QR-002
+    - QR-003
+    - QR-004
+    - QR-005
+    - QR-006
+    - QR-010
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -4186,6 +4581,10 @@ packages:
     symbol: fact_sink::{emit,emit_custom,emit_evidence,mark_partial}
     kind: method_family
     phase: M1
+    contract_traceability:
+    - FR-004
+    - FR-005
+    - QR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -4200,7 +4599,7 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
   - id: API-INT-004
     symbol: interop::{register_extractor,unregister_extractor}
     kind: free_function_family
@@ -4208,6 +4607,10 @@ packages:
     errors:
     - interop.custom-schema-conflict
     - interop.nondeterministic-extractor
+    contract_traceability:
+    - FR-004
+    - FR-005
+    - QR-001
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
@@ -4222,12 +4625,12 @@ packages:
     readiness:
       state: blocked
       blockers:
-      - candidate_declaration_not_integrated
+      - phase_c_implementation_missing
 - id: configuration
   contract:
-    state: candidate
+    state: frozen
     owner_issue: '#43'
-    transition_issue: '#43'
+    transition_issue: '#54'
     conventions: cxxlens.global-contract-conventions.v1
     candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-43
     candidate_fingerprint: sha256:12ff14d27a96a78edb062e7263f4221f8b602e7347dc556c549715d3cd12cb4c
@@ -4242,6 +4645,8 @@ packages:
     kind: static_factory
     phase: M0
     requirements:
+    - QR-001
+    contract_traceability:
     - QR-001
     contract_maturity: contract-defined
     implementation_state: conformant
@@ -4270,6 +4675,8 @@ packages:
     - config.yaml-invalid
     - config.unknown-key
     requirements:
+    - QR-008
+    contract_traceability:
     - QR-008
     contract_maturity: contract-defined
     implementation_state: conformant
@@ -4302,6 +4709,8 @@ packages:
     - config.overlay-conflict
     requirements:
     - QR-001
+    contract_traceability:
+    - QR-001
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -4331,6 +4740,9 @@ packages:
     errors:
     - config.invalid-value
     requirements:
+    - FR-018
+    - QR-001
+    contract_traceability:
     - FR-018
     - QR-001
     contract_maturity: contract-defined
@@ -4386,7 +4798,7 @@ summary:
     implemented: 0
     unimplemented: 77
   contract_state_counts:
-    candidate: 22
+    frozen: 22
   dependency_graph:
     API-CFG-001: []
     API-CFG-002: []

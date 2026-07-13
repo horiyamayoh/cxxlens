@@ -555,11 +555,21 @@ def make_dependency_request_example(
         None,
     )
     if skeleton is None:
-        blocked_api_id = next(
-            packet["api_id"]
-            for packet in corpus["packets"]
-            if packet["generation"]["state"] == "blocked"
+        blocked_packet = next(
+            (
+                packet
+                for packet in corpus["packets"]
+                if packet["generation"]["state"] == "blocked"
+            ),
+            None,
         )
+        if blocked_packet is None:
+            blocked_packet = next(
+                packet
+                for packet in corpus["packets"]
+                if packet["implementation_state"] == "unimplemented"
+            )
+        blocked_api_id = blocked_packet["api_id"]
         skeleton = next(
             item for item in manifest["skeletons"] if item["api_id"] == blocked_api_id
         )
@@ -571,14 +581,14 @@ def make_dependency_request_example(
         kind = "missing_fixture"
         steward_target = unit["package_integration_role"]
         evidence = [
-            f"{skeleton['api_id']}:candidate_declaration_not_integrated",
+            f"{skeleton['api_id']}:phase_c_implementation_fixture_pending",
             skeleton["skeleton_fingerprint"],
         ]
         requested_behavior = [
-            "Publish the positive, negative and ambiguous integration fixtures for the exact declaration."
+            "Publish the production-backed positive, negative and ambiguous Phase C implementation fixtures."
         ]
         acceptance_criteria = [
-            "The candidate declaration is compiled through its public package boundary with regenerated readiness evidence."
+            "The frozen declaration is exercised through its public package boundary with regenerated readiness evidence."
         ]
     else:
         kind = "missing_contract"

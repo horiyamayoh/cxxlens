@@ -406,9 +406,16 @@ def validate_document(document: Any, inventory_text: str | None = None) -> dict:
                 fail(f"{api_id}: dangling requirement references: {sorted(dangling_requirements)}")
             if dangling_errors:
                 fail(f"{api_id}: dangling error references: {sorted(dangling_errors)}")
-            if readiness["state"] in {"ready", "complete"} and not (
-                api.get("use_cases") or api.get("requirements")
-            ):
+            contract_traceability = _unique_strings(
+                api.get(
+                    "contract_traceability",
+                    api.get("use_cases", []) + api.get("requirements", []),
+                ),
+                f"{api_id}.contract_traceability",
+            )
+            if contract["state"] == "frozen" and not contract_traceability:
+                fail(f"{api_id}: frozen contract requires traceability")
+            if readiness["state"] in {"ready", "complete"} and not contract_traceability:
                 fail(f"{api_id}: ready or complete API requires traceability")
 
         unresolved_declarations = sum(

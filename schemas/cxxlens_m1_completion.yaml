@@ -21,8 +21,8 @@ conformant_catalog_ids:
 - API-WS-006
 - API-WS-007
 deferred_catalog:
-- {id: API-INT-003, blocker: candidate_declaration_not_integrated}
-- {id: API-INT-004, blocker: candidate_declaration_not_integrated}
+- {id: API-INT-003, blocker: phase_c_implementation_missing}
+- {id: API-INT-004, blocker: phase_c_implementation_missing}
 stable_public_headers:
 - include/cxxlens/core.hpp
 - include/cxxlens/facts.hpp

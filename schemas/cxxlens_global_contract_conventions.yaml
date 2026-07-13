@@ -1,7 +1,7 @@
 schema: cxxlens.global-contract-conventions.v1
-document_version: 1.0.0
-contract_state: candidate
-transition_issue: '#42'
+document_version: 1.1.0
+contract_state: frozen
+transition_issue: '#54'
 authority:
   catalog: schemas/cxxlens_public_api_contract.yaml
   normative_document: docs/design/public_contract_conventions.md

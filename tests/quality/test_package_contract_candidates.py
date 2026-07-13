@@ -43,7 +43,7 @@ class PackageContractCandidateTest(unittest.TestCase):
         }
         for package in catalog["packages"]:
             issue = package["contract"]["owner_issue"]
-            if package["contract"]["state"] == "candidate" and issue in fingerprints:
+            if package["contract"]["state"] in {"candidate", "frozen"} and issue in fingerprints:
                 package["contract"]["candidate_fingerprint"] = fingerprints[issue]
         with self.assertRaisesRegex(CandidateError, pattern):
             validate_candidates(

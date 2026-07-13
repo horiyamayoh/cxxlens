@@ -25,12 +25,15 @@ properties:
   global_contract_fingerprints:
     type: object
     additionalProperties: false
-    required: [conventions, ownership_registry]
+    required: [conventions, ownership_registry, candidate_acceptance]
     properties:
       conventions:
         type: string
         pattern: '^sha256:[0-9a-f]{64}$'
       ownership_registry:
+        type: string
+        pattern: '^sha256:[0-9a-f]{64}$'
+      candidate_acceptance:
         type: string
         pattern: '^sha256:[0-9a-f]{64}$'
   corpus_semantic_digest:

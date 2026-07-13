@@ -183,6 +183,8 @@ install(
         schemas/cxxlens_package_contract_candidates.schema.yaml
         schemas/cxxlens_phase_b_contract_integration.yaml
         schemas/cxxlens_phase_b_contract_integration.schema.yaml
+        schemas/cxxlens_public_api_contract_freeze.yaml
+        schemas/cxxlens_public_api_contract_freeze.schema.yaml
         schemas/cxxlens_contract_ownership.yaml
         schemas/cxxlens_contract_ownership.schema.yaml
         schemas/cxxlens_coverage.schema.yaml

@@ -24,8 +24,8 @@ required:
 properties:
   schema: {const: cxxlens.global-contract-conventions.v1}
   document_version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
-  contract_state: {const: candidate}
-  transition_issue: {const: '#42'}
+  contract_state: {const: frozen}
+  transition_issue: {const: '#54'}
   authority:
     type: object
     additionalProperties: false

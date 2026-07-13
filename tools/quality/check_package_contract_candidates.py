@@ -127,12 +127,16 @@ def validate_candidates(
             if package is None:
                 fail(f"{issue}: unknown package {package_id}")
             contract = package["contract"]
+            if contract["owner_issue"] != issue:
+                fail(f"{package_id}: catalog candidate owner differs")
+            expected_transition = (
+                issue if contract["state"] == "candidate" else "#54"
+            )
             if (
-                contract["state"] != "candidate"
-                or contract["owner_issue"] != issue
-                or contract["transition_issue"] != issue
+                contract["state"] not in {"candidate", "frozen"}
+                or contract["transition_issue"] != expected_transition
             ):
-                fail(f"{package_id}: catalog candidate state or transition differs")
+                fail(f"{package_id}: catalog candidate/frozen state or transition differs")
             if contract.get("candidate_manifest") != expected_pointer:
                 fail(f"{package_id}: candidate manifest pointer differs")
             if contract.get("candidate_fingerprint") != actual_fingerprint:
@@ -212,6 +216,10 @@ def validate_candidates(
             )
             if dangling_trace:
                 fail(f"{api_id}: dangling traceability: {sorted(dangling_trace)}")
+            if api.get("contract_traceability") != contract["traceability"][
+                "requirements_or_use_cases"
+            ]:
+                fail(f"{api_id}: catalog contract traceability differs")
             for category in ("positive", "negative", "ambiguous"):
                 case = contract["acceptance"][category]
                 if not case["id"].startswith(f"{api_id}.{category}"):
@@ -241,13 +249,16 @@ def validate_candidates(
             if not ({boundary["owner_package"], boundary["consumer_package"]} & set(group_packages)):
                 fail(f"{issue}: consumer boundary is unrelated to assigned packages")
 
-    candidate_packages = {
+    candidate_or_frozen_packages = {
         package["id"]
         for package in catalog["packages"]
-        if package["contract"]["state"] == "candidate"
+        if package["contract"]["state"] in {"candidate", "frozen"}
     }
-    if seen_packages != candidate_packages:
-        fail("candidate manifest must cover every catalog candidate package exactly once")
+    if seen_packages != candidate_or_frozen_packages:
+        fail(
+            "candidate manifest must cover every catalog candidate/frozen package "
+            "exactly once"
+        )
 
 
 def load_yaml(path: pathlib.Path) -> dict[str, Any]:
