@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -303,6 +304,16 @@ int main(int argc, char** argv)
 							 .include_headers()
 							 .variants({units_a[0].variant_id(), units_a[1].variant_id()});
 	require(scope_a.to_json() == scope_b.to_json(), "analysis scope order is unstable");
+	const std::array scope_family{
+		cxxlens::analysis_scope::all(),
+		cxxlens::analysis_scope::files({"src/main.cpp"}),
+		cxxlens::analysis_scope::compile_units({units_a.front().id()}),
+		cxxlens::analysis_scope::changed_files({"src/main.cpp"}),
+		cxxlens::analysis_scope::all().include_headers(false),
+		cxxlens::analysis_scope::all().variants({units_a.front().variant_id()}),
+	};
+	for (const auto& scope : scope_family)
+		require(!scope.to_json().empty(), "analysis scope family member produced no contract");
 	if (argc == 2 && std::string_view{argv[1]} == "--emit")
 	{
 		std::cout << scope_a.to_json() << '\n' << opened_a.value().explain_build_context() << '\n';

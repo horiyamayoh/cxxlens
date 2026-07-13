@@ -1,0 +1,1643 @@
+schema: cxxlens.api-test-coverage.v1
+completion_manifests:
+- schemas/cxxlens_m0_completion.yaml
+- schemas/cxxlens_m1_completion.yaml
+- schemas/cxxlens_m2_completion.yaml
+tests:
+- id: install.consumer
+  kind: acceptance
+  source: tests/install/consumer/main.cpp
+  execution_path: installed_consumer
+  covered_use_cases: []
+- id: integration.m1-conformance
+  kind: acceptance
+  source: tests/integration/m1_conformance_test.cpp
+  execution_path: public_header
+  covered_use_cases: []
+- id: integration.m2-search-conformance
+  kind: acceptance
+  source: tests/integration/m2_search_conformance_test.cpp
+  execution_path: public_header
+  covered_use_cases:
+  - UC-GR-001
+  - UC-SR-001
+  - UC-SR-002
+- id: unit.configuration
+  kind: unit
+  source: tests/unit/config/configuration_test.cpp
+  execution_path: public_header
+  covered_use_cases: []
+- id: unit.evidence-coverage
+  kind: unit
+  source: tests/unit/core/evidence_coverage_test.cpp
+  execution_path: public_header
+  covered_use_cases: []
+- id: unit.fact-contract
+  kind: unit
+  source: tests/unit/facts/fact_contract_test.cpp
+  execution_path: public_header
+  covered_use_cases: []
+- id: unit.fact-store
+  kind: unit
+  source: tests/unit/store/fact_store_test.cpp
+  execution_path: public_header
+  covered_use_cases: []
+- id: unit.frontend-job
+  kind: unit
+  source: tests/unit/llvm/frontend_job_test.cpp
+  execution_path: public_header
+  covered_use_cases: []
+- id: unit.provisioning
+  kind: unit
+  source: tests/unit/workspace/provisioning_test.cpp
+  execution_path: public_header
+  covered_use_cases: []
+- id: unit.search
+  kind: unit
+  source: tests/unit/search/search_test.cpp
+  execution_path: public_header
+  covered_use_cases:
+  - UC-GR-001
+  - UC-SR-001
+  - UC-SR-002
+- id: unit.selectors
+  kind: unit
+  source: tests/unit/select/selector_test.cpp
+  execution_path: public_header
+  covered_use_cases:
+  - UC-SR-001
+  - UC-SR-002
+- id: unit.testing-substrate
+  kind: unit
+  source: tests/unit/testing/testing_substrate_test.cpp
+  execution_path: public_header
+  covered_use_cases: []
+- id: unit.version
+  kind: unit
+  source: tests/unit/version_test.cpp
+  execution_path: public_header
+  covered_use_cases: []
+- id: unit.workspace-catalog
+  kind: unit
+  source: tests/unit/workspace/workspace_catalog_test.cpp
+  execution_path: public_header
+  covered_use_cases: []
+apis:
+- api_id: API-CFG-001
+  signature_fingerprint: sha256:b933b42221793f39ad34feb76f438c200fbb6291be5db53655ee171150759919
+  unit_test_id: unit.configuration
+  acceptance_test_id: install.consumer
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - QR-001
+  expected_outcome: configuration::defaults satisfies its declared public result and
+    failure contract
+  fixtures:
+  - id: API-CFG-001.positive
+    category: positive
+    test_id: unit.configuration
+    evidence_path: tests/unit/config/configuration_test.cpp
+    expected_outcome: API-CFG-001 returns the documented successful result
+  - id: API-CFG-001.negative
+    category: negative
+    test_id: unit.configuration
+    evidence_path: tests/unit/config/configuration_test.cpp
+    expected_outcome: API-CFG-001 rejects invalid or unsupported input without silent
+      success
+  - id: API-CFG-001.ambiguous
+    category: ambiguous
+    test_id: unit.configuration
+    evidence_path: tests/unit/config/configuration_test.cpp
+    expected_outcome: API-CFG-001 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-CFG-002
+  signature_fingerprint: sha256:f5aea8351c9add766f067af109f44526e4ee7df0fcba2ad0c28bb493caeefe12
+  unit_test_id: unit.configuration
+  acceptance_test_id: install.consumer
+  covered_member_indexes:
+  - 0
+  - 1
+  covered_use_cases: []
+  covered_requirements:
+  - QR-008
+  expected_outcome: configuration::{load,load_nearest} satisfies its declared public
+    result and failure contract
+  fixtures:
+  - id: API-CFG-002.positive
+    category: positive
+    test_id: unit.configuration
+    evidence_path: tests/unit/config/configuration_test.cpp
+    expected_outcome: API-CFG-002 returns the documented successful result
+  - id: API-CFG-002.negative
+    category: negative
+    test_id: unit.configuration
+    evidence_path: tests/unit/config/configuration_test.cpp
+    expected_outcome: API-CFG-002 rejects invalid or unsupported input without silent
+      success
+  - id: API-CFG-002.ambiguous
+    category: ambiguous
+    test_id: unit.configuration
+    evidence_path: tests/unit/config/configuration_test.cpp
+    expected_outcome: API-CFG-002 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-CFG-003
+  signature_fingerprint: sha256:f75e35abeb2f727cf79e54ef6b053ec9538439d05fce841778876a2f03d1e42a
+  unit_test_id: unit.configuration
+  acceptance_test_id: install.consumer
+  covered_member_indexes:
+  - 0
+  - 1
+  covered_use_cases: []
+  covered_requirements:
+  - QR-001
+  expected_outcome: configuration::{with_profile,overlay} satisfies its declared public
+    result and failure contract
+  fixtures:
+  - id: API-CFG-003.positive
+    category: positive
+    test_id: unit.configuration
+    evidence_path: tests/unit/config/configuration_test.cpp
+    expected_outcome: API-CFG-003 returns the documented successful result
+  - id: API-CFG-003.negative
+    category: negative
+    test_id: unit.configuration
+    evidence_path: tests/unit/config/configuration_test.cpp
+    expected_outcome: API-CFG-003 rejects invalid or unsupported input without silent
+      success
+  - id: API-CFG-003.ambiguous
+    category: ambiguous
+    test_id: unit.configuration
+    evidence_path: tests/unit/config/configuration_test.cpp
+    expected_outcome: API-CFG-003 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-CFG-004
+  signature_fingerprint: sha256:9b07208ddc2f1da2dd40f779a961085692c3803c222866e83d4bdbe1d7a51af8
+  unit_test_id: unit.configuration
+  acceptance_test_id: install.consumer
+  covered_member_indexes:
+  - 0
+  - 1
+  - 2
+  covered_use_cases: []
+  covered_requirements:
+  - FR-018
+  - QR-001
+  expected_outcome: configuration::{validate,resolved_json,explain} satisfies its
+    declared public result and failure contract
+  fixtures:
+  - id: API-CFG-004.positive
+    category: positive
+    test_id: unit.configuration
+    evidence_path: tests/unit/config/configuration_test.cpp
+    expected_outcome: API-CFG-004 returns the documented successful result
+  - id: API-CFG-004.negative
+    category: negative
+    test_id: unit.configuration
+    evidence_path: tests/unit/config/configuration_test.cpp
+    expected_outcome: API-CFG-004 rejects invalid or unsupported input without silent
+      success
+  - id: API-CFG-004.ambiguous
+    category: ambiguous
+    test_id: unit.configuration
+    evidence_path: tests/unit/config/configuration_test.cpp
+    expected_outcome: API-CFG-004 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-CORE-001
+  signature_fingerprint: sha256:2c21ba960094c71a85b0fd4dd35ad67d6e4126c06ed2b5f39012596e0c570aea
+  unit_test_id: unit.version
+  acceptance_test_id: install.consumer
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-018
+  expected_outcome: versions() satisfies its declared public result and failure contract
+  fixtures:
+  - id: API-CORE-001.positive
+    category: positive
+    test_id: unit.version
+    evidence_path: tests/unit/version_test.cpp
+    expected_outcome: API-CORE-001 returns the documented successful result
+  - id: API-CORE-001.negative
+    category: negative
+    test_id: unit.version
+    evidence_path: tests/unit/version_test.cpp
+    expected_outcome: API-CORE-001 rejects invalid or unsupported input without silent
+      success
+  - id: API-CORE-001.ambiguous
+    category: ambiguous
+    test_id: unit.version
+    evidence_path: tests/unit/version_test.cpp
+    expected_outcome: API-CORE-001 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-CORE-002
+  signature_fingerprint: sha256:15787e2e94fbf4f868d25f8cf6c0ccbb12517cf862ce1b34a83821969ba9a278
+  unit_test_id: unit.version
+  acceptance_test_id: install.consumer
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - QR-010
+  expected_outcome: capabilities() satisfies its declared public result and failure
+    contract
+  fixtures:
+  - id: API-CORE-002.positive
+    category: positive
+    test_id: unit.version
+    evidence_path: tests/unit/version_test.cpp
+    expected_outcome: API-CORE-002 returns the documented successful result
+  - id: API-CORE-002.negative
+    category: negative
+    test_id: unit.version
+    evidence_path: tests/unit/version_test.cpp
+    expected_outcome: API-CORE-002 rejects invalid or unsupported input without silent
+      success
+  - id: API-CORE-002.ambiguous
+    category: ambiguous
+    test_id: unit.version
+    evidence_path: tests/unit/version_test.cpp
+    expected_outcome: API-CORE-002 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-CORE-003
+  signature_fingerprint: sha256:d590366b80be69a4c215c934de46c443e9b938c5cafe38d120222c398c392bb2
+  unit_test_id: unit.evidence-coverage
+  acceptance_test_id: install.consumer
+  covered_member_indexes:
+  - 0
+  - 1
+  - 2
+  - 3
+  covered_use_cases: []
+  covered_requirements:
+  - FR-008
+  - FR-011
+  expected_outcome: evidence::{add,items,to_json,to_markdown} satisfies its declared
+    public result and failure contract
+  fixtures:
+  - id: API-CORE-003.positive
+    category: positive
+    test_id: unit.evidence-coverage
+    evidence_path: tests/unit/core/evidence_coverage_test.cpp
+    expected_outcome: API-CORE-003 returns the documented successful result
+  - id: API-CORE-003.negative
+    category: negative
+    test_id: unit.evidence-coverage
+    evidence_path: tests/unit/core/evidence_coverage_test.cpp
+    expected_outcome: API-CORE-003 rejects invalid or unsupported input without silent
+      success
+  - id: API-CORE-003.ambiguous
+    category: ambiguous
+    test_id: unit.evidence-coverage
+    evidence_path: tests/unit/core/evidence_coverage_test.cpp
+    expected_outcome: API-CORE-003 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-CORE-004
+  signature_fingerprint: sha256:439cfc1f164979287ff750183b73afcc9d3980d2cdebdad620789fe80f0d03a9
+  unit_test_id: unit.evidence-coverage
+  acceptance_test_id: install.consumer
+  covered_member_indexes:
+  - 0
+  - 1
+  - 2
+  - 3
+  covered_use_cases: []
+  covered_requirements:
+  - FR-008
+  - FR-010
+  expected_outcome: coverage_report::{complete,units,to_json,to_markdown} satisfies
+    its declared public result and failure contract
+  fixtures:
+  - id: API-CORE-004.positive
+    category: positive
+    test_id: unit.evidence-coverage
+    evidence_path: tests/unit/core/evidence_coverage_test.cpp
+    expected_outcome: API-CORE-004 returns the documented successful result
+  - id: API-CORE-004.negative
+    category: negative
+    test_id: unit.evidence-coverage
+    evidence_path: tests/unit/core/evidence_coverage_test.cpp
+    expected_outcome: API-CORE-004 rejects invalid or unsupported input without silent
+      success
+  - id: API-CORE-004.ambiguous
+    category: ambiguous
+    test_id: unit.evidence-coverage
+    evidence_path: tests/unit/core/evidence_coverage_test.cpp
+    expected_outcome: API-CORE-004 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-EXP-002
+  signature_fingerprint: sha256:e9ed782086cceba6787a9693bf1fa1ad103adb0bc4098fab9febb6c5421f5308
+  unit_test_id: unit.search
+  acceptance_test_id: integration.m2-search-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-008
+  - FR-018
+  - QR-001
+  expected_outcome: explain::why_not_matched satisfies its declared public result
+    and failure contract
+  fixtures:
+  - id: API-EXP-002.positive
+    category: positive
+    test_id: unit.search
+    evidence_path: tests/unit/search/search_test.cpp
+    expected_outcome: API-EXP-002 returns the documented successful result
+  - id: API-EXP-002.negative
+    category: negative
+    test_id: unit.search
+    evidence_path: tests/unit/search/search_test.cpp
+    expected_outcome: API-EXP-002 rejects invalid or unsupported input without silent
+      success
+  - id: API-EXP-002.ambiguous
+    category: ambiguous
+    test_id: unit.search
+    evidence_path: tests/unit/search/search_test.cpp
+    expected_outcome: API-EXP-002 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-FACT-001
+  signature_fingerprint: sha256:4c36e740a41436761ec96c06ec8519c14707eee9a3febc92e5c695181d48f552
+  unit_test_id: unit.fact-contract
+  acceptance_test_id: install.consumer
+  covered_member_indexes:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  covered_use_cases: []
+  covered_requirements:
+  - FR-005
+  - QR-001
+  expected_outcome: fact_profile::{minimal,semantic_search,refactor,generation,flow,full,include,exclude,precision}
+    satisfies its declared public result and failure contract
+  fixtures:
+  - id: API-FACT-001.positive
+    category: positive
+    test_id: unit.fact-contract
+    evidence_path: tests/unit/facts/fact_contract_test.cpp
+    expected_outcome: API-FACT-001 returns the documented successful result
+  - id: API-FACT-001.negative
+    category: negative
+    test_id: unit.fact-contract
+    evidence_path: tests/unit/facts/fact_contract_test.cpp
+    expected_outcome: API-FACT-001 rejects invalid or unsupported input without silent
+      success
+  - id: API-FACT-001.ambiguous
+    category: ambiguous
+    test_id: unit.fact-contract
+    evidence_path: tests/unit/facts/fact_contract_test.cpp
+    expected_outcome: API-FACT-001 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-FACT-002
+  signature_fingerprint: sha256:cadc83bc7a1ddd6071b40569dbfafa45bbfed70e8463dc35763a18ff1a1ace50
+  unit_test_id: unit.fact-store
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-005
+  - QR-001
+  expected_outcome: fact_store::find(fact_query) satisfies its declared public result
+    and failure contract
+  fixtures:
+  - id: API-FACT-002.positive
+    category: positive
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-002 returns the documented successful result
+  - id: API-FACT-002.negative
+    category: negative
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-002 rejects invalid or unsupported input without silent
+      success
+  - id: API-FACT-002.ambiguous
+    category: ambiguous
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-002 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-FACT-003
+  signature_fingerprint: sha256:0056e80277d8a79ecbff47bed0bbd283ca5a1667f25ae4c64731eb6502901aa5
+  unit_test_id: unit.fact-store
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-005
+  - QR-001
+  expected_outcome: fact_store::symbols() satisfies its declared public result and
+    failure contract
+  fixtures:
+  - id: API-FACT-003.positive
+    category: positive
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-003 returns the documented successful result
+  - id: API-FACT-003.negative
+    category: negative
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-003 rejects invalid or unsupported input without silent
+      success
+  - id: API-FACT-003.ambiguous
+    category: ambiguous
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-003 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-FACT-004
+  signature_fingerprint: sha256:4a09fe12bbd8c5ea03b789a3400ce36ac76178d020dde1a8a78462921bf28f49
+  unit_test_id: unit.fact-store
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-005
+  - QR-001
+  expected_outcome: fact_store::references(symbol_id) satisfies its declared public
+    result and failure contract
+  fixtures:
+  - id: API-FACT-004.positive
+    category: positive
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-004 returns the documented successful result
+  - id: API-FACT-004.negative
+    category: negative
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-004 rejects invalid or unsupported input without silent
+      success
+  - id: API-FACT-004.ambiguous
+    category: ambiguous
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-004 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-FACT-005
+  signature_fingerprint: sha256:602bb1506fdd68665990546957767a6506cc40a3e1155e3fef5180e128910cdb
+  unit_test_id: unit.fact-store
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-005
+  - FR-009
+  - QR-001
+  expected_outcome: fact_store::calls() satisfies its declared public result and failure
+    contract
+  fixtures:
+  - id: API-FACT-005.positive
+    category: positive
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-005 returns the documented successful result
+  - id: API-FACT-005.negative
+    category: negative
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-005 rejects invalid or unsupported input without silent
+      success
+  - id: API-FACT-005.ambiguous
+    category: ambiguous
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-005 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-FACT-006
+  signature_fingerprint: sha256:734ba3cda2f9efe70ea962229e311359aad515d669f8dfb13143d67f4e393bf1
+  unit_test_id: unit.fact-store
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-005
+  - QR-001
+  expected_outcome: fact_store::inheritance() satisfies its declared public result
+    and failure contract
+  fixtures:
+  - id: API-FACT-006.positive
+    category: positive
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-006 returns the documented successful result
+  - id: API-FACT-006.negative
+    category: negative
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-006 rejects invalid or unsupported input without silent
+      success
+  - id: API-FACT-006.ambiguous
+    category: ambiguous
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-006 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-FACT-007
+  signature_fingerprint: sha256:8c555f51a821e623795eb7b6277730ca00ae432c42a33f41ae992b27fb9ffebe
+  unit_test_id: unit.fact-store
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-005
+  - QR-001
+  expected_outcome: fact_store::overrides() satisfies its declared public result and
+    failure contract
+  fixtures:
+  - id: API-FACT-007.positive
+    category: positive
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-007 returns the documented successful result
+  - id: API-FACT-007.negative
+    category: negative
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-007 rejects invalid or unsupported input without silent
+      success
+  - id: API-FACT-007.ambiguous
+    category: ambiguous
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-007 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-FACT-008
+  signature_fingerprint: sha256:08c62b7f7fb5a2cbf8400ea26bd79d20284cde66f4c274fe5e665d2f7c277a3f
+  unit_test_id: unit.fact-store
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-005
+  - QR-001
+  expected_outcome: fact_store::includes() satisfies its declared public result and
+    failure contract
+  fixtures:
+  - id: API-FACT-008.positive
+    category: positive
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-008 returns the documented successful result
+  - id: API-FACT-008.negative
+    category: negative
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-008 rejects invalid or unsupported input without silent
+      success
+  - id: API-FACT-008.ambiguous
+    category: ambiguous
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-008 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-FACT-009
+  signature_fingerprint: sha256:f05fe2a00a73a36bc0715f6deb2ca4af38dab246cca0ef57cd389f42e221b84e
+  unit_test_id: unit.fact-store
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-003
+  - FR-005
+  - QR-001
+  expected_outcome: fact_store::macros() satisfies its declared public result and
+    failure contract
+  fixtures:
+  - id: API-FACT-009.positive
+    category: positive
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-009 returns the documented successful result
+  - id: API-FACT-009.negative
+    category: negative
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-009 rejects invalid or unsupported input without silent
+      success
+  - id: API-FACT-009.ambiguous
+    category: ambiguous
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-009 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-FACT-010
+  signature_fingerprint: sha256:b57198f6c82c99bbe496b390ec3e65bc37115a2ded8014ce55e8efffa897d89b
+  unit_test_id: unit.fact-store
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-008
+  - QR-001
+  expected_outcome: fact_store::coverage(fact_profile,analysis_scope) satisfies its
+    declared public result and failure contract
+  fixtures:
+  - id: API-FACT-010.positive
+    category: positive
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-010 returns the documented successful result
+  - id: API-FACT-010.negative
+    category: negative
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-010 rejects invalid or unsupported input without silent
+      success
+  - id: API-FACT-010.ambiguous
+    category: ambiguous
+    test_id: unit.fact-store
+    evidence_path: tests/unit/store/fact_store_test.cpp
+    expected_outcome: API-FACT-010 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-INT-001
+  signature_fingerprint: sha256:f078c5614cdbe609d5b954134b6758a2e42a1ba06150909fe5e2a0e55e6470a3
+  unit_test_id: unit.frontend-job
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-018
+  - QR-003
+  - QR-010
+  expected_outcome: interop::linked_clang_version satisfies its declared public result
+    and failure contract
+  fixtures:
+  - id: API-INT-001.positive
+    category: positive
+    test_id: unit.frontend-job
+    evidence_path: tests/unit/llvm/frontend_job_test.cpp
+    expected_outcome: API-INT-001 returns the documented successful result
+  - id: API-INT-001.negative
+    category: negative
+    test_id: unit.frontend-job
+    evidence_path: tests/unit/llvm/frontend_job_test.cpp
+    expected_outcome: API-INT-001 rejects invalid or unsupported input without silent
+      success
+  - id: API-INT-001.ambiguous
+    category: ambiguous
+    test_id: unit.frontend-job
+    evidence_path: tests/unit/llvm/frontend_job_test.cpp
+    expected_outcome: API-INT-001 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-INT-002
+  signature_fingerprint: sha256:a4c0d049f7ee4e1c144fdcba162df5ff4eea7834fc6a6b519e03a8d927dd2e23
+  unit_test_id: unit.frontend-job
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-004
+  - FR-019
+  - FR-020
+  - QR-001
+  - QR-002
+  - QR-003
+  - QR-004
+  - QR-005
+  - QR-006
+  - QR-010
+  expected_outcome: interop::with_translation_unit satisfies its declared public result
+    and failure contract
+  fixtures:
+  - id: API-INT-002.positive
+    category: positive
+    test_id: unit.frontend-job
+    evidence_path: tests/unit/llvm/frontend_job_test.cpp
+    expected_outcome: API-INT-002 returns the documented successful result
+  - id: API-INT-002.negative
+    category: negative
+    test_id: unit.frontend-job
+    evidence_path: tests/unit/llvm/frontend_job_test.cpp
+    expected_outcome: API-INT-002 rejects invalid or unsupported input without silent
+      success
+  - id: API-INT-002.ambiguous
+    category: ambiguous
+    test_id: unit.frontend-job
+    evidence_path: tests/unit/llvm/frontend_job_test.cpp
+    expected_outcome: API-INT-002 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-SEL-001
+  signature_fingerprint: sha256:c8e9429700291df9ab577ec71058f1f97b92daf1666943e0d5aa3c996df03ae7
+  unit_test_id: unit.selectors
+  acceptance_test_id: integration.m2-search-conformance
+  covered_member_indexes:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  covered_use_cases: []
+  covered_requirements:
+  - FR-007
+  - QR-001
+  expected_outcome: file_selector builder family satisfies its declared public result
+    and failure contract
+  fixtures:
+  - id: API-SEL-001.positive
+    category: positive
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-001 returns the documented successful result
+  - id: API-SEL-001.negative
+    category: negative
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-001 rejects invalid or unsupported input without silent
+      success
+  - id: API-SEL-001.ambiguous
+    category: ambiguous
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-001 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-SEL-002
+  signature_fingerprint: sha256:158597f7269a10fa3f3916151f97d1ba3757d1e354dd52ba08a969d8337ae82b
+  unit_test_id: unit.selectors
+  acceptance_test_id: integration.m2-search-conformance
+  covered_member_indexes:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  - 13
+  - 14
+  - 15
+  - 16
+  covered_use_cases: []
+  covered_requirements:
+  - FR-006
+  - FR-007
+  - QR-001
+  expected_outcome: symbol_selector builder family satisfies its declared public result
+    and failure contract
+  fixtures:
+  - id: API-SEL-002.positive
+    category: positive
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-002 returns the documented successful result
+  - id: API-SEL-002.negative
+    category: negative
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-002 rejects invalid or unsupported input without silent
+      success
+  - id: API-SEL-002.ambiguous
+    category: ambiguous
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-002 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-SEL-003
+  signature_fingerprint: sha256:236427d43aa49d9ef3c4e94cde81905da7902d6951ea72b24bc225b4e8a1aad4
+  unit_test_id: unit.selectors
+  acceptance_test_id: integration.m2-search-conformance
+  covered_member_indexes:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  - 13
+  covered_use_cases: []
+  covered_requirements:
+  - FR-006
+  - FR-007
+  - QR-001
+  expected_outcome: type_selector builder family satisfies its declared public result
+    and failure contract
+  fixtures:
+  - id: API-SEL-003.positive
+    category: positive
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-003 returns the documented successful result
+  - id: API-SEL-003.negative
+    category: negative
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-003 rejects invalid or unsupported input without silent
+      success
+  - id: API-SEL-003.ambiguous
+    category: ambiguous
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-003 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-SEL-006
+  signature_fingerprint: sha256:a0c75263dd8d5dd8d4afbed31930224f235bbd918660010b5f8be4e779c81572
+  unit_test_id: unit.selectors
+  acceptance_test_id: integration.m2-search-conformance
+  covered_member_indexes:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  - 13
+  - 14
+  - 15
+  - 16
+  - 17
+  - 18
+  - 19
+  - 20
+  covered_use_cases:
+  - UC-SR-001
+  - UC-SR-002
+  covered_requirements:
+  - FR-007
+  - FR-009
+  - QR-001
+  expected_outcome: call_selector builder family satisfies its declared public result
+    and failure contract
+  fixtures:
+  - id: API-SEL-006.positive
+    category: positive
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-006 returns the documented successful result
+  - id: API-SEL-006.negative
+    category: negative
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-006 rejects invalid or unsupported input without silent
+      success
+  - id: API-SEL-006.ambiguous
+    category: ambiguous
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-006 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-SEL-008
+  signature_fingerprint: sha256:db4ff4d614eafb8b8d0a4170224cfaa5e77d6a98752d60aa3e9b71eba41e3f7f
+  unit_test_id: unit.selectors
+  acceptance_test_id: integration.m2-search-conformance
+  covered_member_indexes:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  covered_use_cases: []
+  covered_requirements:
+  - FR-006
+  - FR-007
+  expected_outcome: any_symbol/function/method/record/variable/macro/type helpers
+    satisfies its declared public result and failure contract
+  fixtures:
+  - id: API-SEL-008.positive
+    category: positive
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-008 returns the documented successful result
+  - id: API-SEL-008.negative
+    category: negative
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-008 rejects invalid or unsupported input without silent
+      success
+  - id: API-SEL-008.ambiguous
+    category: ambiguous
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-008 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-SEL-009
+  signature_fingerprint: sha256:248934c1db65198944f397f629dc9177a5e5bcde6e2c93ee5129b786a1e02121
+  unit_test_id: unit.selectors
+  acceptance_test_id: integration.m2-search-conformance
+  covered_member_indexes:
+  - 0
+  - 1
+  - 2
+  covered_use_cases:
+  - UC-SR-001
+  - UC-SR-002
+  covered_requirements:
+  - FR-007
+  - FR-009
+  expected_outcome: calls_to/calls_to_function/calls_to_method helpers satisfies its
+    declared public result and failure contract
+  fixtures:
+  - id: API-SEL-009.positive
+    category: positive
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-009 returns the documented successful result
+  - id: API-SEL-009.negative
+    category: negative
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-009 rejects invalid or unsupported input without silent
+      success
+  - id: API-SEL-009.ambiguous
+    category: ambiguous
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-009 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-SEL-010
+  signature_fingerprint: sha256:5a9c31955dd08d580ea2d68ab9b3c3d864a50a8081545bfff5bf6d7db15b6580
+  unit_test_id: unit.selectors
+  acceptance_test_id: integration.m2-search-conformance
+  covered_member_indexes:
+  - 0
+  - 1
+  - 2
+  - 3
+  covered_use_cases: []
+  covered_requirements:
+  - FR-007
+  - FR-018
+  - QR-001
+  expected_outcome: semantic_selector::{from_json,requirements,explain,to_json} satisfies
+    its declared public result and failure contract
+  fixtures:
+  - id: API-SEL-010.positive
+    category: positive
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-010 returns the documented successful result
+  - id: API-SEL-010.negative
+    category: negative
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-010 rejects invalid or unsupported input without silent
+      success
+  - id: API-SEL-010.ambiguous
+    category: ambiguous
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-010 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-SEL-011
+  signature_fingerprint: sha256:af3bea8d8ebde60611cc1f9d96793fc4f262ffcac39e6ac073ba7b8f60c235cf
+  unit_test_id: unit.selectors
+  acceptance_test_id: integration.m2-search-conformance
+  covered_member_indexes:
+  - 0
+  - 1
+  - 2
+  - 3
+  covered_use_cases: []
+  covered_requirements:
+  - FR-007
+  expected_outcome: semantic(typed_selector) satisfies its declared public result
+    and failure contract
+  fixtures:
+  - id: API-SEL-011.positive
+    category: positive
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-011 returns the documented successful result
+  - id: API-SEL-011.negative
+    category: negative
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-011 rejects invalid or unsupported input without silent
+      success
+  - id: API-SEL-011.ambiguous
+    category: ambiguous
+    test_id: unit.selectors
+    evidence_path: tests/unit/select/selector_test.cpp
+    expected_outcome: API-SEL-011 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-SRCH-003
+  signature_fingerprint: sha256:daf1c6cf5399279ca599a5727382d6d6b5861b5c15819beb68a78ea431033539
+  unit_test_id: unit.search
+  acceptance_test_id: integration.m2-search-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases:
+  - UC-SR-001
+  - UC-SR-002
+  covered_requirements:
+  - FR-007
+  - FR-008
+  - FR-009
+  - QR-001
+  - QR-002
+  expected_outcome: search::calls satisfies its declared public result and failure
+    contract
+  fixtures:
+  - id: API-SRCH-003.positive
+    category: positive
+    test_id: unit.search
+    evidence_path: tests/unit/search/search_test.cpp
+    expected_outcome: API-SRCH-003 returns the documented successful result
+  - id: API-SRCH-003.negative
+    category: negative
+    test_id: unit.search
+    evidence_path: tests/unit/search/search_test.cpp
+    expected_outcome: API-SRCH-003 rejects invalid or unsupported input without silent
+      success
+  - id: API-SRCH-003.ambiguous
+    category: ambiguous
+    test_id: unit.search
+    evidence_path: tests/unit/search/search_test.cpp
+    expected_outcome: API-SRCH-003 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-SRCH-004
+  signature_fingerprint: sha256:45b5a52a7be28140b2f44610111c8b92a74ed020f06a559a87e38994745e16b4
+  unit_test_id: unit.search
+  acceptance_test_id: integration.m2-search-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases:
+  - UC-SR-001
+  covered_requirements:
+  - FR-007
+  - FR-008
+  - QR-001
+  expected_outcome: search::calls_to_function satisfies its declared public result
+    and failure contract
+  fixtures:
+  - id: API-SRCH-004.positive
+    category: positive
+    test_id: unit.search
+    evidence_path: tests/unit/search/search_test.cpp
+    expected_outcome: API-SRCH-004 returns the documented successful result
+  - id: API-SRCH-004.negative
+    category: negative
+    test_id: unit.search
+    evidence_path: tests/unit/search/search_test.cpp
+    expected_outcome: API-SRCH-004 rejects invalid or unsupported input without silent
+      success
+  - id: API-SRCH-004.ambiguous
+    category: ambiguous
+    test_id: unit.search
+    evidence_path: tests/unit/search/search_test.cpp
+    expected_outcome: API-SRCH-004 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-SRCH-005
+  signature_fingerprint: sha256:d4e1b61a3d37e843311b01d14c62826df7844a5e00eab2e931098685dccc49e9
+  unit_test_id: unit.search
+  acceptance_test_id: integration.m2-search-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases:
+  - UC-SR-002
+  covered_requirements:
+  - FR-007
+  - FR-008
+  - FR-009
+  - QR-001
+  - QR-002
+  expected_outcome: search::calls_to_method satisfies its declared public result and
+    failure contract
+  fixtures:
+  - id: API-SRCH-005.positive
+    category: positive
+    test_id: unit.search
+    evidence_path: tests/unit/search/search_test.cpp
+    expected_outcome: API-SRCH-005 returns the documented successful result
+  - id: API-SRCH-005.negative
+    category: negative
+    test_id: unit.search
+    evidence_path: tests/unit/search/search_test.cpp
+    expected_outcome: API-SRCH-005 rejects invalid or unsupported input without silent
+      success
+  - id: API-SRCH-005.ambiguous
+    category: ambiguous
+    test_id: unit.search
+    evidence_path: tests/unit/search/search_test.cpp
+    expected_outcome: API-SRCH-005 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-SRCH-006
+  signature_fingerprint: sha256:f4fb15563a0488bebd88fbddff5129a4741cee335522f0e65ae36b36dafac685
+  unit_test_id: unit.search
+  acceptance_test_id: integration.m2-search-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases:
+  - UC-GR-001
+  covered_requirements:
+  - FR-008
+  - FR-009
+  - QR-001
+  expected_outcome: search::inheritance satisfies its declared public result and failure
+    contract
+  fixtures:
+  - id: API-SRCH-006.positive
+    category: positive
+    test_id: unit.search
+    evidence_path: tests/unit/search/search_test.cpp
+    expected_outcome: API-SRCH-006 returns the documented successful result
+  - id: API-SRCH-006.negative
+    category: negative
+    test_id: unit.search
+    evidence_path: tests/unit/search/search_test.cpp
+    expected_outcome: API-SRCH-006 rejects invalid or unsupported input without silent
+      success
+  - id: API-SRCH-006.ambiguous
+    category: ambiguous
+    test_id: unit.search
+    evidence_path: tests/unit/search/search_test.cpp
+    expected_outcome: API-SRCH-006 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-SRCH-007
+  signature_fingerprint: sha256:db6d878297da8b91adbb9f4f5beded715425b6daecc4b444d5adcc15881bede3
+  unit_test_id: unit.search
+  acceptance_test_id: integration.m2-search-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases:
+  - UC-GR-001
+  covered_requirements:
+  - FR-008
+  - FR-009
+  - QR-001
+  expected_outcome: search::overrides satisfies its declared public result and failure
+    contract
+  fixtures:
+  - id: API-SRCH-007.positive
+    category: positive
+    test_id: unit.search
+    evidence_path: tests/unit/search/search_test.cpp
+    expected_outcome: API-SRCH-007 returns the documented successful result
+  - id: API-SRCH-007.negative
+    category: negative
+    test_id: unit.search
+    evidence_path: tests/unit/search/search_test.cpp
+    expected_outcome: API-SRCH-007 rejects invalid or unsupported input without silent
+      success
+  - id: API-SRCH-007.ambiguous
+    category: ambiguous
+    test_id: unit.search
+    evidence_path: tests/unit/search/search_test.cpp
+    expected_outcome: API-SRCH-007 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-TEST-001
+  signature_fingerprint: sha256:4c9b40c214f9ece3c5f4fda3e86951dca06cd8479e6db023c7e4aca7598dfb4d
+  unit_test_id: unit.testing-substrate
+  acceptance_test_id: install.consumer
+  covered_member_indexes:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  - 13
+  covered_use_cases: []
+  covered_requirements:
+  - FR-020
+  - QR-001
+  expected_outcome: workspace_fixture::{cpp,c,main_file,add_file,add_header,add_variant,standard,target,argument,generated,system_header,materialize};
+    fault_plan::{make,probe} satisfies its declared public result and failure contract
+  fixtures:
+  - id: API-TEST-001.positive
+    category: positive
+    test_id: unit.testing-substrate
+    evidence_path: tests/unit/testing/testing_substrate_test.cpp
+    expected_outcome: API-TEST-001 returns the documented successful result
+  - id: API-TEST-001.negative
+    category: negative
+    test_id: unit.testing-substrate
+    evidence_path: tests/unit/testing/testing_substrate_test.cpp
+    expected_outcome: API-TEST-001 rejects invalid or unsupported input without silent
+      success
+  - id: API-TEST-001.ambiguous
+    category: ambiguous
+    test_id: unit.testing-substrate
+    evidence_path: tests/unit/testing/testing_substrate_test.cpp
+    expected_outcome: API-TEST-001 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-TEST-002
+  signature_fingerprint: sha256:4e30f3fdec5f05e2f6f69b4e555188ba1e9cd258a9af39bab6cd080074644a10
+  unit_test_id: unit.testing-substrate
+  acceptance_test_id: install.consumer
+  covered_member_indexes:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  covered_use_cases: []
+  covered_requirements:
+  - FR-008
+  expected_outcome: result_assertion builder/check satisfies its declared public result
+    and failure contract
+  fixtures:
+  - id: API-TEST-002.positive
+    category: positive
+    test_id: unit.testing-substrate
+    evidence_path: tests/unit/testing/testing_substrate_test.cpp
+    expected_outcome: API-TEST-002 returns the documented successful result
+  - id: API-TEST-002.negative
+    category: negative
+    test_id: unit.testing-substrate
+    evidence_path: tests/unit/testing/testing_substrate_test.cpp
+    expected_outcome: API-TEST-002 rejects invalid or unsupported input without silent
+      success
+  - id: API-TEST-002.ambiguous
+    category: ambiguous
+    test_id: unit.testing-substrate
+    evidence_path: tests/unit/testing/testing_substrate_test.cpp
+    expected_outcome: API-TEST-002 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-TEST-005
+  signature_fingerprint: sha256:072d60f45b1db5c9556a2cff38d4570e18d4c4263259075863abe7e288909214
+  unit_test_id: unit.testing-substrate
+  acceptance_test_id: install.consumer
+  covered_member_indexes:
+  - 0
+  - 1
+  - 2
+  covered_use_cases: []
+  covered_requirements:
+  - QR-001
+  expected_outcome: testing::{check_property,check_determinism} satisfies its declared
+    public result and failure contract
+  fixtures:
+  - id: API-TEST-005.positive
+    category: positive
+    test_id: unit.testing-substrate
+    evidence_path: tests/unit/testing/testing_substrate_test.cpp
+    expected_outcome: API-TEST-005 returns the documented successful result
+  - id: API-TEST-005.negative
+    category: negative
+    test_id: unit.testing-substrate
+    evidence_path: tests/unit/testing/testing_substrate_test.cpp
+    expected_outcome: API-TEST-005 rejects invalid or unsupported input without silent
+      success
+  - id: API-TEST-005.ambiguous
+    category: ambiguous
+    test_id: unit.testing-substrate
+    evidence_path: tests/unit/testing/testing_substrate_test.cpp
+    expected_outcome: API-TEST-005 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-TEST-006
+  signature_fingerprint: sha256:63d098a2572aceefec45abfe1a8ed665eb6ce014cc119e67f9a9f85b67492995
+  unit_test_id: unit.testing-substrate
+  acceptance_test_id: install.consumer
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - QR-009
+  expected_outcome: testing::assert_schema_conforms satisfies its declared public
+    result and failure contract
+  fixtures:
+  - id: API-TEST-006.positive
+    category: positive
+    test_id: unit.testing-substrate
+    evidence_path: tests/unit/testing/testing_substrate_test.cpp
+    expected_outcome: API-TEST-006 returns the documented successful result
+  - id: API-TEST-006.negative
+    category: negative
+    test_id: unit.testing-substrate
+    evidence_path: tests/unit/testing/testing_substrate_test.cpp
+    expected_outcome: API-TEST-006 rejects invalid or unsupported input without silent
+      success
+  - id: API-TEST-006.ambiguous
+    category: ambiguous
+    test_id: unit.testing-substrate
+    evidence_path: tests/unit/testing/testing_substrate_test.cpp
+    expected_outcome: API-TEST-006 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-TEST-007
+  signature_fingerprint: sha256:2c8d40b0b0faf9fb1534392ff6cc46eba5e1fc5df45a2cc51fe77b4eb5d06203
+  unit_test_id: unit.testing-substrate
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-001
+  - FR-005
+  - FR-020
+  - QR-001
+  - QR-002
+  - QR-004
+  expected_outcome: workspace_fixture::open satisfies its declared public result and
+    failure contract
+  fixtures:
+  - id: API-TEST-007.positive
+    category: positive
+    test_id: unit.testing-substrate
+    evidence_path: tests/unit/testing/testing_substrate_test.cpp
+    expected_outcome: API-TEST-007 returns the documented successful result
+  - id: API-TEST-007.negative
+    category: negative
+    test_id: unit.testing-substrate
+    evidence_path: tests/unit/testing/testing_substrate_test.cpp
+    expected_outcome: API-TEST-007 rejects invalid or unsupported input without silent
+      success
+  - id: API-TEST-007.ambiguous
+    category: ambiguous
+    test_id: unit.testing-substrate
+    evidence_path: tests/unit/testing/testing_substrate_test.cpp
+    expected_outcome: API-TEST-007 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-WS-001
+  signature_fingerprint: sha256:3749a527bc7c8b1bdcdd68fb1ae22a6ddd580fb11ae84a2dfe7c0a6b5286151e
+  unit_test_id: unit.workspace-catalog
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-001
+  - QR-007
+  expected_outcome: workspace_options::from_compilation_database(path) satisfies its
+    declared public result and failure contract
+  fixtures:
+  - id: API-WS-001.positive
+    category: positive
+    test_id: unit.workspace-catalog
+    evidence_path: tests/unit/workspace/workspace_catalog_test.cpp
+    expected_outcome: API-WS-001 returns the documented successful result
+  - id: API-WS-001.negative
+    category: negative
+    test_id: unit.workspace-catalog
+    evidence_path: tests/unit/workspace/workspace_catalog_test.cpp
+    expected_outcome: API-WS-001 rejects invalid or unsupported input without silent
+      success
+  - id: API-WS-001.ambiguous
+    category: ambiguous
+    test_id: unit.workspace-catalog
+    evidence_path: tests/unit/workspace/workspace_catalog_test.cpp
+    expected_outcome: API-WS-001 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-WS-002
+  signature_fingerprint: sha256:d7940b317f42ce7f19da9161d748d2f7985a45483c9fc2b988dfee7f2741c60b
+  unit_test_id: unit.workspace-catalog
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-001
+  - FR-002
+  - QR-001
+  - QR-007
+  expected_outcome: workspace::open(workspace_options, execution_context) satisfies
+    its declared public result and failure contract
+  fixtures:
+  - id: API-WS-002.positive
+    category: positive
+    test_id: unit.workspace-catalog
+    evidence_path: tests/unit/workspace/workspace_catalog_test.cpp
+    expected_outcome: API-WS-002 returns the documented successful result
+  - id: API-WS-002.negative
+    category: negative
+    test_id: unit.workspace-catalog
+    evidence_path: tests/unit/workspace/workspace_catalog_test.cpp
+    expected_outcome: API-WS-002 rejects invalid or unsupported input without silent
+      success
+  - id: API-WS-002.ambiguous
+    category: ambiguous
+    test_id: unit.workspace-catalog
+    evidence_path: tests/unit/workspace/workspace_catalog_test.cpp
+    expected_outcome: API-WS-002 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-WS-003
+  signature_fingerprint: sha256:753a9b4d1bb989afc258d64ab87357df61b916f7af1d2a496e449742250f0756
+  unit_test_id: unit.workspace-catalog
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-002
+  - QR-001
+  expected_outcome: workspace::compile_units() satisfies its declared public result
+    and failure contract
+  fixtures:
+  - id: API-WS-003.positive
+    category: positive
+    test_id: unit.workspace-catalog
+    evidence_path: tests/unit/workspace/workspace_catalog_test.cpp
+    expected_outcome: API-WS-003 returns the documented successful result
+  - id: API-WS-003.negative
+    category: negative
+    test_id: unit.workspace-catalog
+    evidence_path: tests/unit/workspace/workspace_catalog_test.cpp
+    expected_outcome: API-WS-003 rejects invalid or unsupported input without silent
+      success
+  - id: API-WS-003.ambiguous
+    category: ambiguous
+    test_id: unit.workspace-catalog
+    evidence_path: tests/unit/workspace/workspace_catalog_test.cpp
+    expected_outcome: API-WS-003 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-WS-004
+  signature_fingerprint: sha256:4b6fa3a1a7a0fa6e2d783b5c82b42f09fc59dac61418229be04a9271b012b650
+  unit_test_id: unit.workspace-catalog
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-001
+  - FR-002
+  expected_outcome: workspace::command_for(path) satisfies its declared public result
+    and failure contract
+  fixtures:
+  - id: API-WS-004.positive
+    category: positive
+    test_id: unit.workspace-catalog
+    evidence_path: tests/unit/workspace/workspace_catalog_test.cpp
+    expected_outcome: API-WS-004 returns the documented successful result
+  - id: API-WS-004.negative
+    category: negative
+    test_id: unit.workspace-catalog
+    evidence_path: tests/unit/workspace/workspace_catalog_test.cpp
+    expected_outcome: API-WS-004 rejects invalid or unsupported input without silent
+      success
+  - id: API-WS-004.ambiguous
+    category: ambiguous
+    test_id: unit.workspace-catalog
+    evidence_path: tests/unit/workspace/workspace_catalog_test.cpp
+    expected_outcome: API-WS-004 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-WS-005
+  signature_fingerprint: sha256:5c614f83d10df4a9401230ee2f2cd91c170d6005fa37444db4ad468983eda97e
+  unit_test_id: unit.provisioning
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-005
+  - FR-010
+  - QR-004
+  - QR-005
+  - QR-011
+  - QR-012
+  expected_outcome: workspace::ensure(fact_profile, analysis_scope, execution_context)
+    satisfies its declared public result and failure contract
+  fixtures:
+  - id: API-WS-005.positive
+    category: positive
+    test_id: unit.provisioning
+    evidence_path: tests/unit/workspace/provisioning_test.cpp
+    expected_outcome: API-WS-005 returns the documented successful result
+  - id: API-WS-005.negative
+    category: negative
+    test_id: unit.provisioning
+    evidence_path: tests/unit/workspace/provisioning_test.cpp
+    expected_outcome: API-WS-005 rejects invalid or unsupported input without silent
+      success
+  - id: API-WS-005.ambiguous
+    category: ambiguous
+    test_id: unit.provisioning
+    evidence_path: tests/unit/workspace/provisioning_test.cpp
+    expected_outcome: API-WS-005 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-WS-006
+  signature_fingerprint: sha256:d84d450bfea28ad01b6476388f3eea89406bcd28f8e0f03a13db5db6fbda8359
+  unit_test_id: unit.provisioning
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - FR-005
+  - QR-001
+  expected_outcome: workspace::facts() satisfies its declared public result and failure
+    contract
+  fixtures:
+  - id: API-WS-006.positive
+    category: positive
+    test_id: unit.provisioning
+    evidence_path: tests/unit/workspace/provisioning_test.cpp
+    expected_outcome: API-WS-006 returns the documented successful result
+  - id: API-WS-006.negative
+    category: negative
+    test_id: unit.provisioning
+    evidence_path: tests/unit/workspace/provisioning_test.cpp
+    expected_outcome: API-WS-006 rejects invalid or unsupported input without silent
+      success
+  - id: API-WS-006.ambiguous
+    category: ambiguous
+    test_id: unit.provisioning
+    evidence_path: tests/unit/workspace/provisioning_test.cpp
+    expected_outcome: API-WS-006 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-WS-007
+  signature_fingerprint: sha256:eb99e571b55bd15cfb849429febe0ab41b40a638f671b4b792bad07c4cc68553
+  unit_test_id: unit.provisioning
+  acceptance_test_id: integration.m1-conformance
+  covered_member_indexes:
+  - 0
+  covered_use_cases: []
+  covered_requirements:
+  - QR-010
+  expected_outcome: workspace::doctor(execution_context) satisfies its declared public
+    result and failure contract
+  fixtures:
+  - id: API-WS-007.positive
+    category: positive
+    test_id: unit.provisioning
+    evidence_path: tests/unit/workspace/provisioning_test.cpp
+    expected_outcome: API-WS-007 returns the documented successful result
+  - id: API-WS-007.negative
+    category: negative
+    test_id: unit.provisioning
+    evidence_path: tests/unit/workspace/provisioning_test.cpp
+    expected_outcome: API-WS-007 rejects invalid or unsupported input without silent
+      success
+  - id: API-WS-007.ambiguous
+    category: ambiguous
+    test_id: unit.provisioning
+    evidence_path: tests/unit/workspace/provisioning_test.cpp
+    expected_outcome: API-WS-007 preserves empty, partial, unresolved, or variant
+      state explicitly
+- api_id: API-WS-008
+  signature_fingerprint: sha256:dade0894af26e531e563987ac02c4c44d3e843c3396c4b66fd7e60bcf684b0e0
+  unit_test_id: unit.workspace-catalog
+  acceptance_test_id: install.consumer
+  covered_member_indexes:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  covered_use_cases: []
+  covered_requirements:
+  - QR-001
+  expected_outcome: analysis_scope::{all,files,compile_units,changed_files,include_headers,variants}
+    satisfies its declared public result and failure contract
+  fixtures:
+  - id: API-WS-008.positive
+    category: positive
+    test_id: unit.workspace-catalog
+    evidence_path: tests/unit/workspace/workspace_catalog_test.cpp
+    expected_outcome: API-WS-008 returns the documented successful result
+  - id: API-WS-008.negative
+    category: negative
+    test_id: unit.workspace-catalog
+    evidence_path: tests/unit/workspace/workspace_catalog_test.cpp
+    expected_outcome: API-WS-008 rejects invalid or unsupported input without silent
+      success
+  - id: API-WS-008.ambiguous
+    category: ambiguous
+    test_id: unit.workspace-catalog
+    evidence_path: tests/unit/workspace/workspace_catalog_test.cpp
+    expected_outcome: API-WS-008 preserves empty, partial, unresolved, or variant
+      state explicitly

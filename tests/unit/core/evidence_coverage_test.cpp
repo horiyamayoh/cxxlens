@@ -103,6 +103,7 @@ namespace
 						"insertion order changed evidence semantics");
 		passed &= check(forward.to_json() == reverse.to_json(),
 						"insertion order changed evidence projection");
+		passed &= check(!forward.to_markdown().empty(), "evidence Markdown projection is empty");
 		const auto before = forward.semantic_representation();
 		forward.merge(reverse).merge(reverse);
 		passed &=
@@ -177,6 +178,10 @@ namespace
 		for (const auto state : states)
 			passed &= check(report.count(state) == 1U, "derived coverage count diverged");
 		passed &= check(!report.complete(), "failed/unresolved coverage reported complete");
+		passed &= check(report.units().size() == states.size() &&
+							report.to_json().find("cxxlens.coverage.v1") != std::string::npos &&
+							!report.to_markdown().empty(),
+						"coverage public projections or unit view are incomplete");
 
 		cxxlens::coverage_report duplicate_request;
 		duplicate_request.request({"symbol", "a"})

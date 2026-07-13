@@ -596,6 +596,13 @@ def generate_report(
             fixtures = all(
                 {fixture["category"] for fixture in packet["fixtures"]}
                 == {"positive", "negative", "ambiguous"}
+                and all(
+                    fixture["case_ids"]
+                    and fixture["test_ids"]
+                    and fixture["expected_outcomes"]
+                    and fixture["evidence_candidates"]
+                    for fixture in packet["fixtures"]
+                )
                 for packet in packets
             )
             required_provider_rows = [

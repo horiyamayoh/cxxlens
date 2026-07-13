@@ -136,6 +136,14 @@ class TaskPacketTest(unittest.TestCase):
                 {fixture["category"] for fixture in packet["fixtures"]},
                 {"positive", "negative", "ambiguous"},
             )
+            for fixture in packet["fixtures"]:
+                if packet["generation"]["state"] == "complete":
+                    self.assertEqual(len(fixture["case_ids"]), 1)
+                    self.assertEqual(len(fixture["test_ids"]), 1)
+                    self.assertEqual(len(fixture["expected_outcomes"]), 1)
+                    self.assertEqual(len(fixture["evidence_candidates"]), 1)
+                else:
+                    self.assertEqual(fixture["case_ids"], [])
             self.assertTrue(
                 all(isinstance(command["argv"], list) for command in packet["acceptance_commands"])
             )
@@ -148,6 +156,15 @@ class TaskPacketTest(unittest.TestCase):
                 self.assertIn(
                     "exact_declaration_unresolved", packet["generation"]["block_reasons"]
                 )
+
+    def test_complete_packet_without_category_evidence_is_rejected(self) -> None:
+        corpus = self.generated()
+        packet = next(
+            value for value in corpus["packets"] if value["generation"]["state"] == "complete"
+        )
+        packet["fixtures"][0]["case_ids"] = []
+        self.resign(corpus, (packet["api_id"],))
+        self.assert_code(corpus, "task_packet.fixture-evidence-missing")
 
     def test_typed_expression_and_atomic_dependency_expansion(self) -> None:
         api_to_unit = {

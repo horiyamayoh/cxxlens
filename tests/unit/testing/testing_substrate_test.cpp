@@ -42,10 +42,17 @@ namespace
 								.system_header("a.hpp")
 								.generated("z.cpp")
 								.argument("-Wall");
+		const auto c_family = workspace_fixture::c("int main(void){return 0;}")
+								  .main_file("entry.c")
+								  .standard("c17")
+								  .target("x86_64-unknown-linux-gnu")
+								  .argument("-Wall");
 		auto first_bundle = first.materialize("/one/root");
 		auto second_bundle = second.materialize("/other/root");
-		bool passed = check(first_bundle && second_bundle, "valid fixture failed to materialize");
-		if (!first_bundle || !second_bundle)
+		auto c_bundle = c_family.materialize("/c/root");
+		bool passed = check(first_bundle && second_bundle && c_bundle,
+							"valid fixture family failed to materialize");
+		if (!first_bundle || !second_bundle || !c_bundle)
 			return false;
 		passed &= check(first_bundle.value().to_json() == second_bundle.value().to_json(),
 						"fixture insertion order or root changed canonical bytes");
@@ -192,6 +199,21 @@ namespace
 		bool passed = check(!report.passed() && report.failure->replay == "seed=41;case=0" &&
 								report.failure->minimal_input == "12",
 							"property failure did not report replayable seed/case/input");
+		auto no_shrinker = check_property(
+			property_options{7U, 2U, std::nullopt},
+			[](const std::uint64_t seed, const std::size_t index)
+			{
+				return seed + index;
+			},
+			[](const std::uint64_t value)
+			{
+				return value >= 7U;
+			},
+			[](const std::uint64_t value)
+			{
+				return std::to_string(value);
+			});
+		passed &= check(no_shrinker.passed(), "property overload without shrinker failed");
 		auto replay = check_property(
 			property_options{41U, 100U, 0U},
 			[](const std::uint64_t seed, const std::size_t index)

@@ -173,6 +173,10 @@ install(
         schemas/cxxlens_agent_task_card.schema.yaml
         schemas/cxxlens_public_api_contract.yaml
         schemas/cxxlens_api_catalog.schema.yaml
+        schemas/cxxlens_api_test_coverage.yaml
+        schemas/cxxlens_api_test_coverage.schema.yaml
+        schemas/cxxlens_api_test_coverage_report.json
+        schemas/cxxlens_api_test_coverage_report.schema.yaml
         schemas/cxxlens_coverage.schema.yaml
         schemas/cxxlens_diagnostic.schema.yaml
         schemas/cxxlens_error.schema.yaml

@@ -83,6 +83,10 @@ namespace
 
 	[[nodiscard]] bool test_precedence_and_immutability(const std::filesystem::path& root)
 	{
+		auto defaults = cxxlens::configuration::defaults();
+		bool passed = check(defaults && defaults.value().validate() &&
+								!defaults.value().resolved_json().empty(),
+							"configuration defaults are not valid");
 		const auto base_file = root / "base.yaml";
 		const auto cli_file = root / "cli.yaml";
 		const auto api_file = root / "api.yaml";
@@ -99,7 +103,7 @@ namespace
 		auto base = cxxlens::configuration::load(base_file);
 		auto cli = cxxlens::configuration::load(cli_file);
 		auto api = cxxlens::configuration::load(api_file);
-		bool passed = check(base && cli && api, "valid layered documents failed to load");
+		passed &= check(base && cli && api, "valid layered documents failed to load");
 		if (!base || !cli || !api)
 			return false;
 		const auto immutable_before = base.value().resolved_json();

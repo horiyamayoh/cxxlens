@@ -136,6 +136,12 @@ def validate_document(document: Any, inventory_text: str | None = None) -> dict:
         "schemas/cxxlens_public_api_contract.yaml"
     ):
         fail("authority must identify the machine-readable catalog")
+    if authority.get("executable_test_coverage") != "schemas/cxxlens_api_test_coverage.yaml":
+        fail("authority must identify the executable API test coverage manifest")
+    if authority.get("executable_test_coverage_report") != (
+        "schemas/cxxlens_api_test_coverage_report.json"
+    ):
+        fail("authority must identify the executable API test coverage report")
 
     registries = document.get("registries")
     if not isinstance(registries, dict):

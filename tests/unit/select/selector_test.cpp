@@ -1,3 +1,4 @@
+#include <array>
 #include <cstdlib>
 #include <iostream>
 #include <map>
@@ -136,5 +137,97 @@ int main()
 	require(!flagship.explain().empty() &&
 				flagship.explain().find("select.call.method-name") != std::string::npos,
 			"predicate reason explanation is missing");
+
+	const auto file_surface = file_selector{}
+								  .path_exact("src/main.cpp")
+								  .path_glob("src/*.cpp")
+								  .generated(false)
+								  .system(false)
+								  .any_of({file_selector{}.path_exact("src/main.cpp")})
+								  .negate();
+	require(!file_surface.to_json().empty(), "file selector family surface is incomplete");
+
+	const auto symbol_surface = any_symbol()
+									.kind(symbol_kind::method)
+									.kinds({symbol_kind::method, symbol_kind::function})
+									.name("Base::step", name_match::qualified_exact)
+									.declared_in(file_selector{}.path_glob("include/*.hpp"))
+									.defined()
+									.member_of(record("Base"))
+									.derived_from(record("Root"))
+									.overrides(method("Root::step"))
+									.public_surface()
+									.macro(macro_match_policy::include_with_origin)
+									.variants(variant_match_policy::report_per_variant)
+									.any_of({function("f"), method("Base::step")})
+									.all_of({record("Base")})
+									.negate();
+	require(!symbol_surface.to_json().empty() && !symbol_surface.explain().empty() &&
+				!symbol_surface.requirements().facts.to_json().empty(),
+			"symbol selector family surface is incomplete");
+
+	const auto type_surface = type_selector{}
+								  .canonical("const Base*")
+								  .spelling("Base const*")
+								  .declared_as(record("Base"))
+								  .pointer_to(type("Base"))
+								  .reference_to(type("Base"))
+								  .const_qualified()
+								  .derived_from(record("Root"))
+								  .including_derived()
+								  .convertible_to(type("Root"))
+								  .specialization_of("Box")
+								  .any_cvref();
+	require(!type_surface.to_json().empty() && !type_surface.explain().empty() &&
+				!type_surface.requirements().facts.to_json().empty(),
+			"type selector family surface is incomplete");
+
+	const auto call_surface =
+		any_call()
+			.kind(call_kind::member)
+			.kinds({call_kind::member, call_kind::virtual_member})
+			.callee(method("Base::step"))
+			.callee_name("Base::step")
+			.function_name("fixture::run")
+			.method_name("step")
+			.receiver_type(type("Base"))
+			.include_derived_types()
+			.include_virtual_overrides()
+			.dispatch(dispatch_policy::static_and_virtual_candidates)
+			.argument_type(0U, type("int"))
+			.inside(function("fixture::caller"))
+			.in_file(file_selector{}.path_exact("src/main.cpp"))
+			.implicit(implicit_node_policy::include_language_implicit)
+			.macro(macro_match_policy::include_with_origin)
+			.templates(template_selection_policy::patterns_and_observed_instantiations)
+			.variants(variant_match_policy::report_per_variant)
+			.precision(precision_level::workspace_semantic);
+	require(!call_surface.to_json().empty() && !call_surface.explain().empty() &&
+				!call_surface.requirements().facts.to_json().empty(),
+			"call selector family surface is incomplete");
+
+	const std::array helper_json{
+		any_symbol().to_json(),
+		function("f").to_json(),
+		method("C::f").to_json(),
+		record("C").to_json(),
+		variable("v").to_json(),
+		macro("M").to_json(),
+		type("int").to_json(),
+		any_call().to_json(),
+		calls_to(function("f")).to_json(),
+		calls_to_function("f").to_json(),
+		calls_to_method("C", "f").to_json(),
+	};
+	for (const auto& json : helper_json)
+		require(!json.empty(), "selector helper family member produced no contract");
+	const std::array erased_json{
+		semantic(file_selector{}).to_json(),
+		semantic(any_symbol()).to_json(),
+		semantic(type("int")).to_json(),
+		semantic(any_call()).to_json(),
+	};
+	for (const auto& json : erased_json)
+		require(!json.empty(), "semantic type-erasure overload produced no contract");
 	return 0;
 }

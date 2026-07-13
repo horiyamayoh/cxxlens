@@ -19,7 +19,12 @@ properties:
     const: C++23
   authority:
     type: object
-    required: [machine_readable_source, human_inventory, change_policy]
+    required:
+    - machine_readable_source
+    - human_inventory
+    - change_policy
+    - executable_test_coverage
+    - executable_test_coverage_report
   registries:
     type: object
     required:

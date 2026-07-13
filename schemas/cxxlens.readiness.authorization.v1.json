@@ -11,7 +11,7 @@
       "package_id": "configuration",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:7dfbd0d90c412c59e9b1642139a2ada56d12d3b8259ec1e110be496591f740b9"
+      "task_packet_digest": "sha256:2ade1c8d4ff64a274085fff70d136deef2b35f6667927efc60ccccca1b1060d2"
     },
     {
       "api_id": "API-CFG-002",
@@ -24,7 +24,7 @@
       "package_id": "configuration",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:d48d333e1ee0e7c666f3a9ede3703dca68c484e4d98f0057e40f45a11b5fac33"
+      "task_packet_digest": "sha256:6acb4bcf83a6ea872fee5acf835c19ad040243473ceaf8cdc285a27007a6c967"
     },
     {
       "api_id": "API-CFG-003",
@@ -37,7 +37,7 @@
       "package_id": "configuration",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:41f73fc731c14e02919364a24b7f06aa4d87b25ffee6133e982ee7c1e2bafe3a"
+      "task_packet_digest": "sha256:2516b0ed866972b3a8e8b062ddfae6dbb3949a6555c4d05171e416b04cc49b66"
     },
     {
       "api_id": "API-CFG-004",
@@ -50,7 +50,7 @@
       "package_id": "configuration",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:96cfbc39d524f6d69e583ee7f38dac5fc360804b9752baca25686b46a8b753f2"
+      "task_packet_digest": "sha256:9bfdc9bc576432bbe81abbbe9772013ad1c410d10290da3d06a09d6d8c127fc5"
     },
     {
       "api_id": "API-COPY-001",
@@ -89,6 +89,16 @@
         {
           "chain": [
             "AU-COPY-001",
+            "fixtures-missing:AU-COPY-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-COPY-001"
+        },
+        {
+          "chain": [
+            "AU-COPY-001",
             "frozen-skeleton-missing:AU-COPY-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -104,7 +114,7 @@
       "package_id": "copy",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:4f300cd83bb6487ea7eea102393c5246e290fe79dd18d5be8d38bbb87a86296e"
+      "task_packet_digest": "sha256:c43d3bf23f3a773d566f867f2318e5ff4e662f3b00fcc82a75fe2cb36306dc2a"
     },
     {
       "api_id": "API-COPY-002",
@@ -129,6 +139,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-COPY-002"
+        },
+        {
+          "chain": [
+            "AU-COPY-002",
+            "fixtures-missing:AU-COPY-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-COPY-002"
         },
         {
           "chain": [
@@ -184,7 +204,7 @@
       "package_id": "copy",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:855fd436d718104d9c561bbe176fc9728ba0d0f48f6a73ad8ee362301160fed0"
+      "task_packet_digest": "sha256:90c26df7c9cf07dd029f84ac4c5d634fab8f47a08a2e36ebb33bf98d256d2b0e"
     },
     {
       "api_id": "API-CORE-001",
@@ -197,7 +217,7 @@
       "package_id": "core",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:2dd51e9009f24c121c2ad92ae6d09fe6544bc3a9174b33ee19d623f62eee7ad6"
+      "task_packet_digest": "sha256:16f21c864577ace47286b761336052edc01ea37e1d2fef4db4d1ec1c9ca7c687"
     },
     {
       "api_id": "API-CORE-002",
@@ -210,7 +230,7 @@
       "package_id": "core",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:93bb9707561c2d346dd0d3fc3f2cc3082602c0b657adc0b3214b79a7d09d21e1"
+      "task_packet_digest": "sha256:fab4883a2fcd94dcd2d85d9d9b002bf4197c3a0e7fe94295eb37523a295c455f"
     },
     {
       "api_id": "API-CORE-003",
@@ -223,7 +243,7 @@
       "package_id": "core",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:2ae80f0a7f00855b37dacf134a46f1bcfe9889a8505932067df056b90ac26f9d"
+      "task_packet_digest": "sha256:a84ce9aa09f57ec9c7be2e13fd92e06f7d9a00bd6508a15476ef789e1982de85"
     },
     {
       "api_id": "API-CORE-004",
@@ -236,7 +256,7 @@
       "package_id": "core",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:273d95fb3b7c5c27668d98214fe333a28e2d327efb12f328383ad9d50b799a2e"
+      "task_packet_digest": "sha256:2ad0fe090cca953cfb4b8b3ce33d75c3a069893586120fcbfdee3ee41a71923b"
     },
     {
       "api_id": "API-CORE-005",
@@ -265,6 +285,16 @@
         {
           "chain": [
             "AU-CORE-005",
+            "fixtures-missing:AU-CORE-005"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-CORE-005"
+        },
+        {
+          "chain": [
+            "AU-CORE-005",
             "frozen-skeleton-missing:AU-CORE-005"
           ],
           "code": "frozen-skeleton-missing",
@@ -280,7 +310,7 @@
       "package_id": "core",
       "phase": "M0",
       "state": "blocked",
-      "task_packet_digest": "sha256:477c2c3e94a2e438492eb7a03e59f0cb2b0301af2d12cc307029953c0924c758"
+      "task_packet_digest": "sha256:3409e5076de72788ea1fdf6acff5866c96484b4accab65c7be6743fdc93c4a39"
     },
     {
       "api_id": "API-CORE-006",
@@ -309,6 +339,16 @@
         {
           "chain": [
             "AU-CORE-006",
+            "fixtures-missing:AU-CORE-006"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-CORE-006"
+        },
+        {
+          "chain": [
+            "AU-CORE-006",
             "frozen-skeleton-missing:AU-CORE-006"
           ],
           "code": "frozen-skeleton-missing",
@@ -324,7 +364,7 @@
       "package_id": "core",
       "phase": "M0",
       "state": "blocked",
-      "task_packet_digest": "sha256:7a501f531933b17d2faa536c6e8742fb5abe9f67bdbad633184ef558e0c40196"
+      "task_packet_digest": "sha256:25272f8f27794336732b479edcae6ade183d2b04ecebcc57ee3ff148cec20eae"
     },
     {
       "api_id": "API-EXP-001",
@@ -353,6 +393,16 @@
         {
           "chain": [
             "AU-EXP-001",
+            "fixtures-missing:AU-EXP-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-EXP-001"
+        },
+        {
+          "chain": [
+            "AU-EXP-001",
             "frozen-skeleton-missing:AU-EXP-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -368,7 +418,7 @@
       "package_id": "explain",
       "phase": "M2",
       "state": "blocked",
-      "task_packet_digest": "sha256:e75344d1a2d48a4b91c92fb2d20b2b24c8243f4f12475e62ced29eba8855eca2"
+      "task_packet_digest": "sha256:0f21fff003e7c6ba0e9dd6412838e560c59dc642c4309d72936211f487287565"
     },
     {
       "api_id": "API-EXP-002",
@@ -381,7 +431,7 @@
       "package_id": "explain",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:12faa575a2a3feb40545acba193f8867be0c95c62aff8eab8b6a5053f327aa2d"
+      "task_packet_digest": "sha256:c755b1e22814aafb891214a202bc9c307489b61e4c19c27c49a8d542565403cc"
     },
     {
       "api_id": "API-EXP-003",
@@ -410,6 +460,16 @@
         {
           "chain": [
             "AU-EXP-003",
+            "fixtures-missing:AU-EXP-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-EXP-003"
+        },
+        {
+          "chain": [
+            "AU-EXP-003",
             "frozen-skeleton-missing:AU-EXP-003"
           ],
           "code": "frozen-skeleton-missing",
@@ -425,7 +485,7 @@
       "package_id": "explain",
       "phase": "M2",
       "state": "blocked",
-      "task_packet_digest": "sha256:8e025e2cee384946e2d631761bf4342ef105fb28e00c8b62c88161dc7b75f3d1"
+      "task_packet_digest": "sha256:5d37a9d04841013cf2b606ae8989f0dcc4eafec4bc7ce5ebd98335ac5439df14"
     },
     {
       "api_id": "API-EXP-004",
@@ -454,6 +514,16 @@
         {
           "chain": [
             "AU-EXP-004",
+            "fixtures-missing:AU-EXP-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-EXP-004"
+        },
+        {
+          "chain": [
+            "AU-EXP-004",
             "frozen-skeleton-missing:AU-EXP-004"
           ],
           "code": "frozen-skeleton-missing",
@@ -469,7 +539,7 @@
       "package_id": "explain",
       "phase": "M0",
       "state": "blocked",
-      "task_packet_digest": "sha256:570946dbf8c2c77d26679f5556bf1af1651eb1b1f635bcce915393029420d01d"
+      "task_packet_digest": "sha256:32fd3a22e6255b32fe6973f960d0de9d0d7ceb15914ac5bc81d08683a1a1b943"
     },
     {
       "api_id": "API-FACT-001",
@@ -482,7 +552,7 @@
       "package_id": "facts",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:e3b08902086217e66f833df165b7b822e64d83f2646d5b730c15120c7a93c8b2"
+      "task_packet_digest": "sha256:867e6955585aa286c6d6b304f45ea7d1bd7ec254b511a430dcb315c2401b49f5"
     },
     {
       "api_id": "API-FACT-002",
@@ -495,7 +565,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:a59df95eef7b7d7076eba0c096eeecd260ae4431bf4a4fb4d3370bdcea92988b"
+      "task_packet_digest": "sha256:8f7856dd76843f13834284d7487938ff5dd8e401036f84ac2766f8120eebd8f4"
     },
     {
       "api_id": "API-FACT-003",
@@ -508,7 +578,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:cf5208d932cebbd20e7c27f98405a012347385a59eab5d4eefada320b074ec9c"
+      "task_packet_digest": "sha256:566e7c5d08413ccab4f21dabb7443ce7b64ab84adc80cdf2e8076950736bd4c4"
     },
     {
       "api_id": "API-FACT-004",
@@ -521,7 +591,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:b99069c8b19314f884b2ab42af7a696de5aa9f612e830116525f82dea2a8ecc8"
+      "task_packet_digest": "sha256:fba1c59d894c3b5dc9dddf3da87359c466686e414155e09dde7e37f62a09f106"
     },
     {
       "api_id": "API-FACT-005",
@@ -534,7 +604,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:d46b343ef06212a711081012d925f32357f1f84e78db417da8fd3336f78a0630"
+      "task_packet_digest": "sha256:36b374f5e2b782c6cb87dd0392c0d065808356d1ddf8806b5feb97071f299e33"
     },
     {
       "api_id": "API-FACT-006",
@@ -547,7 +617,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:5960332bff1c6d31260f503ece2863e392d33eb9ea491cae6564dd4dc4bb812a"
+      "task_packet_digest": "sha256:2536e1691f29e52c70fdc33547cc063dff04c3ea1100803ad7bf309a22a87020"
     },
     {
       "api_id": "API-FACT-007",
@@ -560,7 +630,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:7f04e2b0f3dbf50843fb0a42cd226d1447cc5a211f8f78499e9c041cb7710d95"
+      "task_packet_digest": "sha256:963ebec46212750b7e0353246552a9eb605762af9ce50e2c90006beba8eece41"
     },
     {
       "api_id": "API-FACT-008",
@@ -573,7 +643,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:089621106ecb502fd7146acbfbbc11a52d26a288cb682de700c7de3fa50a2710"
+      "task_packet_digest": "sha256:254bbd1c4b3137e69912cb304e54a7c34daef1af1d4d64322eb47a7c2f90a093"
     },
     {
       "api_id": "API-FACT-009",
@@ -586,7 +656,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:deb792cb0fb4d423602a00b53d33ea533c4f7feb8c08f7901b5a6283639594ec"
+      "task_packet_digest": "sha256:543848f7b2937a06024ea1b0eafa4f27aa8adfc77216a99f2011bbc711d182f4"
     },
     {
       "api_id": "API-FACT-010",
@@ -599,7 +669,7 @@
       "package_id": "facts",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:399e3f5b7c576bdcccc7205fee285a3954c336a0726d6db160df88d17eeaefb1"
+      "task_packet_digest": "sha256:1b28b5fc5cd5ad3d3532a6180f62749f7e26615dacc00edf1e516cdc1d7cf169"
     },
     {
       "api_id": "API-FLOW-001",
@@ -628,6 +698,16 @@
         {
           "chain": [
             "AU-FLOW-001",
+            "fixtures-missing:AU-FLOW-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-001"
+        },
+        {
+          "chain": [
+            "AU-FLOW-001",
             "frozen-skeleton-missing:AU-FLOW-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -643,7 +723,7 @@
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:d9cb2f08c2e05666d4484cb523708be848a99032d5f08229f4ad7a50fd70f382"
+      "task_packet_digest": "sha256:278dbb5501c48679c4b6c44db65725e673c7be8c3fdc5473152f7549ac9c4699"
     },
     {
       "api_id": "API-FLOW-002",
@@ -668,6 +748,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-FLOW-002"
+        },
+        {
+          "chain": [
+            "AU-FLOW-002",
+            "fixtures-missing:AU-FLOW-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-002"
         },
         {
           "chain": [
@@ -723,7 +813,7 @@
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:709adb4ca5cd72f4d0240729088623f9840cddee04066ce9dc36b6d8a64b374c"
+      "task_packet_digest": "sha256:d7ab0279b3f00c06b59fe374b526af26a12c0f306ed146af94ef70ab93feb7dd"
     },
     {
       "api_id": "API-FLOW-003",
@@ -758,6 +848,16 @@
           "resolution_issue": 1,
           "steward": "steward.facts",
           "subject": "control_flow"
+        },
+        {
+          "chain": [
+            "AU-FLOW-003",
+            "fixtures-missing:AU-FLOW-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-003"
         },
         {
           "chain": [
@@ -813,7 +913,7 @@
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:6db231fdb7c97eeb81e45d537c837c2dfd4ffa85c5220ffff75e138986b86dba"
+      "task_packet_digest": "sha256:08e55c5dd18f4ff91d6e94debda62ef1558713ba5c8d480d1148b81a86d9d51f"
     },
     {
       "api_id": "API-FLOW-004",
@@ -838,6 +938,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-FLOW-004"
+        },
+        {
+          "chain": [
+            "AU-FLOW-004",
+            "fixtures-missing:AU-FLOW-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-004"
         },
         {
           "chain": [
@@ -893,7 +1003,7 @@
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:3aac34d84bbd27bad4991b405c901c0df00e20c7bc7eca704bd5fd32cc5b56f9"
+      "task_packet_digest": "sha256:53c161d202974912083565ef097fc9998ec849303586de406f98384680575882"
     },
     {
       "api_id": "API-FLOW-005",
@@ -938,6 +1048,16 @@
           "resolution_issue": 1,
           "steward": "steward.facts",
           "subject": "flow_summary"
+        },
+        {
+          "chain": [
+            "AU-FLOW-005",
+            "fixtures-missing:AU-FLOW-005"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-005"
         },
         {
           "chain": [
@@ -993,7 +1113,7 @@
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:31b04cac445d99dd3fb6ab74fdffc118a56d1ab766d636099d1e76310109a26c"
+      "task_packet_digest": "sha256:02a7b0c86e6c8052804886d7baefbe9fbaa49c7aa8c8cb96e0aa0dcf18db94a0"
     },
     {
       "api_id": "API-FLOW-006",
@@ -1018,6 +1138,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-FLOW-006"
+        },
+        {
+          "chain": [
+            "AU-FLOW-006",
+            "fixtures-missing:AU-FLOW-006"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-006"
         },
         {
           "chain": [
@@ -1073,7 +1203,7 @@
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:79936a2599e90e04b4f81430966b46e874e9601c3db4f3525045c5634ea8b16a"
+      "task_packet_digest": "sha256:159123a36bbecb58fb454e5701e3fc4d422d0614a20c1a3295fa3b8b24f15c18"
     },
     {
       "api_id": "API-FLOW-007",
@@ -1108,6 +1238,16 @@
           "resolution_issue": 1,
           "steward": "steward.facts",
           "subject": "cfg_summary"
+        },
+        {
+          "chain": [
+            "AU-FLOW-007",
+            "fixtures-missing:AU-FLOW-007"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-007"
         },
         {
           "chain": [
@@ -1163,7 +1303,7 @@
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:b783363bbea49203d96fc0d0bdfcaa9e9479c3a450db6273be5d7125bcfabd4c"
+      "task_packet_digest": "sha256:bf897caebfbdfac4d66c9706d5c0af526e5f859be1c83df42a71ecffedbf3bbb"
     },
     {
       "api_id": "API-FLOW-008",
@@ -1208,6 +1348,16 @@
           "resolution_issue": 1,
           "steward": "steward.facts",
           "subject": "effect_summary"
+        },
+        {
+          "chain": [
+            "AU-FLOW-008",
+            "fixtures-missing:AU-FLOW-008"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-008"
         },
         {
           "chain": [
@@ -1263,7 +1413,7 @@
       "package_id": "flow",
       "phase": "M7",
       "state": "blocked",
-      "task_packet_digest": "sha256:66b93b642f0485badbdaa4b8d8544956cd700f801b3b37bc99c6797dd990ad1f"
+      "task_packet_digest": "sha256:5fd06b6a81f3e98fa00e01907a4a5ca1db75078a81ddbf3d2b909cbae0290296"
     },
     {
       "api_id": "API-FUZZ-001",
@@ -1292,6 +1442,16 @@
         {
           "chain": [
             "AU-FUZZ-001",
+            "fixtures-missing:AU-FUZZ-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FUZZ-001"
+        },
+        {
+          "chain": [
+            "AU-FUZZ-001",
             "frozen-skeleton-missing:AU-FUZZ-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -1307,7 +1467,7 @@
       "package_id": "fuzz",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:69103b1029cb2af7491ae9f4fdd1d8091afe9cde8269ba3f2f5ed34928dcb8d1"
+      "task_packet_digest": "sha256:fcea71c2e7665bf5cb89dd679b04004840b0d248074131bab2ddbe0fdb365423"
     },
     {
       "api_id": "API-FUZZ-002",
@@ -1332,6 +1492,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-FUZZ-002"
+        },
+        {
+          "chain": [
+            "AU-FUZZ-002",
+            "fixtures-missing:AU-FUZZ-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FUZZ-002"
         },
         {
           "chain": [
@@ -1387,7 +1557,7 @@
       "package_id": "fuzz",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:8a0a6a363d5c8fa376d873392b47560dcb041a8f1198dbda9ffb6552692debe1"
+      "task_packet_digest": "sha256:55cc58a3c947211a5509ff82ea65d0cf44418f5a78c7c560121977fdd9ace494"
     },
     {
       "api_id": "API-FUZZ-003",
@@ -1412,6 +1582,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-FUZZ-003"
+        },
+        {
+          "chain": [
+            "AU-FUZZ-003",
+            "fixtures-missing:AU-FUZZ-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FUZZ-003"
         },
         {
           "chain": [
@@ -1467,7 +1647,7 @@
       "package_id": "fuzz",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:90fc0dd05157c19eeaf4445698726f1f2a67a0e71c90da68a2204d352bc71387"
+      "task_packet_digest": "sha256:4996a78d854b7f7d092e6e38bd6efbd2b6ee9e4a67783dd3ec7084495c2ea77c"
     },
     {
       "api_id": "API-GEN-001",
@@ -1496,6 +1676,16 @@
         {
           "chain": [
             "AU-GEN-001",
+            "fixtures-missing:AU-GEN-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-GEN-001"
+        },
+        {
+          "chain": [
+            "AU-GEN-001",
             "frozen-skeleton-missing:AU-GEN-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -1511,7 +1701,7 @@
       "package_id": "generate",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:a23efcd2a5ba66ae735c863681461b838cc6b350f2c066c975320155e7519018"
+      "task_packet_digest": "sha256:669660d0e757e3b56a684533bb439357532ee7d6a5866927856351f0d524ac61"
     },
     {
       "api_id": "API-GEN-002",
@@ -1536,6 +1726,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-GEN-002"
+        },
+        {
+          "chain": [
+            "AU-GEN-002",
+            "fixtures-missing:AU-GEN-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-GEN-002"
         },
         {
           "chain": [
@@ -1591,7 +1791,7 @@
       "package_id": "generate",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:27d89ac892c1554513722449a67068a170e86a503a971a2c83af90fe7b21a25f"
+      "task_packet_digest": "sha256:4d9b395d11506d2dfee2d141b2133ed2ef95d9b8736f2ae5f7418090a4f6c8c3"
     },
     {
       "api_id": "API-GRAPH-001",
@@ -1620,6 +1820,16 @@
         {
           "chain": [
             "AU-GRAPH-001",
+            "fixtures-missing:AU-GRAPH-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-GRAPH-001"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-001",
             "frozen-skeleton-missing:AU-GRAPH-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -1635,7 +1845,7 @@
       "package_id": "graph",
       "phase": "M2",
       "state": "blocked",
-      "task_packet_digest": "sha256:124fdc020d939b92fe7ac8cae179f19d0d9a762cdfc4e918d622ea07d22a5c1c"
+      "task_packet_digest": "sha256:b609221736f5e69328e427ebd3056759666930fe9563c832bc4680c5875127ff"
     },
     {
       "api_id": "API-GRAPH-002",
@@ -1660,6 +1870,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-GRAPH-002"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-002",
+            "fixtures-missing:AU-GRAPH-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-GRAPH-002"
         },
         {
           "chain": [
@@ -1715,7 +1935,7 @@
       "package_id": "graph",
       "phase": "M2",
       "state": "blocked",
-      "task_packet_digest": "sha256:6857944c393658e11032f4de9fee1c661393db1d3350ec1a9ba0c2ba5609b57a"
+      "task_packet_digest": "sha256:8003b3d8d947ff1f9d2ff7a7eb892ccf9da27b48aedb019e2c47c6d64f27c108"
     },
     {
       "api_id": "API-GRAPH-003",
@@ -1740,6 +1960,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-GRAPH-003"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-003",
+            "fixtures-missing:AU-GRAPH-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-GRAPH-003"
         },
         {
           "chain": [
@@ -1795,7 +2025,7 @@
       "package_id": "graph",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:3462b52426ba7f55bb2053348b83c3dcc30d7d25a3ed49f1ce92786f85adcb87"
+      "task_packet_digest": "sha256:92d923ec8f5ec41afb625f09fb83f66605a103b9351ef41fdfddf144286bf78a"
     },
     {
       "api_id": "API-GRAPH-004",
@@ -1820,6 +2050,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-GRAPH-004"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-004",
+            "fixtures-missing:AU-GRAPH-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-GRAPH-004"
         },
         {
           "chain": [
@@ -1875,7 +2115,7 @@
       "package_id": "graph",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:fd04edd5f585ca198503d5cbf7b8942e97889414ad772be5820abcd632b30bc3"
+      "task_packet_digest": "sha256:4312d23b356ab9fd62e0e3cd3b12727b2ff6a57c6f60f8cbf5dd2b2f81302623"
     },
     {
       "api_id": "API-GRAPH-005",
@@ -1900,6 +2140,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-GRAPH-005"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-005",
+            "fixtures-missing:AU-GRAPH-005"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-GRAPH-005"
         },
         {
           "chain": [
@@ -1955,7 +2205,7 @@
       "package_id": "graph",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:7bfb618c71af4b5f6a0e2ae2af355cc78ad12115226c904a090fc874f97fe220"
+      "task_packet_digest": "sha256:0c0ca16dd69ce5701d81ab459bc9c214f1ba0b1efae1a24f370e52cdff3feb0e"
     },
     {
       "api_id": "API-GRAPH-006",
@@ -1980,6 +2230,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-GRAPH-006"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-006",
+            "fixtures-missing:AU-GRAPH-006"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-GRAPH-006"
         },
         {
           "chain": [
@@ -2035,7 +2295,7 @@
       "package_id": "graph",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:e72d03f424623070a80837da41f7b1868a250a00bf2562a33245654b33e5775a"
+      "task_packet_digest": "sha256:6f57d41004f48ded0c7fc151d94116c550d5f6e44dfc22339e2e95100dbfa442"
     },
     {
       "api_id": "API-INT-001",
@@ -2048,7 +2308,7 @@
       "package_id": "interop",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:72fb4ed46d4eba6176c229b801803c1f44138c61c7b5ceee1719680258b89b4f"
+      "task_packet_digest": "sha256:862e8f585b120e69e04b749b834b9304ed254ab3ace10f5b96dc524eec2d2854"
     },
     {
       "api_id": "API-INT-002",
@@ -2061,7 +2321,7 @@
       "package_id": "interop",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:b5f1c10b5208493a2b8718f13eee24a6cda304857efc712a4d0c9e83b9a4cf49"
+      "task_packet_digest": "sha256:e43e230393cddc4ce6833ae01347b2d05f632c22fdb44e33699b82c7e107069d"
     },
     {
       "api_id": "API-INT-003",
@@ -2090,6 +2350,16 @@
         {
           "chain": [
             "AU-INT-003",
+            "fixtures-missing:AU-INT-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-INT-003"
+        },
+        {
+          "chain": [
+            "AU-INT-003",
             "frozen-skeleton-missing:AU-INT-003"
           ],
           "code": "frozen-skeleton-missing",
@@ -2105,7 +2375,7 @@
       "package_id": "interop",
       "phase": "M1",
       "state": "blocked",
-      "task_packet_digest": "sha256:aa25245bd79854c57ab6ac78ec8a5b2dde83ca0dbde15c5f875cacf2144cb2f6"
+      "task_packet_digest": "sha256:38e6f06c8762b5a3d336e3c41ce062587b43e63636278adea2da4ad09b96cb6d"
     },
     {
       "api_id": "API-INT-004",
@@ -2134,6 +2404,16 @@
         {
           "chain": [
             "AU-INT-004",
+            "fixtures-missing:AU-INT-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-INT-004"
+        },
+        {
+          "chain": [
+            "AU-INT-004",
             "frozen-skeleton-missing:AU-INT-004"
           ],
           "code": "frozen-skeleton-missing",
@@ -2149,7 +2429,7 @@
       "package_id": "interop",
       "phase": "M1",
       "state": "blocked",
-      "task_packet_digest": "sha256:56a83926ba675a2bdad7d43ae8b3ace481c14ebe0620d969fbfc3e7db2eb2f19"
+      "task_packet_digest": "sha256:db68e8aefc32b6590e44f5a75febaaed0fb1aa11bbaf110999ba0f5db5e20c65"
     },
     {
       "api_id": "API-METHOD-001",
@@ -2178,6 +2458,16 @@
         {
           "chain": [
             "AU-METHOD-001",
+            "fixtures-missing:AU-METHOD-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-METHOD-001"
+        },
+        {
+          "chain": [
+            "AU-METHOD-001",
             "frozen-skeleton-missing:AU-METHOD-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -2193,7 +2483,7 @@
       "package_id": "method_harness",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:257ae4b8a641678cc803c788ecea004a5a394f816022235616d2e85e58efc71b"
+      "task_packet_digest": "sha256:9ae9e7036adbd81d9e8cf6b0ce9323c62c60d08671c036ac694a55ffb36a538e"
     },
     {
       "api_id": "API-METHOD-002",
@@ -2218,6 +2508,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-METHOD-002"
+        },
+        {
+          "chain": [
+            "AU-METHOD-002",
+            "fixtures-missing:AU-METHOD-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-METHOD-002"
         },
         {
           "chain": [
@@ -2273,7 +2573,7 @@
       "package_id": "method_harness",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:1fc927cb0365dd55804f271c64aea16048c2fa8fcfe473d02924eeab06be03dc"
+      "task_packet_digest": "sha256:fe34fd8e614c5ccdcb3dd5d054be2a5b7299eaae7f50de101d68c2779dee67be"
     },
     {
       "api_id": "API-METHOD-003",
@@ -2298,6 +2598,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-METHOD-003"
+        },
+        {
+          "chain": [
+            "AU-METHOD-003",
+            "fixtures-missing:AU-METHOD-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-METHOD-003"
         },
         {
           "chain": [
@@ -2353,7 +2663,7 @@
       "package_id": "method_harness",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:8f4c7ab1f6a09af50235d737998a90852608da14e55b23363c99f7cb8cc4f00e"
+      "task_packet_digest": "sha256:a98cc7b0fa71ef01803590d98e70d9acee1cc60d50b6062bc295a141544b752c"
     },
     {
       "api_id": "API-METHOD-004",
@@ -2398,6 +2708,16 @@
           "resolution_issue": 1,
           "steward": "steward.facts",
           "subject": "effect_summary"
+        },
+        {
+          "chain": [
+            "AU-METHOD-004",
+            "fixtures-missing:AU-METHOD-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-METHOD-004"
         },
         {
           "chain": [
@@ -2453,7 +2773,7 @@
       "package_id": "method_harness",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:c536a05a6099a5b0013f917a6013b9408f4c7f0ce56bc2080bbe31e01439ebba"
+      "task_packet_digest": "sha256:5e46fc7bd136f824bb79fb12a3a4085b7dc235b7184e605559ed55ad971d2e0c"
     },
     {
       "api_id": "API-METHOD-005",
@@ -2488,6 +2808,16 @@
           "resolution_issue": 1,
           "steward": "steward.facts",
           "subject": "control_flow"
+        },
+        {
+          "chain": [
+            "AU-METHOD-005",
+            "fixtures-missing:AU-METHOD-005"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-METHOD-005"
         },
         {
           "chain": [
@@ -2543,7 +2873,7 @@
       "package_id": "method_harness",
       "phase": "M6",
       "state": "blocked",
-      "task_packet_digest": "sha256:44fb66d03d1fc92bd8d29adc4e3f60cc2a7e4f5678411dbec449d8ad66e53a1e"
+      "task_packet_digest": "sha256:b185c41baaf143479becab562852e328f22e86c680c0657ae795b8de96364346"
     },
     {
       "api_id": "API-MOCK-001",
@@ -2572,6 +2902,16 @@
         {
           "chain": [
             "AU-MOCK-001",
+            "fixtures-missing:AU-MOCK-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-MOCK-001"
+        },
+        {
+          "chain": [
+            "AU-MOCK-001",
             "frozen-skeleton-missing:AU-MOCK-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -2587,7 +2927,7 @@
       "package_id": "mock",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:1a7183ecf9ff04ee8b27b54a1c5684e5aa7ba4e97582805658dc1c83c79f83ed"
+      "task_packet_digest": "sha256:66109d8670d54f8b1f7ca5e810078bef959d4907f198e9e37903d4bc439b3eb1"
     },
     {
       "api_id": "API-MOCK-002",
@@ -2612,6 +2952,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-MOCK-002"
+        },
+        {
+          "chain": [
+            "AU-MOCK-002",
+            "fixtures-missing:AU-MOCK-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-MOCK-002"
         },
         {
           "chain": [
@@ -2667,7 +3017,7 @@
       "package_id": "mock",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:c225345f402b715f495fed21899797f26d76e124a554b0776e0823187433c14d"
+      "task_packet_digest": "sha256:e67abd1fdf01ed2b8a4d29a0d2fb5dad34688138093e83a5633e12b47c70e518"
     },
     {
       "api_id": "API-MOCK-003",
@@ -2692,6 +3042,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-MOCK-003"
+        },
+        {
+          "chain": [
+            "AU-MOCK-003",
+            "fixtures-missing:AU-MOCK-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-MOCK-003"
         },
         {
           "chain": [
@@ -2747,7 +3107,7 @@
       "package_id": "mock",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:c0ac08cbd904bbfa3d0fafd530d3cc8ed423412fafd31170e01e7460d60e0a3e"
+      "task_packet_digest": "sha256:c1e6bd3148b7e4793856f90a094512053a53298177e047cbb081450fd0791d07"
     },
     {
       "api_id": "API-MODEL-001",
@@ -2776,6 +3136,16 @@
         {
           "chain": [
             "AU-MODEL-001",
+            "fixtures-missing:AU-MODEL-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-MODEL-001"
+        },
+        {
+          "chain": [
+            "AU-MODEL-001",
             "frozen-skeleton-missing:AU-MODEL-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -2791,7 +3161,7 @@
       "package_id": "models",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:894bb7c5bc157b5775fa66bed4f0ae15f80de69cabfdf46dba7c1846a0d13b32"
+      "task_packet_digest": "sha256:d8d5ad3aff1a22547b12cd28b8ee14dba18857acf9200d2046714faa9bb5beee"
     },
     {
       "api_id": "API-MODEL-002",
@@ -2816,6 +3186,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-MODEL-002"
+        },
+        {
+          "chain": [
+            "AU-MODEL-002",
+            "fixtures-missing:AU-MODEL-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-MODEL-002"
         },
         {
           "chain": [
@@ -2871,7 +3251,7 @@
       "package_id": "models",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:235033f7a5543a016d1f263a374ad006574b73d409f9322093e14611d32c87ef"
+      "task_packet_digest": "sha256:8160641d17e9c771bb91c4993f13d328178881e4fee03a5b6b4d0f6d4ebb8e9a"
     },
     {
       "api_id": "API-MODEL-003",
@@ -2896,6 +3276,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-MODEL-003"
+        },
+        {
+          "chain": [
+            "AU-MODEL-003",
+            "fixtures-missing:AU-MODEL-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-MODEL-003"
         },
         {
           "chain": [
@@ -2951,7 +3341,7 @@
       "package_id": "models",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:eb667a5cbdedf1eb83c70057ee0acff315ed11728332fa7b6ca17457638b7a40"
+      "task_packet_digest": "sha256:bb0e39d122e14e98db23bcf70c7372293e248ebf5a6f078e50667f67c04a1e4f"
     },
     {
       "api_id": "API-MODEL-004",
@@ -2976,6 +3366,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-MODEL-004"
+        },
+        {
+          "chain": [
+            "AU-MODEL-004",
+            "fixtures-missing:AU-MODEL-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-MODEL-004"
         },
         {
           "chain": [
@@ -3031,7 +3431,7 @@
       "package_id": "models",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:e588bd97991f3779d598f570a036488cab0c10aa2e5f29fa72cf0b398cf22e88"
+      "task_packet_digest": "sha256:f6a81dcbeb1dcce35fe9f359e0a9a5e109b9d2d36b8d38584e4b27d9094987bc"
     },
     {
       "api_id": "API-QA-001",
@@ -3060,6 +3460,16 @@
         {
           "chain": [
             "AU-QA-001",
+            "fixtures-missing:AU-QA-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-QA-001"
+        },
+        {
+          "chain": [
+            "AU-QA-001",
             "frozen-skeleton-missing:AU-QA-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -3075,7 +3485,7 @@
       "package_id": "qa",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:01d5e9a6673548c95bb1ea70c404968bac98864dbe706f9baaadb2554e1e048c"
+      "task_packet_digest": "sha256:ec97f7fb4adede18c360c7c272884c75ff56b63187161a14374e30b21575d255"
     },
     {
       "api_id": "API-QA-002",
@@ -3100,6 +3510,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-QA-002"
+        },
+        {
+          "chain": [
+            "AU-QA-002",
+            "fixtures-missing:AU-QA-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-QA-002"
         },
         {
           "chain": [
@@ -3155,7 +3575,7 @@
       "package_id": "qa",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:1d548748bbaba386dfb951777dddae1eecffa9ae878451bcaaf7d2485b76ffb3"
+      "task_packet_digest": "sha256:2c3736434ddd23d82c134562e2b0d1f65b9a50a81c5acf4672b42922fe9f8b53"
     },
     {
       "api_id": "API-QA-003",
@@ -3190,6 +3610,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-QA-003"
+        },
+        {
+          "chain": [
+            "AU-QA-003",
+            "fixtures-missing:AU-QA-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-QA-003"
         },
         {
           "chain": [
@@ -3257,7 +3687,7 @@
       "package_id": "qa",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:8b948a84f803e94cee8236f43806f2cf0b5ed8daaacaf1a9cd7e323cf7fc7f64"
+      "task_packet_digest": "sha256:cd64e1197ecdbc9da5e0370489d1a5d798649d3b8493b7a9712bc60c920a0361"
     },
     {
       "api_id": "API-QA-004",
@@ -3292,6 +3722,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-QA-004"
+        },
+        {
+          "chain": [
+            "AU-QA-004",
+            "fixtures-missing:AU-QA-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-QA-004"
         },
         {
           "chain": [
@@ -3359,7 +3799,7 @@
       "package_id": "qa",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:6a1e0d4f69af25bd994643f30747fdf947ad970b798e011cf09269142fe3ff2a"
+      "task_packet_digest": "sha256:4e32c322327e5f780fd3d946e595e6a87a6ceb14aa86e9d72eee0151a4309c57"
     },
     {
       "api_id": "API-REPORT-001",
@@ -3388,6 +3828,16 @@
         {
           "chain": [
             "AU-REPORT-001",
+            "fixtures-missing:AU-REPORT-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-REPORT-001"
+        },
+        {
+          "chain": [
+            "AU-REPORT-001",
             "frozen-skeleton-missing:AU-REPORT-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -3403,7 +3853,7 @@
       "package_id": "report",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:8d295dd341cae7b5c3982a2f259aed67e53c8a32db104d257ad481a12e5d4017"
+      "task_packet_digest": "sha256:9b0219fd11a007f670f6e9bc33af0461acb1fabbd38d92d2ecdc7e593434e42f"
     },
     {
       "api_id": "API-REPORT-002",
@@ -3428,6 +3878,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-REPORT-002"
+        },
+        {
+          "chain": [
+            "AU-REPORT-002",
+            "fixtures-missing:AU-REPORT-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-REPORT-002"
         },
         {
           "chain": [
@@ -3483,7 +3943,7 @@
       "package_id": "report",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:d01c8bf5019cce82ab5b49d88dfefd1d6bf8041608532b1799dc38d553c92063"
+      "task_packet_digest": "sha256:bce8a544eb9f49706403c0961d5a9df81bc582708571676c547f165e145dec7d"
     },
     {
       "api_id": "API-REPORT-003",
@@ -3508,6 +3968,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-REPORT-003"
+        },
+        {
+          "chain": [
+            "AU-REPORT-003",
+            "fixtures-missing:AU-REPORT-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-REPORT-003"
         },
         {
           "chain": [
@@ -3563,7 +4033,7 @@
       "package_id": "report",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:f93ddadf2462a179d93bd4e4746a1ce593669e04b4ca219889303f454dcd540c"
+      "task_packet_digest": "sha256:a8e0e50642663373608673c6fce76eb48b84e0ef7b3c787056266491b71273ce"
     },
     {
       "api_id": "API-REPORT-004",
@@ -3588,6 +4058,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-REPORT-004"
+        },
+        {
+          "chain": [
+            "AU-REPORT-004",
+            "fixtures-missing:AU-REPORT-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-REPORT-004"
         },
         {
           "chain": [
@@ -3643,7 +4123,7 @@
       "package_id": "report",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:4165ddb4699bd7a1e0918fcf31b4f11ff4f4c8b492a89271d927689f54094394"
+      "task_packet_digest": "sha256:067fde01bf619a1db577c2a970ef7637a35e926a7db550615432bd41ae82f648"
     },
     {
       "api_id": "API-RULE-001",
@@ -3672,6 +4152,16 @@
         {
           "chain": [
             "AU-RULE-001",
+            "fixtures-missing:AU-RULE-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RULE-001"
+        },
+        {
+          "chain": [
+            "AU-RULE-001",
             "frozen-skeleton-missing:AU-RULE-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -3687,7 +4177,7 @@
       "package_id": "rules",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:f9eb3799be66baeb99f682edab399549601cf48f98eccb5457c8e2ffb6c84595"
+      "task_packet_digest": "sha256:8a8896ffca472906137e014591ece40d4f9a56de0c06376db98583f4d531bcc5"
     },
     {
       "api_id": "API-RULE-002",
@@ -3712,6 +4202,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-RULE-002"
+        },
+        {
+          "chain": [
+            "AU-RULE-002",
+            "fixtures-missing:AU-RULE-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RULE-002"
         },
         {
           "chain": [
@@ -3767,7 +4267,7 @@
       "package_id": "rules",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:11b03cb06226ec456dc140f8067af115165dbb0c991105520377998e97d4a77c"
+      "task_packet_digest": "sha256:6a4890cf8cc15ac8fae155ce3c5a2e1e4476e983c5147fb76672e7879f1fd744"
     },
     {
       "api_id": "API-RULE-003",
@@ -3792,6 +4292,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-RULE-003"
+        },
+        {
+          "chain": [
+            "AU-RULE-003",
+            "fixtures-missing:AU-RULE-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RULE-003"
         },
         {
           "chain": [
@@ -3847,7 +4357,7 @@
       "package_id": "rules",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:e6746ea95aec0db4b05786b681aeb21e52825111e7fff71faaaa1a35e25e8ffa"
+      "task_packet_digest": "sha256:82e059b3402782556e99ff669d142e5fe4f5554560bc3de14083564db6e3e2cd"
     },
     {
       "api_id": "API-RULE-004",
@@ -3872,6 +4382,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-RULE-004"
+        },
+        {
+          "chain": [
+            "AU-RULE-004",
+            "fixtures-missing:AU-RULE-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RULE-004"
         },
         {
           "chain": [
@@ -3927,7 +4447,7 @@
       "package_id": "rules",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:63eb75a391c24ac9172c94f67505fa2fe59a6268af935e627175b271e7be6e08"
+      "task_packet_digest": "sha256:fd3ce5536e79c3ebe230b7543d4c1e8cf3439fbb18e4600796dc37a5a15cdde6"
     },
     {
       "api_id": "API-RULE-005",
@@ -3952,6 +4472,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-RULE-005"
+        },
+        {
+          "chain": [
+            "AU-RULE-005",
+            "fixtures-missing:AU-RULE-005"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RULE-005"
         },
         {
           "chain": [
@@ -4007,7 +4537,7 @@
       "package_id": "rules",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:26a47920d6521e92b667b331d276efd8003e2142d994d20f43c5d8592709f69a"
+      "task_packet_digest": "sha256:ea785bedf3f6db231063b998331259126c1730716f26e4baec897d555cf054c3"
     },
     {
       "api_id": "API-RV-001",
@@ -4036,6 +4566,16 @@
         {
           "chain": [
             "AU-RV-001",
+            "fixtures-missing:AU-RV-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RV-001"
+        },
+        {
+          "chain": [
+            "AU-RV-001",
             "frozen-skeleton-missing:AU-RV-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -4051,7 +4591,7 @@
       "package_id": "review",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:80edb8426e96fdcd8bdaec45fffdd6005dc4446d5d774c2d70939297f26c718c"
+      "task_packet_digest": "sha256:d3b646b4dc6a470b81ea2e1d88b59fdca74a48e46fb393677f1b97f5285d44d6"
     },
     {
       "api_id": "API-RV-002",
@@ -4076,6 +4616,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-RV-002"
+        },
+        {
+          "chain": [
+            "AU-RV-002",
+            "fixtures-missing:AU-RV-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RV-002"
         },
         {
           "chain": [
@@ -4131,7 +4681,7 @@
       "package_id": "review",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:c8b70ca73843c435d586a40fd1242819c5ec4875b07c300a40f0516af43ae309"
+      "task_packet_digest": "sha256:80570419a6264108254d46bf50b55eac2255d44d460200c548307a17cd23ae3a"
     },
     {
       "api_id": "API-RV-003",
@@ -4156,6 +4706,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-RV-003"
+        },
+        {
+          "chain": [
+            "AU-RV-003",
+            "fixtures-missing:AU-RV-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RV-003"
         },
         {
           "chain": [
@@ -4211,7 +4771,7 @@
       "package_id": "review",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:90cd74c4b1fdb24c630d1225fc79be4260ab0c027d5125f416075a4ab1c845c0"
+      "task_packet_digest": "sha256:ecb4338f7984ccb0ef6fb2c2af6acd61849e20e9301b3ef64acb8bc60fcff618"
     },
     {
       "api_id": "API-RV-004",
@@ -4236,6 +4796,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-RV-004"
+        },
+        {
+          "chain": [
+            "AU-RV-004",
+            "fixtures-missing:AU-RV-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RV-004"
         },
         {
           "chain": [
@@ -4291,7 +4861,7 @@
       "package_id": "review",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:3f206f91d94b01037bee2c5cd53d039eb31f4cbe2dd45195051c1a5d1d82b6ac"
+      "task_packet_digest": "sha256:65b242fa06093b93400795cef7eda984df3891a35d9b6751a8d0f754ecc4d8d4"
     },
     {
       "api_id": "API-RV-005",
@@ -4326,6 +4896,16 @@
           "resolution_issue": 1,
           "steward": "steward.facts",
           "subject": "finding"
+        },
+        {
+          "chain": [
+            "AU-RV-005",
+            "fixtures-missing:AU-RV-005"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RV-005"
         },
         {
           "chain": [
@@ -4381,7 +4961,7 @@
       "package_id": "review",
       "phase": "M8",
       "state": "blocked",
-      "task_packet_digest": "sha256:f9cb62adfce03273d93ee50edc1d38769d91cd560780201d76f901a3859ca0c4"
+      "task_packet_digest": "sha256:0c6d39daeb866a6fe1412361d8d885cfaecdf12b9eb782a4a350e06654e52448"
     },
     {
       "api_id": "API-SEL-001",
@@ -4394,7 +4974,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:72b5fcfcb899c91727af39b71eb5977d0a26dd8c2a48915ee7d37dbc6559881c"
+      "task_packet_digest": "sha256:efbc1e78e1a431c30a85b59a07b0ca170c7b5d45263f5060b227fc018016a94c"
     },
     {
       "api_id": "API-SEL-002",
@@ -4407,7 +4987,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:8a23f91f4c74e82c4b7003deeda9cf1f4a86c892a25a5832203ae02faf4e55f5"
+      "task_packet_digest": "sha256:d0b2374b499ba6c9aa4cd53f6d049a46a34d1bc14fb3152dbef6973b05cfaa09"
     },
     {
       "api_id": "API-SEL-003",
@@ -4420,7 +5000,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:6e0e45303495e15f9c7df68319f9c63c0b8ada570e627fa7e8c4449919f54f59"
+      "task_packet_digest": "sha256:7e1d3f02bc5cc1e165fbc1fda033543b51cd5a7076c8047bb7ae65a8b5ec4174"
     },
     {
       "api_id": "API-SEL-004",
@@ -4459,6 +5039,16 @@
         {
           "chain": [
             "AU-SEL-004",
+            "fixtures-missing:AU-SEL-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-SEL-004"
+        },
+        {
+          "chain": [
+            "AU-SEL-004",
             "frozen-skeleton-missing:AU-SEL-004"
           ],
           "code": "frozen-skeleton-missing",
@@ -4474,7 +5064,7 @@
       "package_id": "select",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:149393c6726491e8682251d0830f687aab6d13ec5a3216962fb0921f37e3dfce"
+      "task_packet_digest": "sha256:66ac3df618e5bd675f01c631c8a2fb056841390e40e557b569b1dacf5a747dfc"
     },
     {
       "api_id": "API-SEL-005",
@@ -4503,6 +5093,16 @@
         {
           "chain": [
             "AU-SEL-005",
+            "fixtures-missing:AU-SEL-005"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-SEL-005"
+        },
+        {
+          "chain": [
+            "AU-SEL-005",
             "frozen-skeleton-missing:AU-SEL-005"
           ],
           "code": "frozen-skeleton-missing",
@@ -4518,7 +5118,7 @@
       "package_id": "select",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:33a6f33fc8a5316c9ddb22c1e6313023d8f7d6593e0493f4e727ce45caafd846"
+      "task_packet_digest": "sha256:3d249c26ce17c93b8c931bc4040f12228ec61aa2166890b2a810f1c5d9942d1b"
     },
     {
       "api_id": "API-SEL-006",
@@ -4531,7 +5131,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:1b672a47d00b6d28596d3fee3af88c26e3b7e0e9fedadeb770202cc92863dc6b"
+      "task_packet_digest": "sha256:8a9db917f4ef2c55e82ef9eeca82e300b23f06facf13ca7bd72747eaac462370"
     },
     {
       "api_id": "API-SEL-007",
@@ -4560,6 +5160,16 @@
         {
           "chain": [
             "AU-SEL-007",
+            "fixtures-missing:AU-SEL-007"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-SEL-007"
+        },
+        {
+          "chain": [
+            "AU-SEL-007",
             "frozen-skeleton-missing:AU-SEL-007"
           ],
           "code": "frozen-skeleton-missing",
@@ -4575,7 +5185,7 @@
       "package_id": "select",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:5c5e09f0a297aec72504fba868c5fdcdf77e98c29f2053bec6c25e4dd2d2664b"
+      "task_packet_digest": "sha256:b233823e22fa0c30a1270068103ae41e2323ea8866a10a759a6d014f3c83cac8"
     },
     {
       "api_id": "API-SEL-008",
@@ -4588,7 +5198,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:09207f71cef0d2237fe5a86eb78b7030368dd6fdf3018d81b86a4f5e6846b0ce"
+      "task_packet_digest": "sha256:851f0a487aa663ae1cd2d63d02688c2e2b87ae4f6660c6552dc0fc40be1d41cb"
     },
     {
       "api_id": "API-SEL-009",
@@ -4601,7 +5211,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:c772c233a42430205819c552499efdba125d9d627d22b60b38475523cef4b274"
+      "task_packet_digest": "sha256:3c7fbd0b96692ff578f3914aade9557d24efd86c2e1bd796db6a67324517d38d"
     },
     {
       "api_id": "API-SEL-010",
@@ -4614,7 +5224,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:60fb1c4825fa5ed53e7462229fc1aa5c59a786ffe597ce36b01c439664431915"
+      "task_packet_digest": "sha256:7191e5e88054b2acdc7fad59aa06f0b73bfe33c6717182a3f852750adb072bf3"
     },
     {
       "api_id": "API-SEL-011",
@@ -4627,7 +5237,7 @@
       "package_id": "select",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:436932b95137587d439f49a287eb355e5cce1553a3ae6f9af48c9dde1ce8aaa6"
+      "task_packet_digest": "sha256:01a7721c1ebe67243729deb6a5a422998c6cd7eb9272059ecda4bdac989eb50c"
     },
     {
       "api_id": "API-SRCH-001",
@@ -4656,6 +5266,16 @@
         {
           "chain": [
             "AU-SRCH-001",
+            "fixtures-missing:AU-SRCH-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-SRCH-001"
+        },
+        {
+          "chain": [
+            "AU-SRCH-001",
             "frozen-skeleton-missing:AU-SRCH-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -4671,7 +5291,7 @@
       "package_id": "search",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:d5a9c94a221b20edfa5b8c40ede28cfcc016181f6e81638ec8e02f4f54c26302"
+      "task_packet_digest": "sha256:d05be57707f07f15998b9fa2092080122890e05e2007bdb87a618a5269738e87"
     },
     {
       "api_id": "API-SRCH-002",
@@ -4700,6 +5320,16 @@
         {
           "chain": [
             "AU-SRCH-002",
+            "fixtures-missing:AU-SRCH-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-SRCH-002"
+        },
+        {
+          "chain": [
+            "AU-SRCH-002",
             "frozen-skeleton-missing:AU-SRCH-002"
           ],
           "code": "frozen-skeleton-missing",
@@ -4715,7 +5345,7 @@
       "package_id": "search",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:6afc274a3a6b00beecfb39fcf491488c0744992a50c4149c78da1c340564454a"
+      "task_packet_digest": "sha256:0fcc9854de2b370a705d4c0df0cb862de7261801489b7198ef487148a8b70343"
     },
     {
       "api_id": "API-SRCH-003",
@@ -4728,7 +5358,7 @@
       "package_id": "search",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:bb62534081e6c66be4c04e9f963086c977258273163f3eb1c0e6eadcf812fa8c"
+      "task_packet_digest": "sha256:8dc64524253a35a4fddab12a9d8c653782e86c2aadb6d505dc120778c69fbe9a"
     },
     {
       "api_id": "API-SRCH-004",
@@ -4741,7 +5371,7 @@
       "package_id": "search",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:07323990ced2f607bfea108e47fc17ea9e74f83c44a4e9126612874f3a924360"
+      "task_packet_digest": "sha256:1174c4c59c1d0d4704305c0749102d3696d8a461051e7eb785a0361250764ad8"
     },
     {
       "api_id": "API-SRCH-005",
@@ -4754,7 +5384,7 @@
       "package_id": "search",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:2f5bf1a475c3a09b6532fd8ac5311564e3e148607b8f437cfcb8243a948c190b"
+      "task_packet_digest": "sha256:20865a222979ace2ef89cee67a550687a566f94e3f4483e813f863d9776ab7a5"
     },
     {
       "api_id": "API-SRCH-006",
@@ -4767,7 +5397,7 @@
       "package_id": "search",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:7e5f0d7e9c90fc0e5569b23f3b5cff55a409086d544d3eebd05071fb3d7765c3"
+      "task_packet_digest": "sha256:c5f4ced33645dd8c8d26cebbd7c01c03eac83a4794b4772b8a240b8ebef67948"
     },
     {
       "api_id": "API-SRCH-007",
@@ -4780,7 +5410,7 @@
       "package_id": "search",
       "phase": "M2",
       "state": "complete",
-      "task_packet_digest": "sha256:f8fd60b6ba6d5f44946a250665d8c9c280bb796a9568ffa5dcc32ddbd76f568d"
+      "task_packet_digest": "sha256:5fcb55ab1f93736119f350fbe0d1b85c0b49da63bccf89a41c1798a79e2fa5f0"
     },
     {
       "api_id": "API-SRCH-008",
@@ -4809,6 +5439,16 @@
         {
           "chain": [
             "AU-SRCH-008",
+            "fixtures-missing:AU-SRCH-008"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-SRCH-008"
+        },
+        {
+          "chain": [
+            "AU-SRCH-008",
             "frozen-skeleton-missing:AU-SRCH-008"
           ],
           "code": "frozen-skeleton-missing",
@@ -4824,7 +5464,7 @@
       "package_id": "search",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:65d6c2bba541565dfaa21ba51ca198a975e07f223be2f01328d233eb7fa34e39"
+      "task_packet_digest": "sha256:6e0f2679a2c7e4610f718cfa2b15dd2bfb6443925a18c959ad645b730451a934"
     },
     {
       "api_id": "API-SRCH-009",
@@ -4853,6 +5493,16 @@
         {
           "chain": [
             "AU-SRCH-009",
+            "fixtures-missing:AU-SRCH-009"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-SRCH-009"
+        },
+        {
+          "chain": [
+            "AU-SRCH-009",
             "frozen-skeleton-missing:AU-SRCH-009"
           ],
           "code": "frozen-skeleton-missing",
@@ -4868,7 +5518,7 @@
       "package_id": "search",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:c0b347999afa0c672e99c55f0d759af4c8cdf7f9955ec294b1a67f1a1f95c59e"
+      "task_packet_digest": "sha256:c8b63b3812e4644877f2e008e1c4b7d51a33bdd37bb242f8825b59b89922a5e0"
     },
     {
       "api_id": "API-SRCH-010",
@@ -4907,6 +5557,16 @@
         {
           "chain": [
             "AU-SRCH-010",
+            "fixtures-missing:AU-SRCH-010"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-SRCH-010"
+        },
+        {
+          "chain": [
+            "AU-SRCH-010",
             "frozen-skeleton-missing:AU-SRCH-010"
           ],
           "code": "frozen-skeleton-missing",
@@ -4922,7 +5582,7 @@
       "package_id": "search",
       "phase": "M3",
       "state": "blocked",
-      "task_packet_digest": "sha256:6ff682123b9ff45b0ab951493142724f447b13ffbfef3ef79d43fab3fdb2e460"
+      "task_packet_digest": "sha256:e5b0bfa2ad7228811f3ddd0f532d82b723bf4f6fb11d2310682481c438893faf"
     },
     {
       "api_id": "API-TEST-001",
@@ -4935,7 +5595,7 @@
       "package_id": "testing",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:385ebc56b270a5606c6b3af5aeff3556820bf1ec2363042a392c3e4838c81477"
+      "task_packet_digest": "sha256:aa1f2a521f066788e322e129f75af05764622bb0dc5d5726265c8c398d31c322"
     },
     {
       "api_id": "API-TEST-002",
@@ -4948,7 +5608,7 @@
       "package_id": "testing",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:040aa917c414c00f9f6af3689d06a534a4e6c372f6bf0b015c68cbdd5b39d1e9"
+      "task_packet_digest": "sha256:f54c4b3abeeae61876f55bb4ad2354e33d6f472423c48d65bb6819e76f2bbaf9"
     },
     {
       "api_id": "API-TEST-003",
@@ -4977,6 +5637,16 @@
         {
           "chain": [
             "AU-TEST-003",
+            "fixtures-missing:AU-TEST-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TEST-003"
+        },
+        {
+          "chain": [
+            "AU-TEST-003",
             "frozen-skeleton-missing:AU-TEST-003"
           ],
           "code": "frozen-skeleton-missing",
@@ -4992,7 +5662,7 @@
       "package_id": "testing",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:6aa1b5e657aba779fae79d599587811a492654661083a9baafaf2be30f808cb4"
+      "task_packet_digest": "sha256:e619bfc393d43534fe6a71fd15a363587e5224d008d4f60611620becd0714080"
     },
     {
       "api_id": "API-TEST-004",
@@ -5021,6 +5691,16 @@
         {
           "chain": [
             "AU-TEST-004",
+            "fixtures-missing:AU-TEST-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TEST-004"
+        },
+        {
+          "chain": [
+            "AU-TEST-004",
             "frozen-skeleton-missing:AU-TEST-004"
           ],
           "code": "frozen-skeleton-missing",
@@ -5036,7 +5716,7 @@
       "package_id": "testing",
       "phase": "M5",
       "state": "blocked",
-      "task_packet_digest": "sha256:4daf14ec9ca27765ae3077820201dc78e8c270ad28d52c5216e945486d968c0a"
+      "task_packet_digest": "sha256:129d45350305d4ba062aef7a50a1c158eb3c55a4b37d5f07b4c684671e6eb901"
     },
     {
       "api_id": "API-TEST-005",
@@ -5049,7 +5729,7 @@
       "package_id": "testing",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:39bb1306bad948c11a9f1d91d83b3083a14112c396c1ea7fcdbefd6c9fa69dce"
+      "task_packet_digest": "sha256:f0f45bba6129b9d8f37d425f5fbd5d361fb5f4950585aaf4f4374df0596bd56e"
     },
     {
       "api_id": "API-TEST-006",
@@ -5062,7 +5742,7 @@
       "package_id": "testing",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:73a72a68b3b8494f1b515e0ae88a1e6e4931b3dfab5db62bab17adc05aa132f4"
+      "task_packet_digest": "sha256:3713950c99c13294f0008b4b987114aed2c42e3986564f437cd4b4ce61c1339d"
     },
     {
       "api_id": "API-TEST-007",
@@ -5075,7 +5755,7 @@
       "package_id": "testing",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:88488a669f142fb302e56fdfbf9750c378306247bdbabd9572ce75f20aedb135"
+      "task_packet_digest": "sha256:6487395dd6473d2b9b9f27656f888dc8d51a18c94b9ddf2b77431d63ed104f42"
     },
     {
       "api_id": "API-TF-001",
@@ -5104,6 +5784,16 @@
         {
           "chain": [
             "AU-TF-001",
+            "fixtures-missing:AU-TF-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TF-001"
+        },
+        {
+          "chain": [
+            "AU-TF-001",
             "frozen-skeleton-missing:AU-TF-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -5119,7 +5809,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:258097923b2da3bee953b413cb9b78ac45c78086e9c715b369338308178c3d0c"
+      "task_packet_digest": "sha256:ccd8e78925b455a88ed9366ea7936dc8ddbe46daf15a279a2c4088402eaf53ca"
     },
     {
       "api_id": "API-TF-002",
@@ -5144,6 +5834,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-TF-002"
+        },
+        {
+          "chain": [
+            "AU-TF-002",
+            "fixtures-missing:AU-TF-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TF-002"
         },
         {
           "chain": [
@@ -5199,7 +5899,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:a3512721bf16ddf695b0c61ab5b930a79c63fa50cf550d0df7c259d610140730"
+      "task_packet_digest": "sha256:c6fbe39ec118a36cc1c72d80c84ab0dfcb2b0c23ae6e76a92e769166c43f5287"
     },
     {
       "api_id": "API-TF-003",
@@ -5224,6 +5924,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-TF-003"
+        },
+        {
+          "chain": [
+            "AU-TF-003",
+            "fixtures-missing:AU-TF-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TF-003"
         },
         {
           "chain": [
@@ -5279,7 +5989,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:bac7390f3c4bfe528e4f7398e0b4dacedf3fa74cc337e7180bead538afc3c60d"
+      "task_packet_digest": "sha256:47ff2f4dfc946e78ed21d3d22bf650ce6361ffacade9c2b8b7f9d56fdb953dab"
     },
     {
       "api_id": "API-TF-004",
@@ -5304,6 +6014,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-TF-004"
+        },
+        {
+          "chain": [
+            "AU-TF-004",
+            "fixtures-missing:AU-TF-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TF-004"
         },
         {
           "chain": [
@@ -5359,7 +6079,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:8a36b6f37cb09d0ff0c92fe79d5dffe426aba6781b5097677edcd6ac44b88ce6"
+      "task_packet_digest": "sha256:59d5b9271e7de5d800082099bd01ed357ae925d470a92669cd1ef3999ff80814"
     },
     {
       "api_id": "API-TF-005",
@@ -5384,6 +6104,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-TF-005"
+        },
+        {
+          "chain": [
+            "AU-TF-005",
+            "fixtures-missing:AU-TF-005"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TF-005"
         },
         {
           "chain": [
@@ -5439,7 +6169,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:c737764c4c657605c702add8b85f3aef913d4ea271fd839eed7fb2eba9741d7c"
+      "task_packet_digest": "sha256:c7249a836db50db7cb76dd34802c791c9ea0f76f956b62350fce92ef50cf15bf"
     },
     {
       "api_id": "API-TF-006",
@@ -5474,6 +6204,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-TF-006"
+        },
+        {
+          "chain": [
+            "AU-TF-006",
+            "fixtures-missing:AU-TF-006"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TF-006"
         },
         {
           "chain": [
@@ -5529,7 +6269,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:689234534dbb3cc47eaf91d5ec904f6148fc879dc7caf3f02b3aeb33cfb6668d"
+      "task_packet_digest": "sha256:873e9c80c9ab7da11addf008f71a2e084233a74ba257d7094d5a84a39393b2f9"
     },
     {
       "api_id": "API-TF-007",
@@ -5554,6 +6294,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-TF-007"
+        },
+        {
+          "chain": [
+            "AU-TF-007",
+            "fixtures-missing:AU-TF-007"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TF-007"
         },
         {
           "chain": [
@@ -5609,7 +6359,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:3dca9dffd249026b1e0f060516f6c527c39ca6c4ca1c2b29404f8fb6a79a2bb2"
+      "task_packet_digest": "sha256:9ef2fd08ff53399d645196c14f89dcbf6e4737dfcde6224a2520d5eddc413815"
     },
     {
       "api_id": "API-TF-008",
@@ -5634,6 +6384,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-TF-008"
+        },
+        {
+          "chain": [
+            "AU-TF-008",
+            "fixtures-missing:AU-TF-008"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TF-008"
         },
         {
           "chain": [
@@ -5689,7 +6449,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:87e27d578bc2558e1228430e773dfb1a2ae562946cb71fe3b380934dcc8efb03"
+      "task_packet_digest": "sha256:1a57f08a3aafa98ce49cf12f2cbdb14554a8130d84030e849f12dae36afdcdb5"
     },
     {
       "api_id": "API-TF-009",
@@ -5714,6 +6474,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-TF-009"
+        },
+        {
+          "chain": [
+            "AU-TF-009",
+            "fixtures-missing:AU-TF-009"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TF-009"
         },
         {
           "chain": [
@@ -5769,7 +6539,7 @@
       "package_id": "transform",
       "phase": "M4",
       "state": "blocked",
-      "task_packet_digest": "sha256:c84050d7b64502eaaa4a0b4c918d1d822f95ef6bb0ed712a667058a3ef11e6cb"
+      "task_packet_digest": "sha256:0e081aa0f6543c49b9ec4c4645dc4bea45a6487061afe23c577fb63bb1f96ef2"
     },
     {
       "api_id": "API-WS-001",
@@ -5782,7 +6552,7 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:c2126966549460fdc44c876e0835bf4ae4aea0d8d726809dd551ef79965af3ae"
+      "task_packet_digest": "sha256:4c56047543e6b4d86586651bd3df8cb180852f4cdd7b73748e69b3e124be5b4b"
     },
     {
       "api_id": "API-WS-002",
@@ -5795,7 +6565,7 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:f9bb358279d7fb879cbe8e088c77264588b46751e3c7619048e0070b50bfaa41"
+      "task_packet_digest": "sha256:7dbe563b05ba10e56e765761c3cac2cfed682d25c035c3946a25a7c0e1cb126e"
     },
     {
       "api_id": "API-WS-003",
@@ -5808,7 +6578,7 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:09bf36fbb9985b63f09b5356d6ef06003529b261f01c0f8cb12b5266db678837"
+      "task_packet_digest": "sha256:c4881edf2763798114638a4ae9909e1aeccb2015fb34373b4b4de373769fd5e8"
     },
     {
       "api_id": "API-WS-004",
@@ -5821,7 +6591,7 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:f715887032fe6985be98bcd4fed18856616b04c411ae0bfb341aa64810d43585"
+      "task_packet_digest": "sha256:1b707c78415040749740be8b4a8b488efd45a1312d4bbd3e9137cfc92202d849"
     },
     {
       "api_id": "API-WS-005",
@@ -5834,7 +6604,7 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:95cd97861146ab79332dc2a7e36b67bfcf8b60d2816c004a7a191e42e99e9978"
+      "task_packet_digest": "sha256:96a8adec54368f8d1c4d89775f4c729397a4ff7c36f22515d8fd3dfcb149ca36"
     },
     {
       "api_id": "API-WS-006",
@@ -5847,7 +6617,7 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:b22ba85915f2d62f280c9f90f318c7ce9cf1eb3d2f5d666d08ac579ee86c4fdc"
+      "task_packet_digest": "sha256:5694d26f1c8086afb244f6cf7170cd94507a6f60dff59601512a860490cc1b27"
     },
     {
       "api_id": "API-WS-007",
@@ -5860,7 +6630,7 @@
       "package_id": "workspace",
       "phase": "M1",
       "state": "complete",
-      "task_packet_digest": "sha256:fdf1632f7a9a5cc62533ebafc6cb69c6a0a8b8da338e2d6b0f9e6bbb2a848eec"
+      "task_packet_digest": "sha256:c98e37d7a4c5828a78ab750c63b1148da6c4cf42539cbd403a82d5748b1caea3"
     },
     {
       "api_id": "API-WS-008",
@@ -5873,7 +6643,7 @@
       "package_id": "workspace",
       "phase": "M0",
       "state": "complete",
-      "task_packet_digest": "sha256:4d8e6b852e26578f8ff7790ce9215d9196845ef1761c36fa1835448914de1314"
+      "task_packet_digest": "sha256:e515cca6b36ec3ce1deb87cd1ada280adf4bf976aaff02c3759cc79bf1044a92"
     }
   ],
   "authorization": {
@@ -5885,7 +6655,7 @@
     "validity": {
       "basis": "exact-source-and-observed-gates",
       "expires_on": "source-workflow-gate-or-input-drift",
-      "fingerprint_digest": "sha256:3cc77253b43f608aa61c2a9eef38d8637ffba3b268c9077d7b2b97b9aae9c3ae",
+      "fingerprint_digest": "sha256:53569316cce7fc210f797cc3c4d760563ff2c404a3cb5d60db4ad7559f90c923",
       "state": "unverified"
     }
   },
@@ -5943,7 +6713,7 @@
         "api_id": "API-COPY-001",
         "atomic_unit_id": "AU-COPY-001",
         "kind": "free_function",
-        "packet_digest": "sha256:4f300cd83bb6487ea7eea102393c5246e290fe79dd18d5be8d38bbb87a86296e",
+        "packet_digest": "sha256:c43d3bf23f3a773d566f867f2318e5ff4e662f3b00fcc82a75fe2cb36306dc2a",
         "phase": "M6",
         "shard_digest": "sha256:18c87c4c640f39c4e80809eaed8b385d4ea46e737f63b341251d49e264332e84",
         "start_authorized": false,
@@ -5961,7 +6731,7 @@
         "api_id": "API-FACT-002",
         "atomic_unit_id": "AU-FACT-002",
         "kind": "method",
-        "packet_digest": "sha256:a59df95eef7b7d7076eba0c096eeecd260ae4431bf4a4fb4d3370bdcea92988b",
+        "packet_digest": "sha256:8f7856dd76843f13834284d7487938ff5dd8e401036f84ac2766f8120eebd8f4",
         "phase": "M1",
         "shard_digest": "sha256:a6504479ade54c8e1d2300faa842ece5bee90b2c9dc7b9fb3c478e64181c9c92",
         "start_authorized": false,
@@ -5979,7 +6749,7 @@
         "api_id": "API-CFG-003",
         "atomic_unit_id": "AU-CFG-003",
         "kind": "method_family",
-        "packet_digest": "sha256:41f73fc731c14e02919364a24b7f06aa4d87b25ffee6133e982ee7c1e2bafe3a",
+        "packet_digest": "sha256:2516b0ed866972b3a8e8b062ddfae6dbb3949a6555c4d05171e416b04cc49b66",
         "phase": "M0",
         "shard_digest": "sha256:9e855b296298f42106a01eb28242729c2a7e6ece47f1fdb01ef05e1deb2d2b1e",
         "start_authorized": false,
@@ -5997,7 +6767,7 @@
         "api_id": "API-FLOW-004",
         "atomic_unit_id": "AU-FLOW-004",
         "kind": "builder_family",
-        "packet_digest": "sha256:3aac34d84bbd27bad4991b405c901c0df00e20c7bc7eca704bd5fd32cc5b56f9",
+        "packet_digest": "sha256:53c161d202974912083565ef097fc9998ec849303586de406f98384680575882",
         "phase": "M7",
         "shard_digest": "sha256:5f9955687c7ac6ca15598af95745b818fb32f398a1fcdcd7b6ff35dfb1997bc0",
         "start_authorized": false,
@@ -6015,9 +6785,9 @@
         "api_id": "API-CFG-001",
         "atomic_unit_id": "AU-CFG-001",
         "kind": "static_factory",
-        "packet_digest": "sha256:7dfbd0d90c412c59e9b1642139a2ada56d12d3b8259ec1e110be496591f740b9",
+        "packet_digest": "sha256:2ade1c8d4ff64a274085fff70d136deef2b35f6667927efc60ccccca1b1060d2",
         "phase": "M0",
-        "shard_digest": "sha256:b29fbbb7d755697e47036bcddeff21987cc526bde463de945b99c941a2b88472",
+        "shard_digest": "sha256:d9df4256387eaa53c053ee711a7dc3700331bccba8cda4d9f75945e8004f2eec",
         "start_authorized": false,
         "state": "complete"
       }
@@ -6302,18 +7072,18 @@
     "write_overlap_count": 0
   },
   "input_fingerprints": {
-    "audit_policy": "sha256:822908a7964cb07984bf1fd6b23cd591333a393fdf7ce8ccf3d3fdcddc8804c9",
-    "build_gates": "sha256:4f8b16d230e8b7cb6fd0de7c75c8e1eb371b63762c304b1b02291bd369427409",
-    "catalog": "sha256:e3d21770bd83c2ea192697165da6671b511fd8acc238af24ceea240f8fe73fff",
-    "dependency_requests": "sha256:b019e18ea094f94addf8e87d6c07d6853bd76f1e5899907aa65221fe16cc7229",
-    "design_package": "sha256:a481f90537999a217c57b8e5696670bbc5feb451c2ff5607781bd3c420058d77",
-    "m0": "sha256:b0e967a78fa4d8e936d54a60bea16c59feb57ad8cbcef645628e9651c1d0b617",
+    "audit_policy": "sha256:c540f237c1698d636e21c88437da029a2a85166f579081d1ed32a7508f38930f",
+    "build_gates": "sha256:bca7b3c4f6e693143e6b7ebd70a456fc38b1cbf193735ade6ea0aa1c5d2d6ea3",
+    "catalog": "sha256:5859a7c90da07fe6b6952db950e4f7f8bcb00abd4fb5c51bd01ab3f78bc2bc9d",
+    "dependency_requests": "sha256:3b91ab753296257f93cd8d51c63beb3dc1918dbd95e59c3954c9f44fc887b4b1",
+    "design_package": "sha256:1d2ec5699926e5dbc4db08f2c69fb276bbea002694cca25568113039b20c065a",
+    "m0": "sha256:9e32e99675512405e1247fd92b8cfcbc5c6e99ab9dc0378833482541c0538f19",
     "m1": "sha256:0e5bf5dd8568f14394199e2deb51649bbd2743170812de12fd098b54caaa142f",
     "m2": "sha256:448a5141f4c6e1045b5ff0ddae6126054be2a0cb261cfd2b227b1e1ce741e9c7",
-    "ownership": "sha256:7cf1d60c29d518f1d626bc25150e643826f11d9f6363c309cfc217988f014fd0",
+    "ownership": "sha256:9ce60be52194edf057499a440b0a65cb072cd5394d82b7faa7fff4de6dc41070",
     "quality_workflow": "sha256:f8fc4c3623c6ff6c81204823ee49dcb1fc457de5a7dcffbc0a8d9957cac743b5",
-    "ready_report": "sha256:2231b809246a934760afa51b21f9ad1ea831c7e278e81b5bba284ba216c3be29",
-    "task_packets": "sha256:11363751d974223df6fd5f743aaa589eebbde128a3142c35411c1b466c8d6a3c"
+    "ready_report": "sha256:eb8adfaeb1bf9e260a212b03e3eef2928cf3f2ae192b7fc3eba8fae6cf08a7a5",
+    "task_packets": "sha256:b7b92fcdcbe3be0c9764f64c102497d86f69b76754b46d23d7d809d49c8a8192"
   },
   "policy": {
     "dispatch_scope": "manifest_ready_units_only",
@@ -6328,7 +7098,7 @@
     "waivers_allowed": false
   },
   "schema": "cxxlens.readiness.authorization.v1",
-  "semantic_digest": "sha256:70e489b836bf9f5d86be5f5333e9ba8f5ad8878f37198c9959efcc6421ec9d9b",
+  "semantic_digest": "sha256:fd1cb702672bbbd380d80c8bf81323e74f434f66a6dc636bcd766a15a77330f8",
   "source_identity": {
     "binding": "unbound",
     "commit_sha": null,
@@ -6361,7 +7131,7 @@
       "dispatch_authorized": false,
       "package_id": "configuration",
       "package_integration_shard_id": "integration.configuration",
-      "shard_digest": "sha256:b29fbbb7d755697e47036bcddeff21987cc526bde463de945b99c941a2b88472",
+      "shard_digest": "sha256:d9df4256387eaa53c053ee711a7dc3700331bccba8cda4d9f75945e8004f2eec",
       "shard_id": "shard.au-cfg-001",
       "state": "complete",
       "topological_wave": 0
@@ -6403,7 +7173,7 @@
       "dispatch_authorized": false,
       "package_id": "configuration",
       "package_integration_shard_id": "integration.configuration",
-      "shard_digest": "sha256:3cf32d52c45f11f5925b691b5149ebbfada7e456a0535bfc4fe8fe84a61687f7",
+      "shard_digest": "sha256:1ecc11f7c91095ad187879e202dc3d3ab54c832d1508ec854b249c788ab8d3b9",
       "shard_id": "shard.au-cfg-004",
       "state": "complete",
       "topological_wave": 1
@@ -6443,6 +7213,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-COPY-001"
+        },
+        {
+          "chain": [
+            "AU-COPY-001",
+            "fixtures-missing:AU-COPY-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-COPY-001"
         },
         {
           "chain": [
@@ -6488,6 +7268,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-COPY-002"
+        },
+        {
+          "chain": [
+            "AU-COPY-002",
+            "fixtures-missing:AU-COPY-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-COPY-002"
         },
         {
           "chain": [
@@ -6553,7 +7343,7 @@
       "dispatch_authorized": false,
       "package_id": "core",
       "package_integration_shard_id": "integration.core",
-      "shard_digest": "sha256:e185bfef81ed2cba5ac3a449392479ae992a679045fb9f73bbfec1b044e0df0d",
+      "shard_digest": "sha256:dfdf1935f95f8e0fafe7e4b226b9a73c67971b7fc1026817c8f93c912e6f57be",
       "shard_id": "shard.au-core-001",
       "state": "complete",
       "topological_wave": 0
@@ -6567,7 +7357,7 @@
       "dispatch_authorized": false,
       "package_id": "core",
       "package_integration_shard_id": "integration.core",
-      "shard_digest": "sha256:49dfb43ff3c5fd9084d0c5ff9b65bb2c631431addcc848ab1c5d908e78bcd29b",
+      "shard_digest": "sha256:707e3124df2452bcde7b68cde31e9443a9f2b4d902c1e2ff07f7a691aa78dc74",
       "shard_id": "shard.au-core-002",
       "state": "complete",
       "topological_wave": 1
@@ -6581,7 +7371,7 @@
       "dispatch_authorized": false,
       "package_id": "core",
       "package_integration_shard_id": "integration.core",
-      "shard_digest": "sha256:b19c93aaa888241136aa421495b2158dd5dee2fc44f5886e2233253a80b77109",
+      "shard_digest": "sha256:7fe2fb1d4bd61b29bfc80003330caf34187f47fab96612d0927fc5423635a727",
       "shard_id": "shard.au-core-003",
       "state": "complete",
       "topological_wave": 1
@@ -6595,7 +7385,7 @@
       "dispatch_authorized": false,
       "package_id": "core",
       "package_integration_shard_id": "integration.core",
-      "shard_digest": "sha256:eca834cb008fcd429296d813a4f3f918c24af5d4d3100936ec960781931f9cab",
+      "shard_digest": "sha256:1db9c6ec4de9a578811147213e93138848500fa4a90866d840b499dcd12e99f8",
       "shard_id": "shard.au-core-004",
       "state": "complete",
       "topological_wave": 1
@@ -6625,6 +7415,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-CORE-005"
+        },
+        {
+          "chain": [
+            "AU-CORE-005",
+            "fixtures-missing:AU-CORE-005"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-CORE-005"
         },
         {
           "chain": [
@@ -6674,6 +7474,16 @@
         {
           "chain": [
             "AU-CORE-006",
+            "fixtures-missing:AU-CORE-006"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-CORE-006"
+        },
+        {
+          "chain": [
+            "AU-CORE-006",
             "frozen-skeleton-missing:AU-CORE-006"
           ],
           "code": "frozen-skeleton-missing",
@@ -6719,6 +7529,16 @@
         {
           "chain": [
             "AU-EXP-001",
+            "fixtures-missing:AU-EXP-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-EXP-001"
+        },
+        {
+          "chain": [
+            "AU-EXP-001",
             "frozen-skeleton-missing:AU-EXP-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -6744,7 +7564,7 @@
       "dispatch_authorized": false,
       "package_id": "explain",
       "package_integration_shard_id": "integration.explain",
-      "shard_digest": "sha256:ef7602a789e3c160b5fbba4c8d160f2ae31aa1d303e3c5a6c6b6e214b96128db",
+      "shard_digest": "sha256:a1c0450d829c20ace1f2526f1b2ec9abac0a62523ff42d3cfe898182937f1a32",
       "shard_id": "shard.au-exp-002",
       "state": "complete",
       "topological_wave": 2
@@ -6774,6 +7594,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-EXP-003"
+        },
+        {
+          "chain": [
+            "AU-EXP-003",
+            "fixtures-missing:AU-EXP-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-EXP-003"
         },
         {
           "chain": [
@@ -6819,6 +7649,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-EXP-004"
+        },
+        {
+          "chain": [
+            "AU-EXP-004",
+            "fixtures-missing:AU-EXP-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-EXP-004"
         },
         {
           "chain": [
@@ -6974,7 +7814,7 @@
       "dispatch_authorized": false,
       "package_id": "facts",
       "package_integration_shard_id": "integration.facts",
-      "shard_digest": "sha256:530b7b1069a419bb19358e7b2ae0c1e4e4a51c8b35d3011a610f99658d69b25d",
+      "shard_digest": "sha256:9319859fae8676b51918d7f5bc92c944112d81327fd10a544116e8be95f07fbb",
       "shard_id": "shard.au-fact-010",
       "state": "complete",
       "topological_wave": 2
@@ -7004,6 +7844,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-FLOW-001"
+        },
+        {
+          "chain": [
+            "AU-FLOW-001",
+            "fixtures-missing:AU-FLOW-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-001"
         },
         {
           "chain": [
@@ -7049,6 +7899,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-FLOW-002"
+        },
+        {
+          "chain": [
+            "AU-FLOW-002",
+            "fixtures-missing:AU-FLOW-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-002"
         },
         {
           "chain": [
@@ -7144,6 +8004,16 @@
         {
           "chain": [
             "AU-FLOW-003",
+            "fixtures-missing:AU-FLOW-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-003"
+        },
+        {
+          "chain": [
+            "AU-FLOW-003",
             "frozen-skeleton-missing:AU-FLOW-003"
           ],
           "code": "frozen-skeleton-missing",
@@ -7221,6 +8091,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-FLOW-004"
+        },
+        {
+          "chain": [
+            "AU-FLOW-004",
+            "fixtures-missing:AU-FLOW-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-004"
         },
         {
           "chain": [
@@ -7326,6 +8206,16 @@
         {
           "chain": [
             "AU-FLOW-005",
+            "fixtures-missing:AU-FLOW-005"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-005"
+        },
+        {
+          "chain": [
+            "AU-FLOW-005",
             "frozen-skeleton-missing:AU-FLOW-005"
           ],
           "code": "frozen-skeleton-missing",
@@ -7403,6 +8293,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-FLOW-006"
+        },
+        {
+          "chain": [
+            "AU-FLOW-006",
+            "fixtures-missing:AU-FLOW-006"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-006"
         },
         {
           "chain": [
@@ -7494,6 +8394,16 @@
           "resolution_issue": 1,
           "steward": "steward.facts",
           "subject": "cfg_summary"
+        },
+        {
+          "chain": [
+            "AU-FLOW-007",
+            "fixtures-missing:AU-FLOW-007"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-007"
         },
         {
           "chain": [
@@ -7599,6 +8509,16 @@
         {
           "chain": [
             "AU-FLOW-008",
+            "fixtures-missing:AU-FLOW-008"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-008"
+        },
+        {
+          "chain": [
+            "AU-FLOW-008",
             "frozen-skeleton-missing:AU-FLOW-008"
           ],
           "code": "frozen-skeleton-missing",
@@ -7680,6 +8600,16 @@
         {
           "chain": [
             "AU-FUZZ-001",
+            "fixtures-missing:AU-FUZZ-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FUZZ-001"
+        },
+        {
+          "chain": [
+            "AU-FUZZ-001",
             "frozen-skeleton-missing:AU-FUZZ-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -7721,6 +8651,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-FUZZ-002"
+        },
+        {
+          "chain": [
+            "AU-FUZZ-002",
+            "fixtures-missing:AU-FUZZ-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FUZZ-002"
         },
         {
           "chain": [
@@ -7806,6 +8746,16 @@
         {
           "chain": [
             "AU-FUZZ-003",
+            "fixtures-missing:AU-FUZZ-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-FUZZ-003"
+        },
+        {
+          "chain": [
+            "AU-FUZZ-003",
             "frozen-skeleton-missing:AU-FUZZ-003"
           ],
           "code": "frozen-skeleton-missing",
@@ -7887,6 +8837,16 @@
         {
           "chain": [
             "AU-GEN-001",
+            "fixtures-missing:AU-GEN-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-GEN-001"
+        },
+        {
+          "chain": [
+            "AU-GEN-001",
             "frozen-skeleton-missing:AU-GEN-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -7928,6 +8888,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-GEN-002"
+        },
+        {
+          "chain": [
+            "AU-GEN-002",
+            "fixtures-missing:AU-GEN-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-GEN-002"
         },
         {
           "chain": [
@@ -8013,6 +8983,16 @@
         {
           "chain": [
             "AU-GRAPH-001",
+            "fixtures-missing:AU-GRAPH-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-GRAPH-001"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-001",
             "frozen-skeleton-missing:AU-GRAPH-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -8054,6 +9034,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-GRAPH-002"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-002",
+            "fixtures-missing:AU-GRAPH-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-GRAPH-002"
         },
         {
           "chain": [
@@ -8139,6 +9129,16 @@
         {
           "chain": [
             "AU-GRAPH-003",
+            "fixtures-missing:AU-GRAPH-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-GRAPH-003"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-003",
             "frozen-skeleton-missing:AU-GRAPH-003"
           ],
           "code": "frozen-skeleton-missing",
@@ -8216,6 +9216,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-GRAPH-004"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-004",
+            "fixtures-missing:AU-GRAPH-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-GRAPH-004"
         },
         {
           "chain": [
@@ -8301,6 +9311,16 @@
         {
           "chain": [
             "AU-GRAPH-005",
+            "fixtures-missing:AU-GRAPH-005"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-GRAPH-005"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-005",
             "frozen-skeleton-missing:AU-GRAPH-005"
           ],
           "code": "frozen-skeleton-missing",
@@ -8382,6 +9402,16 @@
         {
           "chain": [
             "AU-GRAPH-006",
+            "fixtures-missing:AU-GRAPH-006"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-GRAPH-006"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-006",
             "frozen-skeleton-missing:AU-GRAPH-006"
           ],
           "code": "frozen-skeleton-missing",
@@ -8443,7 +9473,7 @@
       "dispatch_authorized": false,
       "package_id": "interop",
       "package_integration_shard_id": "integration.interop",
-      "shard_digest": "sha256:ffb533e00bbd4ae9d3115305f2c0b9beb604db664145e1ebcfb3121d6ca0e18b",
+      "shard_digest": "sha256:5067394febdc33e9400bc35f1cd7302a514abb820d48dfe68ed4c1ac0a6d20c9",
       "shard_id": "shard.au-int-001",
       "state": "complete",
       "topological_wave": 0
@@ -8487,6 +9517,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-INT-003"
+        },
+        {
+          "chain": [
+            "AU-INT-003",
+            "fixtures-missing:AU-INT-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-INT-003"
         },
         {
           "chain": [
@@ -8536,6 +9576,16 @@
         {
           "chain": [
             "AU-INT-004",
+            "fixtures-missing:AU-INT-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-INT-004"
+        },
+        {
+          "chain": [
+            "AU-INT-004",
             "frozen-skeleton-missing:AU-INT-004"
           ],
           "code": "frozen-skeleton-missing",
@@ -8581,6 +9631,16 @@
         {
           "chain": [
             "AU-METHOD-001",
+            "fixtures-missing:AU-METHOD-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-METHOD-001"
+        },
+        {
+          "chain": [
+            "AU-METHOD-001",
             "frozen-skeleton-missing:AU-METHOD-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -8622,6 +9682,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-METHOD-002"
+        },
+        {
+          "chain": [
+            "AU-METHOD-002",
+            "fixtures-missing:AU-METHOD-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-METHOD-002"
         },
         {
           "chain": [
@@ -8703,6 +9773,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-METHOD-003"
+        },
+        {
+          "chain": [
+            "AU-METHOD-003",
+            "fixtures-missing:AU-METHOD-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-METHOD-003"
         },
         {
           "chain": [
@@ -8808,6 +9888,16 @@
         {
           "chain": [
             "AU-METHOD-004",
+            "fixtures-missing:AU-METHOD-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-METHOD-004"
+        },
+        {
+          "chain": [
+            "AU-METHOD-004",
             "frozen-skeleton-missing:AU-METHOD-004"
           ],
           "code": "frozen-skeleton-missing",
@@ -8899,6 +9989,16 @@
         {
           "chain": [
             "AU-METHOD-005",
+            "fixtures-missing:AU-METHOD-005"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-METHOD-005"
+        },
+        {
+          "chain": [
+            "AU-METHOD-005",
             "frozen-skeleton-missing:AU-METHOD-005"
           ],
           "code": "frozen-skeleton-missing",
@@ -8980,6 +10080,16 @@
         {
           "chain": [
             "AU-MOCK-001",
+            "fixtures-missing:AU-MOCK-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-MOCK-001"
+        },
+        {
+          "chain": [
+            "AU-MOCK-001",
             "frozen-skeleton-missing:AU-MOCK-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -9021,6 +10131,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-MOCK-002"
+        },
+        {
+          "chain": [
+            "AU-MOCK-002",
+            "fixtures-missing:AU-MOCK-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-MOCK-002"
         },
         {
           "chain": [
@@ -9106,6 +10226,16 @@
         {
           "chain": [
             "AU-MOCK-003",
+            "fixtures-missing:AU-MOCK-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-MOCK-003"
+        },
+        {
+          "chain": [
+            "AU-MOCK-003",
             "frozen-skeleton-missing:AU-MOCK-003"
           ],
           "code": "frozen-skeleton-missing",
@@ -9187,6 +10317,16 @@
         {
           "chain": [
             "AU-MODEL-001",
+            "fixtures-missing:AU-MODEL-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-MODEL-001"
+        },
+        {
+          "chain": [
+            "AU-MODEL-001",
             "frozen-skeleton-missing:AU-MODEL-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -9228,6 +10368,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-MODEL-002"
+        },
+        {
+          "chain": [
+            "AU-MODEL-002",
+            "fixtures-missing:AU-MODEL-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-MODEL-002"
         },
         {
           "chain": [
@@ -9313,6 +10463,16 @@
         {
           "chain": [
             "AU-MODEL-003",
+            "fixtures-missing:AU-MODEL-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-MODEL-003"
+        },
+        {
+          "chain": [
+            "AU-MODEL-003",
             "frozen-skeleton-missing:AU-MODEL-003"
           ],
           "code": "frozen-skeleton-missing",
@@ -9390,6 +10550,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-MODEL-004"
+        },
+        {
+          "chain": [
+            "AU-MODEL-004",
+            "fixtures-missing:AU-MODEL-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-MODEL-004"
         },
         {
           "chain": [
@@ -9475,6 +10645,16 @@
         {
           "chain": [
             "AU-QA-001",
+            "fixtures-missing:AU-QA-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-QA-001"
+        },
+        {
+          "chain": [
+            "AU-QA-001",
             "frozen-skeleton-missing:AU-QA-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -9516,6 +10696,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-QA-002"
+        },
+        {
+          "chain": [
+            "AU-QA-002",
+            "fixtures-missing:AU-QA-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-QA-002"
         },
         {
           "chain": [
@@ -9607,6 +10797,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-QA-003"
+        },
+        {
+          "chain": [
+            "AU-QA-003",
+            "fixtures-missing:AU-QA-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-QA-003"
         },
         {
           "chain": [
@@ -9714,6 +10914,16 @@
         {
           "chain": [
             "AU-QA-004",
+            "fixtures-missing:AU-QA-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-QA-004"
+        },
+        {
+          "chain": [
+            "AU-QA-004",
             "frozen-skeleton-missing:AU-QA-004"
           ],
           "code": "frozen-skeleton-missing",
@@ -9807,6 +11017,16 @@
         {
           "chain": [
             "AU-REPORT-001",
+            "fixtures-missing:AU-REPORT-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-REPORT-001"
+        },
+        {
+          "chain": [
+            "AU-REPORT-001",
             "frozen-skeleton-missing:AU-REPORT-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -9848,6 +11068,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-REPORT-002"
+        },
+        {
+          "chain": [
+            "AU-REPORT-002",
+            "fixtures-missing:AU-REPORT-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-REPORT-002"
         },
         {
           "chain": [
@@ -9933,6 +11163,16 @@
         {
           "chain": [
             "AU-REPORT-003",
+            "fixtures-missing:AU-REPORT-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-REPORT-003"
+        },
+        {
+          "chain": [
+            "AU-REPORT-003",
             "frozen-skeleton-missing:AU-REPORT-003"
           ],
           "code": "frozen-skeleton-missing",
@@ -10010,6 +11250,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-REPORT-004"
+        },
+        {
+          "chain": [
+            "AU-REPORT-004",
+            "fixtures-missing:AU-REPORT-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-REPORT-004"
         },
         {
           "chain": [
@@ -10095,6 +11345,16 @@
         {
           "chain": [
             "AU-RULE-001",
+            "fixtures-missing:AU-RULE-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RULE-001"
+        },
+        {
+          "chain": [
+            "AU-RULE-001",
             "frozen-skeleton-missing:AU-RULE-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -10136,6 +11396,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-RULE-002"
+        },
+        {
+          "chain": [
+            "AU-RULE-002",
+            "fixtures-missing:AU-RULE-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RULE-002"
         },
         {
           "chain": [
@@ -10221,6 +11491,16 @@
         {
           "chain": [
             "AU-RULE-003",
+            "fixtures-missing:AU-RULE-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RULE-003"
+        },
+        {
+          "chain": [
+            "AU-RULE-003",
             "frozen-skeleton-missing:AU-RULE-003"
           ],
           "code": "frozen-skeleton-missing",
@@ -10298,6 +11578,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-RULE-004"
+        },
+        {
+          "chain": [
+            "AU-RULE-004",
+            "fixtures-missing:AU-RULE-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RULE-004"
         },
         {
           "chain": [
@@ -10383,6 +11673,16 @@
         {
           "chain": [
             "AU-RULE-005",
+            "fixtures-missing:AU-RULE-005"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RULE-005"
+        },
+        {
+          "chain": [
+            "AU-RULE-005",
             "frozen-skeleton-missing:AU-RULE-005"
           ],
           "code": "frozen-skeleton-missing",
@@ -10464,6 +11764,16 @@
         {
           "chain": [
             "AU-RV-001",
+            "fixtures-missing:AU-RV-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RV-001"
+        },
+        {
+          "chain": [
+            "AU-RV-001",
             "frozen-skeleton-missing:AU-RV-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -10505,6 +11815,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-RV-002"
+        },
+        {
+          "chain": [
+            "AU-RV-002",
+            "fixtures-missing:AU-RV-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RV-002"
         },
         {
           "chain": [
@@ -10590,6 +11910,16 @@
         {
           "chain": [
             "AU-RV-003",
+            "fixtures-missing:AU-RV-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RV-003"
+        },
+        {
+          "chain": [
+            "AU-RV-003",
             "frozen-skeleton-missing:AU-RV-003"
           ],
           "code": "frozen-skeleton-missing",
@@ -10667,6 +11997,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-RV-004"
+        },
+        {
+          "chain": [
+            "AU-RV-004",
+            "fixtures-missing:AU-RV-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RV-004"
         },
         {
           "chain": [
@@ -10758,6 +12098,16 @@
           "resolution_issue": 1,
           "steward": "steward.facts",
           "subject": "finding"
+        },
+        {
+          "chain": [
+            "AU-RV-005",
+            "fixtures-missing:AU-RV-005"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-RV-005"
         },
         {
           "chain": [
@@ -10895,6 +12245,16 @@
         {
           "chain": [
             "AU-SEL-004",
+            "fixtures-missing:AU-SEL-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-SEL-004"
+        },
+        {
+          "chain": [
+            "AU-SEL-004",
             "frozen-skeleton-missing:AU-SEL-004"
           ],
           "code": "frozen-skeleton-missing",
@@ -10936,6 +12296,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-SEL-005"
+        },
+        {
+          "chain": [
+            "AU-SEL-005",
+            "fixtures-missing:AU-SEL-005"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-SEL-005"
         },
         {
           "chain": [
@@ -10999,6 +12369,16 @@
         {
           "chain": [
             "AU-SEL-007",
+            "fixtures-missing:AU-SEL-007"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-SEL-007"
+        },
+        {
+          "chain": [
+            "AU-SEL-007",
             "frozen-skeleton-missing:AU-SEL-007"
           ],
           "code": "frozen-skeleton-missing",
@@ -11052,7 +12432,7 @@
       "dispatch_authorized": false,
       "package_id": "select",
       "package_integration_shard_id": "integration.select",
-      "shard_digest": "sha256:83ec7da60923f897547d99cbf5b30e1053254d1647098b78f0f865ba31d9abee",
+      "shard_digest": "sha256:12ef0c17a3c4c9696060893ae613369cc989fbf9949202de78166bb95210eda7",
       "shard_id": "shard.au-sel-010",
       "state": "complete",
       "topological_wave": 3
@@ -11096,6 +12476,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-SRCH-001"
+        },
+        {
+          "chain": [
+            "AU-SRCH-001",
+            "fixtures-missing:AU-SRCH-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-SRCH-001"
         },
         {
           "chain": [
@@ -11145,6 +12535,16 @@
         {
           "chain": [
             "AU-SRCH-002",
+            "fixtures-missing:AU-SRCH-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-SRCH-002"
+        },
+        {
+          "chain": [
+            "AU-SRCH-002",
             "frozen-skeleton-missing:AU-SRCH-002"
           ],
           "code": "frozen-skeleton-missing",
@@ -11170,7 +12570,7 @@
       "dispatch_authorized": false,
       "package_id": "search",
       "package_integration_shard_id": "integration.search",
-      "shard_digest": "sha256:b8bb916c487c946f413193e1f9d0013e68a7f4be3e7ddfae7dec858fed968086",
+      "shard_digest": "sha256:4d847a9f469ad1cce8bc881449731afe387f02ac7c90c7cefd43ee83daed6412",
       "shard_id": "shard.au-srch-003",
       "state": "complete",
       "topological_wave": 2
@@ -11184,7 +12584,7 @@
       "dispatch_authorized": false,
       "package_id": "search",
       "package_integration_shard_id": "integration.search",
-      "shard_digest": "sha256:799e82bc416f4eaff6c80acd98c06f379dd66a509f66e5397d8eb0b9c1f080f5",
+      "shard_digest": "sha256:fcb17383424d1522b58417d7280440ca37eff7ddc4f33b114100a3f0ea9c1339",
       "shard_id": "shard.au-srch-004",
       "state": "complete",
       "topological_wave": 3
@@ -11260,6 +12660,16 @@
         {
           "chain": [
             "AU-SRCH-008",
+            "fixtures-missing:AU-SRCH-008"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-SRCH-008"
+        },
+        {
+          "chain": [
+            "AU-SRCH-008",
             "frozen-skeleton-missing:AU-SRCH-008"
           ],
           "code": "frozen-skeleton-missing",
@@ -11301,6 +12711,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-SRCH-009"
+        },
+        {
+          "chain": [
+            "AU-SRCH-009",
+            "fixtures-missing:AU-SRCH-009"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-SRCH-009"
         },
         {
           "chain": [
@@ -11360,6 +12780,16 @@
         {
           "chain": [
             "AU-SRCH-010",
+            "fixtures-missing:AU-SRCH-010"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-SRCH-010"
+        },
+        {
+          "chain": [
+            "AU-SRCH-010",
             "frozen-skeleton-missing:AU-SRCH-010"
           ],
           "code": "frozen-skeleton-missing",
@@ -11385,7 +12815,7 @@
       "dispatch_authorized": false,
       "package_id": "testing",
       "package_integration_shard_id": "integration.testing",
-      "shard_digest": "sha256:d094f72c7884d7701eda8ca7b7ae29d1c0c1e37d1d893cc281a75d99eba5c917",
+      "shard_digest": "sha256:3d0238098282138f94c07fec889a28bec3d189cfa29b95efc2100d2668390202",
       "shard_id": "shard.au-test-001",
       "state": "complete",
       "topological_wave": 0
@@ -11433,6 +12863,16 @@
         {
           "chain": [
             "AU-TEST-003",
+            "fixtures-missing:AU-TEST-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TEST-003"
+        },
+        {
+          "chain": [
+            "AU-TEST-003",
             "frozen-skeleton-missing:AU-TEST-003"
           ],
           "code": "frozen-skeleton-missing",
@@ -11474,6 +12914,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-TEST-004"
+        },
+        {
+          "chain": [
+            "AU-TEST-004",
+            "fixtures-missing:AU-TEST-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TEST-004"
         },
         {
           "chain": [
@@ -11565,6 +13015,16 @@
         {
           "chain": [
             "AU-TF-001",
+            "fixtures-missing:AU-TF-001"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TF-001"
+        },
+        {
+          "chain": [
+            "AU-TF-001",
             "frozen-skeleton-missing:AU-TF-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -11606,6 +13066,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-TF-002"
+        },
+        {
+          "chain": [
+            "AU-TF-002",
+            "fixtures-missing:AU-TF-002"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TF-002"
         },
         {
           "chain": [
@@ -11691,6 +13161,16 @@
         {
           "chain": [
             "AU-TF-003",
+            "fixtures-missing:AU-TF-003"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TF-003"
+        },
+        {
+          "chain": [
+            "AU-TF-003",
             "frozen-skeleton-missing:AU-TF-003"
           ],
           "code": "frozen-skeleton-missing",
@@ -11772,6 +13252,16 @@
         {
           "chain": [
             "AU-TF-004",
+            "fixtures-missing:AU-TF-004"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TF-004"
+        },
+        {
+          "chain": [
+            "AU-TF-004",
             "frozen-skeleton-missing:AU-TF-004"
           ],
           "code": "frozen-skeleton-missing",
@@ -11849,6 +13339,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-TF-005"
+        },
+        {
+          "chain": [
+            "AU-TF-005",
+            "fixtures-missing:AU-TF-005"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TF-005"
         },
         {
           "chain": [
@@ -11944,6 +13444,16 @@
         {
           "chain": [
             "AU-TF-006",
+            "fixtures-missing:AU-TF-006"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TF-006"
+        },
+        {
+          "chain": [
+            "AU-TF-006",
             "frozen-skeleton-missing:AU-TF-006"
           ],
           "code": "frozen-skeleton-missing",
@@ -12021,6 +13531,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-TF-007"
+        },
+        {
+          "chain": [
+            "AU-TF-007",
+            "fixtures-missing:AU-TF-007"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TF-007"
         },
         {
           "chain": [
@@ -12106,6 +13626,16 @@
         {
           "chain": [
             "AU-TF-008",
+            "fixtures-missing:AU-TF-008"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TF-008"
+        },
+        {
+          "chain": [
+            "AU-TF-008",
             "frozen-skeleton-missing:AU-TF-008"
           ],
           "code": "frozen-skeleton-missing",
@@ -12183,6 +13713,16 @@
           "resolution_issue": 27,
           "steward": "generator.catalog",
           "subject": "API-TF-009"
+        },
+        {
+          "chain": [
+            "AU-TF-009",
+            "fixtures-missing:AU-TF-009"
+          ],
+          "code": "fixtures-missing",
+          "resolution_issue": 1,
+          "steward": "steward.testing",
+          "subject": "AU-TF-009"
         },
         {
           "chain": [
@@ -12304,7 +13844,7 @@
       "dispatch_authorized": false,
       "package_id": "workspace",
       "package_integration_shard_id": "integration.workspace",
-      "shard_digest": "sha256:d0cd4a5766fd4e8a11290e852e128c568b575b5b04caa9e2cfd6f7e0b8062465",
+      "shard_digest": "sha256:fed015f818604c14fe80451ad54bf1fda5490ddce5f88d87fd611155c94505ea",
       "shard_id": "shard.au-ws-005",
       "state": "complete",
       "topological_wave": 1

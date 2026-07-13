@@ -22,12 +22,20 @@ def main() -> int:
     }
     conformant = manifest["conformant_catalog_ids"]
     failures: list[str] = []
-    if any(catalog_by_id[api_id]["implementation_state"] != "conformant" for api_id in conformant):
-        failures.append("an M0 completion API is no longer conformant in the catalog")
+    exact_complete = sorted(
+        api["id"]
+        for api in catalog_by_id.values()
+        if api["phase"] == "M0"
+        and api["declaration"]["status"] == "exact"
+        and api["implementation_state"] == "conformant"
+        and api["readiness"]["state"] == "complete"
+    )
+    if sorted(conformant) != exact_complete:
+        failures.append("M0 completion APIs do not exactly match the catalog's exact complete set")
     vector_catalog = sorted(
         catalog_id for vector in manifest["vectors"] for catalog_id in vector["catalog_ids"]
     )
-    if vector_catalog != conformant:
+    if vector_catalog != sorted(conformant):
         failures.append("completion vectors do not map every conformant catalog API exactly once")
     requirements = {
         requirement for vector in manifest["vectors"] for requirement in vector["requirements"]

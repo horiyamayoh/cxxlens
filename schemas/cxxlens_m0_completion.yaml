@@ -6,12 +6,15 @@ conformant_catalog_ids:
 - API-CFG-003
 - API-CFG-004
 - API-CORE-001
+- API-CORE-002
 - API-CORE-003
 - API-CORE-004
+- API-FACT-001
 - API-TEST-001
 - API-TEST-002
 - API-TEST-005
 - API-TEST-006
+- API-WS-008
 public_headers:
 - include/cxxlens/configuration.hpp
 - include/cxxlens/core.hpp
@@ -21,8 +24,10 @@ public_headers:
 - include/cxxlens/core/identity.hpp
 - include/cxxlens/core/schema.hpp
 - include/cxxlens/cxxlens.hpp
+- include/cxxlens/facts.hpp
 - include/cxxlens/source.hpp
 - include/cxxlens/testing.hpp
+- include/cxxlens/workspace.hpp
 allowed_run_metadata: [cache_hit, elapsed, elapsed_ms, pid, thread, thread_id, timestamp]
 matrix:
   jobs: [1, 2, 8]
@@ -35,7 +40,7 @@ matrix:
 vectors:
 - id: M0-VERSION
   owner_issue: 2
-  catalog_ids: [API-CORE-001]
+  catalog_ids: [API-CORE-001, API-CORE-002]
   requirements: [FR-018, QR-001]
   tests: [unit.version, install.consumer]
   fixture: tests/unit/version_test.cpp
@@ -74,6 +79,13 @@ vectors:
   requirements: [FR-008, FR-010, QR-005]
   tests: [unit.evidence-coverage, determinism.evidence-process]
   fixture: tests/golden/evidence_coverage/canonical_v1.txt
+  reproduction_seed: 816926
+- id: M0-ANALYSIS-INPUTS
+  owner_issue: 7
+  catalog_ids: [API-FACT-001, API-WS-008]
+  requirements: [FR-005, QR-001]
+  tests: [unit.fact-contract, unit.workspace-catalog, install.consumer]
+  fixture: tests/install/consumer/main.cpp
   reproduction_seed: 816926
 - id: M0-FINDING
   owner_issue: 8

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <cxxlens/cxxlens.hpp>
+#include <cxxlens/interop/clang.hpp>
 
 namespace
 {
@@ -78,6 +79,20 @@ int helper(int value) { return value; }
 				"multi-TU x multi-variant compile-unit universe was not preserved");
 		require(workspace.capabilities().has("frontend.clang22"),
 				"M1 conformance requires the exact Clang 22 frontend capability");
+		const auto linked = interop::linked_clang_version();
+		require(linked.llvm_major == 22U, "M1 acceptance is not using the linked Clang 22 adapter");
+		bool callback_observed{};
+		auto borrowed = interop::with_translation_unit(
+			workspace,
+			workspace.compile_units().front().id(),
+			[&callback_observed](interop::borrowed_clang_tu& value) -> result<void>
+			{
+				callback_observed = !value.unit().id().empty();
+				return {};
+			},
+			context);
+		require(borrowed && callback_observed,
+				"M1 public borrowed translation-unit corridor was not executed");
 
 		const auto profile = fact_profile::semantic_search().include(fact_kind::macro_definition);
 		auto ensured = workspace.ensure(profile, analysis_scope::all(), context);

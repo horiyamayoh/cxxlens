@@ -9827,12 +9827,12 @@
     }
   ],
   "input_fingerprints": {
-    "dependency_requests": "sha256:b019e18ea094f94addf8e87d6c07d6853bd76f1e5899907aa65221fe16cc7229",
-    "m0": "sha256:b0e967a78fa4d8e936d54a60bea16c59feb57ad8cbcef645628e9651c1d0b617",
+    "dependency_requests": "sha256:3b91ab753296257f93cd8d51c63beb3dc1918dbd95e59c3954c9f44fc887b4b1",
+    "m0": "sha256:9e32e99675512405e1247fd92b8cfcbc5c6e99ab9dc0378833482541c0538f19",
     "m1": "sha256:0e5bf5dd8568f14394199e2deb51649bbd2743170812de12fd098b54caaa142f",
     "m2": "sha256:448a5141f4c6e1045b5ff0ddae6126054be2a0cb261cfd2b227b1e1ce741e9c7",
-    "ownership": "sha256:7cf1d60c29d518f1d626bc25150e643826f11d9f6363c309cfc217988f014fd0",
-    "task_packets": "sha256:11363751d974223df6fd5f743aaa589eebbde128a3142c35411c1b466c8d6a3c"
+    "ownership": "sha256:9ce60be52194edf057499a440b0a65cb072cd5394d82b7faa7fff4de6dc41070",
+    "task_packets": "sha256:b7b92fcdcbe3be0c9764f64c102497d86f69b76754b46d23d7d809d49c8a8192"
   },
   "nodes": [
     {
@@ -10021,6 +10021,15 @@
         {
           "chain": [
             "AU-COPY-001",
+            "fixtures-missing:AU-COPY-001"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-COPY-001"
+        },
+        {
+          "chain": [
+            "AU-COPY-001",
             "frozen-skeleton-missing:AU-COPY-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -10040,7 +10049,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -10093,6 +10102,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-COPY-002"
+        },
+        {
+          "chain": [
+            "AU-COPY-002",
+            "fixtures-missing:AU-COPY-002"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-COPY-002"
         },
         {
           "chain": [
@@ -10153,7 +10171,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -10356,6 +10374,15 @@
         {
           "chain": [
             "AU-CORE-005",
+            "fixtures-missing:AU-CORE-005"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-CORE-005"
+        },
+        {
+          "chain": [
+            "AU-CORE-005",
             "frozen-skeleton-missing:AU-CORE-005"
           ],
           "code": "frozen-skeleton-missing",
@@ -10377,7 +10404,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -10423,6 +10450,15 @@
         {
           "chain": [
             "AU-CORE-006",
+            "fixtures-missing:AU-CORE-006"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-CORE-006"
+        },
+        {
+          "chain": [
+            "AU-CORE-006",
             "frozen-skeleton-missing:AU-CORE-006"
           ],
           "code": "frozen-skeleton-missing",
@@ -10444,7 +10480,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -10490,6 +10526,15 @@
         {
           "chain": [
             "AU-EXP-001",
+            "fixtures-missing:AU-EXP-001"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-EXP-001"
+        },
+        {
+          "chain": [
+            "AU-EXP-001",
             "frozen-skeleton-missing:AU-EXP-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -10511,7 +10556,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -10603,6 +10648,15 @@
         {
           "chain": [
             "AU-EXP-003",
+            "fixtures-missing:AU-EXP-003"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-EXP-003"
+        },
+        {
+          "chain": [
+            "AU-EXP-003",
             "frozen-skeleton-missing:AU-EXP-003"
           ],
           "code": "frozen-skeleton-missing",
@@ -10624,7 +10678,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -10670,6 +10724,15 @@
         {
           "chain": [
             "AU-EXP-004",
+            "fixtures-missing:AU-EXP-004"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-EXP-004"
+        },
+        {
+          "chain": [
+            "AU-EXP-004",
             "frozen-skeleton-missing:AU-EXP-004"
           ],
           "code": "frozen-skeleton-missing",
@@ -10691,7 +10754,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -11161,6 +11224,15 @@
         {
           "chain": [
             "AU-FLOW-001",
+            "fixtures-missing:AU-FLOW-001"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-001"
+        },
+        {
+          "chain": [
+            "AU-FLOW-001",
             "frozen-skeleton-missing:AU-FLOW-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -11180,7 +11252,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -11229,6 +11301,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-FLOW-002"
+        },
+        {
+          "chain": [
+            "AU-FLOW-002",
+            "fixtures-missing:AU-FLOW-002"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-002"
         },
         {
           "chain": [
@@ -11289,7 +11370,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -11345,6 +11426,15 @@
           "code": "fact-provider-unavailable",
           "steward": "steward.facts",
           "subject": "control_flow"
+        },
+        {
+          "chain": [
+            "AU-FLOW-003",
+            "fixtures-missing:AU-FLOW-003"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-003"
         },
         {
           "chain": [
@@ -11405,7 +11495,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -11452,6 +11542,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-FLOW-004"
+        },
+        {
+          "chain": [
+            "AU-FLOW-004",
+            "fixtures-missing:AU-FLOW-004"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-004"
         },
         {
           "chain": [
@@ -11510,7 +11609,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -11574,6 +11673,15 @@
         {
           "chain": [
             "AU-FLOW-005",
+            "fixtures-missing:AU-FLOW-005"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-005"
+        },
+        {
+          "chain": [
+            "AU-FLOW-005",
             "frozen-skeleton-missing:AU-FLOW-005"
           ],
           "code": "frozen-skeleton-missing",
@@ -11630,7 +11738,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -11679,6 +11787,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-FLOW-006"
+        },
+        {
+          "chain": [
+            "AU-FLOW-006",
+            "fixtures-missing:AU-FLOW-006"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-006"
         },
         {
           "chain": [
@@ -11737,7 +11854,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -11788,6 +11905,15 @@
           "code": "fact-provider-unavailable",
           "steward": "steward.facts",
           "subject": "cfg_summary"
+        },
+        {
+          "chain": [
+            "AU-FLOW-007",
+            "fixtures-missing:AU-FLOW-007"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-007"
         },
         {
           "chain": [
@@ -11848,7 +11974,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -11917,6 +12043,15 @@
         {
           "chain": [
             "AU-FLOW-008",
+            "fixtures-missing:AU-FLOW-008"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-FLOW-008"
+        },
+        {
+          "chain": [
+            "AU-FLOW-008",
             "frozen-skeleton-missing:AU-FLOW-008"
           ],
           "code": "frozen-skeleton-missing",
@@ -11973,7 +12108,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -12026,6 +12161,15 @@
         {
           "chain": [
             "AU-FUZZ-001",
+            "fixtures-missing:AU-FUZZ-001"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-FUZZ-001"
+        },
+        {
+          "chain": [
+            "AU-FUZZ-001",
             "frozen-skeleton-missing:AU-FUZZ-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -12045,7 +12189,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -12092,6 +12236,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-FUZZ-002"
+        },
+        {
+          "chain": [
+            "AU-FUZZ-002",
+            "fixtures-missing:AU-FUZZ-002"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-FUZZ-002"
         },
         {
           "chain": [
@@ -12150,7 +12303,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -12192,6 +12345,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-FUZZ-003"
+        },
+        {
+          "chain": [
+            "AU-FUZZ-003",
+            "fixtures-missing:AU-FUZZ-003"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-FUZZ-003"
         },
         {
           "chain": [
@@ -12252,7 +12414,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -12305,6 +12467,15 @@
         {
           "chain": [
             "AU-GEN-001",
+            "fixtures-missing:AU-GEN-001"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-GEN-001"
+        },
+        {
+          "chain": [
+            "AU-GEN-001",
             "frozen-skeleton-missing:AU-GEN-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -12320,7 +12491,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -12362,6 +12533,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-GEN-002"
+        },
+        {
+          "chain": [
+            "AU-GEN-002",
+            "fixtures-missing:AU-GEN-002"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-GEN-002"
         },
         {
           "chain": [
@@ -12420,7 +12600,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -12466,6 +12646,15 @@
         {
           "chain": [
             "AU-GRAPH-001",
+            "fixtures-missing:AU-GRAPH-001"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-GRAPH-001"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-001",
             "frozen-skeleton-missing:AU-GRAPH-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -12485,7 +12674,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -12530,6 +12719,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-GRAPH-002"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-002",
+            "fixtures-missing:AU-GRAPH-002"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-GRAPH-002"
         },
         {
           "chain": [
@@ -12590,7 +12788,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -12635,6 +12833,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-GRAPH-003"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-003",
+            "fixtures-missing:AU-GRAPH-003"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-GRAPH-003"
         },
         {
           "chain": [
@@ -12695,7 +12902,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -12740,6 +12947,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-GRAPH-004"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-004",
+            "fixtures-missing:AU-GRAPH-004"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-GRAPH-004"
         },
         {
           "chain": [
@@ -12800,7 +13016,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -12845,6 +13061,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-GRAPH-005"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-005",
+            "fixtures-missing:AU-GRAPH-005"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-GRAPH-005"
         },
         {
           "chain": [
@@ -12905,7 +13130,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -12954,6 +13179,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-GRAPH-006"
+        },
+        {
+          "chain": [
+            "AU-GRAPH-006",
+            "fixtures-missing:AU-GRAPH-006"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-GRAPH-006"
         },
         {
           "chain": [
@@ -13012,7 +13246,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -13137,6 +13371,15 @@
         {
           "chain": [
             "AU-INT-003",
+            "fixtures-missing:AU-INT-003"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-INT-003"
+        },
+        {
+          "chain": [
+            "AU-INT-003",
             "frozen-skeleton-missing:AU-INT-003"
           ],
           "code": "frozen-skeleton-missing",
@@ -13158,7 +13401,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -13204,6 +13447,15 @@
         {
           "chain": [
             "AU-INT-004",
+            "fixtures-missing:AU-INT-004"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-INT-004"
+        },
+        {
+          "chain": [
+            "AU-INT-004",
             "frozen-skeleton-missing:AU-INT-004"
           ],
           "code": "frozen-skeleton-missing",
@@ -13225,7 +13477,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -13271,6 +13523,15 @@
         {
           "chain": [
             "AU-METHOD-001",
+            "fixtures-missing:AU-METHOD-001"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-METHOD-001"
+        },
+        {
+          "chain": [
+            "AU-METHOD-001",
             "frozen-skeleton-missing:AU-METHOD-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -13286,7 +13547,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -13328,6 +13589,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-METHOD-002"
+        },
+        {
+          "chain": [
+            "AU-METHOD-002",
+            "fixtures-missing:AU-METHOD-002"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-METHOD-002"
         },
         {
           "chain": [
@@ -13388,7 +13658,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -13435,6 +13705,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-METHOD-003"
+        },
+        {
+          "chain": [
+            "AU-METHOD-003",
+            "fixtures-missing:AU-METHOD-003"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-METHOD-003"
         },
         {
           "chain": [
@@ -13493,7 +13772,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -13557,6 +13836,15 @@
         {
           "chain": [
             "AU-METHOD-004",
+            "fixtures-missing:AU-METHOD-004"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-METHOD-004"
+        },
+        {
+          "chain": [
+            "AU-METHOD-004",
             "frozen-skeleton-missing:AU-METHOD-004"
           ],
           "code": "frozen-skeleton-missing",
@@ -13613,7 +13901,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -13677,6 +13965,15 @@
         {
           "chain": [
             "AU-METHOD-005",
+            "fixtures-missing:AU-METHOD-005"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-METHOD-005"
+        },
+        {
+          "chain": [
+            "AU-METHOD-005",
             "frozen-skeleton-missing:AU-METHOD-005"
           ],
           "code": "frozen-skeleton-missing",
@@ -13733,7 +14030,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -13788,6 +14085,15 @@
         {
           "chain": [
             "AU-MOCK-001",
+            "fixtures-missing:AU-MOCK-001"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-MOCK-001"
+        },
+        {
+          "chain": [
+            "AU-MOCK-001",
             "frozen-skeleton-missing:AU-MOCK-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -13807,7 +14113,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -13854,6 +14160,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-MOCK-002"
+        },
+        {
+          "chain": [
+            "AU-MOCK-002",
+            "fixtures-missing:AU-MOCK-002"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-MOCK-002"
         },
         {
           "chain": [
@@ -13912,7 +14227,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -13954,6 +14269,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-MOCK-003"
+        },
+        {
+          "chain": [
+            "AU-MOCK-003",
+            "fixtures-missing:AU-MOCK-003"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-MOCK-003"
         },
         {
           "chain": [
@@ -14014,7 +14338,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -14073,6 +14397,15 @@
         {
           "chain": [
             "AU-MODEL-001",
+            "fixtures-missing:AU-MODEL-001"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-MODEL-001"
+        },
+        {
+          "chain": [
+            "AU-MODEL-001",
             "frozen-skeleton-missing:AU-MODEL-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -14088,7 +14421,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -14130,6 +14463,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-MODEL-002"
+        },
+        {
+          "chain": [
+            "AU-MODEL-002",
+            "fixtures-missing:AU-MODEL-002"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-MODEL-002"
         },
         {
           "chain": [
@@ -14190,7 +14532,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -14237,6 +14579,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-MODEL-003"
+        },
+        {
+          "chain": [
+            "AU-MODEL-003",
+            "fixtures-missing:AU-MODEL-003"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-MODEL-003"
         },
         {
           "chain": [
@@ -14295,7 +14646,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -14337,6 +14688,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-MODEL-004"
+        },
+        {
+          "chain": [
+            "AU-MODEL-004",
+            "fixtures-missing:AU-MODEL-004"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-MODEL-004"
         },
         {
           "chain": [
@@ -14395,7 +14755,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -14441,6 +14801,15 @@
         {
           "chain": [
             "AU-QA-001",
+            "fixtures-missing:AU-QA-001"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-QA-001"
+        },
+        {
+          "chain": [
+            "AU-QA-001",
             "frozen-skeleton-missing:AU-QA-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -14456,7 +14825,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -14498,6 +14867,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-QA-002"
+        },
+        {
+          "chain": [
+            "AU-QA-002",
+            "fixtures-missing:AU-QA-002"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-QA-002"
         },
         {
           "chain": [
@@ -14556,7 +14934,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -14607,6 +14985,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-QA-003"
+        },
+        {
+          "chain": [
+            "AU-QA-003",
+            "fixtures-missing:AU-QA-003"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-QA-003"
         },
         {
           "chain": [
@@ -14677,7 +15064,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -14731,6 +15118,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-QA-004"
+        },
+        {
+          "chain": [
+            "AU-QA-004",
+            "fixtures-missing:AU-QA-004"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-QA-004"
         },
         {
           "chain": [
@@ -14802,7 +15198,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -14851,6 +15247,15 @@
         {
           "chain": [
             "AU-REPORT-001",
+            "fixtures-missing:AU-REPORT-001"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-REPORT-001"
+        },
+        {
+          "chain": [
+            "AU-REPORT-001",
             "frozen-skeleton-missing:AU-REPORT-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -14866,7 +15271,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -14908,6 +15313,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-REPORT-002"
+        },
+        {
+          "chain": [
+            "AU-REPORT-002",
+            "fixtures-missing:AU-REPORT-002"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-REPORT-002"
         },
         {
           "chain": [
@@ -14966,7 +15380,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -15008,6 +15422,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-REPORT-003"
+        },
+        {
+          "chain": [
+            "AU-REPORT-003",
+            "fixtures-missing:AU-REPORT-003"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-REPORT-003"
         },
         {
           "chain": [
@@ -15066,7 +15489,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -15108,6 +15531,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-REPORT-004"
+        },
+        {
+          "chain": [
+            "AU-REPORT-004",
+            "fixtures-missing:AU-REPORT-004"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-REPORT-004"
         },
         {
           "chain": [
@@ -15166,7 +15598,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -15212,6 +15644,15 @@
         {
           "chain": [
             "AU-RULE-001",
+            "fixtures-missing:AU-RULE-001"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-RULE-001"
+        },
+        {
+          "chain": [
+            "AU-RULE-001",
             "frozen-skeleton-missing:AU-RULE-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -15227,7 +15668,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -15269,6 +15710,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-RULE-002"
+        },
+        {
+          "chain": [
+            "AU-RULE-002",
+            "fixtures-missing:AU-RULE-002"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-RULE-002"
         },
         {
           "chain": [
@@ -15329,7 +15779,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -15380,6 +15830,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-RULE-003"
+        },
+        {
+          "chain": [
+            "AU-RULE-003",
+            "fixtures-missing:AU-RULE-003"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-RULE-003"
         },
         {
           "chain": [
@@ -15440,7 +15899,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -15491,6 +15950,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-RULE-004"
+        },
+        {
+          "chain": [
+            "AU-RULE-004",
+            "fixtures-missing:AU-RULE-004"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-RULE-004"
         },
         {
           "chain": [
@@ -15549,7 +16017,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -15591,6 +16059,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-RULE-005"
+        },
+        {
+          "chain": [
+            "AU-RULE-005",
+            "fixtures-missing:AU-RULE-005"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-RULE-005"
         },
         {
           "chain": [
@@ -15649,7 +16126,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -15695,6 +16172,15 @@
         {
           "chain": [
             "AU-RV-001",
+            "fixtures-missing:AU-RV-001"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-RV-001"
+        },
+        {
+          "chain": [
+            "AU-RV-001",
             "frozen-skeleton-missing:AU-RV-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -15710,7 +16196,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -15752,6 +16238,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-RV-002"
+        },
+        {
+          "chain": [
+            "AU-RV-002",
+            "fixtures-missing:AU-RV-002"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-RV-002"
         },
         {
           "chain": [
@@ -15810,7 +16305,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -15852,6 +16347,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-RV-003"
+        },
+        {
+          "chain": [
+            "AU-RV-003",
+            "fixtures-missing:AU-RV-003"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-RV-003"
         },
         {
           "chain": [
@@ -15910,7 +16414,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -15952,6 +16456,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-RV-004"
+        },
+        {
+          "chain": [
+            "AU-RV-004",
+            "fixtures-missing:AU-RV-004"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-RV-004"
         },
         {
           "chain": [
@@ -16010,7 +16523,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -16061,6 +16574,15 @@
           "code": "fact-provider-unavailable",
           "steward": "steward.facts",
           "subject": "finding"
+        },
+        {
+          "chain": [
+            "AU-RV-005",
+            "fixtures-missing:AU-RV-005"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-RV-005"
         },
         {
           "chain": [
@@ -16121,7 +16643,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -16321,6 +16843,15 @@
         {
           "chain": [
             "AU-SEL-004",
+            "fixtures-missing:AU-SEL-004"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-SEL-004"
+        },
+        {
+          "chain": [
+            "AU-SEL-004",
             "frozen-skeleton-missing:AU-SEL-004"
           ],
           "code": "frozen-skeleton-missing",
@@ -16344,7 +16875,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -16397,6 +16928,15 @@
         {
           "chain": [
             "AU-SEL-005",
+            "fixtures-missing:AU-SEL-005"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-SEL-005"
+        },
+        {
+          "chain": [
+            "AU-SEL-005",
             "frozen-skeleton-missing:AU-SEL-005"
           ],
           "code": "frozen-skeleton-missing",
@@ -16420,7 +16960,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -16519,6 +17059,15 @@
         {
           "chain": [
             "AU-SEL-007",
+            "fixtures-missing:AU-SEL-007"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-SEL-007"
+        },
+        {
+          "chain": [
+            "AU-SEL-007",
             "frozen-skeleton-missing:AU-SEL-007"
           ],
           "code": "frozen-skeleton-missing",
@@ -16540,7 +17089,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -16742,6 +17291,15 @@
         {
           "chain": [
             "AU-SRCH-001",
+            "fixtures-missing:AU-SRCH-001"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-SRCH-001"
+        },
+        {
+          "chain": [
+            "AU-SRCH-001",
             "frozen-skeleton-missing:AU-SRCH-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -16765,7 +17323,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -16814,6 +17372,15 @@
         {
           "chain": [
             "AU-SRCH-002",
+            "fixtures-missing:AU-SRCH-002"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-SRCH-002"
+        },
+        {
+          "chain": [
+            "AU-SRCH-002",
             "frozen-skeleton-missing:AU-SRCH-002"
           ],
           "code": "frozen-skeleton-missing",
@@ -16837,7 +17404,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -17118,6 +17685,15 @@
         {
           "chain": [
             "AU-SRCH-008",
+            "fixtures-missing:AU-SRCH-008"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-SRCH-008"
+        },
+        {
+          "chain": [
+            "AU-SRCH-008",
             "frozen-skeleton-missing:AU-SRCH-008"
           ],
           "code": "frozen-skeleton-missing",
@@ -17141,7 +17717,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -17192,6 +17768,15 @@
         {
           "chain": [
             "AU-SRCH-009",
+            "fixtures-missing:AU-SRCH-009"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-SRCH-009"
+        },
+        {
+          "chain": [
+            "AU-SRCH-009",
             "frozen-skeleton-missing:AU-SRCH-009"
           ],
           "code": "frozen-skeleton-missing",
@@ -17215,7 +17800,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -17273,6 +17858,15 @@
         {
           "chain": [
             "AU-SRCH-010",
+            "fixtures-missing:AU-SRCH-010"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-SRCH-010"
+        },
+        {
+          "chain": [
+            "AU-SRCH-010",
             "frozen-skeleton-missing:AU-SRCH-010"
           ],
           "code": "frozen-skeleton-missing",
@@ -17296,7 +17890,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -17417,6 +18011,15 @@
         {
           "chain": [
             "AU-TEST-003",
+            "fixtures-missing:AU-TEST-003"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-TEST-003"
+        },
+        {
+          "chain": [
+            "AU-TEST-003",
             "frozen-skeleton-missing:AU-TEST-003"
           ],
           "code": "frozen-skeleton-missing",
@@ -17438,7 +18041,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -17484,6 +18087,15 @@
         {
           "chain": [
             "AU-TEST-004",
+            "fixtures-missing:AU-TEST-004"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-TEST-004"
+        },
+        {
+          "chain": [
+            "AU-TEST-004",
             "frozen-skeleton-missing:AU-TEST-004"
           ],
           "code": "frozen-skeleton-missing",
@@ -17505,7 +18117,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -17683,6 +18295,15 @@
         {
           "chain": [
             "AU-TF-001",
+            "fixtures-missing:AU-TF-001"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-TF-001"
+        },
+        {
+          "chain": [
+            "AU-TF-001",
             "frozen-skeleton-missing:AU-TF-001"
           ],
           "code": "frozen-skeleton-missing",
@@ -17702,7 +18323,7 @@
       "prerequisites": {
         "dependencies": true,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -17749,6 +18370,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-TF-002"
+        },
+        {
+          "chain": [
+            "AU-TF-002",
+            "fixtures-missing:AU-TF-002"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-TF-002"
         },
         {
           "chain": [
@@ -17809,7 +18439,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -17860,6 +18490,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-TF-003"
+        },
+        {
+          "chain": [
+            "AU-TF-003",
+            "fixtures-missing:AU-TF-003"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-TF-003"
         },
         {
           "chain": [
@@ -17920,7 +18559,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -17965,6 +18604,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-TF-004"
+        },
+        {
+          "chain": [
+            "AU-TF-004",
+            "fixtures-missing:AU-TF-004"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-TF-004"
         },
         {
           "chain": [
@@ -18025,7 +18673,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -18074,6 +18722,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-TF-005"
+        },
+        {
+          "chain": [
+            "AU-TF-005",
+            "fixtures-missing:AU-TF-005"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-TF-005"
         },
         {
           "chain": [
@@ -18134,7 +18791,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -18190,6 +18847,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-TF-006"
+        },
+        {
+          "chain": [
+            "AU-TF-006",
+            "fixtures-missing:AU-TF-006"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-TF-006"
         },
         {
           "chain": [
@@ -18251,7 +18917,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -18301,6 +18967,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-TF-007"
+        },
+        {
+          "chain": [
+            "AU-TF-007",
+            "fixtures-missing:AU-TF-007"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-TF-007"
         },
         {
           "chain": [
@@ -18361,7 +19036,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -18412,6 +19087,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-TF-008"
+        },
+        {
+          "chain": [
+            "AU-TF-008",
+            "fixtures-missing:AU-TF-008"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-TF-008"
         },
         {
           "chain": [
@@ -18470,7 +19154,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -18512,6 +19196,15 @@
           "code": "exact_declaration_unresolved",
           "steward": "generator.catalog",
           "subject": "API-TF-009"
+        },
+        {
+          "chain": [
+            "AU-TF-009",
+            "fixtures-missing:AU-TF-009"
+          ],
+          "code": "fixtures-missing",
+          "steward": "steward.testing",
+          "subject": "AU-TF-009"
         },
         {
           "chain": [
@@ -18570,7 +19263,7 @@
       "prerequisites": {
         "dependencies": false,
         "exact_contract": false,
-        "fixtures": true,
+        "fixtures": false,
         "frozen_skeleton": false,
         "global_gate_declarations": true,
         "observed_global_gates": false,
@@ -18996,7 +19689,7 @@
           "atomic_unit_id": "AU-CFG-001",
           "execution_result_path": "build/dev-clang/agent-results/AU-CFG-001.json",
           "required_execution_status": "passed",
-          "shard_digest": "sha256:b29fbbb7d755697e47036bcddeff21987cc526bde463de945b99c941a2b88472",
+          "shard_digest": "sha256:d9df4256387eaa53c053ee711a7dc3700331bccba8cda4d9f75945e8004f2eec",
           "shard_id": "shard.au-cfg-001"
         },
         {
@@ -19017,7 +19710,7 @@
           "atomic_unit_id": "AU-CFG-004",
           "execution_result_path": "build/dev-clang/agent-results/AU-CFG-004.json",
           "required_execution_status": "passed",
-          "shard_digest": "sha256:3cf32d52c45f11f5925b691b5149ebbfada7e456a0535bfc4fe8fe84a61687f7",
+          "shard_digest": "sha256:1ecc11f7c91095ad187879e202dc3d3ab54c832d1508ec854b249c788ab8d3b9",
           "shard_id": "shard.au-cfg-004"
         }
       ],
@@ -19136,7 +19829,7 @@
       ],
       "package_id": "configuration",
       "package_integration_role": "integration.package.configuration",
-      "semantic_digest": "sha256:8efa70803ec2f4e7f33ffe7ba5446790baddc929e8552a044bfb0fff23678d0d",
+      "semantic_digest": "sha256:735b93ac73cc702f8c81472317f624498756d13874d26f4d0c528e09e87a7737",
       "state": "verification"
     },
     {
@@ -19435,28 +20128,28 @@
           "atomic_unit_id": "AU-CORE-001",
           "execution_result_path": "build/dev-clang/agent-results/AU-CORE-001.json",
           "required_execution_status": "passed",
-          "shard_digest": "sha256:e185bfef81ed2cba5ac3a449392479ae992a679045fb9f73bbfec1b044e0df0d",
+          "shard_digest": "sha256:dfdf1935f95f8e0fafe7e4b226b9a73c67971b7fc1026817c8f93c912e6f57be",
           "shard_id": "shard.au-core-001"
         },
         {
           "atomic_unit_id": "AU-CORE-002",
           "execution_result_path": "build/dev-clang/agent-results/AU-CORE-002.json",
           "required_execution_status": "passed",
-          "shard_digest": "sha256:49dfb43ff3c5fd9084d0c5ff9b65bb2c631431addcc848ab1c5d908e78bcd29b",
+          "shard_digest": "sha256:707e3124df2452bcde7b68cde31e9443a9f2b4d902c1e2ff07f7a691aa78dc74",
           "shard_id": "shard.au-core-002"
         },
         {
           "atomic_unit_id": "AU-CORE-003",
           "execution_result_path": "build/dev-clang/agent-results/AU-CORE-003.json",
           "required_execution_status": "passed",
-          "shard_digest": "sha256:b19c93aaa888241136aa421495b2158dd5dee2fc44f5886e2233253a80b77109",
+          "shard_digest": "sha256:7fe2fb1d4bd61b29bfc80003330caf34187f47fab96612d0927fc5423635a727",
           "shard_id": "shard.au-core-003"
         },
         {
           "atomic_unit_id": "AU-CORE-004",
           "execution_result_path": "build/dev-clang/agent-results/AU-CORE-004.json",
           "required_execution_status": "passed",
-          "shard_digest": "sha256:eca834cb008fcd429296d813a4f3f918c24af5d4d3100936ec960781931f9cab",
+          "shard_digest": "sha256:1db9c6ec4de9a578811147213e93138848500fa4a90866d840b499dcd12e99f8",
           "shard_id": "shard.au-core-004"
         }
       ],
@@ -19575,7 +20268,7 @@
       ],
       "package_id": "core",
       "package_integration_role": "integration.package.core",
-      "semantic_digest": "sha256:0d6ac452c6f725fb8c1088ce76d12e6fbdb6bad4e27a3c69599df70126c2a1e8",
+      "semantic_digest": "sha256:01120cf26364c0759337c889d4d91a3041de11a117dca894923e34e872a30fb1",
       "state": "blocked"
     },
     {
@@ -19671,7 +20364,7 @@
           "atomic_unit_id": "AU-EXP-002",
           "execution_result_path": "build/dev-clang/agent-results/AU-EXP-002.json",
           "required_execution_status": "passed",
-          "shard_digest": "sha256:ef7602a789e3c160b5fbba4c8d160f2ae31aa1d303e3c5a6c6b6e214b96128db",
+          "shard_digest": "sha256:a1c0450d829c20ace1f2526f1b2ec9abac0a62523ff42d3cfe898182937f1a32",
           "shard_id": "shard.au-exp-002"
         }
       ],
@@ -19790,7 +20483,7 @@
       ],
       "package_id": "explain",
       "package_integration_role": "integration.package.explain",
-      "semantic_digest": "sha256:ec862d50a84ad5777fcb971b71f6f43f8a60afff105575d3adaa3ab38f3836af",
+      "semantic_digest": "sha256:35be4a956c98d9759508638322e67818b38ea3fd53a4e342efd44faea5a71f5e",
       "state": "blocked"
     },
     {
@@ -19945,7 +20638,7 @@
           "atomic_unit_id": "AU-FACT-010",
           "execution_result_path": "build/dev-clang/agent-results/AU-FACT-010.json",
           "required_execution_status": "passed",
-          "shard_digest": "sha256:530b7b1069a419bb19358e7b2ae0c1e4e4a51c8b35d3011a610f99658d69b25d",
+          "shard_digest": "sha256:9319859fae8676b51918d7f5bc92c944112d81327fd10a544116e8be95f07fbb",
           "shard_id": "shard.au-fact-010"
         }
       ],
@@ -20064,7 +20757,7 @@
       ],
       "package_id": "facts",
       "package_integration_role": "integration.package.facts",
-      "semantic_digest": "sha256:1220de208a397dca0d6dd68e970c4bb44a482d0739b8f3b36e31b12337fa2ac6",
+      "semantic_digest": "sha256:db796066ab15fba3897edf2a0f4cc7bbec6193e9aa827fd23cd5fdb08de0a611",
       "state": "verification"
     },
     {
@@ -20984,7 +21677,7 @@
           "atomic_unit_id": "AU-INT-001",
           "execution_result_path": "build/dev-clang/agent-results/AU-INT-001.json",
           "required_execution_status": "passed",
-          "shard_digest": "sha256:ffb533e00bbd4ae9d3115305f2c0b9beb604db664145e1ebcfb3121d6ca0e18b",
+          "shard_digest": "sha256:5067394febdc33e9400bc35f1cd7302a514abb820d48dfe68ed4c1ac0a6d20c9",
           "shard_id": "shard.au-int-001"
         },
         {
@@ -21110,7 +21803,7 @@
       ],
       "package_id": "interop",
       "package_integration_role": "integration.package.interop",
-      "semantic_digest": "sha256:ebe74aab59a48fd83bcb70940e1cc7607a6e1c869d7949a7e09d99b5000ca42f",
+      "semantic_digest": "sha256:84307fb5daabd33871135abf9f021dd1d0561477ee19f256f40968c23e2ccc5b",
       "state": "blocked"
     },
     {
@@ -22652,14 +23345,14 @@
           "atomic_unit_id": "AU-SRCH-003",
           "execution_result_path": "build/dev-clang/agent-results/AU-SRCH-003.json",
           "required_execution_status": "passed",
-          "shard_digest": "sha256:b8bb916c487c946f413193e1f9d0013e68a7f4be3e7ddfae7dec858fed968086",
+          "shard_digest": "sha256:4d847a9f469ad1cce8bc881449731afe387f02ac7c90c7cefd43ee83daed6412",
           "shard_id": "shard.au-srch-003"
         },
         {
           "atomic_unit_id": "AU-SRCH-004",
           "execution_result_path": "build/dev-clang/agent-results/AU-SRCH-004.json",
           "required_execution_status": "passed",
-          "shard_digest": "sha256:799e82bc416f4eaff6c80acd98c06f379dd66a509f66e5397d8eb0b9c1f080f5",
+          "shard_digest": "sha256:fcb17383424d1522b58417d7280440ca37eff7ddc4f33b114100a3f0ea9c1339",
           "shard_id": "shard.au-srch-004"
         },
         {
@@ -22799,7 +23492,7 @@
       ],
       "package_id": "search",
       "package_integration_role": "integration.package.search",
-      "semantic_digest": "sha256:e16adb3e8445d5301f608df60c8ec73b578b9aee1cf7296ad2d233739ce7a6b4",
+      "semantic_digest": "sha256:bace2b8d97565009a27ef375d7c5618d59d44c48bc78a98dd3c66c4a52441882",
       "state": "blocked"
     },
     {
@@ -22937,7 +23630,7 @@
           "atomic_unit_id": "AU-SEL-010",
           "execution_result_path": "build/dev-clang/agent-results/AU-SEL-010.json",
           "required_execution_status": "passed",
-          "shard_digest": "sha256:83ec7da60923f897547d99cbf5b30e1053254d1647098b78f0f865ba31d9abee",
+          "shard_digest": "sha256:12ef0c17a3c4c9696060893ae613369cc989fbf9949202de78166bb95210eda7",
           "shard_id": "shard.au-sel-010"
         },
         {
@@ -23063,7 +23756,7 @@
       ],
       "package_id": "select",
       "package_integration_role": "integration.package.select",
-      "semantic_digest": "sha256:571e7d933892e72fec4790aba0beba4d8e2c12faeecf19ddcf66f9416a45ebb1",
+      "semantic_digest": "sha256:19ad212ba9989cad978127934a0a71dd0bfe6a9f338421836a6fda1bf9b298e2",
       "state": "blocked"
     },
     {
@@ -23158,7 +23851,7 @@
           "atomic_unit_id": "AU-TEST-001",
           "execution_result_path": "build/dev-clang/agent-results/AU-TEST-001.json",
           "required_execution_status": "passed",
-          "shard_digest": "sha256:d094f72c7884d7701eda8ca7b7ae29d1c0c1e37d1d893cc281a75d99eba5c917",
+          "shard_digest": "sha256:3d0238098282138f94c07fec889a28bec3d189cfa29b95efc2100d2668390202",
           "shard_id": "shard.au-test-001"
         },
         {
@@ -23305,7 +23998,7 @@
       ],
       "package_id": "testing",
       "package_integration_role": "integration.package.testing",
-      "semantic_digest": "sha256:0aaa985ac6205c0de491772072899a764f3f5c127f2cc34599674ffe7e346aeb",
+      "semantic_digest": "sha256:d4c6f887740b9e9201f93d9220f619b9810f5567c2f9d3bf109b605d08613c9e",
       "state": "blocked"
     },
     {
@@ -23636,7 +24329,7 @@
           "atomic_unit_id": "AU-WS-005",
           "execution_result_path": "build/dev-clang/agent-results/AU-WS-005.json",
           "required_execution_status": "passed",
-          "shard_digest": "sha256:d0cd4a5766fd4e8a11290e852e128c568b575b5b04caa9e2cfd6f7e0b8062465",
+          "shard_digest": "sha256:fed015f818604c14fe80451ad54bf1fda5490ddce5f88d87fd611155c94505ea",
           "shard_id": "shard.au-ws-005"
         },
         {
@@ -23776,7 +24469,7 @@
       ],
       "package_id": "workspace",
       "package_integration_role": "integration.package.workspace",
-      "semantic_digest": "sha256:a212863a066a237f9dd6d4773fefd5eb405489817bec4830cc9e5278bf3447d5",
+      "semantic_digest": "sha256:56a9147cd3d91ff17efeb5580c6aa0c925c049eb927d83fe2df671ae85464d2d",
       "state": "verification"
     }
   ],
@@ -24178,7 +24871,7 @@
     ]
   },
   "schema": "cxxlens.api-ready.v1",
-  "semantic_digest": "sha256:2231b809246a934760afa51b21f9ad1ea831c7e278e81b5bba284ba216c3be29",
+  "semantic_digest": "sha256:eb8adfaeb1bf9e260a212b03e3eef2928cf3f2ae192b7fc3eba8fae6cf08a7a5",
   "shards": [
     {
       "acceptance_command": {
@@ -24346,15 +25039,12 @@
               "--category",
               "ambiguous",
               "--evidence",
-              "tests/public_headers/configuration_header_test.cpp",
-              "--evidence",
               "tests/unit/config/configuration_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-ambiguous"
           },
           "evidence_paths": [
-            "tests/public_headers/configuration_header_test.cpp",
             "tests/unit/config/configuration_test.cpp"
           ],
           "fixture_category": "ambiguous",
@@ -24374,15 +25064,12 @@
               "--category",
               "negative",
               "--evidence",
-              "tests/public_headers/configuration_header_test.cpp",
-              "--evidence",
               "tests/unit/config/configuration_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-negative"
           },
           "evidence_paths": [
-            "tests/public_headers/configuration_header_test.cpp",
             "tests/unit/config/configuration_test.cpp"
           ],
           "fixture_category": "negative",
@@ -24402,15 +25089,12 @@
               "--category",
               "positive",
               "--evidence",
-              "tests/public_headers/configuration_header_test.cpp",
-              "--evidence",
               "tests/unit/config/configuration_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-positive"
           },
           "evidence_paths": [
-            "tests/public_headers/configuration_header_test.cpp",
             "tests/unit/config/configuration_test.cpp"
           ],
           "fixture_category": "positive",
@@ -24473,7 +25157,7 @@
         "tests/public_headers/configuration_header_test.cpp",
         "tests/unit/config/configuration_test.cpp"
       ],
-      "semantic_digest": "sha256:b29fbbb7d755697e47036bcddeff21987cc526bde463de945b99c941a2b88472",
+      "semantic_digest": "sha256:d9df4256387eaa53c053ee711a7dc3700331bccba8cda4d9f75945e8004f2eec",
       "state": "verification"
     },
     {
@@ -25215,13 +25899,13 @@
               "--category",
               "ambiguous",
               "--evidence",
-              "tests/config/test_configuration_process.py"
+              "tests/unit/config/configuration_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-ambiguous"
           },
           "evidence_paths": [
-            "tests/config/test_configuration_process.py"
+            "tests/unit/config/configuration_test.cpp"
           ],
           "fixture_category": "ambiguous",
           "id": "local.ambiguous",
@@ -25240,13 +25924,13 @@
               "--category",
               "negative",
               "--evidence",
-              "tests/config/test_configuration_process.py"
+              "tests/unit/config/configuration_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-negative"
           },
           "evidence_paths": [
-            "tests/config/test_configuration_process.py"
+            "tests/unit/config/configuration_test.cpp"
           ],
           "fixture_category": "negative",
           "id": "local.negative",
@@ -25265,13 +25949,13 @@
               "--category",
               "positive",
               "--evidence",
-              "tests/config/test_configuration_process.py"
+              "tests/unit/config/configuration_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-positive"
           },
           "evidence_paths": [
-            "tests/config/test_configuration_process.py"
+            "tests/unit/config/configuration_test.cpp"
           ],
           "fixture_category": "positive",
           "id": "local.positive",
@@ -25332,9 +26016,10 @@
         "schemas/cxxlens.config.explain.schema.yaml",
         "schemas/cxxlens.config.resolved.schema.yaml",
         "src/config/configuration.cpp",
-        "tests/config/test_configuration_process.py"
+        "tests/config/test_configuration_process.py",
+        "tests/unit/config/configuration_test.cpp"
       ],
-      "semantic_digest": "sha256:3cf32d52c45f11f5925b691b5149ebbfada7e456a0535bfc4fe8fe84a61687f7",
+      "semantic_digest": "sha256:1ecc11f7c91095ad187879e202dc3d3ab54c832d1508ec854b249c788ab8d3b9",
       "state": "verification"
     },
     {
@@ -26043,15 +26728,12 @@
               "--category",
               "ambiguous",
               "--evidence",
-              "tests/public_headers/core_header_test.cpp",
-              "--evidence",
               "tests/unit/version_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-ambiguous"
           },
           "evidence_paths": [
-            "tests/public_headers/core_header_test.cpp",
             "tests/unit/version_test.cpp"
           ],
           "fixture_category": "ambiguous",
@@ -26071,15 +26753,12 @@
               "--category",
               "negative",
               "--evidence",
-              "tests/public_headers/core_header_test.cpp",
-              "--evidence",
               "tests/unit/version_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-negative"
           },
           "evidence_paths": [
-            "tests/public_headers/core_header_test.cpp",
             "tests/unit/version_test.cpp"
           ],
           "fixture_category": "negative",
@@ -26099,15 +26778,12 @@
               "--category",
               "positive",
               "--evidence",
-              "tests/public_headers/core_header_test.cpp",
-              "--evidence",
               "tests/unit/version_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-positive"
           },
           "evidence_paths": [
-            "tests/public_headers/core_header_test.cpp",
             "tests/unit/version_test.cpp"
           ],
           "fixture_category": "positive",
@@ -26171,7 +26847,7 @@
         "tests/public_headers/core_header_test.cpp",
         "tests/unit/version_test.cpp"
       ],
-      "semantic_digest": "sha256:e185bfef81ed2cba5ac3a449392479ae992a679045fb9f73bbfec1b044e0df0d",
+      "semantic_digest": "sha256:dfdf1935f95f8e0fafe7e4b226b9a73c67971b7fc1026817c8f93c912e6f57be",
       "state": "verification"
     },
     {
@@ -26340,16 +27016,13 @@
               "--category",
               "ambiguous",
               "--evidence",
-              "tests/unit/version_test.cpp",
-              "--evidence",
-              "tests/unit/workspace/provisioning_test.cpp"
+              "tests/unit/version_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-ambiguous"
           },
           "evidence_paths": [
-            "tests/unit/version_test.cpp",
-            "tests/unit/workspace/provisioning_test.cpp"
+            "tests/unit/version_test.cpp"
           ],
           "fixture_category": "ambiguous",
           "id": "local.ambiguous",
@@ -26368,16 +27041,13 @@
               "--category",
               "negative",
               "--evidence",
-              "tests/unit/version_test.cpp",
-              "--evidence",
-              "tests/unit/workspace/provisioning_test.cpp"
+              "tests/unit/version_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-negative"
           },
           "evidence_paths": [
-            "tests/unit/version_test.cpp",
-            "tests/unit/workspace/provisioning_test.cpp"
+            "tests/unit/version_test.cpp"
           ],
           "fixture_category": "negative",
           "id": "local.negative",
@@ -26396,16 +27066,13 @@
               "--category",
               "positive",
               "--evidence",
-              "tests/unit/version_test.cpp",
-              "--evidence",
-              "tests/unit/workspace/provisioning_test.cpp"
+              "tests/unit/version_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-positive"
           },
           "evidence_paths": [
-            "tests/unit/version_test.cpp",
-            "tests/unit/workspace/provisioning_test.cpp"
+            "tests/unit/version_test.cpp"
           ],
           "fixture_category": "positive",
           "id": "local.positive",
@@ -26468,7 +27135,7 @@
         "tests/unit/version_test.cpp",
         "tests/unit/workspace/provisioning_test.cpp"
       ],
-      "semantic_digest": "sha256:49dfb43ff3c5fd9084d0c5ff9b65bb2c631431addcc848ab1c5d908e78bcd29b",
+      "semantic_digest": "sha256:707e3124df2452bcde7b68cde31e9443a9f2b4d902c1e2ff07f7a691aa78dc74",
       "state": "verification"
     },
     {
@@ -26637,15 +27304,12 @@
               "--category",
               "ambiguous",
               "--evidence",
-              "tests/public_headers/evidence_header_test.cpp",
-              "--evidence",
               "tests/unit/core/evidence_coverage_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-ambiguous"
           },
           "evidence_paths": [
-            "tests/public_headers/evidence_header_test.cpp",
             "tests/unit/core/evidence_coverage_test.cpp"
           ],
           "fixture_category": "ambiguous",
@@ -26665,15 +27329,12 @@
               "--category",
               "negative",
               "--evidence",
-              "tests/public_headers/evidence_header_test.cpp",
-              "--evidence",
               "tests/unit/core/evidence_coverage_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-negative"
           },
           "evidence_paths": [
-            "tests/public_headers/evidence_header_test.cpp",
             "tests/unit/core/evidence_coverage_test.cpp"
           ],
           "fixture_category": "negative",
@@ -26693,15 +27354,12 @@
               "--category",
               "positive",
               "--evidence",
-              "tests/public_headers/evidence_header_test.cpp",
-              "--evidence",
               "tests/unit/core/evidence_coverage_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-positive"
           },
           "evidence_paths": [
-            "tests/public_headers/evidence_header_test.cpp",
             "tests/unit/core/evidence_coverage_test.cpp"
           ],
           "fixture_category": "positive",
@@ -26765,7 +27423,7 @@
         "tests/public_headers/evidence_header_test.cpp",
         "tests/unit/core/evidence_coverage_test.cpp"
       ],
-      "semantic_digest": "sha256:b19c93aaa888241136aa421495b2158dd5dee2fc44f5886e2233253a80b77109",
+      "semantic_digest": "sha256:7fe2fb1d4bd61b29bfc80003330caf34187f47fab96612d0927fc5423635a727",
       "state": "verification"
     },
     {
@@ -26934,15 +27592,12 @@
               "--category",
               "ambiguous",
               "--evidence",
-              "tests/evidence/test_evidence_process.py",
-              "--evidence",
               "tests/unit/core/evidence_coverage_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-ambiguous"
           },
           "evidence_paths": [
-            "tests/evidence/test_evidence_process.py",
             "tests/unit/core/evidence_coverage_test.cpp"
           ],
           "fixture_category": "ambiguous",
@@ -26962,15 +27617,12 @@
               "--category",
               "negative",
               "--evidence",
-              "tests/evidence/test_evidence_process.py",
-              "--evidence",
               "tests/unit/core/evidence_coverage_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-negative"
           },
           "evidence_paths": [
-            "tests/evidence/test_evidence_process.py",
             "tests/unit/core/evidence_coverage_test.cpp"
           ],
           "fixture_category": "negative",
@@ -26990,15 +27642,12 @@
               "--category",
               "positive",
               "--evidence",
-              "tests/evidence/test_evidence_process.py",
-              "--evidence",
               "tests/unit/core/evidence_coverage_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-positive"
           },
           "evidence_paths": [
-            "tests/evidence/test_evidence_process.py",
             "tests/unit/core/evidence_coverage_test.cpp"
           ],
           "fixture_category": "positive",
@@ -27062,7 +27711,7 @@
         "tests/evidence/test_evidence_process.py",
         "tests/unit/core/evidence_coverage_test.cpp"
       ],
-      "semantic_digest": "sha256:eca834cb008fcd429296d813a4f3f918c24af5d4d3100936ec960781931f9cab",
+      "semantic_digest": "sha256:1db9c6ec4de9a578811147213e93138848500fa4a90866d840b499dcd12e99f8",
       "state": "verification"
     },
     {
@@ -28041,15 +28690,12 @@
               "--category",
               "ambiguous",
               "--evidence",
-              "tests/search/test_search_process.py",
-              "--evidence",
               "tests/unit/search/search_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-ambiguous"
           },
           "evidence_paths": [
-            "tests/search/test_search_process.py",
             "tests/unit/search/search_test.cpp"
           ],
           "fixture_category": "ambiguous",
@@ -28069,15 +28715,12 @@
               "--category",
               "negative",
               "--evidence",
-              "tests/search/test_search_process.py",
-              "--evidence",
               "tests/unit/search/search_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-negative"
           },
           "evidence_paths": [
-            "tests/search/test_search_process.py",
             "tests/unit/search/search_test.cpp"
           ],
           "fixture_category": "negative",
@@ -28097,15 +28740,12 @@
               "--category",
               "positive",
               "--evidence",
-              "tests/search/test_search_process.py",
-              "--evidence",
               "tests/unit/search/search_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-positive"
           },
           "evidence_paths": [
-            "tests/search/test_search_process.py",
             "tests/unit/search/search_test.cpp"
           ],
           "fixture_category": "positive",
@@ -28169,7 +28809,7 @@
         "tests/search/test_search_process.py",
         "tests/unit/search/search_test.cpp"
       ],
-      "semantic_digest": "sha256:ef7602a789e3c160b5fbba4c8d160f2ae31aa1d303e3c5a6c6b6e214b96128db",
+      "semantic_digest": "sha256:a1c0450d829c20ace1f2526f1b2ec9abac0a62523ff42d3cfe898182937f1a32",
       "state": "verification"
     },
     {
@@ -31485,16 +32125,13 @@
               "--category",
               "ambiguous",
               "--evidence",
-              "tests/unit/store/fact_store_test.cpp",
-              "--evidence",
-              "tests/unit/workspace/provisioning_test.cpp"
+              "tests/unit/store/fact_store_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-ambiguous"
           },
           "evidence_paths": [
-            "tests/unit/store/fact_store_test.cpp",
-            "tests/unit/workspace/provisioning_test.cpp"
+            "tests/unit/store/fact_store_test.cpp"
           ],
           "fixture_category": "ambiguous",
           "id": "local.ambiguous",
@@ -31513,16 +32150,13 @@
               "--category",
               "negative",
               "--evidence",
-              "tests/unit/store/fact_store_test.cpp",
-              "--evidence",
-              "tests/unit/workspace/provisioning_test.cpp"
+              "tests/unit/store/fact_store_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-negative"
           },
           "evidence_paths": [
-            "tests/unit/store/fact_store_test.cpp",
-            "tests/unit/workspace/provisioning_test.cpp"
+            "tests/unit/store/fact_store_test.cpp"
           ],
           "fixture_category": "negative",
           "id": "local.negative",
@@ -31541,16 +32175,13 @@
               "--category",
               "positive",
               "--evidence",
-              "tests/unit/store/fact_store_test.cpp",
-              "--evidence",
-              "tests/unit/workspace/provisioning_test.cpp"
+              "tests/unit/store/fact_store_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-positive"
           },
           "evidence_paths": [
-            "tests/unit/store/fact_store_test.cpp",
-            "tests/unit/workspace/provisioning_test.cpp"
+            "tests/unit/store/fact_store_test.cpp"
           ],
           "fixture_category": "positive",
           "id": "local.positive",
@@ -31617,7 +32248,7 @@
         "tests/unit/store/fact_store_test.cpp",
         "tests/unit/workspace/provisioning_test.cpp"
       ],
-      "semantic_digest": "sha256:530b7b1069a419bb19358e7b2ae0c1e4e4a51c8b35d3011a610f99658d69b25d",
+      "semantic_digest": "sha256:9319859fae8676b51918d7f5bc92c944112d81327fd10a544116e8be95f07fbb",
       "state": "verification"
     },
     {
@@ -36916,13 +37547,13 @@
               "--category",
               "ambiguous",
               "--evidence",
-              "tests/public_headers/interop_clang_header_test.cpp"
+              "tests/unit/llvm/frontend_job_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-ambiguous"
           },
           "evidence_paths": [
-            "tests/public_headers/interop_clang_header_test.cpp"
+            "tests/unit/llvm/frontend_job_test.cpp"
           ],
           "fixture_category": "ambiguous",
           "id": "local.ambiguous",
@@ -36941,13 +37572,13 @@
               "--category",
               "negative",
               "--evidence",
-              "tests/public_headers/interop_clang_header_test.cpp"
+              "tests/unit/llvm/frontend_job_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-negative"
           },
           "evidence_paths": [
-            "tests/public_headers/interop_clang_header_test.cpp"
+            "tests/unit/llvm/frontend_job_test.cpp"
           ],
           "fixture_category": "negative",
           "id": "local.negative",
@@ -36966,13 +37597,13 @@
               "--category",
               "positive",
               "--evidence",
-              "tests/public_headers/interop_clang_header_test.cpp"
+              "tests/unit/llvm/frontend_job_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-positive"
           },
           "evidence_paths": [
-            "tests/public_headers/interop_clang_header_test.cpp"
+            "tests/unit/llvm/frontend_job_test.cpp"
           ],
           "fixture_category": "positive",
           "id": "local.positive",
@@ -37033,9 +37664,10 @@
         "include/cxxlens/interop/clang.hpp",
         "src/llvm/clang22/frontend_job.cpp",
         "tests/link/clang22_link_closure_test.cpp",
-        "tests/public_headers/interop_clang_header_test.cpp"
+        "tests/public_headers/interop_clang_header_test.cpp",
+        "tests/unit/llvm/frontend_job_test.cpp"
       ],
-      "semantic_digest": "sha256:ffb533e00bbd4ae9d3115305f2c0b9beb604db664145e1ebcfb3121d6ca0e18b",
+      "semantic_digest": "sha256:5067394febdc33e9400bc35f1cd7302a514abb820d48dfe68ed4c1ac0a6d20c9",
       "state": "verification"
     },
     {
@@ -48660,15 +49292,12 @@
               "--category",
               "ambiguous",
               "--evidence",
-              "tests/select/test_selector_process.py",
-              "--evidence",
               "tests/unit/select/selector_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-ambiguous"
           },
           "evidence_paths": [
-            "tests/select/test_selector_process.py",
             "tests/unit/select/selector_test.cpp"
           ],
           "fixture_category": "ambiguous",
@@ -48688,15 +49317,12 @@
               "--category",
               "negative",
               "--evidence",
-              "tests/select/test_selector_process.py",
-              "--evidence",
               "tests/unit/select/selector_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-negative"
           },
           "evidence_paths": [
-            "tests/select/test_selector_process.py",
             "tests/unit/select/selector_test.cpp"
           ],
           "fixture_category": "negative",
@@ -48716,15 +49342,12 @@
               "--category",
               "positive",
               "--evidence",
-              "tests/select/test_selector_process.py",
-              "--evidence",
               "tests/unit/select/selector_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-positive"
           },
           "evidence_paths": [
-            "tests/select/test_selector_process.py",
             "tests/unit/select/selector_test.cpp"
           ],
           "fixture_category": "positive",
@@ -48789,7 +49412,7 @@
         "tests/select/test_selector_process.py",
         "tests/unit/select/selector_test.cpp"
       ],
-      "semantic_digest": "sha256:83ec7da60923f897547d99cbf5b30e1053254d1647098b78f0f865ba31d9abee",
+      "semantic_digest": "sha256:12ef0c17a3c4c9696060893ae613369cc989fbf9949202de78166bb95210eda7",
       "state": "verification"
     },
     {
@@ -49784,15 +50407,12 @@
               "--category",
               "ambiguous",
               "--evidence",
-              "tests/search/test_search_process.py",
-              "--evidence",
               "tests/unit/search/search_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-ambiguous"
           },
           "evidence_paths": [
-            "tests/search/test_search_process.py",
             "tests/unit/search/search_test.cpp"
           ],
           "fixture_category": "ambiguous",
@@ -49812,15 +50432,12 @@
               "--category",
               "negative",
               "--evidence",
-              "tests/search/test_search_process.py",
-              "--evidence",
               "tests/unit/search/search_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-negative"
           },
           "evidence_paths": [
-            "tests/search/test_search_process.py",
             "tests/unit/search/search_test.cpp"
           ],
           "fixture_category": "negative",
@@ -49840,15 +50457,12 @@
               "--category",
               "positive",
               "--evidence",
-              "tests/search/test_search_process.py",
-              "--evidence",
               "tests/unit/search/search_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-positive"
           },
           "evidence_paths": [
-            "tests/search/test_search_process.py",
             "tests/unit/search/search_test.cpp"
           ],
           "fixture_category": "positive",
@@ -49914,7 +50528,7 @@
         "tests/search/test_search_process.py",
         "tests/unit/search/search_test.cpp"
       ],
-      "semantic_digest": "sha256:b8bb916c487c946f413193e1f9d0013e68a7f4be3e7ddfae7dec858fed968086",
+      "semantic_digest": "sha256:4d847a9f469ad1cce8bc881449731afe387f02ac7c90c7cefd43ee83daed6412",
       "state": "verification"
     },
     {
@@ -50083,15 +50697,12 @@
               "--category",
               "ambiguous",
               "--evidence",
-              "tests/public_headers/search_header_test.cpp",
-              "--evidence",
               "tests/unit/search/search_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-ambiguous"
           },
           "evidence_paths": [
-            "tests/public_headers/search_header_test.cpp",
             "tests/unit/search/search_test.cpp"
           ],
           "fixture_category": "ambiguous",
@@ -50111,15 +50722,12 @@
               "--category",
               "negative",
               "--evidence",
-              "tests/public_headers/search_header_test.cpp",
-              "--evidence",
               "tests/unit/search/search_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-negative"
           },
           "evidence_paths": [
-            "tests/public_headers/search_header_test.cpp",
             "tests/unit/search/search_test.cpp"
           ],
           "fixture_category": "negative",
@@ -50139,15 +50747,12 @@
               "--category",
               "positive",
               "--evidence",
-              "tests/public_headers/search_header_test.cpp",
-              "--evidence",
               "tests/unit/search/search_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-positive"
           },
           "evidence_paths": [
-            "tests/public_headers/search_header_test.cpp",
             "tests/unit/search/search_test.cpp"
           ],
           "fixture_category": "positive",
@@ -50210,7 +50815,7 @@
         "tests/public_headers/search_header_test.cpp",
         "tests/unit/search/search_test.cpp"
       ],
-      "semantic_digest": "sha256:799e82bc416f4eaff6c80acd98c06f379dd66a509f66e5397d8eb0b9c1f080f5",
+      "semantic_digest": "sha256:fcb17383424d1522b58417d7280440ca37eff7ddc4f33b114100a3f0ea9c1339",
       "state": "verification"
     },
     {
@@ -52053,15 +52658,12 @@
               "--category",
               "ambiguous",
               "--evidence",
-              "tests/testing/test_testing_fixture_process.py",
-              "--evidence",
               "tests/unit/testing/testing_substrate_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-ambiguous"
           },
           "evidence_paths": [
-            "tests/testing/test_testing_fixture_process.py",
             "tests/unit/testing/testing_substrate_test.cpp"
           ],
           "fixture_category": "ambiguous",
@@ -52081,15 +52683,12 @@
               "--category",
               "negative",
               "--evidence",
-              "tests/testing/test_testing_fixture_process.py",
-              "--evidence",
               "tests/unit/testing/testing_substrate_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-negative"
           },
           "evidence_paths": [
-            "tests/testing/test_testing_fixture_process.py",
             "tests/unit/testing/testing_substrate_test.cpp"
           ],
           "fixture_category": "negative",
@@ -52109,15 +52708,12 @@
               "--category",
               "positive",
               "--evidence",
-              "tests/testing/test_testing_fixture_process.py",
-              "--evidence",
               "tests/unit/testing/testing_substrate_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-positive"
           },
           "evidence_paths": [
-            "tests/testing/test_testing_fixture_process.py",
             "tests/unit/testing/testing_substrate_test.cpp"
           ],
           "fixture_category": "positive",
@@ -52182,7 +52778,7 @@
         "tests/testing/test_testing_fixture_process.py",
         "tests/unit/testing/testing_substrate_test.cpp"
       ],
-      "semantic_digest": "sha256:d094f72c7884d7701eda8ca7b7ae29d1c0c1e37d1d893cc281a75d99eba5c917",
+      "semantic_digest": "sha256:3d0238098282138f94c07fec889a28bec3d189cfa29b95efc2100d2668390202",
       "state": "verification"
     },
     {
@@ -57614,16 +58210,13 @@
               "--category",
               "ambiguous",
               "--evidence",
-              "tests/unit/workspace/provisioning_test.cpp",
-              "--evidence",
-              "tests/unit/workspace/scheduler_test.cpp"
+              "tests/unit/workspace/provisioning_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-ambiguous"
           },
           "evidence_paths": [
-            "tests/unit/workspace/provisioning_test.cpp",
-            "tests/unit/workspace/scheduler_test.cpp"
+            "tests/unit/workspace/provisioning_test.cpp"
           ],
           "fixture_category": "ambiguous",
           "id": "local.ambiguous",
@@ -57642,16 +58235,13 @@
               "--category",
               "negative",
               "--evidence",
-              "tests/unit/workspace/provisioning_test.cpp",
-              "--evidence",
-              "tests/unit/workspace/scheduler_test.cpp"
+              "tests/unit/workspace/provisioning_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-negative"
           },
           "evidence_paths": [
-            "tests/unit/workspace/provisioning_test.cpp",
-            "tests/unit/workspace/scheduler_test.cpp"
+            "tests/unit/workspace/provisioning_test.cpp"
           ],
           "fixture_category": "negative",
           "id": "local.negative",
@@ -57670,16 +58260,13 @@
               "--category",
               "positive",
               "--evidence",
-              "tests/unit/workspace/provisioning_test.cpp",
-              "--evidence",
-              "tests/unit/workspace/scheduler_test.cpp"
+              "tests/unit/workspace/provisioning_test.cpp"
             ],
             "environment": {},
             "id": "unit-local-positive"
           },
           "evidence_paths": [
-            "tests/unit/workspace/provisioning_test.cpp",
-            "tests/unit/workspace/scheduler_test.cpp"
+            "tests/unit/workspace/provisioning_test.cpp"
           ],
           "fixture_category": "positive",
           "id": "local.positive",
@@ -57750,7 +58337,7 @@
         "tests/unit/workspace/provisioning_test.cpp",
         "tests/unit/workspace/scheduler_test.cpp"
       ],
-      "semantic_digest": "sha256:d0cd4a5766fd4e8a11290e852e128c568b575b5b04caa9e2cfd6f7e0b8062465",
+      "semantic_digest": "sha256:fed015f818604c14fe80451ad54bf1fda5490ddce5f88d87fd611155c94505ea",
       "state": "verification"
     },
     {

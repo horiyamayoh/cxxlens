@@ -73,6 +73,12 @@ add_custom_target(
     "${CMAKE_CURRENT_SOURCE_DIR}/docs/design/api_catalog_inventory.md"
   COMMAND "${Python3_EXECUTABLE}"
           "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_api_contract.py"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_api_test_coverage.py" check
+    --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_api_test_coverage.py"
   VERBATIM)
 add_dependencies(cxxlens-api-contract-check cxxlens-task-packet-check)
 add_dependencies(cxxlens-api-contract-check cxxlens-ownership-check)

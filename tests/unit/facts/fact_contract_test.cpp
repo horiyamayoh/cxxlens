@@ -1,5 +1,6 @@
 #include "facts/fact_contract.hpp"
 
+#include <array>
 #include <iostream>
 #include <string>
 
@@ -119,6 +120,22 @@ int main(int argc, char** argv)
 							 .to_json();
 	passed &= check(forward.find("cxxlens.fact-profile.v1") != std::string::npos,
 					"profile schema missing");
+	const std::array profiles{
+		fact_profile::minimal(),
+		fact_profile::semantic_search(),
+		fact_profile::refactor(),
+		fact_profile::generation(),
+		fact_profile::flow(),
+		fact_profile::full(),
+	};
+	for (const auto& profile : profiles)
+		passed &= check(!profile.to_json().empty(), "fact profile factory produced no contract");
+	const auto adjusted = fact_profile::full()
+							  .exclude(fact_kind::macro_expansion)
+							  .include(fact_kind::macro_expansion)
+							  .precision(precision_level::workspace_semantic);
+	passed &= check(adjusted.to_json().find("workspace_semantic") != std::string::npos,
+					"fact profile include/exclude/precision family is incomplete");
 	if (argc == 2 && std::string_view{argv[1]} == "--emit")
 		std::cout << fact_profile::semantic_search().to_json() << '\n';
 	(void)reverse;

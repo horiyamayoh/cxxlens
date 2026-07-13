@@ -3738,6 +3738,8 @@ authority:
   machine_readable_source: schemas/cxxlens_public_api_contract.yaml
   human_inventory: docs/design/api_catalog_inventory.md
   change_policy: docs/design/api_catalog_change_policy.md
+  executable_test_coverage: schemas/cxxlens_api_test_coverage.yaml
+  executable_test_coverage_report: schemas/cxxlens_api_test_coverage_report.json
 registries:
   fact_kinds:
   - call

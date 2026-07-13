@@ -1,0 +1,80 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://schemas.cxxlens.dev/cxxlens.api-test-coverage.v1.json
+title: cxxlens.api-test-coverage.v1
+type: object
+required: [schema, completion_manifests, tests, apis]
+additionalProperties: false
+properties:
+  schema: {const: cxxlens.api-test-coverage.v1}
+  completion_manifests:
+    type: array
+    minItems: 3
+    maxItems: 3
+    uniqueItems: true
+    items: {type: string, pattern: '^schemas/cxxlens_m[0-2]_completion\.yaml$'}
+  tests:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      required: [id, kind, source, execution_path, covered_use_cases]
+      additionalProperties: false
+      properties:
+        id: {type: string, pattern: '^[a-z0-9.-]+$'}
+        kind: {enum: [unit, acceptance]}
+        source: {type: string, pattern: '^(examples|tests)/.+'}
+        execution_path: {enum: [public_header, installed_consumer]}
+        covered_use_cases:
+          type: array
+          uniqueItems: true
+          items: {type: string, pattern: '^UC-[A-Z]+-[0-9]{3}$'}
+  apis:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      required:
+      - api_id
+      - signature_fingerprint
+      - unit_test_id
+      - acceptance_test_id
+      - covered_member_indexes
+      - covered_use_cases
+      - covered_requirements
+      - expected_outcome
+      - fixtures
+      additionalProperties: false
+      properties:
+        api_id: {type: string, pattern: '^API-[A-Z]+-[0-9]{3}$'}
+        signature_fingerprint: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+        unit_test_id: {type: string, pattern: '^[a-z0-9.-]+$'}
+        acceptance_test_id: {type: string, pattern: '^[a-z0-9.-]+$'}
+        covered_member_indexes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {type: integer, minimum: 0}
+        covered_use_cases:
+          type: array
+          uniqueItems: true
+          items: {type: string, pattern: '^UC-[A-Z]+-[0-9]{3}$'}
+        covered_requirements:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {type: string, pattern: '^(FR|QR)-[0-9]{3}$'}
+        expected_outcome: {type: string, minLength: 1}
+        fixtures:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items:
+            type: object
+            required: [id, category, test_id, evidence_path, expected_outcome]
+            additionalProperties: false
+            properties:
+              id: {type: string, pattern: '^API-[A-Z]+-[0-9]{3}\.(positive|negative|ambiguous)$'}
+              category: {enum: [positive, negative, ambiguous]}
+              test_id: {type: string, pattern: '^[a-z0-9.-]+$'}
+              evidence_path: {type: string, pattern: '^(examples|tests)/.+'}
+              expected_outcome: {type: string, minLength: 1}

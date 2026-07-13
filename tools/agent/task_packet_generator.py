@@ -249,26 +249,37 @@ def acceptance_commands() -> list[dict[str, Any]]:
     ]
 
 
-def fixture_requirements(api: dict[str, Any]) -> list[dict[str, Any]]:
-    evidence = sorted(
-        path
-        for path in api.get("implementation_evidence", [])
-        if path.startswith(("examples/", "tests/"))
-    )
+def fixture_requirements(
+    api: dict[str, Any], coverage: dict[str, Any] | None
+) -> list[dict[str, Any]]:
     references = {
         "positive": "docs/design/cxxlens_integrated_design_ja.md#36.14-positive",
         "negative": "docs/design/cxxlens_integrated_design_ja.md#36.14-negative",
         "ambiguous": "docs/design/cxxlens_integrated_design_ja.md#36.14-ambiguous",
     }
-    return [
-        {
-            "category": category,
-            "required": True,
-            "contract_reference": references[category],
-            "evidence_candidates": evidence,
-        }
-        for category in ("positive", "negative", "ambiguous")
-    ]
+    cases = {
+        fixture["category"]: fixture
+        for fixture in (coverage or {}).get("fixtures", [])
+    }
+    requirements = []
+    for category in ("positive", "negative", "ambiguous"):
+        fixture = cases.get(category)
+        requirements.append(
+            {
+                "category": category,
+                "required": True,
+                "contract_reference": references[category],
+                "case_ids": [] if fixture is None else [fixture["id"]],
+                "test_ids": [] if fixture is None else [fixture["test_id"]],
+                "expected_outcomes": []
+                if fixture is None
+                else [fixture["expected_outcome"]],
+                "evidence_candidates": []
+                if fixture is None
+                else [fixture["evidence_path"]],
+            }
+        )
+    return requirements
 
 
 def make_packet(
@@ -279,6 +290,7 @@ def make_packet(
     expressions: dict[str, list[str]],
     shared_contracts: dict[str, dict[str, Any]],
     providers: dict[tuple[str, str], dict[str, Any]],
+    coverage: dict[str, Any] | None,
 ) -> dict[str, Any]:
     api_id = api["id"]
     declaration = api["declaration"]
@@ -362,7 +374,7 @@ def make_packet(
                 "contract_reference": "docs/design/cxxlens_integrated_design_ja.md#39.12-schema",
             },
         },
-        "fixtures": fixture_requirements(api),
+        "fixtures": fixture_requirements(api, coverage),
         "acceptance_commands": acceptance_commands(),
         "coordination": {
             "ownership_contract": "cxxlens.agent-ownership.v1",
@@ -405,7 +417,11 @@ def make_atomic_units(packets: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return units
 
 
-def generate_corpus(document: dict[str, Any], root: pathlib.Path) -> dict[str, Any]:
+def generate_corpus(
+    document: dict[str, Any],
+    root: pathlib.Path,
+    coverage_document: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     try:
         validate_document(document)
     except CatalogError as error:
@@ -415,6 +431,15 @@ def generate_corpus(document: dict[str, Any], root: pathlib.Path) -> dict[str, A
     expressions = expression_lookup(document)
     shared_contracts = shared_contract_lookup(document)
     providers = provider_subject_lookup(document)
+    if coverage_document is None:
+        coverage_document = yaml.safe_load(
+            (REPOSITORY_ROOT / "schemas/cxxlens_api_test_coverage.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
+    coverage_by_api = {
+        row["api_id"]: row for row in coverage_document.get("apis", [])
+    }
     packets = [
         make_packet(
             package,
@@ -424,6 +449,7 @@ def generate_corpus(document: dict[str, Any], root: pathlib.Path) -> dict[str, A
             expressions,
             shared_contracts,
             providers,
+            coverage_by_api.get(api["id"]),
         )
         for package, api in entries
     ]
@@ -569,6 +595,30 @@ def validate_corpus(
                     f"{api_id}: contract maturity cannot imply readiness",
                 )
             fail("task_packet.readiness-drift", f"{api_id}: generation state differs")
+        fixtures = packet.get("fixtures", [])
+        categories = [fixture.get("category") for fixture in fixtures]
+        if sorted(categories) != ["ambiguous", "negative", "positive"] or len(
+            set(categories)
+        ) != 3:
+            fail("task_packet.fixture-category-missing", f"{api_id}: fixture categories differ")
+        if state in {"complete", "ready"}:
+            for fixture in fixtures:
+                for field in (
+                    "case_ids",
+                    "test_ids",
+                    "expected_outcomes",
+                    "evidence_candidates",
+                ):
+                    if not fixture.get(field):
+                        fail(
+                            "task_packet.fixture-evidence-missing",
+                            f"{api_id}: {fixture['category']} lacks concrete {field}",
+                        )
+            if len({tuple(fixture["case_ids"]) for fixture in fixtures}) != 3:
+                fail(
+                    "task_packet.fixture-evidence-duplicated",
+                    f"{api_id}: category-specific fixture cases are duplicated",
+                )
         declaration = packet.get("declaration", {})
         expected_declaration = api["declaration"]
         if state == "ready" and expected_declaration["status"] != "exact":

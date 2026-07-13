@@ -154,13 +154,26 @@ $defs:
   fixture_requirement:
     type: object
     additionalProperties: false
-    required: [category, required, contract_reference, evidence_candidates]
+    required:
+      - category
+      - required
+      - contract_reference
+      - case_ids
+      - test_ids
+      - expected_outcomes
+      - evidence_candidates
     properties:
       category:
         enum: [positive, negative, ambiguous]
       required:
         const: true
       contract_reference: {type: string, minLength: 1}
+      case_ids:
+        $ref: '#/$defs/string_list'
+      test_ids:
+        $ref: '#/$defs/string_list'
+      expected_outcomes:
+        $ref: '#/$defs/string_list'
       evidence_candidates:
         $ref: '#/$defs/string_list'
   command:
