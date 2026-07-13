@@ -20,6 +20,7 @@
 #include "../runtime/hash_port.hpp"
 #include "catalog_access.hpp"
 #include "provisioning.hpp"
+#include "semantic_path.hpp"
 
 namespace cxxlens
 {
@@ -286,22 +287,101 @@ namespace cxxlens
 			return std::get<std::string>(value->value);
 		}
 
-		[[nodiscard]] std::string semantic_path(const path& root, const path& value)
+		struct resolved_entry
 		{
-			const auto normalized_root = root.lexically_normal();
-			const auto normalized = value.lexically_normal();
-			const auto relative = normalized.lexically_relative(normalized_root);
-			if (!relative.empty() && !relative.native().starts_with(".."))
-				return relative.generic_string();
-			return normalized.filename().generic_string();
+			const database_value::object* object{};
+			path directory;
+			path source;
+		};
+
+		[[nodiscard]] path common_ancestor(path left, const path& right)
+		{
+			left = left.lexically_normal();
+			const auto normalized_right = right.lexically_normal();
+			path output;
+			auto left_part = left.begin();
+			auto right_part = normalized_right.begin();
+			while (left_part != left.end() && right_part != normalized_right.end() &&
+				   *left_part == *right_part)
+			{
+				output /= *left_part;
+				++left_part;
+				++right_part;
+			}
+			return output.lexically_normal();
 		}
 
-		[[nodiscard]] std::string semantic_argument(const path& root, std::string value)
+		[[nodiscard]] result<std::vector<resolved_entry>>
+		resolve_entries(const database_value::array& entries,
+						const path& database,
+						const detail::runtime::filesystem_port& filesystem,
+						const request_context& request)
 		{
-			const auto prefix = root.lexically_normal().generic_string();
+			std::vector<resolved_entry> output;
+			output.reserve(entries.size());
+			for (const auto& entry : entries)
+			{
+				if (!std::holds_alternative<database_value::object>(entry.value))
+					return workspace_error("workspace.compile-database-invalid",
+										   "entry-not-object");
+				const auto& object = std::get<database_value::object>(entry.value);
+				auto directory_text = required_string(object, "directory");
+				auto file_text = required_string(object, "file");
+				if (!directory_text || !file_text)
+					return workspace_error("workspace.compile-database-invalid",
+										   "entry-required-field");
+				path directory = directory_text.value();
+				if (directory.is_relative())
+					directory = database.parent_path() / directory;
+				auto canonical_directory = filesystem.canonicalize(directory, request);
+				if (!canonical_directory)
+					return workspace_error("workspace.compile-database-invalid",
+										   "working-directory-invalid",
+										   directory);
+				directory = canonical_directory.value();
+				path source = file_text.value();
+				if (source.is_relative())
+					source = directory / source;
+				auto canonical_source = filesystem.canonicalize(source, request);
+				if (!canonical_source)
+					return workspace_error(
+						"workspace.compile-database-invalid", "source-path-invalid", source);
+				output.push_back({&object, directory, canonical_source.value()});
+			}
+			return output;
+		}
+
+		[[nodiscard]] result<path> infer_project_root(const path& database,
+													  const std::vector<resolved_entry>& entries)
+		{
+			path root = database.parent_path().lexically_normal();
+			for (const auto& entry : entries)
+			{
+				root = common_ancestor(std::move(root), entry.directory);
+				root = common_ancestor(std::move(root), entry.source.parent_path());
+			}
+			if (root.empty() || root == root.root_path())
+				return workspace_error(
+					"workspace.compile-database-invalid", "project-root-ambiguous", database);
+			return root;
+		}
+
+		void replace_path_prefix(std::string& value,
+								 const path& anchor,
+								 const std::string_view replacement)
+		{
+			const auto prefix = anchor.lexically_normal().generic_string();
 			const auto position = value.find(prefix);
 			if (!prefix.empty() && position != std::string::npos)
-				value.replace(position, prefix.size(), "$root");
+				value.replace(position, prefix.size(), replacement);
+		}
+
+		[[nodiscard]] std::string
+		semantic_argument(const path& root, const path& build_root, std::string value)
+		{
+			replace_path_prefix(value, root, "$root");
+			if (!detail::workspace_paths::semantic_path(root, build_root))
+				replace_path_prefix(value, build_root, "$build");
 			return value;
 		}
 
@@ -498,6 +578,8 @@ namespace cxxlens
 	{
 		path project_root;
 		path database;
+		path build_root;
+		std::string root_origin;
 		workspace_options options;
 		std::vector<compile_unit> units;
 		std::string database_digest;
@@ -707,8 +789,22 @@ namespace cxxlens
 															  "root-not-array")}
 						  : result<workspace>{std::move(parsed.error())};
 
-		path root = options.project_root.empty() ? database_path.value().parent_path()
-												 : options.project_root;
+		const auto& database_entries = std::get<database_value::array>(parsed.value().value);
+		auto resolved_entries =
+			resolve_entries(database_entries, database_path.value(), filesystem, request);
+		if (!resolved_entries)
+			return std::move(resolved_entries.error());
+		const bool inferred_root = options.project_root.empty();
+		path root;
+		if (inferred_root)
+		{
+			auto inferred = infer_project_root(database_path.value(), resolved_entries.value());
+			if (!inferred)
+				return std::move(inferred.error());
+			root = std::move(inferred.value());
+		}
+		else
+			root = options.project_root;
 		auto canonical_root = filesystem.canonicalize(root, request);
 		if (!canonical_root)
 			return workspace_error(
@@ -717,6 +813,8 @@ namespace cxxlens
 		auto state = std::make_shared<workspace::data>();
 		state->project_root = root;
 		state->database = database_path.value();
+		state->build_root = database_path.value().parent_path();
+		state->root_origin = inferred_root ? "inferred-common-ancestor" : "explicit";
 		state->options = options;
 		state->files = files;
 		state->virtual_files = std::move(virtual_files);
@@ -727,29 +825,21 @@ namespace cxxlens
 		state->database_digest = digest_part(database_id.value());
 
 		std::set<std::string> unit_keys;
-		for (const auto& entry : std::get<database_value::array>(parsed.value().value))
+		for (const auto& resolved : resolved_entries.value())
 		{
-			if (!std::holds_alternative<database_value::object>(entry.value))
-				return workspace_error("workspace.compile-database-invalid", "entry-not-object");
-			const auto& object = std::get<database_value::object>(entry.value);
-			auto directory_text = required_string(object, "directory");
-			auto file_text = required_string(object, "file");
-			if (!directory_text || !file_text)
-				return workspace_error("workspace.compile-database-invalid",
-									   "entry-required-field");
-			path directory = directory_text.value();
-			if (directory.is_relative())
-				directory = database_path.value().parent_path() / directory;
-			auto resolved_directory = filesystem.canonicalize(directory, request);
-			if (!resolved_directory)
+			const auto& object = *resolved.object;
+			const auto& directory = resolved.directory;
+			const auto& source = resolved.source;
+			auto source_key = detail::workspace_paths::semantic_path(root, source);
+			if (!source_key)
 				return workspace_error(
-					"workspace.compile-database-invalid", "working-directory-invalid", directory);
-			directory = resolved_directory.value();
-			path source = file_text.value();
-			if (source.is_relative())
-				source = directory / source;
-			source = source.lexically_normal();
-			const auto source_key = semantic_path(root, source);
+					"workspace.compile-database-invalid", "source-outside-project-root", source);
+			auto directory_key = detail::workspace_paths::build_path(
+				{root, database_path.value().parent_path()}, directory);
+			if (!directory_key)
+				return workspace_error("workspace.compile-database-invalid",
+									   "working-directory-outside-mapped-roots",
+									   directory);
 
 			std::vector<std::string> arguments;
 			if (const auto* argument_value = field(object, "arguments"))
@@ -788,26 +878,27 @@ namespace cxxlens
 			std::vector<std::string> semantic_arguments;
 			semantic_arguments.reserve(variant_inputs.size());
 			for (const auto& argument : variant_inputs)
-				semantic_arguments.push_back(semantic_argument(root, argument));
+				semantic_arguments.push_back(
+					semantic_argument(root, database_path.value().parent_path(), argument));
 			std::string joined;
 			for (const auto& argument : semantic_arguments)
 				joined += std::to_string(argument.size()) + ":" + argument;
-			auto variant =
-				stable_id("variant",
-						  "cxxlens.build-variant-id.v1",
-						  {{"arguments", joined}, {"directory", semantic_path(root, directory)}});
+			auto variant = stable_id("variant",
+									 "cxxlens.build-variant-id.v1",
+									 {{"arguments", joined}, {"directory", directory_key.value()}});
 			if (!variant)
 				return std::move(variant.error());
 			auto file_identity =
-				stable_id("file", "cxxlens.file-id.v1", {{"source_key", source_key}});
+				stable_id("file", "cxxlens.file-id.v1", {{"source_key", source_key.value()}});
 			if (!file_identity)
 				return std::move(file_identity.error());
-			auto unit = stable_id("cu",
-								  "cxxlens.compile-unit-id.v1",
-								  {{"source_key", source_key}, {"variant", variant.value()}});
+			auto unit =
+				stable_id("cu",
+						  "cxxlens.compile-unit-id.v1",
+						  {{"source_key", source_key.value()}, {"variant", variant.value()}});
 			if (!unit)
 				return std::move(unit.error());
-			const auto duplicate_key = source_key + '\0' + variant.value();
+			const auto duplicate_key = source_key.value() + '\0' + variant.value();
 			if (!unit_keys.insert(duplicate_key).second)
 				return workspace_error(
 					"workspace.compile-database-invalid", "duplicate-command", source);
@@ -822,7 +913,7 @@ namespace cxxlens
 				value->invocation.output = std::get<std::string>(output->value);
 			value->target = project_target(value->invocation.arguments);
 			value->digest = std::string{build_variant_id{variant.value()}.full_digest()};
-			value->semantic_file = source_key;
+			value->semantic_file = source_key.value();
 			state->units.emplace_back(compile_unit{std::move(value)});
 
 			request.operation = "workspace.source.read";
@@ -833,7 +924,7 @@ namespace cxxlens
 				stable_id("snapshot", "cxxlens.source-digest.v1", {{"content", source_payload}});
 			if (!source_digest)
 				return std::move(source_digest.error());
-			state->source_digests[source_key] = digest_part(source_digest.value());
+			state->source_digests[source_key.value()] = digest_part(source_digest.value());
 		}
 		std::ranges::sort(state->units,
 						  [](const compile_unit& left, const compile_unit& right)
@@ -843,7 +934,7 @@ namespace cxxlens
 								  std::pair{right.command().file.generic_string(),
 											std::string{right.variant_id().value()}};
 						  });
-		std::string snapshot_payload = state->database_digest + "|schema=1|semantics=1|llvm=22";
+		std::string snapshot_payload = state->database_digest + "|schema=2|semantics=2|llvm=22";
 		for (const auto& [file, digest] : state->source_digests)
 		{
 			snapshot_payload.append("|");
@@ -868,13 +959,20 @@ namespace cxxlens
 			snapshot_payload += "|config=" + state->configuration_digest;
 		}
 		auto snapshot =
-			stable_id("snapshot", "cxxlens.workspace-snapshot.v1", {{"inputs", snapshot_payload}});
+			stable_id("snapshot", "cxxlens.workspace-snapshot.v2", {{"inputs", snapshot_payload}});
 		if (!snapshot)
 			return std::move(snapshot.error());
 		state->snapshot_key = snapshot.value();
-		auto cache_key = stable_id("snapshot",
-								   "cxxlens.workspace-cache.v1",
-								   {{"database", semantic_path(root, database_path.value())}});
+		auto database_key = detail::workspace_paths::build_path(
+			{root, database_path.value().parent_path()}, database_path.value());
+		if (!database_key)
+			return workspace_error("workspace.compile-database-invalid",
+								   "database-outside-mapped-roots",
+								   database_path.value());
+		auto cache_key = stable_id(
+			"snapshot",
+			"cxxlens.workspace-cache.v2",
+			{{"database", database_key.value()}, {"path_mapping", "project-relative-v2"}});
 		if (!cache_key)
 			return std::move(cache_key.error());
 		auto provisioning =
@@ -993,29 +1091,38 @@ namespace cxxlens
 		}
 		for (const auto& unit : data_->units)
 		{
-			const auto key = semantic_path(data_->project_root, unit.command().file);
-			if (!data_->source_digests.contains(key))
+			const auto key =
+				detail::workspace_paths::semantic_path(data_->project_root, unit.command().file);
+			if (!key || !data_->source_digests.contains(key.value()))
+			{
+				compatible = false;
+				stale.emplace_back("path-mapping-invalid");
 				continue;
+			}
 			auto content = files.read(unit.command().file, request);
 			const auto payload = content ? content.value() : std::string{"<missing>"};
 			auto digest = stable_id("snapshot", "cxxlens.source-digest.v1", {{"content", payload}});
-			if (!digest || digest_part(digest.value()) != data_->source_digests.at(key))
+			if (!digest || digest_part(digest.value()) != data_->source_digests.at(key.value()))
 			{
 				compatible = false;
-				const auto already_reported =
-					std::ranges::any_of(stale,
-										[&](const json_value& value)
-										{
-											return std::get<std::string>(value.value) == key;
-										});
+				const auto already_reported = std::ranges::any_of(
+					stale,
+					[&](const json_value& value)
+					{
+						return std::get<std::string>(value.value) == key.value();
+					});
 				if (!already_reported)
-					stale.emplace_back(key);
+					stale.emplace_back(key.value());
 			}
 		}
 		auto matches = file.empty() ? data_->units : command_for(file);
 		json_value::array units;
 		for (const auto& unit : matches)
 		{
+			const auto directory = detail::workspace_paths::build_path(
+				{data_->project_root, data_->build_root}, unit.command().directory);
+			const auto source =
+				detail::workspace_paths::semantic_path(data_->project_root, unit.command().file);
 			auto macros = prefixed_arguments(unit.command().arguments, "-D");
 			auto undefines = prefixed_arguments(unit.command().arguments, "-U");
 			auto includes = prefixed_arguments(unit.command().arguments, "-I");
@@ -1024,9 +1131,9 @@ namespace cxxlens
 				{"arguments", json_value{strings(unit.command().arguments)}},
 				{"command_digest", unit.command_digest()},
 				{"compile_unit_id", std::string{unit.id().value()}},
-				{"directory", semantic_path(data_->project_root, unit.command().directory)},
+				{"directory", directory ? directory.value() : std::string{"$invalid/path-mapping"}},
 				{"driver_mode", driver_mode(unit.command().arguments)},
-				{"file", semantic_path(data_->project_root, unit.command().file)},
+				{"file", source ? source.value() : std::string{"$invalid/path-mapping"}},
 				{"includes", json_value{strings(includes)}},
 				{"language_standard", unit.target().language_standard},
 				{"macros", json_value{strings(macros)}},
@@ -1054,13 +1161,28 @@ namespace cxxlens
 					path query = file.is_relative() ? data_->project_root / file : file;
 					return unit.command().file.lexically_normal() == query.lexically_normal();
 				});
+		const auto query_path = file.empty()
+			? detail::workspace_paths::semantic_path(data_->project_root, data_->project_root)
+			: detail::workspace_paths::semantic_path(
+				  data_->project_root, file.is_relative() ? data_->project_root / file : file);
+		const auto build_root = detail::workspace_paths::build_path(
+			{data_->project_root, data_->build_root}, data_->build_root);
 		json_value::object fields{
 			{"compatible", compatible},
 			{"header_inference", inferred ? "stem-match" : "none"},
+			{"path_mapping",
+			 json_value::object{
+				 {"build_root",
+				  build_root ? build_root.value() : std::string{"$invalid/path-mapping"}},
+				 {"external_build_namespace", "$build"},
+				 {"external_source_policy", "reject"},
+				 {"policy", "project-relative-v2"},
+				 {"project_root", data_->project_root.generic_string()},
+				 {"project_root_origin", data_->root_origin}}},
 			{"query",
 			 file.empty() ? std::string{}
-						  : semantic_path(data_->project_root,
-										  file.is_relative() ? data_->project_root / file : file)},
+						  : (query_path ? query_path.value()
+										: std::string{"$invalid/outside-project-root"})},
 			{"snapshot_key", data_->snapshot_key},
 			{"stale_inputs", json_value{std::move(stale)}},
 			{"units", json_value{std::move(units)}}};

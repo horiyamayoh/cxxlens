@@ -766,6 +766,16 @@ public:
 
 ### 11.2 Open algorithm
 
+`project_root` 省略時は、canonical compile database 親、全 compile command working directory、
+全 main source 親の最深共通祖先を deterministic に採用する。共通祖先が filesystem root までしか
+絞れない場合は `workspace.compile-database-invalid` / `project-root-ambiguous` で fail closed とする。
+semantic path は project-relative hierarchy を保持し、basename fallback を禁止する。明示 root 外の
+source（generated source を含む）は `source-outside-project-root` で拒否する。root 外 build directory は
+compile database 親配下に限って `$build/` namespace へ写像し、それ以外を拒否する。catalog、diagnostics、
+provisioning は同じ `project-relative-v2` mapper を使用する。root の由来と mapping policy は
+`explain_build_context()` に出し、絶対 root は stable ID に含めない。path mapping 変更時は workspace
+snapshot/cache domain と semantics version を更新し、旧 alias cache と混在させない。
+
 1. project root と config を解決。
 2. JSON Compilation Database（通常は `compile_commands.json`）を load。
 3. `arguments` を優先し、`command` しかない場合は互換 parser で argv 化するが shell 実行しない。

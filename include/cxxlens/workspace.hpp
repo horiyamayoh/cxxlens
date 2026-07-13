@@ -72,7 +72,10 @@ namespace cxxlens
 	/** @brief Immutable workspace construction options. */
 	struct workspace_options
 	{
-		/** @brief Project root used to derive semantic relative paths. */
+		/** @brief Project root used to derive semantic relative paths.
+		 * @note When empty, `workspace::open` infers the deepest common ancestor of the
+		 * compilation database, working directories, and source parents. Ambiguous filesystem-root
+		 * inference and source paths outside an explicit root are rejected. */
 		path project_root;
 		/** @brief Build directory or JSON Compilation Database file. */
 		path compilation_database;

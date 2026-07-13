@@ -21,6 +21,7 @@
 #include "../store/fact_store_access.hpp"
 #include "../store/store_port.hpp"
 #include "frontend_scheduler_worker.hpp"
+#include "semantic_path.hpp"
 #include "value_access.hpp"
 
 namespace cxxlens::detail::provisioning
@@ -63,17 +64,6 @@ namespace cxxlens::detail::provisioning
 			failure.scope = scope;
 			failure.attributes.emplace("reason", std::move(reason));
 			return failure;
-		}
-
-		[[nodiscard]] std::string semantic_path(const path& root, path value)
-		{
-			if (value.is_relative())
-				value = root / value;
-			value = value.lexically_normal();
-			auto relative = value.lexically_relative(root.lexically_normal());
-			if (!relative.empty() && !relative.generic_string().starts_with(".."))
-				return relative.generic_string();
-			return value.filename().generic_string();
 		}
 
 		[[nodiscard]] std::string hex_encode(const std::string_view input)
@@ -152,7 +142,7 @@ namespace cxxlens::detail::provisioning
 												   std::string input_digest)
 		{
 			requirement output;
-			output.file = semantic_path(root, unit.command().file);
+			output.file = workspace_paths::semantic_path(root, unit.command().file).value();
 			output.unit = unit;
 			output.kind = kind;
 			output.precision = precision;
@@ -349,6 +339,15 @@ namespace cxxlens::detail::provisioning
 	{
 		if (options.root.empty() || options.workspace_key.empty())
 			return provisioning_error("core.invalid-argument", "service-options");
+		if (std::ranges::any_of(options.units,
+								[&](const compile_unit& unit)
+								{
+									return !workspace_paths::semantic_path(options.root,
+																		   unit.command().file);
+								}))
+			return provisioning_error("core.internal-invariant-violation",
+									  "semantic-source-outside-root",
+									  failure_scope::workspace);
 		if (!options.files)
 			options.files = std::make_shared<runtime::standard_filesystem_adapter>();
 		auto value = std::make_unique<implementation>();
@@ -475,14 +474,15 @@ namespace cxxlens::detail::provisioning
 			else if (scope_kind == workspace_value_access::scope_kind::files ||
 					 scope_kind == workspace_value_access::scope_kind::changed_files)
 			{
-				const auto unit_file =
-					semantic_path(implementation_->options.root, unit.command().file);
-				include = std::ranges::any_of(
-					workspace_value_access::files(scope),
-					[&](const path& file)
-					{
-						return semantic_path(implementation_->options.root, file) == unit_file;
-					});
+				const auto unit_file = workspace_paths::semantic_path(implementation_->options.root,
+																	  unit.command().file);
+				include = std::ranges::any_of(workspace_value_access::files(scope),
+											  [&](const path& file)
+											  {
+												  return workspace_paths::semantic_path(
+															 implementation_->options.root, file) ==
+													  unit_file;
+											  });
 			}
 			if (include && scoped_variants.has_value())
 				include = std::ranges::contains(scoped_variants.value(), unit.variant_id());

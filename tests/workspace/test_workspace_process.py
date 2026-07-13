@@ -26,5 +26,8 @@ jsonschema.validate(documents[0][0], scope_schema)
 jsonschema.validate(documents[0][1], context_schema)
 assert documents[0][1]["compatible"] is False
 assert documents[0][1]["stale_inputs"] == ["compilation_database", "configuration", "src/main.cpp"]
+assert documents[0][1]["path_mapping"]["policy"] == "project-relative-v2"
+assert documents[0][1]["path_mapping"]["project_root_origin"] == "explicit"
+assert documents[0][1]["path_mapping"]["external_source_policy"] == "reject"
 assert len(documents[0][1]["units"]) == 2
 print("validated workspace schemas and repeat-process determinism")

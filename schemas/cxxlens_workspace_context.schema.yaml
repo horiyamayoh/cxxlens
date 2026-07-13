@@ -2,7 +2,7 @@ $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://schemas.cxxlens.dev/cxxlens.workspace-context.v1.json
 title: cxxlens.workspace-context.v1
 type: object
-required: [schema, semantics_version, library_version, compatible, header_inference, query, snapshot_key, stale_inputs, units]
+required: [schema, semantics_version, library_version, compatible, header_inference, path_mapping, query, snapshot_key, stale_inputs, units]
 additionalProperties: false
 properties:
   schema: {const: cxxlens.workspace-context.v1}
@@ -10,6 +10,17 @@ properties:
   library_version: {type: string}
   compatible: {type: boolean}
   header_inference: {enum: [none, stem-match]}
+  path_mapping:
+    type: object
+    required: [build_root, external_build_namespace, external_source_policy, policy, project_root, project_root_origin]
+    additionalProperties: false
+    properties:
+      build_root: {type: string}
+      external_build_namespace: {const: '$build'}
+      external_source_policy: {const: reject}
+      policy: {const: project-relative-v2}
+      project_root: {type: string}
+      project_root_origin: {enum: [explicit, inferred-common-ancestor]}
   query: {type: string}
   snapshot_key: {type: string, pattern: '^snapshot_[0-9a-f]{64}$'}
   stale_inputs:

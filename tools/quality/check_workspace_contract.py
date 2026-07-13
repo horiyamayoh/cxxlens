@@ -22,6 +22,8 @@ for api_id in ("API-WS-001", "API-WS-002", "API-WS-003", "API-WS-004", "API-WS-0
 
 header = (root / "include/cxxlens/workspace.hpp").read_text()
 implementation = (root / "src/workspace/catalog.cpp").read_text()
+path_mapping = (root / "src/workspace/semantic_path.hpp").read_text()
+provisioning = (root / "src/workspace/provisioning.cpp").read_text()
 tests = (root / "tests/unit/workspace/workspace_catalog_test.cpp").read_text()
 for forbidden in ("clang/", "llvm/", "clang::", "llvm::"):
     if forbidden in header:
@@ -34,7 +36,10 @@ for required in (
     "expand_response_files",
     "unsafe_driver_flags",
     "duplicate-command",
-    "cxxlens.workspace-snapshot.v1",
+    "cxxlens.workspace-snapshot.v2",
+    "cxxlens.workspace-cache.v2",
+    "infer_project_root",
+    "source-outside-project-root",
 ):
     if required not in implementation:
         failures.append(f"workspace invariant branch missing: {required}")
@@ -48,6 +53,19 @@ for fixture in (
 ):
     if fixture not in tests:
         failures.append(f"workspace acceptance fixture missing: {fixture}")
+for shared in (implementation, provisioning):
+    if "workspace_paths::semantic_path" not in shared:
+        failures.append("catalog and provisioning do not share canonical semantic paths")
+if "filename()" in path_mapping:
+    failures.append("canonical semantic paths contain a basename fallback")
+for fixture in (
+    "default root collapsed same-basename sources",
+    "default root identity changed after relocation",
+    "external generated source was accepted",
+    "inferred root evidence missing",
+):
+    if fixture not in tests:
+        failures.append(f"workspace root regression fixture missing: {fixture}")
 for schema in ("cxxlens_analysis_scope.schema.yaml", "cxxlens_workspace_context.schema.yaml"):
     if not (root / "schemas" / schema).is_file():
         failures.append(f"workspace schema missing: {schema}")

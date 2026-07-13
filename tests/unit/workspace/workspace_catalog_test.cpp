@@ -61,6 +61,25 @@ namespace
 			  "[" + (reverse ? second + "," + first : first + "," + second) + "]");
 		return root;
 	}
+
+	std::filesystem::path make_same_basename_root(const std::filesystem::path& base,
+												  const std::string& name,
+												  const bool reverse)
+	{
+		const auto root = base / name;
+		write(root / "src/a/common.cpp", "int common_a(){return 1;}\n");
+		write(root / "src/b/common.cpp", "int common_b(){return 2;}\n");
+		const auto directory = json_path(root / "build");
+		const std::string first = "{\"directory\":\"" + directory +
+			"\",\"file\":\"../src/a/common.cpp\",\"arguments\":[\"clang++\",\"-std=c++23\","
+			"\"-c\",\"../src/a/common.cpp\"]}";
+		const std::string second = "{\"directory\":\"" + directory +
+			"\",\"file\":\"../src/b/common.cpp\",\"arguments\":[\"clang++\",\"-std=c++23\","
+			"\"-c\",\"../src/b/common.cpp\"]}";
+		write(root / "build/compile_commands.json",
+			  "[" + (reverse ? second + "," + first : first + "," + second) + "]");
+		return root;
+	}
 } // namespace
 
 int main(int argc, char** argv)
@@ -69,6 +88,33 @@ int main(int argc, char** argv)
 	std::filesystem::remove_all(base);
 	const auto root_a = make_root(base, "checkout-a", false);
 	const auto root_b = make_root(base, "relocated-checkout-b", true);
+	const auto collision_a = make_same_basename_root(base, "collision-checkout-a", false);
+	const auto collision_b = make_same_basename_root(base, "collision-relocated-b", true);
+	const auto collision_opened_a = cxxlens::workspace::open(
+		cxxlens::workspace_options::from_compilation_database(collision_a / "build"));
+	const auto collision_opened_b = cxxlens::workspace::open(
+		cxxlens::workspace_options::from_compilation_database(collision_b / "build"));
+	require(collision_opened_a && collision_opened_b, "default out-of-tree workspace open failed");
+	const auto collision_units_a = collision_opened_a.value().compile_units();
+	const auto collision_units_b = collision_opened_b.value().compile_units();
+	require(collision_opened_a.value().root() == collision_a && collision_units_a.size() == 2U,
+			"default project root was not inferred from build and sources");
+	require(collision_units_a[0].main_file() != collision_units_a[1].main_file() &&
+				collision_units_a[0].id() != collision_units_a[1].id(),
+			"default root collapsed same-basename sources");
+	require(collision_units_a[0].variant_id() == collision_units_a[1].variant_id(),
+			"source hierarchy leaked into variant identity");
+	for (std::size_t index = 0U; index < collision_units_a.size(); ++index)
+		require(collision_units_a[index].main_file() == collision_units_b[index].main_file() &&
+					collision_units_a[index].id() == collision_units_b[index].id(),
+				"default root identity changed after relocation");
+	const auto collision_evidence = collision_opened_a.value().explain_build_context();
+	require(collision_evidence.find("\"project_root_origin\":\"inferred-common-ancestor\"") !=
+					std::string::npos &&
+				collision_evidence.find("\"policy\":\"project-relative-v2\"") !=
+					std::string::npos &&
+				collision_evidence.find(collision_a.generic_string()) != std::string::npos,
+			"inferred root evidence missing");
 
 	auto options_a = cxxlens::workspace_options::from_compilation_database(root_a / "build");
 	options_a.project_root = root_a;
@@ -196,6 +242,22 @@ int main(int argc, char** argv)
 		cxxlens::workspace_options::from_compilation_database(negative / "duplicate.json"));
 	require(!duplicate && duplicate.error().attributes.at("reason") == "duplicate-command",
 			"duplicate command was not diagnosed");
+
+	const auto external_project = base / "external-policy/project";
+	const auto external_source = base / "external-policy/generated/common.cpp";
+	write(external_source, "int generated(){return 0;}\n");
+	write(external_project / "build/compile_commands.json",
+		  "[{\"directory\":\"" + json_path(external_project / "build") + "\",\"file\":\"" +
+			  json_path(external_source) + "\",\"arguments\":[\"clang++\",\"-c\",\"" +
+			  json_path(external_source) + "\"]}]");
+	auto external_options =
+		cxxlens::workspace_options::from_compilation_database(external_project / "build");
+	external_options.project_root = external_project;
+	external_options.generated = cxxlens::generated_code_policy::include;
+	const auto external = cxxlens::workspace::open(external_options);
+	require(!external && external.error().code.value == "workspace.compile-database-invalid" &&
+				external.error().attributes.at("reason") == "source-outside-project-root",
+			"external generated source was accepted");
 
 	std::filesystem::remove_all(base);
 	return 0;
