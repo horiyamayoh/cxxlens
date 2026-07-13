@@ -43,12 +43,12 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-FUZZ-003 | fuzz | <cxxlens/generate.hpp> | fuzz::generator::plan | AU-FUZZ-003 | unimplemented | unresolved |
 | API-GEN-001 | generate | <cxxlens/generate.hpp> | generation_plan::{census,decisions,artifacts,diagnostics,unresolved_items,coverage,preview,to_json,to_markdown} | AU-GEN-001 | unimplemented | unresolved |
 | API-GEN-002 | generate | <cxxlens/generate.hpp> | generation_plan::apply | AU-GEN-002 | unimplemented | unresolved |
-| API-GRAPH-001 | graph | <cxxlens/graph.hpp> | graph::class_hierarchy | AU-GRAPH-001 | unimplemented | unresolved |
-| API-GRAPH-002 | graph | <cxxlens/graph.hpp> | graph::override_graph | AU-GRAPH-002 | unimplemented | unresolved |
-| API-GRAPH-003 | graph | <cxxlens/graph.hpp> | graph::call_graph | AU-GRAPH-003 | unimplemented | unresolved |
-| API-GRAPH-004 | graph | <cxxlens/graph.hpp> | graph::include_graph | AU-GRAPH-004 | unimplemented | unresolved |
-| API-GRAPH-005 | graph | <cxxlens/graph.hpp> | impact_query builder and run | AU-GRAPH-005 | unimplemented | unresolved |
-| API-GRAPH-006 | graph | <cxxlens/graph.hpp> | semantic_graph::{subgraph,to_json,to_dot} | AU-GRAPH-006 | unimplemented | unresolved |
+| API-GRAPH-001 | graph | <cxxlens/graph.hpp> | graph::class_hierarchy | AU-GRAPH-001 | unimplemented | candidate |
+| API-GRAPH-002 | graph | <cxxlens/graph.hpp> | graph::override_graph | AU-GRAPH-002 | unimplemented | candidate |
+| API-GRAPH-003 | graph | <cxxlens/graph.hpp> | graph::call_graph | AU-GRAPH-003 | unimplemented | candidate |
+| API-GRAPH-004 | graph | <cxxlens/graph.hpp> | graph::include_graph | AU-GRAPH-004 | unimplemented | candidate |
+| API-GRAPH-005 | graph | <cxxlens/graph.hpp> | impact_query builder and run | AU-GRAPH-005 | unimplemented | candidate |
+| API-GRAPH-006 | graph | <cxxlens/graph.hpp> | semantic_graph::{subgraph,to_json,to_dot} | AU-GRAPH-006 | unimplemented | candidate |
 | API-INT-001 | interop | <cxxlens/interop/clang.hpp> | interop::linked_clang_version | AU-INT-001 | conformant | candidate |
 | API-INT-002 | interop | <cxxlens/interop/clang.hpp> | interop::with_translation_unit | AU-INT-002 | conformant | candidate |
 | API-INT-003 | interop | <cxxlens/interop/clang.hpp> | fact_sink::{emit,emit_custom,emit_evidence,mark_partial} | AU-INT-003 | unimplemented | candidate |

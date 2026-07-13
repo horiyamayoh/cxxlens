@@ -113,7 +113,7 @@ class TaskPacketTest(unittest.TestCase):
         )
         self.assertEqual(
             generated["summary"]["declaration_state_counts"],
-            {"exact": 64, "unresolved": 60},
+            {"exact": 70, "unresolved": 54},
         )
         self.assertEqual(
             set(generated["global_contract_fingerprints"]),

@@ -21,8 +21,8 @@ conformant_catalog_ids:
 deferred_catalog:
 - {id: API-EXP-001, blocker: candidate_declaration_not_integrated}
 - {id: API-EXP-003, blocker: candidate_declaration_not_integrated}
-- {id: API-GRAPH-001, blocker: exact_declaration_unresolved}
-- {id: API-GRAPH-002, blocker: exact_declaration_unresolved}
+- {id: API-GRAPH-001, blocker: candidate_declaration_not_integrated}
+- {id: API-GRAPH-002, blocker: candidate_declaration_not_integrated}
 stable_public_headers:
 - include/cxxlens/cxxlens.hpp
 - include/cxxlens/explain.hpp

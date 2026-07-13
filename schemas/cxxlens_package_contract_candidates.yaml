@@ -5,7 +5,10 @@ catalog: schemas/cxxlens_public_api_contract.yaml
 groups:
 - issue: '#43'
   state: candidate
-  packages: [configuration, core, testing]
+  packages:
+  - configuration
+  - core
+  - testing
   normative_document: docs/design/package_contract_43.md
   candidate_headers:
   - contracts/candidates/43/core_findings.hpp
@@ -260,73 +263,119 @@ groups:
     kind: error_registry
     owner_atomic_unit: AU-CORE-001
     steward: integration.package.core
-    entries: [core.budget-exhausted, core.cancelled, core.capability-unavailable, core.deadline-exceeded, core.internal-invariant-violation, core.invalid-argument, core.schema-validation-failed, core.unsupported-capability, core.version-mismatch]
+    entries:
+    - core.budget-exhausted
+    - core.cancelled
+    - core.capability-unavailable
+    - core.deadline-exceeded
+    - core.internal-invariant-violation
+    - core.invalid-argument
+    - core.schema-validation-failed
+    - core.unsupported-capability
+    - core.version-mismatch
     behavior: Unknown or duplicate stable codes reject; no package controls flow from diagnostic prose.
   - id: registry.core.capabilities
     kind: capability_registry
     owner_atomic_unit: AU-CORE-002
     steward: integration.package.core
-    entries: [include.cleaner, interop.clang, qa.coverage, qa.sanitizers]
+    entries:
+    - include.cleaner
+    - interop.clang
+    - qa.coverage
+    - qa.sanitizers
     behavior: Known unavailable and unknown capability IDs remain distinguishable explicit states.
   - id: registry.core.schemas
     kind: schema_registry
     owner_atomic_unit: AU-CORE-001
     steward: steward.schema
-    entries: [cxxlens.capabilities.v1, cxxlens.coverage.v1, cxxlens.evidence.v1, cxxlens.finding.v1, cxxlens.finding-set.v1]
+    entries:
+    - cxxlens.capabilities.v1
+    - cxxlens.coverage.v1
+    - cxxlens.evidence.v1
+    - cxxlens.finding.v1
+    - cxxlens.finding-set.v1
     behavior: Exact ID/version lookup only; missing, version-incompatible, and unsupported never become empty success.
   - id: registry.configuration.errors
     kind: error_registry
     owner_atomic_unit: AU-CFG-001
     steward: integration.package.configuration
-    entries: [config.file-not-found, config.invalid-value, config.overlay-conflict, config.profile-not-found, config.unknown-key, config.yaml-invalid]
+    entries:
+    - config.file-not-found
+    - config.invalid-value
+    - config.overlay-conflict
+    - config.profile-not-found
+    - config.unknown-key
+    - config.yaml-invalid
     behavior: Parse, key, type, profile, boundary, conflict, and version failures remain distinct stable codes.
   - id: registry.configuration.schemas
     kind: schema_registry
     owner_atomic_unit: AU-CFG-001
     steward: steward.schema
-    entries: [cxxlens.config.v1, cxxlens.config.resolved.v1, cxxlens.config.explain.v1]
+    entries:
+    - cxxlens.config.v1
+    - cxxlens.config.resolved.v1
+    - cxxlens.config.explain.v1
     behavior: Input/resolved/explanation schemas have independent exact IDs and redaction rules.
   - id: registry.testing.errors
     kind: error_registry
     owner_atomic_unit: AU-TEST-001
     steward: integration.package.testing
-    entries: [testing.assertion-failed, testing.fixture-invalid, testing.json-invalid, testing.schema-mismatch]
+    entries:
+    - testing.assertion-failed
+    - testing.fixture-invalid
+    - testing.json-invalid
+    - testing.schema-mismatch
     behavior: Assertion, fixture, parser, and schema selection failures remain structurally distinguishable.
   - id: registry.testing.schemas
     kind: schema_registry
     owner_atomic_unit: AU-TEST-001
     steward: steward.schema
-    entries: [cxxlens.testing-fixture.v1]
+    entries:
+    - cxxlens.testing-fixture.v1
     behavior: Fixture schema identity is exact; plan assertions consume transform/generate schemas without re-owning them.
   consumer_boundaries:
   - owner_package: core
     consumer_package: rules
-    shared_types: [finding, finding_set]
+    shared_types:
+    - finding
+    - finding_set
     access: value_copy
-    rule: 'Issue #47 may produce and read findings but cannot redefine identity, duplicate, evidence, coverage, or projection semantics.'
+    rule: 'Issue #47 may produce and read findings but cannot redefine identity, duplicate, evidence, coverage, or projection
+      semantics.'
   - owner_package: core
     consumer_package: report
-    shared_types: [finding, finding_set, evidence, coverage_report]
+    shared_types:
+    - finding
+    - finding_set
+    - evidence
+    - coverage_report
     access: const_reference
     rule: Report is a pure consumer projection and never becomes the authoritative row owner.
   - owner_package: core
     consumer_package: review
-    shared_types: [finding_set]
+    shared_types:
+    - finding_set
     access: value_copy
     rule: Review gates consume stable finding identity and preserve evidence/unresolved/coverage.
   - owner_package: core
     consumer_package: qa
-    shared_types: [finding_set, evidence, coverage_report]
+    shared_types:
+    - finding_set
+    - evidence
+    - coverage_report
     access: value_copy
     rule: QA association does not reclassify findings or upgrade confidence/guarantee.
   - owner_package: transform
     consumer_package: testing
-    shared_types: [transform::codemod, transform::edit_plan]
+    shared_types:
+    - transform::codemod
+    - transform::edit_plan
     access: forward_declaration
     rule: Testing owns assertions only; transform owns plan identity, validation, schema, and apply semantics.
   - owner_package: generate
     consumer_package: testing
-    shared_types: [generate::generation_plan]
+    shared_types:
+    - generate::generation_plan
     access: forward_declaration
     rule: Testing owns assertions only; generate owns census, decision, artifact, schema, and apply semantics.
   api_contracts:
@@ -338,24 +387,42 @@ groups:
       source: include/cxxlens/core.hpp
       signature: cxxlens::api_versions cxxlens::versions()
       signature_fingerprint: sha256:2c21ba960094c71a85b0fd4dd35ad67d6e4126c06ed2b5f39012596e0c570aea
-    family_members: [cxxlens::versions]
+    family_members:
+    - cxxlens::versions
     semantics:
     - Returns detached values for library, public/fact/finding/edit/generation schemas, semantics, and LLVM baseline.
     - Version axes are compared independently; no compatibility is inferred from the library version alone.
     ownership_refs:
-      public_types: [public-type:core:api_versions, public-type:core:semantic_version]
-      shared_components: [shared.package.core.shared_public_type_contract]
+      public_types:
+      - public-type:core:api_versions
+      - public-type:core:semantic_version
+      shared_components:
+      - shared.package.core.shared_public_type_contract
       providers: []
-      schemas: [schema:schemas/cxxlens_capabilities.schema.yaml]
+      schemas:
+      - schema:schemas/cxxlens_capabilities.schema.yaml
     dependency_apis: []
     traceability:
-      requirements_or_use_cases: [FR-018]
-      design_sections: ['10.2', '10.3', '39.13']
+      requirements_or_use_cases:
+      - FR-018
+      design_sections:
+      - '10.2'
+      - '10.3'
+      - '39.13'
       doxygen_obligation: Document every independent axis, value ownership, deterministic build result, and allocation failure.
     acceptance:
-      positive: {id: API-CORE-001.positive, expression: versions returns every named axis, expected: Complete detached version value.}
-      negative: {id: API-CORE-001.negative, expression: Consumer treats library version as schema version, expected: Contract validator rejects the compatibility claim.}
-      ambiguous: {id: API-CORE-001.ambiguous, expression: Adapter and public schema versions differ, expected: Axes remain distinct without fallback.}
+      positive:
+        id: API-CORE-001.positive
+        expression: versions returns every named axis
+        expected: Complete detached version value.
+      negative:
+        id: API-CORE-001.negative
+        expression: Consumer treats library version as schema version
+        expected: Contract validator rejects the compatibility claim.
+      ambiguous:
+        id: API-CORE-001.ambiguous
+        expression: Adapter and public schema versions differ
+        expected: Axes remain distinct without fallback.
   - api_id: API-CORE-002
     atomic_unit: AU-CORE-002
     package: core
@@ -364,130 +431,294 @@ groups:
       source: include/cxxlens/core.hpp
       signature: cxxlens::capability_set cxxlens::capabilities()
       signature_fingerprint: sha256:15787e2e94fbf4f868d25f8cf6c0ccbb12517cf862ce1b34a83821969ba9a278
-    family_members: [cxxlens::capabilities]
+    family_members:
+    - cxxlens::capabilities
     semantics:
     - Returns all known capability rows in ID order, including unavailable states and limitations.
     - Unknown lookup stays distinct from an empty registry and never enables implicit downgrade.
     ownership_refs:
-      public_types: [public-type:core:capability, public-type:core:capability_set, public-type:core:capability_state]
-      shared_components: [shared.package.core.shared_public_type_contract]
-      providers: [provider.capability.include-cleaner:include.cleaner, provider.capability.interop-clang:interop.clang, provider.capability.qa-coverage:qa.coverage, provider.capability.qa-sanitizers:qa.sanitizers]
-      schemas: [schema:schemas/cxxlens_capabilities.schema.yaml]
+      public_types:
+      - public-type:core:capability
+      - public-type:core:capability_set
+      - public-type:core:capability_state
+      shared_components:
+      - shared.package.core.shared_public_type_contract
+      providers:
+      - provider.capability.include-cleaner:include.cleaner
+      - provider.capability.interop-clang:interop.clang
+      - provider.capability.qa-coverage:qa.coverage
+      - provider.capability.qa-sanitizers:qa.sanitizers
+      schemas:
+      - schema:schemas/cxxlens_capabilities.schema.yaml
     dependency_apis: []
     traceability:
-      requirements_or_use_cases: [QR-010]
-      design_sections: ['10.2', '10.4', '39.13']
+      requirements_or_use_cases:
+      - QR-010
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.13'
       doxygen_obligation: Document every availability state, unknown lookup, ordering, duplicate, and version rule.
     acceptance:
-      positive: {id: API-CORE-002.positive, expression: Lookup a known available capability, expected: Exact present row.}
-      negative: {id: API-CORE-002.negative, expression: Registry contains duplicate IDs, expected: Hard invariant failure; no first-wins.}
-      ambiguous: {id: API-CORE-002.ambiguous, expression: Lookup an unknown ID, expected: Explicit unavailable unknown row distinct from empty.}
+      positive:
+        id: API-CORE-002.positive
+        expression: Lookup a known available capability
+        expected: Exact present row.
+      negative:
+        id: API-CORE-002.negative
+        expression: Registry contains duplicate IDs
+        expected: Hard invariant failure; no first-wins.
+      ambiguous:
+        id: API-CORE-002.ambiguous
+        expression: Lookup an unknown ID
+        expected: Explicit unavailable unknown row distinct from empty.
   - api_id: API-CORE-003
     atomic_unit: AU-CORE-003
     package: core
     policy: core.evidence-coverage.v1
     declaration:
       source: include/cxxlens/core/evidence.hpp
-      signature: 'cxxlens::evidence& cxxlens::evidence::add(cxxlens::evidence_item); std::span<const cxxlens::evidence_item> cxxlens::evidence::items() const noexcept; std::string cxxlens::evidence::to_json() const; std::string cxxlens::evidence::to_markdown() const'
+      signature: cxxlens::evidence& cxxlens::evidence::add(cxxlens::evidence_item); std::span<const cxxlens::evidence_item>
+        cxxlens::evidence::items() const noexcept; std::string cxxlens::evidence::to_json() const; std::string cxxlens::evidence::to_markdown()
+        const
       signature_fingerprint: sha256:d590366b80be69a4c215c934de46c443e9b938c5cafe38d120222c398c392bb2
-    family_members: [cxxlens::evidence::add, cxxlens::evidence::items, cxxlens::evidence::to_json, cxxlens::evidence::to_markdown]
+    family_members:
+    - cxxlens::evidence::add
+    - cxxlens::evidence::items
+    - cxxlens::evidence::to_json
+    - cxxlens::evidence::to_markdown
     semantics:
     - add validates and canonicalizes typed evidence; spans borrow until mutation or destruction.
     - JSON is authoritative and Markdown is a deterministic projection that cannot add support.
     ownership_refs:
-      public_types: [public-type:core:evidence, public-type:core:evidence_item, public-type:core:evidence_kind]
-      shared_components: [shared.package.core.shared_public_type_contract]
-      providers: [provider.fact.frontend:finding]
-      schemas: [schema:schemas/cxxlens_evidence.schema.yaml]
+      public_types:
+      - public-type:core:evidence
+      - public-type:core:evidence_item
+      - public-type:core:evidence_kind
+      shared_components:
+      - shared.package.core.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:finding
+      schemas:
+      - schema:schemas/cxxlens_evidence.schema.yaml
     dependency_apis: []
     traceability:
-      requirements_or_use_cases: [FR-008, FR-011]
-      design_sections: ['10.2', '10.4', '39.10']
-      doxygen_obligation: Document backing lifetime, invalidation, canonical dedup/order, authoritative JSON, and projection limits.
+      requirements_or_use_cases:
+      - FR-008
+      - FR-011
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.10'
+      doxygen_obligation: Document backing lifetime, invalidation, canonical dedup/order, authoritative JSON, and projection
+        limits.
     acceptance:
-      positive: {id: API-CORE-003.positive, expression: Add two distinct typed evidence rows, expected: Canonical rows and equivalent JSON/Markdown content.}
-      negative: {id: API-CORE-003.negative, expression: Evidence references a fact outside its snapshot, expected: Structured validation error.}
-      ambiguous: {id: API-CORE-003.ambiguous, expression: Equivalent rows arrive in opposite orders, expected: One canonical deterministic representation.}
+      positive:
+        id: API-CORE-003.positive
+        expression: Add two distinct typed evidence rows
+        expected: Canonical rows and equivalent JSON/Markdown content.
+      negative:
+        id: API-CORE-003.negative
+        expression: Evidence references a fact outside its snapshot
+        expected: Structured validation error.
+      ambiguous:
+        id: API-CORE-003.ambiguous
+        expression: Equivalent rows arrive in opposite orders
+        expected: One canonical deterministic representation.
   - api_id: API-CORE-004
     atomic_unit: AU-CORE-004
     package: core
     policy: core.evidence-coverage.v1
     declaration:
       source: include/cxxlens/core/evidence.hpp
-      signature: 'bool cxxlens::coverage_report::complete() const; std::span<const cxxlens::coverage_unit> cxxlens::coverage_report::units() const noexcept; std::string cxxlens::coverage_report::to_json() const; std::string cxxlens::coverage_report::to_markdown() const'
+      signature: bool cxxlens::coverage_report::complete() const; std::span<const cxxlens::coverage_unit> cxxlens::coverage_report::units()
+        const noexcept; std::string cxxlens::coverage_report::to_json() const; std::string cxxlens::coverage_report::to_markdown()
+        const
       signature_fingerprint: sha256:439cfc1f164979287ff750183b73afcc9d3980d2cdebdad620789fe80f0d03a9
-    family_members: [cxxlens::coverage_report::complete, cxxlens::coverage_report::units, cxxlens::coverage_report::to_json, cxxlens::coverage_report::to_markdown]
+    family_members:
+    - cxxlens::coverage_report::complete
+    - cxxlens::coverage_report::units
+    - cxxlens::coverage_report::to_json
+    - cxxlens::coverage_report::to_markdown
     semantics:
     - Complete is derived from exact conservation of requested units across terminal states.
     - Returned span preserves authoritative canonical rows; projections derive counts and prose from them.
     ownership_refs:
-      public_types: [public-type:core:coverage_report, public-type:core:coverage_request, public-type:core:coverage_state, public-type:core:coverage_unit]
-      shared_components: [shared.package.core.shared_public_type_contract]
-      providers: [provider.fact.frontend:coverage]
-      schemas: [schema:schemas/cxxlens_coverage.schema.yaml]
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:coverage_request
+      - public-type:core:coverage_state
+      - public-type:core:coverage_unit
+      shared_components:
+      - shared.package.core.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:coverage
+      schemas:
+      - schema:schemas/cxxlens_coverage.schema.yaml
     dependency_apis: []
     traceability:
-      requirements_or_use_cases: [FR-008, FR-010]
-      design_sections: ['10.2', '10.4', '39.10']
+      requirements_or_use_cases:
+      - FR-008
+      - FR-010
+      design_sections:
+      - '10.2'
+      - '10.4'
+      - '39.10'
       doxygen_obligation: Document conservation, empty completeness, span lifetime, guarantee downgrade, and projection rules.
     acceptance:
-      positive: {id: API-CORE-004.positive, expression: Every requested unit has one terminal row, expected: Complete canonical coverage.}
-      negative: {id: API-CORE-004.negative, expression: Requested unit is omitted or duplicated, expected: Structured conservation failure.}
-      ambiguous: {id: API-CORE-004.ambiguous, expression: One variant is covered and another unresolved, expected: Incomplete coverage with both rows preserved.}
+      positive:
+        id: API-CORE-004.positive
+        expression: Every requested unit has one terminal row
+        expected: Complete canonical coverage.
+      negative:
+        id: API-CORE-004.negative
+        expression: Requested unit is omitted or duplicated
+        expected: Structured conservation failure.
+      ambiguous:
+        id: API-CORE-004.ambiguous
+        expression: One variant is covered and another unresolved
+        expected: Incomplete coverage with both rows preserved.
   - api_id: API-CORE-005
     atomic_unit: AU-CORE-005
     package: core
     policy: core.findings.v1
     declaration:
       source: contracts/candidates/43/core_findings.hpp
-      signature: 'cxxlens::result<cxxlens::finding> cxxlens::finding::make(cxxlens::finding_input,const cxxlens::finding_validation_context&); cxxlens::finding_id cxxlens::finding::id() const; std::string_view cxxlens::finding::rule_or_recipe() const noexcept; cxxlens::severity cxxlens::finding::level() const noexcept; cxxlens::confidence cxxlens::finding::certainty() const noexcept; cxxlens::result_guarantee cxxlens::finding::guarantee() const noexcept; const cxxlens::source_span& cxxlens::finding::primary_location() const noexcept; std::string_view cxxlens::finding::message() const noexcept; const cxxlens::evidence& cxxlens::finding::why() const noexcept; std::span<const cxxlens::unresolved> cxxlens::finding::unresolved_items() const noexcept; const cxxlens::coverage_report& cxxlens::finding::coverage() const noexcept; cxxlens::finding_explanation_input cxxlens::finding::explanation_input() const noexcept; cxxlens::result<void> cxxlens::finding::validate(const cxxlens::finding_validation_context&) const; std::string cxxlens::finding::semantic_representation() const; std::string cxxlens::finding::to_json() const'
+      signature: cxxlens::result<cxxlens::finding> cxxlens::finding::make(cxxlens::finding_input,const cxxlens::finding_validation_context&);
+        cxxlens::finding_id cxxlens::finding::id() const; std::string_view cxxlens::finding::rule_or_recipe() const noexcept;
+        cxxlens::severity cxxlens::finding::level() const noexcept; cxxlens::confidence cxxlens::finding::certainty() const
+        noexcept; cxxlens::result_guarantee cxxlens::finding::guarantee() const noexcept; const cxxlens::source_span& cxxlens::finding::primary_location()
+        const noexcept; std::string_view cxxlens::finding::message() const noexcept; const cxxlens::evidence& cxxlens::finding::why()
+        const noexcept; std::span<const cxxlens::unresolved> cxxlens::finding::unresolved_items() const noexcept; const cxxlens::coverage_report&
+        cxxlens::finding::coverage() const noexcept; cxxlens::finding_explanation_input cxxlens::finding::explanation_input()
+        const noexcept; cxxlens::result<void> cxxlens::finding::validate(const cxxlens::finding_validation_context&) const;
+        std::string cxxlens::finding::semantic_representation() const; std::string cxxlens::finding::to_json() const
       signature_fingerprint: sha256:6003d07f3ed009d442c160c73b728c82c1b2bddc21a731698c9c2aeaba061655
-    family_members: [cxxlens::finding::make, cxxlens::finding::id, cxxlens::finding::rule_or_recipe, cxxlens::finding::level, cxxlens::finding::certainty, cxxlens::finding::guarantee, cxxlens::finding::primary_location, cxxlens::finding::message, cxxlens::finding::why, cxxlens::finding::unresolved_items, cxxlens::finding::coverage, cxxlens::finding::explanation_input, cxxlens::finding::validate, cxxlens::finding::semantic_representation, cxxlens::finding::to_json]
+    family_members:
+    - cxxlens::finding::make
+    - cxxlens::finding::id
+    - cxxlens::finding::rule_or_recipe
+    - cxxlens::finding::level
+    - cxxlens::finding::certainty
+    - cxxlens::finding::guarantee
+    - cxxlens::finding::primary_location
+    - cxxlens::finding::message
+    - cxxlens::finding::why
+    - cxxlens::finding::unresolved_items
+    - cxxlens::finding::coverage
+    - cxxlens::finding::explanation_input
+    - cxxlens::finding::validate
+    - cxxlens::finding::semantic_representation
+    - cxxlens::finding::to_json
     semantics:
-    - ID includes rule/recipe, full semantic subject, normalized source key/range, variant signature, and explicit identity parameters.
+    - ID includes rule/recipe, full semantic subject, normalized source key/range, variant signature, and explicit identity
+      parameters.
     - Message/severity are ID-excluded; why/coverage/unresolved are authoritative and explanation_input is renderer-neutral.
     - Factory and validator reject root-dependent identity, dangling evidence, invalid guarantee, and stale/colliding IDs.
     ownership_refs:
-      public_types: [public-type:core:finding, public-type:core:finding_explanation_input, public-type:core:finding_input, public-type:core:finding_validation_context]
-      shared_components: [shared.package.core.shared_public_type_contract]
-      providers: [provider.fact.frontend:finding]
-      schemas: [schema:schemas/cxxlens_finding.schema.yaml]
-    dependency_apis: [API-CORE-003, API-CORE-004]
+      public_types:
+      - public-type:core:finding
+      - public-type:core:finding_explanation_input
+      - public-type:core:finding_input
+      - public-type:core:finding_validation_context
+      shared_components:
+      - shared.package.core.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:finding
+      schemas:
+      - schema:schemas/cxxlens_finding.schema.yaml
+    dependency_apis:
+    - API-CORE-003
+    - API-CORE-004
     traceability:
-      requirements_or_use_cases: [FR-008, FR-011, QR-001]
-      design_sections: ['10.2', '10.3', '10.4', '39.10']
-      doxygen_obligation: Document every identity include/exclude, borrowed accessor lifetime, validator input, and why/explanation boundary.
+      requirements_or_use_cases:
+      - FR-008
+      - FR-011
+      - QR-001
+      design_sections:
+      - '10.2'
+      - '10.3'
+      - '10.4'
+      - '39.10'
+      doxygen_obligation: Document every identity include/exclude, borrowed accessor lifetime, validator input, and why/explanation
+        boundary.
     acceptance:
-      positive: {id: API-CORE-005.positive, expression: Same semantic input with changed message/severity, expected: Same full finding ID and preserved changed material payload.}
-      negative: {id: API-CORE-005.negative, expression: Identity contains an absolute checkout root, expected: Structured identity validation failure.}
-      ambiguous: {id: API-CORE-005.ambiguous, expression: Variant-dependent subject has no variant signature, expected: Typed unresolved or validation failure; never merged identity.}
+      positive:
+        id: API-CORE-005.positive
+        expression: Same semantic input with changed message/severity
+        expected: Same full finding ID and preserved changed material payload.
+      negative:
+        id: API-CORE-005.negative
+        expression: Identity contains an absolute checkout root
+        expected: Structured identity validation failure.
+      ambiguous:
+        id: API-CORE-005.ambiguous
+        expression: Variant-dependent subject has no variant signature
+        expected: Typed unresolved or validation failure; never merged identity.
   - api_id: API-CORE-006
     atomic_unit: AU-CORE-006
     package: core
     policy: core.findings.v1
     declaration:
       source: contracts/candidates/43/core_findings.hpp
-      signature: 'cxxlens::result<void> cxxlens::finding_set::add(cxxlens::finding); std::size_t cxxlens::finding_set::size() const noexcept; bool cxxlens::finding_set::empty() const noexcept; std::span<const cxxlens::finding> cxxlens::finding_set::all() const noexcept; cxxlens::finding_set cxxlens::finding_set::minimum_confidence(cxxlens::confidence) const; cxxlens::finding_set cxxlens::finding_set::minimum_severity(cxxlens::severity) const; std::string cxxlens::finding_set::to_json() const; std::string cxxlens::finding_set::to_markdown() const; std::string cxxlens::finding_set::to_sarif() const'
+      signature: cxxlens::result<void> cxxlens::finding_set::add(cxxlens::finding); std::size_t cxxlens::finding_set::size()
+        const noexcept; bool cxxlens::finding_set::empty() const noexcept; std::span<const cxxlens::finding> cxxlens::finding_set::all()
+        const noexcept; cxxlens::finding_set cxxlens::finding_set::minimum_confidence(cxxlens::confidence) const; cxxlens::finding_set
+        cxxlens::finding_set::minimum_severity(cxxlens::severity) const; std::string cxxlens::finding_set::to_json() const;
+        std::string cxxlens::finding_set::to_markdown() const; std::string cxxlens::finding_set::to_sarif() const
       signature_fingerprint: sha256:b111c53789436fc32aa3d7a496ef19725abd7beae0490df4ad0e33cde9509ca4
-    family_members: [cxxlens::finding_set::add, cxxlens::finding_set::size, cxxlens::finding_set::empty, cxxlens::finding_set::all, cxxlens::finding_set::minimum_confidence, cxxlens::finding_set::minimum_severity, cxxlens::finding_set::to_json, cxxlens::finding_set::to_markdown, cxxlens::finding_set::to_sarif]
+    family_members:
+    - cxxlens::finding_set::add
+    - cxxlens::finding_set::size
+    - cxxlens::finding_set::empty
+    - cxxlens::finding_set::all
+    - cxxlens::finding_set::minimum_confidence
+    - cxxlens::finding_set::minimum_severity
+    - cxxlens::finding_set::to_json
+    - cxxlens::finding_set::to_markdown
+    - cxxlens::finding_set::to_sarif
     semantics:
     - Canonical order is rule/source offsets/subject/variant/full ID and is independent of insertion/hash/thread order.
     - Same-ID equal material payload collapses; conflicting payload is a hard invariant failure.
-    - Filters are inclusive pure projections preserving complete finding payload; JSON/Markdown/SARIF share authoritative rows.
+    - Filters are inclusive pure projections preserving complete finding payload; JSON/Markdown/SARIF share authoritative
+      rows.
     ownership_refs:
-      public_types: [public-type:core:finding, public-type:core:finding_set]
-      shared_components: [shared.package.core.shared_public_type_contract]
-      providers: [provider.fact.frontend:finding]
-      schemas: [schema:schemas/cxxlens_finding_set.schema.yaml]
-    dependency_apis: [API-CORE-005]
+      public_types:
+      - public-type:core:finding
+      - public-type:core:finding_set
+      shared_components:
+      - shared.package.core.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:finding
+      schemas:
+      - schema:schemas/cxxlens_finding_set.schema.yaml
+    dependency_apis:
+    - API-CORE-005
     traceability:
-      requirements_or_use_cases: [FR-008, FR-011, QR-001]
-      design_sections: ['10.2', '10.3', '10.4', '24.1']
-      doxygen_obligation: Document canonical key, duplicate conflict, threshold inclusion, span lifetime, and common projection source.
+      requirements_or_use_cases:
+      - FR-008
+      - FR-011
+      - QR-001
+      design_sections:
+      - '10.2'
+      - '10.3'
+      - '10.4'
+      - '24.1'
+      doxygen_obligation: Document canonical key, duplicate conflict, threshold inclusion, span lifetime, and common projection
+        source.
     acceptance:
-      positive: {id: API-CORE-006.positive, expression: Insert findings in reverse order then filter, expected: Canonical order and payload-preserving subset.}
-      negative: {id: API-CORE-006.negative, expression: Same full ID has different material payload, expected: Hard structured invariant error.}
-      ambiguous: {id: API-CORE-006.ambiguous, expression: Equal source and subject differ only by variant, expected: Separate deterministic rows.}
+      positive:
+        id: API-CORE-006.positive
+        expression: Insert findings in reverse order then filter
+        expected: Canonical order and payload-preserving subset.
+      negative:
+        id: API-CORE-006.negative
+        expression: Same full ID has different material payload
+        expected: Hard structured invariant error.
+      ambiguous:
+        id: API-CORE-006.ambiguous
+        expression: Equal source and subject differ only by variant
+        expected: Separate deterministic rows.
   - api_id: API-CFG-001
     atomic_unit: AU-CFG-001
     package: configuration
@@ -496,232 +727,500 @@ groups:
       source: include/cxxlens/configuration.hpp
       signature: cxxlens::result<cxxlens::configuration> cxxlens::configuration::defaults()
       signature_fingerprint: sha256:b933b42221793f39ad34feb76f438c200fbb6291be5db53655ee171150759919
-    family_members: [cxxlens::configuration::defaults]
+    family_members:
+    - cxxlens::configuration::defaults
     semantics:
     - Produces a fully validated immutable value using only safe built-in defaults.
     - Ambient environment, current directory, and host-specific paths cannot alter the defaults.
     ownership_refs:
-      public_types: [public-type:configuration:configuration, public-type:configuration:configuration_layer]
-      shared_components: [shared.package.configuration.shared_public_type_contract]
+      public_types:
+      - public-type:configuration:configuration
+      - public-type:configuration:configuration_layer
+      shared_components:
+      - shared.package.configuration.shared_public_type_contract
       providers: []
-      schemas: [schema:schemas/cxxlens.config.schema.yaml]
+      schemas:
+      - schema:schemas/cxxlens.config.schema.yaml
     dependency_apis: []
     traceability:
-      requirements_or_use_cases: [QR-001]
-      design_sections: ['12.1', '12.2', '12.4']
-      doxygen_obligation: Document immutable value traits, validation timing, safe defaults, environment prohibition, and failure channel.
+      requirements_or_use_cases:
+      - QR-001
+      design_sections:
+      - '12.1'
+      - '12.2'
+      - '12.4'
+      doxygen_obligation: Document immutable value traits, validation timing, safe defaults, environment prohibition, and
+        failure channel.
     acceptance:
-      positive: {id: API-CFG-001.positive, expression: Build defaults in two roots/environments, expected: Equal canonical resolved JSON.}
-      negative: {id: API-CFG-001.negative, expression: Built-in default violates schema, expected: Structured config.invalid-value.}
-      ambiguous: {id: API-CFG-001.ambiguous, expression: Ambient variable names a profile, expected: Variable is ignored and built-in defaults remain authoritative.}
+      positive:
+        id: API-CFG-001.positive
+        expression: Build defaults in two roots/environments
+        expected: Equal canonical resolved JSON.
+      negative:
+        id: API-CFG-001.negative
+        expression: Built-in default violates schema
+        expected: Structured config.invalid-value.
+      ambiguous:
+        id: API-CFG-001.ambiguous
+        expression: Ambient variable names a profile
+        expected: Variable is ignored and built-in defaults remain authoritative.
   - api_id: API-CFG-002
     atomic_unit: AU-CFG-002
     package: configuration
     policy: configuration.resolution.v1
     declaration:
       source: include/cxxlens/configuration.hpp
-      signature: 'cxxlens::result<cxxlens::configuration> cxxlens::configuration::load(const cxxlens::path&); cxxlens::result<cxxlens::configuration> cxxlens::configuration::load_nearest(const cxxlens::path&)'
+      signature: cxxlens::result<cxxlens::configuration> cxxlens::configuration::load(const cxxlens::path&); cxxlens::result<cxxlens::configuration>
+        cxxlens::configuration::load_nearest(const cxxlens::path&)
       signature_fingerprint: sha256:f5aea8351c9add766f067af109f44526e4ee7df0fcba2ad0c28bb493caeefe12
-    family_members: [cxxlens::configuration::load, cxxlens::configuration::load_nearest]
+    family_members:
+    - cxxlens::configuration::load
+    - cxxlens::configuration::load_nearest
     semantics:
     - load rejects unknown/duplicate keys, invalid types, unsupported interpolation, and incompatible schema versions.
     - load_nearest stops at canonical .git/.cxxlens-root boundary and rejects symlink/path escape or ambiguous identity.
     ownership_refs:
-      public_types: [public-type:configuration:configuration]
-      shared_components: [shared.package.configuration.package_internal_engine, shared.package.configuration.schema_fixture_contract]
+      public_types:
+      - public-type:configuration:configuration
+      shared_components:
+      - shared.package.configuration.package_internal_engine
+      - shared.package.configuration.schema_fixture_contract
       providers: []
-      schemas: [schema:schemas/cxxlens.config.schema.yaml]
+      schemas:
+      - schema:schemas/cxxlens.config.schema.yaml
     dependency_apis: []
     traceability:
-      requirements_or_use_cases: [QR-008]
-      design_sections: ['12.1', '12.2', '12.4', '31.1']
-      doxygen_obligation: Document port-based reads, root boundary, canonical path/symlink identity, key/type/version errors, and interpolation/redaction.
+      requirements_or_use_cases:
+      - QR-008
+      design_sections:
+      - '12.1'
+      - '12.2'
+      - '12.4'
+      - '31.1'
+      doxygen_obligation: Document port-based reads, root boundary, canonical path/symlink identity, key/type/version errors,
+        and interpolation/redaction.
     acceptance:
-      positive: {id: API-CFG-002.positive, expression: Nearest valid file inside one project boundary, expected: Fully validated owned configuration with source provenance.}
-      negative: {id: API-CFG-002.negative, expression: Duplicate key or symlink escapes the root, expected: Stable parse/boundary error; no fallback.}
-      ambiguous: {id: API-CFG-002.ambiguous, expression: Two lexical paths resolve to the same config through symlinks, expected: One canonical identity or explicit ambiguity failure.}
+      positive:
+        id: API-CFG-002.positive
+        expression: Nearest valid file inside one project boundary
+        expected: Fully validated owned configuration with source provenance.
+      negative:
+        id: API-CFG-002.negative
+        expression: Duplicate key or symlink escapes the root
+        expected: Stable parse/boundary error; no fallback.
+      ambiguous:
+        id: API-CFG-002.ambiguous
+        expression: Two lexical paths resolve to the same config through symlinks
+        expected: One canonical identity or explicit ambiguity failure.
   - api_id: API-CFG-003
     atomic_unit: AU-CFG-003
     package: configuration
     policy: configuration.resolution.v1
     declaration:
       source: include/cxxlens/configuration.hpp
-      signature: 'cxxlens::result<cxxlens::configuration> cxxlens::configuration::with_profile(std::string_view) const; cxxlens::result<cxxlens::configuration> cxxlens::configuration::overlay(const cxxlens::configuration&) const'
+      signature: cxxlens::result<cxxlens::configuration> cxxlens::configuration::with_profile(std::string_view) const; cxxlens::result<cxxlens::configuration>
+        cxxlens::configuration::overlay(const cxxlens::configuration&) const
       signature_fingerprint: sha256:f75e35abeb2f727cf79e54ef6b053ec9538439d05fce841778876a2f03d1e42a
-    family_members: [cxxlens::configuration::with_profile, cxxlens::configuration::overlay]
+    family_members:
+    - cxxlens::configuration::with_profile
+    - cxxlens::configuration::overlay
     semantics:
     - with_profile inserts the named profile between CLI and config-default layers and retains per-key provenance.
     - overlay applies higher precedence immutably; different values at the same layer are config.overlay-conflict.
     ownership_refs:
-      public_types: [public-type:configuration:configuration, public-type:configuration:configuration_layer]
-      shared_components: [shared.package.configuration.package_internal_engine, shared.package.configuration.shared_public_type_contract]
+      public_types:
+      - public-type:configuration:configuration
+      - public-type:configuration:configuration_layer
+      shared_components:
+      - shared.package.configuration.package_internal_engine
+      - shared.package.configuration.shared_public_type_contract
       providers: []
-      schemas: [schema:schemas/cxxlens.config.schema.yaml, schema:schemas/cxxlens.config.resolved.schema.yaml]
-    dependency_apis: [API-CFG-001]
+      schemas:
+      - schema:schemas/cxxlens.config.schema.yaml
+      - schema:schemas/cxxlens.config.resolved.schema.yaml
+    dependency_apis:
+    - API-CFG-001
     traceability:
-      requirements_or_use_cases: [QR-001]
-      design_sections: ['12.1', '12.2', '12.3']
-      doxygen_obligation: Document exact precedence, immutable input/output lifetime, same-layer conflict, missing profile, and provenance conservation.
+      requirements_or_use_cases:
+      - QR-001
+      design_sections:
+      - '12.1'
+      - '12.2'
+      - '12.3'
+      doxygen_obligation: Document exact precedence, immutable input/output lifetime, same-layer conflict, missing profile,
+        and provenance conservation.
     acceptance:
-      positive: {id: API-CFG-003.positive, expression: Overlay API option over profile/default, expected: API value wins and all shadowed provenance is retained.}
-      negative: {id: API-CFG-003.negative, expression: Two CLI layers assign different values, expected: config.overlay-conflict.}
-      ambiguous: {id: API-CFG-003.ambiguous, expression: Requested profile is absent, expected: config.profile-not-found; config defaults are not silently used.}
+      positive:
+        id: API-CFG-003.positive
+        expression: Overlay API option over profile/default
+        expected: API value wins and all shadowed provenance is retained.
+      negative:
+        id: API-CFG-003.negative
+        expression: Two CLI layers assign different values
+        expected: config.overlay-conflict.
+      ambiguous:
+        id: API-CFG-003.ambiguous
+        expression: Requested profile is absent
+        expected: config.profile-not-found; config defaults are not silently used.
   - api_id: API-CFG-004
     atomic_unit: AU-CFG-004
     package: configuration
     policy: configuration.resolution.v1
     declaration:
       source: include/cxxlens/configuration.hpp
-      signature: 'cxxlens::result<void> cxxlens::configuration::validate() const; std::string cxxlens::configuration::resolved_json() const; std::string cxxlens::configuration::explain(std::string_view) const'
+      signature: cxxlens::result<void> cxxlens::configuration::validate() const; std::string cxxlens::configuration::resolved_json()
+        const; std::string cxxlens::configuration::explain(std::string_view) const
       signature_fingerprint: sha256:9b07208ddc2f1da2dd40f779a961085692c3803c222866e83d4bdbe1d7a51af8
-    family_members: [cxxlens::configuration::validate, cxxlens::configuration::resolved_json, cxxlens::configuration::explain]
+    family_members:
+    - cxxlens::configuration::validate
+    - cxxlens::configuration::resolved_json
+    - cxxlens::configuration::explain
     semantics:
     - validate checks every key/type/value/provenance/schema invariant independently of diagnostic prose.
     - resolved_json is canonical and redacted; explain identifies winning and shadowed layers in stable order.
     ownership_refs:
-      public_types: [public-type:configuration:configuration, public-type:configuration:configuration_layer]
-      shared_components: [shared.package.configuration.package_internal_engine, shared.package.configuration.schema_fixture_contract]
+      public_types:
+      - public-type:configuration:configuration
+      - public-type:configuration:configuration_layer
+      shared_components:
+      - shared.package.configuration.package_internal_engine
+      - shared.package.configuration.schema_fixture_contract
       providers: []
-      schemas: [schema:schemas/cxxlens.config.resolved.schema.yaml, schema:schemas/cxxlens.config.explain.schema.yaml]
-    dependency_apis: [API-CFG-001, API-CFG-003]
+      schemas:
+      - schema:schemas/cxxlens.config.resolved.schema.yaml
+      - schema:schemas/cxxlens.config.explain.schema.yaml
+    dependency_apis:
+    - API-CFG-001
+    - API-CFG-003
     traceability:
-      requirements_or_use_cases: [FR-018, QR-001]
-      design_sections: ['12.1', '12.2', '12.3', '12.4']
-      doxygen_obligation: Document validation invariants, canonical key order, unknown-key explanation, provenance order, and mandatory secret redaction.
+      requirements_or_use_cases:
+      - FR-018
+      - QR-001
+      design_sections:
+      - '12.1'
+      - '12.2'
+      - '12.3'
+      - '12.4'
+      doxygen_obligation: Document validation invariants, canonical key order, unknown-key explanation, provenance order,
+        and mandatory secret redaction.
     acceptance:
-      positive: {id: API-CFG-004.positive, expression: Explain a key resolved through five layers, expected: Redacted winner and shadowed layers in precedence order.}
-      negative: {id: API-CFG-004.negative, expression: Secret appears in canonical output or explanation, expected: Contract/schema failure.}
-      ambiguous: {id: API-CFG-004.ambiguous, expression: Explain an unknown key, expected: Documented empty explanation distinct from validation failure.}
+      positive:
+        id: API-CFG-004.positive
+        expression: Explain a key resolved through five layers
+        expected: Redacted winner and shadowed layers in precedence order.
+      negative:
+        id: API-CFG-004.negative
+        expression: Secret appears in canonical output or explanation
+        expected: Contract/schema failure.
+      ambiguous:
+        id: API-CFG-004.ambiguous
+        expression: Explain an unknown key
+        expected: Documented empty explanation distinct from validation failure.
   - api_id: API-TEST-001
     atomic_unit: AU-TEST-001
     package: testing
     policy: testing.fixture-production.v1
     declaration:
       source: include/cxxlens/testing.hpp
-      signature: 'cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::cpp(std::string); cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::c(std::string); cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::main_file(cxxlens::path) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::add_file(cxxlens::path,std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::add_header(cxxlens::path,std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::add_variant(cxxlens::testing::fixture_variant) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::standard(std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::target(std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::argument(std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::generated(cxxlens::path) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::system_header(cxxlens::path) const; cxxlens::result<cxxlens::testing::fixture_bundle> cxxlens::testing::workspace_fixture::materialize(const cxxlens::path&) const; cxxlens::result<cxxlens::testing::fault_plan> cxxlens::testing::fault_plan::make(std::vector<cxxlens::testing::fault_injection>); cxxlens::result<void> cxxlens::testing::fault_plan::probe(cxxlens::testing::fault_target,std::string_view,std::uint64_t) const'
+      signature: cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::cpp(std::string); cxxlens::testing::workspace_fixture
+        cxxlens::testing::workspace_fixture::c(std::string); cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::main_file(cxxlens::path)
+        const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::add_file(cxxlens::path,std::string)
+        const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::add_header(cxxlens::path,std::string)
+        const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::add_variant(cxxlens::testing::fixture_variant)
+        const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::standard(std::string) const; cxxlens::testing::workspace_fixture
+        cxxlens::testing::workspace_fixture::target(std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::argument(std::string)
+        const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::generated(cxxlens::path) const; cxxlens::testing::workspace_fixture
+        cxxlens::testing::workspace_fixture::system_header(cxxlens::path) const; cxxlens::result<cxxlens::testing::fixture_bundle>
+        cxxlens::testing::workspace_fixture::materialize(const cxxlens::path&) const; cxxlens::result<cxxlens::testing::fault_plan>
+        cxxlens::testing::fault_plan::make(std::vector<cxxlens::testing::fault_injection>); cxxlens::result<void> cxxlens::testing::fault_plan::probe(cxxlens::testing::fault_target,std::string_view,std::uint64_t)
+        const
       signature_fingerprint: sha256:4c9b40c214f9ece3c5f4fda3e86951dca06cd8479e6db023c7e4aca7598dfb4d
-    family_members: [cxxlens::testing::workspace_fixture::cpp, cxxlens::testing::workspace_fixture::c, cxxlens::testing::workspace_fixture::main_file, cxxlens::testing::workspace_fixture::add_file, cxxlens::testing::workspace_fixture::add_header, cxxlens::testing::workspace_fixture::add_variant, cxxlens::testing::workspace_fixture::standard, cxxlens::testing::workspace_fixture::target, cxxlens::testing::workspace_fixture::argument, cxxlens::testing::workspace_fixture::generated, cxxlens::testing::workspace_fixture::system_header, cxxlens::testing::workspace_fixture::materialize, cxxlens::testing::fault_plan::make, cxxlens::testing::fault_plan::probe]
+    family_members:
+    - cxxlens::testing::workspace_fixture::cpp
+    - cxxlens::testing::workspace_fixture::c
+    - cxxlens::testing::workspace_fixture::main_file
+    - cxxlens::testing::workspace_fixture::add_file
+    - cxxlens::testing::workspace_fixture::add_header
+    - cxxlens::testing::workspace_fixture::add_variant
+    - cxxlens::testing::workspace_fixture::standard
+    - cxxlens::testing::workspace_fixture::target
+    - cxxlens::testing::workspace_fixture::argument
+    - cxxlens::testing::workspace_fixture::generated
+    - cxxlens::testing::workspace_fixture::system_header
+    - cxxlens::testing::workspace_fixture::materialize
+    - cxxlens::testing::fault_plan::make
+    - cxxlens::testing::fault_plan::probe
     semantics:
     - Every builder is immutable; duplicate normalized paths/variant names and unsafe traversal reject at materialization.
     - File/variant order canonicalizes while literal argv order is preserved; fault keys are exact target/operation/index.
     ownership_refs:
-      public_types: [public-type:testing:workspace_fixture, public-type:testing:fixture_bundle, public-type:testing:fault_plan]
-      shared_components: [shared.package.testing.package_internal_engine, shared.package.testing.schema_fixture_contract]
+      public_types:
+      - public-type:testing:workspace_fixture
+      - public-type:testing:fixture_bundle
+      - public-type:testing:fault_plan
+      shared_components:
+      - shared.package.testing.package_internal_engine
+      - shared.package.testing.schema_fixture_contract
       providers: []
-      schemas: [schema:schemas/cxxlens_testing_fixture.schema.yaml]
+      schemas:
+      - schema:schemas/cxxlens_testing_fixture.schema.yaml
     dependency_apis: []
     traceability:
-      requirements_or_use_cases: [FR-020, QR-001]
-      design_sections: ['28.1', '28.2', '28.3']
-      doxygen_obligation: Document immutable lifetime, production-path boundary, path/duplicate/argv order, variant identity, and exact fault scheduling.
+      requirements_or_use_cases:
+      - FR-020
+      - QR-001
+      design_sections:
+      - '28.1'
+      - '28.2'
+      - '28.3'
+      doxygen_obligation: Document immutable lifetime, production-path boundary, path/duplicate/argv order, variant identity,
+        and exact fault scheduling.
     acceptance:
-      positive: {id: API-TEST-001.positive, expression: Build equivalent fixtures in different insertion order, expected: Equal canonical bundle bytes.}
-      negative: {id: API-TEST-001.negative, expression: Duplicate canonical path or fault key, expected: Stable fixture/conflict error.}
-      ambiguous: {id: API-TEST-001.ambiguous, expression: Two variants have the same name and different argv, expected: Reject rather than first-wins.}
+      positive:
+        id: API-TEST-001.positive
+        expression: Build equivalent fixtures in different insertion order
+        expected: Equal canonical bundle bytes.
+      negative:
+        id: API-TEST-001.negative
+        expression: Duplicate canonical path or fault key
+        expected: Stable fixture/conflict error.
+      ambiguous:
+        id: API-TEST-001.ambiguous
+        expression: Two variants have the same name and different argv
+        expected: Reject rather than first-wins.
   - api_id: API-TEST-002
     atomic_unit: AU-TEST-002
     package: testing
     policy: testing.result-assertion.v1
     declaration:
       source: include/cxxlens/testing.hpp
-      signature: 'cxxlens::testing::result_assertion cxxlens::testing::result_assertion::has_exactly(std::size_t) const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::has_no_errors() const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::is_complete() const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::is_partial_with(cxxlens::unresolved_kind) const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::json_matches(cxxlens::path) const; cxxlens::result<void> cxxlens::testing::result_assertion::check(const cxxlens::testing::result_observation&) const'
+      signature: cxxlens::testing::result_assertion cxxlens::testing::result_assertion::has_exactly(std::size_t) const; cxxlens::testing::result_assertion
+        cxxlens::testing::result_assertion::has_no_errors() const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::is_complete()
+        const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::is_partial_with(cxxlens::unresolved_kind)
+        const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::json_matches(cxxlens::path) const; cxxlens::result<void>
+        cxxlens::testing::result_assertion::check(const cxxlens::testing::result_observation&) const
       signature_fingerprint: sha256:4e30f3fdec5f05e2f6f69b4e555188ba1e9cd258a9af39bab6cd080074644a10
-    family_members: [cxxlens::testing::result_assertion::has_exactly, cxxlens::testing::result_assertion::has_no_errors, cxxlens::testing::result_assertion::is_complete, cxxlens::testing::result_assertion::is_partial_with, cxxlens::testing::result_assertion::json_matches, cxxlens::testing::result_assertion::check]
+    family_members:
+    - cxxlens::testing::result_assertion::has_exactly
+    - cxxlens::testing::result_assertion::has_no_errors
+    - cxxlens::testing::result_assertion::is_complete
+    - cxxlens::testing::result_assertion::is_partial_with
+    - cxxlens::testing::result_assertion::json_matches
+    - cxxlens::testing::result_assertion::check
     semantics:
     - Checks result count, error, coverage, unresolved, evidence, and canonical schema bytes as independent channels.
     - Failure reports stable expected/actual attributes and never infers state from message substrings.
     ownership_refs:
-      public_types: [public-type:testing:result_assertion, public-type:testing:result_observation]
-      shared_components: [shared.package.testing.package_internal_engine, shared.package.testing.shared_public_type_contract]
+      public_types:
+      - public-type:testing:result_assertion
+      - public-type:testing:result_observation
+      shared_components:
+      - shared.package.testing.package_internal_engine
+      - shared.package.testing.shared_public_type_contract
       providers: []
-      schemas: [schema:schemas/cxxlens_error.schema.yaml, schema:schemas/cxxlens_coverage.schema.yaml, schema:schemas/cxxlens_unresolved.schema.yaml]
-    dependency_apis: [API-CORE-003, API-CORE-004]
+      schemas:
+      - schema:schemas/cxxlens_error.schema.yaml
+      - schema:schemas/cxxlens_coverage.schema.yaml
+      - schema:schemas/cxxlens_unresolved.schema.yaml
+    dependency_apis:
+    - API-CORE-003
+    - API-CORE-004
     traceability:
-      requirements_or_use_cases: [FR-008]
-      design_sections: ['28.1', '28.2', '28.3']
-      doxygen_obligation: Document immutable expectation composition, every observation channel, empty/partial/error distinction, and mismatch structure.
+      requirements_or_use_cases:
+      - FR-008
+      design_sections:
+      - '28.1'
+      - '28.2'
+      - '28.3'
+      doxygen_obligation: Document immutable expectation composition, every observation channel, empty/partial/error distinction,
+        and mismatch structure.
     acceptance:
-      positive: {id: API-TEST-002.positive, expression: Zero findings with complete coverage and no error, expected: Exact-empty assertion passes.}
-      negative: {id: API-TEST-002.negative, expression: Coverage incomplete while is_complete is required, expected: testing.assertion-failed with coverage path.}
-      ambiguous: {id: API-TEST-002.ambiguous, expression: No error but typed unresolved exists, expected: Partial assertion may pass; complete assertion fails.}
+      positive:
+        id: API-TEST-002.positive
+        expression: Zero findings with complete coverage and no error
+        expected: Exact-empty assertion passes.
+      negative:
+        id: API-TEST-002.negative
+        expression: Coverage incomplete while is_complete is required
+        expected: testing.assertion-failed with coverage path.
+      ambiguous:
+        id: API-TEST-002.ambiguous
+        expression: No error but typed unresolved exists
+        expected: Partial assertion may pass; complete assertion fails.
   - api_id: API-TEST-003
     atomic_unit: AU-TEST-003
     package: testing
     policy: testing.plan-assertion.v1
     declaration:
       source: contracts/candidates/43/testing_plan_assertions.hpp
-      signature: 'cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::valid() const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::changes_file(cxxlens::path) const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::diff_matches(cxxlens::path) const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::reparses() const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::idempotent(cxxlens::transform::codemod) const; cxxlens::result<void> cxxlens::testing::edit_plan_assertion::check(const cxxlens::workspace&,const cxxlens::transform::edit_plan&) const'
+      signature: cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::valid() const; cxxlens::testing::edit_plan_assertion
+        cxxlens::testing::edit_plan_assertion::changes_file(cxxlens::path) const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::diff_matches(cxxlens::path)
+        const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::reparses() const; cxxlens::testing::edit_plan_assertion
+        cxxlens::testing::edit_plan_assertion::idempotent(cxxlens::transform::codemod) const; cxxlens::result<void> cxxlens::testing::edit_plan_assertion::check(const
+        cxxlens::workspace&,const cxxlens::transform::edit_plan&) const
       signature_fingerprint: sha256:4fceea615289412b759940a951c527fb01d093154a8347b8ba4741bee7f45b4b
-    family_members: [cxxlens::testing::edit_plan_assertion::valid, cxxlens::testing::edit_plan_assertion::changes_file, cxxlens::testing::edit_plan_assertion::diff_matches, cxxlens::testing::edit_plan_assertion::reparses, cxxlens::testing::edit_plan_assertion::idempotent, cxxlens::testing::edit_plan_assertion::check]
+    family_members:
+    - cxxlens::testing::edit_plan_assertion::valid
+    - cxxlens::testing::edit_plan_assertion::changes_file
+    - cxxlens::testing::edit_plan_assertion::diff_matches
+    - cxxlens::testing::edit_plan_assertion::reparses
+    - cxxlens::testing::edit_plan_assertion::idempotent
+    - cxxlens::testing::edit_plan_assertion::check
     semantics:
     - Checks authoritative edit identity/ranges/digests/diff plus independent reparse and idempotence evidence.
     - check uses overlay dry-run only and never invokes edit_plan::apply or a source transaction.
     ownership_refs:
-      public_types: [public-type:testing:edit_plan_assertion]
-      shared_components: [shared.package.testing.shared_public_type_contract, shared.package.transform.shared_public_type_contract]
+      public_types:
+      - public-type:testing:edit_plan_assertion
+      shared_components:
+      - shared.package.testing.shared_public_type_contract
+      - shared.package.transform.shared_public_type_contract
       providers: []
-      schemas: [schema:schemas/cxxlens_error.schema.yaml]
-    dependency_apis: [API-TF-001, API-TF-002, API-TF-003, API-TF-004, API-TF-005]
+      schemas:
+      - schema:schemas/cxxlens_error.schema.yaml
+    dependency_apis:
+    - API-TF-001
+    - API-TF-002
+    - API-TF-003
+    - API-TF-004
+    - API-TF-005
     traceability:
-      requirements_or_use_cases: [FR-012, QR-001]
-      design_sections: ['19.1', '19.2', '28.1', '39.6']
-      doxygen_obligation: Document forward-declared dependency lifetime, authoritative rows, golden port, reparse variants, idempotence, and apply prohibition.
+      requirements_or_use_cases:
+      - FR-012
+      - QR-001
+      design_sections:
+      - '19.1'
+      - '19.2'
+      - '28.1'
+      - '39.6'
+      doxygen_obligation: Document forward-declared dependency lifetime, authoritative rows, golden port, reparse variants,
+        idempotence, and apply prohibition.
     acceptance:
-      positive: {id: API-TEST-003.positive, expression: Valid dry-run edit plan changes expected file and reparses all affected variants, expected: All assertions pass without writes.}
-      negative: {id: API-TEST-003.negative, expression: Stale digest or conflicting edit is present, expected: Structured assertion failure before any apply.}
-      ambiguous: {id: API-TEST-003.ambiguous, expression: One variant reparses and one fails, expected: Failure preserves both variant coverage rows.}
+      positive:
+        id: API-TEST-003.positive
+        expression: Valid dry-run edit plan changes expected file and reparses all affected variants
+        expected: All assertions pass without writes.
+      negative:
+        id: API-TEST-003.negative
+        expression: Stale digest or conflicting edit is present
+        expected: Structured assertion failure before any apply.
+      ambiguous:
+        id: API-TEST-003.ambiguous
+        expression: One variant reparses and one fails
+        expected: Failure preserves both variant coverage rows.
   - api_id: API-TEST-004
     atomic_unit: AU-TEST-004
     package: testing
     policy: testing.plan-assertion.v1
     declaration:
       source: contracts/candidates/43/testing_plan_assertions.hpp
-      signature: 'cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::valid() const; cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::census_complete() const; cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::no_unknown_decisions() const; cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::artifacts_reparse() const; cxxlens::result<void> cxxlens::testing::generation_plan_assertion::check(const cxxlens::workspace&,const cxxlens::generate::generation_plan&) const'
+      signature: cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::valid() const; cxxlens::testing::generation_plan_assertion
+        cxxlens::testing::generation_plan_assertion::census_complete() const; cxxlens::testing::generation_plan_assertion
+        cxxlens::testing::generation_plan_assertion::no_unknown_decisions() const; cxxlens::testing::generation_plan_assertion
+        cxxlens::testing::generation_plan_assertion::artifacts_reparse() const; cxxlens::result<void> cxxlens::testing::generation_plan_assertion::check(const
+        cxxlens::workspace&,const cxxlens::generate::generation_plan&) const
       signature_fingerprint: sha256:cf24f7cb4f920ad1d50201849e6c46c4873abb75d881c52594fa42f3204975cf
-    family_members: [cxxlens::testing::generation_plan_assertion::valid, cxxlens::testing::generation_plan_assertion::census_complete, cxxlens::testing::generation_plan_assertion::no_unknown_decisions, cxxlens::testing::generation_plan_assertion::artifacts_reparse, cxxlens::testing::generation_plan_assertion::check]
+    family_members:
+    - cxxlens::testing::generation_plan_assertion::valid
+    - cxxlens::testing::generation_plan_assertion::census_complete
+    - cxxlens::testing::generation_plan_assertion::no_unknown_decisions
+    - cxxlens::testing::generation_plan_assertion::artifacts_reparse
+    - cxxlens::testing::generation_plan_assertion::check
     semantics:
     - Checks authoritative surface census, required decision axes, payload/artifact references, and coverage conservation.
     - Artifact reparse occurs in an overlay; assertion never emits files or invokes generation_plan::apply.
     ownership_refs:
-      public_types: [public-type:testing:generation_plan_assertion]
-      shared_components: [shared.package.testing.shared_public_type_contract, shared.package.generate.shared_public_type_contract]
+      public_types:
+      - public-type:testing:generation_plan_assertion
+      shared_components:
+      - shared.package.testing.shared_public_type_contract
+      - shared.package.generate.shared_public_type_contract
       providers: []
-      schemas: [schema:schemas/cxxlens_error.schema.yaml]
-    dependency_apis: [API-GEN-001, API-GEN-002]
+      schemas:
+      - schema:schemas/cxxlens_error.schema.yaml
+    dependency_apis:
+    - API-GEN-001
+    - API-GEN-002
     traceability:
-      requirements_or_use_cases: [FR-013, QR-001]
-      design_sections: ['20.1', '20.2', '28.1', '39.7']
-      doxygen_obligation: Document forward-declared dependency lifetime, exhaustive census/decision rules, artifact identity, overlay reparse, and emission prohibition.
+      requirements_or_use_cases:
+      - FR-013
+      - QR-001
+      design_sections:
+      - '20.1'
+      - '20.2'
+      - '28.1'
+      - '39.7'
+      doxygen_obligation: Document forward-declared dependency lifetime, exhaustive census/decision rules, artifact identity,
+        overlay reparse, and emission prohibition.
     acceptance:
-      positive: {id: API-TEST-004.positive, expression: Complete census and classified decisions reference reparsing artifacts, expected: All assertions pass without emission.}
-      negative: {id: API-TEST-004.negative, expression: Artifact references missing payload or surface, expected: Structured plan assertion failure.}
-      ambiguous: {id: API-TEST-004.ambiguous, expression: Variant artifacts conflict at one path, expected: Explicit conflict failure; no first-wins artifact.}
+      positive:
+        id: API-TEST-004.positive
+        expression: Complete census and classified decisions reference reparsing artifacts
+        expected: All assertions pass without emission.
+      negative:
+        id: API-TEST-004.negative
+        expression: Artifact references missing payload or surface
+        expected: Structured plan assertion failure.
+      ambiguous:
+        id: API-TEST-004.ambiguous
+        expression: Variant artifacts conflict at one path
+        expected: Explicit conflict failure; no first-wins artifact.
   - api_id: API-TEST-005
     atomic_unit: AU-TEST-005
     package: testing
     policy: testing.property-determinism.v1
     declaration:
       source: include/cxxlens/testing.hpp
-      signature: 'template<class Generator,class Predicate,class Renderer> cxxlens::testing::property_report cxxlens::testing::check_property(const cxxlens::testing::property_options&,Generator&&,Predicate&&,Renderer&&); template<class Generator,class Predicate,class Shrinker,class Renderer> cxxlens::testing::property_report cxxlens::testing::check_property(const cxxlens::testing::property_options&,Generator&&,Predicate&&,Shrinker&&,Renderer&&); template<class Operation> cxxlens::result<cxxlens::testing::determinism_report> cxxlens::testing::check_determinism(const cxxlens::testing::workspace_fixture&,Operation&&,const cxxlens::testing::determinism_options&)'
+      signature: template<class Generator,class Predicate,class Renderer> cxxlens::testing::property_report cxxlens::testing::check_property(const
+        cxxlens::testing::property_options&,Generator&&,Predicate&&,Renderer&&); template<class Generator,class Predicate,class
+        Shrinker,class Renderer> cxxlens::testing::property_report cxxlens::testing::check_property(const cxxlens::testing::property_options&,Generator&&,Predicate&&,Shrinker&&,Renderer&&);
+        template<class Operation> cxxlens::result<cxxlens::testing::determinism_report> cxxlens::testing::check_determinism(const
+        cxxlens::testing::workspace_fixture&,Operation&&,const cxxlens::testing::determinism_options&)
       signature_fingerprint: sha256:072d60f45b1db5c9556a2cff38d4570e18d4c4263259075863abe7e288909214
-    family_members: [cxxlens::testing::check_property, cxxlens::testing::check_property_with_shrinker, cxxlens::testing::check_determinism]
+    family_members:
+    - cxxlens::testing::check_property
+    - cxxlens::testing::check_property_with_shrinker
+    - cxxlens::testing::check_determinism
     semantics:
     - Property failure owns seed, case index, minimal canonical input, and reproduction string under exact trial budget.
     - Determinism compares semantic bytes across parallelism, scheduler seed, reversed input order, and root relocation.
     ownership_refs:
-      public_types: [public-type:testing:property_options, public-type:testing:property_failure, public-type:testing:property_report, public-type:testing:determinism_options, public-type:testing:determinism_report]
-      shared_components: [shared.package.testing.package_internal_engine, shared.package.testing.shared_public_type_contract]
+      public_types:
+      - public-type:testing:property_options
+      - public-type:testing:property_failure
+      - public-type:testing:property_report
+      - public-type:testing:determinism_options
+      - public-type:testing:determinism_report
+      shared_components:
+      - shared.package.testing.package_internal_engine
+      - shared.package.testing.shared_public_type_contract
       providers: []
-      schemas: [schema:schemas/cxxlens_testing_fixture.schema.yaml]
-    dependency_apis: [API-TEST-001]
+      schemas:
+      - schema:schemas/cxxlens_testing_fixture.schema.yaml
+    dependency_apis:
+    - API-TEST-001
     traceability:
-      requirements_or_use_cases: [QR-001]
-      design_sections: ['28.1', '28.3', '30.3']
-      doxygen_obligation: Document callable concepts/lifetime/thread, seed/replay/budget, canonical shrink order, all perturbation axes, and error/report distinction.
+      requirements_or_use_cases:
+      - QR-001
+      design_sections:
+      - '28.1'
+      - '28.3'
+      - '30.3'
+      doxygen_obligation: Document callable concepts/lifetime/thread, seed/replay/budget, canonical shrink order, all perturbation
+        axes, and error/report distinction.
     acceptance:
-      positive: {id: API-TEST-005.positive, expression: Deterministic operation under full perturbation matrix, expected: Stable report with exact execution count.}
-      negative: {id: API-TEST-005.negative, expression: Output embeds workspace root or completion order, expected: Stable difference rows identify the axes.}
-      ambiguous: {id: API-TEST-005.ambiguous, expression: Two failing shrink candidates render differently, expected: Canonically smallest reproducible candidate.}
+      positive:
+        id: API-TEST-005.positive
+        expression: Deterministic operation under full perturbation matrix
+        expected: Stable report with exact execution count.
+      negative:
+        id: API-TEST-005.negative
+        expression: Output embeds workspace root or completion order
+        expected: Stable difference rows identify the axes.
+      ambiguous:
+        id: API-TEST-005.ambiguous
+        expression: Two failing shrink candidates render differently
+        expected: Canonically smallest reproducible candidate.
   - api_id: API-TEST-006
     atomic_unit: AU-TEST-006
     package: testing
@@ -730,50 +1229,105 @@ groups:
       source: include/cxxlens/testing.hpp
       signature: cxxlens::result<void> cxxlens::testing::assert_schema_conforms(std::string_view,std::string_view)
       signature_fingerprint: sha256:63d098a2572aceefec45abfe1a8ed665eb6ce014cc119e67f9a9f85b67492995
-    family_members: [cxxlens::testing::assert_schema_conforms]
+    family_members:
+    - cxxlens::testing::assert_schema_conforms
     semantics:
     - Parses untrusted JSON under bounded depth and validates against the exact registered schema ID/version.
     - Invalid JSON and schema mismatch use separate codes with stable instance/schema paths; no nearest-version fallback.
     ownership_refs:
-      public_types: [public-type:core:schema_registry, public-type:core:schema_descriptor, public-type:core:result<T>]
-      shared_components: [shared.package.testing.package_internal_engine, shared.package.core.schema_fixture_contract]
+      public_types:
+      - public-type:core:schema_registry
+      - public-type:core:schema_descriptor
+      - public-type:core:result<T>
+      shared_components:
+      - shared.package.testing.package_internal_engine
+      - shared.package.core.schema_fixture_contract
       providers: []
-      schemas: [schema:schemas/cxxlens_error.schema.yaml]
-    dependency_apis: [API-CORE-001]
+      schemas:
+      - schema:schemas/cxxlens_error.schema.yaml
+    dependency_apis:
+    - API-CORE-001
     traceability:
-      requirements_or_use_cases: [QR-009]
-      design_sections: ['10.5', '28.1', '28.3']
-      doxygen_obligation: Document borrowed input lifetime, exact registry/version selection, parser limits, failure code/path, and no partial success.
+      requirements_or_use_cases:
+      - QR-009
+      design_sections:
+      - '10.5'
+      - '28.1'
+      - '28.3'
+      doxygen_obligation: Document borrowed input lifetime, exact registry/version selection, parser limits, failure code/path,
+        and no partial success.
     acceptance:
-      positive: {id: API-TEST-006.positive, expression: Canonical evidence JSON validates against exact v1 ID, expected: Success result.}
-      negative: {id: API-TEST-006.negative, expression: Required field is absent, expected: testing.schema-mismatch with stable paths.}
-      ambiguous: {id: API-TEST-006.ambiguous, expression: Schema name exists but requested version is unknown, expected: Version mismatch error; no nearest schema.}
+      positive:
+        id: API-TEST-006.positive
+        expression: Canonical evidence JSON validates against exact v1 ID
+        expected: Success result.
+      negative:
+        id: API-TEST-006.negative
+        expression: Required field is absent
+        expected: testing.schema-mismatch with stable paths.
+      ambiguous:
+        id: API-TEST-006.ambiguous
+        expression: Schema name exists but requested version is unknown
+        expected: Version mismatch error; no nearest schema.
   - api_id: API-TEST-007
     atomic_unit: AU-TEST-007
     package: testing
     policy: testing.fixture-production.v1
     declaration:
       source: include/cxxlens/testing.hpp
-      signature: cxxlens::result<cxxlens::workspace> cxxlens::testing::workspace_fixture::open(cxxlens::execution_context) const
+      signature: cxxlens::result<cxxlens::workspace> cxxlens::testing::workspace_fixture::open(cxxlens::execution_context)
+        const
       signature_fingerprint: sha256:2c8d40b0b0faf9fb1534392ff6cc46eba5e1fc5df45a2cc51fe77b4eb5d06203
-    family_members: [cxxlens::testing::workspace_fixture::open]
+    family_members:
+    - cxxlens::testing::workspace_fixture::open
     semantics:
     - Opens value-owned fixture bytes through the production catalog/frontend/reducer/store path and a memory filesystem port.
-    - Context cancellation/deadline/parallelism are observed; no fake fact, host temporary file, or silent compile-command fallback is permitted.
+    - Context cancellation/deadline/parallelism are observed; no fake fact, host temporary file, or silent compile-command
+      fallback is permitted.
     ownership_refs:
-      public_types: [public-type:testing:workspace_fixture, public-type:core:execution_context, public-type:workspace:workspace]
-      shared_components: [shared.package.testing.package_internal_engine, shared.package.workspace.package_internal_engine]
-      providers: [provider.fact.compile-command:compile_command, provider.fact.frontend:file]
-      schemas: [schema:schemas/cxxlens_testing_fixture.schema.yaml]
-    dependency_apis: [API-WS-002, API-WS-005]
+      public_types:
+      - public-type:testing:workspace_fixture
+      - public-type:core:execution_context
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.testing.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers:
+      - provider.fact.compile-command:compile_command
+      - provider.fact.frontend:file
+      schemas:
+      - schema:schemas/cxxlens_testing_fixture.schema.yaml
+    dependency_apis:
+    - API-WS-002
+    - API-WS-005
     traceability:
-      requirements_or_use_cases: [FR-001, FR-005, FR-020, QR-001, QR-002, QR-004]
-      design_sections: ['11.1', '11.2', '28.1', '28.2']
-      doxygen_obligation: Document production components, owned byte lifetime, context observation, port boundary, capability/parse failures, and fake-backend prohibition.
+      requirements_or_use_cases:
+      - FR-001
+      - FR-005
+      - FR-020
+      - QR-001
+      - QR-002
+      - QR-004
+      design_sections:
+      - '11.1'
+      - '11.2'
+      - '28.1'
+      - '28.2'
+      doxygen_obligation: Document production components, owned byte lifetime, context observation, port boundary, capability/parse
+        failures, and fake-backend prohibition.
     acceptance:
-      positive: {id: API-TEST-007.positive, expression: Open one valid C++ fixture with one compile command, expected: Production workspace with one compile unit.}
-      negative: {id: API-TEST-007.negative, expression: Compile command is missing or frontend is cancelled, expected: Stable error/coverage; no inferred fake facts.}
-      ambiguous: {id: API-TEST-007.ambiguous, expression: Two compile commands match one file, expected: Explicit ambiguity; never first-wins.}
+      positive:
+        id: API-TEST-007.positive
+        expression: Open one valid C++ fixture with one compile command
+        expected: Production workspace with one compile unit.
+      negative:
+        id: API-TEST-007.negative
+        expression: Compile command is missing or frontend is cancelled
+        expected: Stable error/coverage; no inferred fake facts.
+      ambiguous:
+        id: API-TEST-007.ambiguous
+        expression: Two compile commands match one file
+        expected: Explicit ambiguity; never first-wins.
   production_implementation_changed: false
   candidate_fingerprint: sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584
 - issue: '#44'
@@ -4217,3 +4771,648 @@ groups:
         expected: Preserved rows plus typed unresolved/accounting/coverage and downgraded guarantee.
   production_implementation_changed: false
   candidate_fingerprint: sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024
+- issue: '#46'
+  state: candidate
+  packages:
+  - graph
+  normative_document: docs/design/package_contract_46.md
+  candidate_headers:
+  - contracts/candidates/46/graph.hpp
+  usage_examples:
+  - contracts/candidates/46/graph_usage.cpp
+  policies:
+  - id: graph.snapshot-construction.v1
+    ownership_and_lifetime:
+    - Hierarchy/override/call/include construction is detached immutable value state bound to one catalog/fact snapshot and
+      owns no AST/backend pointer.
+    - Returned spans/references borrow from immutable shared backing until owner destruction; builders retain no caller views.
+    const_noexcept_thread_safety:
+    - Const snapshot reads are safe concurrently; accessor noexcept functions allocate nothing.
+    - Builders and projections return detached values; allocation/serialization may throw std::bad_alloc.
+    callback_and_exception:
+    - No callback is retained; expected identity/provider/schema/budget failure uses result and stable codes.
+    - Traversal never lets provider exceptions cross the engine boundary without typed failure coverage.
+    execution_context_and_budgets:
+    - Every operation binds cancellation/deadline and positive finite depth/node/edge/path limits before traversal.
+    - Filesystem/process/time access remains behind workspace/provider ports; zero never means unbounded.
+    result_semantics:
+      empty_success: Zero nodes/edges is success only with complete requested-universe coverage and no unresolved rows.
+      unresolved: Unknown endpoints, missing facts, cycles requiring downgrade, and open-world targets remain explicit rows.
+      unsupported: Unsupported kind/relation/schema is a structured error, never an empty or nearest-version graph.
+      ambiguous: All semantic/variant/dynamic candidates survive with evidence and unresolved ambiguity; no first-wins.
+      partial: Valid canonical rows survive provider failure or budget truncation with incomplete coverage and downgraded
+        guarantee.
+      failure: Invalid IDs/limits, dangling edges, conflicting duplicate payload, or schema invariant fails atomically.
+    evidence_coverage_guarantee:
+    - Each edge/path carries authoritative evidence and graph coverage conserves the full requested universe.
+    - Open-world, unresolved, truncation, or provider failure forbids an exact guarantee; confidence cannot upgrade it.
+    ordering_duplicates_variants:
+    - Nodes, edges, paths, properties, variants, and contributors use declared canonical total orders.
+    - Same-ID equal payload merges contributors; conflict rejects; parallel/self/variant edges remain explicit.
+    schema_and_versioning:
+    - cxxlens.graph.v1 and cxxlens.graph-options.v1 are exact authorities; DOT is presentation only.
+    - Unknown enum/schema fields reject unless an explicit migration exists; semantic and schema axes remain independent.
+    change_policy:
+    - Identity, traversal, SCC/path, budget, outcome, ordering, projection, owner, or schema changes invalidate the candidate
+      fingerprint.
+  - id: graph.impact-traversal.v1
+    ownership_and_lifetime:
+    - Impact traversal is detached immutable value state bound to one catalog/fact snapshot and owns no AST/backend pointer.
+    - Returned spans/references borrow from immutable shared backing until owner destruction; builders retain no caller views.
+    const_noexcept_thread_safety:
+    - Const snapshot reads are safe concurrently; accessor noexcept functions allocate nothing.
+    - Builders and projections return detached values; allocation/serialization may throw std::bad_alloc.
+    callback_and_exception:
+    - No callback is retained; expected identity/provider/schema/budget failure uses result and stable codes.
+    - Traversal never lets provider exceptions cross the engine boundary without typed failure coverage.
+    execution_context_and_budgets:
+    - Every operation binds cancellation/deadline and positive finite depth/node/edge/path limits before traversal.
+    - Filesystem/process/time access remains behind workspace/provider ports; zero never means unbounded.
+    result_semantics:
+      empty_success: Zero nodes/edges is success only with complete requested-universe coverage and no unresolved rows.
+      unresolved: Unknown endpoints, missing facts, cycles requiring downgrade, and open-world targets remain explicit rows.
+      unsupported: Unsupported kind/relation/schema is a structured error, never an empty or nearest-version graph.
+      ambiguous: All semantic/variant/dynamic candidates survive with evidence and unresolved ambiguity; no first-wins.
+      partial: Valid canonical rows survive provider failure or budget truncation with incomplete coverage and downgraded
+        guarantee.
+      failure: Invalid IDs/limits, dangling edges, conflicting duplicate payload, or schema invariant fails atomically.
+    evidence_coverage_guarantee:
+    - Each edge/path carries authoritative evidence and graph coverage conserves the full requested universe.
+    - Open-world, unresolved, truncation, or provider failure forbids an exact guarantee; confidence cannot upgrade it.
+    ordering_duplicates_variants:
+    - Nodes, edges, paths, properties, variants, and contributors use declared canonical total orders.
+    - Same-ID equal payload merges contributors; conflict rejects; parallel/self/variant edges remain explicit.
+    schema_and_versioning:
+    - cxxlens.graph.v1 and cxxlens.graph-options.v1 are exact authorities; DOT is presentation only.
+    - Unknown enum/schema fields reject unless an explicit migration exists; semantic and schema axes remain independent.
+    change_policy:
+    - Identity, traversal, SCC/path, budget, outcome, ordering, projection, owner, or schema changes invalidate the candidate
+      fingerprint.
+  - id: graph.authoritative-projection.v1
+    ownership_and_lifetime:
+    - Subgraph/JSON/DOT projection is detached immutable value state bound to one catalog/fact snapshot and owns no AST/backend
+      pointer.
+    - Returned spans/references borrow from immutable shared backing until owner destruction; builders retain no caller views.
+    const_noexcept_thread_safety:
+    - Const snapshot reads are safe concurrently; accessor noexcept functions allocate nothing.
+    - Builders and projections return detached values; allocation/serialization may throw std::bad_alloc.
+    callback_and_exception:
+    - No callback is retained; expected identity/provider/schema/budget failure uses result and stable codes.
+    - Traversal never lets provider exceptions cross the engine boundary without typed failure coverage.
+    execution_context_and_budgets:
+    - Every operation binds cancellation/deadline and positive finite depth/node/edge/path limits before traversal.
+    - Filesystem/process/time access remains behind workspace/provider ports; zero never means unbounded.
+    result_semantics:
+      empty_success: Zero nodes/edges is success only with complete requested-universe coverage and no unresolved rows.
+      unresolved: Unknown endpoints, missing facts, cycles requiring downgrade, and open-world targets remain explicit rows.
+      unsupported: Unsupported kind/relation/schema is a structured error, never an empty or nearest-version graph.
+      ambiguous: All semantic/variant/dynamic candidates survive with evidence and unresolved ambiguity; no first-wins.
+      partial: Valid canonical rows survive provider failure or budget truncation with incomplete coverage and downgraded
+        guarantee.
+      failure: Invalid IDs/limits, dangling edges, conflicting duplicate payload, or schema invariant fails atomically.
+    evidence_coverage_guarantee:
+    - Each edge/path carries authoritative evidence and graph coverage conserves the full requested universe.
+    - Open-world, unresolved, truncation, or provider failure forbids an exact guarantee; confidence cannot upgrade it.
+    ordering_duplicates_variants:
+    - Nodes, edges, paths, properties, variants, and contributors use declared canonical total orders.
+    - Same-ID equal payload merges contributors; conflict rejects; parallel/self/variant edges remain explicit.
+    schema_and_versioning:
+    - cxxlens.graph.v1 and cxxlens.graph-options.v1 are exact authorities; DOT is presentation only.
+    - Unknown enum/schema fields reject unless an explicit migration exists; semantic and schema axes remain independent.
+    change_policy:
+    - Identity, traversal, SCC/path, budget, outcome, ordering, projection, owner, or schema changes invalidate the candidate
+      fingerprint.
+  registry_owners:
+  - id: registry.graph.errors
+    kind: error_registry
+    owner_atomic_unit: AU-GRAPH-001
+    steward: integration.package.graph
+    entries:
+    - graph.budget-exhausted
+    - graph.identity-conflict
+    - graph.invalid-limit
+    - graph.non-convergent
+    - graph.required-facts-unavailable
+    - graph.unsupported-kind
+    behavior: Graph construction/traversal/projection failures are typed; diagnostic prose is never control input.
+  - id: registry.graph.schemas
+    kind: schema_registry
+    owner_atomic_unit: AU-GRAPH-006
+    steward: steward.schema
+    entries:
+    - cxxlens.graph-options.v1
+    - cxxlens.graph.v1
+    behavior: Authoritative graph/options use exact schema and semantics versions; DOT is never an alternate authority.
+  - id: registry.graph.capabilities
+    kind: capability_registry
+    owner_atomic_unit: AU-GRAPH-001
+    steward: integration.package.graph
+    entries:
+    - graph.deterministic-closure
+    - graph.impact-paths
+    - graph.semantic-snapshot
+    behavior: Availability is explicit; unavailable graph capabilities never silently downgrade the requested operation.
+  consumer_boundaries:
+  - owner_package: facts
+    consumer_package: graph
+    shared_types:
+    - fact_snapshot
+    - evidence
+    - coverage_report
+    access: const_reference
+    rule: 'Graph consumes detached facts from #44 and cannot inspect, retain, or transfer AST/backend state.'
+  - owner_package: workspace
+    consumer_package: graph
+    shared_types:
+    - workspace
+    - analysis_scope
+    - execution_context
+    access: const_reference
+    rule: Graph binds one workspace catalog/fact snapshot and uses workspace ports for all external effects.
+  - owner_package: select
+    consumer_package: graph
+    shared_types:
+    - semantic_selector
+    - selector_requirements
+    access: value_copy
+    rule: 'Impact consumes #45 normalized selector identity/requirements and cannot reinterpret names or predicates.'
+  - owner_package: graph
+    consumer_package: search
+    shared_types:
+    - graph_node_id
+    - graph_edge
+    - open-world candidate closure
+    access: read_only
+    rule: Graph owns adjacency/closure/SCC identity; search may consume results but cannot define competing edge rules.
+  - owner_package: graph
+    consumer_package: flow
+    shared_types:
+    - core typed IDs
+    - evidence
+    - coverage_report
+    access: read_only
+    rule: '#50 CFG/data-flow nodes are not semantic_graph nodes; only core primitives may be reused across namespaces.'
+  api_contracts:
+  - api_id: API-GRAPH-001
+    atomic_unit: AU-GRAPH-001
+    package: graph
+    policy: graph.snapshot-construction.v1
+    declaration:
+      source: contracts/candidates/46/graph.hpp
+      signature: cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::class_hierarchy(const cxxlens::workspace&,cxxlens::graph::graph_options)
+      signature_fingerprint: sha256:57a0c6e8a8d1c3cc056e54ca27cf90c0c5196c21df5a69254e6d9724c21d1161
+    family_members:
+    - cxxlens::graph::class_hierarchy
+    semantics:
+    - class hierarchy graph uses one immutable catalog/fact snapshot and the shared graph identity/adjacency/SCC/path engine.
+    - Complete empty, unsupported, ambiguous/open-world, unresolved, partial/truncated, and failure outcomes remain distinct.
+    - Canonical ID/order/dedup/variant rules preserve parallel/self/conflicting edges, evidence, coverage, and guarantee.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:evidence
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:unresolved
+      - public-type:graph:graph_direction
+      - public-type:graph:graph_edge
+      - public-type:graph:graph_edge_id
+      - public-type:graph:graph_edge_kind
+      - public-type:graph:graph_kind
+      - public-type:graph:graph_limits
+      - public-type:graph:graph_node
+      - public-type:graph:graph_node_id
+      - public-type:graph:graph_node_kind
+      - public-type:graph:graph_options
+      - public-type:graph:graph_path
+      - public-type:graph:graph_path_policy
+      - public-type:graph:impact_query
+      - public-type:graph:semantic_graph
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.graph.package_internal_engine
+      - shared.package.graph.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:inheritance
+      schemas:
+      - schema:schemas/cxxlens_coverage.schema.yaml
+      - schema:schemas/cxxlens_evidence.schema.yaml
+      - schema:schemas/cxxlens_graph.schema.yaml
+      - schema:schemas/cxxlens_graph_options.schema.yaml
+      - schema:schemas/cxxlens_unresolved.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-GR-001
+      design_sections:
+      - '16'
+      - '39.17'
+      doxygen_obligation: Document snapshot/value lifetime, typed identity, parallel/conflicting/variant edges, all outcomes,
+        SCC/path and four budgets, evidence/coverage/guarantee, deterministic JSON/DOT, providers, and schema version.
+    acceptance:
+      positive:
+        id: API-GRAPH-001.positive
+        expression: Build class hierarchy graph from complete exact-version facts under finite limits.
+        expected: Canonical deterministic graph rows/paths with complete coverage and a justified guarantee.
+      negative:
+        id: API-GRAPH-001.negative
+        expression: Use an invalid ID/limit/schema, dangling edge, conflicting duplicate, or unsupported relation.
+        expected: Stable structured failure; no name-only identity, silent fallback, omission, or partial mutation.
+      ambiguous:
+        id: API-GRAPH-001.ambiguous
+        expression: Use open-world targets, SCC/cycles, divergent variants, missing providers, or a reached budget.
+        expected: Preserved canonical rows plus typed unresolved/coverage/truncation and downgraded guarantee.
+  - api_id: API-GRAPH-002
+    atomic_unit: AU-GRAPH-002
+    package: graph
+    policy: graph.snapshot-construction.v1
+    declaration:
+      source: contracts/candidates/46/graph.hpp
+      signature: cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::override_graph(const cxxlens::workspace&,cxxlens::graph::graph_options)
+      signature_fingerprint: sha256:680f964c6e7a97502882cd1a07c481098a8aa591f321651df52d21b677a87f58
+    family_members:
+    - cxxlens::graph::override_graph
+    semantics:
+    - override graph uses one immutable catalog/fact snapshot and the shared graph identity/adjacency/SCC/path engine.
+    - Complete empty, unsupported, ambiguous/open-world, unresolved, partial/truncated, and failure outcomes remain distinct.
+    - Canonical ID/order/dedup/variant rules preserve parallel/self/conflicting edges, evidence, coverage, and guarantee.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:evidence
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:unresolved
+      - public-type:graph:graph_direction
+      - public-type:graph:graph_edge
+      - public-type:graph:graph_edge_id
+      - public-type:graph:graph_edge_kind
+      - public-type:graph:graph_kind
+      - public-type:graph:graph_limits
+      - public-type:graph:graph_node
+      - public-type:graph:graph_node_id
+      - public-type:graph:graph_node_kind
+      - public-type:graph:graph_options
+      - public-type:graph:graph_path
+      - public-type:graph:graph_path_policy
+      - public-type:graph:impact_query
+      - public-type:graph:semantic_graph
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.graph.package_internal_engine
+      - shared.package.graph.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:override_relation
+      schemas:
+      - schema:schemas/cxxlens_coverage.schema.yaml
+      - schema:schemas/cxxlens_evidence.schema.yaml
+      - schema:schemas/cxxlens_graph.schema.yaml
+      - schema:schemas/cxxlens_graph_options.schema.yaml
+      - schema:schemas/cxxlens_unresolved.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-GR-001
+      design_sections:
+      - '16'
+      - '39.17'
+      doxygen_obligation: Document snapshot/value lifetime, typed identity, parallel/conflicting/variant edges, all outcomes,
+        SCC/path and four budgets, evidence/coverage/guarantee, deterministic JSON/DOT, providers, and schema version.
+    acceptance:
+      positive:
+        id: API-GRAPH-002.positive
+        expression: Build override graph from complete exact-version facts under finite limits.
+        expected: Canonical deterministic graph rows/paths with complete coverage and a justified guarantee.
+      negative:
+        id: API-GRAPH-002.negative
+        expression: Use an invalid ID/limit/schema, dangling edge, conflicting duplicate, or unsupported relation.
+        expected: Stable structured failure; no name-only identity, silent fallback, omission, or partial mutation.
+      ambiguous:
+        id: API-GRAPH-002.ambiguous
+        expression: Use open-world targets, SCC/cycles, divergent variants, missing providers, or a reached budget.
+        expected: Preserved canonical rows plus typed unresolved/coverage/truncation and downgraded guarantee.
+  - api_id: API-GRAPH-003
+    atomic_unit: AU-GRAPH-003
+    package: graph
+    policy: graph.snapshot-construction.v1
+    declaration:
+      source: contracts/candidates/46/graph.hpp
+      signature: cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::call_graph(const cxxlens::workspace&,cxxlens::graph::graph_options)
+      signature_fingerprint: sha256:94731d48a2f4483281f98c39318c474c24bd14bb65c9535c0b6559f7f3af2b95
+    family_members:
+    - cxxlens::graph::call_graph
+    semantics:
+    - call graph uses one immutable catalog/fact snapshot and the shared graph identity/adjacency/SCC/path engine.
+    - Complete empty, unsupported, ambiguous/open-world, unresolved, partial/truncated, and failure outcomes remain distinct.
+    - Canonical ID/order/dedup/variant rules preserve parallel/self/conflicting edges, evidence, coverage, and guarantee.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:evidence
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:unresolved
+      - public-type:graph:graph_direction
+      - public-type:graph:graph_edge
+      - public-type:graph:graph_edge_id
+      - public-type:graph:graph_edge_kind
+      - public-type:graph:graph_kind
+      - public-type:graph:graph_limits
+      - public-type:graph:graph_node
+      - public-type:graph:graph_node_id
+      - public-type:graph:graph_node_kind
+      - public-type:graph:graph_options
+      - public-type:graph:graph_path
+      - public-type:graph:graph_path_policy
+      - public-type:graph:impact_query
+      - public-type:graph:semantic_graph
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.graph.package_internal_engine
+      - shared.package.graph.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:call
+      schemas:
+      - schema:schemas/cxxlens_coverage.schema.yaml
+      - schema:schemas/cxxlens_evidence.schema.yaml
+      - schema:schemas/cxxlens_graph.schema.yaml
+      - schema:schemas/cxxlens_graph_options.schema.yaml
+      - schema:schemas/cxxlens_unresolved.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-GR-002
+      design_sections:
+      - '16'
+      - '39.17'
+      doxygen_obligation: Document snapshot/value lifetime, typed identity, parallel/conflicting/variant edges, all outcomes,
+        SCC/path and four budgets, evidence/coverage/guarantee, deterministic JSON/DOT, providers, and schema version.
+    acceptance:
+      positive:
+        id: API-GRAPH-003.positive
+        expression: Build call graph from complete exact-version facts under finite limits.
+        expected: Canonical deterministic graph rows/paths with complete coverage and a justified guarantee.
+      negative:
+        id: API-GRAPH-003.negative
+        expression: Use an invalid ID/limit/schema, dangling edge, conflicting duplicate, or unsupported relation.
+        expected: Stable structured failure; no name-only identity, silent fallback, omission, or partial mutation.
+      ambiguous:
+        id: API-GRAPH-003.ambiguous
+        expression: Use open-world targets, SCC/cycles, divergent variants, missing providers, or a reached budget.
+        expected: Preserved canonical rows plus typed unresolved/coverage/truncation and downgraded guarantee.
+  - api_id: API-GRAPH-004
+    atomic_unit: AU-GRAPH-004
+    package: graph
+    policy: graph.snapshot-construction.v1
+    declaration:
+      source: contracts/candidates/46/graph.hpp
+      signature: cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::include_graph(const cxxlens::workspace&,cxxlens::graph::graph_options)
+      signature_fingerprint: sha256:8fb4444b60a610e06f27614784f009a1253121342645aec4a5ecae91f57f60bb
+    family_members:
+    - cxxlens::graph::include_graph
+    semantics:
+    - include graph uses one immutable catalog/fact snapshot and the shared graph identity/adjacency/SCC/path engine.
+    - Complete empty, unsupported, ambiguous/open-world, unresolved, partial/truncated, and failure outcomes remain distinct.
+    - Canonical ID/order/dedup/variant rules preserve parallel/self/conflicting edges, evidence, coverage, and guarantee.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:evidence
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:unresolved
+      - public-type:graph:graph_direction
+      - public-type:graph:graph_edge
+      - public-type:graph:graph_edge_id
+      - public-type:graph:graph_edge_kind
+      - public-type:graph:graph_kind
+      - public-type:graph:graph_limits
+      - public-type:graph:graph_node
+      - public-type:graph:graph_node_id
+      - public-type:graph:graph_node_kind
+      - public-type:graph:graph_options
+      - public-type:graph:graph_path
+      - public-type:graph:graph_path_policy
+      - public-type:graph:impact_query
+      - public-type:graph:semantic_graph
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.graph.package_internal_engine
+      - shared.package.graph.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:include_relation
+      schemas:
+      - schema:schemas/cxxlens_coverage.schema.yaml
+      - schema:schemas/cxxlens_evidence.schema.yaml
+      - schema:schemas/cxxlens_graph.schema.yaml
+      - schema:schemas/cxxlens_graph_options.schema.yaml
+      - schema:schemas/cxxlens_unresolved.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-SR-008
+      design_sections:
+      - '16'
+      - '39.17'
+      doxygen_obligation: Document snapshot/value lifetime, typed identity, parallel/conflicting/variant edges, all outcomes,
+        SCC/path and four budgets, evidence/coverage/guarantee, deterministic JSON/DOT, providers, and schema version.
+    acceptance:
+      positive:
+        id: API-GRAPH-004.positive
+        expression: Build include graph from complete exact-version facts under finite limits.
+        expected: Canonical deterministic graph rows/paths with complete coverage and a justified guarantee.
+      negative:
+        id: API-GRAPH-004.negative
+        expression: Use an invalid ID/limit/schema, dangling edge, conflicting duplicate, or unsupported relation.
+        expected: Stable structured failure; no name-only identity, silent fallback, omission, or partial mutation.
+      ambiguous:
+        id: API-GRAPH-004.ambiguous
+        expression: Use open-world targets, SCC/cycles, divergent variants, missing providers, or a reached budget.
+        expected: Preserved canonical rows plus typed unresolved/coverage/truncation and downgraded guarantee.
+  - api_id: API-GRAPH-005
+    atomic_unit: AU-GRAPH-005
+    package: graph
+    policy: graph.impact-traversal.v1
+    declaration:
+      source: contracts/candidates/46/graph.hpp
+      signature: cxxlens::graph::impact_query cxxlens::graph::impact_query::changed_symbols(std::vector<cxxlens::symbol_id>);
+        cxxlens::graph::impact_query cxxlens::graph::impact_query::matching(cxxlens::select::semantic_selector); cxxlens::graph::impact_query
+        cxxlens::graph::impact_query::relations(std::vector<cxxlens::graph::graph_edge_kind>) const; cxxlens::graph::impact_query
+        cxxlens::graph::impact_query::direction(cxxlens::graph::graph_direction) const; cxxlens::graph::impact_query cxxlens::graph::impact_query::paths(cxxlens::graph::graph_path_policy)
+        const; cxxlens::graph::impact_query cxxlens::graph::impact_query::scope(cxxlens::analysis_scope) const; cxxlens::graph::impact_query
+        cxxlens::graph::impact_query::limits(cxxlens::graph::graph_limits) const; cxxlens::graph::impact_query cxxlens::graph::impact_query::callers(bool)
+        const; cxxlens::graph::impact_query cxxlens::graph::impact_query::derived_types(bool) const; cxxlens::graph::impact_query
+        cxxlens::graph::impact_query::reverse_includes(bool) const; cxxlens::graph::impact_query cxxlens::graph::impact_query::tests(bool)
+        const; cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::impact_query::run(const cxxlens::workspace&,cxxlens::execution_context)
+        const
+      signature_fingerprint: sha256:dc3bd7fe7fcf9fdcf7e6c768b0cefc8bea02180d4d18f0d27daef37436c361e7
+    family_members:
+    - cxxlens::graph::impact_query::changed_symbols
+    - cxxlens::graph::impact_query::matching
+    - cxxlens::graph::impact_query::relations
+    - cxxlens::graph::impact_query::direction
+    - cxxlens::graph::impact_query::paths
+    - cxxlens::graph::impact_query::scope
+    - cxxlens::graph::impact_query::limits
+    - cxxlens::graph::impact_query::callers
+    - cxxlens::graph::impact_query::derived_types
+    - cxxlens::graph::impact_query::reverse_includes
+    - cxxlens::graph::impact_query::tests
+    - cxxlens::graph::impact_query::run
+    semantics:
+    - impact query uses one immutable catalog/fact snapshot and the shared graph identity/adjacency/SCC/path engine.
+    - Complete empty, unsupported, ambiguous/open-world, unresolved, partial/truncated, and failure outcomes remain distinct.
+    - Canonical ID/order/dedup/variant rules preserve parallel/self/conflicting edges, evidence, coverage, and guarantee.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:evidence
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:unresolved
+      - public-type:graph:graph_direction
+      - public-type:graph:graph_edge
+      - public-type:graph:graph_edge_id
+      - public-type:graph:graph_edge_kind
+      - public-type:graph:graph_kind
+      - public-type:graph:graph_limits
+      - public-type:graph:graph_node
+      - public-type:graph:graph_node_id
+      - public-type:graph:graph_node_kind
+      - public-type:graph:graph_options
+      - public-type:graph:graph_path
+      - public-type:graph:graph_path_policy
+      - public-type:graph:impact_query
+      - public-type:graph:semantic_graph
+      - public-type:select:semantic_selector
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.graph.package_internal_engine
+      - shared.package.graph.shared_public_type_contract
+      providers:
+      - provider.fact.frontend:call
+      - provider.fact.frontend:include_relation
+      - provider.fact.frontend:inheritance
+      - provider.fact.frontend:override_relation
+      schemas:
+      - schema:schemas/cxxlens_coverage.schema.yaml
+      - schema:schemas/cxxlens_evidence.schema.yaml
+      - schema:schemas/cxxlens_graph.schema.yaml
+      - schema:schemas/cxxlens_graph_options.schema.yaml
+      - schema:schemas/cxxlens_unresolved.schema.yaml
+    dependency_apis:
+    - API-SEL-010
+    traceability:
+      requirements_or_use_cases:
+      - UC-GR-003
+      design_sections:
+      - '16'
+      - '39.17'
+      doxygen_obligation: Document snapshot/value lifetime, typed identity, parallel/conflicting/variant edges, all outcomes,
+        SCC/path and four budgets, evidence/coverage/guarantee, deterministic JSON/DOT, providers, and schema version.
+    acceptance:
+      positive:
+        id: API-GRAPH-005.positive
+        expression: Build impact query from complete exact-version facts under finite limits.
+        expected: Canonical deterministic graph rows/paths with complete coverage and a justified guarantee.
+      negative:
+        id: API-GRAPH-005.negative
+        expression: Use an invalid ID/limit/schema, dangling edge, conflicting duplicate, or unsupported relation.
+        expected: Stable structured failure; no name-only identity, silent fallback, omission, or partial mutation.
+      ambiguous:
+        id: API-GRAPH-005.ambiguous
+        expression: Use open-world targets, SCC/cycles, divergent variants, missing providers, or a reached budget.
+        expected: Preserved canonical rows plus typed unresolved/coverage/truncation and downgraded guarantee.
+  - api_id: API-GRAPH-006
+    atomic_unit: AU-GRAPH-006
+    package: graph
+    policy: graph.authoritative-projection.v1
+    declaration:
+      source: contracts/candidates/46/graph.hpp
+      signature: cxxlens::graph::graph_kind cxxlens::graph::semantic_graph::kind() const noexcept; std::span<const cxxlens::graph::graph_node>
+        cxxlens::graph::semantic_graph::nodes() const noexcept; std::span<const cxxlens::graph::graph_edge> cxxlens::graph::semantic_graph::edges()
+        const noexcept; std::span<const cxxlens::graph::graph_path> cxxlens::graph::semantic_graph::paths() const noexcept;
+        const cxxlens::coverage_report& cxxlens::graph::semantic_graph::coverage() const noexcept; std::span<const cxxlens::unresolved>
+        cxxlens::graph::semantic_graph::unresolved_items() const noexcept; cxxlens::result_guarantee cxxlens::graph::semantic_graph::guarantee()
+        const noexcept; cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::semantic_graph::subgraph(std::vector<cxxlens::graph::graph_node_id>,cxxlens::graph::graph_options)
+        const; std::string cxxlens::graph::semantic_graph::to_json() const; std::string cxxlens::graph::semantic_graph::to_dot()
+        const
+      signature_fingerprint: sha256:9e6fab202a2416b938681326c119759e0da3e2a3800e29f19bcfd9544a3d5269
+    family_members:
+    - cxxlens::graph::semantic_graph::kind
+    - cxxlens::graph::semantic_graph::nodes
+    - cxxlens::graph::semantic_graph::edges
+    - cxxlens::graph::semantic_graph::paths
+    - cxxlens::graph::semantic_graph::coverage
+    - cxxlens::graph::semantic_graph::unresolved_items
+    - cxxlens::graph::semantic_graph::guarantee
+    - cxxlens::graph::semantic_graph::subgraph
+    - cxxlens::graph::semantic_graph::to_json
+    - cxxlens::graph::semantic_graph::to_dot
+    semantics:
+    - semantic graph projection uses one immutable catalog/fact snapshot and the shared graph identity/adjacency/SCC/path
+      engine.
+    - Complete empty, unsupported, ambiguous/open-world, unresolved, partial/truncated, and failure outcomes remain distinct.
+    - Canonical ID/order/dedup/variant rules preserve parallel/self/conflicting edges, evidence, coverage, and guarantee.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:evidence
+      - public-type:core:result<T>
+      - public-type:core:result_guarantee
+      - public-type:core:unresolved
+      - public-type:graph:graph_direction
+      - public-type:graph:graph_edge
+      - public-type:graph:graph_edge_id
+      - public-type:graph:graph_edge_kind
+      - public-type:graph:graph_kind
+      - public-type:graph:graph_limits
+      - public-type:graph:graph_node
+      - public-type:graph:graph_node_id
+      - public-type:graph:graph_node_kind
+      - public-type:graph:graph_options
+      - public-type:graph:graph_path
+      - public-type:graph:graph_path_policy
+      - public-type:graph:impact_query
+      - public-type:graph:semantic_graph
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.graph.package_internal_engine
+      - shared.package.graph.shared_public_type_contract
+      providers: []
+      schemas:
+      - schema:schemas/cxxlens_coverage.schema.yaml
+      - schema:schemas/cxxlens_evidence.schema.yaml
+      - schema:schemas/cxxlens_graph.schema.yaml
+      - schema:schemas/cxxlens_graph_options.schema.yaml
+      - schema:schemas/cxxlens_unresolved.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - QR-001
+      design_sections:
+      - '16'
+      - '39.17'
+      doxygen_obligation: Document snapshot/value lifetime, typed identity, parallel/conflicting/variant edges, all outcomes,
+        SCC/path and four budgets, evidence/coverage/guarantee, deterministic JSON/DOT, providers, and schema version.
+    acceptance:
+      positive:
+        id: API-GRAPH-006.positive
+        expression: Build semantic graph projection from complete exact-version facts under finite limits.
+        expected: Canonical deterministic graph rows/paths with complete coverage and a justified guarantee.
+      negative:
+        id: API-GRAPH-006.negative
+        expression: Use an invalid ID/limit/schema, dangling edge, conflicting duplicate, or unsupported relation.
+        expected: Stable structured failure; no name-only identity, silent fallback, omission, or partial mutation.
+      ambiguous:
+        id: API-GRAPH-006.ambiguous
+        expression: Use open-world targets, SCC/cycles, divergent variants, missing providers, or a reached budget.
+        expected: Preserved canonical rows plus typed unresolved/coverage/truncation and downgraded guarantee.
+  production_implementation_changed: false
+  candidate_fingerprint: sha256:3c8f4fec0bb55eae81842b2dc4dec84c5efcfc236621f4b9e73888736de9f940

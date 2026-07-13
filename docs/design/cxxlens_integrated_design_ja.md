@@ -3646,6 +3646,19 @@ catalog の bounded pure projection を所有し、query/plan を再実行・再
 predicate rejection、unresolved、unsupported、ambiguous、partial は同一表現へ潰さない。candidate fragment の
 public/install 統合は #53、freeze は #54 の authority とする。
 
+### 39.17 graph package candidate
+
+Issue #46 の規範契約は `docs/design/package_contract_46.md` と
+`schemas/cxxlens_package_contract_candidates.yaml#issue-46` である。graph-local node/edge ID は
+既存 semantic subject ID を置換せず、relation role、source/call-site、variant を含む canonical
+identity とする。parallel/self/variant edge を保持し、same-ID payload conflict は reject する。
+
+全 graph operation は一つの immutable workspace/fact snapshot と finite positive
+depth/node/edge/path budget に束縛する。open-world target、missing fact、cycle/SCC、provider failure、
+truncation は coverage/unresolved/guarantee に保存し、empty や exact に変換しない。JSON/DOT と
+subgraph は authoritative graph の deterministic pure projection であり、#52 が実装可能性、#53 が
+public header 統合、#54 が frozen 遷移を所有する。
+
 ---
 
 ## 40. Public API inventory

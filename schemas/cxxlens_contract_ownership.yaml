@@ -562,8 +562,29 @@ public_types:
   owner_atomic_unit: AU-GEN-001
   steward: integration.package.generate
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-generate
+- id: public-type:graph:graph_direction
+  type: graph_direction
+  package: graph
+  header: <cxxlens/graph.hpp>
+  owner_atomic_unit: AU-GRAPH-001
+  steward: integration.package.graph
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-graph
 - id: public-type:graph:graph_edge
   type: graph_edge
+  package: graph
+  header: <cxxlens/graph.hpp>
+  owner_atomic_unit: AU-GRAPH-001
+  steward: integration.package.graph
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-graph
+- id: public-type:graph:graph_edge_id
+  type: graph_edge_id
+  package: graph
+  header: <cxxlens/graph.hpp>
+  owner_atomic_unit: AU-GRAPH-001
+  steward: integration.package.graph
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-graph
+- id: public-type:graph:graph_edge_kind
+  type: graph_edge_kind
   package: graph
   header: <cxxlens/graph.hpp>
   owner_atomic_unit: AU-GRAPH-001
@@ -576,6 +597,13 @@ public_types:
   owner_atomic_unit: AU-GRAPH-001
   steward: integration.package.graph
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-graph
+- id: public-type:graph:graph_limits
+  type: graph_limits
+  package: graph
+  header: <cxxlens/graph.hpp>
+  owner_atomic_unit: AU-GRAPH-001
+  steward: integration.package.graph
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-graph
 - id: public-type:graph:graph_node
   type: graph_node
   package: graph
@@ -583,8 +611,36 @@ public_types:
   owner_atomic_unit: AU-GRAPH-001
   steward: integration.package.graph
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-graph
+- id: public-type:graph:graph_node_id
+  type: graph_node_id
+  package: graph
+  header: <cxxlens/graph.hpp>
+  owner_atomic_unit: AU-GRAPH-001
+  steward: integration.package.graph
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-graph
+- id: public-type:graph:graph_node_kind
+  type: graph_node_kind
+  package: graph
+  header: <cxxlens/graph.hpp>
+  owner_atomic_unit: AU-GRAPH-001
+  steward: integration.package.graph
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-graph
 - id: public-type:graph:graph_options
   type: graph_options
+  package: graph
+  header: <cxxlens/graph.hpp>
+  owner_atomic_unit: AU-GRAPH-001
+  steward: integration.package.graph
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-graph
+- id: public-type:graph:graph_path
+  type: graph_path
+  package: graph
+  header: <cxxlens/graph.hpp>
+  owner_atomic_unit: AU-GRAPH-001
+  steward: integration.package.graph
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-graph
+- id: public-type:graph:graph_path_policy
+  type: graph_path_policy
   package: graph
   header: <cxxlens/graph.hpp>
   owner_atomic_unit: AU-GRAPH-001
@@ -2087,6 +2143,16 @@ schemas:
   owner_atomic_unit: AU-CORE-001
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_graph.schema.yaml
+  path: schemas/cxxlens_graph.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_graph_options.schema.yaml
+  path: schemas/cxxlens_graph_options.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
 - id: schema:schemas/cxxlens_m0_acceptance_report.schema.yaml
   path: schemas/cxxlens_m0_acceptance_report.schema.yaml
   owner_atomic_unit: AU-CORE-001
@@ -2208,8 +2274,8 @@ schemas:
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
 summary:
-  public_type_count: 179
+  public_type_count: 187
   shared_component_count: 66
   provider_subject_count: 24
-  schema_count: 59
-semantic_digest: sha256:f905dcfb00e1766266f8e7218867b59b3ba1203f00d62e71daf89c43b4ca479d
+  schema_count: 61
+semantic_digest: sha256:ac79c3f79b8857ed98148db4262ed76c99673f9c7a68b13a07ceae4397f3375e

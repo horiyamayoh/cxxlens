@@ -1,0 +1,81 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.graph.v1.schema.yaml
+title: cxxlens authoritative semantic graph v1
+type: object
+additionalProperties: false
+required: [schema, semantics_version, kind, snapshot, nodes, edges, paths, coverage, unresolved, guarantee, truncated]
+properties:
+  schema: {const: cxxlens.graph.v1}
+  semantics_version: {const: 1.0.0}
+  kind: {enum: [class_hierarchy, override_relation, call, include, impact, custom]}
+  snapshot:
+    type: object
+    additionalProperties: false
+    required: [catalog_version, fact_snapshot_id]
+    properties:
+      catalog_version: {type: string, minLength: 1}
+      fact_snapshot_id: {type: string, pattern: '^snapshot_[0-9a-f]{64}$'}
+  nodes:
+    type: array
+    items: {$ref: '#/$defs/node'}
+  edges:
+    type: array
+    items: {$ref: '#/$defs/edge'}
+  paths:
+    type: array
+    items: {$ref: '#/$defs/path'}
+  coverage: {$ref: cxxlens_coverage.schema.yaml}
+  unresolved:
+    type: array
+    items: {$ref: cxxlens_unresolved.schema.yaml}
+  guarantee: {enum: [exact, conservative, best_effort, none]}
+  truncated: {type: boolean}
+$defs:
+  id: {type: string, pattern: '^graph_(node|edge)_[0-9a-f]{64}$'}
+  variants:
+    type: array
+    uniqueItems: true
+    items: {type: string, pattern: '^variant_[0-9a-f]{64}$'}
+  properties:
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required: [key, value]
+      properties:
+        key: {type: string, minLength: 1}
+        value: {type: string}
+  node:
+    type: object
+    additionalProperties: false
+    required: [id, kind, semantic_subject, source, variants, properties]
+    properties:
+      id: {$ref: '#/$defs/id'}
+      kind: {enum: [symbol, file, call_site, unresolved_target, boundary]}
+      semantic_subject: {type: [string, 'null'], pattern: '^(symbol|file|call_site):'}
+      source: {type: [object, 'null']}
+      variants: {$ref: '#/$defs/variants'}
+      properties: {$ref: '#/$defs/properties'}
+  edge:
+    type: object
+    additionalProperties: false
+    required: [id, from, to, kind, source, variants, confidence, guarantee, evidence, target_unresolved]
+    properties:
+      id: {$ref: '#/$defs/id'}
+      from: {$ref: '#/$defs/id'}
+      to: {$ref: '#/$defs/id'}
+      kind: {enum: [base, override_relation, direct_call, possible_dynamic_call, indirect_call, include, impact, custom]}
+      source: {type: [object, 'null']}
+      variants: {$ref: '#/$defs/variants'}
+      confidence: {enum: [certain, probable, possible, heuristic]}
+      guarantee: {enum: [exact, conservative, best_effort, none]}
+      evidence: {$ref: cxxlens_evidence.schema.yaml}
+      target_unresolved: {type: boolean}
+  path:
+    type: object
+    additionalProperties: false
+    required: [nodes, edges, truncated]
+    properties:
+      nodes: {type: array, minItems: 1, items: {$ref: '#/$defs/id'}}
+      edges: {type: array, items: {$ref: '#/$defs/id'}}
+      truncated: {type: boolean}

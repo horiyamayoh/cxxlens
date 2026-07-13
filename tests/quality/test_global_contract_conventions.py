@@ -65,10 +65,10 @@ class GlobalContractConventionsTest(unittest.TestCase):
             self.catalog,
             ROOT,
         )
-        self.assertEqual(self.ownership["summary"]["public_type_count"], 179)
+        self.assertEqual(self.ownership["summary"]["public_type_count"], 187)
         self.assertEqual(self.ownership["summary"]["shared_component_count"], 66)
         self.assertEqual(self.ownership["summary"]["provider_subject_count"], 24)
-        self.assertEqual(self.ownership["summary"]["schema_count"], 59)
+        self.assertEqual(self.ownership["summary"]["schema_count"], 61)
 
     def test_missing_package_owner_is_rejected(self) -> None:
         document = copy.deepcopy(self.conventions)

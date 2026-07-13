@@ -13,7 +13,13 @@ stability:
   all_result_operations_require_coverage: true
 packages:
 - id: core
-  contract: {state: candidate, owner_issue: '#43', transition_issue: '#43', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-43', candidate_fingerprint: 'sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584'}
+  contract:
+    state: candidate
+    owner_issue: '#43'
+    transition_issue: '#43'
+    conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-43
+    candidate_fingerprint: sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584
   header: <cxxlens/core.hpp>
   purpose: Version, capability, IDs, errors, evidence, coverage and findings.
   public_types:
@@ -88,7 +94,8 @@ packages:
     phase: M0
     guarantees:
     - Never represents an unavailable capability as an empty successful result.
-    requirements: [QR-010]
+    requirements:
+    - QR-010
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -122,7 +129,9 @@ packages:
     declaration:
       status: exact
       source: include/cxxlens/core/evidence.hpp
-      signature: 'cxxlens::evidence& cxxlens::evidence::add(cxxlens::evidence_item); std::span<const cxxlens::evidence_item> cxxlens::evidence::items() const noexcept; std::string cxxlens::evidence::to_json() const; std::string cxxlens::evidence::to_markdown() const'
+      signature: cxxlens::evidence& cxxlens::evidence::add(cxxlens::evidence_item); std::span<const cxxlens::evidence_item>
+        cxxlens::evidence::items() const noexcept; std::string cxxlens::evidence::to_json() const; std::string cxxlens::evidence::to_markdown()
+        const
       signature_fingerprint: sha256:d590366b80be69a4c215c934de46c443e9b938c5cafe38d120222c398c392bb2
     implementation_evidence:
     - include/cxxlens/core/evidence.hpp
@@ -150,7 +159,9 @@ packages:
     declaration:
       status: exact
       source: include/cxxlens/core/evidence.hpp
-      signature: 'bool cxxlens::coverage_report::complete() const; std::span<const cxxlens::coverage_unit> cxxlens::coverage_report::units() const noexcept; std::string cxxlens::coverage_report::to_json() const; std::string cxxlens::coverage_report::to_markdown() const'
+      signature: bool cxxlens::coverage_report::complete() const; std::span<const cxxlens::coverage_unit> cxxlens::coverage_report::units()
+        const noexcept; std::string cxxlens::coverage_report::to_json() const; std::string cxxlens::coverage_report::to_markdown()
+        const
       signature_fingerprint: sha256:439cfc1f164979287ff750183b73afcc9d3980d2cdebdad620789fe80f0d03a9
     implementation_evidence:
     - include/cxxlens/core/evidence.hpp
@@ -171,7 +182,9 @@ packages:
     guarantees:
     - Stable identity does not depend on message text or absolute checkout root.
     requires:
-      apis: [API-CORE-003, API-CORE-004]
+      apis:
+      - API-CORE-003
+      - API-CORE-004
     errors:
     - core.internal-invariant-violation
     - core.schema-validation-failed
@@ -180,7 +193,15 @@ packages:
     declaration:
       status: exact
       source: contracts/candidates/43/core_findings.hpp
-      signature: 'cxxlens::result<cxxlens::finding> cxxlens::finding::make(cxxlens::finding_input,const cxxlens::finding_validation_context&); cxxlens::finding_id cxxlens::finding::id() const; std::string_view cxxlens::finding::rule_or_recipe() const noexcept; cxxlens::severity cxxlens::finding::level() const noexcept; cxxlens::confidence cxxlens::finding::certainty() const noexcept; cxxlens::result_guarantee cxxlens::finding::guarantee() const noexcept; const cxxlens::source_span& cxxlens::finding::primary_location() const noexcept; std::string_view cxxlens::finding::message() const noexcept; const cxxlens::evidence& cxxlens::finding::why() const noexcept; std::span<const cxxlens::unresolved> cxxlens::finding::unresolved_items() const noexcept; const cxxlens::coverage_report& cxxlens::finding::coverage() const noexcept; cxxlens::finding_explanation_input cxxlens::finding::explanation_input() const noexcept; cxxlens::result<void> cxxlens::finding::validate(const cxxlens::finding_validation_context&) const; std::string cxxlens::finding::semantic_representation() const; std::string cxxlens::finding::to_json() const'
+      signature: cxxlens::result<cxxlens::finding> cxxlens::finding::make(cxxlens::finding_input,const cxxlens::finding_validation_context&);
+        cxxlens::finding_id cxxlens::finding::id() const; std::string_view cxxlens::finding::rule_or_recipe() const noexcept;
+        cxxlens::severity cxxlens::finding::level() const noexcept; cxxlens::confidence cxxlens::finding::certainty() const
+        noexcept; cxxlens::result_guarantee cxxlens::finding::guarantee() const noexcept; const cxxlens::source_span& cxxlens::finding::primary_location()
+        const noexcept; std::string_view cxxlens::finding::message() const noexcept; const cxxlens::evidence& cxxlens::finding::why()
+        const noexcept; std::span<const cxxlens::unresolved> cxxlens::finding::unresolved_items() const noexcept; const cxxlens::coverage_report&
+        cxxlens::finding::coverage() const noexcept; cxxlens::finding_explanation_input cxxlens::finding::explanation_input()
+        const noexcept; cxxlens::result<void> cxxlens::finding::validate(const cxxlens::finding_validation_context&) const;
+        std::string cxxlens::finding::semantic_representation() const; std::string cxxlens::finding::to_json() const
       signature_fingerprint: sha256:6003d07f3ed009d442c160c73b728c82c1b2bddc21a731698c9c2aeaba061655
     atomic_unit:
       id: AU-CORE-005
@@ -194,7 +215,8 @@ packages:
     kind: method_family
     phase: M0
     requires:
-      apis: [API-CORE-005]
+      apis:
+      - API-CORE-005
     errors:
     - core.internal-invariant-violation
     contract_maturity: contract-defined
@@ -202,7 +224,11 @@ packages:
     declaration:
       status: exact
       source: contracts/candidates/43/core_findings.hpp
-      signature: 'cxxlens::result<void> cxxlens::finding_set::add(cxxlens::finding); std::size_t cxxlens::finding_set::size() const noexcept; bool cxxlens::finding_set::empty() const noexcept; std::span<const cxxlens::finding> cxxlens::finding_set::all() const noexcept; cxxlens::finding_set cxxlens::finding_set::minimum_confidence(cxxlens::confidence) const; cxxlens::finding_set cxxlens::finding_set::minimum_severity(cxxlens::severity) const; std::string cxxlens::finding_set::to_json() const; std::string cxxlens::finding_set::to_markdown() const; std::string cxxlens::finding_set::to_sarif() const'
+      signature: cxxlens::result<void> cxxlens::finding_set::add(cxxlens::finding); std::size_t cxxlens::finding_set::size()
+        const noexcept; bool cxxlens::finding_set::empty() const noexcept; std::span<const cxxlens::finding> cxxlens::finding_set::all()
+        const noexcept; cxxlens::finding_set cxxlens::finding_set::minimum_confidence(cxxlens::confidence) const; cxxlens::finding_set
+        cxxlens::finding_set::minimum_severity(cxxlens::severity) const; std::string cxxlens::finding_set::to_json() const;
+        std::string cxxlens::finding_set::to_markdown() const; std::string cxxlens::finding_set::to_sarif() const
       signature_fingerprint: sha256:b111c53789436fc32aa3d7a496ef19725abd7beae0490df4ad0e33cde9509ca4
     atomic_unit:
       id: AU-CORE-006
@@ -212,7 +238,13 @@ packages:
       blockers:
       - candidate_declaration_not_integrated
 - id: workspace
-  contract: {state: candidate, owner_issue: '#44', transition_issue: '#44', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-44', candidate_fingerprint: 'sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601'}
+  contract:
+    state: candidate
+    owner_issue: '#44'
+    transition_issue: '#44'
+    conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-44
+    candidate_fingerprint: sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601
   header: <cxxlens/workspace.hpp>
   purpose: Compilation database, build variants, snapshots and fact provisioning.
   public_types:
@@ -228,7 +260,9 @@ packages:
     symbol: workspace_options::from_compilation_database(path)
     kind: static_factory
     phase: M1
-    requirements: [FR-001, QR-007]
+    requirements:
+    - FR-001
+    - QR-007
     requires:
       facts:
       - compile_command
@@ -268,7 +302,11 @@ packages:
     symbol: workspace::open(workspace_options, execution_context)
     kind: static_factory
     phase: M1
-    requirements: [FR-001, FR-002, QR-001, QR-007]
+    requirements:
+    - FR-001
+    - FR-002
+    - QR-001
+    - QR-007
     requires:
       facts:
       - compile_command
@@ -316,7 +354,9 @@ packages:
     symbol: workspace::compile_units()
     kind: method
     phase: M1
-    requirements: [FR-002, QR-001]
+    requirements:
+    - FR-002
+    - QR-001
     guarantees:
     - Returns canonical deterministic order.
     contract_maturity: contract-defined
@@ -340,7 +380,9 @@ packages:
     symbol: workspace::command_for(path)
     kind: method
     phase: M1
-    requirements: [FR-001, FR-002]
+    requirements:
+    - FR-001
+    - FR-002
     guarantees:
     - Returns zero, one or many commands; ambiguity is visible.
     contract_maturity: contract-defined
@@ -364,7 +406,13 @@ packages:
     symbol: workspace::ensure(fact_profile, analysis_scope, execution_context)
     kind: method
     phase: M1
-    requirements: [FR-005, FR-010, QR-004, QR-005, QR-011, QR-012]
+    requirements:
+    - FR-005
+    - FR-010
+    - QR-004
+    - QR-005
+    - QR-011
+    - QR-012
     requires:
       expressions:
       - requested_profile
@@ -391,7 +439,8 @@ packages:
     declaration:
       status: exact
       source: include/cxxlens/workspace.hpp
-      signature: cxxlens::result<void> cxxlens::workspace::ensure(cxxlens::fact_profile, cxxlens::analysis_scope, cxxlens::execution_context) const
+      signature: cxxlens::result<void> cxxlens::workspace::ensure(cxxlens::fact_profile, cxxlens::analysis_scope, cxxlens::execution_context)
+        const
       signature_fingerprint: sha256:5c614f83d10df4a9401230ee2f2cd91c170d6005fa37444db4ad468983eda97e
     implementation_evidence:
     - include/cxxlens/workspace.hpp
@@ -417,7 +466,9 @@ packages:
     symbol: workspace::facts()
     kind: method
     phase: M1
-    requirements: [FR-005, QR-001]
+    requirements:
+    - FR-005
+    - QR-001
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
@@ -441,7 +492,8 @@ packages:
     symbol: workspace::doctor(execution_context)
     kind: method
     phase: M1
-    requirements: [QR-010]
+    requirements:
+    - QR-010
     llvm:
       components:
       - clangDriver
@@ -473,13 +525,18 @@ packages:
     symbol: analysis_scope::{all,files,compile_units,changed_files,include_headers,variants}
     kind: method_family
     phase: M0
-    requirements: [QR-001]
+    requirements:
+    - QR-001
     contract_maturity: contract-defined
     implementation_state: conformant
     declaration:
       status: exact
       source: include/cxxlens/workspace.hpp
-      signature: 'cxxlens::analysis_scope cxxlens::analysis_scope::all(); cxxlens::analysis_scope cxxlens::analysis_scope::files(std::vector<cxxlens::path>); cxxlens::analysis_scope cxxlens::analysis_scope::compile_units(std::vector<cxxlens::compile_unit_id>); cxxlens::analysis_scope cxxlens::analysis_scope::changed_files(std::vector<cxxlens::path>); cxxlens::analysis_scope cxxlens::analysis_scope::include_headers(bool) const; cxxlens::analysis_scope cxxlens::analysis_scope::variants(std::vector<cxxlens::build_variant_id>) const; std::string cxxlens::analysis_scope::to_json() const'
+      signature: cxxlens::analysis_scope cxxlens::analysis_scope::all(); cxxlens::analysis_scope cxxlens::analysis_scope::files(std::vector<cxxlens::path>);
+        cxxlens::analysis_scope cxxlens::analysis_scope::compile_units(std::vector<cxxlens::compile_unit_id>); cxxlens::analysis_scope
+        cxxlens::analysis_scope::changed_files(std::vector<cxxlens::path>); cxxlens::analysis_scope cxxlens::analysis_scope::include_headers(bool)
+        const; cxxlens::analysis_scope cxxlens::analysis_scope::variants(std::vector<cxxlens::build_variant_id>) const; std::string
+        cxxlens::analysis_scope::to_json() const
       signature_fingerprint: sha256:dade0894af26e531e563987ac02c4c44d3e843c3396c4b66fd7e60bcf684b0e0
     implementation_evidence:
     - include/cxxlens/workspace.hpp
@@ -493,7 +550,13 @@ packages:
       state: complete
       blockers: []
 - id: facts
-  contract: {state: candidate, owner_issue: '#44', transition_issue: '#44', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-44', candidate_fingerprint: 'sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601'}
+  contract:
+    state: candidate
+    owner_issue: '#44'
+    transition_issue: '#44'
+    conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-44
+    candidate_fingerprint: sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601
   header: <cxxlens/facts.hpp>
   purpose: Immutable semantic facts and typed fact access.
   public_types:
@@ -517,12 +580,19 @@ packages:
     kind: method_family
     phase: M0
     contract_maturity: contract-defined
-    requirements: [FR-005, QR-001]
+    requirements:
+    - FR-005
+    - QR-001
     implementation_state: conformant
     declaration:
       status: exact
       source: include/cxxlens/facts.hpp
-      signature: 'cxxlens::fact_profile cxxlens::fact_profile::minimal(); cxxlens::fact_profile cxxlens::fact_profile::semantic_search(); cxxlens::fact_profile cxxlens::fact_profile::refactor(); cxxlens::fact_profile cxxlens::fact_profile::generation(); cxxlens::fact_profile cxxlens::fact_profile::flow(); cxxlens::fact_profile cxxlens::fact_profile::full(); cxxlens::fact_profile cxxlens::fact_profile::include(cxxlens::fact_kind) const; cxxlens::fact_profile cxxlens::fact_profile::exclude(cxxlens::fact_kind) const; cxxlens::fact_profile cxxlens::fact_profile::precision(cxxlens::precision_level) const; std::string cxxlens::fact_profile::to_json() const'
+      signature: cxxlens::fact_profile cxxlens::fact_profile::minimal(); cxxlens::fact_profile cxxlens::fact_profile::semantic_search();
+        cxxlens::fact_profile cxxlens::fact_profile::refactor(); cxxlens::fact_profile cxxlens::fact_profile::generation();
+        cxxlens::fact_profile cxxlens::fact_profile::flow(); cxxlens::fact_profile cxxlens::fact_profile::full(); cxxlens::fact_profile
+        cxxlens::fact_profile::include(cxxlens::fact_kind) const; cxxlens::fact_profile cxxlens::fact_profile::exclude(cxxlens::fact_kind)
+        const; cxxlens::fact_profile cxxlens::fact_profile::precision(cxxlens::precision_level) const; std::string cxxlens::fact_profile::to_json()
+        const
       signature_fingerprint: sha256:4c36e740a41436761ec96c06ec8519c14707eee9a3febc92e5c695181d48f552
     implementation_evidence:
     - include/cxxlens/facts.hpp
@@ -842,7 +912,11 @@ packages:
       state: complete
       blockers: []
 - id: models
-  contract: {state: unresolved, owner_issue: '#50', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract:
+    state: unresolved
+    owner_issue: '#50'
+    transition_issue: '#42'
+    conventions: cxxlens.global-contract-conventions.v1
   header: <cxxlens/models.hpp>
   purpose: Versioned project API effects, replacements and flow models.
   public_types:
@@ -936,7 +1010,13 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: select
-  contract: {state: candidate, owner_issue: '#45', transition_issue: '#45', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-45', candidate_fingerprint: 'sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024'}
+  contract:
+    state: candidate
+    owner_issue: '#45'
+    transition_issue: '#45'
+    conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-45
+    candidate_fingerprint: sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024
   header: <cxxlens/select.hpp>
   purpose: Immutable serializable semantic selector DSL.
   public_types:
@@ -956,7 +1036,9 @@ packages:
     symbol: file_selector builder family
     kind: builder_family
     phase: M2
-    requirements: [FR-007, QR-001]
+    requirements:
+    - FR-007
+    - QR-001
     requires:
       facts:
       - file
@@ -966,14 +1048,11 @@ packages:
     declaration:
       status: exact
       source: include/cxxlens/select.hpp
-      signature: >-
-        cxxlens::select::file_selector cxxlens::select::file_selector::path_exact(cxxlens::path) const;
-        cxxlens::select::file_selector cxxlens::select::file_selector::path_glob(std::string) const;
-        cxxlens::select::file_selector cxxlens::select::file_selector::generated(bool) const;
-        cxxlens::select::file_selector cxxlens::select::file_selector::system(bool) const;
-        cxxlens::select::file_selector cxxlens::select::file_selector::any_of(std::vector<cxxlens::select::file_selector>) const;
-        cxxlens::select::file_selector cxxlens::select::file_selector::negate() const;
-        std::string cxxlens::select::file_selector::to_json() const
+      signature: cxxlens::select::file_selector cxxlens::select::file_selector::path_exact(cxxlens::path) const; cxxlens::select::file_selector
+        cxxlens::select::file_selector::path_glob(std::string) const; cxxlens::select::file_selector cxxlens::select::file_selector::generated(bool)
+        const; cxxlens::select::file_selector cxxlens::select::file_selector::system(bool) const; cxxlens::select::file_selector
+        cxxlens::select::file_selector::any_of(std::vector<cxxlens::select::file_selector>) const; cxxlens::select::file_selector
+        cxxlens::select::file_selector::negate() const; std::string cxxlens::select::file_selector::to_json() const
       signature_fingerprint: sha256:c8e9429700291df9ab577ec71058f1f97b92daf1666943e0d5aa3c996df03ae7
     implementation_evidence:
     - include/cxxlens/select.hpp
@@ -989,7 +1068,10 @@ packages:
     symbol: symbol_selector builder family
     kind: builder_family
     phase: M2
-    requirements: [FR-006, FR-007, QR-001]
+    requirements:
+    - FR-006
+    - FR-007
+    - QR-001
     requires:
       facts:
       - inheritance
@@ -1002,24 +1084,21 @@ packages:
     declaration:
       status: exact
       source: include/cxxlens/select.hpp
-      signature: >-
-        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::kind(cxxlens::symbol_kind) const;
-        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::kinds(std::vector<cxxlens::symbol_kind>) const;
-        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::name(std::string,cxxlens::select::name_match) const;
-        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::declared_in(cxxlens::select::file_selector) const;
-        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::defined(bool) const;
-        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::member_of(cxxlens::select::symbol_selector) const;
-        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::derived_from(cxxlens::select::symbol_selector) const;
-        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::overrides(cxxlens::select::symbol_selector) const;
-        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::public_surface(bool) const;
-        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::macro(cxxlens::select::macro_match_policy) const;
-        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::variants(cxxlens::select::variant_match_policy) const;
-        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::any_of(std::vector<cxxlens::select::symbol_selector>) const;
-        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::all_of(std::vector<cxxlens::select::symbol_selector>) const;
-        cxxlens::select::symbol_selector cxxlens::select::symbol_selector::negate() const;
-        cxxlens::select::selector_requirements cxxlens::select::symbol_selector::requirements() const;
-        std::string cxxlens::select::symbol_selector::explain() const;
-        std::string cxxlens::select::symbol_selector::to_json() const
+      signature: cxxlens::select::symbol_selector cxxlens::select::symbol_selector::kind(cxxlens::symbol_kind) const; cxxlens::select::symbol_selector
+        cxxlens::select::symbol_selector::kinds(std::vector<cxxlens::symbol_kind>) const; cxxlens::select::symbol_selector
+        cxxlens::select::symbol_selector::name(std::string,cxxlens::select::name_match) const; cxxlens::select::symbol_selector
+        cxxlens::select::symbol_selector::declared_in(cxxlens::select::file_selector) const; cxxlens::select::symbol_selector
+        cxxlens::select::symbol_selector::defined(bool) const; cxxlens::select::symbol_selector cxxlens::select::symbol_selector::member_of(cxxlens::select::symbol_selector)
+        const; cxxlens::select::symbol_selector cxxlens::select::symbol_selector::derived_from(cxxlens::select::symbol_selector)
+        const; cxxlens::select::symbol_selector cxxlens::select::symbol_selector::overrides(cxxlens::select::symbol_selector)
+        const; cxxlens::select::symbol_selector cxxlens::select::symbol_selector::public_surface(bool) const; cxxlens::select::symbol_selector
+        cxxlens::select::symbol_selector::macro(cxxlens::select::macro_match_policy) const; cxxlens::select::symbol_selector
+        cxxlens::select::symbol_selector::variants(cxxlens::select::variant_match_policy) const; cxxlens::select::symbol_selector
+        cxxlens::select::symbol_selector::any_of(std::vector<cxxlens::select::symbol_selector>) const; cxxlens::select::symbol_selector
+        cxxlens::select::symbol_selector::all_of(std::vector<cxxlens::select::symbol_selector>) const; cxxlens::select::symbol_selector
+        cxxlens::select::symbol_selector::negate() const; cxxlens::select::selector_requirements cxxlens::select::symbol_selector::requirements()
+        const; std::string cxxlens::select::symbol_selector::explain() const; std::string cxxlens::select::symbol_selector::to_json()
+        const
       signature_fingerprint: sha256:158597f7269a10fa3f3916151f97d1ba3757d1e354dd52ba08a969d8337ae82b
     implementation_evidence:
     - include/cxxlens/select.hpp
@@ -1035,7 +1114,10 @@ packages:
     symbol: type_selector builder family
     kind: builder_family
     phase: M2
-    requirements: [FR-006, FR-007, QR-001]
+    requirements:
+    - FR-006
+    - FR-007
+    - QR-001
     requires:
       facts:
       - conversion
@@ -1048,21 +1130,17 @@ packages:
     declaration:
       status: exact
       source: include/cxxlens/select.hpp
-      signature: >-
-        cxxlens::select::type_selector cxxlens::select::type_selector::canonical(std::string) const;
-        cxxlens::select::type_selector cxxlens::select::type_selector::spelling(std::string) const;
-        cxxlens::select::type_selector cxxlens::select::type_selector::declared_as(cxxlens::select::symbol_selector) const;
-        cxxlens::select::type_selector cxxlens::select::type_selector::pointer_to(cxxlens::select::type_selector) const;
+      signature: cxxlens::select::type_selector cxxlens::select::type_selector::canonical(std::string) const; cxxlens::select::type_selector
+        cxxlens::select::type_selector::spelling(std::string) const; cxxlens::select::type_selector cxxlens::select::type_selector::declared_as(cxxlens::select::symbol_selector)
+        const; cxxlens::select::type_selector cxxlens::select::type_selector::pointer_to(cxxlens::select::type_selector) const;
         cxxlens::select::type_selector cxxlens::select::type_selector::reference_to(cxxlens::select::type_selector) const;
-        cxxlens::select::type_selector cxxlens::select::type_selector::const_qualified(bool) const;
-        cxxlens::select::type_selector cxxlens::select::type_selector::derived_from(cxxlens::select::symbol_selector) const;
-        cxxlens::select::type_selector cxxlens::select::type_selector::including_derived(bool) const;
-        cxxlens::select::type_selector cxxlens::select::type_selector::convertible_to(cxxlens::select::type_selector) const;
-        cxxlens::select::type_selector cxxlens::select::type_selector::specialization_of(std::string) const;
-        cxxlens::select::type_selector cxxlens::select::type_selector::any_cvref() const;
-        cxxlens::select::selector_requirements cxxlens::select::type_selector::requirements() const;
-        std::string cxxlens::select::type_selector::explain() const;
-        std::string cxxlens::select::type_selector::to_json() const
+        cxxlens::select::type_selector cxxlens::select::type_selector::const_qualified(bool) const; cxxlens::select::type_selector
+        cxxlens::select::type_selector::derived_from(cxxlens::select::symbol_selector) const; cxxlens::select::type_selector
+        cxxlens::select::type_selector::including_derived(bool) const; cxxlens::select::type_selector cxxlens::select::type_selector::convertible_to(cxxlens::select::type_selector)
+        const; cxxlens::select::type_selector cxxlens::select::type_selector::specialization_of(std::string) const; cxxlens::select::type_selector
+        cxxlens::select::type_selector::any_cvref() const; cxxlens::select::selector_requirements cxxlens::select::type_selector::requirements()
+        const; std::string cxxlens::select::type_selector::explain() const; std::string cxxlens::select::type_selector::to_json()
+        const
       signature_fingerprint: sha256:236427d43aa49d9ef3c4e94cde81905da7902d6951ea72b24bc225b4e8a1aad4
     implementation_evidence:
     - include/cxxlens/select.hpp
@@ -1090,7 +1168,15 @@ packages:
     declaration:
       status: exact
       source: contracts/candidates/45/select_search_explain.hpp
-      signature: 'cxxlens::select::expression_selector cxxlens::select::expression_selector::type_is(cxxlens::select::type_selector) const; cxxlens::select::expression_selector cxxlens::select::expression_selector::refers_to(cxxlens::select::symbol_selector) const; cxxlens::select::expression_selector cxxlens::select::expression_selector::is_null_pointer() const; cxxlens::select::expression_selector cxxlens::select::expression_selector::is_literal() const; cxxlens::select::expression_selector cxxlens::select::expression_selector::integer_value(std::int64_t) const; cxxlens::select::expression_selector cxxlens::select::expression_selector::string_value(std::string) const; cxxlens::select::expression_selector cxxlens::select::expression_selector::implicit(cxxlens::select::implicit_node_policy) const; cxxlens::select::expression_selector cxxlens::select::expression_selector::macro(cxxlens::select::macro_match_policy) const; cxxlens::select::selector_requirements cxxlens::select::expression_selector::requirements() const; std::string cxxlens::select::expression_selector::to_json() const; cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::expression_selector)'
+      signature: cxxlens::select::expression_selector cxxlens::select::expression_selector::type_is(cxxlens::select::type_selector)
+        const; cxxlens::select::expression_selector cxxlens::select::expression_selector::refers_to(cxxlens::select::symbol_selector)
+        const; cxxlens::select::expression_selector cxxlens::select::expression_selector::is_null_pointer() const; cxxlens::select::expression_selector
+        cxxlens::select::expression_selector::is_literal() const; cxxlens::select::expression_selector cxxlens::select::expression_selector::integer_value(std::int64_t)
+        const; cxxlens::select::expression_selector cxxlens::select::expression_selector::string_value(std::string) const;
+        cxxlens::select::expression_selector cxxlens::select::expression_selector::implicit(cxxlens::select::implicit_node_policy)
+        const; cxxlens::select::expression_selector cxxlens::select::expression_selector::macro(cxxlens::select::macro_match_policy)
+        const; cxxlens::select::selector_requirements cxxlens::select::expression_selector::requirements() const; std::string
+        cxxlens::select::expression_selector::to_json() const; cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::expression_selector)
       signature_fingerprint: sha256:53dfcb364dd7a081822dea17bee50722a84b17c7d3bca236fdfb87ab7316a608
     atomic_unit:
       id: AU-SEL-004
@@ -1115,7 +1201,16 @@ packages:
     declaration:
       status: exact
       source: contracts/candidates/45/select_search_explain.hpp
-      signature: 'cxxlens::select::reference_selector cxxlens::select::reference_selector::target(cxxlens::select::symbol_selector) const; cxxlens::select::reference_selector cxxlens::select::reference_selector::kind(cxxlens::reference_kind) const; cxxlens::select::reference_selector cxxlens::select::reference_selector::kinds(std::vector<cxxlens::reference_kind>) const; cxxlens::select::reference_selector cxxlens::select::reference_selector::inside(cxxlens::select::symbol_selector) const; cxxlens::select::reference_selector cxxlens::select::reference_selector::in_file(cxxlens::select::file_selector) const; cxxlens::select::reference_selector cxxlens::select::reference_selector::macro(cxxlens::select::macro_match_policy) const; cxxlens::select::reference_selector cxxlens::select::reference_selector::variants(cxxlens::select::variant_match_policy) const; cxxlens::select::selector_requirements cxxlens::select::reference_selector::requirements() const; std::string cxxlens::select::reference_selector::to_json() const; cxxlens::select::reference_selector cxxlens::select::references_to(cxxlens::select::symbol_selector); cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::reference_selector)'
+      signature: cxxlens::select::reference_selector cxxlens::select::reference_selector::target(cxxlens::select::symbol_selector)
+        const; cxxlens::select::reference_selector cxxlens::select::reference_selector::kind(cxxlens::reference_kind) const;
+        cxxlens::select::reference_selector cxxlens::select::reference_selector::kinds(std::vector<cxxlens::reference_kind>)
+        const; cxxlens::select::reference_selector cxxlens::select::reference_selector::inside(cxxlens::select::symbol_selector)
+        const; cxxlens::select::reference_selector cxxlens::select::reference_selector::in_file(cxxlens::select::file_selector)
+        const; cxxlens::select::reference_selector cxxlens::select::reference_selector::macro(cxxlens::select::macro_match_policy)
+        const; cxxlens::select::reference_selector cxxlens::select::reference_selector::variants(cxxlens::select::variant_match_policy)
+        const; cxxlens::select::selector_requirements cxxlens::select::reference_selector::requirements() const; std::string
+        cxxlens::select::reference_selector::to_json() const; cxxlens::select::reference_selector cxxlens::select::references_to(cxxlens::select::symbol_selector);
+        cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::reference_selector)
       signature_fingerprint: sha256:65db6021d0192c263cb8f56635918c49bfa9398d1bf6e6bd1dbb93a996064b34
     atomic_unit:
       id: AU-SEL-005
@@ -1128,7 +1223,10 @@ packages:
     symbol: call_selector builder family
     kind: builder_family
     phase: M2
-    requirements: [FR-007, FR-009, QR-001]
+    requirements:
+    - FR-007
+    - FR-009
+    - QR-001
     use_cases:
     - UC-SR-001
     - UC-SR-002
@@ -1145,27 +1243,21 @@ packages:
     declaration:
       status: exact
       source: include/cxxlens/select.hpp
-      signature: >-
-        cxxlens::select::call_selector cxxlens::select::call_selector::kind(cxxlens::call_kind) const;
-        cxxlens::select::call_selector cxxlens::select::call_selector::kinds(std::vector<cxxlens::call_kind>) const;
-        cxxlens::select::call_selector cxxlens::select::call_selector::callee(cxxlens::select::symbol_selector) const;
-        cxxlens::select::call_selector cxxlens::select::call_selector::callee_name(std::string) const;
-        cxxlens::select::call_selector cxxlens::select::call_selector::function_name(std::string) const;
-        cxxlens::select::call_selector cxxlens::select::call_selector::method_name(std::string) const;
-        cxxlens::select::call_selector cxxlens::select::call_selector::receiver_type(cxxlens::select::type_selector) const;
-        cxxlens::select::call_selector cxxlens::select::call_selector::include_derived_types(bool) const;
-        cxxlens::select::call_selector cxxlens::select::call_selector::include_virtual_overrides(bool) const;
-        cxxlens::select::call_selector cxxlens::select::call_selector::dispatch(cxxlens::select::dispatch_policy) const;
-        cxxlens::select::call_selector cxxlens::select::call_selector::argument_type(std::size_t,cxxlens::select::type_selector) const;
-        cxxlens::select::call_selector cxxlens::select::call_selector::inside(cxxlens::select::symbol_selector) const;
-        cxxlens::select::call_selector cxxlens::select::call_selector::in_file(cxxlens::select::file_selector) const;
-        cxxlens::select::call_selector cxxlens::select::call_selector::implicit(cxxlens::select::implicit_node_policy) const;
-        cxxlens::select::call_selector cxxlens::select::call_selector::macro(cxxlens::select::macro_match_policy) const;
-        cxxlens::select::call_selector cxxlens::select::call_selector::templates(cxxlens::select::template_selection_policy) const;
-        cxxlens::select::call_selector cxxlens::select::call_selector::variants(cxxlens::select::variant_match_policy) const;
-        cxxlens::select::call_selector cxxlens::select::call_selector::precision(cxxlens::precision_level) const;
-        cxxlens::select::selector_requirements cxxlens::select::call_selector::requirements() const;
-        std::string cxxlens::select::call_selector::explain() const;
+      signature: cxxlens::select::call_selector cxxlens::select::call_selector::kind(cxxlens::call_kind) const; cxxlens::select::call_selector
+        cxxlens::select::call_selector::kinds(std::vector<cxxlens::call_kind>) const; cxxlens::select::call_selector cxxlens::select::call_selector::callee(cxxlens::select::symbol_selector)
+        const; cxxlens::select::call_selector cxxlens::select::call_selector::callee_name(std::string) const; cxxlens::select::call_selector
+        cxxlens::select::call_selector::function_name(std::string) const; cxxlens::select::call_selector cxxlens::select::call_selector::method_name(std::string)
+        const; cxxlens::select::call_selector cxxlens::select::call_selector::receiver_type(cxxlens::select::type_selector)
+        const; cxxlens::select::call_selector cxxlens::select::call_selector::include_derived_types(bool) const; cxxlens::select::call_selector
+        cxxlens::select::call_selector::include_virtual_overrides(bool) const; cxxlens::select::call_selector cxxlens::select::call_selector::dispatch(cxxlens::select::dispatch_policy)
+        const; cxxlens::select::call_selector cxxlens::select::call_selector::argument_type(std::size_t,cxxlens::select::type_selector)
+        const; cxxlens::select::call_selector cxxlens::select::call_selector::inside(cxxlens::select::symbol_selector) const;
+        cxxlens::select::call_selector cxxlens::select::call_selector::in_file(cxxlens::select::file_selector) const; cxxlens::select::call_selector
+        cxxlens::select::call_selector::implicit(cxxlens::select::implicit_node_policy) const; cxxlens::select::call_selector
+        cxxlens::select::call_selector::macro(cxxlens::select::macro_match_policy) const; cxxlens::select::call_selector cxxlens::select::call_selector::templates(cxxlens::select::template_selection_policy)
+        const; cxxlens::select::call_selector cxxlens::select::call_selector::variants(cxxlens::select::variant_match_policy)
+        const; cxxlens::select::call_selector cxxlens::select::call_selector::precision(cxxlens::precision_level) const; cxxlens::select::selector_requirements
+        cxxlens::select::call_selector::requirements() const; std::string cxxlens::select::call_selector::explain() const;
         std::string cxxlens::select::call_selector::to_json() const
       signature_fingerprint: sha256:a0c75263dd8d5dd8d4afbed31930224f235bbd918660010b5f8be4e779c81572
     implementation_evidence:
@@ -1192,7 +1284,22 @@ packages:
     declaration:
       status: exact
       source: contracts/candidates/45/select_search_explain.hpp
-      signature: 'cxxlens::select::conversion_selector cxxlens::select::conversion_selector::kind(std::string) const; cxxlens::select::conversion_selector cxxlens::select::conversion_selector::from(cxxlens::select::type_selector) const; cxxlens::select::conversion_selector cxxlens::select::conversion_selector::to(cxxlens::select::type_selector) const; cxxlens::select::conversion_selector cxxlens::select::conversion_selector::implicit(bool) const; cxxlens::select::conversion_selector cxxlens::select::conversion_selector::in_file(cxxlens::select::file_selector) const; cxxlens::select::selector_requirements cxxlens::select::conversion_selector::requirements() const; cxxlens::select::include_selector cxxlens::select::include_selector::header(std::string) const; cxxlens::select::include_selector cxxlens::select::include_selector::resolved_to(cxxlens::path) const; cxxlens::select::include_selector cxxlens::select::include_selector::used(bool) const; cxxlens::select::include_selector cxxlens::select::include_selector::system(bool) const; cxxlens::select::include_selector cxxlens::select::include_selector::providing(cxxlens::select::symbol_selector) const; cxxlens::select::include_selector cxxlens::select::include_selector::included_by(cxxlens::select::file_selector) const; cxxlens::select::selector_requirements cxxlens::select::include_selector::requirements() const; cxxlens::select::macro_selector cxxlens::select::macro_selector::name(std::string) const; cxxlens::select::macro_selector cxxlens::select::macro_selector::function_like(bool) const; cxxlens::select::macro_selector cxxlens::select::macro_selector::used_in(cxxlens::select::file_selector) const; cxxlens::select::macro_selector cxxlens::select::macro_selector::argument_contains(cxxlens::select::expression_selector) const; cxxlens::select::selector_requirements cxxlens::select::macro_selector::requirements() const; cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::conversion_selector); cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::include_selector); cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::macro_selector)'
+      signature: cxxlens::select::conversion_selector cxxlens::select::conversion_selector::kind(std::string) const; cxxlens::select::conversion_selector
+        cxxlens::select::conversion_selector::from(cxxlens::select::type_selector) const; cxxlens::select::conversion_selector
+        cxxlens::select::conversion_selector::to(cxxlens::select::type_selector) const; cxxlens::select::conversion_selector
+        cxxlens::select::conversion_selector::implicit(bool) const; cxxlens::select::conversion_selector cxxlens::select::conversion_selector::in_file(cxxlens::select::file_selector)
+        const; cxxlens::select::selector_requirements cxxlens::select::conversion_selector::requirements() const; cxxlens::select::include_selector
+        cxxlens::select::include_selector::header(std::string) const; cxxlens::select::include_selector cxxlens::select::include_selector::resolved_to(cxxlens::path)
+        const; cxxlens::select::include_selector cxxlens::select::include_selector::used(bool) const; cxxlens::select::include_selector
+        cxxlens::select::include_selector::system(bool) const; cxxlens::select::include_selector cxxlens::select::include_selector::providing(cxxlens::select::symbol_selector)
+        const; cxxlens::select::include_selector cxxlens::select::include_selector::included_by(cxxlens::select::file_selector)
+        const; cxxlens::select::selector_requirements cxxlens::select::include_selector::requirements() const; cxxlens::select::macro_selector
+        cxxlens::select::macro_selector::name(std::string) const; cxxlens::select::macro_selector cxxlens::select::macro_selector::function_like(bool)
+        const; cxxlens::select::macro_selector cxxlens::select::macro_selector::used_in(cxxlens::select::file_selector) const;
+        cxxlens::select::macro_selector cxxlens::select::macro_selector::argument_contains(cxxlens::select::expression_selector)
+        const; cxxlens::select::selector_requirements cxxlens::select::macro_selector::requirements() const; cxxlens::select::semantic_selector
+        cxxlens::select::semantic(cxxlens::select::conversion_selector); cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::include_selector);
+        cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::macro_selector)
       signature_fingerprint: sha256:06f0913e607e3b68748d1dc77098544d1b33c6a81c3cfd905510006ead6690f9
     atomic_unit:
       id: AU-SEL-007
@@ -1205,21 +1312,18 @@ packages:
     symbol: any_symbol/function/method/record/variable/macro/type helpers
     kind: free_function_family
     phase: M2
-    requirements: [FR-006, FR-007]
+    requirements:
+    - FR-006
+    - FR-007
     contract_maturity: stable
     implementation_state: conformant
     declaration:
       status: exact
       source: include/cxxlens/select.hpp
-      signature: >-
-        cxxlens::select::symbol_selector cxxlens::select::any_symbol();
-        cxxlens::select::symbol_selector cxxlens::select::function(std::string);
-        cxxlens::select::symbol_selector cxxlens::select::method(std::string);
-        cxxlens::select::symbol_selector cxxlens::select::record(std::string);
-        cxxlens::select::symbol_selector cxxlens::select::variable(std::string);
-        cxxlens::select::symbol_selector cxxlens::select::macro(std::string);
-        cxxlens::select::type_selector cxxlens::select::type(std::string);
-        cxxlens::select::call_selector cxxlens::select::any_call()
+      signature: cxxlens::select::symbol_selector cxxlens::select::any_symbol(); cxxlens::select::symbol_selector cxxlens::select::function(std::string);
+        cxxlens::select::symbol_selector cxxlens::select::method(std::string); cxxlens::select::symbol_selector cxxlens::select::record(std::string);
+        cxxlens::select::symbol_selector cxxlens::select::variable(std::string); cxxlens::select::symbol_selector cxxlens::select::macro(std::string);
+        cxxlens::select::type_selector cxxlens::select::type(std::string); cxxlens::select::call_selector cxxlens::select::any_call()
       signature_fingerprint: sha256:db4ff4d614eafb8b8d0a4170224cfaa5e77d6a98752d60aa3e9b71eba41e3f7f
     implementation_evidence:
     - include/cxxlens/select.hpp
@@ -1235,7 +1339,9 @@ packages:
     symbol: calls_to/calls_to_function/calls_to_method helpers
     kind: free_function_family
     phase: M2
-    requirements: [FR-007, FR-009]
+    requirements:
+    - FR-007
+    - FR-009
     use_cases:
     - UC-SR-001
     - UC-SR-002
@@ -1244,10 +1350,8 @@ packages:
     declaration:
       status: exact
       source: include/cxxlens/select.hpp
-      signature: >-
-        cxxlens::select::call_selector cxxlens::select::calls_to(cxxlens::select::symbol_selector);
-        cxxlens::select::call_selector cxxlens::select::calls_to_function(std::string);
-        cxxlens::select::call_selector cxxlens::select::calls_to_method(std::string,std::string)
+      signature: cxxlens::select::call_selector cxxlens::select::calls_to(cxxlens::select::symbol_selector); cxxlens::select::call_selector
+        cxxlens::select::calls_to_function(std::string); cxxlens::select::call_selector cxxlens::select::calls_to_method(std::string,std::string)
       signature_fingerprint: sha256:248934c1db65198944f397f629dc9177a5e5bcde6e2c93ee5129b786a1e02121
     implementation_evidence:
     - include/cxxlens/select.hpp
@@ -1263,7 +1367,10 @@ packages:
     symbol: semantic_selector::{from_json,requirements,explain,to_json}
     kind: method_family
     phase: M2
-    requirements: [FR-007, FR-018, QR-001]
+    requirements:
+    - FR-007
+    - FR-018
+    - QR-001
     errors:
     - select.invalid-expression
     - select.type-mismatch
@@ -1272,11 +1379,9 @@ packages:
     declaration:
       status: exact
       source: include/cxxlens/select.hpp
-      signature: >-
-        cxxlens::result<cxxlens::select::semantic_selector> cxxlens::select::semantic_selector::from_json(std::string_view);
-        cxxlens::select::selector_requirements cxxlens::select::semantic_selector::requirements() const;
-        std::string cxxlens::select::semantic_selector::explain() const;
-        std::string cxxlens::select::semantic_selector::to_json() const
+      signature: cxxlens::result<cxxlens::select::semantic_selector> cxxlens::select::semantic_selector::from_json(std::string_view);
+        cxxlens::select::selector_requirements cxxlens::select::semantic_selector::requirements() const; std::string cxxlens::select::semantic_selector::explain()
+        const; std::string cxxlens::select::semantic_selector::to_json() const
       signature_fingerprint: sha256:5a9c31955dd08d580ea2d68ab9b3c3d864a50a8081545bfff5bf6d7db15b6580
     implementation_evidence:
     - include/cxxlens/select.hpp
@@ -1295,17 +1400,16 @@ packages:
     symbol: semantic(typed_selector)
     kind: free_function_family
     phase: M2
-    requirements: [FR-007]
+    requirements:
+    - FR-007
     notes: Type-erases a typed selector without changing its semantics.
     contract_maturity: stable
     implementation_state: conformant
     declaration:
       status: exact
       source: include/cxxlens/select.hpp
-      signature: >-
-        cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::file_selector);
-        cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::symbol_selector);
-        cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::type_selector);
+      signature: cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::file_selector); cxxlens::select::semantic_selector
+        cxxlens::select::semantic(cxxlens::select::symbol_selector); cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::type_selector);
         cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::call_selector)
       signature_fingerprint: sha256:af3bea8d8ebde60611cc1f9d96793fc4f262ffcac39e6ac073ba7b8f60c235cf
     implementation_evidence:
@@ -1319,7 +1423,13 @@ packages:
       state: complete
       blockers: []
 - id: search
-  contract: {state: candidate, owner_issue: '#45', transition_issue: '#45', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-45', candidate_fingerprint: 'sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024'}
+  contract:
+    state: candidate
+    owner_issue: '#45'
+    transition_issue: '#45'
+    conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-45
+    candidate_fingerprint: sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024
   header: <cxxlens/search.hpp>
   purpose: Semantic grep over facts with targeted AST/CFG refinement.
   public_types:
@@ -1423,7 +1533,12 @@ packages:
     - Direct and possible targets are distinct; unresolved targets are not silently omitted.
     errors:
     - search.refinement-failed
-    requirements: [FR-007, FR-008, FR-009, QR-001, QR-002]
+    requirements:
+    - FR-007
+    - FR-008
+    - FR-009
+    - QR-001
+    - QR-002
     contract_maturity: stable
     implementation_state: conformant
     declaration:
@@ -1457,7 +1572,10 @@ packages:
       - symbol
       minimum_precision: local_semantic
       apis: []
-    requirements: [FR-007, FR-008, QR-001]
+    requirements:
+    - FR-007
+    - FR-008
+    - QR-001
     contract_maturity: stable
     implementation_state: conformant
     declaration:
@@ -1490,7 +1608,12 @@ packages:
       - type
       minimum_precision: workspace_semantic
       apis: []
-    requirements: [FR-007, FR-008, FR-009, QR-001, QR-002]
+    requirements:
+    - FR-007
+    - FR-008
+    - FR-009
+    - QR-001
+    - QR-002
     contract_maturity: stable
     implementation_state: conformant
     declaration:
@@ -1525,7 +1648,10 @@ packages:
       - clangAST
       primary_apis:
       - CXXRecordDecl::bases
-    requirements: [FR-008, FR-009, QR-001]
+    requirements:
+    - FR-008
+    - FR-009
+    - QR-001
     contract_maturity: stable
     implementation_state: conformant
     declaration:
@@ -1560,7 +1686,10 @@ packages:
       - clangAST
       primary_apis:
       - CXXMethodDecl::overridden_methods
-    requirements: [FR-008, FR-009, QR-001]
+    requirements:
+    - FR-008
+    - FR-009
+    - QR-001
     contract_maturity: stable
     implementation_state: conformant
     declaration:
@@ -1670,16 +1799,30 @@ packages:
       blockers:
       - candidate_declaration_not_integrated
 - id: graph
-  contract: {state: unresolved, owner_issue: '#46', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract:
+    state: candidate
+    owner_issue: '#46'
+    transition_issue: '#46'
+    conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-46
+    candidate_fingerprint: sha256:3c8f4fec0bb55eae81842b2dc4dec84c5efcfc236621f4b9e73888736de9f940
   header: <cxxlens/graph.hpp>
   purpose: Call, hierarchy, override, include and impact graphs.
   public_types:
-  - graph_kind
-  - graph_node
+  - graph_direction
   - graph_edge
-  - semantic_graph
+  - graph_edge_id
+  - graph_edge_kind
+  - graph_kind
+  - graph_limits
+  - graph_node
+  - graph_node_id
+  - graph_node_kind
   - graph_options
+  - graph_path
+  - graph_path_policy
   - impact_query
+  - semantic_graph
   apis:
   - id: API-GRAPH-001
     symbol: graph::class_hierarchy
@@ -1695,17 +1838,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/46/graph.hpp
+      signature: cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::class_hierarchy(const cxxlens::workspace&,cxxlens::graph::graph_options)
+      signature_fingerprint: sha256:57a0c6e8a8d1c3cc056e54ca27cf90c0c5196c21df5a69254e6d9724c21d1161
     atomic_unit:
       id: AU-GRAPH-001
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-GRAPH-002
     symbol: graph::override_graph
     kind: free_function
@@ -1720,17 +1863,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/46/graph.hpp
+      signature: cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::override_graph(const cxxlens::workspace&,cxxlens::graph::graph_options)
+      signature_fingerprint: sha256:680f964c6e7a97502882cd1a07c481098a8aa591f321651df52d21b677a87f58
     atomic_unit:
       id: AU-GRAPH-002
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-GRAPH-003
     symbol: graph::call_graph
     kind: free_function
@@ -1745,17 +1888,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/46/graph.hpp
+      signature: cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::call_graph(const cxxlens::workspace&,cxxlens::graph::graph_options)
+      signature_fingerprint: sha256:94731d48a2f4483281f98c39318c474c24bd14bb65c9535c0b6559f7f3af2b95
     atomic_unit:
       id: AU-GRAPH-003
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-GRAPH-004
     symbol: graph::include_graph
     kind: free_function
@@ -1770,17 +1913,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/46/graph.hpp
+      signature: cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::include_graph(const cxxlens::workspace&,cxxlens::graph::graph_options)
+      signature_fingerprint: sha256:8fb4444b60a610e06f27614784f009a1253121342645aec4a5ecae91f57f60bb
     atomic_unit:
       id: AU-GRAPH-004
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-GRAPH-005
     symbol: impact_query builder and run
     kind: builder_operation
@@ -1792,21 +1935,32 @@ packages:
       - call
       - include_relation
       - inheritance
-      apis: []
+      apis:
+      - API-SEL-010
+      minimum_precision: workspace_semantic
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/46/graph.hpp
+      signature: cxxlens::graph::impact_query cxxlens::graph::impact_query::changed_symbols(std::vector<cxxlens::symbol_id>);
+        cxxlens::graph::impact_query cxxlens::graph::impact_query::matching(cxxlens::select::semantic_selector); cxxlens::graph::impact_query
+        cxxlens::graph::impact_query::relations(std::vector<cxxlens::graph::graph_edge_kind>) const; cxxlens::graph::impact_query
+        cxxlens::graph::impact_query::direction(cxxlens::graph::graph_direction) const; cxxlens::graph::impact_query cxxlens::graph::impact_query::paths(cxxlens::graph::graph_path_policy)
+        const; cxxlens::graph::impact_query cxxlens::graph::impact_query::scope(cxxlens::analysis_scope) const; cxxlens::graph::impact_query
+        cxxlens::graph::impact_query::limits(cxxlens::graph::graph_limits) const; cxxlens::graph::impact_query cxxlens::graph::impact_query::callers(bool)
+        const; cxxlens::graph::impact_query cxxlens::graph::impact_query::derived_types(bool) const; cxxlens::graph::impact_query
+        cxxlens::graph::impact_query::reverse_includes(bool) const; cxxlens::graph::impact_query cxxlens::graph::impact_query::tests(bool)
+        const; cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::impact_query::run(const cxxlens::workspace&,cxxlens::execution_context)
+        const
+      signature_fingerprint: sha256:dc3bd7fe7fcf9fdcf7e6c768b0cefc8bea02180d4d18f0d27daef37436c361e7
     atomic_unit:
       id: AU-GRAPH-005
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-GRAPH-006
     symbol: semantic_graph::{subgraph,to_json,to_dot}
     kind: method_family
@@ -1814,19 +1968,30 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/46/graph.hpp
+      signature: cxxlens::graph::graph_kind cxxlens::graph::semantic_graph::kind() const noexcept; std::span<const cxxlens::graph::graph_node>
+        cxxlens::graph::semantic_graph::nodes() const noexcept; std::span<const cxxlens::graph::graph_edge> cxxlens::graph::semantic_graph::edges()
+        const noexcept; std::span<const cxxlens::graph::graph_path> cxxlens::graph::semantic_graph::paths() const noexcept;
+        const cxxlens::coverage_report& cxxlens::graph::semantic_graph::coverage() const noexcept; std::span<const cxxlens::unresolved>
+        cxxlens::graph::semantic_graph::unresolved_items() const noexcept; cxxlens::result_guarantee cxxlens::graph::semantic_graph::guarantee()
+        const noexcept; cxxlens::result<cxxlens::graph::semantic_graph> cxxlens::graph::semantic_graph::subgraph(std::vector<cxxlens::graph::graph_node_id>,cxxlens::graph::graph_options)
+        const; std::string cxxlens::graph::semantic_graph::to_json() const; std::string cxxlens::graph::semantic_graph::to_dot()
+        const
+      signature_fingerprint: sha256:9e6fab202a2416b938681326c119759e0da3e2a3800e29f19bcfd9544a3d5269
     atomic_unit:
       id: AU-GRAPH-006
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
 - id: rules
-  contract: {state: unresolved, owner_issue: '#47', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract:
+    state: unresolved
+    owner_issue: '#47'
+    transition_issue: '#42'
+    conventions: cxxlens.global-contract-conventions.v1
   header: <cxxlens/rules.hpp>
   purpose: Declarative rules, suppressions and shared execution.
   public_types:
@@ -1948,7 +2113,11 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: flow
-  contract: {state: unresolved, owner_issue: '#50', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract:
+    state: unresolved
+    owner_issue: '#50'
+    transition_issue: '#42'
+    conventions: cxxlens.global-contract-conventions.v1
   header: <cxxlens/flow.hpp>
   purpose: CFG/dataflow, taint and resource protocol analyses.
   public_types:
@@ -2159,7 +2328,11 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: transform
-  contract: {state: unresolved, owner_issue: '#48', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract:
+    state: unresolved
+    owner_issue: '#48'
+    transition_issue: '#42'
+    conventions: cxxlens.global-contract-conventions.v1
   header: <cxxlens/transform.hpp>
   purpose: Immutable edit plans, validation, formatting, reparsing and transactional apply.
   public_types:
@@ -2413,7 +2586,11 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: generate
-  contract: {state: unresolved, owner_issue: '#49', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract:
+    state: unresolved
+    owner_issue: '#49'
+    transition_issue: '#42'
+    conventions: cxxlens.global-contract-conventions.v1
   header: <cxxlens/generate.hpp>
   purpose: Common census, decisions, artifacts and transaction apply.
   public_types:
@@ -2471,7 +2648,11 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: mock
-  contract: {state: unresolved, owner_issue: '#49', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract:
+    state: unresolved
+    owner_issue: '#49'
+    transition_issue: '#42'
+    conventions: cxxlens.global-contract-conventions.v1
   header: <cxxlens/generate.hpp>
   purpose: Mock/fake planning and emission.
   public_types:
@@ -2577,7 +2758,11 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: method_harness
-  contract: {state: unresolved, owner_issue: '#49', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract:
+    state: unresolved
+    owner_issue: '#49'
+    transition_issue: '#42'
+    conventions: cxxlens.global-contract-conventions.v1
   header: <cxxlens/generate.hpp>
   purpose: Exact method selection, inspection and extraction/harness planning.
   public_types:
@@ -2730,7 +2915,11 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: copy
-  contract: {state: unresolved, owner_issue: '#49', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract:
+    state: unresolved
+    owner_issue: '#49'
+    transition_issue: '#42'
+    conventions: cxxlens.global-contract-conventions.v1
   header: <cxxlens/generate.hpp>
   purpose: Semantic public-surface and dependency copying.
   public_types:
@@ -2796,7 +2985,11 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: fuzz
-  contract: {state: unresolved, owner_issue: '#49', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract:
+    state: unresolved
+    owner_issue: '#49'
+    transition_issue: '#42'
+    conventions: cxxlens.global-contract-conventions.v1
   header: <cxxlens/generate.hpp>
   purpose: Type-driven fuzz harness planning.
   public_types:
@@ -2878,7 +3071,11 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: qa
-  contract: {state: unresolved, owner_issue: '#51', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract:
+    state: unresolved
+    owner_issue: '#51'
+    transition_issue: '#42'
+    conventions: cxxlens.global-contract-conventions.v1
   header: <cxxlens/qa.hpp>
   purpose: Sanitizer, coverage and external QA workflows.
   public_types:
@@ -2991,7 +3188,11 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: review
-  contract: {state: unresolved, owner_issue: '#51', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract:
+    state: unresolved
+    owner_issue: '#51'
+    transition_issue: '#42'
+    conventions: cxxlens.global-contract-conventions.v1
   header: <cxxlens/review.hpp>
   purpose: Diff scope, baseline, gate and review workflow.
   public_types:
@@ -3115,7 +3316,11 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: report
-  contract: {state: unresolved, owner_issue: '#47', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract:
+    state: unresolved
+    owner_issue: '#47'
+    transition_issue: '#42'
+    conventions: cxxlens.global-contract-conventions.v1
   header: <cxxlens/report.hpp>
   purpose: Deterministic human and machine report projections.
   public_types:
@@ -3212,7 +3417,13 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: explain
-  contract: {state: candidate, owner_issue: '#45', transition_issue: '#45', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-45', candidate_fingerprint: 'sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024'}
+  contract:
+    state: candidate
+    owner_issue: '#45'
+    transition_issue: '#45'
+    conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-45
+    candidate_fingerprint: sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024
   header: <cxxlens/explain.hpp>
   purpose: Why/explanation and coding-agent task cards.
   public_types:
@@ -3229,7 +3440,11 @@ packages:
     declaration:
       status: exact
       source: contracts/candidates/45/select_search_explain.hpp
-      signature: 'cxxlens::explain::explanation cxxlens::explain::selector(const cxxlens::select::semantic_selector&,cxxlens::explain::detail_level); cxxlens::explain::explanation cxxlens::explain::finding(const cxxlens::finding&,cxxlens::explain::detail_level); cxxlens::explain::explanation cxxlens::explain::coverage(const cxxlens::coverage_report&,cxxlens::explain::detail_level); cxxlens::explain::explanation cxxlens::explain::edit_plan(const cxxlens::transform::edit_plan&,cxxlens::explain::detail_level); cxxlens::explain::explanation cxxlens::explain::generation_plan(const cxxlens::generate::generation_plan&,cxxlens::explain::detail_level)'
+      signature: cxxlens::explain::explanation cxxlens::explain::selector(const cxxlens::select::semantic_selector&,cxxlens::explain::detail_level);
+        cxxlens::explain::explanation cxxlens::explain::finding(const cxxlens::finding&,cxxlens::explain::detail_level); cxxlens::explain::explanation
+        cxxlens::explain::coverage(const cxxlens::coverage_report&,cxxlens::explain::detail_level); cxxlens::explain::explanation
+        cxxlens::explain::edit_plan(const cxxlens::transform::edit_plan&,cxxlens::explain::detail_level); cxxlens::explain::explanation
+        cxxlens::explain::generation_plan(const cxxlens::generate::generation_plan&,cxxlens::explain::detail_level)
       signature_fingerprint: sha256:adc0fbd816afc1a43a846ec317545135a405fa0c799808e55592b6bea1c47263
     atomic_unit:
       id: AU-EXP-001
@@ -3248,7 +3463,10 @@ packages:
       apis: []
     guarantees:
     - Reports predicate rejection counts and unresolved prerequisites.
-    requirements: [FR-008, FR-018, QR-001]
+    requirements:
+    - FR-008
+    - FR-018
+    - QR-001
     contract_maturity: stable
     implementation_state: conformant
     declaration:
@@ -3277,7 +3495,10 @@ packages:
     declaration:
       status: exact
       source: contracts/candidates/45/select_search_explain.hpp
-      signature: 'cxxlens::explain::agent_task_card cxxlens::explain::for_selector(const cxxlens::select::semantic_selector&); cxxlens::explain::agent_task_card cxxlens::explain::for_rule(const cxxlens::rules::rule&); cxxlens::explain::agent_task_card cxxlens::explain::for_codemod(const cxxlens::transform::codemod&); cxxlens::explain::agent_task_card cxxlens::explain::for_generation(const cxxlens::generate::generation_plan&)'
+      signature: cxxlens::explain::agent_task_card cxxlens::explain::for_selector(const cxxlens::select::semantic_selector&);
+        cxxlens::explain::agent_task_card cxxlens::explain::for_rule(const cxxlens::rules::rule&); cxxlens::explain::agent_task_card
+        cxxlens::explain::for_codemod(const cxxlens::transform::codemod&); cxxlens::explain::agent_task_card cxxlens::explain::for_generation(const
+        cxxlens::generate::generation_plan&)
       signature_fingerprint: sha256:52d1427216a080b8c400269de2b871d8a726f4aabc7ec87c601450ea94b4bd53
     atomic_unit:
       id: AU-EXP-003
@@ -3305,7 +3526,13 @@ packages:
       blockers:
       - candidate_declaration_not_integrated
 - id: testing
-  contract: {state: candidate, owner_issue: '#43', transition_issue: '#43', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-43', candidate_fingerprint: 'sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584'}
+  contract:
+    state: candidate
+    owner_issue: '#43'
+    transition_issue: '#43'
+    conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-43
+    candidate_fingerprint: sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584
   header: <cxxlens/testing.hpp>
   purpose: Production-path fixtures, assertions, schema and determinism checks.
   public_types:
@@ -3329,7 +3556,8 @@ packages:
   - determinism_report
   apis:
   - id: API-TEST-001
-    symbol: workspace_fixture::{cpp,c,main_file,add_file,add_header,add_variant,standard,target,argument,generated,system_header,materialize}; fault_plan::{make,probe}
+    symbol: workspace_fixture::{cpp,c,main_file,add_file,add_header,add_variant,standard,target,argument,generated,system_header,materialize};
+      fault_plan::{make,probe}
     kind: method_family
     phase: M0
     requirements:
@@ -3342,7 +3570,18 @@ packages:
     declaration:
       status: exact
       source: include/cxxlens/testing.hpp
-      signature: 'cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::cpp(std::string); cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::c(std::string); cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::main_file(cxxlens::path) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::add_file(cxxlens::path,std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::add_header(cxxlens::path,std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::add_variant(cxxlens::testing::fixture_variant) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::standard(std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::target(std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::argument(std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::generated(cxxlens::path) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::system_header(cxxlens::path) const; cxxlens::result<cxxlens::testing::fixture_bundle> cxxlens::testing::workspace_fixture::materialize(const cxxlens::path&) const; cxxlens::result<cxxlens::testing::fault_plan> cxxlens::testing::fault_plan::make(std::vector<cxxlens::testing::fault_injection>); cxxlens::result<void> cxxlens::testing::fault_plan::probe(cxxlens::testing::fault_target,std::string_view,std::uint64_t) const'
+      signature: cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::cpp(std::string); cxxlens::testing::workspace_fixture
+        cxxlens::testing::workspace_fixture::c(std::string); cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::main_file(cxxlens::path)
+        const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::add_file(cxxlens::path,std::string)
+        const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::add_header(cxxlens::path,std::string)
+        const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::add_variant(cxxlens::testing::fixture_variant)
+        const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::standard(std::string) const; cxxlens::testing::workspace_fixture
+        cxxlens::testing::workspace_fixture::target(std::string) const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::argument(std::string)
+        const; cxxlens::testing::workspace_fixture cxxlens::testing::workspace_fixture::generated(cxxlens::path) const; cxxlens::testing::workspace_fixture
+        cxxlens::testing::workspace_fixture::system_header(cxxlens::path) const; cxxlens::result<cxxlens::testing::fixture_bundle>
+        cxxlens::testing::workspace_fixture::materialize(const cxxlens::path&) const; cxxlens::result<cxxlens::testing::fault_plan>
+        cxxlens::testing::fault_plan::make(std::vector<cxxlens::testing::fault_injection>); cxxlens::result<void> cxxlens::testing::fault_plan::probe(cxxlens::testing::fault_target,std::string_view,std::uint64_t)
+        const
       signature_fingerprint: sha256:4c9b40c214f9ece3c5f4fda3e86951dca06cd8479e6db023c7e4aca7598dfb4d
     implementation_evidence:
     - include/cxxlens/testing.hpp
@@ -3362,7 +3601,9 @@ packages:
     kind: method_family
     phase: M0
     requires:
-      apis: [API-CORE-003, API-CORE-004]
+      apis:
+      - API-CORE-003
+      - API-CORE-004
     requirements:
     - FR-008
     errors:
@@ -3372,7 +3613,11 @@ packages:
     declaration:
       status: exact
       source: include/cxxlens/testing.hpp
-      signature: 'cxxlens::testing::result_assertion cxxlens::testing::result_assertion::has_exactly(std::size_t) const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::has_no_errors() const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::is_complete() const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::is_partial_with(cxxlens::unresolved_kind) const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::json_matches(cxxlens::path) const; cxxlens::result<void> cxxlens::testing::result_assertion::check(const cxxlens::testing::result_observation&) const'
+      signature: cxxlens::testing::result_assertion cxxlens::testing::result_assertion::has_exactly(std::size_t) const; cxxlens::testing::result_assertion
+        cxxlens::testing::result_assertion::has_no_errors() const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::is_complete()
+        const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::is_partial_with(cxxlens::unresolved_kind)
+        const; cxxlens::testing::result_assertion cxxlens::testing::result_assertion::json_matches(cxxlens::path) const; cxxlens::result<void>
+        cxxlens::testing::result_assertion::check(const cxxlens::testing::result_observation&) const
       signature_fingerprint: sha256:4e30f3fdec5f05e2f6f69b4e555188ba1e9cd258a9af39bab6cd080074644a10
     implementation_evidence:
     - include/cxxlens/testing.hpp
@@ -3389,7 +3634,12 @@ packages:
     kind: method_family
     phase: M4
     requires:
-      apis: [API-TF-001, API-TF-002, API-TF-003, API-TF-004, API-TF-005]
+      apis:
+      - API-TF-001
+      - API-TF-002
+      - API-TF-003
+      - API-TF-004
+      - API-TF-005
     errors:
     - testing.assertion-failed
     side_effects: dry-run overlay validation only; never applies source edits
@@ -3398,7 +3648,11 @@ packages:
     declaration:
       status: exact
       source: contracts/candidates/43/testing_plan_assertions.hpp
-      signature: 'cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::valid() const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::changes_file(cxxlens::path) const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::diff_matches(cxxlens::path) const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::reparses() const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::idempotent(cxxlens::transform::codemod) const; cxxlens::result<void> cxxlens::testing::edit_plan_assertion::check(const cxxlens::workspace&,const cxxlens::transform::edit_plan&) const'
+      signature: cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::valid() const; cxxlens::testing::edit_plan_assertion
+        cxxlens::testing::edit_plan_assertion::changes_file(cxxlens::path) const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::diff_matches(cxxlens::path)
+        const; cxxlens::testing::edit_plan_assertion cxxlens::testing::edit_plan_assertion::reparses() const; cxxlens::testing::edit_plan_assertion
+        cxxlens::testing::edit_plan_assertion::idempotent(cxxlens::transform::codemod) const; cxxlens::result<void> cxxlens::testing::edit_plan_assertion::check(const
+        cxxlens::workspace&,const cxxlens::transform::edit_plan&) const
       signature_fingerprint: sha256:4fceea615289412b759940a951c527fb01d093154a8347b8ba4741bee7f45b4b
     atomic_unit:
       id: AU-TEST-003
@@ -3413,7 +3667,9 @@ packages:
     kind: method_family
     phase: M5
     requires:
-      apis: [API-GEN-001, API-GEN-002]
+      apis:
+      - API-GEN-001
+      - API-GEN-002
     errors:
     - testing.assertion-failed
     side_effects: dry-run overlay validation only; never emits artifacts
@@ -3422,7 +3678,11 @@ packages:
     declaration:
       status: exact
       source: contracts/candidates/43/testing_plan_assertions.hpp
-      signature: 'cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::valid() const; cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::census_complete() const; cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::no_unknown_decisions() const; cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::artifacts_reparse() const; cxxlens::result<void> cxxlens::testing::generation_plan_assertion::check(const cxxlens::workspace&,const cxxlens::generate::generation_plan&) const'
+      signature: cxxlens::testing::generation_plan_assertion cxxlens::testing::generation_plan_assertion::valid() const; cxxlens::testing::generation_plan_assertion
+        cxxlens::testing::generation_plan_assertion::census_complete() const; cxxlens::testing::generation_plan_assertion
+        cxxlens::testing::generation_plan_assertion::no_unknown_decisions() const; cxxlens::testing::generation_plan_assertion
+        cxxlens::testing::generation_plan_assertion::artifacts_reparse() const; cxxlens::result<void> cxxlens::testing::generation_plan_assertion::check(const
+        cxxlens::workspace&,const cxxlens::generate::generation_plan&) const
       signature_fingerprint: sha256:cf24f7cb4f920ad1d50201849e6c46c4873abb75d881c52594fa42f3204975cf
     atomic_unit:
       id: AU-TEST-004
@@ -3437,7 +3697,8 @@ packages:
     kind: function_template
     phase: M0
     requires:
-      apis: [API-TEST-001]
+      apis:
+      - API-TEST-001
     guarantees:
     - Compares semantic outputs across parallelism, order and root relocation.
     requirements:
@@ -3447,7 +3708,11 @@ packages:
     declaration:
       status: exact
       source: include/cxxlens/testing.hpp
-      signature: 'template<class Generator,class Predicate,class Renderer> cxxlens::testing::property_report cxxlens::testing::check_property(const cxxlens::testing::property_options&,Generator&&,Predicate&&,Renderer&&); template<class Generator,class Predicate,class Shrinker,class Renderer> cxxlens::testing::property_report cxxlens::testing::check_property(const cxxlens::testing::property_options&,Generator&&,Predicate&&,Shrinker&&,Renderer&&); template<class Operation> cxxlens::result<cxxlens::testing::determinism_report> cxxlens::testing::check_determinism(const cxxlens::testing::workspace_fixture&,Operation&&,const cxxlens::testing::determinism_options&)'
+      signature: template<class Generator,class Predicate,class Renderer> cxxlens::testing::property_report cxxlens::testing::check_property(const
+        cxxlens::testing::property_options&,Generator&&,Predicate&&,Renderer&&); template<class Generator,class Predicate,class
+        Shrinker,class Renderer> cxxlens::testing::property_report cxxlens::testing::check_property(const cxxlens::testing::property_options&,Generator&&,Predicate&&,Shrinker&&,Renderer&&);
+        template<class Operation> cxxlens::result<cxxlens::testing::determinism_report> cxxlens::testing::check_determinism(const
+        cxxlens::testing::workspace_fixture&,Operation&&,const cxxlens::testing::determinism_options&)
       signature_fingerprint: sha256:072d60f45b1db5c9556a2cff38d4570e18d4c4263259075863abe7e288909214
     implementation_evidence:
     - include/cxxlens/testing.hpp
@@ -3463,7 +3728,8 @@ packages:
     kind: free_function
     phase: M0
     requires:
-      apis: [API-CORE-001]
+      apis:
+      - API-CORE-001
     requirements:
     - QR-009
     errors:
@@ -3491,7 +3757,13 @@ packages:
     symbol: workspace_fixture::open
     kind: method
     phase: M1
-    requirements: [FR-001, FR-005, FR-020, QR-001, QR-002, QR-004]
+    requirements:
+    - FR-001
+    - FR-005
+    - FR-020
+    - QR-001
+    - QR-002
+    - QR-004
     requires:
       capabilities:
       - interop.clang
@@ -3502,8 +3774,8 @@ packages:
       - API-WS-002
       - API-WS-005
     guarantees:
-    - Uses the production catalog, frontend, reducer and store with value-owned memory filesystem
-      inputs; no semantic fact is fabricated.
+    - Uses the production catalog, frontend, reducer and store with value-owned memory filesystem inputs; no semantic fact
+      is fabricated.
     errors:
     - testing.fixture-invalid
     - core.cancelled
@@ -3513,7 +3785,8 @@ packages:
     declaration:
       status: exact
       source: include/cxxlens/testing.hpp
-      signature: cxxlens::result<cxxlens::workspace> cxxlens::testing::workspace_fixture::open(cxxlens::execution_context) const
+      signature: cxxlens::result<cxxlens::workspace> cxxlens::testing::workspace_fixture::open(cxxlens::execution_context)
+        const
       signature_fingerprint: sha256:2c8d40b0b0faf9fb1534392ff6cc46eba5e1fc5df45a2cc51fe77b4eb5d06203
     implementation_evidence:
     - include/cxxlens/testing.hpp
@@ -3528,7 +3801,13 @@ packages:
       state: complete
       blockers: []
 - id: interop
-  contract: {state: candidate, owner_issue: '#44', transition_issue: '#44', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-44', candidate_fingerprint: 'sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601'}
+  contract:
+    state: candidate
+    owner_issue: '#44'
+    transition_issue: '#44'
+    conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-44
+    candidate_fingerprint: sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601
   header: <cxxlens/interop/clang.hpp>
   purpose: Unstable LLVM-major-scoped raw Clang corridor.
   public_types:
@@ -3542,7 +3821,10 @@ packages:
     symbol: interop::linked_clang_version
     kind: free_function
     phase: M1
-    requirements: [FR-018, QR-003, QR-010]
+    requirements:
+    - FR-018
+    - QR-003
+    - QR-010
     requires:
       capabilities:
       - interop.clang
@@ -3570,7 +3852,17 @@ packages:
     symbol: interop::with_translation_unit
     kind: free_function
     phase: M1
-    requirements: [FR-004, FR-019, FR-020, QR-001, QR-002, QR-003, QR-004, QR-005, QR-006, QR-010]
+    requirements:
+    - FR-004
+    - FR-019
+    - FR-020
+    - QR-001
+    - QR-002
+    - QR-003
+    - QR-004
+    - QR-005
+    - QR-006
+    - QR-010
     requires:
       capabilities:
       - interop.clang
@@ -3587,7 +3879,8 @@ packages:
       - Preprocessor
     guarantees:
     - Borrowed objects are valid only during the callback.
-    - Cancellation and deadline during the in-process user callback are cooperative; bounded workspace parsing uses the isolated scheduler worker.
+    - Cancellation and deadline during the in-process user callback are cooperative; bounded workspace parsing uses the isolated
+      scheduler worker.
     errors:
     - interop.borrowed-lifetime-violation
     - core.capability-unavailable
@@ -3601,7 +3894,8 @@ packages:
     declaration:
       status: exact
       source: include/cxxlens/interop/clang.hpp
-      signature: cxxlens::result<void> cxxlens::interop::with_translation_unit(cxxlens::workspace&, cxxlens::compile_unit_id, cxxlens::interop::clang_tu_callback, cxxlens::execution_context)
+      signature: cxxlens::result<void> cxxlens::interop::with_translation_unit(cxxlens::workspace&, cxxlens::compile_unit_id,
+        cxxlens::interop::clang_tu_callback, cxxlens::execution_context)
       signature_fingerprint: sha256:a4c0d049f7ee4e1c144fdcba162df5ff4eea7834fc6a6b519e03a8d927dd2e23
     implementation_evidence:
     - include/cxxlens/interop/clang.hpp
@@ -3625,7 +3919,8 @@ packages:
     declaration:
       status: exact
       source: contracts/candidates/44/interop_extractors.hpp
-      signature: 'cxxlens::result<void> cxxlens::interop::fact_sink::emit(cxxlens::fact); cxxlens::result<void> cxxlens::interop::fact_sink::emit_custom(cxxlens::interop::custom_fact); cxxlens::result<void> cxxlens::interop::fact_sink::emit_evidence(cxxlens::evidence_item); cxxlens::result<void> cxxlens::interop::fact_sink::mark_partial(cxxlens::unresolved)'
+      signature: cxxlens::result<void> cxxlens::interop::fact_sink::emit(cxxlens::fact); cxxlens::result<void> cxxlens::interop::fact_sink::emit_custom(cxxlens::interop::custom_fact);
+        cxxlens::result<void> cxxlens::interop::fact_sink::emit_evidence(cxxlens::evidence_item); cxxlens::result<void> cxxlens::interop::fact_sink::mark_partial(cxxlens::unresolved)
       signature_fingerprint: sha256:4d667ed308ad08871902397aacaf79419053dc3799d278960e47a64bff9af3d5
     atomic_unit:
       id: AU-INT-003
@@ -3646,7 +3941,8 @@ packages:
     declaration:
       status: exact
       source: contracts/candidates/44/interop_extractors.hpp
-      signature: 'cxxlens::result<std::string> cxxlens::interop::register_extractor(cxxlens::workspace&,std::shared_ptr<cxxlens::interop::clang_fact_extractor>); cxxlens::result<void> cxxlens::interop::unregister_extractor(cxxlens::workspace&,std::string)'
+      signature: cxxlens::result<std::string> cxxlens::interop::register_extractor(cxxlens::workspace&,std::shared_ptr<cxxlens::interop::clang_fact_extractor>);
+        cxxlens::result<void> cxxlens::interop::unregister_extractor(cxxlens::workspace&,std::string)
       signature_fingerprint: sha256:d4049228415182ede11d70662295d69cf0642721e96ab500bbb024a6415a56b2
     atomic_unit:
       id: AU-INT-004
@@ -3656,7 +3952,13 @@ packages:
       blockers:
       - candidate_declaration_not_integrated
 - id: configuration
-  contract: {state: candidate, owner_issue: '#43', transition_issue: '#43', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-43', candidate_fingerprint: 'sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584'}
+  contract:
+    state: candidate
+    owner_issue: '#43'
+    transition_issue: '#43'
+    conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-43
+    candidate_fingerprint: sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584
   header: <cxxlens/configuration.hpp>
   purpose: Typed configuration loading, overlay and explanation.
   public_types:
@@ -3702,7 +4004,8 @@ packages:
     declaration:
       status: exact
       source: include/cxxlens/configuration.hpp
-      signature: 'cxxlens::result<cxxlens::configuration> cxxlens::configuration::load(const cxxlens::path&); cxxlens::result<cxxlens::configuration> cxxlens::configuration::load_nearest(const cxxlens::path&)'
+      signature: cxxlens::result<cxxlens::configuration> cxxlens::configuration::load(const cxxlens::path&); cxxlens::result<cxxlens::configuration>
+        cxxlens::configuration::load_nearest(const cxxlens::path&)
       signature_fingerprint: sha256:f5aea8351c9add766f067af109f44526e4ee7df0fcba2ad0c28bb493caeefe12
     implementation_evidence:
     - include/cxxlens/configuration.hpp
@@ -3720,7 +4023,8 @@ packages:
     kind: method_family
     phase: M0
     requires:
-      apis: [API-CFG-001]
+      apis:
+      - API-CFG-001
     errors:
     - config.profile-not-found
     - config.overlay-conflict
@@ -3731,7 +4035,8 @@ packages:
     declaration:
       status: exact
       source: include/cxxlens/configuration.hpp
-      signature: 'cxxlens::result<cxxlens::configuration> cxxlens::configuration::with_profile(std::string_view) const; cxxlens::result<cxxlens::configuration> cxxlens::configuration::overlay(const cxxlens::configuration&) const'
+      signature: cxxlens::result<cxxlens::configuration> cxxlens::configuration::with_profile(std::string_view) const; cxxlens::result<cxxlens::configuration>
+        cxxlens::configuration::overlay(const cxxlens::configuration&) const
       signature_fingerprint: sha256:f75e35abeb2f727cf79e54ef6b053ec9538439d05fce841778876a2f03d1e42a
     implementation_evidence:
     - include/cxxlens/configuration.hpp
@@ -3748,7 +4053,9 @@ packages:
     kind: method_family
     phase: M0
     requires:
-      apis: [API-CFG-001, API-CFG-003]
+      apis:
+      - API-CFG-001
+      - API-CFG-003
     errors:
     - config.invalid-value
     requirements:
@@ -3759,7 +4066,8 @@ packages:
     declaration:
       status: exact
       source: include/cxxlens/configuration.hpp
-      signature: 'cxxlens::result<void> cxxlens::configuration::validate() const; std::string cxxlens::configuration::resolved_json() const; std::string cxxlens::configuration::explain(std::string_view) const'
+      signature: cxxlens::result<void> cxxlens::configuration::validate() const; std::string cxxlens::configuration::resolved_json()
+        const; std::string cxxlens::configuration::explain(std::string_view) const
       signature_fingerprint: sha256:9b07208ddc2f1da2dd40f779a961085692c3803c222866e83d4bdbe1d7a51af8
     implementation_evidence:
     - include/cxxlens/configuration.hpp
@@ -3782,8 +4090,8 @@ summary:
     implemented: 0
     conformant: 47
   contract_state_counts:
-    candidate: 9
-    unresolved: 13
+    candidate: 10
+    unresolved: 12
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.
@@ -3857,54 +4165,212 @@ registries:
     - type
     expansion_order: lexicographic_unique
   shared_implementation_contracts:
-  - {id: shared.package.configuration, package: configuration, owner_atomic_unit: AU-CFG-001, steward: integration.package.configuration, semantics_version: cxxlens.package.configuration.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-configuration}
-  - {id: shared.package.copy, package: copy, owner_atomic_unit: AU-COPY-001, steward: integration.package.copy, semantics_version: cxxlens.package.copy.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-copy}
-  - {id: shared.package.core, package: core, owner_atomic_unit: AU-CORE-001, steward: integration.package.core, semantics_version: cxxlens.package.core.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-core}
-  - {id: shared.package.explain, package: explain, owner_atomic_unit: AU-EXP-002, steward: integration.package.explain, semantics_version: cxxlens.package.explain.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-explain}
-  - {id: shared.package.facts, package: facts, owner_atomic_unit: AU-FACT-001, steward: integration.package.facts, semantics_version: cxxlens.package.facts.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-facts}
-  - {id: shared.package.flow, package: flow, owner_atomic_unit: AU-FLOW-001, steward: integration.package.flow, semantics_version: cxxlens.package.flow.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-flow}
-  - {id: shared.package.fuzz, package: fuzz, owner_atomic_unit: AU-FUZZ-001, steward: integration.package.fuzz, semantics_version: cxxlens.package.fuzz.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-fuzz}
-  - {id: shared.package.generate, package: generate, owner_atomic_unit: AU-GEN-001, steward: integration.package.generate, semantics_version: cxxlens.package.generate.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-generate}
-  - {id: shared.package.graph, package: graph, owner_atomic_unit: AU-GRAPH-001, steward: integration.package.graph, semantics_version: cxxlens.package.graph.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-graph}
-  - {id: shared.package.interop, package: interop, owner_atomic_unit: AU-INT-001, steward: integration.package.interop, semantics_version: cxxlens.package.interop.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-interop}
-  - {id: shared.package.method_harness, package: method_harness, owner_atomic_unit: AU-METHOD-001, steward: integration.package.method_harness, semantics_version: cxxlens.package.method_harness.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-method_harness}
-  - {id: shared.package.mock, package: mock, owner_atomic_unit: AU-MOCK-001, steward: integration.package.mock, semantics_version: cxxlens.package.mock.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-mock}
-  - {id: shared.package.models, package: models, owner_atomic_unit: AU-MODEL-001, steward: integration.package.models, semantics_version: cxxlens.package.models.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-models}
-  - {id: shared.package.qa, package: qa, owner_atomic_unit: AU-QA-001, steward: integration.package.qa, semantics_version: cxxlens.package.qa.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-qa}
-  - {id: shared.package.report, package: report, owner_atomic_unit: AU-REPORT-001, steward: integration.package.report, semantics_version: cxxlens.package.report.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-report}
-  - {id: shared.package.review, package: review, owner_atomic_unit: AU-RV-001, steward: integration.package.review, semantics_version: cxxlens.package.review.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-review}
-  - {id: shared.package.rules, package: rules, owner_atomic_unit: AU-RULE-001, steward: integration.package.rules, semantics_version: cxxlens.package.rules.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-rules}
-  - {id: shared.package.search, package: search, owner_atomic_unit: AU-SRCH-003, steward: integration.package.search, semantics_version: cxxlens.package.search.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-search}
-  - {id: shared.package.select, package: select, owner_atomic_unit: AU-SEL-001, steward: integration.package.select, semantics_version: cxxlens.package.select.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-select}
-  - {id: shared.package.testing, package: testing, owner_atomic_unit: AU-TEST-001, steward: integration.package.testing, semantics_version: cxxlens.package.testing.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-testing}
-  - {id: shared.package.transform, package: transform, owner_atomic_unit: AU-TF-001, steward: integration.package.transform, semantics_version: cxxlens.package.transform.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform}
-  - {id: shared.package.workspace, package: workspace, owner_atomic_unit: AU-WS-001, steward: integration.package.workspace, semantics_version: cxxlens.package.workspace.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#package-workspace}
+  - id: shared.package.configuration
+    package: configuration
+    owner_atomic_unit: AU-CFG-001
+    steward: integration.package.configuration
+    semantics_version: cxxlens.package.configuration.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-configuration
+  - id: shared.package.copy
+    package: copy
+    owner_atomic_unit: AU-COPY-001
+    steward: integration.package.copy
+    semantics_version: cxxlens.package.copy.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-copy
+  - id: shared.package.core
+    package: core
+    owner_atomic_unit: AU-CORE-001
+    steward: integration.package.core
+    semantics_version: cxxlens.package.core.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-core
+  - id: shared.package.explain
+    package: explain
+    owner_atomic_unit: AU-EXP-002
+    steward: integration.package.explain
+    semantics_version: cxxlens.package.explain.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-explain
+  - id: shared.package.facts
+    package: facts
+    owner_atomic_unit: AU-FACT-001
+    steward: integration.package.facts
+    semantics_version: cxxlens.package.facts.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-facts
+  - id: shared.package.flow
+    package: flow
+    owner_atomic_unit: AU-FLOW-001
+    steward: integration.package.flow
+    semantics_version: cxxlens.package.flow.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-flow
+  - id: shared.package.fuzz
+    package: fuzz
+    owner_atomic_unit: AU-FUZZ-001
+    steward: integration.package.fuzz
+    semantics_version: cxxlens.package.fuzz.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-fuzz
+  - id: shared.package.generate
+    package: generate
+    owner_atomic_unit: AU-GEN-001
+    steward: integration.package.generate
+    semantics_version: cxxlens.package.generate.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-generate
+  - id: shared.package.graph
+    package: graph
+    owner_atomic_unit: AU-GRAPH-001
+    steward: integration.package.graph
+    semantics_version: cxxlens.package.graph.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-graph
+  - id: shared.package.interop
+    package: interop
+    owner_atomic_unit: AU-INT-001
+    steward: integration.package.interop
+    semantics_version: cxxlens.package.interop.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-interop
+  - id: shared.package.method_harness
+    package: method_harness
+    owner_atomic_unit: AU-METHOD-001
+    steward: integration.package.method_harness
+    semantics_version: cxxlens.package.method_harness.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-method_harness
+  - id: shared.package.mock
+    package: mock
+    owner_atomic_unit: AU-MOCK-001
+    steward: integration.package.mock
+    semantics_version: cxxlens.package.mock.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-mock
+  - id: shared.package.models
+    package: models
+    owner_atomic_unit: AU-MODEL-001
+    steward: integration.package.models
+    semantics_version: cxxlens.package.models.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-models
+  - id: shared.package.qa
+    package: qa
+    owner_atomic_unit: AU-QA-001
+    steward: integration.package.qa
+    semantics_version: cxxlens.package.qa.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-qa
+  - id: shared.package.report
+    package: report
+    owner_atomic_unit: AU-REPORT-001
+    steward: integration.package.report
+    semantics_version: cxxlens.package.report.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-report
+  - id: shared.package.review
+    package: review
+    owner_atomic_unit: AU-RV-001
+    steward: integration.package.review
+    semantics_version: cxxlens.package.review.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-review
+  - id: shared.package.rules
+    package: rules
+    owner_atomic_unit: AU-RULE-001
+    steward: integration.package.rules
+    semantics_version: cxxlens.package.rules.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-rules
+  - id: shared.package.search
+    package: search
+    owner_atomic_unit: AU-SRCH-003
+    steward: integration.package.search
+    semantics_version: cxxlens.package.search.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-search
+  - id: shared.package.select
+    package: select
+    owner_atomic_unit: AU-SEL-001
+    steward: integration.package.select
+    semantics_version: cxxlens.package.select.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-select
+  - id: shared.package.testing
+    package: testing
+    owner_atomic_unit: AU-TEST-001
+    steward: integration.package.testing
+    semantics_version: cxxlens.package.testing.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-testing
+  - id: shared.package.transform
+    package: transform
+    owner_atomic_unit: AU-TF-001
+    steward: integration.package.transform
+    semantics_version: cxxlens.package.transform.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-transform
+  - id: shared.package.workspace
+    package: workspace
+    owner_atomic_unit: AU-WS-001
+    steward: integration.package.workspace
+    semantics_version: cxxlens.package.workspace.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#package-workspace
   provider_implementation_contracts:
   - id: provider.fact.compile-command
     kind: fact_provider_implementation
-    subjects: [compile_command]
+    subjects:
+    - compile_command
     owner_atomic_unit: AU-WS-001
     steward: steward.workspace
     semantics_version: cxxlens.fact-provider.compile-command.v1
     source_contract: schemas/cxxlens_m1_completion.yaml
   - id: provider.fact.custom-extractor
     kind: fact_provider_implementation
-    subjects: [custom]
+    subjects:
+    - custom
     owner_atomic_unit: AU-INT-004
     steward: steward.interop
     semantics_version: cxxlens.fact-provider.custom-extractor.v1
     source_contract: docs/design/package_contract_44.md#custom-fact-and-extractor-state-machine
   - id: provider.fact.frontend
     kind: fact_provider_implementation
-    subjects: [call, cfg_summary, control_flow, conversion, coverage, declaration, definition, effect_summary, file, finding, flow_summary, include_relation, inheritance, macro_expansion, override_relation, reference, symbol, type]
+    subjects:
+    - call
+    - cfg_summary
+    - control_flow
+    - conversion
+    - coverage
+    - declaration
+    - definition
+    - effect_summary
+    - file
+    - finding
+    - flow_summary
+    - include_relation
+    - inheritance
+    - macro_expansion
+    - override_relation
+    - reference
+    - symbol
+    - type
     owner_atomic_unit: AU-WS-005
     steward: steward.facts
     semantics_version: cxxlens.fact-provider.frontend.v1
     source_contract: schemas/cxxlens_m1_completion.yaml
-  - {id: provider.capability.include-cleaner, kind: capability_provider_implementation, subjects: [include.cleaner], owner_atomic_unit: AU-WS-005, steward: steward.repository, semantics_version: cxxlens.capability.include-cleaner.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#capability-include-cleaner}
-  - {id: provider.capability.interop-clang, kind: capability_provider_implementation, subjects: [interop.clang], owner_atomic_unit: AU-INT-001, steward: steward.interop, semantics_version: cxxlens.capability.interop-clang.v1, source_contract: schemas/cxxlens_m1_completion.yaml}
-  - {id: provider.capability.qa-coverage, kind: capability_provider_implementation, subjects: [qa.coverage], owner_atomic_unit: AU-QA-002, steward: steward.qa, semantics_version: cxxlens.capability.qa-coverage.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#capability-qa-coverage}
-  - {id: provider.capability.qa-sanitizers, kind: capability_provider_implementation, subjects: [qa.sanitizers], owner_atomic_unit: AU-QA-001, steward: steward.qa, semantics_version: cxxlens.capability.qa-sanitizers.v1, source_contract: schemas/cxxlens_public_api_contract.yaml#capability-qa-sanitizers}
+  - id: provider.capability.include-cleaner
+    kind: capability_provider_implementation
+    subjects:
+    - include.cleaner
+    owner_atomic_unit: AU-WS-005
+    steward: steward.repository
+    semantics_version: cxxlens.capability.include-cleaner.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#capability-include-cleaner
+  - id: provider.capability.interop-clang
+    kind: capability_provider_implementation
+    subjects:
+    - interop.clang
+    owner_atomic_unit: AU-INT-001
+    steward: steward.interop
+    semantics_version: cxxlens.capability.interop-clang.v1
+    source_contract: schemas/cxxlens_m1_completion.yaml
+  - id: provider.capability.qa-coverage
+    kind: capability_provider_implementation
+    subjects:
+    - qa.coverage
+    owner_atomic_unit: AU-QA-002
+    steward: steward.qa
+    semantics_version: cxxlens.capability.qa-coverage.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#capability-qa-coverage
+  - id: provider.capability.qa-sanitizers
+    kind: capability_provider_implementation
+    subjects:
+    - qa.sanitizers
+    owner_atomic_unit: AU-QA-001
+    steward: steward.qa
+    semantics_version: cxxlens.capability.qa-sanitizers.v1
+    source_contract: schemas/cxxlens_public_api_contract.yaml#capability-qa-sanitizers
   implementation_states:
   - unimplemented
   - implemented

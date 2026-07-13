@@ -140,6 +140,24 @@ class PackageContractCandidateTest(unittest.TestCase):
         )
         jsonschema.Draft202012Validator.check_schema(load("cxxlens_search_options.schema.yaml"))
 
+    def test_positive_issue_46_candidate_and_graph_schemas(self) -> None:
+        group = next(row for row in self.manifest["groups"] if row["issue"] == "#46")
+        self.assertEqual(group["packages"], ["graph"])
+        self.assertEqual(len(group["api_contracts"]), 6)
+        self.assertFalse(group["production_implementation_changed"])
+
+        graph_schema = load("cxxlens_graph.schema.yaml")
+        option_schema = load("cxxlens_graph_options.schema.yaml")
+        jsonschema.Draft202012Validator.check_schema(graph_schema)
+        jsonschema.Draft202012Validator.check_schema(option_schema)
+        limits = option_schema["properties"]["limits"]["properties"]
+        self.assertEqual(set(limits), {"max_depth", "max_nodes", "max_edges", "max_paths"})
+        self.assertTrue(all(row["minimum"] == 1 for row in limits.values()))
+        self.assertEqual(
+            set(graph_schema["$defs"]["edge"]["properties"]["kind"]["enum"]),
+            {"base", "override_relation", "direct_call", "possible_dynamic_call", "indirect_call", "include", "impact", "custom"},
+        )
+
     def test_missing_assigned_api_is_rejected(self) -> None:
         document = copy.deepcopy(self.manifest)
         group = document["groups"][0]

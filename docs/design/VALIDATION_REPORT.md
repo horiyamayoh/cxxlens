@@ -69,18 +69,18 @@
 | interop | 4 |
 | configuration | 4 |
 
-## Phase B package Contract Candidates (#43–#45)
+## Phase B package Contract Candidates (#43–#46)
 
-- candidate group: 3
-- candidate packages: `configuration`, `core`, `explain`, `facts`, `interop`, `search`, `select`, `testing`, `workspace`（9）
-- assigned API: 64、exact declaration: 64、unresolved declaration: 0
-- implementation state: `conformant` 47、`unimplemented` 17（変更なし）
-- policy record: 20、各 record の result outcome 6種: 完全
-- positive / negative / ambiguous acceptance: 各 API 1件、計192件
-- public type 179 / shared component 66 / provider subject 24 / schema 59: owner 一意、dangling 0
+- candidate group: 4
+- candidate packages: `configuration`, `core`, `explain`, `facts`, `graph`, `interop`, `search`, `select`, `testing`, `workspace`（10）
+- assigned API: 70、exact declaration: 70、unresolved declaration: 0
+- implementation state: `conformant` 47、`unimplemented` 23（変更なし）
+- policy record: 23、各 record の result outcome 6種: 完全
+- positive / negative / ambiguous acceptance: 各 API 1件、計210件
+- public type 187 / shared component 66 / provider subject 24 / schema 61: owner 一意、dangling 0
 - registry owner and entry overlap: 0
-- candidate C++23 syntax usage: 4/4 PASS
-- package candidate validator/test: 11/11 PASS
+- candidate C++23 syntax usage: 5/5 PASS
+- package candidate validator/test: 12/12 PASS
 - production implementation / public install integration / final freeze: 未主張（#53 / #54 owner を維持）
 
 ### Issue #43 core・configuration・testing
@@ -124,3 +124,18 @@
 - selector predicate/reason-code unique fixture、search result kind 8種、options schema: PASS
 - candidate C++23 syntax usage: 1/1 PASS
 - candidate fingerprint: `sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024`
+
+### Issue #46 graph
+
+- candidate packages: `graph`（1）
+- assigned API: 6、exact declaration: 6、unresolved declaration: 0
+- implementation state: `unimplemented` 6（変更なし）
+- policy record: 3、各 record の result outcome 6種: 完全
+- positive / negative / ambiguous acceptance: 各 API 1件、計18件
+- typed graph-local node/edge ID、parallel/self/conflict/variant identity/order/dedup: 完全
+- hierarchy/override/call/include open-world・unknown target・cycle/SCC semantics: 完全
+- impact relation/direction/path policy と finite depth/node/edge/path budget: 完全
+- JSON authoritative schema / deterministic DOT pure projection / subgraph boundary: 完全
+- #44 facts/workspace、#45 select/search、#50 flow owner/provider boundary: dangling 0
+- candidate C++23 syntax usage: 1/1 PASS
+- candidate fingerprint: `sha256:3c8f4fec0bb55eae81842b2dc4dec84c5efcfc236621f4b9e73888736de9f940`
