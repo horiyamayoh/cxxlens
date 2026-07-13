@@ -40,6 +40,11 @@ paths are evidence candidates, not an inferred claim about which category they c
 commands are argument arrays plus explicit environment maps; consumers must not concatenate them
 into shell command strings.
 
+The ready evaluator resolves executable test evidence for every non-blocked packet into the
+positive, negative, and ambiguous unit-local stages. Build-only, install-only, and optional
+integration sources remain implementation evidence but are not misrepresented as unconditional
+CTest targets.
+
 `generation.state` is copied from catalog readiness and is independent of contract maturity. An
 unresolved declaration stays visible as `blocked` with a stable reason. Existing conformant entries
 are `complete`; a later exact, unimplemented and dependency-ready entry may be `ready` only when the

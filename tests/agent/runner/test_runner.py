@@ -7,8 +7,10 @@ import concurrent.futures
 import copy
 import json
 import pathlib
+import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 
 import jsonschema
@@ -22,8 +24,14 @@ from api_task_runner import (  # noqa: E402
     RunnerError,
     authorize_integration,
     authorize_run,
+    digest,
+    verify_conformant_artifacts,
 )
-from ownership_generator import transition_request  # noqa: E402
+from ownership_generator import (  # noqa: E402
+    OwnershipError,
+    transition_request,
+    validate_changed_paths,
+)
 from ready_evaluator import (  # noqa: E402
     ReadyError,
     generate_report,
@@ -208,6 +216,10 @@ class RunnerTest(unittest.TestCase):
             self.assertTrue(resolution["allowed_write_prefixes"])
             self.assertIsInstance(resolution["acceptance_command"]["argv"], list)
             self.assertFalse(resolution["start_authorized"])
+            bypassed = copy.deepcopy(resolution)
+            bypassed["acceptance_command"]["argv"].remove("--execute")
+            with self.assertRaises(jsonschema.ValidationError):
+                jsonschema.Draft202012Validator(self.run_schema).validate(bypassed)
 
     def test_shards_include_declared_fixtures_and_non_bypassable_global_gates(self) -> None:
         required_gates = {"task-packets", "ownership", "configure", "build", "test", "quality"}
@@ -218,9 +230,17 @@ class RunnerTest(unittest.TestCase):
             )
             self.assertEqual(set(shard["mandatory_gate_ids"]), required_gates)
             self.assertTrue(all(isinstance(command["argv"], list) for command in shard["commands"]))
+            self.assertIn("--execute", shard["acceptance_command"]["argv"])
+            local_steps = [
+                step for step in shard["execution_steps"]
+                if step["scope"] == "unit_local"
+            ]
             self.assertEqual(
-                shard["acceptance_command"]["argv"][-1], shard["atomic_unit_id"]
+                {step["fixture_category"] for step in local_steps},
+                {"positive", "negative", "ambiguous"},
             )
+            if shard["state"] != "blocked":
+                self.assertTrue(all(step["evidence_paths"] for step in local_steps))
         node_states = {
             node["atomic_unit_id"]: node["state"] for node in self.report["nodes"]
         }
@@ -229,10 +249,7 @@ class RunnerTest(unittest.TestCase):
             self.assertTrue(
                 all(isinstance(command["argv"], list) for command in integration["commands"])
             )
-            self.assertEqual(
-                integration["acceptance_command"]["argv"][-1],
-                integration["package_id"],
-            )
+            self.assertIn("--execute", integration["acceptance_command"]["argv"])
             self.assertTrue(
                 all(
                     node_states[artifact["atomic_unit_id"]] == "complete"
@@ -252,7 +269,7 @@ class RunnerTest(unittest.TestCase):
             for shard in self.report["package_integration_shards"]
             if shard["state"] == "verification" and shard["allowed_write_paths"]
         )
-        accepted = subprocess.run(
+        bypassed = subprocess.run(
             [
                 sys.executable,
                 str(ROOT / "tools" / "agent" / "api_task_runner.py"),
@@ -268,21 +285,20 @@ class RunnerTest(unittest.TestCase):
             capture_output=True,
             check=False,
         )
-        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        self.assertNotEqual(bypassed.returncode, 0)
+        self.assertIn("runner.execution-required", bypassed.stderr)
         other_path = next(
             tracked["path"]
             for tracked in self.ownership["tracked_paths"]
             if tracked["owner_role"].startswith("integration.package.")
             and tracked["owner_role"] != verification["package_integration_role"]
         )
-        rejected = subprocess.run(
-            accepted.args + ["--changed-path", other_path],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        self.assertNotEqual(rejected.returncode, 0)
-        self.assertIn("ownership.unauthorized-path", rejected.stderr)
+        with self.assertRaises(OwnershipError):
+            validate_changed_paths(
+                self.ownership,
+                verification["package_integration_role"],
+                [other_path],
+            )
         blocked = next(
             shard
             for shard in self.report["package_integration_shards"]
@@ -292,6 +308,196 @@ class RunnerTest(unittest.TestCase):
             "runner.package-integration-blocked",
             lambda: authorize_integration(blocked),
         )
+
+    def test_package_integration_requires_matching_executed_unit_artifacts(self) -> None:
+        integration = next(
+            shard
+            for shard in self.report["package_integration_shards"]
+            if shard["state"] == "verification"
+            and shard["conformant_unit_artifacts"]
+        )
+        input_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        with tempfile.TemporaryDirectory(dir=ROOT / "build") as temporary:
+            root = pathlib.Path(temporary)
+            for expected in integration["conformant_unit_artifacts"]:
+                artifact = {
+                    "schema": "cxxlens.api-ready.execution-result.v1",
+                    "subject_kind": "atomic_unit",
+                    "subject_id": expected["atomic_unit_id"],
+                    "input_sha": input_sha,
+                    "shard_id": expected["shard_id"],
+                    "shard_digest": expected["shard_digest"],
+                    "status": "passed",
+                }
+                artifact["artifact_digest"] = digest(artifact)
+                path = root / expected["execution_result_path"]
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(artifact), encoding="utf-8")
+            verified = verify_conformant_artifacts(root, integration, input_sha)
+            self.assertEqual(
+                {item["atomic_unit_id"] for item in verified},
+                {
+                    item["atomic_unit_id"]
+                    for item in integration["conformant_unit_artifacts"]
+                },
+            )
+            first = integration["conformant_unit_artifacts"][0]
+            path = root / first["execution_result_path"]
+            artifact = json.loads(path.read_text(encoding="utf-8"))
+            artifact["status"] = "failed"
+            artifact["artifact_digest"] = digest(
+                {key: value for key, value in artifact.items() if key != "artifact_digest"}
+            )
+            path.write_text(json.dumps(artifact), encoding="utf-8")
+            self.assert_code(
+                "runner.unit-artifact-nonconformant",
+                lambda: verify_conformant_artifacts(root, integration, input_sha),
+            )
+
+    def test_canonical_command_executes_and_attributes_local_and_global_failures(self) -> None:
+        units = [
+            node["atomic_unit_id"]
+            for node in self.report["nodes"]
+            if node["state"] == "complete"
+        ][:2]
+
+        def step(step_id: str, scope: str, exit_status: int, marker: str) -> dict:
+            script = (
+                "import pathlib,sys; "
+                f"p=pathlib.Path({marker!r}); p.parent.mkdir(parents=True, exist_ok=True); "
+                f"p.write_text({step_id!r}, encoding='utf-8'); "
+                f"sys.exit({exit_status})"
+            )
+            category = step_id.removeprefix("local.") if scope == "unit_local" else None
+            return {
+                "id": step_id,
+                "scope": scope,
+                "fixture_category": category,
+                "evidence_paths": [f"tests/{step_id}.fixture"] if category else [],
+                "command": {
+                    "id": step_id,
+                    "argv": [sys.executable, "-c", script],
+                    "environment": {},
+                },
+            }
+
+        with tempfile.TemporaryDirectory(dir=ROOT / "build") as temporary:
+            root = pathlib.Path(temporary)
+            schemas = root / "schemas"
+            schemas.mkdir()
+            for relative in (
+                "schemas/cxxlens.agent-task-packet-corpus.v1.json",
+                "schemas/cxxlens.agent-ownership.v1.json",
+                "schemas/cxxlens.api-ready.run-manifest.v1.schema.yaml",
+                "schemas/cxxlens.api-ready.execution-result.v1.schema.yaml",
+            ):
+                shutil.copyfile(ROOT / relative, root / relative)
+            report = copy.deepcopy(self.report)
+            first_shard = next(
+                shard for shard in report["shards"] if shard["atomic_unit_id"] == units[0]
+            )
+            second_shard = next(
+                shard for shard in report["shards"] if shard["atomic_unit_id"] == units[1]
+            )
+            first_shard["execution_steps"] = [
+                step("global.setup", "global_setup", 0, "markers/first-setup"),
+                step("local.ambiguous", "unit_local", 0, "markers/first-ambiguous"),
+                step("local.negative", "unit_local", 0, "markers/first-negative"),
+                step("local.positive", "unit_local", 0, "markers/first-positive"),
+                step("global.verify", "global_verification", 0, "markers/first-global"),
+            ]
+            second_shard["execution_steps"] = [
+                step("global.setup", "global_setup", 0, "markers/second-setup"),
+                step("local.ambiguous", "unit_local", 0, "markers/second-ambiguous"),
+                step("local.negative", "unit_local", 7, "markers/second-negative"),
+                step("local.positive", "unit_local", 0, "markers/second-positive"),
+                step("global.verify", "global_verification", 0, "markers/second-global"),
+            ]
+            (schemas / "cxxlens.api-ready.report.v1.json").write_text(
+                json.dumps(report), encoding="utf-8"
+            )
+            runner = ROOT / "tools/agent/api_task_runner.py"
+
+            def command(shard: dict, execute: bool = True) -> list[str]:
+                argv = shard["acceptance_command"]["argv"]
+                selected = [sys.executable, str(runner), *argv[2:]]
+                if not execute:
+                    selected.remove("--execute")
+                return [*selected, "--root", str(root)]
+
+            bypassed = subprocess.run(
+                command(first_shard, execute=False),
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(bypassed.returncode, 0)
+            self.assertIn("runner.execution-required", bypassed.stderr)
+
+            first = subprocess.run(
+                command(first_shard),
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(first.returncode, 0, first.stderr)
+            self.assertTrue((root / "markers/first-positive").is_file())
+            first_artifact = json.loads(
+                (root / first_shard["execution_result_path"]).read_text(encoding="utf-8")
+            )
+            self.assertEqual(first_artifact["status"], "passed")
+            self.assertEqual(
+                {item["scope"] for item in first_artifact["steps"]},
+                {"global_setup", "unit_local", "global_verification"},
+            )
+
+            second = subprocess.run(
+                command(second_shard),
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(second.returncode, 0)
+            second_artifact = json.loads(
+                (root / second_shard["execution_result_path"]).read_text(encoding="utf-8")
+            )
+            self.assertEqual(second_artifact["subject_id"], units[1])
+            self.assertEqual(second_artifact["steps"][-1]["id"], "local.negative")
+            self.assertEqual(second_artifact["steps"][-1]["exit_status"], 7)
+            self.assertEqual(first_artifact["status"], "passed")
+
+            second_shard["execution_steps"] = [
+                step("global.setup", "global_setup", 0, "markers/global-setup"),
+                step("local.ambiguous", "unit_local", 0, "markers/global-ambiguous"),
+                step("local.negative", "unit_local", 0, "markers/global-negative"),
+                step("local.positive", "unit_local", 0, "markers/global-positive"),
+                step("global.verify", "global_verification", 9, "markers/global-failure"),
+            ]
+            (schemas / "cxxlens.api-ready.report.v1.json").write_text(
+                json.dumps(report), encoding="utf-8"
+            )
+            global_failure = subprocess.run(
+                command(second_shard),
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(global_failure.returncode, 0)
+            global_artifact = json.loads(
+                (root / second_shard["execution_result_path"]).read_text(encoding="utf-8")
+            )
+            self.assertEqual(global_artifact["steps"][-1]["scope"], "global_verification")
+            self.assertEqual(global_artifact["steps"][-1]["exit_status"], 9)
 
     def test_dependency_request_block_resolve_and_reissue_is_deterministic(self) -> None:
         pending = self.requests["requests"][0]
@@ -385,6 +591,7 @@ class RunnerTest(unittest.TestCase):
             "dangling_edge": self.negative_dangling,
             "dependency_cycle": self.negative_cycle,
             "provider_ambiguity": self.negative_provider,
+            "acceptance_command_bypass": self.negative_acceptance_command,
             "maturity_only_ready": self.negative_maturity,
             "unknown_prompt_api": self.negative_unknown,
             "ambiguous_prompt": self.negative_prompt,
@@ -431,6 +638,11 @@ class RunnerTest(unittest.TestCase):
     def negative_provider(self) -> None:
         report = copy.deepcopy(self.report)
         report["providers"]["facts"].append(copy.deepcopy(report["providers"]["facts"][0]))
+        validate_report(report, self.report, self.schema)
+
+    def negative_acceptance_command(self) -> None:
+        report = copy.deepcopy(self.report)
+        report["shards"][0]["acceptance_command"]["argv"].remove("--execute")
         validate_report(report, self.report, self.schema)
 
     def negative_maturity(self) -> None:

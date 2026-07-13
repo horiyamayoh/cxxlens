@@ -1670,7 +1670,7 @@
       "readiness_state": "complete"
     }
   ],
-  "catalog_fingerprint": "sha256:0b8002c533caafa0c269288db9ca32b27da9fb888d8217431cf9851e404006b5",
+  "catalog_fingerprint": "sha256:9e2b2e760221cc1a976400059280468b12d4d2bc8aa9dbf8a8881d82228cf3f6",
   "packets": [
     {
       "acceptance_commands": [
@@ -10736,7 +10736,8 @@
           "category": "positive",
           "contract_reference": "docs/design/cxxlens_integrated_design_ja.md#36.14-positive",
           "evidence_candidates": [
-            "tests/link/clang22_link_closure_test.cpp"
+            "tests/link/clang22_link_closure_test.cpp",
+            "tests/public_headers/interop_clang_header_test.cpp"
           ],
           "required": true
         },
@@ -10744,7 +10745,8 @@
           "category": "negative",
           "contract_reference": "docs/design/cxxlens_integrated_design_ja.md#36.14-negative",
           "evidence_candidates": [
-            "tests/link/clang22_link_closure_test.cpp"
+            "tests/link/clang22_link_closure_test.cpp",
+            "tests/public_headers/interop_clang_header_test.cpp"
           ],
           "required": true
         },
@@ -10752,7 +10754,8 @@
           "category": "ambiguous",
           "contract_reference": "docs/design/cxxlens_integrated_design_ja.md#36.14-ambiguous",
           "evidence_candidates": [
-            "tests/link/clang22_link_closure_test.cpp"
+            "tests/link/clang22_link_closure_test.cpp",
+            "tests/public_headers/interop_clang_header_test.cpp"
           ],
           "required": true
         }
@@ -10765,7 +10768,8 @@
         "cmake/CxxlensClangTargets.cmake",
         "include/cxxlens/interop/clang.hpp",
         "src/llvm/clang22/frontend_job.cpp",
-        "tests/link/clang22_link_closure_test.cpp"
+        "tests/link/clang22_link_closure_test.cpp",
+        "tests/public_headers/interop_clang_header_test.cpp"
       ],
       "implementation_state": "conformant",
       "kind": "free_function",
@@ -10793,7 +10797,7 @@
         }
       },
       "schema": "cxxlens.agent-task-packet.v1",
-      "semantic_digest": "sha256:bd0dc4564c52524de088b10073be95284608680138218c5be3cdd6e152514b1f",
+      "semantic_digest": "sha256:72fb4ed46d4eba6176c229b801803c1f44138c61c7b5ceee1719680258b89b4f",
       "symbol": "interop::linked_clang_version",
       "traceability": {
         "requirements": [
@@ -26469,7 +26473,7 @@
     }
   ],
   "schema": "cxxlens.agent-task-packet-corpus.v1",
-  "semantic_digest": "sha256:a7df33f415b656232d5ec60badf94b79b493d6b48f5ad484077fb8b661a7d5a7",
+  "semantic_digest": "sha256:4b4c7c6b57a14a79d5390f9621a51256dcd879e9f63d38de41acb8d4a84ef20e",
   "summary": {
     "api_count": 124,
     "atomic_unit_count": 124,

@@ -44,6 +44,10 @@ add_custom_target(
     "${CMAKE_CURRENT_SOURCE_DIR}"
   COMMAND "${Python3_EXECUTABLE}"
           "${CMAKE_CURRENT_SOURCE_DIR}/tests/agent/runner/test_runner.py"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/agent/unit_local_gate.py" check-report
+    --root "${CMAKE_CURRENT_SOURCE_DIR}" --build-dir "${CMAKE_BINARY_DIR}"
   VERBATIM)
 add_dependencies(cxxlens-ready-check cxxlens-ownership-check)
 

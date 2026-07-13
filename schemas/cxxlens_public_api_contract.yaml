@@ -3490,6 +3490,7 @@ packages:
     - cmake/CxxlensClangTargets.cmake
     - src/llvm/clang22/frontend_job.cpp
     - tests/link/clang22_link_closure_test.cpp
+    - tests/public_headers/interop_clang_header_test.cpp
     atomic_unit:
       id: AU-INT-001
       indivisible: true

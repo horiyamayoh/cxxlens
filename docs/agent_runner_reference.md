@@ -11,19 +11,27 @@ required semantics version when applicable. Contract maturity is never a readine
 python3 tools/agent/ready_evaluator.py check --root .
 python3 tools/agent/ready_evaluator.py resolve --root . \
   --prompt 'API-CORE-005 を実装してください'
-python3 tools/agent/api_task_runner.py run --root . --api-id API-CORE-005
+python3 tools/agent/api_task_runner.py run --root . \
+  --api-id API-CORE-005 --execute
 ```
 
 Resolution always returns the exact packet/unit, allowed write prefixes, evidence paths, shard, and
-single acceptance command. A complete or blocked unit has `start_authorized=false`; `run` refuses it
-before creating an implementation workspace or executing commands. Only a `ready` unit may pass
-ownership preflight and execute its argv-based shard.
+single acceptance command. The canonical `run` and `integrate` commands contain `--execute`;
+removing it is rejected by both schema validation and the runner instead of silently printing a
+resolution. A blocked unit cannot execute. A `ready` unit may start implementation, while a
+`complete` unit may only replay its acceptance shard for integration evidence.
 
-Every shard includes task-packet and ownership drift checks, configure/build/test, and the complete
-quality target. Positive, negative, and ambiguous fixture categories are mandatory. Package
-integration remains a separate role and receives only conformant unit/shard digests. Its generated
-shard is blocked while any package unit is incomplete, and its preflight accepts only paths owned by
-that package integration role.
+Every shard has an ordered execution plan: shared task/ownership/configure/build setup, three
+unit-local steps, then the full test and quality gates. Each positive, negative, and ambiguous step
+resolves catalog evidence to exact CTest names through `unit_local_gate.py`; the report check rejects
+a complete/ready unit whose target does not resolve. The result artifact under
+`build/dev-clang/agent-results/` records the input commit SHA, command argv/environment, scope,
+fixture category, evidence paths, exit status, and stdout/stderr digests for every executed step.
+
+Package integration remains a separate role. It is blocked while any package unit is incomplete,
+accepts only paths owned by that package integration role, and verifies that every conformant input
+has a successful unit artifact for the same commit SHA and exact shard digest before executing its
+global gates.
 
 A provider being named or globally available is insufficient: its owner unit must have completed
 the required semantics version. Blockers include the component/provider and recursively visible
@@ -31,5 +39,6 @@ owner chain. Topological waves therefore place the package contract owner before
 and the report digest binds dispatch authorization to the full typed graph.
 
 ```sh
-python3 tools/agent/api_task_runner.py integrate --root . --package-id configuration
+python3 tools/agent/api_task_runner.py integrate --root . \
+  --package-id configuration --execute
 ```

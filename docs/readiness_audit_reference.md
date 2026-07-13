@@ -36,6 +36,11 @@ units and must never infer readiness from contract maturity.
 6. Use the exact task packet, owner prefixes, and acceptance command resolved by the API runner.
 7. Re-run the audit after resolving a dependency request; do not edit blocker state by hand.
 
+Canonical acceptance commands are executable, not resolution previews. Keep `--execute`, retain the
+unit-local positive/negative/ambiguous stages, and preserve the resulting commit-bound artifact.
+Package integration must consume matching successful unit artifacts; a declaration-only shard or a
+result from another unit/SHA is not conformant input.
+
 Immediately stop and re-audit on catalog/signature, schema/task-packet/shard, ownership/shared
 contract, dependency/provider, completion-manifest, design-package, or required CI workflow drift.
 Previously issued authorization is not reusable after any such change.

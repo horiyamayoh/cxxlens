@@ -312,6 +312,81 @@ def unique_blockers(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
     )
 
 
+def executable_evidence(packets: list[dict[str, Any]], category: str) -> list[str]:
+    suffixes = (".c", ".cc", ".cpp", ".cxx", ".py")
+    return sorted(
+        {
+            path
+            for packet in packets
+            for fixture in packet["fixtures"]
+            if fixture["category"] == category
+            for path in fixture["evidence_candidates"]
+            if path.startswith("tests/") and path.endswith(suffixes)
+            and not path.startswith(("tests/install/", "tests/integration/", "tests/link/"))
+        }
+    )
+
+
+def execution_steps(
+    gates: list[dict[str, Any]],
+    unit_id: str | None = None,
+    packets: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    setup_ids = {"task-packets", "ownership", "configure", "build"}
+    steps = [
+        {
+            "id": f"global.{gate['id']}",
+            "scope": "global_setup" if gate["id"] in setup_ids else "global_verification",
+            "fixture_category": None,
+            "evidence_paths": [],
+            "command": gate["command"],
+        }
+        for gate in gates
+        if gate["id"] in setup_ids
+    ]
+    if unit_id is not None and packets is not None:
+        for category in ("ambiguous", "negative", "positive"):
+            evidence = executable_evidence(packets, category)
+            argv = [
+                "python3",
+                "tools/agent/unit_local_gate.py",
+                "run",
+                "--root",
+                ".",
+                "--unit",
+                unit_id,
+                "--category",
+                category,
+            ]
+            for path in evidence:
+                argv.extend(("--evidence", path))
+            steps.append(
+                {
+                    "id": f"local.{category}",
+                    "scope": "unit_local",
+                    "fixture_category": category,
+                    "evidence_paths": evidence,
+                    "command": {
+                        "id": f"unit-local-{category}",
+                        "argv": argv,
+                        "environment": {},
+                    },
+                }
+            )
+    steps.extend(
+        {
+            "id": f"global.{gate['id']}",
+            "scope": "global_verification",
+            "fixture_category": None,
+            "evidence_paths": [],
+            "command": gate["command"],
+        }
+        for gate in gates
+        if gate["id"] not in setup_ids
+    )
+    return steps
+
+
 def make_shard(
     node: dict[str, Any],
     packets: list[dict[str, Any]],
@@ -345,6 +420,10 @@ def make_shard(
         "selected_evidence_paths": evidence,
         "mandatory_gate_ids": [gate["id"] for gate in gates],
         "commands": [gate["command"] for gate in gates],
+        "execution_steps": execution_steps(gates, node["atomic_unit_id"], packets),
+        "execution_result_path": (
+            f"build/dev-clang/agent-results/{node['atomic_unit_id']}.json"
+        ),
         "acceptance_command": {
             "id": "atomic-unit-acceptance",
             "argv": [
@@ -353,6 +432,7 @@ def make_shard(
                 "run",
                 "--unit",
                 node["atomic_unit_id"],
+                "--execute",
             ],
             "environment": {},
         },
@@ -398,6 +478,8 @@ def make_package_integration_shards(
                         "atomic_unit_id": unit_id,
                         "shard_id": shard["id"],
                         "shard_digest": shard["semantic_digest"],
+                        "execution_result_path": shard["execution_result_path"],
+                        "required_execution_status": "passed",
                     }
                 )
             else:
@@ -412,6 +494,10 @@ def make_package_integration_shards(
             "allowed_write_paths": sorted(tracked_paths_by_role[role]),
             "mandatory_gate_ids": [gate["id"] for gate in gates],
             "commands": [gate["command"] for gate in gates],
+            "execution_steps": execution_steps(gates),
+            "execution_result_path": (
+                f"build/dev-clang/agent-results/integration.{package_id}.json"
+            ),
             "acceptance_command": {
                 "id": "package-integration-acceptance",
                 "argv": [
@@ -420,6 +506,7 @@ def make_package_integration_shards(
                     "integrate",
                     "--package-id",
                     package_id,
+                    "--execute",
                 ],
                 "environment": {},
             },
@@ -785,6 +872,32 @@ def validate_report(
         set(shard_units)
     ):
         fail("ready.shard-coverage", "atomic-unit shards do not cover DAG nodes exactly once")
+    for shard in shards:
+        if "--execute" not in shard.get("acceptance_command", {}).get("argv", []):
+            fail(
+                "ready.acceptance-command-bypass",
+                f"{shard.get('atomic_unit_id')}: canonical command must execute",
+            )
+        local_steps = [
+            step for step in shard.get("execution_steps", [])
+            if step.get("scope") == "unit_local"
+        ]
+        if {step.get("fixture_category") for step in local_steps} != {
+            "positive",
+            "negative",
+            "ambiguous",
+        }:
+            fail(
+                "ready.local-fixture-coverage",
+                f"{shard.get('atomic_unit_id')}: local fixture categories are incomplete",
+            )
+        if shard.get("state") != "blocked" and any(
+            not step.get("evidence_paths") for step in local_steps
+        ):
+            fail(
+                "ready.local-target-unresolved",
+                f"{shard.get('atomic_unit_id')}: executable local target is missing",
+            )
     api_ids = [api_id for node in nodes for api_id in node["api_ids"]]
     if len(api_ids) != len(set(api_ids)):
         fail("ready.api-ambiguity", "API identifiers resolve to multiple DAG nodes")
@@ -799,6 +912,11 @@ def validate_report(
                 f"duplicate package integration shard: {package_id}",
             )
         package_ids.add(package_id)
+        if "--execute" not in integration.get("acceptance_command", {}).get("argv", []):
+            fail(
+                "ready.acceptance-command-bypass",
+                f"{package_id}: integration command must execute",
+            )
         conformant = {
             artifact["atomic_unit_id"]
             for artifact in integration["conformant_unit_artifacts"]
@@ -816,6 +934,9 @@ def validate_report(
                 or shard["atomic_unit_id"] != artifact["atomic_unit_id"]
                 or shard["state"] != "verification"
                 or shard["semantic_digest"] != artifact["shard_digest"]
+                or shard["execution_result_path"]
+                != artifact["execution_result_path"]
+                or artifact["required_execution_status"] != "passed"
             ):
                 fail(
                     "ready.nonconformant-integration-input",
@@ -884,6 +1005,8 @@ def resolve_api(
         "allowed_write_prefixes": unit["allowed_write_prefixes"],
         "selected_evidence_paths": shard["selected_evidence_paths"],
         "acceptance_command": shard["acceptance_command"],
+        "execution_required": True,
+        "execution_result_path": shard["execution_result_path"],
         "blockers": node["blockers"],
     }
     run_manifest["semantic_digest"] = digest(run_manifest)

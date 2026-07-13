@@ -1,5 +1,5 @@
 {
-  "repository_paths_digest": "sha256:41e11c2935f9ee6d511f37fa093b70b789d8d9929e7b2671eecc58d92ede9147",
+  "repository_paths_digest": "sha256:a254ad23b2728c89e6a99e2d1c35b872ac1b0e8a590717572a75bb05ebd8a97d",
   "reserved_paths": [
     {
       "access": "exclusive_write",
@@ -48,6 +48,12 @@
       "owner_role": "steward.runner",
       "prefix": "tools/agent/api_task",
       "purpose": "API task prompt, preflight, and runner tooling owned by issue #29."
+    },
+    {
+      "access": "exclusive_write",
+      "owner_role": "steward.runner",
+      "prefix": "tools/agent/unit_local",
+      "purpose": "Atomic-unit evidence-to-CTest resolution owned by issue #29."
     },
     {
       "access": "exclusive_write",
@@ -1127,7 +1133,7 @@
     }
   ],
   "schema": "cxxlens.agent-ownership.v1",
-  "semantic_digest": "sha256:7ba898d72b51cdafd4b5919f0a69f2fdc7cf75f616987d7a5578d549978602b0",
+  "semantic_digest": "sha256:ab9edce389f50c4d5448b6fea3905ae4396bc66b5ddd9eceb94afc9d9cbd1af5",
   "skeletons": [
     {
       "api_id": "API-CFG-001",
@@ -2650,7 +2656,7 @@
   ],
   "summary": {
     "generated_path_count": 5,
-    "reserved_path_count": 10,
+    "reserved_path_count": 11,
     "role_count": 177,
     "skeleton_state_counts": {
       "blocked": 77,
@@ -2659,7 +2665,7 @@
     "tracked_path_count": 360,
     "unit_count": 124
   },
-  "task_packet_digest": "sha256:a7df33f415b656232d5ec60badf94b79b493d6b48f5ad484077fb8b661a7d5a7",
+  "task_packet_digest": "sha256:4b4c7c6b57a14a79d5390f9621a51256dcd879e9f63d38de41acb8d4a84ef20e",
   "tracked_paths": [
     {
       "access": "exclusive_write",

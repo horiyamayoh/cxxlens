@@ -91,7 +91,7 @@ class OwnershipTest(unittest.TestCase):
         self.assertEqual(
             generated["summary"]["tracked_path_count"], len(baseline_paths)
         )
-        self.assertEqual(generated["summary"]["reserved_path_count"], 10)
+        self.assertEqual(generated["summary"]["reserved_path_count"], 11)
         self.assertEqual(
             generated["summary"]["skeleton_state_counts"],
             {"blocked": 77, "frozen": 47},

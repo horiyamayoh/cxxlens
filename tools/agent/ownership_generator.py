@@ -263,6 +263,12 @@ RESERVED_PATHS = [
         "purpose": "API task prompt, preflight, and runner tooling owned by issue #29.",
     },
     {
+        "prefix": "tools/agent/unit_local",
+        "owner_role": "steward.runner",
+        "access": "exclusive_write",
+        "purpose": "Atomic-unit evidence-to-CTest resolution owned by issue #29.",
+    },
+    {
         "prefix": "tools/agent/readiness_audit",
         "owner_role": "steward.readiness",
         "access": "exclusive_write",

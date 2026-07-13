@@ -158,11 +158,23 @@ def input_fingerprints(inputs: dict[str, Any], root: pathlib.Path) -> dict[str, 
         "audit_policy": digest(
             {
                 "implementation": file_digest(root / "tools/agent/readiness_audit.py"),
+                "runner": file_digest(root / "tools/agent/api_task_runner.py"),
+                "unit_local_gate": file_digest(root / "tools/agent/unit_local_gate.py"),
+                "ready_evaluator": file_digest(root / "tools/agent/ready_evaluator.py"),
                 "schema": file_digest(
                     root / "schemas/cxxlens.readiness.authorization.v1.schema.yaml"
                 ),
+                "run_schema": file_digest(
+                    root / "schemas/cxxlens.api-ready.run-manifest.v1.schema.yaml"
+                ),
+                "execution_result_schema": file_digest(
+                    root / "schemas/cxxlens.api-ready.execution-result.v1.schema.yaml"
+                ),
                 "tests": file_digest(
                     root / "tests/agent/readiness/test_readiness_audit.py"
+                ),
+                "runner_tests": file_digest(
+                    root / "tests/agent/runner/test_runner.py"
                 ),
                 "negative_fixtures": file_digest(
                     root / "tests/agent/readiness/fixtures/negative_cases.yaml"
