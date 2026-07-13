@@ -17,6 +17,8 @@
   - Issue #43 が所有する core・configuration・testing の規範的 Contract Candidate と決定表。
 - `package_contract_44.md`
   - Issue #44 が所有する workspace・facts・interop の規範的 Contract Candidate と決定表。
+- `package_contract_45.md`
+  - Issue #45 が所有する select・search・explain の規範的 Contract Candidate と決定表。
 - `../../schemas/cxxlens_package_contract_candidates.yaml`
   - #43〜#51 の package candidate、exact declaration、意味契約、owner、acceptance の機械可読 authority。
 - `SHA256SUMS`

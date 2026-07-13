@@ -15,3 +15,11 @@ properties:
   unresolved: {type: array, items: {type: object}}
   suggested_actions: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
   properties: {type: object, additionalProperties: {type: string}}
+  truncation:
+    type: object
+    additionalProperties: false
+    required: [truncated, omitted, reason_code]
+    properties:
+      truncated: {const: true}
+      omitted: {type: integer, minimum: 1}
+      reason_code: {const: core.budget-exhausted}

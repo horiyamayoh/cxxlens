@@ -8,7 +8,7 @@ properties:
   schema: {const: cxxlens.search-report.v1}
   semantics_version: {const: 1.0.0}
   library_version: {type: string, minLength: 1}
-  result_kind: {enum: [call, inheritance, override]}
+  result_kind: {enum: [symbol, reference, call, inheritance, override, include, macro, conversion]}
   matches: {type: array}
   accounting:
     type: object
@@ -44,6 +44,16 @@ allOf:
     then: {properties: {matches: {items: {$ref: '#/$defs/inheritance_match'}}}}
   - if: {properties: {result_kind: {const: override}}}
     then: {properties: {matches: {items: {$ref: '#/$defs/override_match'}}}}
+  - if: {properties: {result_kind: {const: symbol}}}
+    then: {properties: {matches: {items: {$ref: '#/$defs/semantic_match'}}}}
+  - if: {properties: {result_kind: {const: reference}}}
+    then: {properties: {matches: {items: {$ref: '#/$defs/semantic_match'}}}}
+  - if: {properties: {result_kind: {const: include}}}
+    then: {properties: {matches: {items: {$ref: '#/$defs/semantic_match'}}}}
+  - if: {properties: {result_kind: {const: macro}}}
+    then: {properties: {matches: {items: {$ref: '#/$defs/semantic_match'}}}}
+  - if: {properties: {result_kind: {const: conversion}}}
+    then: {properties: {matches: {items: {$ref: '#/$defs/semantic_match'}}}}
 $defs:
   symbol_ids: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
   call_match:
@@ -102,3 +112,17 @@ $defs:
       overridden: {type: string, minLength: 1}
       overriding: {type: string, minLength: 1}
       source: {type: object}
+  semantic_match:
+    type: object
+    additionalProperties: false
+    required: [id, semantic_key, variant, source, evidence, confidence, guarantee, unresolved, payload]
+    properties:
+      id: {type: string, minLength: 1}
+      semantic_key: {type: string, minLength: 1}
+      variant: {type: [string, 'null']}
+      source: {type: [object, 'null']}
+      evidence: {type: object}
+      confidence: {enum: [speculative, possible, probable, high, certain]}
+      guarantee: {enum: [exact_within_coverage, sound_over_approximation, sound_under_approximation, best_effort, heuristic]}
+      unresolved: {type: array, items: {type: object}}
+      payload: {type: object}

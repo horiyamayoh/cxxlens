@@ -69,18 +69,18 @@
 | interop | 4 |
 | configuration | 4 |
 
-## Phase B package Contract Candidates (#43–#44)
+## Phase B package Contract Candidates (#43–#45)
 
-- candidate group: 2
-- candidate packages: `configuration`, `core`, `facts`, `interop`, `testing`, `workspace`（6）
-- assigned API: 39、exact declaration: 39、unresolved declaration: 0
-- implementation state: `conformant` 33、`unimplemented` 6（変更なし）
-- policy record: 15、各 record の result outcome 6種: 完全
-- positive / negative / ambiguous acceptance: 各 API 1件、計117件
-- public type 179 / shared component 66 / provider subject 24 / schema 58: owner 一意、dangling 0
+- candidate group: 3
+- candidate packages: `configuration`, `core`, `explain`, `facts`, `interop`, `search`, `select`, `testing`, `workspace`（9）
+- assigned API: 64、exact declaration: 64、unresolved declaration: 0
+- implementation state: `conformant` 47、`unimplemented` 17（変更なし）
+- policy record: 20、各 record の result outcome 6種: 完全
+- positive / negative / ambiguous acceptance: 各 API 1件、計192件
+- public type 179 / shared component 66 / provider subject 24 / schema 59: owner 一意、dangling 0
 - registry owner and entry overlap: 0
-- candidate C++23 syntax usage: 3/3 PASS
-- package candidate validator/test: 10/10 PASS
+- candidate C++23 syntax usage: 4/4 PASS
+- package candidate validator/test: 11/11 PASS
 - production implementation / public install integration / final freeze: 未主張（#53 / #54 owner を維持）
 
 ### Issue #43 core・configuration・testing
@@ -110,3 +110,17 @@
 - provider ownership: `custom` は `provider.fact.custom-extractor` の一意 owner、重複0
 - candidate C++23 syntax usage: 1/1 PASS
 - candidate fingerprint: `sha256:e0a3a1ad4ded7631b87210183992c0b1d4c9c8535ad06664faac3f62d1188601`
+
+### Issue #45 select・search・explain
+
+- candidate packages: `explain`, `search`, `select`（3）
+- assigned API: 25、exact declaration: 25、unresolved declaration: 0
+- implementation state: `conformant` 14、`unimplemented` 11（変更なし）
+- policy record: 5、各 record の result outcome 6種: 完全
+- positive / negative / ambiguous acceptance: 各 API 1件、計75件
+- typed selector domain 9種、normalization/type erasure/requirements/reason-code registry: 完全
+- search snapshot/options/row/open-world/variant/limit/order/dedup/coverage decision table: 完全
+- explanation/rejection trace/task card/catalog bounded pure projection: 完全
+- selector predicate/reason-code unique fixture、search result kind 8種、options schema: PASS
+- candidate C++23 syntax usage: 1/1 PASS
+- candidate fingerprint: `sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024`

@@ -232,6 +232,7 @@ install(
         schemas/cxxlens_selector.schema.yaml
         schemas/cxxlens_selector_reason_codes.yaml
         schemas/cxxlens_search_report.schema.yaml
+        schemas/cxxlens_search_options.schema.yaml
         schemas/cxxlens_virtual_candidate_resolution.schema.yaml
         schemas/cxxlens_workspace_doctor.schema.yaml
         schemas/cxxlens_workspace_context.schema.yaml

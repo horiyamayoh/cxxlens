@@ -10116,14 +10116,14 @@
     }
   ],
   "input_fingerprints": {
-    "contract_ownership_registry": "sha256:18a75e14eb12d0cf4cdde519646447fe033a35ac48fd91c850502624a86c08da",
-    "dependency_requests": "sha256:41a45589d8c53d74ea2b31f3e9f11c5ffe6f16fab51f1f3dfa64d91a96a06c69",
+    "contract_ownership_registry": "sha256:1bbd032f334c66015a68aa52f0faf86920fb9eace63b4248b1be564b361df390",
+    "dependency_requests": "sha256:055adabfd299ded24a2993e8180facbe222e2519011313f824afee441a2db183",
     "global_contract_conventions": "sha256:cdf3166db0b38fb9230602ff5ba273baf9e7e253d61d6c2fc75d21f0fea1238c",
     "m0": "sha256:9e32e99675512405e1247fd92b8cfcbc5c6e99ab9dc0378833482541c0538f19",
     "m1": "sha256:330670610fc393f8fd9a79493477b28f45c22f863fddaa35dae8a074a4deb567",
-    "m2": "sha256:448a5141f4c6e1045b5ff0ddae6126054be2a0cb261cfd2b227b1e1ce741e9c7",
-    "ownership": "sha256:938f8f06a38de7f5aab72ebde313fc01530f06166e3334f2e5b73191029eeaea",
-    "task_packets": "sha256:d1a9424c0e90b502f200277ebc1c680cc6aa7d667274410521ff0616e37bf496"
+    "m2": "sha256:000b9a22daea813bf533f81c21d77c96e2aa3182048fdde811347f538669277a",
+    "ownership": "sha256:b33f95fd468fcb9b638b487b55c1cab42b117ecbce45ee0e6bbedd8cb6e0ba98",
+    "task_packets": "sha256:98b1330be50d6318ab9e021bce63fdca9068f804cf419ec6101ac04098c6382b"
   },
   "nodes": [
     {
@@ -10859,11 +10859,11 @@
         {
           "chain": [
             "AU-EXP-001",
-            "contract-candidate-missing:AU-EXP-001"
+            "candidate_declaration_not_integrated:API-EXP-001"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-EXP-001"
+          "subject": "API-EXP-001"
         },
         {
           "chain": [
@@ -10877,37 +10877,10 @@
         {
           "chain": [
             "AU-EXP-001",
-            "exact-contract-missing:AU-EXP-001"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-EXP-001"
-        },
-        {
-          "chain": [
-            "AU-EXP-001",
-            "exact_declaration_unresolved:API-EXP-001"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-EXP-001"
-        },
-        {
-          "chain": [
-            "AU-EXP-001",
             "fixtures-missing:AU-EXP-001"
           ],
           "code": "fixtures-missing",
           "steward": "steward.testing",
-          "subject": "AU-EXP-001"
-        },
-        {
-          "chain": [
-            "AU-EXP-001",
-            "frozen-skeleton-missing:AU-EXP-001"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
           "subject": "AU-EXP-001"
         }
       ],
@@ -10923,12 +10896,12 @@
         "M2"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -10962,7 +10935,7 @@
         "M2"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -11003,11 +10976,11 @@
         {
           "chain": [
             "AU-EXP-003",
-            "contract-candidate-missing:AU-EXP-003"
+            "candidate_declaration_not_integrated:API-EXP-003"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-EXP-003"
+          "subject": "API-EXP-003"
         },
         {
           "chain": [
@@ -11021,37 +10994,10 @@
         {
           "chain": [
             "AU-EXP-003",
-            "exact-contract-missing:AU-EXP-003"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-EXP-003"
-        },
-        {
-          "chain": [
-            "AU-EXP-003",
-            "exact_declaration_unresolved:API-EXP-003"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-EXP-003"
-        },
-        {
-          "chain": [
-            "AU-EXP-003",
             "fixtures-missing:AU-EXP-003"
           ],
           "code": "fixtures-missing",
           "steward": "steward.testing",
-          "subject": "AU-EXP-003"
-        },
-        {
-          "chain": [
-            "AU-EXP-003",
-            "frozen-skeleton-missing:AU-EXP-003"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
           "subject": "AU-EXP-003"
         }
       ],
@@ -11067,12 +11013,12 @@
         "M2"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -11099,11 +11045,11 @@
         {
           "chain": [
             "AU-EXP-004",
-            "contract-candidate-missing:AU-EXP-004"
+            "candidate_declaration_not_integrated:API-EXP-004"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-EXP-004"
+          "subject": "API-EXP-004"
         },
         {
           "chain": [
@@ -11117,37 +11063,10 @@
         {
           "chain": [
             "AU-EXP-004",
-            "exact-contract-missing:AU-EXP-004"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-EXP-004"
-        },
-        {
-          "chain": [
-            "AU-EXP-004",
-            "exact_declaration_unresolved:API-EXP-004"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-EXP-004"
-        },
-        {
-          "chain": [
-            "AU-EXP-004",
             "fixtures-missing:AU-EXP-004"
           ],
           "code": "fixtures-missing",
           "steward": "steward.testing",
-          "subject": "AU-EXP-004"
-        },
-        {
-          "chain": [
-            "AU-EXP-004",
-            "frozen-skeleton-missing:AU-EXP-004"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
           "subject": "AU-EXP-004"
         }
       ],
@@ -11163,12 +11082,12 @@
         "M0"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -18090,7 +18009,7 @@
         "M2"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -18136,7 +18055,7 @@
         "M2"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -18186,7 +18105,7 @@
         "M2"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -18225,11 +18144,11 @@
         {
           "chain": [
             "AU-SEL-004",
-            "contract-candidate-missing:AU-SEL-004"
+            "candidate_declaration_not_integrated:API-SEL-004"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-SEL-004"
+          "subject": "API-SEL-004"
         },
         {
           "chain": [
@@ -18239,24 +18158,6 @@
           "code": "contract-freeze-missing",
           "steward": "generator.catalog",
           "subject": "AU-SEL-004"
-        },
-        {
-          "chain": [
-            "AU-SEL-004",
-            "exact-contract-missing:AU-SEL-004"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-SEL-004"
-        },
-        {
-          "chain": [
-            "AU-SEL-004",
-            "exact_declaration_unresolved:API-SEL-004"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-SEL-004"
         },
         {
           "chain": [
@@ -18275,15 +18176,6 @@
           "code": "fixtures-missing",
           "steward": "steward.testing",
           "subject": "AU-SEL-004"
-        },
-        {
-          "chain": [
-            "AU-SEL-004",
-            "frozen-skeleton-missing:AU-SEL-004"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-SEL-004"
         }
       ],
       "dependencies": [
@@ -18300,12 +18192,12 @@
         "M3"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -18339,11 +18231,11 @@
         {
           "chain": [
             "AU-SEL-005",
-            "contract-candidate-missing:AU-SEL-005"
+            "candidate_declaration_not_integrated:API-SEL-005"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-SEL-005"
+          "subject": "API-SEL-005"
         },
         {
           "chain": [
@@ -18357,37 +18249,10 @@
         {
           "chain": [
             "AU-SEL-005",
-            "exact-contract-missing:AU-SEL-005"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-SEL-005"
-        },
-        {
-          "chain": [
-            "AU-SEL-005",
-            "exact_declaration_unresolved:API-SEL-005"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-SEL-005"
-        },
-        {
-          "chain": [
-            "AU-SEL-005",
             "fixtures-missing:AU-SEL-005"
           ],
           "code": "fixtures-missing",
           "steward": "steward.testing",
-          "subject": "AU-SEL-005"
-        },
-        {
-          "chain": [
-            "AU-SEL-005",
-            "frozen-skeleton-missing:AU-SEL-005"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
           "subject": "AU-SEL-005"
         }
       ],
@@ -18405,12 +18270,12 @@
         "M3"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -18451,7 +18316,7 @@
         "M2"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -18492,11 +18357,11 @@
         {
           "chain": [
             "AU-SEL-007",
-            "contract-candidate-missing:AU-SEL-007"
+            "candidate_declaration_not_integrated:API-SEL-007"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-SEL-007"
+          "subject": "API-SEL-007"
         },
         {
           "chain": [
@@ -18510,37 +18375,10 @@
         {
           "chain": [
             "AU-SEL-007",
-            "exact-contract-missing:AU-SEL-007"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-SEL-007"
-        },
-        {
-          "chain": [
-            "AU-SEL-007",
-            "exact_declaration_unresolved:API-SEL-007"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-SEL-007"
-        },
-        {
-          "chain": [
-            "AU-SEL-007",
             "fixtures-missing:AU-SEL-007"
           ],
           "code": "fixtures-missing",
           "steward": "steward.testing",
-          "subject": "AU-SEL-007"
-        },
-        {
-          "chain": [
-            "AU-SEL-007",
-            "frozen-skeleton-missing:AU-SEL-007"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
           "subject": "AU-SEL-007"
         }
       ],
@@ -18556,12 +18394,12 @@
         "M3"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -18597,7 +18435,7 @@
         "M2"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -18638,7 +18476,7 @@
         "M2"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -18679,7 +18517,7 @@
         "M2"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -18720,7 +18558,7 @@
         "M2"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -18752,11 +18590,11 @@
         {
           "chain": [
             "AU-SRCH-001",
-            "contract-candidate-missing:AU-SRCH-001"
+            "candidate_declaration_not_integrated:API-SRCH-001"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-SRCH-001"
+          "subject": "API-SRCH-001"
         },
         {
           "chain": [
@@ -18770,37 +18608,10 @@
         {
           "chain": [
             "AU-SRCH-001",
-            "exact-contract-missing:AU-SRCH-001"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-SRCH-001"
-        },
-        {
-          "chain": [
-            "AU-SRCH-001",
-            "exact_declaration_unresolved:API-SRCH-001"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-SRCH-001"
-        },
-        {
-          "chain": [
-            "AU-SRCH-001",
             "fixtures-missing:AU-SRCH-001"
           ],
           "code": "fixtures-missing",
           "steward": "steward.testing",
-          "subject": "AU-SRCH-001"
-        },
-        {
-          "chain": [
-            "AU-SRCH-001",
-            "frozen-skeleton-missing:AU-SRCH-001"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
           "subject": "AU-SRCH-001"
         }
       ],
@@ -18818,12 +18629,12 @@
         "M3"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -18853,11 +18664,11 @@
         {
           "chain": [
             "AU-SRCH-002",
-            "contract-candidate-missing:AU-SRCH-002"
+            "candidate_declaration_not_integrated:API-SRCH-002"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-SRCH-002"
+          "subject": "API-SRCH-002"
         },
         {
           "chain": [
@@ -18871,37 +18682,10 @@
         {
           "chain": [
             "AU-SRCH-002",
-            "exact-contract-missing:AU-SRCH-002"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-SRCH-002"
-        },
-        {
-          "chain": [
-            "AU-SRCH-002",
-            "exact_declaration_unresolved:API-SRCH-002"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-SRCH-002"
-        },
-        {
-          "chain": [
-            "AU-SRCH-002",
             "fixtures-missing:AU-SRCH-002"
           ],
           "code": "fixtures-missing",
           "steward": "steward.testing",
-          "subject": "AU-SRCH-002"
-        },
-        {
-          "chain": [
-            "AU-SRCH-002",
-            "frozen-skeleton-missing:AU-SRCH-002"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
           "subject": "AU-SRCH-002"
         }
       ],
@@ -18919,12 +18703,12 @@
         "M3"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -18963,7 +18747,7 @@
         "M2"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -19015,7 +18799,7 @@
         "M2"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -19063,7 +18847,7 @@
         "M2"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -19115,7 +18899,7 @@
         "M2"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -19161,7 +18945,7 @@
         "M2"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
         "exact_contract": true,
@@ -19196,11 +18980,11 @@
         {
           "chain": [
             "AU-SRCH-008",
-            "contract-candidate-missing:AU-SRCH-008"
+            "candidate_declaration_not_integrated:API-SRCH-008"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-SRCH-008"
+          "subject": "API-SRCH-008"
         },
         {
           "chain": [
@@ -19214,37 +18998,10 @@
         {
           "chain": [
             "AU-SRCH-008",
-            "exact-contract-missing:AU-SRCH-008"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-SRCH-008"
-        },
-        {
-          "chain": [
-            "AU-SRCH-008",
-            "exact_declaration_unresolved:API-SRCH-008"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-SRCH-008"
-        },
-        {
-          "chain": [
-            "AU-SRCH-008",
             "fixtures-missing:AU-SRCH-008"
           ],
           "code": "fixtures-missing",
           "steward": "steward.testing",
-          "subject": "AU-SRCH-008"
-        },
-        {
-          "chain": [
-            "AU-SRCH-008",
-            "frozen-skeleton-missing:AU-SRCH-008"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
           "subject": "AU-SRCH-008"
         }
       ],
@@ -19262,12 +19019,12 @@
         "M3"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -19299,11 +19056,11 @@
         {
           "chain": [
             "AU-SRCH-009",
-            "contract-candidate-missing:AU-SRCH-009"
+            "candidate_declaration_not_integrated:API-SRCH-009"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-SRCH-009"
+          "subject": "API-SRCH-009"
         },
         {
           "chain": [
@@ -19317,37 +19074,10 @@
         {
           "chain": [
             "AU-SRCH-009",
-            "exact-contract-missing:AU-SRCH-009"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-SRCH-009"
-        },
-        {
-          "chain": [
-            "AU-SRCH-009",
-            "exact_declaration_unresolved:API-SRCH-009"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-SRCH-009"
-        },
-        {
-          "chain": [
-            "AU-SRCH-009",
             "fixtures-missing:AU-SRCH-009"
           ],
           "code": "fixtures-missing",
           "steward": "steward.testing",
-          "subject": "AU-SRCH-009"
-        },
-        {
-          "chain": [
-            "AU-SRCH-009",
-            "frozen-skeleton-missing:AU-SRCH-009"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
           "subject": "AU-SRCH-009"
         }
       ],
@@ -19365,12 +19095,12 @@
         "M3"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -19400,11 +19130,11 @@
         {
           "chain": [
             "AU-SRCH-010",
-            "contract-candidate-missing:AU-SRCH-010"
+            "candidate_declaration_not_integrated:API-SRCH-010"
           ],
-          "code": "contract-candidate-missing",
+          "code": "candidate_declaration_not_integrated",
           "steward": "generator.catalog",
-          "subject": "AU-SRCH-010"
+          "subject": "API-SRCH-010"
         },
         {
           "chain": [
@@ -19414,24 +19144,6 @@
           "code": "contract-freeze-missing",
           "steward": "generator.catalog",
           "subject": "AU-SRCH-010"
-        },
-        {
-          "chain": [
-            "AU-SRCH-010",
-            "exact-contract-missing:AU-SRCH-010"
-          ],
-          "code": "exact-contract-missing",
-          "steward": "generator.catalog",
-          "subject": "AU-SRCH-010"
-        },
-        {
-          "chain": [
-            "AU-SRCH-010",
-            "exact_declaration_unresolved:API-SRCH-010"
-          ],
-          "code": "exact_declaration_unresolved",
-          "steward": "generator.catalog",
-          "subject": "API-SRCH-010"
         },
         {
           "chain": [
@@ -19450,15 +19162,6 @@
           "code": "fixtures-missing",
           "steward": "steward.testing",
           "subject": "AU-SRCH-010"
-        },
-        {
-          "chain": [
-            "AU-SRCH-010",
-            "frozen-skeleton-missing:AU-SRCH-010"
-          ],
-          "code": "frozen-skeleton-missing",
-          "steward": "steward.ownership",
-          "subject": "AU-SRCH-010"
         }
       ],
       "dependencies": [
@@ -19475,12 +19178,12 @@
         "M3"
       ],
       "prerequisites": {
-        "contract_candidate": false,
+        "contract_candidate": true,
         "contract_frozen": false,
         "dependencies": true,
-        "exact_contract": false,
+        "exact_contract": true,
         "fixtures": false,
-        "frozen_skeleton": false,
+        "frozen_skeleton": true,
         "global_gate_declarations": true,
         "observed_global_gates": false,
         "ownership": true,
@@ -26755,7 +26458,7 @@
     ]
   },
   "schema": "cxxlens.api-ready.v1",
-  "semantic_digest": "sha256:c18040619b0e2fd0b347d1fb324465fded27e8b362dd912676fc6fbbe8e3d3f4",
+  "semantic_digest": "sha256:c3ab6b4bf13a53909a5bf33851c695108fb6a42dbee9526853f03127fc8dbc3d",
   "shards": [
     {
       "acceptance_command": {

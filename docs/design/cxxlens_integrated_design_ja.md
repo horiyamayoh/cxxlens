@@ -3635,6 +3635,17 @@ custom payload へ AST/LLVM pointer、address、pretty-type-only identity を保
 failure は個別 staging batch に隔離し、typed evidence/coverage を残す。candidate fragment の public/install
 統合は #53、freeze は #54 の authority とする。
 
+### 39.16 select・search・explain package candidate
+
+Issue #45 の規範的 package contract は `package_contract_45.md` と
+`cxxlens_package_contract_candidates.yaml#issue-45` である。`select` は immutable typed algebra、
+normalization/type erasure、requirements union、predicate/reason-code registry を所有する。`search` は一つの
+immutable snapshot に対する shared query engine、authoritative result rows、open-world/variant/limit/order/
+dedup/coverage 会計を所有する。`explain` は selector/finding/coverage/plan/rejection trace と agent task card、
+catalog の bounded pure projection を所有し、query/plan を再実行・再解釈しない。complete zero-match、
+predicate rejection、unresolved、unsupported、ambiguous、partial は同一表現へ潰さない。candidate fragment の
+public/install 統合は #53、freeze は #54 の authority とする。
+
 ---
 
 ## 40. Public API inventory

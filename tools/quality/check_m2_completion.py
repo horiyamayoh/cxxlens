@@ -22,19 +22,26 @@ def main() -> int:
         api["id"]: api for package in catalog["packages"] for api in package["apis"]
     }
     m2_apis = [api for api in catalog_by_id.values() if api["phase"] == "M2"]
-    exact_ids = sorted(
-        api["id"] for api in m2_apis if api["declaration"]["status"] == "exact"
+    complete_ids = sorted(
+        api["id"]
+        for api in m2_apis
+        if api["declaration"]["status"] == "exact"
+        and api["implementation_state"] == "conformant"
+        and api["readiness"]["state"] == "complete"
     )
-    unresolved_ids = sorted(
-        api["id"] for api in m2_apis if api["declaration"]["status"] == "unresolved"
+    blocked_ids = sorted(
+        api["id"]
+        for api in m2_apis
+        if api["implementation_state"] == "unimplemented"
+        and api["readiness"]["state"] == "blocked"
     )
     deferred_ids = sorted(entry["id"] for entry in manifest["deferred_catalog"])
     failures: list[str] = []
-    if exact_ids != sorted(manifest["conformant_catalog_ids"]):
-        failures.append("M2 exact catalog signatures are not mapped exactly once")
-    if unresolved_ids != deferred_ids:
-        failures.append("M2 unresolved catalog entries are not explicitly deferred")
-    for api_id in exact_ids:
+    if complete_ids != sorted(manifest["conformant_catalog_ids"]):
+        failures.append("M2 exact complete catalog signatures are not mapped exactly once")
+    if blocked_ids != deferred_ids:
+        failures.append("M2 blocked catalog entries are not explicitly deferred")
+    for api_id in complete_ids:
         api = catalog_by_id[api_id]
         if api["implementation_state"] != "conformant" or api["readiness"]["state"] != "complete":
             failures.append(f"{api_id} exact M2 signature lacks completion evidence")
@@ -50,12 +57,12 @@ def main() -> int:
     vector_catalog = sorted(
         api_id for vector in manifest["vectors"] for api_id in vector["catalog_ids"]
     )
-    if vector_catalog != exact_ids:
-        failures.append("M2 vectors do not map every exact catalog signature exactly once")
+    if vector_catalog != complete_ids:
+        failures.append("M2 vectors do not map every exact complete catalog signature exactly once")
     vector_by_api = {
         api_id: vector for vector in manifest["vectors"] for api_id in vector["catalog_ids"]
     }
-    for api_id in exact_ids:
+    for api_id in complete_ids:
         missing = set(catalog_by_id[api_id].get("requirements", [])) - set(
             vector_by_api[api_id]["requirements"]
         )
@@ -168,7 +175,7 @@ def main() -> int:
         return 1
     print(
         f"validated M2 completion manifest: {len(manifest['vectors'])} vectors, "
-        f"{len(exact_ids)} exact APIs, {len(deferred_ids)} explicit deferrals, "
+        f"{len(complete_ids)} exact complete APIs, {len(deferred_ids)} explicit deferrals, "
         f"{axes['expected_executions']} installed matrix executions"
     )
     return 0

@@ -16,10 +16,10 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-CORE-004 | core | <cxxlens/core.hpp> | coverage_report::{complete,units,to_json,to_markdown} | AU-CORE-004 | conformant | candidate |
 | API-CORE-005 | core | <cxxlens/core.hpp> | finding::{id,why,unresolved_items,explain,to_json} | AU-CORE-005 | unimplemented | candidate |
 | API-CORE-006 | core | <cxxlens/core.hpp> | finding_set::{minimum_confidence,minimum_severity,to_json,to_markdown,to_sarif} | AU-CORE-006 | unimplemented | candidate |
-| API-EXP-001 | explain | <cxxlens/explain.hpp> | explain::{selector,finding,coverage,edit_plan,generation_plan} | AU-EXP-001 | unimplemented | unresolved |
-| API-EXP-002 | explain | <cxxlens/explain.hpp> | explain::why_not_matched | AU-EXP-002 | conformant | unresolved |
-| API-EXP-003 | explain | <cxxlens/explain.hpp> | explain::{for_selector,for_rule,for_codemod,for_generation} | AU-EXP-003 | unimplemented | unresolved |
-| API-EXP-004 | explain | <cxxlens/explain.hpp> | explain::api_catalog_json | AU-EXP-004 | unimplemented | unresolved |
+| API-EXP-001 | explain | <cxxlens/explain.hpp> | explain::{selector,finding,coverage,edit_plan,generation_plan} | AU-EXP-001 | unimplemented | candidate |
+| API-EXP-002 | explain | <cxxlens/explain.hpp> | explain::why_not_matched | AU-EXP-002 | conformant | candidate |
+| API-EXP-003 | explain | <cxxlens/explain.hpp> | explain::{for_selector,for_rule,for_codemod,for_generation} | AU-EXP-003 | unimplemented | candidate |
+| API-EXP-004 | explain | <cxxlens/explain.hpp> | explain::api_catalog_json | AU-EXP-004 | unimplemented | candidate |
 | API-FACT-001 | facts | <cxxlens/facts.hpp> | fact_profile::{minimal,semantic_search,refactor,generation,flow,full,include,exclude,precision} | AU-FACT-001 | conformant | candidate |
 | API-FACT-002 | facts | <cxxlens/facts.hpp> | fact_store::find(fact_query) | AU-FACT-002 | conformant | candidate |
 | API-FACT-003 | facts | <cxxlens/facts.hpp> | fact_store::symbols() | AU-FACT-003 | conformant | candidate |
@@ -83,27 +83,27 @@ This file is generated from `schemas/cxxlens_public_api_contract.yaml`; do not e
 | API-RV-003 | review | <cxxlens/review.hpp> | gate_policy factory/builder family | AU-RV-003 | unimplemented | unresolved |
 | API-RV-004 | review | <cxxlens/review.hpp> | review::workflow builder family | AU-RV-004 | unimplemented | unresolved |
 | API-RV-005 | review | <cxxlens/review.hpp> | review::workflow::run | AU-RV-005 | unimplemented | unresolved |
-| API-SEL-001 | select | <cxxlens/select.hpp> | file_selector builder family | AU-SEL-001 | conformant | unresolved |
-| API-SEL-002 | select | <cxxlens/select.hpp> | symbol_selector builder family | AU-SEL-002 | conformant | unresolved |
-| API-SEL-003 | select | <cxxlens/select.hpp> | type_selector builder family | AU-SEL-003 | conformant | unresolved |
-| API-SEL-004 | select | <cxxlens/select.hpp> | expression_selector builder family | AU-SEL-004 | unimplemented | unresolved |
-| API-SEL-005 | select | <cxxlens/select.hpp> | reference_selector builder family | AU-SEL-005 | unimplemented | unresolved |
-| API-SEL-006 | select | <cxxlens/select.hpp> | call_selector builder family | AU-SEL-006 | conformant | unresolved |
-| API-SEL-007 | select | <cxxlens/select.hpp> | conversion/include/macro selector families | AU-SEL-007 | unimplemented | unresolved |
-| API-SEL-008 | select | <cxxlens/select.hpp> | any_symbol/function/method/record/variable/macro/type helpers | AU-SEL-008 | conformant | unresolved |
-| API-SEL-009 | select | <cxxlens/select.hpp> | calls_to/calls_to_function/calls_to_method helpers | AU-SEL-009 | conformant | unresolved |
-| API-SEL-010 | select | <cxxlens/select.hpp> | semantic_selector::{from_json,requirements,explain,to_json} | AU-SEL-010 | conformant | unresolved |
-| API-SEL-011 | select | <cxxlens/select.hpp> | semantic(typed_selector) | AU-SEL-011 | conformant | unresolved |
-| API-SRCH-001 | search | <cxxlens/search.hpp> | search::symbols | AU-SRCH-001 | unimplemented | unresolved |
-| API-SRCH-002 | search | <cxxlens/search.hpp> | search::references | AU-SRCH-002 | unimplemented | unresolved |
-| API-SRCH-003 | search | <cxxlens/search.hpp> | search::calls | AU-SRCH-003 | conformant | unresolved |
-| API-SRCH-004 | search | <cxxlens/search.hpp> | search::calls_to_function | AU-SRCH-004 | conformant | unresolved |
-| API-SRCH-005 | search | <cxxlens/search.hpp> | search::calls_to_method | AU-SRCH-005 | conformant | unresolved |
-| API-SRCH-006 | search | <cxxlens/search.hpp> | search::inheritance | AU-SRCH-006 | conformant | unresolved |
-| API-SRCH-007 | search | <cxxlens/search.hpp> | search::overrides | AU-SRCH-007 | conformant | unresolved |
-| API-SRCH-008 | search | <cxxlens/search.hpp> | search::includes | AU-SRCH-008 | unimplemented | unresolved |
-| API-SRCH-009 | search | <cxxlens/search.hpp> | search::macros | AU-SRCH-009 | unimplemented | unresolved |
-| API-SRCH-010 | search | <cxxlens/search.hpp> | search::conversions | AU-SRCH-010 | unimplemented | unresolved |
+| API-SEL-001 | select | <cxxlens/select.hpp> | file_selector builder family | AU-SEL-001 | conformant | candidate |
+| API-SEL-002 | select | <cxxlens/select.hpp> | symbol_selector builder family | AU-SEL-002 | conformant | candidate |
+| API-SEL-003 | select | <cxxlens/select.hpp> | type_selector builder family | AU-SEL-003 | conformant | candidate |
+| API-SEL-004 | select | <cxxlens/select.hpp> | expression_selector builder family | AU-SEL-004 | unimplemented | candidate |
+| API-SEL-005 | select | <cxxlens/select.hpp> | reference_selector builder family | AU-SEL-005 | unimplemented | candidate |
+| API-SEL-006 | select | <cxxlens/select.hpp> | call_selector builder family | AU-SEL-006 | conformant | candidate |
+| API-SEL-007 | select | <cxxlens/select.hpp> | conversion/include/macro selector families | AU-SEL-007 | unimplemented | candidate |
+| API-SEL-008 | select | <cxxlens/select.hpp> | any_symbol/function/method/record/variable/macro/type helpers | AU-SEL-008 | conformant | candidate |
+| API-SEL-009 | select | <cxxlens/select.hpp> | calls_to/calls_to_function/calls_to_method helpers | AU-SEL-009 | conformant | candidate |
+| API-SEL-010 | select | <cxxlens/select.hpp> | semantic_selector::{from_json,requirements,explain,to_json} | AU-SEL-010 | conformant | candidate |
+| API-SEL-011 | select | <cxxlens/select.hpp> | semantic(typed_selector) | AU-SEL-011 | conformant | candidate |
+| API-SRCH-001 | search | <cxxlens/search.hpp> | search::symbols | AU-SRCH-001 | unimplemented | candidate |
+| API-SRCH-002 | search | <cxxlens/search.hpp> | search::references | AU-SRCH-002 | unimplemented | candidate |
+| API-SRCH-003 | search | <cxxlens/search.hpp> | search::calls | AU-SRCH-003 | conformant | candidate |
+| API-SRCH-004 | search | <cxxlens/search.hpp> | search::calls_to_function | AU-SRCH-004 | conformant | candidate |
+| API-SRCH-005 | search | <cxxlens/search.hpp> | search::calls_to_method | AU-SRCH-005 | conformant | candidate |
+| API-SRCH-006 | search | <cxxlens/search.hpp> | search::inheritance | AU-SRCH-006 | conformant | candidate |
+| API-SRCH-007 | search | <cxxlens/search.hpp> | search::overrides | AU-SRCH-007 | conformant | candidate |
+| API-SRCH-008 | search | <cxxlens/search.hpp> | search::includes | AU-SRCH-008 | unimplemented | candidate |
+| API-SRCH-009 | search | <cxxlens/search.hpp> | search::macros | AU-SRCH-009 | unimplemented | candidate |
+| API-SRCH-010 | search | <cxxlens/search.hpp> | search::conversions | AU-SRCH-010 | unimplemented | candidate |
 | API-TEST-001 | testing | <cxxlens/testing.hpp> | workspace_fixture::{cpp,c,main_file,add_file,add_header,add_variant,standard,target,argument,generated,system_header,materialize}; fault_plan::{make,probe} | AU-TEST-001 | conformant | candidate |
 | API-TEST-002 | testing | <cxxlens/testing.hpp> | result_assertion builder/check | AU-TEST-002 | conformant | candidate |
 | API-TEST-003 | testing | <cxxlens/testing.hpp> | edit_plan_assertion builder/check | AU-TEST-003 | unimplemented | candidate |

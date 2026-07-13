@@ -936,7 +936,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: select
-  contract: {state: unresolved, owner_issue: '#45', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract: {state: candidate, owner_issue: '#45', transition_issue: '#45', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-45', candidate_fingerprint: 'sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024'}
   header: <cxxlens/select.hpp>
   purpose: Immutable serializable semantic selector DSL.
   public_types:
@@ -1088,17 +1088,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/45/select_search_explain.hpp
+      signature: 'cxxlens::select::expression_selector cxxlens::select::expression_selector::type_is(cxxlens::select::type_selector) const; cxxlens::select::expression_selector cxxlens::select::expression_selector::refers_to(cxxlens::select::symbol_selector) const; cxxlens::select::expression_selector cxxlens::select::expression_selector::is_null_pointer() const; cxxlens::select::expression_selector cxxlens::select::expression_selector::is_literal() const; cxxlens::select::expression_selector cxxlens::select::expression_selector::integer_value(std::int64_t) const; cxxlens::select::expression_selector cxxlens::select::expression_selector::string_value(std::string) const; cxxlens::select::expression_selector cxxlens::select::expression_selector::implicit(cxxlens::select::implicit_node_policy) const; cxxlens::select::expression_selector cxxlens::select::expression_selector::macro(cxxlens::select::macro_match_policy) const; cxxlens::select::selector_requirements cxxlens::select::expression_selector::requirements() const; std::string cxxlens::select::expression_selector::to_json() const; cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::expression_selector)'
+      signature_fingerprint: sha256:53dfcb364dd7a081822dea17bee50722a84b17c7d3bca236fdfb87ab7316a608
     atomic_unit:
       id: AU-SEL-004
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-SEL-005
     symbol: reference_selector builder family
     kind: builder_family
@@ -1113,17 +1113,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/45/select_search_explain.hpp
+      signature: 'cxxlens::select::reference_selector cxxlens::select::reference_selector::target(cxxlens::select::symbol_selector) const; cxxlens::select::reference_selector cxxlens::select::reference_selector::kind(cxxlens::reference_kind) const; cxxlens::select::reference_selector cxxlens::select::reference_selector::kinds(std::vector<cxxlens::reference_kind>) const; cxxlens::select::reference_selector cxxlens::select::reference_selector::inside(cxxlens::select::symbol_selector) const; cxxlens::select::reference_selector cxxlens::select::reference_selector::in_file(cxxlens::select::file_selector) const; cxxlens::select::reference_selector cxxlens::select::reference_selector::macro(cxxlens::select::macro_match_policy) const; cxxlens::select::reference_selector cxxlens::select::reference_selector::variants(cxxlens::select::variant_match_policy) const; cxxlens::select::selector_requirements cxxlens::select::reference_selector::requirements() const; std::string cxxlens::select::reference_selector::to_json() const; cxxlens::select::reference_selector cxxlens::select::references_to(cxxlens::select::symbol_selector); cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::reference_selector)'
+      signature_fingerprint: sha256:65db6021d0192c263cb8f56635918c49bfa9398d1bf6e6bd1dbb93a996064b34
     atomic_unit:
       id: AU-SEL-005
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-SEL-006
     symbol: call_selector builder family
     kind: builder_family
@@ -1190,17 +1190,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/45/select_search_explain.hpp
+      signature: 'cxxlens::select::conversion_selector cxxlens::select::conversion_selector::kind(std::string) const; cxxlens::select::conversion_selector cxxlens::select::conversion_selector::from(cxxlens::select::type_selector) const; cxxlens::select::conversion_selector cxxlens::select::conversion_selector::to(cxxlens::select::type_selector) const; cxxlens::select::conversion_selector cxxlens::select::conversion_selector::implicit(bool) const; cxxlens::select::conversion_selector cxxlens::select::conversion_selector::in_file(cxxlens::select::file_selector) const; cxxlens::select::selector_requirements cxxlens::select::conversion_selector::requirements() const; cxxlens::select::include_selector cxxlens::select::include_selector::header(std::string) const; cxxlens::select::include_selector cxxlens::select::include_selector::resolved_to(cxxlens::path) const; cxxlens::select::include_selector cxxlens::select::include_selector::used(bool) const; cxxlens::select::include_selector cxxlens::select::include_selector::system(bool) const; cxxlens::select::include_selector cxxlens::select::include_selector::providing(cxxlens::select::symbol_selector) const; cxxlens::select::include_selector cxxlens::select::include_selector::included_by(cxxlens::select::file_selector) const; cxxlens::select::selector_requirements cxxlens::select::include_selector::requirements() const; cxxlens::select::macro_selector cxxlens::select::macro_selector::name(std::string) const; cxxlens::select::macro_selector cxxlens::select::macro_selector::function_like(bool) const; cxxlens::select::macro_selector cxxlens::select::macro_selector::used_in(cxxlens::select::file_selector) const; cxxlens::select::macro_selector cxxlens::select::macro_selector::argument_contains(cxxlens::select::expression_selector) const; cxxlens::select::selector_requirements cxxlens::select::macro_selector::requirements() const; cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::conversion_selector); cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::include_selector); cxxlens::select::semantic_selector cxxlens::select::semantic(cxxlens::select::macro_selector)'
+      signature_fingerprint: sha256:06f0913e607e3b68748d1dc77098544d1b33c6a81c3cfd905510006ead6690f9
     atomic_unit:
       id: AU-SEL-007
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-SEL-008
     symbol: any_symbol/function/method/record/variable/macro/type helpers
     kind: free_function_family
@@ -1319,7 +1319,7 @@ packages:
       state: complete
       blockers: []
 - id: search
-  contract: {state: unresolved, owner_issue: '#45', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract: {state: candidate, owner_issue: '#45', transition_issue: '#45', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-45', candidate_fingerprint: 'sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024'}
   header: <cxxlens/search.hpp>
   purpose: Semantic grep over facts with targeted AST/CFG refinement.
   public_types:
@@ -1351,17 +1351,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/45/select_search_explain.hpp
+      signature: cxxlens::result<cxxlens::search_report<cxxlens::symbol>> cxxlens::search::symbols(const cxxlens::workspace&,cxxlens::select::symbol_selector,cxxlens::search_options)
+      signature_fingerprint: sha256:b96eb750e20a847cade5cfb28f7baa0f472533f05cc70397e0119f3e61e8487b
     atomic_unit:
       id: AU-SRCH-001
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-SRCH-002
     symbol: search::references
     kind: free_function
@@ -1386,17 +1386,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/45/select_search_explain.hpp
+      signature: cxxlens::result<cxxlens::search_report<cxxlens::reference>> cxxlens::search::references(const cxxlens::workspace&,cxxlens::select::reference_selector,cxxlens::search_options)
+      signature_fingerprint: sha256:9bfea1820f9e8bbff568c40f2c55e37a31e5f3fb28276f3dcd152e1679feaebd
     atomic_unit:
       id: AU-SRCH-002
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-SRCH-003
     symbol: search::calls
     kind: free_function
@@ -1600,17 +1600,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/45/select_search_explain.hpp
+      signature: cxxlens::result<cxxlens::search_report<cxxlens::include_relation>> cxxlens::search::includes(const cxxlens::workspace&,cxxlens::select::include_selector,cxxlens::search_options)
+      signature_fingerprint: sha256:125d6fced9b72bc7d75cfc5c1a38967d6d8440c2380bf22bc80ebc77d375b5d3
     atomic_unit:
       id: AU-SRCH-008
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-SRCH-009
     symbol: search::macros
     kind: free_function
@@ -1629,17 +1629,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/45/select_search_explain.hpp
+      signature: cxxlens::result<cxxlens::search_report<cxxlens::macro_expansion>> cxxlens::search::macros(const cxxlens::workspace&,cxxlens::select::macro_selector,cxxlens::search_options)
+      signature_fingerprint: sha256:c281593aa30a769f783052201fef0533f0830c15cd5aa7e184335f3bc417cdc5
     atomic_unit:
       id: AU-SRCH-009
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-SRCH-010
     symbol: search::conversions
     kind: free_function
@@ -1658,17 +1658,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/45/select_search_explain.hpp
+      signature: cxxlens::result<cxxlens::search_report<cxxlens::fact>> cxxlens::search::conversions(const cxxlens::workspace&,cxxlens::select::conversion_selector,cxxlens::search_options)
+      signature_fingerprint: sha256:f0fd1deb433ea736c422d98579cb2c9351d3032c8153dab1c1209ba0d8d54fcd
     atomic_unit:
       id: AU-SRCH-010
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
 - id: graph
   contract: {state: unresolved, owner_issue: '#46', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
   header: <cxxlens/graph.hpp>
@@ -3212,7 +3212,7 @@ packages:
       blockers:
       - exact_declaration_unresolved
 - id: explain
-  contract: {state: unresolved, owner_issue: '#45', transition_issue: '#42', conventions: cxxlens.global-contract-conventions.v1}
+  contract: {state: candidate, owner_issue: '#45', transition_issue: '#45', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-45', candidate_fingerprint: 'sha256:c2a99bdb8fbb47fd06d021f5d1bf8418b29b24ebe82120b50d3688afef720024'}
   header: <cxxlens/explain.hpp>
   purpose: Why/explanation and coding-agent task cards.
   public_types:
@@ -3227,17 +3227,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/45/select_search_explain.hpp
+      signature: 'cxxlens::explain::explanation cxxlens::explain::selector(const cxxlens::select::semantic_selector&,cxxlens::explain::detail_level); cxxlens::explain::explanation cxxlens::explain::finding(const cxxlens::finding&,cxxlens::explain::detail_level); cxxlens::explain::explanation cxxlens::explain::coverage(const cxxlens::coverage_report&,cxxlens::explain::detail_level); cxxlens::explain::explanation cxxlens::explain::edit_plan(const cxxlens::transform::edit_plan&,cxxlens::explain::detail_level); cxxlens::explain::explanation cxxlens::explain::generation_plan(const cxxlens::generate::generation_plan&,cxxlens::explain::detail_level)'
+      signature_fingerprint: sha256:adc0fbd816afc1a43a846ec317545135a405fa0c799808e55592b6bea1c47263
     atomic_unit:
       id: AU-EXP-001
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-EXP-002
     symbol: explain::why_not_matched
     kind: free_function
@@ -3275,17 +3275,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/45/select_search_explain.hpp
+      signature: 'cxxlens::explain::agent_task_card cxxlens::explain::for_selector(const cxxlens::select::semantic_selector&); cxxlens::explain::agent_task_card cxxlens::explain::for_rule(const cxxlens::rules::rule&); cxxlens::explain::agent_task_card cxxlens::explain::for_codemod(const cxxlens::transform::codemod&); cxxlens::explain::agent_task_card cxxlens::explain::for_generation(const cxxlens::generate::generation_plan&)'
+      signature_fingerprint: sha256:52d1427216a080b8c400269de2b871d8a726f4aabc7ec87c601450ea94b4bd53
     atomic_unit:
       id: AU-EXP-003
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-EXP-004
     symbol: explain::api_catalog_json
     kind: free_function
@@ -3293,17 +3293,17 @@ packages:
     contract_maturity: contract-defined
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/45/select_search_explain.hpp
+      signature: std::string cxxlens::explain::api_catalog_json()
+      signature_fingerprint: sha256:7824de0ec7171b4de6eb4af75227d8c838b6b43c869929188b1c19306948dbbc
     atomic_unit:
       id: AU-EXP-004
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
 - id: testing
   contract: {state: candidate, owner_issue: '#43', transition_issue: '#43', conventions: cxxlens.global-contract-conventions.v1, candidate_manifest: 'schemas/cxxlens_package_contract_candidates.yaml#issue-43', candidate_fingerprint: 'sha256:d340846ca120a2adf335ec1ffa4ccb6a5ade3be2142e9212dd4523e34b5e7584'}
   header: <cxxlens/testing.hpp>
@@ -3782,8 +3782,8 @@ summary:
     implemented: 0
     conformant: 47
   contract_state_counts:
-    candidate: 6
-    unresolved: 16
+    candidate: 9
+    unresolved: 13
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.

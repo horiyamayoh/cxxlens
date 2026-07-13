@@ -15,7 +15,7 @@ properties:
   semantics_version: {const: 1.0.0}
   library_version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
   normalization_version: {const: 1}
-  domain: {enum: [file, symbol, type, call]}
+  domain: {enum: [file, symbol, type, expression, reference, call, conversion, include, macro]}
   expression: {$ref: '#/$defs/expression'}
 $defs:
   expression:
@@ -31,7 +31,7 @@ $defs:
       required: [op, name, reason_code, arguments, operands]
       properties:
         op: {const: predicate}
-        name: {type: string, pattern: '^(file|symbol|type|call)\.[a-z0-9_]+$'}
+        name: {type: string, pattern: '^(file|symbol|type|expression|reference|call|conversion|include|macro)\.[a-z0-9_]+$'}
         reason_code: {type: string, pattern: '^select\.[a-z0-9.-]+$'}
         arguments:
           type: object

@@ -113,6 +113,33 @@ class PackageContractCandidateTest(unittest.TestCase):
         with self.assertRaises(jsonschema.ValidationError):
             validator.validate(name_only)
 
+    def test_positive_issue_45_candidate_and_selector_registry(self) -> None:
+        group = next(row for row in self.manifest["groups"] if row["issue"] == "#45")
+        self.assertEqual(group["packages"], ["explain", "search", "select"])
+        self.assertEqual(len(group["api_contracts"]), 25)
+        self.assertFalse(group["production_implementation_changed"])
+
+        selector_schema = load("cxxlens_selector.schema.yaml")
+        domains = set(selector_schema["properties"]["domain"]["enum"])
+        self.assertEqual(
+            domains,
+            {"file", "symbol", "type", "expression", "reference", "call", "conversion", "include", "macro"},
+        )
+        reasons = load("cxxlens_selector_reason_codes.yaml")
+        predicates = [(row["name"], row["reason_code"]) for row in reasons["predicates"]]
+        self.assertEqual(len(predicates), len(set(predicates)))
+        self.assertTrue(
+            {"expression", "reference", "conversion", "include", "macro"}
+            <= {row["domain"] for row in reasons["predicates"]}
+        )
+
+        search_schema = load("cxxlens_search_report.schema.yaml")
+        self.assertEqual(
+            set(search_schema["properties"]["result_kind"]["enum"]),
+            {"symbol", "reference", "call", "inheritance", "override", "include", "macro", "conversion"},
+        )
+        jsonschema.Draft202012Validator.check_schema(load("cxxlens_search_options.schema.yaml"))
+
     def test_missing_assigned_api_is_rejected(self) -> None:
         document = copy.deepcopy(self.manifest)
         group = document["groups"][0]
