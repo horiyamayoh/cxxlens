@@ -40,6 +40,7 @@ from ready_evaluator import (  # noqa: E402
     resolve_api,
     validate_report,
 )
+from unit_local_gate import compile_targets  # noqa: E402
 
 
 def process_report_digest(inputs: tuple[dict, ...]) -> str:
@@ -140,6 +141,23 @@ class RunnerTest(unittest.TestCase):
         }
         self.assertEqual(integrated_units, set(node_units))
         self.assertNotIn(str(ROOT), json.dumps(generated, sort_keys=True))
+
+    def test_compile_target_falls_back_to_command_output(self) -> None:
+        source = (ROOT / "tests/unit/config/configuration_test.cpp").resolve()
+        compile_commands = [
+            {
+                "file": str(source),
+                "command": (
+                    "clang++ -o "
+                    "build/tests/CMakeFiles/cxxlens-unit-configuration.dir/"
+                    f"configuration_test.cpp.o -c {source}"
+                ),
+            }
+        ]
+        self.assertEqual(
+            compile_targets(compile_commands)[source],
+            "cxxlens-unit-configuration",
+        )
 
     def test_typed_providers_blockers_and_dependency_chains_are_visible(self) -> None:
         providers = {

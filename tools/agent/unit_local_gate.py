@@ -7,6 +7,7 @@ import argparse
 import json
 import pathlib
 import re
+import shlex
 import subprocess
 import sys
 from typing import Any
@@ -39,7 +40,21 @@ def compile_targets(compile_commands: list[dict[str, Any]]) -> dict[pathlib.Path
     targets: dict[pathlib.Path, str] = {}
     for row in compile_commands:
         source = pathlib.Path(row["file"]).resolve()
-        output = str(row.get("output", "")).replace("\\", "/")
+        output = str(row.get("output", ""))
+        if not output:
+            arguments = row.get("arguments")
+            if not isinstance(arguments, list):
+                command = row.get("command", "")
+                arguments = shlex.split(command) if isinstance(command, str) else []
+            output = next(
+                (
+                    str(arguments[index + 1])
+                    for index, argument in enumerate(arguments[:-1])
+                    if argument == "-o"
+                ),
+                "",
+            )
+        output = output.replace("\\", "/")
         match = TARGET.search(output)
         if match:
             targets[source] = match.group(1)

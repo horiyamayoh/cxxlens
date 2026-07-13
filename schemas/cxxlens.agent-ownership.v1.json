@@ -4,7 +4,7 @@
     "conventions": "sha256:9597d2b4c8c47c93f19595fb227a394224b6a7deb0a771e81c10d86d59c492f2",
     "ownership_registry": "sha256:797e6a52c4c941ed4225b761ee070f5f00af4c10661d2ebd519e874391eec342"
   },
-  "repository_paths_digest": "sha256:ba2a7f8e0188cc03124e2c8312b7082db830e81feb7dbc94be20a7b431543787",
+  "repository_paths_digest": "sha256:c6eef59c026d84c2bc34154894610b6e02ac8e348d759f8e227f6064816877be",
   "reserved_paths": [
     {
       "access": "exclusive_write",
@@ -1138,7 +1138,7 @@
     }
   ],
   "schema": "cxxlens.agent-ownership.v1",
-  "semantic_digest": "sha256:f948c6dc885753e0bc880a9d515d6cc57e5f6abfc5597a1f01b1c4ee9cd3f979",
+  "semantic_digest": "sha256:2312cd8d4b983b10e431e8307daf4f4cd3af04287e4c6b71bd0abcac320419fd",
   "skeletons": [
     {
       "api_id": "API-CFG-001",
@@ -2888,7 +2888,7 @@
       "blocked": 0,
       "frozen": 124
     },
-    "tracked_path_count": 493,
+    "tracked_path_count": 498,
     "unit_count": 124
   },
   "task_packet_digest": "sha256:e2007e75e7b21c8634bc39fa64fa608c61351806ca7cd51aad8b6eb3a764fe12",
@@ -3354,6 +3354,13 @@
       "generator_role": null,
       "owner_role": "steward.design",
       "path": "docs/design/phase_b_contract_integration.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.design",
+      "path": "docs/design/public_api_contract_freeze.md"
     },
     {
       "access": "exclusive_write",
@@ -4376,6 +4383,20 @@
       "generator_role": null,
       "owner_role": "generator.catalog",
       "path": "schemas/cxxlens_public_api_contract.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.schema",
+      "path": "schemas/cxxlens_public_api_contract_freeze.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.schema",
+      "path": "schemas/cxxlens_public_api_contract_freeze.yaml"
     },
     {
       "access": "exclusive_write",
@@ -5754,6 +5775,13 @@
       "generated": false,
       "generator_role": null,
       "owner_role": "steward.quality",
+      "path": "tests/quality/test_public_api_contract_freeze.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.quality",
       "path": "tests/quality/test_tsan_gate.py"
     },
     {
@@ -6217,6 +6245,13 @@
       "generator_role": null,
       "owner_role": "steward.provisioning",
       "path": "tools/quality/check_provisioning_contract.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.quality",
+      "path": "tools/quality/check_public_api_contract_freeze.py"
     },
     {
       "access": "exclusive_write",

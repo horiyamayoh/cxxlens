@@ -106,6 +106,7 @@ def input_path_groups(root: pathlib.Path) -> dict[str, set[str]]:
         *integration["public_headers"]["ordinary"],
     }
     docs_examples = {
+        "docs/design/cxxlens_integrated_design_ja.md",
         "docs/design/public_contract_conventions.md",
         "docs/design/contract_candidate_checklist.md",
         *(group["normative_document"] for group in candidates["groups"]),

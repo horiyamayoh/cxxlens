@@ -3604,7 +3604,7 @@ Coverageは requested universe − excluded − covered − failed − unresolve
 全 package contract は `cxxlens_global_contract_conventions.yaml` と
 `contract_candidate_checklist.md` を共通規約とする。catalog の package `contract.state` は declaration、
 implementation、readiness と独立した `draft` / `unresolved` / `candidate` / `frozen` の軸である。
-#43〜#51 の一意な package owner は exact contract と全 checklist evidence を揃えて `candidate` へ遷移
+\#43〜#51 の一意な package owner は exact contract と全 checklist evidence を揃えて `candidate` へ遷移
 できるが、`frozen` への遷移 authority は #54 のみとする。
 
 `cxxlens_contract_ownership.yaml` は shared public type、package component、fact/capability provider subject、
@@ -3621,7 +3621,7 @@ version/capability、evidence/coverage、finding/finding_set の identity・owne
 root/symlink/environment/redaction/version failure を持つ。`testing` は production-path fixture、result/plan
 assertion、property/determinism、exact schema lookup を持ち、transform/generate plan は forward-declared
 consumer として参照するだけで再所有しない。candidate fragment の public/install 統合は #53、freeze は
-#54 の authority とする。
+\#54 の authority とする。
 
 ### 39.15 workspace・facts・interop package candidate
 

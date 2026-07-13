@@ -4,9 +4,9 @@ state: frozen
 phase_c_authorized: true
 repository:
   binding: git-head-at-execution
-  input_fingerprint: sha256:fc6fa55333501bbbabf2b3bf1f25b84fde04a288a70892ec6b0f224f3000991e
+  input_fingerprint: sha256:c6402bf4a3a339a6713488b161adb92503c64c5aba646e054052d1dd44ef6292
 inputs:
-  fingerprint: sha256:fc6fa55333501bbbabf2b3bf1f25b84fde04a288a70892ec6b0f224f3000991e
+  fingerprint: sha256:c6402bf4a3a339a6713488b161adb92503c64c5aba646e054052d1dd44ef6292
   categories:
   - id: catalog
     digest: sha256:cc3e0aef73913825a0cd0192de65f37e39dd6a7375b556e93bf525273fd1e445
@@ -20,7 +20,7 @@ inputs:
     - path: schemas/cxxlens_public_api_contract.yaml
       sha256: sha256:3e2d4c29e664fd4246163c79b8a0639eb8a9f0bffd0ba5153c5997b81f97fc61
   - id: docs_examples
-    digest: sha256:a1b9b3adfa9742bfeb333229cf22289bac37264cc12e16a1508b67a6aa6959ee
+    digest: sha256:165aa800e1f78f59d1e4c521c90b04988a0b15408a3d425bfa75b6c613bba36e
     files:
     - path: contracts/candidates/43/core_findings_usage.cpp
       sha256: sha256:99fd1a8ba375a077bea05e3ec5f0209575733ccac50cc22e08e465c6c578c6ab
@@ -44,6 +44,8 @@ inputs:
       sha256: sha256:14fb66a33e5dc2e4508cac7b8860d6746d51ce78a935616c0184fa53d401af3c
     - path: docs/design/contract_candidate_checklist.md
       sha256: sha256:4e399f788578812a273c3bc8665731addec1058195f937af769735e66d7fbf39
+    - path: docs/design/cxxlens_integrated_design_ja.md
+      sha256: sha256:319b04e99baeaaf30fc63ef0df95e9dec3f26e13814fc0287185ae5265303178
     - path: docs/design/package_contract_43.md
       sha256: sha256:821d48728500cde457bfb25eea6e09435db77d900d6c0a548d6265694b0dcc35
     - path: docs/design/package_contract_44.md
@@ -51,7 +53,7 @@ inputs:
     - path: docs/design/package_contract_45.md
       sha256: sha256:cdeb11eb737017f517a1ac3a58f8e9b307c245cbff69ab20f32f52eb5ebc3328
     - path: docs/design/package_contract_46.md
-      sha256: sha256:27e91339227367795f72b69aa5cd18a0cf9feb085fc0086cf1e7f4438bfc7998
+      sha256: sha256:9547c35bd3aa3178eac16d177d876aaa1ef2d2d65f7490adebc234d7dbdfc839
     - path: docs/design/package_contract_47.md
       sha256: sha256:bd9a0db70f3ce510cc13b727025513c870e9865d4d7343a5a8357a897e661f4e
     - path: docs/design/package_contract_48.md
@@ -122,7 +124,7 @@ inputs:
     - path: tools/quality/check_high_risk_contract_validation.py
       sha256: sha256:3eb38bd6dc13cc88547756bce16c2a63c9599fe6135f62dbef59aa8d2630d30d
   - id: integration_acceptance
-    digest: sha256:561eb1b31525a832ee46215fa37efcda29f3da30f601e07daee04330a5676501
+    digest: sha256:798388b544f288669d5e7413368b0e9cac4c159cf31c47ca53c0cb82e421cbf6
     files:
     - path: docs/design/phase_b_contract_integration.md
       sha256: sha256:187abc9a0efd5a3229b62c499a9312a843270b5a51336530fc531bac60e56987
@@ -139,12 +141,12 @@ inputs:
     - path: tools/quality/check_phase_b_contract_integration.py
       sha256: sha256:a65e65a10cd33aa9fba2d4cdd3f6afa79d68c554f7d6794ab88198b0a5e482a8
     - path: tools/quality/check_public_api_contract_freeze.py
-      sha256: sha256:43d009cf0fcbab03e572f25989f35fbd697a870999e3b6a2d77849547288cf6e
+      sha256: sha256:50acc653adcfe92b02bb0ada247e7c406010c9f7708008063f6d1836953a0264
   - id: ownership
-    digest: sha256:6befd6b4898f0327c0ea93474f7ecf049f088406164758806a42c901b84e2bfb
+    digest: sha256:05e9251743d4ab97808eaed529f9dc88789408d4223de53978f77a5ef40f3cdc
     files:
     - path: schemas/cxxlens.agent-ownership.v1.json
-      sha256: sha256:8779710a62d212824bb2f8a1e4feaeb08f608d47dcdc37ee9bdb84bbe61a0cbb
+      sha256: sha256:8547f27c57a2cbfc488c9af51c0abf6d7aaf0c44a521d961eba4bf3c394270aa
     - path: schemas/cxxlens.agent-ownership.v1.schema.yaml
       sha256: sha256:5b9b07cfa4994cd33cc58b859c632a36a35389ed1cce744f77161da0445945cb
     - path: schemas/cxxlens.dependency-request.examples.v1.json
@@ -232,19 +234,19 @@ inputs:
     - path: include/cxxlens/workspace.hpp
       sha256: sha256:50a4706c419c5407621415859a505f14385f05ec2d6e3081d03f5fd65c210800
   - id: readiness_authorization
-    digest: sha256:064ee539528c9d1351c6c0521d85b0b586910a11e3e25a38bd29e396f18250c9
+    digest: sha256:a568ba0d6ddbb61610c816d73c30a17e2a62dd0936c9fc95c7fc51057e32f170
     files:
     - path: schemas/cxxlens.readiness.authorization.v1.json
-      sha256: sha256:c1b202888be9142c91117fde7e505320d29f21ba2cf51d1fbb439c2fc26a841e
+      sha256: sha256:2a49b439224ff6b8f51b1bbb5871422a21997b6905536b654c00947d46ae9d11
     - path: schemas/cxxlens.readiness.authorization.v1.schema.yaml
       sha256: sha256:7c14aa3727aa2b577ec5a4b3f858b8ebe1e1dbc4ed04a814246d869839bcc84e
     - path: schemas/cxxlens.readiness.gate-evidence.v1.schema.yaml
       sha256: sha256:bebb3095270b574acea9aaea69ab17d0e591f8367f977577ba7966a48a39ade3
   - id: ready_report
-    digest: sha256:855265ee74cf1fa9083655896af6eae8661632068ca49062bb7030b440ef1888
+    digest: sha256:2059bfc09197c00e7690db9380988605dac6e7070c151bf916543ba098bd5aab
     files:
     - path: schemas/cxxlens.api-ready.report.v1.json
-      sha256: sha256:5d1a460e88aae667fd45a2debe6282679137fc53374a262bcffae5051e9ed3b8
+      sha256: sha256:f94abba75977d964bbe7b2fef09b89eb27ec0731308aee4079d298ca72c0c7c4
     - path: schemas/cxxlens.api-ready.run-manifest.v1.schema.yaml
       sha256: sha256:ba8b1c0bdaec1713139797dc329c37972730c776988b2b8c67f15e51216834e6
     - path: schemas/cxxlens.api-ready.v1.schema.yaml

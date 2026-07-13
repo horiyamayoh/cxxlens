@@ -5,7 +5,7 @@
 This document and `schemas/cxxlens_package_contract_candidates.yaml#issue-46` are the normative
 Phase B candidate for all six `graph` APIs. All six remain unimplemented/blocked. The candidate
 fragment is non-installed; #53 owns stable-header integration, #52 owns the technical spike, and
-#54 alone owns the frozen transition.
+\#54 alone owns the frozen transition.
 
 ## Authoritative graph snapshot and identity
 
