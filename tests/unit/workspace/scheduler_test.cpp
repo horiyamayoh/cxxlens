@@ -84,6 +84,7 @@ namespace
 		std::map<std::string, std::string> failures;
 		std::set<std::string> batch_failures;
 		std::size_t payload_size{};
+		bool echo_parse_input{};
 
 		result<frontend::observation_batch> execute(const task_request& task,
 													execution_context context) override
@@ -138,6 +139,13 @@ namespace
 											 1U,
 											 1U,
 											 std::string(payload_size, 'x')});
+			if (echo_parse_input)
+				batch.diagnostics.push_back({"clang.diagnostic.input",
+											 frontend::diagnostic_severity::note,
+											 task.parse.files.front().file.generic_string(),
+											 1U,
+											 1U,
+											 task.parse.files.front().content});
 			return batch;
 		}
 	};
@@ -201,6 +209,92 @@ namespace
 										return row.event == "coalesced";
 									}),
 				"coalescing trace was omitted");
+	}
+
+	void parse_input_identity(scheduler& service, task_request request)
+	{
+		request.subscribers = {{"content-a", {}}};
+		request.parse.files.front().content = "int value = 1;\n";
+		auto different_content = request;
+		different_content.subscribers = {{"content-b", {}}};
+		different_content.parse.files.front().content = "int value = 2;\n";
+		auto first_key = service.task_key(request);
+		auto second_key = service.task_key(different_content);
+		require(first_key && second_key && first_key.value() != second_key.value(),
+				"different virtual content shared a task key");
+		auto framed_content = request;
+		framed_content.parse.files.front().content = std::string{"a\0b", 3U};
+		auto framed_key = service.task_key(framed_content);
+		require(framed_key && framed_key.value() != first_key.value(),
+				"length-framed content bytes were not part of task identity");
+
+		fake_worker content_worker;
+		content_worker.echo_parse_input = true;
+		auto content_output = service.run({request, different_content}, content_worker);
+		require(content_output && content_worker.calls == 2U &&
+					content_output.value().tasks.size() == 2U,
+				"different virtual content was coalesced");
+		for (const auto& task : content_output.value().tasks)
+		{
+			require(task.deliveries.size() == 1U && task.diagnostics.size() == 1U,
+					"parse input result was not delivered independently");
+			const auto expected =
+				task.deliveries.front().id == "content-a" ? "int value = 1;\n" : "int value = 2;\n";
+			require(task.diagnostics.front().message == expected,
+					"subscriber received another virtual source result");
+			require(task.input_fingerprint.starts_with("input_") &&
+						task.input_fingerprint.size() == 70U,
+					"parse input fingerprint was omitted from the task artifact");
+		}
+
+		auto faulted = request;
+		faulted.subscribers = {{"faulted", {}}};
+		faulted.parse.injected_fault = frontend::frontend_fault::crash;
+		auto faulted_key = service.task_key(faulted);
+		require(faulted_key && faulted_key.value() != first_key.value(),
+				"injected fault was omitted from task identity");
+		fake_worker fault_worker;
+		auto fault_output = service.run({request, faulted}, fault_worker);
+		require(fault_output && fault_worker.calls == 2U && fault_output.value().tasks.size() == 2U,
+				"different injected faults were coalesced");
+
+		auto ordered = request;
+		ordered.parse.files.push_back(
+			{request.parse.unit.command().directory / "overlay.hpp", "int overlay;\n"});
+		auto reordered = ordered;
+		reordered.subscribers = {{"reordered", {}}};
+		std::ranges::reverse(reordered.parse.files);
+		auto ordered_key = service.task_key(ordered);
+		auto reordered_key = service.task_key(reordered);
+		require(ordered_key && reordered_key && ordered_key.value() == reordered_key.value(),
+				"virtual file ordering changed canonical task identity");
+		fake_worker order_worker;
+		auto order_output = service.run({ordered, reordered}, order_worker);
+		require(order_output && order_worker.calls == 1U && order_output.value().tasks.size() == 1U,
+				"canonical virtual file ordering did not preserve coalescing");
+
+		auto relative = request;
+		relative.subscribers = {{"relative", {}}};
+		relative.parse.files.front().file = request.parse.files.front().file.lexically_relative(
+			request.parse.unit.command().directory);
+		auto relative_key = service.task_key(relative);
+		require(relative_key && relative_key.value() == first_key.value(),
+				"equivalent absolute and relative virtual paths diverged");
+		fake_worker relative_worker;
+		relative_worker.echo_parse_input = true;
+		auto relative_output = service.run({request, relative}, relative_worker);
+		require(relative_output && relative_worker.calls == 1U &&
+					relative_output.value().tasks.front().diagnostics.front().file ==
+						request.parse.files.front().file.lexically_normal().generic_string(),
+				"relative virtual path was not normalized before worker execution");
+
+		auto duplicate_path = request;
+		duplicate_path.parse.files.push_back(relative.parse.files.front());
+		auto duplicate_key = service.task_key(duplicate_path);
+		require(!duplicate_key &&
+					duplicate_key.error().attributes.at("reason") ==
+						"duplicate-virtual-source-path",
+				"normalized duplicate virtual path was accepted");
 	}
 
 	void partial_failures_and_dag(scheduler& service, std::vector<task_request> requests)
@@ -361,6 +455,7 @@ int main(const int argument_count, const char* const* arguments)
 	}
 	determinism_and_bounds(service, requests);
 	coalescing_and_subscribers(service, requests.front());
+	parse_input_identity(service, requests.front());
 	partial_failures_and_dag(service, requests);
 	controls(service, requests.front(), time);
 	production_bridge(service, requests.front());

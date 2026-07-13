@@ -25,8 +25,11 @@ for forbidden, reason in (
         raise SystemExit(f"scheduler contains forbidden {reason}")
 
 for marker in (
-    "cxxlens.scheduler-task.v1",
+    "cxxlens.scheduler-task.v2",
+    "cxxlens.scheduler-parse-input.v1",
     "canonical_encoder",
+    "normalized_virtual_sources",
+    "input_fingerprint",
     "snapshot_key",
     "worker_port",
     "maximum_queued_tasks",
@@ -52,6 +55,7 @@ for marker in (
     "diagnostics",
     "dependency_failed",
     "output_limited",
+    "input_fingerprint",
 ):
     if marker not in schema:
         raise SystemExit(f"scheduler schema marker is missing: {marker}")
@@ -65,6 +69,9 @@ for marker in (
     "partial failure did not preserve/account successful siblings",
     "queue overflow was not structured",
     "output budget was not bounded and explicit",
+    "different virtual content was coalesced",
+    "injected fault was omitted from task identity",
+    "normalized duplicate virtual path was accepted",
 ):
     if marker not in test:
         raise SystemExit(f"scheduler acceptance seam is missing: {marker}")

@@ -2987,6 +2987,7 @@ Expected failureは`result<T>`。User callback/interop extractor例外はboundar
 
 - priority: explicit target > changed > refinement > background build。
 - compatible extractor requestsをcoalesce。
+- coalesce identity は実際の parse input を canonical fingerprint 化する。virtual source の相対 path は compile command directory 基準で絶対 lexical normalize し、path 順序は非意味的、normalize 後の重複は invalid とする。content bytes は length framing し、injected test fault も identity に含める。caller supplied snapshot key はこの照合を代替せず、trace/artifact には content ではなく fingerprint だけを出力する。
 - CPUとmemory budgetからworker数決定。
 - `CompilerInstance`/AST/SourceManager/PPはone job/thread。
 - immutable config/fact snapshots/selectors/plans/reportsはconcurrent read可。

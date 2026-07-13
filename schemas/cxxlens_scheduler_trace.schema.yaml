@@ -12,6 +12,7 @@ properties:
       type: object
       required:
       - task_key
+      - input_fingerprint
       - kind
       - state
       - reason_code
@@ -23,6 +24,7 @@ properties:
       additionalProperties: false
       properties:
         task_key: {type: string, pattern: '^task_[0-9a-f]{64}$'}
+        input_fingerprint: {type: string, pattern: '^input_[0-9a-f]{64}$'}
         kind: {enum: [parse, refinement]}
         state:
           enum: [succeeded, failed, cancelled, deadline_exceeded, budget_exhausted,
@@ -71,10 +73,11 @@ properties:
     type: array
     items:
       type: object
-      required: [task_key, event, detail]
+      required: [task_key, input_fingerprint, event, detail]
       additionalProperties: false
       properties:
         task_key: {type: string, pattern: '^task_[0-9a-f]{64}$'}
+        input_fingerprint: {type: string, pattern: '^input_[0-9a-f]{64}$'}
         event:
           enum: [scheduled, coalesced, succeeded, failed, cancelled, deadline_exceeded,
                  budget_exhausted, output_limited, dependency_failed]

@@ -110,14 +110,101 @@ namespace cxxlens::detail::scheduling
 									task.dependencies.end());
 		}
 
-		[[nodiscard]] bool compatible(const task_request& left, const task_request& right)
+		struct canonical_task_identity
 		{
-			return left.kind == right.kind && left.parse.unit.id() == right.parse.unit.id() &&
-				left.parse.unit.variant_id() == right.parse.unit.variant_id() &&
-				left.snapshot_key == right.snapshot_key &&
-				left.refinement_id == right.refinement_id &&
-				left.profile.to_json() == right.profile.to_json() &&
-				left.dependencies == right.dependencies && left.cost == right.cost;
+			std::string task_key;
+			std::string input_fingerprint;
+			std::vector<std::byte> canonical_bytes;
+		};
+
+		[[nodiscard]] result<std::vector<std::pair<std::string, std::string>>>
+		normalized_virtual_sources(const task_request& task)
+		{
+			std::vector<std::pair<std::string, std::string>> sources;
+			sources.reserve(task.parse.files.size());
+			const auto working_directory = task.parse.unit.command().directory.lexically_normal();
+			for (const auto& source : task.parse.files)
+			{
+				if (source.file.empty())
+					return scheduler_error("core.invalid-argument", "virtual-source-path");
+				auto normalized = source.file;
+				if (normalized.is_relative())
+				{
+					if (working_directory.empty() || working_directory.is_relative())
+						return scheduler_error("core.invalid-argument", "virtual-source-base");
+					normalized = working_directory / normalized;
+				}
+				normalized = normalized.lexically_normal();
+				if (!normalized.is_absolute() || normalized.empty())
+					return scheduler_error("core.invalid-argument", "virtual-source-path");
+				sources.emplace_back(normalized.generic_string(), source.content);
+			}
+			std::ranges::sort(sources, {}, &std::pair<std::string, std::string>::first);
+			if (std::ranges::adjacent_find(sources,
+										   [](const auto& left, const auto& right)
+										   {
+											   return left.first == right.first;
+										   }) != sources.end())
+				return scheduler_error("core.invalid-argument", "duplicate-virtual-source-path");
+			return sources;
+		}
+
+		[[nodiscard]] result<void> normalize_parse_input(task_request& task)
+		{
+			auto sources = normalized_virtual_sources(task);
+			if (!sources)
+				return scheduler_error(sources.error().code.value,
+									   sources.error().attributes.at("reason"));
+			task.parse.files.clear();
+			task.parse.files.reserve(sources.value().size());
+			for (auto& [file, content] : sources.value())
+				task.parse.files.push_back({path{std::move(file)}, std::move(content)});
+			return {};
+		}
+
+		[[nodiscard]] result<canonical_task_identity>
+		make_task_identity(const task_request& task, const runtime::hash_port& hashes)
+		{
+			if (!task.parse.unit.id().valid() || !task.parse.unit.variant_id().valid() ||
+				task.snapshot_key.empty() || task.cost == 0U)
+				return scheduler_error("core.invalid-argument", "task-identity");
+			auto sources = normalized_virtual_sources(task);
+			if (!sources)
+				return scheduler_error(sources.error().code.value,
+									   sources.error().attributes.at("reason"));
+
+			identity::canonical_encoder input_encoder{"cxxlens.scheduler-parse-input.v1", {1U, 1U}};
+			input_encoder.string_map("virtual_sources", std::move(sources.value()));
+			input_encoder.enum_field("injected_fault",
+									 static_cast<std::int64_t>(task.parse.injected_fault));
+			auto input_payload = input_encoder.finish();
+			if (!input_payload)
+				return scheduler_error("core.invalid-argument", "canonical-parse-input");
+
+			identity::identity_service identities{hashes};
+			identity::collision_registry collisions;
+			auto input_fingerprint = identities.make_id("input", input_payload.value(), collisions);
+			if (!input_fingerprint)
+				return scheduler_error("core.internal-invariant-violation", "parse-input-hash");
+
+			identity::canonical_encoder task_encoder{"cxxlens.scheduler-task.v2", {2U, 2U}};
+			task_encoder.enum_field("kind", static_cast<std::int64_t>(task.kind));
+			task_encoder.string_field("compile_unit", std::string{task.parse.unit.id().value()});
+			task_encoder.string_field("variant", std::string{task.parse.unit.variant_id().value()});
+			task_encoder.string_field("profile", task.profile.to_json());
+			task_encoder.string_field("snapshot", task.snapshot_key);
+			task_encoder.string_field("refinement", task.refinement_id);
+			task_encoder.string_field("parse_input", input_fingerprint.value());
+			task_encoder.string_set("dependencies", task.dependencies);
+			task_encoder.unsigned_field("cost", task.cost);
+			auto task_payload = task_encoder.finish();
+			if (!task_payload)
+				return scheduler_error("core.invalid-argument", "canonical-task-payload");
+			auto task_key = identities.make_id("task", task_payload.value(), collisions);
+			if (!task_key)
+				return scheduler_error("core.internal-invariant-violation", "task-key-hash");
+			return canonical_task_identity{
+				task_key.value(), input_fingerprint.value(), task_payload.value().bytes};
 		}
 
 		[[nodiscard]] json_value delivery_json(const subscriber_delivery& delivery)
@@ -159,6 +246,7 @@ namespace cxxlens::detail::scheduling
 					 {"parsed", std::uint64_t{task.frontend_coverage.parsed}},
 					 {"requested", std::uint64_t{task.frontend_coverage.requested}}}},
 				{"kind", std::string{kind_name(task.kind)}},
+				{"input_fingerprint", task.input_fingerprint},
 				{"reason_code", task.reason_code},
 				{"semantic_batch", task.semantic_batch},
 				{"state", std::string{state_name(task.state)}},
@@ -208,6 +296,8 @@ namespace cxxlens::detail::scheduling
 		for (const auto& task : tasks)
 		{
 			if (!task.task_key.starts_with("task_") || task.task_key.size() != 69U ||
+				!task.input_fingerprint.starts_with("input_") ||
+				task.input_fingerprint.size() != 70U ||
 				!std::ranges::is_sorted(task.dependencies) ||
 				!std::ranges::is_sorted(task.deliveries))
 				return scheduler_error("core.internal-invariant-violation", "task-shape");
@@ -222,6 +312,13 @@ namespace cxxlens::detail::scheduling
 				return scheduler_error("core.internal-invariant-violation",
 									   "frontend-coverage-accounting");
 		}
+		std::map<std::string, std::string> inputs;
+		for (const auto& task : tasks)
+			inputs.emplace(task.task_key, task.input_fingerprint);
+		for (const auto& row : trace)
+			if (!inputs.contains(row.task_key) || inputs.at(row.task_key) != row.input_fingerprint)
+				return scheduler_error("core.internal-invariant-violation",
+									   "trace-input-fingerprint");
 		return {};
 	}
 
@@ -232,8 +329,11 @@ namespace cxxlens::detail::scheduling
 			task_values.emplace_back(task_json(task));
 		json_value::array trace_values;
 		for (const auto& row : trace)
-			trace_values.emplace_back(json_value::object{
-				{"detail", row.detail}, {"event", row.event}, {"task_key", row.task_key}});
+			trace_values.emplace_back(
+				json_value::object{{"detail", row.detail},
+								   {"event", row.event},
+								   {"input_fingerprint", row.input_fingerprint},
+								   {"task_key", row.task_key}});
 		const json_value document{json_value::object{
 			{"coverage",
 			 json_value::object{{"budget_exhausted", coverage.budget_exhausted},
@@ -258,25 +358,11 @@ namespace cxxlens::detail::scheduling
 
 	result<std::string> scheduler::task_key(const task_request& task) const
 	{
-		if (!task.parse.unit.id().valid() || !task.parse.unit.variant_id().valid() ||
-			task.snapshot_key.empty() || task.cost == 0U)
-			return scheduler_error("core.invalid-argument", "task-identity");
-		identity::canonical_encoder encoder{"cxxlens.scheduler-task.v1", {1U, 1U}};
-		encoder.enum_field("kind", static_cast<std::int64_t>(task.kind));
-		encoder.string_field("compile_unit", std::string{task.parse.unit.id().value()});
-		encoder.string_field("variant", std::string{task.parse.unit.variant_id().value()});
-		encoder.string_field("profile", task.profile.to_json());
-		encoder.string_field("snapshot", task.snapshot_key);
-		encoder.string_field("refinement", task.refinement_id);
-		auto payload = encoder.finish();
-		if (!payload)
-			return scheduler_error("core.invalid-argument", "canonical-task-payload");
-		identity::identity_service identities{hashes_};
-		identity::collision_registry collisions;
-		auto id = identities.make_id("task", payload.value(), collisions);
-		if (!id)
-			return scheduler_error("core.internal-invariant-violation", "task-key-hash");
-		return id.value();
+		auto identity = make_task_identity(task, hashes_);
+		if (!identity)
+			return scheduler_error(identity.error().code.value,
+								   identity.error().attributes.at("reason"));
+		return identity.value().task_key;
 	}
 
 	result<scheduler_batch> scheduler::run(std::vector<task_request> requests,
@@ -301,6 +387,8 @@ namespace cxxlens::detail::scheduling
 		struct admitted_task
 		{
 			std::string key;
+			std::string input_fingerprint;
+			std::vector<std::byte> canonical_bytes;
 			task_request request;
 			std::size_t duplicate_count{1U};
 		};
@@ -308,22 +396,30 @@ namespace cxxlens::detail::scheduling
 		for (auto& request : requests)
 		{
 			normalize_dependencies(request);
+			if (auto normalized = normalize_parse_input(request); !normalized)
+				return scheduler_error(normalized.error().code.value,
+									   normalized.error().attributes.at("reason"));
 			std::ranges::sort(request.subscribers, {}, &subscriber_request::id);
 			if (std::ranges::adjacent_find(request.subscribers, {}, &subscriber_request::id) !=
 				request.subscribers.end())
 				return scheduler_error("core.invalid-argument", "duplicate-subscriber");
-			auto key_result = task_key(request);
-			if (!key_result)
-				return key_result.error();
-			auto position = unique.find(key_result.value());
+			auto identity = make_task_identity(request, hashes_);
+			if (!identity)
+				return scheduler_error(identity.error().code.value,
+									   identity.error().attributes.at("reason"));
+			auto position = unique.find(identity.value().task_key);
 			if (position == unique.end())
 			{
-				unique.emplace(key_result.value(),
-							   admitted_task{key_result.value(), std::move(request), 1U});
+				auto admitted = admitted_task{identity.value().task_key,
+											  identity.value().input_fingerprint,
+											  std::move(identity.value().canonical_bytes),
+											  std::move(request),
+											  1U};
+				unique.emplace(admitted.key, std::move(admitted));
 			}
 			else
 			{
-				if (!compatible(position->second.request, request))
+				if (position->second.canonical_bytes != identity.value().canonical_bytes)
 					return scheduler_error("core.invalid-argument", "conflicting-coalesced-task");
 				position->second.request.priority =
 					std::min(position->second.request.priority, request.priority);
@@ -393,6 +489,7 @@ namespace cxxlens::detail::scheduling
 					auto& task = *ready[index];
 					task_result immediate;
 					immediate.task_key = task.key;
+					immediate.input_fingerprint = task.input_fingerprint;
 					immediate.kind = task.request.kind;
 					immediate.dependencies = task.request.dependencies;
 					immediate.frontend_coverage.requested = 0U;
@@ -429,7 +526,8 @@ namespace cxxlens::detail::scheduling
 					else
 					{
 						spent += task.request.cost;
-						batch.trace.push_back({task.key, "scheduled", "worker"});
+						batch.trace.push_back(
+							{task.key, task.input_fingerprint, "scheduled", "worker"});
 						auto* scheduled_task = &task;
 						running.push_back(
 							{scheduled_task,
@@ -458,6 +556,7 @@ namespace cxxlens::detail::scheduling
 													   static_cast<double>(unique.size()),
 												   state_name(immediate.state));
 					batch.trace.push_back({task.key,
+										   task.input_fingerprint,
 										   std::string{state_name(immediate.state)},
 										   immediate.reason_code});
 					batch.tasks.push_back(std::move(immediate));
@@ -468,6 +567,7 @@ namespace cxxlens::detail::scheduling
 					auto outcome = pending.future.get();
 					task_result result;
 					result.task_key = pending.task->key;
+					result.input_fingerprint = pending.task->input_fingerprint;
 					result.kind = pending.task->request.kind;
 					result.dependencies = pending.task->request.dependencies;
 					if (!outcome)
@@ -535,9 +635,11 @@ namespace cxxlens::detail::scheduling
 												   state_name(result.state));
 					if (pending.task->duplicate_count > 1U)
 						batch.trace.push_back({pending.task->key,
+											   pending.task->input_fingerprint,
 											   "coalesced",
 											   std::to_string(pending.task->duplicate_count)});
 					batch.trace.push_back({pending.task->key,
+										   pending.task->input_fingerprint,
 										   std::string{state_name(result.state)},
 										   result.reason_code});
 					batch.tasks.push_back(std::move(result));

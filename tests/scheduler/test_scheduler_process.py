@@ -31,6 +31,9 @@ for repeat in range(2):
 assert outputs and all(value == outputs[0] for value in outputs), (
     "scheduler output changed with jobs/seed/order/process"
 )
+assert "int unit0(){return 0;}" not in outputs[0], (
+    "virtual source content leaked into scheduler artifacts"
+)
 assert outputs[0] == golden, "scheduler canonical golden changed"
 document = json.loads(outputs[0])
 schema = yaml.safe_load((root / "schemas/cxxlens_scheduler_trace.schema.yaml").read_text())
@@ -50,11 +53,23 @@ assert coverage["requested"] == sum(
 )
 assert document["tasks"] == sorted(document["tasks"], key=lambda row: row["task_key"])
 for task in document["tasks"]:
+    assert task["input_fingerprint"].startswith("input_")
     frontend = task["frontend_coverage"]
     assert frontend["requested"] == sum(
         frontend[key] for key in ("parsed", "failed", "cancelled")
     )
 assert document["trace"] == sorted(
-    document["trace"], key=lambda row: (row["task_key"], row["event"], row["detail"])
+    document["trace"],
+    key=lambda row: (
+        row["task_key"],
+        row["input_fingerprint"],
+        row["event"],
+        row["detail"],
+    ),
+)
+task_inputs = {task["task_key"]: task["input_fingerprint"] for task in document["tasks"]}
+assert all(
+    row["input_fingerprint"] == task_inputs[row["task_key"]]
+    for row in document["trace"]
 )
 print("validated scheduler schema/golden and jobs/seed/order/process determinism")

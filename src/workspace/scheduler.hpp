@@ -71,6 +71,7 @@ namespace cxxlens::detail::scheduling
 	struct task_result
 	{
 		std::string task_key;
+		std::string input_fingerprint;
 		task_kind kind{task_kind::parse};
 		task_state state{task_state::failed};
 		std::string reason_code;
@@ -97,6 +98,7 @@ namespace cxxlens::detail::scheduling
 	struct trace_row
 	{
 		std::string task_key;
+		std::string input_fingerprint;
 		std::string event;
 		std::string detail;
 		auto operator<=>(const trace_row&) const = default;
