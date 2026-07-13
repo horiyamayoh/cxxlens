@@ -737,6 +737,13 @@ public_types:
   owner_atomic_unit: AU-METHOD-001
   steward: integration.package.method_harness
   source_contract: schemas/cxxlens_public_api_contract.yaml#package-method_harness
+- id: public-type:method_harness:method_resolution
+  type: method_resolution
+  package: method_harness
+  header: <cxxlens/generate.hpp>
+  owner_atomic_unit: AU-METHOD-001
+  steward: integration.package.method_harness
+  source_contract: schemas/cxxlens_public_api_contract.yaml#package-method_harness
 - id: public-type:method_harness:method_spec
   type: method_spec
   package: method_harness
@@ -2274,6 +2281,21 @@ schemas:
   owner_atomic_unit: AU-CORE-001
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_generation_options.schema.yaml
+  path: schemas/cxxlens_generation_options.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_generation_plan.schema.yaml
+  path: schemas/cxxlens_generation_plan.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_generation_result.schema.yaml
+  path: schemas/cxxlens_generation_result.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
 - id: schema:schemas/cxxlens_global_contract_conventions.schema.yaml
   path: schemas/cxxlens_global_contract_conventions.schema.yaml
   owner_atomic_unit: AU-CORE-001
@@ -2316,6 +2338,11 @@ schemas:
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
 - id: schema:schemas/cxxlens_m2_completion.schema.yaml
   path: schemas/cxxlens_m2_completion.schema.yaml
+  owner_atomic_unit: AU-CORE-001
+  steward: steward.schema
+  source_contract: docs/design/public_contract_conventions.md#schema-ownership
+- id: schema:schemas/cxxlens_method_spec.schema.yaml
+  path: schemas/cxxlens_method_spec.schema.yaml
   owner_atomic_unit: AU-CORE-001
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
@@ -2435,8 +2462,8 @@ schemas:
   steward: steward.schema
   source_contract: docs/design/public_contract_conventions.md#schema-ownership
 summary:
-  public_type_count: 205
+  public_type_count: 206
   shared_component_count: 66
   provider_subject_count: 24
-  schema_count: 68
-semantic_digest: sha256:c3b6f09c49d3794550f0f5228c380bbb01d983a2ba1a77320af7d6294b30ed09
+  schema_count: 72
+semantic_digest: sha256:66908a27ba0e35e94eede43c163a30e5e6571cedc25ab49c2d55592a504544c7

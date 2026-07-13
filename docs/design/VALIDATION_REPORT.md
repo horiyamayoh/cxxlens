@@ -69,18 +69,18 @@
 | interop | 4 |
 | configuration | 4 |
 
-## Phase B package Contract Candidates (#43–#48)
+## Phase B package Contract Candidates (#43–#49)
 
-- candidate group: 6
-- candidate packages: `configuration`, `core`, `explain`, `facts`, `graph`, `interop`, `report`, `rules`, `search`, `select`, `testing`, `transform`, `workspace`（13）
-- assigned API: 88、exact declaration: 88、unresolved declaration: 0
-- implementation state: `conformant` 47、`unimplemented` 41（変更なし）
-- policy record: 31、各 record の result outcome 6種: 完全
-- positive / negative / ambiguous acceptance: 各 API 1件、計264件
-- public type 205 / shared component 66 / provider subject 24 / schema 68: owner 一意、dangling 0
+- candidate group: 7
+- candidate packages: `configuration`, `copy`, `core`, `explain`, `facts`, `fuzz`, `generate`, `graph`, `interop`, `method_harness`, `mock`, `report`, `rules`, `search`, `select`, `testing`, `transform`, `workspace`（18）
+- assigned API: 103、exact declaration: 103、unresolved declaration: 0
+- implementation state: `conformant` 47、`unimplemented` 56（変更なし）
+- policy record: 37、各 record の result outcome 6種: 完全
+- positive / negative / ambiguous acceptance: 各 API 1件、計309件
+- public type 206 / shared component 66 / provider subject 24 / schema 72: owner 一意、dangling 0
 - registry owner and entry overlap: 0
-- candidate C++23 syntax usage: 7/7 PASS
-- package candidate validator/test: 14/14 PASS
+- candidate C++23 syntax usage: 8/8 PASS
+- package candidate validator/test: 15/15 PASS
 - production implementation / public install integration / final freeze: 未主張（#53 / #54 owner を維持）
 
 ### Issue #43 core・configuration・testing
@@ -167,3 +167,18 @@
 - #49 writer reuse、#52 spike 境界、production implementation 非変更: 明示
 - candidate C++23 syntax usage: 1/1 PASS
 - candidate fingerprint: `sha256:6d209dd7b50a01718969b32c75fa1536ef946ccd9a6c71f603878fc13dc67d75`
+
+### Issue #49 generation・mock・method harness・copy・fuzz
+
+- candidate packages: `copy`, `fuzz`, `generate`, `method_harness`, `mock`（5）
+- assigned API: 15、exact declaration: 15、unresolved declaration: 0
+- implementation state: `unimplemented` 15（変更なし）
+- policy record: 6、各 record の result outcome 6種: 完全
+- positive / negative / ambiguous acceptance: 各 API 1件、計45件
+- exhaustive surface census、required-axis decision、artifact identity/order/collision/coverage: 完全
+- present/publishable/usable/link-ready/listed/quarantined 独立状態、preview budget: 完全
+- #48 default dry-run/one-writer transaction/rollback reuse と artifact lifecycle 境界: 完全
+- mock 四軸、exact method cv/ref/noexcept resolution、copy ODR/type closure、fuzz finite inference: 完全
+- #50 optional model・#52 spike・#53 integration 境界、production implementation 非変更: 明示
+- candidate C++23 syntax usage: 1/1 PASS
+- candidate fingerprint: `sha256:8ce8f299252b71f361407b41774291a97ef78dfaee1a74797ca4e9b41dace163`

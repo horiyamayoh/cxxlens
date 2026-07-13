@@ -1,0 +1,25 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.method-spec.v1.schema.yaml
+title: cxxlens exact method specification v1
+type: object
+additionalProperties: false
+required: [schema, qualified_class_name, method_name, parameter_canonical_types, is_const, is_volatile, ref_qualifier]
+properties:
+  schema: {const: cxxlens.method-spec.v1}
+  qualified_class_name: {type: string, minLength: 1}
+  method_name: {type: string, minLength: 1}
+  parameter_canonical_types: {type: array, items: {type: string, minLength: 1}}
+  return_canonical_type: {type: [string, 'null']}
+  is_const: {type: boolean}
+  is_volatile: {type: boolean}
+  ref_qualifier: {enum: [none, lvalue, rvalue]}
+  is_noexcept: {type: [boolean, 'null']}
+  template_arguments: {type: [string, 'null']}
+  normalized: {type: string, minLength: 1}
+  parse_error:
+    type: [object, 'null']
+    additionalProperties: false
+    required: [code, byte_offset]
+    properties:
+      code: {type: string, minLength: 1}
+      byte_offset: {type: integer, minimum: 0}

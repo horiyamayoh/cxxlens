@@ -193,7 +193,7 @@ class ReadinessAuditTest(unittest.TestCase):
         self.assertEqual(catalog["dangling_api_dependency_count"], 0)
         self.assertEqual(catalog["unresolved_ready_signature_count"], 0)
         self.assertEqual(catalog["evidence_free_conformant_count"], 0)
-        self.assertEqual(catalog["candidate_contract_package_count"], 13)
+        self.assertEqual(catalog["candidate_contract_package_count"], 18)
         self.assertEqual(catalog["frozen_contract_package_count"], 0)
         self.assertEqual(catalog["invalid_contract_transition_count"], 0)
         self.assertEqual(

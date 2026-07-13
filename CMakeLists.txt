@@ -243,6 +243,10 @@ install(
         schemas/cxxlens_edit_plan.schema.yaml
         schemas/cxxlens_apply_result.schema.yaml
         schemas/cxxlens_transform_transaction.yaml
+        schemas/cxxlens_generation_plan.schema.yaml
+        schemas/cxxlens_generation_result.schema.yaml
+        schemas/cxxlens_method_spec.schema.yaml
+        schemas/cxxlens_generation_options.schema.yaml
         schemas/cxxlens_virtual_candidate_resolution.schema.yaml
         schemas/cxxlens_workspace_doctor.schema.yaml
         schemas/cxxlens_workspace_context.schema.yaml

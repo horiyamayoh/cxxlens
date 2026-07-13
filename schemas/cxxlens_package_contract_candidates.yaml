@@ -7311,3 +7311,1648 @@ groups:
         expected: Preserved rows plus conflicts/unresolved/coverage/truncation and no write eligibility.
   production_implementation_changed: false
   candidate_fingerprint: sha256:6d209dd7b50a01718969b32c75fa1536ef946ccd9a6c71f603878fc13dc67d75
+- issue: '#49'
+  state: candidate
+  packages:
+  - copy
+  - fuzz
+  - generate
+  - method_harness
+  - mock
+  normative_document: docs/design/package_contract_49.md
+  candidate_headers:
+  - contracts/candidates/49/generate.hpp
+  usage_examples:
+  - contracts/candidates/49/generate_usage.cpp
+  policies:
+  - id: generation.census-plan.v1
+    ownership_and_lifetime:
+    - Values, builders, plans and results are immutable detached values; no AST pointer escapes a frontend job.
+    const_noexcept_thread_safety:
+    - Const observers are concurrent-read safe; workspace operations use one immutable snapshot and explicit execution context.
+    callback_and_exception:
+    - Provider, formatter, frontend, compiler and link exceptions become typed failure/unresolved rows and cannot cross the
+      API boundary.
+    execution_context_and_budgets:
+    - Cancellation, deadline, memory, preview/output, artifact and validation budgets are finite inputs and preserve partial
+      accounting.
+    result_semantics:
+      empty_success: Complete zero surface/artifact output is success only when target resolution and coverage are complete.
+      unresolved: Missing fact, model, tool, ownership relation or variant is typed unresolved with retained authoritative
+        rows.
+      unsupported: Ineligible C++ surface, input model, path or validation mode is explicit and never omitted.
+      ambiguous: Target overload, type closure, path/content or variant ambiguity is fail-closed and never first-wins.
+      partial: Provider, budget or validation partiality retains coverage and prevents publishable/usable/link-ready overclaim.
+      failure: Invariant, stale, safety, transaction or rollback failure is typed; partial commit and false success are forbidden.
+    evidence_coverage_guarantee:
+    - Census, decisions, artifacts, diagnostics and unresolved rows conserve the requested universe and carry typed evidence/guarantee.
+    ordering_duplicates_variants:
+    - Canonical semantic IDs/order, equal-row dedup, unequal collision rejection and explicit per-variant divergence are mandatory.
+    schema_and_versioning:
+    - C++ API, plan/result/method/options schemas, payload/template/tool identities and semantics versions evolve independently
+      and explicitly.
+    change_policy:
+    - '#49 owns candidate semantics only; #52 spikes, #53 integration and #54 freeze remain separate authorities.'
+  - id: generation.artifact-transaction.v1
+    ownership_and_lifetime:
+    - Values, builders, plans and results are immutable detached values; no AST pointer escapes a frontend job.
+    const_noexcept_thread_safety:
+    - Const observers are concurrent-read safe; workspace operations use one immutable snapshot and explicit execution context.
+    callback_and_exception:
+    - Provider, formatter, frontend, compiler and link exceptions become typed failure/unresolved rows and cannot cross the
+      API boundary.
+    execution_context_and_budgets:
+    - Cancellation, deadline, memory, preview/output, artifact and validation budgets are finite inputs and preserve partial
+      accounting.
+    result_semantics:
+      empty_success: Complete zero surface/artifact output is success only when target resolution and coverage are complete.
+      unresolved: Missing fact, model, tool, ownership relation or variant is typed unresolved with retained authoritative
+        rows.
+      unsupported: Ineligible C++ surface, input model, path or validation mode is explicit and never omitted.
+      ambiguous: Target overload, type closure, path/content or variant ambiguity is fail-closed and never first-wins.
+      partial: Provider, budget or validation partiality retains coverage and prevents publishable/usable/link-ready overclaim.
+      failure: Invariant, stale, safety, transaction or rollback failure is typed; partial commit and false success are forbidden.
+    evidence_coverage_guarantee:
+    - Census, decisions, artifacts, diagnostics and unresolved rows conserve the requested universe and carry typed evidence/guarantee.
+    ordering_duplicates_variants:
+    - Canonical semantic IDs/order, equal-row dedup, unequal collision rejection and explicit per-variant divergence are mandatory.
+    schema_and_versioning:
+    - C++ API, plan/result/method/options schemas, payload/template/tool identities and semantics versions evolve independently
+      and explicitly.
+    change_policy:
+    - '#49 owns candidate semantics only; #52 spikes, #53 integration and #54 freeze remain separate authorities.'
+  - id: generation.mock-four-axis.v1
+    ownership_and_lifetime:
+    - Values, builders, plans and results are immutable detached values; no AST pointer escapes a frontend job.
+    const_noexcept_thread_safety:
+    - Const observers are concurrent-read safe; workspace operations use one immutable snapshot and explicit execution context.
+    callback_and_exception:
+    - Provider, formatter, frontend, compiler and link exceptions become typed failure/unresolved rows and cannot cross the
+      API boundary.
+    execution_context_and_budgets:
+    - Cancellation, deadline, memory, preview/output, artifact and validation budgets are finite inputs and preserve partial
+      accounting.
+    result_semantics:
+      empty_success: Complete zero surface/artifact output is success only when target resolution and coverage are complete.
+      unresolved: Missing fact, model, tool, ownership relation or variant is typed unresolved with retained authoritative
+        rows.
+      unsupported: Ineligible C++ surface, input model, path or validation mode is explicit and never omitted.
+      ambiguous: Target overload, type closure, path/content or variant ambiguity is fail-closed and never first-wins.
+      partial: Provider, budget or validation partiality retains coverage and prevents publishable/usable/link-ready overclaim.
+      failure: Invariant, stale, safety, transaction or rollback failure is typed; partial commit and false success are forbidden.
+    evidence_coverage_guarantee:
+    - Census, decisions, artifacts, diagnostics and unresolved rows conserve the requested universe and carry typed evidence/guarantee.
+    ordering_duplicates_variants:
+    - Canonical semantic IDs/order, equal-row dedup, unequal collision rejection and explicit per-variant divergence are mandatory.
+    schema_and_versioning:
+    - C++ API, plan/result/method/options schemas, payload/template/tool identities and semantics versions evolve independently
+      and explicitly.
+    change_policy:
+    - '#49 owns candidate semantics only; #52 spikes, #53 integration and #54 freeze remain separate authorities.'
+  - id: generation.exact-method-harness.v1
+    ownership_and_lifetime:
+    - Values, builders, plans and results are immutable detached values; no AST pointer escapes a frontend job.
+    const_noexcept_thread_safety:
+    - Const observers are concurrent-read safe; workspace operations use one immutable snapshot and explicit execution context.
+    callback_and_exception:
+    - Provider, formatter, frontend, compiler and link exceptions become typed failure/unresolved rows and cannot cross the
+      API boundary.
+    execution_context_and_budgets:
+    - Cancellation, deadline, memory, preview/output, artifact and validation budgets are finite inputs and preserve partial
+      accounting.
+    result_semantics:
+      empty_success: Complete zero surface/artifact output is success only when target resolution and coverage are complete.
+      unresolved: Missing fact, model, tool, ownership relation or variant is typed unresolved with retained authoritative
+        rows.
+      unsupported: Ineligible C++ surface, input model, path or validation mode is explicit and never omitted.
+      ambiguous: Target overload, type closure, path/content or variant ambiguity is fail-closed and never first-wins.
+      partial: Provider, budget or validation partiality retains coverage and prevents publishable/usable/link-ready overclaim.
+      failure: Invariant, stale, safety, transaction or rollback failure is typed; partial commit and false success are forbidden.
+    evidence_coverage_guarantee:
+    - Census, decisions, artifacts, diagnostics and unresolved rows conserve the requested universe and carry typed evidence/guarantee.
+    ordering_duplicates_variants:
+    - Canonical semantic IDs/order, equal-row dedup, unequal collision rejection and explicit per-variant divergence are mandatory.
+    schema_and_versioning:
+    - C++ API, plan/result/method/options schemas, payload/template/tool identities and semantics versions evolve independently
+      and explicitly.
+    change_policy:
+    - '#49 owns candidate semantics only; #52 spikes, #53 integration and #54 freeze remain separate authorities.'
+  - id: generation.semantic-copy.v1
+    ownership_and_lifetime:
+    - Values, builders, plans and results are immutable detached values; no AST pointer escapes a frontend job.
+    const_noexcept_thread_safety:
+    - Const observers are concurrent-read safe; workspace operations use one immutable snapshot and explicit execution context.
+    callback_and_exception:
+    - Provider, formatter, frontend, compiler and link exceptions become typed failure/unresolved rows and cannot cross the
+      API boundary.
+    execution_context_and_budgets:
+    - Cancellation, deadline, memory, preview/output, artifact and validation budgets are finite inputs and preserve partial
+      accounting.
+    result_semantics:
+      empty_success: Complete zero surface/artifact output is success only when target resolution and coverage are complete.
+      unresolved: Missing fact, model, tool, ownership relation or variant is typed unresolved with retained authoritative
+        rows.
+      unsupported: Ineligible C++ surface, input model, path or validation mode is explicit and never omitted.
+      ambiguous: Target overload, type closure, path/content or variant ambiguity is fail-closed and never first-wins.
+      partial: Provider, budget or validation partiality retains coverage and prevents publishable/usable/link-ready overclaim.
+      failure: Invariant, stale, safety, transaction or rollback failure is typed; partial commit and false success are forbidden.
+    evidence_coverage_guarantee:
+    - Census, decisions, artifacts, diagnostics and unresolved rows conserve the requested universe and carry typed evidence/guarantee.
+    ordering_duplicates_variants:
+    - Canonical semantic IDs/order, equal-row dedup, unequal collision rejection and explicit per-variant divergence are mandatory.
+    schema_and_versioning:
+    - C++ API, plan/result/method/options schemas, payload/template/tool identities and semantics versions evolve independently
+      and explicitly.
+    change_policy:
+    - '#49 owns candidate semantics only; #52 spikes, #53 integration and #54 freeze remain separate authorities.'
+  - id: generation.fuzz-input.v1
+    ownership_and_lifetime:
+    - Values, builders, plans and results are immutable detached values; no AST pointer escapes a frontend job.
+    const_noexcept_thread_safety:
+    - Const observers are concurrent-read safe; workspace operations use one immutable snapshot and explicit execution context.
+    callback_and_exception:
+    - Provider, formatter, frontend, compiler and link exceptions become typed failure/unresolved rows and cannot cross the
+      API boundary.
+    execution_context_and_budgets:
+    - Cancellation, deadline, memory, preview/output, artifact and validation budgets are finite inputs and preserve partial
+      accounting.
+    result_semantics:
+      empty_success: Complete zero surface/artifact output is success only when target resolution and coverage are complete.
+      unresolved: Missing fact, model, tool, ownership relation or variant is typed unresolved with retained authoritative
+        rows.
+      unsupported: Ineligible C++ surface, input model, path or validation mode is explicit and never omitted.
+      ambiguous: Target overload, type closure, path/content or variant ambiguity is fail-closed and never first-wins.
+      partial: Provider, budget or validation partiality retains coverage and prevents publishable/usable/link-ready overclaim.
+      failure: Invariant, stale, safety, transaction or rollback failure is typed; partial commit and false success are forbidden.
+    evidence_coverage_guarantee:
+    - Census, decisions, artifacts, diagnostics and unresolved rows conserve the requested universe and carry typed evidence/guarantee.
+    ordering_duplicates_variants:
+    - Canonical semantic IDs/order, equal-row dedup, unequal collision rejection and explicit per-variant divergence are mandatory.
+    schema_and_versioning:
+    - C++ API, plan/result/method/options schemas, payload/template/tool identities and semantics versions evolve independently
+      and explicitly.
+    change_policy:
+    - '#49 owns candidate semantics only; #52 spikes, #53 integration and #54 freeze remain separate authorities.'
+  registry_owners:
+  - id: registry.generate.errors.v1
+    kind: error_registry
+    owner_atomic_unit: AU-GEN-002
+    steward: steward.generate
+    entries:
+    - generate.artifact-collision
+    - generate.artifact-quarantined
+    - generate.manual-edit-conflict
+    - generate.path-unsafe
+    - generate.plan-invalid
+    - generate.rollback-failed
+    - generate.source-stale
+    - generate.structural-audit-failed
+    - generate.surface-census-incomplete
+    - generate.variant-artifact-conflict
+    behavior: Stable generation failures are typed and never selected from diagnostic prose.
+  - id: registry.generate.schemas.v1
+    kind: schema_registry
+    owner_atomic_unit: AU-GEN-001
+    steward: steward.generate
+    entries:
+    - cxxlens.generation-options.v1
+    - cxxlens.generation-plan.v1
+    - cxxlens.generation-result.v1
+    - cxxlens.method-spec.v1
+    behavior: Versioned generation values are canonical projections of authoritative plan/result rows.
+  - id: registry.generate.capabilities.v1
+    kind: capability_registry
+    owner_atomic_unit: AU-GEN-002
+    steward: steward.generate
+    entries:
+    - generate.atomic-artifact-write
+    - generate.compile-verify
+    - generate.structural-audit
+    behavior: Optional validation is negotiated explicitly and unavailable capabilities remain unresolved.
+  - id: registry.mock.errors.v1
+    kind: error_registry
+    owner_atomic_unit: AU-MOCK-003
+    steward: steward.mock
+    entries:
+    - generate.mock-axis-incomplete
+    - generate.mock-target-ambiguous
+    - generate.type-unspellable
+    behavior: Mock/fake census and all four decision axes fail closed without silent surfaces.
+  - id: registry.method-harness.errors.v1
+    kind: error_registry
+    owner_atomic_unit: AU-METHOD-002
+    steward: steward.method-harness
+    entries:
+    - generate.method-ambiguous
+    - generate.method-spec-invalid
+    - generate.method-unsupported
+    behavior: Parse offsets and zero/one/many resolution use stable codes and evidence.
+  - id: registry.copy.errors.v1
+    kind: error_registry
+    owner_atomic_unit: AU-COPY-001
+    steward: steward.copy
+    entries:
+    - generate.copy-closure-incomplete
+    - generate.macro-surface-rejected
+    - generate.odr-risk-rejected
+    behavior: Dependency closure, macro and ODR risk remain explicit and cannot be guessed away.
+  - id: registry.fuzz.errors.v1
+    kind: error_registry
+    owner_atomic_unit: AU-FUZZ-003
+    steward: steward.fuzz
+    entries:
+    - generate.fuzz-input-unsupported
+    - generate.fuzz-risk-unresolved
+    - generate.fuzz-target-ineligible
+    behavior: Unsafe or unknown input relations are unsupported/unresolved rather than inferred as safe.
+  consumer_boundaries:
+  - owner_package: generate
+    consumer_package: mock
+    shared_types:
+    - generation_plan
+    - surface
+    - surface_decision
+    - artifact_plan
+    access: value_copy
+    rule: Mock contributes typed requests/decisions and consumes the common immutable plan without re-owning it.
+  - owner_package: generate
+    consumer_package: method_harness
+    shared_types:
+    - generation_plan
+    - artifact_plan
+    access: value_copy
+    rule: Harness inspection lowers to common artifacts only after exact method classification.
+  - owner_package: generate
+    consumer_package: copy
+    shared_types:
+    - generation_plan
+    - artifact_plan
+    access: value_copy
+    rule: Copy owns closure policy while common generation owns artifact identity and projection.
+  - owner_package: generate
+    consumer_package: fuzz
+    shared_types:
+    - generation_plan
+    - artifact_plan
+    access: value_copy
+    rule: Fuzz owns input models while common generation owns plan/result state.
+  - owner_package: transform
+    consumer_package: generate
+    shared_types:
+    - apply_mode
+    - transaction_state
+    - transaction_writer
+    access: const_reference
+    rule: 'Generation uses #48 authorization/stale/path/format/reparse/prepare/commit/rollback machinery and cannot implement
+      another writer.'
+  - owner_package: models
+    consumer_package: generate
+    shared_types:
+    - api_model_pack
+    access: read_only
+    rule: 'Optional #50 model versions are explicit inputs; absence cannot trigger silent fallback.'
+  - owner_package: generate
+    consumer_package: report
+    shared_types:
+    - generation_plan
+    - generation_result
+    access: const_reference
+    rule: Reports are bounded pure projections and cannot recompute decisions.
+  - owner_package: generate
+    consumer_package: testing
+    shared_types:
+    - generation_plan
+    access: forward_declaration
+    rule: 'Testing assertions consume candidate plans without production header integration before #53.'
+  api_contracts:
+  - api_id: API-COPY-001
+    atomic_unit: AU-COPY-001
+    package: copy
+    policy: generation.semantic-copy.v1
+    declaration:
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::copy::public_surface(cxxlens::workspace&,cxxlens::select::symbol_selector,cxxlens::generate::copy::copy_options,cxxlens::execution_context)
+      signature_fingerprint: sha256:5baccebd7a8969352b8d491027605b672c73386339d4d615e672c69199f93342
+    family_members:
+    - cxxlens::generate::copy::public_surface
+    semantics:
+    - semantic public/type closure with ODR, macro and variant safety uses one immutable catalog/fact snapshot and never silently
+      omits requested rows.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-publishable and failure outcomes remain
+      distinct.
+    - Stable identity/order, evidence/coverage/guarantee, path/variant/tool provenance and default dry-run transaction state
+      are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:copy:copy_options
+      - public-type:copy:copy_policy
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:result<T>
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:generate:artifact_kind
+      - public-type:generate:artifact_plan
+      - public-type:generate:artifact_state
+      - public-type:generate:decision_state
+      - public-type:generate:generation_plan
+      - public-type:generate:generation_result
+      - public-type:generate:surface
+      - public-type:generate:surface_decision
+      - public-type:generate:surface_kind
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.copy.package_internal_engine
+      - shared.package.facts.package_internal_engine
+      - shared.package.generate.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.transform.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers:
+      - provider.fact.frontend:declaration
+      - provider.fact.frontend:definition
+      - provider.fact.frontend:include_relation
+      - provider.fact.frontend:symbol
+      - provider.fact.frontend:type
+      schemas: &id001
+      - schema:schemas/cxxlens_generation_options.schema.yaml
+      - schema:schemas/cxxlens_generation_plan.schema.yaml
+      - schema:schemas/cxxlens_generation_result.schema.yaml
+      - schema:schemas/cxxlens_method_spec.schema.yaml
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-GN-006
+      design_sections:
+      - §20 generation foundation
+      - §21 mock/fake
+      - §22 method harness
+      - §23 copy/fuzz
+      - §39.20 package candidate
+      doxygen_obligation: Document exact types, ownership/lifetime, snapshot/budget, census/decision/artifact accounting,
+        ambiguity/unsupported/variant, default dry-run and rollback semantics with a public example.
+    acceptance:
+      positive:
+        id: API-COPY-001.positive
+        expression: Use a complete deterministic fixture for semantic public/type closure with ODR, macro and variant safety.
+        expected: Exact rows, conserved coverage, canonical IDs/order and validated artifact/plan state.
+      negative:
+        id: API-COPY-001.negative
+        expression: Use an unsupported, stale, unsafe path, manual-edit, ODR/macro, invalid input or provider-failure fixture.
+        expected: Typed rejection/unresolved evidence, no silent omission, no publishability overclaim and no filesystem write.
+      ambiguous:
+        id: API-COPY-001.ambiguous
+        expression: Use overload, inherited/template, type-closure, case-fold/path/content or variant-divergent candidates.
+        expected: All candidates/collisions remain explicit with downgraded guarantee; first-wins and partial commit are forbidden.
+  - api_id: API-COPY-002
+    atomic_unit: AU-COPY-002
+    package: copy
+    policy: generation.semantic-copy.v1
+    declaration:
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::copy::required_types(cxxlens::workspace&,std::vector<cxxlens::symbol_id>,cxxlens::generate::copy::copy_options,cxxlens::execution_context)
+      signature_fingerprint: sha256:e43bbeb56496fd0371b92ac9e1f18e8b9e887e5396a8134c1bd4dab520685eef
+    family_members:
+    - cxxlens::generate::copy::required_types
+    semantics:
+    - semantic public/type closure with ODR, macro and variant safety uses one immutable catalog/fact snapshot and never silently
+      omits requested rows.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-publishable and failure outcomes remain
+      distinct.
+    - Stable identity/order, evidence/coverage/guarantee, path/variant/tool provenance and default dry-run transaction state
+      are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:copy:copy_options
+      - public-type:copy:copy_policy
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:result<T>
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:generate:artifact_kind
+      - public-type:generate:artifact_plan
+      - public-type:generate:artifact_state
+      - public-type:generate:decision_state
+      - public-type:generate:generation_plan
+      - public-type:generate:generation_result
+      - public-type:generate:surface
+      - public-type:generate:surface_decision
+      - public-type:generate:surface_kind
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.copy.package_internal_engine
+      - shared.package.facts.package_internal_engine
+      - shared.package.generate.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.transform.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers:
+      - provider.fact.frontend:declaration
+      - provider.fact.frontend:include_relation
+      - provider.fact.frontend:type
+      schemas: *id001
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-GN-006
+      design_sections:
+      - §20 generation foundation
+      - §21 mock/fake
+      - §22 method harness
+      - §23 copy/fuzz
+      - §39.20 package candidate
+      doxygen_obligation: Document exact types, ownership/lifetime, snapshot/budget, census/decision/artifact accounting,
+        ambiguity/unsupported/variant, default dry-run and rollback semantics with a public example.
+    acceptance:
+      positive:
+        id: API-COPY-002.positive
+        expression: Use a complete deterministic fixture for semantic public/type closure with ODR, macro and variant safety.
+        expected: Exact rows, conserved coverage, canonical IDs/order and validated artifact/plan state.
+      negative:
+        id: API-COPY-002.negative
+        expression: Use an unsupported, stale, unsafe path, manual-edit, ODR/macro, invalid input or provider-failure fixture.
+        expected: Typed rejection/unresolved evidence, no silent omission, no publishability overclaim and no filesystem write.
+      ambiguous:
+        id: API-COPY-002.ambiguous
+        expression: Use overload, inherited/template, type-closure, case-fold/path/content or variant-divergent candidates.
+        expected: All candidates/collisions remain explicit with downgraded guarantee; first-wins and partial commit are forbidden.
+  - api_id: API-FUZZ-001
+    atomic_unit: AU-FUZZ-001
+    package: fuzz
+    policy: generation.fuzz-input.v1
+    declaration:
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::generate::fuzz::generator cxxlens::generate::fuzz::generator::for_function(cxxlens::select::symbol_selector)
+      signature_fingerprint: sha256:4eb44faf0469362a2f7ab650e21decf6860e808c7abcbf73e4f24258def55fa3
+    family_members:
+    - cxxlens::generate::fuzz::generator::for_function
+    semantics:
+    - eligible target and explicit finite fuzz input-model planning uses one immutable catalog/fact snapshot and never silently
+      omits requested rows.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-publishable and failure outcomes remain
+      distinct.
+    - Stable identity/order, evidence/coverage/guarantee, path/variant/tool provenance and default dry-run transaction state
+      are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:result<T>
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:fuzz:fuzz::generator
+      - public-type:fuzz:fuzz_options
+      - public-type:fuzz:input_kind
+      - public-type:fuzz:input_model
+      - public-type:generate:artifact_kind
+      - public-type:generate:artifact_plan
+      - public-type:generate:artifact_state
+      - public-type:generate:decision_state
+      - public-type:generate:generation_plan
+      - public-type:generate:generation_result
+      - public-type:generate:surface
+      - public-type:generate:surface_decision
+      - public-type:generate:surface_kind
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.fuzz.package_internal_engine
+      - shared.package.generate.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.transform.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers:
+      - provider.fact.frontend:symbol
+      - provider.fact.frontend:type
+      schemas: *id001
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-GN-008
+      design_sections:
+      - §20 generation foundation
+      - §21 mock/fake
+      - §22 method harness
+      - §23 copy/fuzz
+      - §39.20 package candidate
+      doxygen_obligation: Document exact types, ownership/lifetime, snapshot/budget, census/decision/artifact accounting,
+        ambiguity/unsupported/variant, default dry-run and rollback semantics with a public example.
+    acceptance:
+      positive:
+        id: API-FUZZ-001.positive
+        expression: Use a complete deterministic fixture for eligible target and explicit finite fuzz input-model planning.
+        expected: Exact rows, conserved coverage, canonical IDs/order and validated artifact/plan state.
+      negative:
+        id: API-FUZZ-001.negative
+        expression: Use an unsupported, stale, unsafe path, manual-edit, ODR/macro, invalid input or provider-failure fixture.
+        expected: Typed rejection/unresolved evidence, no silent omission, no publishability overclaim and no filesystem write.
+      ambiguous:
+        id: API-FUZZ-001.ambiguous
+        expression: Use overload, inherited/template, type-closure, case-fold/path/content or variant-divergent candidates.
+        expected: All candidates/collisions remain explicit with downgraded guarantee; first-wins and partial commit are forbidden.
+  - api_id: API-FUZZ-002
+    atomic_unit: AU-FUZZ-002
+    package: fuzz
+    policy: generation.fuzz-input.v1
+    declaration:
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::generate::fuzz::generator cxxlens::generate::fuzz::generator::input(std::size_t,cxxlens::generate::fuzz::input_model)
+        const; cxxlens::generate::fuzz::generator cxxlens::generate::fuzz::generator::infer_inputs(bool) const; cxxlens::generate::fuzz::generator
+        cxxlens::generate::fuzz::generator::options(cxxlens::generate::fuzz::fuzz_options) const
+      signature_fingerprint: sha256:fdf33922f28cae71382625efead078385fa9ec64230fd66dc4c9ee16a24bb483
+    family_members:
+    - cxxlens::generate::fuzz::generator::input
+    - cxxlens::generate::fuzz::generator::infer_inputs
+    - cxxlens::generate::fuzz::generator::options
+    semantics:
+    - eligible target and explicit finite fuzz input-model planning uses one immutable catalog/fact snapshot and never silently
+      omits requested rows.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-publishable and failure outcomes remain
+      distinct.
+    - Stable identity/order, evidence/coverage/guarantee, path/variant/tool provenance and default dry-run transaction state
+      are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:result<T>
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:fuzz:fuzz::generator
+      - public-type:fuzz:fuzz_options
+      - public-type:fuzz:input_kind
+      - public-type:fuzz:input_model
+      - public-type:generate:artifact_kind
+      - public-type:generate:artifact_plan
+      - public-type:generate:artifact_state
+      - public-type:generate:decision_state
+      - public-type:generate:generation_plan
+      - public-type:generate:generation_result
+      - public-type:generate:surface
+      - public-type:generate:surface_decision
+      - public-type:generate:surface_kind
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.fuzz.package_internal_engine
+      - shared.package.generate.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.transform.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers: []
+      schemas: *id001
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-015
+      - FR-016
+      - FR-017
+      design_sections:
+      - §20 generation foundation
+      - §21 mock/fake
+      - §22 method harness
+      - §23 copy/fuzz
+      - §39.20 package candidate
+      doxygen_obligation: Document exact types, ownership/lifetime, snapshot/budget, census/decision/artifact accounting,
+        ambiguity/unsupported/variant, default dry-run and rollback semantics with a public example.
+    acceptance:
+      positive:
+        id: API-FUZZ-002.positive
+        expression: Use a complete deterministic fixture for eligible target and explicit finite fuzz input-model planning.
+        expected: Exact rows, conserved coverage, canonical IDs/order and validated artifact/plan state.
+      negative:
+        id: API-FUZZ-002.negative
+        expression: Use an unsupported, stale, unsafe path, manual-edit, ODR/macro, invalid input or provider-failure fixture.
+        expected: Typed rejection/unresolved evidence, no silent omission, no publishability overclaim and no filesystem write.
+      ambiguous:
+        id: API-FUZZ-002.ambiguous
+        expression: Use overload, inherited/template, type-closure, case-fold/path/content or variant-divergent candidates.
+        expected: All candidates/collisions remain explicit with downgraded guarantee; first-wins and partial commit are forbidden.
+  - api_id: API-FUZZ-003
+    atomic_unit: AU-FUZZ-003
+    package: fuzz
+    policy: generation.fuzz-input.v1
+    declaration:
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::fuzz::generator::plan(cxxlens::workspace&,cxxlens::execution_context)
+        const
+      signature_fingerprint: sha256:6f342cb56a4df1a4533caceab26d8c624153fce6f053ad7e807622fb52a80b19
+    family_members:
+    - cxxlens::generate::fuzz::generator::plan
+    semantics:
+    - eligible target and explicit finite fuzz input-model planning uses one immutable catalog/fact snapshot and never silently
+      omits requested rows.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-publishable and failure outcomes remain
+      distinct.
+    - Stable identity/order, evidence/coverage/guarantee, path/variant/tool provenance and default dry-run transaction state
+      are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:result<T>
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:fuzz:fuzz::generator
+      - public-type:fuzz:fuzz_options
+      - public-type:fuzz:input_kind
+      - public-type:fuzz:input_model
+      - public-type:generate:artifact_kind
+      - public-type:generate:artifact_plan
+      - public-type:generate:artifact_state
+      - public-type:generate:decision_state
+      - public-type:generate:generation_plan
+      - public-type:generate:generation_result
+      - public-type:generate:surface
+      - public-type:generate:surface_decision
+      - public-type:generate:surface_kind
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.fuzz.package_internal_engine
+      - shared.package.generate.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.transform.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers:
+      - provider.fact.frontend:call
+      - provider.fact.frontend:symbol
+      - provider.fact.frontend:type
+      schemas: *id001
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-GN-008
+      design_sections:
+      - §20 generation foundation
+      - §21 mock/fake
+      - §22 method harness
+      - §23 copy/fuzz
+      - §39.20 package candidate
+      doxygen_obligation: Document exact types, ownership/lifetime, snapshot/budget, census/decision/artifact accounting,
+        ambiguity/unsupported/variant, default dry-run and rollback semantics with a public example.
+    acceptance:
+      positive:
+        id: API-FUZZ-003.positive
+        expression: Use a complete deterministic fixture for eligible target and explicit finite fuzz input-model planning.
+        expected: Exact rows, conserved coverage, canonical IDs/order and validated artifact/plan state.
+      negative:
+        id: API-FUZZ-003.negative
+        expression: Use an unsupported, stale, unsafe path, manual-edit, ODR/macro, invalid input or provider-failure fixture.
+        expected: Typed rejection/unresolved evidence, no silent omission, no publishability overclaim and no filesystem write.
+      ambiguous:
+        id: API-FUZZ-003.ambiguous
+        expression: Use overload, inherited/template, type-closure, case-fold/path/content or variant-divergent candidates.
+        expected: All candidates/collisions remain explicit with downgraded guarantee; first-wins and partial commit are forbidden.
+  - api_id: API-GEN-001
+    atomic_unit: AU-GEN-001
+    package: generate
+    policy: generation.census-plan.v1
+    declaration:
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::plan_id cxxlens::generate::generation_plan::id() const noexcept; bool cxxlens::generate::generation_plan::valid()
+        const noexcept; std::span<const cxxlens::generate::surface> cxxlens::generate::generation_plan::census() const noexcept;
+        std::span<const cxxlens::generate::surface_decision> cxxlens::generate::generation_plan::decisions() const noexcept;
+        std::span<const cxxlens::generate::artifact_plan> cxxlens::generate::generation_plan::artifacts() const noexcept;
+        std::span<const cxxlens::diagnostic> cxxlens::generate::generation_plan::diagnostics() const noexcept; std::span<const
+        cxxlens::unresolved> cxxlens::generate::generation_plan::unresolved_items() const noexcept; const cxxlens::coverage_report&
+        cxxlens::generate::generation_plan::coverage() const noexcept; cxxlens::result<std::string> cxxlens::generate::generation_plan::preview(std::size_t)
+        const; std::string cxxlens::generate::generation_plan::to_json() const; std::string cxxlens::generate::generation_plan::to_markdown()
+        const
+      signature_fingerprint: sha256:6704d11628a4ad5b5f82b8e3b1b85026522faf7156eec6753eeef70e1e435a6d
+    family_members:
+    - cxxlens::generate::generation_plan::id
+    - cxxlens::generate::generation_plan::valid
+    - cxxlens::generate::generation_plan::census
+    - cxxlens::generate::generation_plan::decisions
+    - cxxlens::generate::generation_plan::artifacts
+    - cxxlens::generate::generation_plan::diagnostics
+    - cxxlens::generate::generation_plan::unresolved_items
+    - cxxlens::generate::generation_plan::coverage
+    - cxxlens::generate::generation_plan::preview
+    - cxxlens::generate::generation_plan::to_json
+    - cxxlens::generate::generation_plan::to_markdown
+    semantics:
+    - exhaustive census, required-axis decisions and immutable artifact projection uses one immutable catalog/fact snapshot
+      and never silently omits requested rows.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-publishable and failure outcomes remain
+      distinct.
+    - Stable identity/order, evidence/coverage/guarantee, path/variant/tool provenance and default dry-run transaction state
+      are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:result<T>
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:generate:artifact_kind
+      - public-type:generate:artifact_plan
+      - public-type:generate:artifact_state
+      - public-type:generate:decision_state
+      - public-type:generate:generation_plan
+      - public-type:generate:generation_result
+      - public-type:generate:surface
+      - public-type:generate:surface_decision
+      - public-type:generate:surface_kind
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.generate.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.transform.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers: []
+      schemas: *id001
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-015
+      - FR-016
+      - FR-017
+      design_sections:
+      - §20 generation foundation
+      - §21 mock/fake
+      - §22 method harness
+      - §23 copy/fuzz
+      - §39.20 package candidate
+      doxygen_obligation: Document exact types, ownership/lifetime, snapshot/budget, census/decision/artifact accounting,
+        ambiguity/unsupported/variant, default dry-run and rollback semantics with a public example.
+    acceptance:
+      positive:
+        id: API-GEN-001.positive
+        expression: Use a complete deterministic fixture for exhaustive census, required-axis decisions and immutable artifact
+          projection.
+        expected: Exact rows, conserved coverage, canonical IDs/order and validated artifact/plan state.
+      negative:
+        id: API-GEN-001.negative
+        expression: Use an unsupported, stale, unsafe path, manual-edit, ODR/macro, invalid input or provider-failure fixture.
+        expected: Typed rejection/unresolved evidence, no silent omission, no publishability overclaim and no filesystem write.
+      ambiguous:
+        id: API-GEN-001.ambiguous
+        expression: Use overload, inherited/template, type-closure, case-fold/path/content or variant-divergent candidates.
+        expected: All candidates/collisions remain explicit with downgraded guarantee; first-wins and partial commit are forbidden.
+  - api_id: API-GEN-002
+    atomic_unit: AU-GEN-002
+    package: generate
+    policy: generation.artifact-transaction.v1
+    declaration:
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::result<cxxlens::generate::generation_result> cxxlens::generate::generation_plan::apply(cxxlens::workspace&,cxxlens::transform::apply_mode,cxxlens::execution_context)
+        const; cxxlens::transform::transaction_state cxxlens::generate::generation_result::state() const noexcept; bool cxxlens::generate::generation_result::committed()
+        const noexcept; std::string_view cxxlens::generate::generation_result::transaction_id() const noexcept; std::span<const
+        cxxlens::generate::artifact_plan> cxxlens::generate::generation_result::artifacts() const noexcept; std::span<const
+        cxxlens::path> cxxlens::generate::generation_result::emitted_files() const noexcept; std::span<const cxxlens::path>
+        cxxlens::generate::generation_result::quarantined_files() const noexcept; std::span<const cxxlens::diagnostic> cxxlens::generate::generation_result::diagnostics()
+        const noexcept; std::span<const cxxlens::unresolved> cxxlens::generate::generation_result::unresolved_items() const
+        noexcept; const cxxlens::coverage_report& cxxlens::generate::generation_result::coverage() const noexcept; std::string
+        cxxlens::generate::generation_result::manifest_json() const; std::string cxxlens::generate::generation_result::report_markdown()
+        const
+      signature_fingerprint: sha256:c6264b670685f429dbcb01c3e96a69e1bdc169130c7dee4cbfb55eaa8e6643fa
+    family_members:
+    - cxxlens::generate::generation_plan::apply
+    - cxxlens::generate::generation_result::state
+    - cxxlens::generate::generation_result::committed
+    - cxxlens::generate::generation_result::transaction_id
+    - cxxlens::generate::generation_result::artifacts
+    - cxxlens::generate::generation_result::emitted_files
+    - cxxlens::generate::generation_result::quarantined_files
+    - cxxlens::generate::generation_result::diagnostics
+    - cxxlens::generate::generation_result::unresolved_items
+    - cxxlens::generate::generation_result::coverage
+    - cxxlens::generate::generation_result::manifest_json
+    - cxxlens::generate::generation_result::report_markdown
+    semantics:
+    - exhaustive census, required-axis decisions and immutable artifact projection uses one immutable catalog/fact snapshot
+      and never silently omits requested rows.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-publishable and failure outcomes remain
+      distinct.
+    - Stable identity/order, evidence/coverage/guarantee, path/variant/tool provenance and default dry-run transaction state
+      are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:result<T>
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:generate:artifact_kind
+      - public-type:generate:artifact_plan
+      - public-type:generate:artifact_state
+      - public-type:generate:decision_state
+      - public-type:generate:generation_plan
+      - public-type:generate:generation_result
+      - public-type:generate:surface
+      - public-type:generate:surface_decision
+      - public-type:generate:surface_kind
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.generate.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.transform.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers: []
+      schemas: *id001
+    dependency_apis:
+    - API-TF-009
+    traceability:
+      requirements_or_use_cases:
+      - FR-015
+      - FR-016
+      - FR-017
+      design_sections:
+      - §20 generation foundation
+      - §21 mock/fake
+      - §22 method harness
+      - §23 copy/fuzz
+      - §39.20 package candidate
+      doxygen_obligation: Document exact types, ownership/lifetime, snapshot/budget, census/decision/artifact accounting,
+        ambiguity/unsupported/variant, default dry-run and rollback semantics with a public example.
+    acceptance:
+      positive:
+        id: API-GEN-002.positive
+        expression: Use a complete deterministic fixture for exhaustive census, required-axis decisions and immutable artifact
+          projection.
+        expected: Exact rows, conserved coverage, canonical IDs/order and validated artifact/plan state.
+      negative:
+        id: API-GEN-002.negative
+        expression: Use an unsupported, stale, unsafe path, manual-edit, ODR/macro, invalid input or provider-failure fixture.
+        expected: Typed rejection/unresolved evidence, no silent omission, no publishability overclaim and no filesystem write.
+      ambiguous:
+        id: API-GEN-002.ambiguous
+        expression: Use overload, inherited/template, type-closure, case-fold/path/content or variant-divergent candidates.
+        expected: All candidates/collisions remain explicit with downgraded guarantee; first-wins and partial commit are forbidden.
+  - api_id: API-METHOD-001
+    atomic_unit: AU-METHOD-001
+    package: method_harness
+    policy: generation.exact-method-harness.v1
+    declaration:
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::result<cxxlens::generate::method_harness::method_spec> cxxlens::generate::method_harness::parse_method_spec(std::string_view)
+      signature_fingerprint: sha256:6d94c582c579712ebcdaa3e9c42bd027a7ced4b0d3b847e2e1baaa2d7914314b
+    family_members:
+    - cxxlens::generate::method_harness::parse_method_spec
+    semantics:
+    - exact method grammar/resolution, inspection and safe harness planning uses one immutable catalog/fact snapshot and never
+      silently omits requested rows.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-publishable and failure outcomes remain
+      distinct.
+    - Stable identity/order, evidence/coverage/guarantee, path/variant/tool provenance and default dry-run transaction state
+      are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:result<T>
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:generate:artifact_kind
+      - public-type:generate:artifact_plan
+      - public-type:generate:artifact_state
+      - public-type:generate:decision_state
+      - public-type:generate:generation_plan
+      - public-type:generate:generation_result
+      - public-type:generate:surface
+      - public-type:generate:surface_decision
+      - public-type:generate:surface_kind
+      - public-type:method_harness:dependency_kind
+      - public-type:method_harness:extraction_class
+      - public-type:method_harness:harness_options
+      - public-type:method_harness:method_feature
+      - public-type:method_harness:method_harness::generator
+      - public-type:method_harness:method_inspection
+      - public-type:method_harness:method_resolution
+      - public-type:method_harness:method_spec
+      - public-type:method_harness:ref_qualifier
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.generate.package_internal_engine
+      - shared.package.method_harness.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.transform.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers: []
+      schemas: *id001
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-GN-004
+      design_sections:
+      - §20 generation foundation
+      - §21 mock/fake
+      - §22 method harness
+      - §23 copy/fuzz
+      - §39.20 package candidate
+      doxygen_obligation: Document exact types, ownership/lifetime, snapshot/budget, census/decision/artifact accounting,
+        ambiguity/unsupported/variant, default dry-run and rollback semantics with a public example.
+    acceptance:
+      positive:
+        id: API-METHOD-001.positive
+        expression: Use a complete deterministic fixture for exact method grammar/resolution, inspection and safe harness
+          planning.
+        expected: Exact rows, conserved coverage, canonical IDs/order and validated artifact/plan state.
+      negative:
+        id: API-METHOD-001.negative
+        expression: Use an unsupported, stale, unsafe path, manual-edit, ODR/macro, invalid input or provider-failure fixture.
+        expected: Typed rejection/unresolved evidence, no silent omission, no publishability overclaim and no filesystem write.
+      ambiguous:
+        id: API-METHOD-001.ambiguous
+        expression: Use overload, inherited/template, type-closure, case-fold/path/content or variant-divergent candidates.
+        expected: All candidates/collisions remain explicit with downgraded guarantee; first-wins and partial commit are forbidden.
+  - api_id: API-METHOD-002
+    atomic_unit: AU-METHOD-002
+    package: method_harness
+    policy: generation.exact-method-harness.v1
+    declaration:
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::result<cxxlens::generate::method_harness::method_resolution> cxxlens::generate::method_harness::resolve_method(const
+        cxxlens::workspace&,const cxxlens::generate::method_harness::method_spec&,cxxlens::execution_context)
+      signature_fingerprint: sha256:fe92e5d5988cb0b9a5ad6c5e5282de3ff773d157ff6b6859d5a0c0f7769a088f
+    family_members:
+    - cxxlens::generate::method_harness::resolve_method
+    semantics:
+    - exact method grammar/resolution, inspection and safe harness planning uses one immutable catalog/fact snapshot and never
+      silently omits requested rows.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-publishable and failure outcomes remain
+      distinct.
+    - Stable identity/order, evidence/coverage/guarantee, path/variant/tool provenance and default dry-run transaction state
+      are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:result<T>
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:generate:artifact_kind
+      - public-type:generate:artifact_plan
+      - public-type:generate:artifact_state
+      - public-type:generate:decision_state
+      - public-type:generate:generation_plan
+      - public-type:generate:generation_result
+      - public-type:generate:surface
+      - public-type:generate:surface_decision
+      - public-type:generate:surface_kind
+      - public-type:method_harness:dependency_kind
+      - public-type:method_harness:extraction_class
+      - public-type:method_harness:harness_options
+      - public-type:method_harness:method_feature
+      - public-type:method_harness:method_harness::generator
+      - public-type:method_harness:method_inspection
+      - public-type:method_harness:method_resolution
+      - public-type:method_harness:method_spec
+      - public-type:method_harness:ref_qualifier
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.generate.package_internal_engine
+      - shared.package.method_harness.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.transform.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers:
+      - provider.fact.frontend:symbol
+      - provider.fact.frontend:type
+      schemas: *id001
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-GN-004
+      design_sections:
+      - §20 generation foundation
+      - §21 mock/fake
+      - §22 method harness
+      - §23 copy/fuzz
+      - §39.20 package candidate
+      doxygen_obligation: Document exact types, ownership/lifetime, snapshot/budget, census/decision/artifact accounting,
+        ambiguity/unsupported/variant, default dry-run and rollback semantics with a public example.
+    acceptance:
+      positive:
+        id: API-METHOD-002.positive
+        expression: Use a complete deterministic fixture for exact method grammar/resolution, inspection and safe harness
+          planning.
+        expected: Exact rows, conserved coverage, canonical IDs/order and validated artifact/plan state.
+      negative:
+        id: API-METHOD-002.negative
+        expression: Use an unsupported, stale, unsafe path, manual-edit, ODR/macro, invalid input or provider-failure fixture.
+        expected: Typed rejection/unresolved evidence, no silent omission, no publishability overclaim and no filesystem write.
+      ambiguous:
+        id: API-METHOD-002.ambiguous
+        expression: Use overload, inherited/template, type-closure, case-fold/path/content or variant-divergent candidates.
+        expected: All candidates/collisions remain explicit with downgraded guarantee; first-wins and partial commit are forbidden.
+  - api_id: API-METHOD-003
+    atomic_unit: AU-METHOD-003
+    package: method_harness
+    policy: generation.exact-method-harness.v1
+    declaration:
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::generate::method_harness::generator cxxlens::generate::method_harness::generator::for_method(cxxlens::generate::method_harness::method_spec);
+        cxxlens::generate::method_harness::generator cxxlens::generate::method_harness::generator::for_symbol(cxxlens::select::symbol_selector);
+        cxxlens::generate::method_harness::generator cxxlens::generate::method_harness::generator::options(cxxlens::generate::method_harness::harness_options)
+        const
+      signature_fingerprint: sha256:1b9403e66fce6791b6fb09f31a0620b3b6d44579b1ebbde6cd012c90ef7edcb8
+    family_members:
+    - cxxlens::generate::method_harness::generator::for_method
+    - cxxlens::generate::method_harness::generator::for_symbol
+    - cxxlens::generate::method_harness::generator::options
+    semantics:
+    - exact method grammar/resolution, inspection and safe harness planning uses one immutable catalog/fact snapshot and never
+      silently omits requested rows.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-publishable and failure outcomes remain
+      distinct.
+    - Stable identity/order, evidence/coverage/guarantee, path/variant/tool provenance and default dry-run transaction state
+      are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:result<T>
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:generate:artifact_kind
+      - public-type:generate:artifact_plan
+      - public-type:generate:artifact_state
+      - public-type:generate:decision_state
+      - public-type:generate:generation_plan
+      - public-type:generate:generation_result
+      - public-type:generate:surface
+      - public-type:generate:surface_decision
+      - public-type:generate:surface_kind
+      - public-type:method_harness:dependency_kind
+      - public-type:method_harness:extraction_class
+      - public-type:method_harness:harness_options
+      - public-type:method_harness:method_feature
+      - public-type:method_harness:method_harness::generator
+      - public-type:method_harness:method_inspection
+      - public-type:method_harness:method_resolution
+      - public-type:method_harness:method_spec
+      - public-type:method_harness:ref_qualifier
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.generate.package_internal_engine
+      - shared.package.method_harness.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.transform.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers: []
+      schemas: *id001
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-015
+      - FR-016
+      - FR-017
+      design_sections:
+      - §20 generation foundation
+      - §21 mock/fake
+      - §22 method harness
+      - §23 copy/fuzz
+      - §39.20 package candidate
+      doxygen_obligation: Document exact types, ownership/lifetime, snapshot/budget, census/decision/artifact accounting,
+        ambiguity/unsupported/variant, default dry-run and rollback semantics with a public example.
+    acceptance:
+      positive:
+        id: API-METHOD-003.positive
+        expression: Use a complete deterministic fixture for exact method grammar/resolution, inspection and safe harness
+          planning.
+        expected: Exact rows, conserved coverage, canonical IDs/order and validated artifact/plan state.
+      negative:
+        id: API-METHOD-003.negative
+        expression: Use an unsupported, stale, unsafe path, manual-edit, ODR/macro, invalid input or provider-failure fixture.
+        expected: Typed rejection/unresolved evidence, no silent omission, no publishability overclaim and no filesystem write.
+      ambiguous:
+        id: API-METHOD-003.ambiguous
+        expression: Use overload, inherited/template, type-closure, case-fold/path/content or variant-divergent candidates.
+        expected: All candidates/collisions remain explicit with downgraded guarantee; first-wins and partial commit are forbidden.
+  - api_id: API-METHOD-004
+    atomic_unit: AU-METHOD-004
+    package: method_harness
+    policy: generation.exact-method-harness.v1
+    declaration:
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::result<cxxlens::generate::method_harness::method_inspection> cxxlens::generate::method_harness::generator::inspect(const
+        cxxlens::workspace&,cxxlens::execution_context) const
+      signature_fingerprint: sha256:4a256d193b1ea1195c8c97a09f0855b23613ac3d8b8b66690558d7bc37b825c6
+    family_members:
+    - cxxlens::generate::method_harness::generator::inspect
+    semantics:
+    - exact method grammar/resolution, inspection and safe harness planning uses one immutable catalog/fact snapshot and never
+      silently omits requested rows.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-publishable and failure outcomes remain
+      distinct.
+    - Stable identity/order, evidence/coverage/guarantee, path/variant/tool provenance and default dry-run transaction state
+      are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:result<T>
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:generate:artifact_kind
+      - public-type:generate:artifact_plan
+      - public-type:generate:artifact_state
+      - public-type:generate:decision_state
+      - public-type:generate:generation_plan
+      - public-type:generate:generation_result
+      - public-type:generate:surface
+      - public-type:generate:surface_decision
+      - public-type:generate:surface_kind
+      - public-type:method_harness:dependency_kind
+      - public-type:method_harness:extraction_class
+      - public-type:method_harness:harness_options
+      - public-type:method_harness:method_feature
+      - public-type:method_harness:method_harness::generator
+      - public-type:method_harness:method_inspection
+      - public-type:method_harness:method_resolution
+      - public-type:method_harness:method_spec
+      - public-type:method_harness:ref_qualifier
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.generate.package_internal_engine
+      - shared.package.method_harness.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.transform.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers:
+      - provider.fact.frontend:call
+      - provider.fact.frontend:cfg_summary
+      - provider.fact.frontend:effect_summary
+      - provider.fact.frontend:reference
+      schemas: *id001
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-015
+      - FR-016
+      - FR-017
+      design_sections:
+      - §20 generation foundation
+      - §21 mock/fake
+      - §22 method harness
+      - §23 copy/fuzz
+      - §39.20 package candidate
+      doxygen_obligation: Document exact types, ownership/lifetime, snapshot/budget, census/decision/artifact accounting,
+        ambiguity/unsupported/variant, default dry-run and rollback semantics with a public example.
+    acceptance:
+      positive:
+        id: API-METHOD-004.positive
+        expression: Use a complete deterministic fixture for exact method grammar/resolution, inspection and safe harness
+          planning.
+        expected: Exact rows, conserved coverage, canonical IDs/order and validated artifact/plan state.
+      negative:
+        id: API-METHOD-004.negative
+        expression: Use an unsupported, stale, unsafe path, manual-edit, ODR/macro, invalid input or provider-failure fixture.
+        expected: Typed rejection/unresolved evidence, no silent omission, no publishability overclaim and no filesystem write.
+      ambiguous:
+        id: API-METHOD-004.ambiguous
+        expression: Use overload, inherited/template, type-closure, case-fold/path/content or variant-divergent candidates.
+        expected: All candidates/collisions remain explicit with downgraded guarantee; first-wins and partial commit are forbidden.
+  - api_id: API-METHOD-005
+    atomic_unit: AU-METHOD-005
+    package: method_harness
+    policy: generation.exact-method-harness.v1
+    declaration:
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::method_harness::generator::plan(cxxlens::workspace&,cxxlens::execution_context)
+        const
+      signature_fingerprint: sha256:1460708c6a7ef9cfabdea9f9080544c7a9f91658c7ddc9da62f7ef074ab4f6f3
+    family_members:
+    - cxxlens::generate::method_harness::generator::plan
+    semantics:
+    - exact method grammar/resolution, inspection and safe harness planning uses one immutable catalog/fact snapshot and never
+      silently omits requested rows.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-publishable and failure outcomes remain
+      distinct.
+    - Stable identity/order, evidence/coverage/guarantee, path/variant/tool provenance and default dry-run transaction state
+      are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:result<T>
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:generate:artifact_kind
+      - public-type:generate:artifact_plan
+      - public-type:generate:artifact_state
+      - public-type:generate:decision_state
+      - public-type:generate:generation_plan
+      - public-type:generate:generation_result
+      - public-type:generate:surface
+      - public-type:generate:surface_decision
+      - public-type:generate:surface_kind
+      - public-type:method_harness:dependency_kind
+      - public-type:method_harness:extraction_class
+      - public-type:method_harness:harness_options
+      - public-type:method_harness:method_feature
+      - public-type:method_harness:method_harness::generator
+      - public-type:method_harness:method_inspection
+      - public-type:method_harness:method_resolution
+      - public-type:method_harness:method_spec
+      - public-type:method_harness:ref_qualifier
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.generate.package_internal_engine
+      - shared.package.method_harness.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.transform.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers:
+      - provider.fact.frontend:declaration
+      - provider.fact.frontend:type
+      schemas: *id001
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-GN-005
+      design_sections:
+      - §20 generation foundation
+      - §21 mock/fake
+      - §22 method harness
+      - §23 copy/fuzz
+      - §39.20 package candidate
+      doxygen_obligation: Document exact types, ownership/lifetime, snapshot/budget, census/decision/artifact accounting,
+        ambiguity/unsupported/variant, default dry-run and rollback semantics with a public example.
+    acceptance:
+      positive:
+        id: API-METHOD-005.positive
+        expression: Use a complete deterministic fixture for exact method grammar/resolution, inspection and safe harness
+          planning.
+        expected: Exact rows, conserved coverage, canonical IDs/order and validated artifact/plan state.
+      negative:
+        id: API-METHOD-005.negative
+        expression: Use an unsupported, stale, unsafe path, manual-edit, ODR/macro, invalid input or provider-failure fixture.
+        expected: Typed rejection/unresolved evidence, no silent omission, no publishability overclaim and no filesystem write.
+      ambiguous:
+        id: API-METHOD-005.ambiguous
+        expression: Use overload, inherited/template, type-closure, case-fold/path/content or variant-divergent candidates.
+        expected: All candidates/collisions remain explicit with downgraded guarantee; first-wins and partial commit are forbidden.
+  - api_id: API-MOCK-001
+    atomic_unit: AU-MOCK-001
+    package: mock
+    policy: generation.mock-four-axis.v1
+    declaration:
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::generate::mock::generator cxxlens::generate::mock::generator::for_class(std::string); cxxlens::generate::mock::generator
+        cxxlens::generate::mock::generator::for_symbol(cxxlens::select::symbol_selector); cxxlens::generate::mock::generator
+        cxxlens::generate::mock::generator::for_c_api_header(cxxlens::path)
+      signature_fingerprint: sha256:dd93d4d1dbd07a2d9933d8879937e776f0927634fbf0b574416283c4590202ad
+    family_members:
+    - cxxlens::generate::mock::generator::for_class
+    - cxxlens::generate::mock::generator::for_symbol
+    - cxxlens::generate::mock::generator::for_c_api_header
+    semantics:
+    - semantic target resolution and four-axis mock/fake/link accounting uses one immutable catalog/fact snapshot and never
+      silently omits requested rows.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-publishable and failure outcomes remain
+      distinct.
+    - Stable identity/order, evidence/coverage/guarantee, path/variant/tool provenance and default dry-run transaction state
+      are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:result<T>
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:generate:artifact_kind
+      - public-type:generate:artifact_plan
+      - public-type:generate:artifact_state
+      - public-type:generate:decision_state
+      - public-type:generate:generation_plan
+      - public-type:generate:generation_result
+      - public-type:generate:surface
+      - public-type:generate:surface_decision
+      - public-type:generate:surface_kind
+      - public-type:mock:fake_definition_decision
+      - public-type:mock:fake_dispatch_decision
+      - public-type:mock:fake_strategy
+      - public-type:mock:generation_options
+      - public-type:mock:include_strategy
+      - public-type:mock:link_effect
+      - public-type:mock:mock::generator
+      - public-type:mock:mock_decision
+      - public-type:mock:mock_framework
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.generate.package_internal_engine
+      - shared.package.mock.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.transform.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers:
+      - provider.fact.frontend:symbol
+      - provider.fact.frontend:type
+      schemas: *id001
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-GN-002
+      - UC-GN-003
+      - UC-GN-007
+      design_sections:
+      - §20 generation foundation
+      - §21 mock/fake
+      - §22 method harness
+      - §23 copy/fuzz
+      - §39.20 package candidate
+      doxygen_obligation: Document exact types, ownership/lifetime, snapshot/budget, census/decision/artifact accounting,
+        ambiguity/unsupported/variant, default dry-run and rollback semantics with a public example.
+    acceptance:
+      positive:
+        id: API-MOCK-001.positive
+        expression: Use a complete deterministic fixture for semantic target resolution and four-axis mock/fake/link accounting.
+        expected: Exact rows, conserved coverage, canonical IDs/order and validated artifact/plan state.
+      negative:
+        id: API-MOCK-001.negative
+        expression: Use an unsupported, stale, unsafe path, manual-edit, ODR/macro, invalid input or provider-failure fixture.
+        expected: Typed rejection/unresolved evidence, no silent omission, no publishability overclaim and no filesystem write.
+      ambiguous:
+        id: API-MOCK-001.ambiguous
+        expression: Use overload, inherited/template, type-closure, case-fold/path/content or variant-divergent candidates.
+        expected: All candidates/collisions remain explicit with downgraded guarantee; first-wins and partial commit are forbidden.
+  - api_id: API-MOCK-002
+    atomic_unit: AU-MOCK-002
+    package: mock
+    policy: generation.mock-four-axis.v1
+    declaration:
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::generate::mock::generator cxxlens::generate::mock::generator::options(cxxlens::generate::mock::generation_options)
+        const; cxxlens::generate::mock::generator cxxlens::generate::mock::generator::include_method(cxxlens::select::symbol_selector)
+        const; cxxlens::generate::mock::generator cxxlens::generate::mock::generator::exclude_method(cxxlens::select::symbol_selector)
+        const
+      signature_fingerprint: sha256:4cdda8f90c7c411b108325c03d45a3d1806eced2d7c765da263d948ac5ec9a6a
+    family_members:
+    - cxxlens::generate::mock::generator::options
+    - cxxlens::generate::mock::generator::include_method
+    - cxxlens::generate::mock::generator::exclude_method
+    semantics:
+    - semantic target resolution and four-axis mock/fake/link accounting uses one immutable catalog/fact snapshot and never
+      silently omits requested rows.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-publishable and failure outcomes remain
+      distinct.
+    - Stable identity/order, evidence/coverage/guarantee, path/variant/tool provenance and default dry-run transaction state
+      are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:result<T>
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:generate:artifact_kind
+      - public-type:generate:artifact_plan
+      - public-type:generate:artifact_state
+      - public-type:generate:decision_state
+      - public-type:generate:generation_plan
+      - public-type:generate:generation_result
+      - public-type:generate:surface
+      - public-type:generate:surface_decision
+      - public-type:generate:surface_kind
+      - public-type:mock:fake_definition_decision
+      - public-type:mock:fake_dispatch_decision
+      - public-type:mock:fake_strategy
+      - public-type:mock:generation_options
+      - public-type:mock:include_strategy
+      - public-type:mock:link_effect
+      - public-type:mock:mock::generator
+      - public-type:mock:mock_decision
+      - public-type:mock:mock_framework
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.generate.package_internal_engine
+      - shared.package.mock.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.transform.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers: []
+      schemas: *id001
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - FR-015
+      - FR-016
+      - FR-017
+      design_sections:
+      - §20 generation foundation
+      - §21 mock/fake
+      - §22 method harness
+      - §23 copy/fuzz
+      - §39.20 package candidate
+      doxygen_obligation: Document exact types, ownership/lifetime, snapshot/budget, census/decision/artifact accounting,
+        ambiguity/unsupported/variant, default dry-run and rollback semantics with a public example.
+    acceptance:
+      positive:
+        id: API-MOCK-002.positive
+        expression: Use a complete deterministic fixture for semantic target resolution and four-axis mock/fake/link accounting.
+        expected: Exact rows, conserved coverage, canonical IDs/order and validated artifact/plan state.
+      negative:
+        id: API-MOCK-002.negative
+        expression: Use an unsupported, stale, unsafe path, manual-edit, ODR/macro, invalid input or provider-failure fixture.
+        expected: Typed rejection/unresolved evidence, no silent omission, no publishability overclaim and no filesystem write.
+      ambiguous:
+        id: API-MOCK-002.ambiguous
+        expression: Use overload, inherited/template, type-closure, case-fold/path/content or variant-divergent candidates.
+        expected: All candidates/collisions remain explicit with downgraded guarantee; first-wins and partial commit are forbidden.
+  - api_id: API-MOCK-003
+    atomic_unit: AU-MOCK-003
+    package: mock
+    policy: generation.mock-four-axis.v1
+    declaration:
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::mock::generator::plan(cxxlens::workspace&,cxxlens::execution_context)
+        const
+      signature_fingerprint: sha256:bb033962a3625b1d861c6c7640854b4c80af715c100ebdfac0afb39c06434cb6
+    family_members:
+    - cxxlens::generate::mock::generator::plan
+    semantics:
+    - semantic target resolution and four-axis mock/fake/link accounting uses one immutable catalog/fact snapshot and never
+      silently omits requested rows.
+    - Complete empty, unresolved, unsupported, ambiguous/conflicting, partial/non-publishable and failure outcomes remain
+      distinct.
+    - Stable identity/order, evidence/coverage/guarantee, path/variant/tool provenance and default dry-run transaction state
+      are authoritative.
+    ownership_refs:
+      public_types:
+      - public-type:core:coverage_report
+      - public-type:core:diagnostic
+      - public-type:core:evidence
+      - public-type:core:execution_context
+      - public-type:core:result<T>
+      - public-type:core:typed_id<T>
+      - public-type:core:unresolved
+      - public-type:facts:provenance
+      - public-type:generate:artifact_kind
+      - public-type:generate:artifact_plan
+      - public-type:generate:artifact_state
+      - public-type:generate:decision_state
+      - public-type:generate:generation_plan
+      - public-type:generate:generation_result
+      - public-type:generate:surface
+      - public-type:generate:surface_decision
+      - public-type:generate:surface_kind
+      - public-type:mock:fake_definition_decision
+      - public-type:mock:fake_dispatch_decision
+      - public-type:mock:fake_strategy
+      - public-type:mock:generation_options
+      - public-type:mock:include_strategy
+      - public-type:mock:link_effect
+      - public-type:mock:mock::generator
+      - public-type:mock:mock_decision
+      - public-type:mock:mock_framework
+      - public-type:select:symbol_selector
+      - public-type:transform:apply_mode
+      - public-type:transform:transaction_state
+      - public-type:workspace:analysis_scope
+      - public-type:workspace:workspace
+      shared_components:
+      - shared.package.facts.package_internal_engine
+      - shared.package.generate.package_internal_engine
+      - shared.package.mock.package_internal_engine
+      - shared.package.select.package_internal_engine
+      - shared.package.transform.package_internal_engine
+      - shared.package.workspace.package_internal_engine
+      providers:
+      - provider.fact.frontend:declaration
+      - provider.fact.frontend:definition
+      - provider.fact.frontend:inheritance
+      - provider.fact.frontend:override_relation
+      - provider.fact.frontend:symbol
+      - provider.fact.frontend:type
+      schemas: *id001
+    dependency_apis: []
+    traceability:
+      requirements_or_use_cases:
+      - UC-GN-001
+      - UC-GN-002
+      - UC-GN-003
+      design_sections:
+      - §20 generation foundation
+      - §21 mock/fake
+      - §22 method harness
+      - §23 copy/fuzz
+      - §39.20 package candidate
+      doxygen_obligation: Document exact types, ownership/lifetime, snapshot/budget, census/decision/artifact accounting,
+        ambiguity/unsupported/variant, default dry-run and rollback semantics with a public example.
+    acceptance:
+      positive:
+        id: API-MOCK-003.positive
+        expression: Use a complete deterministic fixture for semantic target resolution and four-axis mock/fake/link accounting.
+        expected: Exact rows, conserved coverage, canonical IDs/order and validated artifact/plan state.
+      negative:
+        id: API-MOCK-003.negative
+        expression: Use an unsupported, stale, unsafe path, manual-edit, ODR/macro, invalid input or provider-failure fixture.
+        expected: Typed rejection/unresolved evidence, no silent omission, no publishability overclaim and no filesystem write.
+      ambiguous:
+        id: API-MOCK-003.ambiguous
+        expression: Use overload, inherited/template, type-closure, case-fold/path/content or variant-divergent candidates.
+        expected: All candidates/collisions remain explicit with downgraded guarantee; first-wins and partial commit are forbidden.
+  production_implementation_changed: false
+  candidate_fingerprint: sha256:8ce8f299252b71f361407b41774291a97ef78dfaee1a74797ca4e9b41dace163

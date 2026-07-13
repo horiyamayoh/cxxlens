@@ -1,0 +1,36 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.generation-result.v1.schema.yaml
+title: cxxlens generation apply result v1
+type: object
+additionalProperties: false
+required: [schema, transaction_id, state, committed, artifacts, diagnostics, unresolved, coverage, recovery_artifacts]
+properties:
+  schema: {const: cxxlens.generation-result.v1}
+  transaction_id: {type: string, minLength: 1}
+  state: {enum: [dry_run_validated, prepared, committed, rolled_back, rollback_failed]}
+  committed: {type: boolean}
+  artifacts:
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, path, before_digest, after_digest, present, publishable, usable, link_ready, listed, quarantined, rolled_back]
+      properties:
+        id: {type: string, minLength: 1}
+        path: {type: string, minLength: 1}
+        before_digest: {type: [string, 'null']}
+        after_digest: {type: [string, 'null']}
+        present: {type: boolean}
+        publishable: {type: boolean}
+        usable: {type: boolean}
+        link_ready: {type: boolean}
+        listed: {type: boolean}
+        quarantined: {type: boolean}
+        rolled_back: {type: boolean}
+  diagnostics: {type: array, items: {type: object}}
+  unresolved: {type: array, items: {type: object}}
+  coverage: {type: object}
+  recovery_artifacts: {type: array, uniqueItems: true, items: {type: string, minLength: 1}}
+allOf:
+  - if: {properties: {committed: {const: true}}}
+    then: {properties: {state: {const: committed}}}

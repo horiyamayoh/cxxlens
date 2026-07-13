@@ -3684,6 +3684,20 @@ one-writer multi-file transaction で commit する。partial commit と silent 
 failure/cancel/post-write validation failure は rollback、rollback failure は recovery artifact 付き typed
 terminal state とする。#52 が高リスク検証、#53 が header 統合、#54 が frozen 遷移を所有する。
 
+### 39.20 generation・mock・method harness・copy・fuzz package candidate
+
+Issue #49 の規範契約は `docs/design/package_contract_49.md` と
+`schemas/cxxlens_package_contract_candidates.yaml#issue-49` である。`generate` は immutable な surface
+census、required-axis decision、typed payload、artifact plan/result を所有し、silent omission と emitter の
+再判定を禁止する。artifact の present/publishable/usable/link-ready/listed/quarantined は独立した状態で、
+path/content/variant collision と全 requested surface の coverage を保存する。
+
+apply は default dry-run とし、#48 の authorization、stale/path/format/reparse、one-writer transaction、
+rollback/recovery を共有するが、artifact lifecycle を source-range edit と偽装しない。mock/fake は全 surface
+の四 decision 軸、method harness は exact cv/ref/noexcept overload と feature classification、copy は
+ODR/macro/type closure、fuzz は有限 input inference と risk disclosure を保持する。unsafe/ambiguous target を
+first-wins や fallback で選ばない。#52 が高リスク検証、#53 が header 統合、#54 が frozen 遷移を所有する。
+
 ---
 
 ## 40. Public API inventory

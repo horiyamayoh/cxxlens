@@ -1,0 +1,83 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.generation-plan.v1.schema.yaml
+title: cxxlens generation plan v1
+type: object
+additionalProperties: false
+required: [schema, plan_id, valid, snapshot, census, decisions, artifacts, diagnostics, unresolved, coverage]
+properties:
+  schema: {const: cxxlens.generation-plan.v1}
+  plan_id: {$ref: '#/$defs/id'}
+  valid: {type: boolean}
+  snapshot: {type: string, minLength: 1}
+  census:
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, kind, owner, signature, variants, evidence]
+      properties:
+        id: {$ref: '#/$defs/id'}
+        kind: {type: string, minLength: 1}
+        owner: {$ref: '#/$defs/id'}
+        signature: {type: string, minLength: 1}
+        variants: {type: array, uniqueItems: true, items: {$ref: '#/$defs/id'}}
+        evidence: {type: array, items: {type: object}}
+  decisions:
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required: [surface, axis, state, stable_code, artifacts, evidence]
+      properties:
+        surface: {$ref: '#/$defs/id'}
+        axis: {type: string, minLength: 1}
+        state: {enum: [requested, accepted, excluded, unsupported, ambiguous, failed, deferred]}
+        stable_code: {type: string, minLength: 1}
+        artifacts: {type: array, uniqueItems: true, items: {$ref: '#/$defs/id'}}
+        evidence: {type: array, items: {type: object}}
+  artifacts:
+    type: array
+    items: {$ref: '#/$defs/artifact'}
+  diagnostics: {type: array, items: {type: object}}
+  unresolved: {type: array, items: {type: object}}
+  coverage: {$ref: '#/$defs/coverage'}
+$defs:
+  id: {type: string, pattern: '^[a-z][a-z0-9-]*_[0-9a-f]{64}$'}
+  artifact:
+    type: object
+    additionalProperties: false
+    required: [id, kind, path, content_digest, satisfies, dependencies, variants, state, evidence]
+    properties:
+      id: {$ref: '#/$defs/id'}
+      kind: {type: string, minLength: 1}
+      path: {type: string, minLength: 1}
+      content_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+      expected_existing_digest: {type: [string, 'null'], pattern: '^sha256:[0-9a-f]{64}$'}
+      satisfies: {type: array, uniqueItems: true, items: {$ref: '#/$defs/id'}}
+      dependencies: {type: array, uniqueItems: true, items: {$ref: '#/$defs/id'}}
+      variants: {type: array, uniqueItems: true, items: {$ref: '#/$defs/id'}}
+      state:
+        type: object
+        additionalProperties: false
+        required: [generated, present, publishable, usable, link_ready, listed, quarantined, rolled_back]
+        properties:
+          generated: {type: boolean}
+          present: {type: boolean}
+          publishable: {type: boolean}
+          usable: {type: boolean}
+          link_ready: {type: boolean}
+          listed: {type: boolean}
+          quarantined: {type: boolean}
+          rolled_back: {type: boolean}
+      evidence: {type: array, items: {type: object}}
+  coverage:
+    type: object
+    additionalProperties: false
+    required: [requested, covered, excluded, failed, unresolved, not_applicable]
+    properties:
+      requested: {type: integer, minimum: 0}
+      covered: {type: integer, minimum: 0}
+      excluded: {type: integer, minimum: 0}
+      failed: {type: integer, minimum: 0}
+      unresolved: {type: integer, minimum: 0}
+      not_applicable: {type: integer, minimum: 0}

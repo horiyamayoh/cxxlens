@@ -1,0 +1,24 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.generation-options.v1.schema.yaml
+title: cxxlens generation options v1
+type: object
+additionalProperties: false
+required: [schema, kind, output_root, format, verify_reparse, verify_compile, verify_link, output_budget_bytes]
+properties:
+  schema: {const: cxxlens.generation-options.v1}
+  kind: {enum: [mock, method_harness, copy, fuzz]}
+  output_root: {type: string, minLength: 1}
+  overwrite_policy: {enum: [reject_existing, owned_generated_only, exact_digest_only]}
+  cleanup_policy: {enum: [preserve_orphans, report_orphans, delete_owned_orphans]}
+  format: {type: boolean}
+  verify_reparse: {type: boolean}
+  verify_compile: {type: boolean}
+  verify_link: {type: boolean}
+  output_budget_bytes: {type: integer, minimum: 1}
+  execution_budget:
+    type: object
+    additionalProperties: false
+    properties:
+      deadline_ms: {type: integer, minimum: 1}
+      memory_bytes: {type: integer, minimum: 1}
+      output_bytes: {type: integer, minimum: 1}

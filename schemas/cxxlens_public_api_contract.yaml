@@ -2668,10 +2668,12 @@ packages:
       apis: []
 - id: generate
   contract:
-    state: unresolved
+    state: candidate
     owner_issue: '#49'
-    transition_issue: '#42'
+    transition_issue: '#49'
     conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-49
+    candidate_fingerprint: sha256:8ce8f299252b71f361407b41774291a97ef78dfaee1a74797ca4e9b41dace163
   header: <cxxlens/generate.hpp>
   purpose: Common census, decisions, artifacts and transaction apply.
   public_types:
@@ -2694,17 +2696,25 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::plan_id cxxlens::generate::generation_plan::id() const noexcept; bool cxxlens::generate::generation_plan::valid()
+        const noexcept; std::span<const cxxlens::generate::surface> cxxlens::generate::generation_plan::census() const noexcept;
+        std::span<const cxxlens::generate::surface_decision> cxxlens::generate::generation_plan::decisions() const noexcept;
+        std::span<const cxxlens::generate::artifact_plan> cxxlens::generate::generation_plan::artifacts() const noexcept;
+        std::span<const cxxlens::diagnostic> cxxlens::generate::generation_plan::diagnostics() const noexcept; std::span<const
+        cxxlens::unresolved> cxxlens::generate::generation_plan::unresolved_items() const noexcept; const cxxlens::coverage_report&
+        cxxlens::generate::generation_plan::coverage() const noexcept; cxxlens::result<std::string> cxxlens::generate::generation_plan::preview(std::size_t)
+        const; std::string cxxlens::generate::generation_plan::to_json() const; std::string cxxlens::generate::generation_plan::to_markdown()
+        const
+      signature_fingerprint: sha256:6704d11628a4ad5b5f82b8e3b1b85026522faf7156eec6753eeef70e1e435a6d
     atomic_unit:
       id: AU-GEN-001
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-GEN-002
     symbol: generation_plan::apply
     kind: method
@@ -2717,23 +2727,37 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::result<cxxlens::generate::generation_result> cxxlens::generate::generation_plan::apply(cxxlens::workspace&,cxxlens::transform::apply_mode,cxxlens::execution_context)
+        const; cxxlens::transform::transaction_state cxxlens::generate::generation_result::state() const noexcept; bool cxxlens::generate::generation_result::committed()
+        const noexcept; std::string_view cxxlens::generate::generation_result::transaction_id() const noexcept; std::span<const
+        cxxlens::generate::artifact_plan> cxxlens::generate::generation_result::artifacts() const noexcept; std::span<const
+        cxxlens::path> cxxlens::generate::generation_result::emitted_files() const noexcept; std::span<const cxxlens::path>
+        cxxlens::generate::generation_result::quarantined_files() const noexcept; std::span<const cxxlens::diagnostic> cxxlens::generate::generation_result::diagnostics()
+        const noexcept; std::span<const cxxlens::unresolved> cxxlens::generate::generation_result::unresolved_items() const
+        noexcept; const cxxlens::coverage_report& cxxlens::generate::generation_result::coverage() const noexcept; std::string
+        cxxlens::generate::generation_result::manifest_json() const; std::string cxxlens::generate::generation_result::report_markdown()
+        const
+      signature_fingerprint: sha256:c6264b670685f429dbcb01c3e96a69e1bdc169130c7dee4cbfb55eaa8e6643fa
     atomic_unit:
       id: AU-GEN-002
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
+    requires:
+      apis:
+      - API-TF-009
 - id: mock
   contract:
-    state: unresolved
+    state: candidate
     owner_issue: '#49'
-    transition_issue: '#42'
+    transition_issue: '#49'
     conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-49
+    candidate_fingerprint: sha256:8ce8f299252b71f361407b41774291a97ef78dfaee1a74797ca4e9b41dace163
   header: <cxxlens/generate.hpp>
   purpose: Mock/fake planning and emission.
   public_types:
@@ -2763,17 +2787,19 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::generate::mock::generator cxxlens::generate::mock::generator::for_class(std::string); cxxlens::generate::mock::generator
+        cxxlens::generate::mock::generator::for_symbol(cxxlens::select::symbol_selector); cxxlens::generate::mock::generator
+        cxxlens::generate::mock::generator::for_c_api_header(cxxlens::path)
+      signature_fingerprint: sha256:dd93d4d1dbd07a2d9933d8879937e776f0927634fbf0b574416283c4590202ad
     atomic_unit:
       id: AU-MOCK-001
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-MOCK-002
     symbol: mock::generator::{options,include_method,exclude_method}
     kind: builder_family
@@ -2781,17 +2807,20 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::generate::mock::generator cxxlens::generate::mock::generator::options(cxxlens::generate::mock::generation_options)
+        const; cxxlens::generate::mock::generator cxxlens::generate::mock::generator::include_method(cxxlens::select::symbol_selector)
+        const; cxxlens::generate::mock::generator cxxlens::generate::mock::generator::exclude_method(cxxlens::select::symbol_selector)
+        const
+      signature_fingerprint: sha256:4cdda8f90c7c411b108325c03d45a3d1806eced2d7c765da263d948ac5ec9a6a
     atomic_unit:
       id: AU-MOCK-002
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-MOCK-003
     symbol: mock::generator::plan
     kind: method
@@ -2827,23 +2856,26 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::mock::generator::plan(cxxlens::workspace&,cxxlens::execution_context)
+        const
+      signature_fingerprint: sha256:bb033962a3625b1d861c6c7640854b4c80af715c100ebdfac0afb39c06434cb6
     atomic_unit:
       id: AU-MOCK-003
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
 - id: method_harness
   contract:
-    state: unresolved
+    state: candidate
     owner_issue: '#49'
-    transition_issue: '#42'
+    transition_issue: '#49'
     conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-49
+    candidate_fingerprint: sha256:8ce8f299252b71f361407b41774291a97ef78dfaee1a74797ca4e9b41dace163
   header: <cxxlens/generate.hpp>
   purpose: Exact method selection, inspection and extraction/harness planning.
   public_types:
@@ -2853,6 +2885,7 @@ packages:
   - dependency_kind
   - method_feature
   - method_inspection
+  - method_resolution
   - harness_options
   - method_harness::generator
   apis:
@@ -2867,17 +2900,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::result<cxxlens::generate::method_harness::method_spec> cxxlens::generate::method_harness::parse_method_spec(std::string_view)
+      signature_fingerprint: sha256:6d94c582c579712ebcdaa3e9c42bd027a7ced4b0d3b847e2e1baaa2d7914314b
     atomic_unit:
       id: AU-METHOD-001
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-METHOD-002
     symbol: method_harness::resolve_method
     kind: free_function
@@ -2904,17 +2937,18 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::result<cxxlens::generate::method_harness::method_resolution> cxxlens::generate::method_harness::resolve_method(const
+        cxxlens::workspace&,const cxxlens::generate::method_harness::method_spec&,cxxlens::execution_context)
+      signature_fingerprint: sha256:fe92e5d5988cb0b9a5ad6c5e5282de3ff773d157ff6b6859d5a0c0f7769a088f
     atomic_unit:
       id: AU-METHOD-002
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-METHOD-003
     symbol: method_harness::generator::{for_method,for_symbol,options}
     kind: builder_family
@@ -2922,17 +2956,20 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::generate::method_harness::generator cxxlens::generate::method_harness::generator::for_method(cxxlens::generate::method_harness::method_spec);
+        cxxlens::generate::method_harness::generator cxxlens::generate::method_harness::generator::for_symbol(cxxlens::select::symbol_selector);
+        cxxlens::generate::method_harness::generator cxxlens::generate::method_harness::generator::options(cxxlens::generate::method_harness::harness_options)
+        const
+      signature_fingerprint: sha256:1b9403e66fce6791b6fb09f31a0620b3b6d44579b1ebbde6cd012c90ef7edcb8
     atomic_unit:
       id: AU-METHOD-003
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-METHOD-004
     symbol: method_harness::generator::inspect
     kind: method
@@ -2954,17 +2991,18 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::result<cxxlens::generate::method_harness::method_inspection> cxxlens::generate::method_harness::generator::inspect(const
+        cxxlens::workspace&,cxxlens::execution_context) const
+      signature_fingerprint: sha256:4a256d193b1ea1195c8c97a09f0855b23613ac3d8b8b66690558d7bc37b825c6
     atomic_unit:
       id: AU-METHOD-004
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-METHOD-005
     symbol: method_harness::generator::plan
     kind: method
@@ -2984,23 +3022,26 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::method_harness::generator::plan(cxxlens::workspace&,cxxlens::execution_context)
+        const
+      signature_fingerprint: sha256:1460708c6a7ef9cfabdea9f9080544c7a9f91658c7ddc9da62f7ef074ab4f6f3
     atomic_unit:
       id: AU-METHOD-005
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
 - id: copy
   contract:
-    state: unresolved
+    state: candidate
     owner_issue: '#49'
-    transition_issue: '#42'
+    transition_issue: '#49'
     conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-49
+    candidate_fingerprint: sha256:8ce8f299252b71f361407b41774291a97ef78dfaee1a74797ca4e9b41dace163
   header: <cxxlens/generate.hpp>
   purpose: Semantic public-surface and dependency copying.
   public_types:
@@ -3028,17 +3069,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::copy::public_surface(cxxlens::workspace&,cxxlens::select::symbol_selector,cxxlens::generate::copy::copy_options,cxxlens::execution_context)
+      signature_fingerprint: sha256:5baccebd7a8969352b8d491027605b672c73386339d4d615e672c69199f93342
     atomic_unit:
       id: AU-COPY-001
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-COPY-002
     symbol: copy::required_types
     kind: free_function
@@ -3054,23 +3095,25 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::copy::required_types(cxxlens::workspace&,std::vector<cxxlens::symbol_id>,cxxlens::generate::copy::copy_options,cxxlens::execution_context)
+      signature_fingerprint: sha256:e43bbeb56496fd0371b92ac9e1f18e8b9e887e5396a8134c1bd4dab520685eef
     atomic_unit:
       id: AU-COPY-002
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
 - id: fuzz
   contract:
-    state: unresolved
+    state: candidate
     owner_issue: '#49'
-    transition_issue: '#42'
+    transition_issue: '#49'
     conventions: cxxlens.global-contract-conventions.v1
+    candidate_manifest: schemas/cxxlens_package_contract_candidates.yaml#issue-49
+    candidate_fingerprint: sha256:8ce8f299252b71f361407b41774291a97ef78dfaee1a74797ca4e9b41dace163
   header: <cxxlens/generate.hpp>
   purpose: Type-driven fuzz harness planning.
   public_types:
@@ -3093,17 +3136,17 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::generate::fuzz::generator cxxlens::generate::fuzz::generator::for_function(cxxlens::select::symbol_selector)
+      signature_fingerprint: sha256:4eb44faf0469362a2f7ab650e21decf6860e808c7abcbf73e4f24258def55fa3
     atomic_unit:
       id: AU-FUZZ-001
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-FUZZ-002
     symbol: fuzz::generator::{input,infer_inputs,options}
     kind: builder_family
@@ -3111,17 +3154,19 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::generate::fuzz::generator cxxlens::generate::fuzz::generator::input(std::size_t,cxxlens::generate::fuzz::input_model)
+        const; cxxlens::generate::fuzz::generator cxxlens::generate::fuzz::generator::infer_inputs(bool) const; cxxlens::generate::fuzz::generator
+        cxxlens::generate::fuzz::generator::options(cxxlens::generate::fuzz::fuzz_options) const
+      signature_fingerprint: sha256:fdf33922f28cae71382625efead078385fa9ec64230fd66dc4c9ee16a24bb483
     atomic_unit:
       id: AU-FUZZ-002
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
   - id: API-FUZZ-003
     symbol: fuzz::generator::plan
     kind: method
@@ -3140,17 +3185,18 @@ packages:
     contract_maturity: planned
     implementation_state: unimplemented
     declaration:
-      status: unresolved
-      source: docs/design/cxxlens_integrated_design_ja.md
-      signature: null
-      signature_fingerprint: null
+      status: exact
+      source: contracts/candidates/49/generate.hpp
+      signature: cxxlens::result<cxxlens::generate::generation_plan> cxxlens::generate::fuzz::generator::plan(cxxlens::workspace&,cxxlens::execution_context)
+        const
+      signature_fingerprint: sha256:6f342cb56a4df1a4533caceab26d8c624153fce6f053ad7e807622fb52a80b19
     atomic_unit:
       id: AU-FUZZ-003
       indivisible: true
     readiness:
       state: blocked
       blockers:
-      - exact_declaration_unresolved
+      - candidate_declaration_not_integrated
 - id: qa
   contract:
     state: unresolved
@@ -4186,8 +4232,8 @@ summary:
     implemented: 0
     conformant: 47
   contract_state_counts:
-    candidate: 13
-    unresolved: 9
+    candidate: 18
+    unresolved: 4
 invariants:
 - Stable public headers do not expose clang::* or llvm::* types.
 - AST pointers never outlive a frontend job or borrowed callback.

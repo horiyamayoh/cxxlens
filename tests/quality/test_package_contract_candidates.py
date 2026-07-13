@@ -200,6 +200,26 @@ class PackageContractCandidateTest(unittest.TestCase):
         required = set(plan["$defs"]["edit"]["properties"]["precondition"]["required"])
         self.assertTrue({"source_digest", "file_identity", "catalog_version", "fact_snapshot_id", "verified_variants"} <= required)
 
+    def test_positive_issue_49_candidate_and_generation_schemas(self) -> None:
+        group = next(row for row in self.manifest["groups"] if row["issue"] == "#49")
+        self.assertEqual(group["packages"], ["copy", "fuzz", "generate", "method_harness", "mock"])
+        self.assertEqual(len(group["api_contracts"]), 15)
+        self.assertFalse(group["production_implementation_changed"])
+        for name in (
+            "cxxlens_generation_plan.schema.yaml",
+            "cxxlens_generation_result.schema.yaml",
+            "cxxlens_method_spec.schema.yaml",
+            "cxxlens_generation_options.schema.yaml",
+        ):
+            jsonschema.Draft202012Validator.check_schema(load(name))
+        plan = load("cxxlens_generation_plan.schema.yaml")
+        states = set(plan["properties"]["decisions"]["items"]["properties"]["state"]["enum"])
+        self.assertEqual(states, {"requested", "accepted", "excluded", "unsupported", "ambiguous", "failed", "deferred"})
+        artifact_state = plan["$defs"]["artifact"]["properties"]["state"]["required"]
+        self.assertTrue({"present", "publishable", "usable", "link_ready", "listed", "quarantined"} <= set(artifact_state))
+        result = load("cxxlens_generation_result.schema.yaml")
+        self.assertIn("rollback_failed", result["properties"]["state"]["enum"])
+
     def test_missing_assigned_api_is_rejected(self) -> None:
         document = copy.deepcopy(self.manifest)
         group = document["groups"][0]
