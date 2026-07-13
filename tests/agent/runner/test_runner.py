@@ -40,7 +40,10 @@ from ready_evaluator import (  # noqa: E402
     resolve_api,
     validate_report,
 )
-from unit_local_gate import compile_targets  # noqa: E402
+from unit_local_gate import (  # noqa: E402
+    compile_targets,
+    restore_unbuilt_test_commands,
+)
 
 
 def process_report_digest(inputs: tuple[dict, ...]) -> str:
@@ -158,6 +161,26 @@ class RunnerTest(unittest.TestCase):
             compile_targets(compile_commands)[source],
             "cxxlens-unit-configuration",
         )
+
+    def test_unbuilt_ctest_command_uses_generated_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            build_dir = pathlib.Path(temporary)
+            manifest = build_dir / "tests" / "CTestTestfile.cmake"
+            manifest.parent.mkdir()
+            executable = build_dir / "tests" / "cxxlens-unit-configuration"
+            manifest.write_text(
+                'add_test([=[unit.configuration]=] "'
+                f'{executable}")\n',
+                encoding="utf-8",
+            )
+            document = {
+                "tests": [{"name": "unit.configuration", "command": []}]
+            }
+            restore_unbuilt_test_commands(build_dir, document)
+            self.assertEqual(
+                document["tests"][0]["command"],
+                [str(executable)],
+            )
 
     def test_typed_providers_blockers_and_dependency_chains_are_visible(self) -> None:
         providers = {

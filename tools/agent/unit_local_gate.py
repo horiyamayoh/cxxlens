@@ -15,6 +15,9 @@ from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 TARGET = re.compile(r"(?:^|/)CMakeFiles/([^/]+)[.]dir(?:/|$)")
+GENERATED_TEST = re.compile(
+    r'^add_test\(\[=\[(?P<name>[^]]+)\]=\]\s+"(?P<command>[^"]+)"'
+)
 
 
 class UnitLocalGateError(ValueError):
@@ -59,6 +62,28 @@ def compile_targets(compile_commands: list[dict[str, Any]]) -> dict[pathlib.Path
         if match:
             targets[source] = match.group(1)
     return targets
+
+
+def restore_unbuilt_test_commands(
+    build_dir: pathlib.Path, ctest_document: dict[str, Any]
+) -> None:
+    generated: dict[str, str] = {}
+    for manifest in sorted(build_dir.rglob("CTestTestfile.cmake")):
+        for line in manifest.read_text(encoding="utf-8").splitlines():
+            match = GENERATED_TEST.match(line)
+            if not match:
+                continue
+            name = match.group("name")
+            command = match.group("command")
+            if name in generated and generated[name] != command:
+                fail("unit_local.ctest-duplicate", name)
+            generated[name] = command
+    for test in ctest_document.get("tests", []):
+        if test.get("command"):
+            continue
+        name = test.get("name")
+        if isinstance(name, str) and name in generated:
+            test["command"] = [generated[name]]
 
 
 def resolve_ctest_targets(
@@ -128,6 +153,7 @@ def main() -> int:
         text=True,
     )
     ctest_document = json.loads(shown.stdout)
+    restore_unbuilt_test_commands(build_dir, ctest_document)
     if args.mode == "check-report":
         report = json.loads(
             (root / "schemas/cxxlens.api-ready.report.v1.json").read_text(
