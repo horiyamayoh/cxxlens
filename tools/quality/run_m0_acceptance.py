@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import subprocess
 import tempfile
 from typing import Any
@@ -76,20 +77,25 @@ def validate_manifest(root: pathlib.Path, build: pathlib.Path, manifest: dict[st
 
 
 def compile_headers(root: pathlib.Path, compiler: str, headers: list[str]) -> None:
-    source_by_header = {
-        "include/cxxlens/configuration.hpp": "configuration_header_test.cpp",
-        "include/cxxlens/core.hpp": "core_header_test.cpp",
-        "include/cxxlens/core/evidence.hpp": "evidence_header_test.cpp",
-        "include/cxxlens/core/failure.hpp": "failure_header_test.cpp",
-        "include/cxxlens/core/finding.hpp": "finding_header_test.cpp",
-        "include/cxxlens/core/identity.hpp": "identity_header_test.cpp",
-        "include/cxxlens/core/schema.hpp": "schema_header_test.cpp",
-        "include/cxxlens/cxxlens.hpp": "cxxlens_header_test.cpp",
-        "include/cxxlens/source.hpp": "source_header_test.cpp",
-        "include/cxxlens/testing.hpp": "testing_header_test.cpp",
-    }
+    source_by_header: dict[str, pathlib.Path] = {}
+    include_pattern = re.compile(r"\s*#\s*include\s*<(?P<header>cxxlens/[^>]+\.hpp)>\s*")
+    for source in sorted((root / "tests/public_headers").glob("*_header_test.cpp")):
+        for line in source.read_text(encoding="utf-8").splitlines():
+            match = include_pattern.fullmatch(line)
+            if not match:
+                continue
+            header = f"include/{match.group('header')}"
+            if header in source_by_header:
+                raise AssertionError(
+                    f"duplicate public-header fixtures for {header}: "
+                    f"{source_by_header[header].name}, {source.name}"
+                )
+            source_by_header[header] = source
+    missing_sources = sorted(set(headers) - set(source_by_header))
+    if missing_sources:
+        raise AssertionError(f"M0 public-header fixtures are missing: {missing_sources}")
     for header in headers:
-        source = root / "tests/public_headers" / source_by_header[header]
+        source = source_by_header[header]
         subprocess.run(
             [
                 compiler,
