@@ -20,17 +20,34 @@ def digest(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
-def run(command: list[str], *, cwd: pathlib.Path) -> bytes:
+def run(
+    command: list[str], *, cwd: pathlib.Path, path_prefix: pathlib.Path | None = None
+) -> bytes:
     environment = os.environ.copy()
     environment["LC_ALL"] = "C"
+    if path_prefix is not None:
+        inherited_path = environment.get("PATH", "")
+        environment["PATH"] = (
+            os.pathsep.join((str(path_prefix), inherited_path))
+            if inherited_path
+            else str(path_prefix)
+        )
     completed = subprocess.run(
         command,
         cwd=cwd,
         env=environment,
-        check=True,
+        check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+    if completed.returncode != 0:
+        stderr = completed.stderr.decode("utf-8", errors="replace")
+        stdout = completed.stdout.decode("utf-8", errors="replace")
+        rendered = " ".join(command)
+        raise RuntimeError(
+            f"command failed ({completed.returncode}): {rendered}\n"
+            f"stdout:\n{stdout}\nstderr:\n{stderr}"
+        )
     return completed.stdout
 
 
@@ -80,6 +97,7 @@ def run_matrix(
     manifest: dict[str, Any],
     integration: str,
     scheduler: str,
+    worker_directory: pathlib.Path,
 ) -> tuple[int, dict[str, str]]:
     axes = manifest["matrix"]
     baseline: bytes | None = None
@@ -94,7 +112,9 @@ def run_matrix(
                         cwd = temporary / root_name / f"repeat-{repeat}"
                         cwd.mkdir(parents=True, exist_ok=True)
                         integration_output = run(
-                            [integration, "--emit", str(jobs), order], cwd=cwd
+                            [integration, "--emit", str(jobs), order],
+                            cwd=cwd,
+                            path_prefix=worker_directory,
                         )
                         scheduler_output = run(
                             [scheduler, "--emit", str(jobs), str(seed), order], cwd=cwd
@@ -135,6 +155,9 @@ def main() -> int:
     args = parser.parse_args()
     args.root = args.root.resolve()
     args.build = args.build.resolve()
+    worker = args.build / "cxxlens-frontend-worker"
+    if not worker.is_file() or not os.access(worker, os.X_OK):
+        raise AssertionError("build-tree frontend worker executable is missing")
     args.integration = str(pathlib.Path(args.integration).resolve())
     args.scheduler = str(pathlib.Path(args.scheduler).resolve())
     args.provisioning = str(pathlib.Path(args.provisioning).resolve())
@@ -143,9 +166,11 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="cxxlens-m1-acceptance-") as directory:
         temporary = pathlib.Path(directory)
         executions, artifacts = run_matrix(
-            temporary, manifest, args.integration, args.scheduler
+            temporary, manifest, args.integration, args.scheduler, args.build
         )
-        provisioning = run([args.provisioning, "--emit"], cwd=temporary)
+        provisioning = run(
+            [args.provisioning, "--emit"], cwd=temporary, path_prefix=args.build
+        )
         artifacts["provisioning"] = digest(provisioning)
     report = {
         "schema": "cxxlens.m1-acceptance-report.v1",

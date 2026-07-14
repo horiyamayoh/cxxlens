@@ -42,9 +42,22 @@ def digest(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
-def run(command: list[str], *, cwd: pathlib.Path, seed: int = 0) -> bytes:
+def run(
+    command: list[str],
+    *,
+    cwd: pathlib.Path,
+    seed: int = 0,
+    path_prefix: pathlib.Path | None = None,
+) -> bytes:
     environment = os.environ.copy()
     environment.update({"LC_ALL": "C", "CXXLENS_TEST_SEED": str(seed)})
+    if path_prefix is not None:
+        inherited_path = environment.get("PATH", "")
+        environment["PATH"] = (
+            os.pathsep.join((str(path_prefix), inherited_path))
+            if inherited_path
+            else str(path_prefix)
+        )
     completed = subprocess.run(
         command,
         cwd=cwd,
@@ -78,7 +91,7 @@ def build_installed_example(
     source: pathlib.Path,
     compiler: str,
     temporary: pathlib.Path,
-) -> pathlib.Path:
+) -> tuple[pathlib.Path, pathlib.Path]:
     prefix = temporary / "prefix"
     example_build = temporary / "example-build"
     run(["cmake", "--install", str(build), "--prefix", str(prefix)], cwd=root)
@@ -100,7 +113,10 @@ def build_installed_example(
     executable = example_build / "cxxlens-m2-flagship"
     if not executable.exists():
         raise AssertionError("installed flagship example executable is missing")
-    return executable
+    worker = prefix / "bin" / "cxxlens-frontend-worker"
+    if not worker.is_file() or not os.access(worker, os.X_OK):
+        raise AssertionError("installed frontend worker executable is missing")
+    return executable, worker.parent
 
 
 def prepare_fixture(
@@ -204,6 +220,7 @@ def run_matrix(
     example: pathlib.Path,
     scheduler: str,
     compiler: str,
+    worker_directory: pathlib.Path,
 ) -> tuple[int, bytes, bytes]:
     axes = manifest["matrix"]
     baseline: bytes | None = None
@@ -231,6 +248,7 @@ def run_matrix(
                 [str(example), str(case), backend, str(jobs), "normal", "json"],
                 cwd=case,
                 seed=seed,
+                path_prefix=worker_directory,
             )
             combined = b"example\0" + example_output + b"scheduler\0" + scheduler_output
             if baseline is None:
@@ -251,9 +269,16 @@ def run_matrix(
 
 
 def performance_trace(
-    root: pathlib.Path, integration: str, limits: dict[str, int]
+    root: pathlib.Path,
+    integration: str,
+    limits: dict[str, int],
+    worker_directory: pathlib.Path,
 ) -> tuple[dict[str, int], bytes]:
-    output = run([integration, "--emit", "1", "forward"], cwd=root)
+    output = run(
+        [integration, "--emit", "1", "forward"],
+        cwd=root,
+        path_prefix=worker_directory,
+    )
     documents = [json.loads(line) for line in output.decode().splitlines()]
     if len(documents) != 5:
         raise AssertionError("M2 integration trace emitted an unexpected artifact count")
@@ -289,17 +314,25 @@ def main() -> int:
     args = parser.parse_args()
     args.root = args.root.resolve()
     args.build = args.build.resolve()
+    build_worker = args.build / "cxxlens-frontend-worker"
+    if not build_worker.is_file() or not os.access(build_worker, os.X_OK):
+        raise AssertionError("build-tree frontend worker executable is missing")
     args.integration = str(pathlib.Path(args.integration).resolve())
     args.scheduler = str(pathlib.Path(args.scheduler).resolve())
     manifest = yaml.safe_load(args.manifest.read_text(encoding="utf-8"))
     validate_manifest(args.root, args.build, manifest)
     with tempfile.TemporaryDirectory(prefix="cxxlens-m2-acceptance-") as directory:
         temporary = pathlib.Path(directory)
-        example = build_installed_example(
+        example, installed_worker_directory = build_installed_example(
             args.root, args.build, args.example_source.resolve(), args.compiler, temporary
         )
         executions, installed_output, scheduler_output = run_matrix(
-            temporary, manifest, example, args.scheduler, args.compiler
+            temporary,
+            manifest,
+            example,
+            args.scheduler,
+            args.compiler,
+            installed_worker_directory,
         )
         documents = validate_public_documents(args.root, installed_output)
         if len(documents[0]["matches"]) != 2 or documents[0]["guarantee"] == "exact_within_coverage":
@@ -310,6 +343,7 @@ def main() -> int:
         markdown = run(
             [str(example), str(markdown_root), "memory", "1", "normal", "markdown"],
             cwd=markdown_root,
+            path_prefix=installed_worker_directory,
         )
         if b"Matches: 2" not in markdown or b"search.open-world-virtual-target" not in markdown:
             raise AssertionError("installed Markdown projection disagrees with canonical JSON")
@@ -319,13 +353,17 @@ def main() -> int:
         partial_output = run(
             [str(example), str(partial_root), "memory", "2", "partial", "json"],
             cwd=partial_root,
+            path_prefix=installed_worker_directory,
         )
         partial_documents = validate_public_documents(args.root, partial_output)
         if partial_documents[0]["coverage"]["complete"]:
             raise AssertionError("one-TU failure became complete coverage")
 
         performance, integration_output = performance_trace(
-            args.root, args.integration, manifest["performance_limits"]
+            args.root,
+            args.integration,
+            manifest["performance_limits"],
+            args.build,
         )
     report = {
         "schema": "cxxlens.m2-acceptance-report.v1",
