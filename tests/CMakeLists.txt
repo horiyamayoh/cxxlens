@@ -514,6 +514,8 @@ target_include_directories(cxxlens-unit-scheduler
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 target_compile_features(cxxlens-unit-scheduler PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens-unit-scheduler)
+add_dependencies(cxxlens-unit-scheduler cxxlens-frontend-worker
+                 cxxlens-frontend-worker-fixture)
 add_test(NAME unit.scheduler
          COMMAND cxxlens-unit-scheduler
                  "$<TARGET_FILE:cxxlens-frontend-worker-fixture>")

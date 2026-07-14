@@ -4,9 +4,9 @@ state: frozen
 phase_c_authorized: true
 repository:
   binding: git-head-at-execution
-  input_fingerprint: sha256:5dc4861f9ed0989b349fa1b0f31ab8a29165028f93dd275f490c1b6ba2ba5e2f
+  input_fingerprint: sha256:eae639d6990b5ae532ee786a59e2fe603c86271fc489b0c5fea05ffab0a0a546
 inputs:
-  fingerprint: sha256:5dc4861f9ed0989b349fa1b0f31ab8a29165028f93dd275f490c1b6ba2ba5e2f
+  fingerprint: sha256:eae639d6990b5ae532ee786a59e2fe603c86271fc489b0c5fea05ffab0a0a546
   categories:
   - id: catalog
     digest: sha256:cc3e0aef73913825a0cd0192de65f37e39dd6a7375b556e93bf525273fd1e445
@@ -234,10 +234,10 @@ inputs:
     - path: include/cxxlens/workspace.hpp
       sha256: sha256:50a4706c419c5407621415859a505f14385f05ec2d6e3081d03f5fd65c210800
   - id: readiness_authorization
-    digest: sha256:a16db1e46c9ac04aa9bd9b43340fbb983028323805cb5edc42061693266b1077
+    digest: sha256:2ee8fad2c7b7a6682405f8eef048e1c9d47daa6896a93280232bf014babcc40b
     files:
     - path: schemas/cxxlens.readiness.authorization.v1.json
-      sha256: sha256:9c253744aab909b30e57897ea80d68e11435d81027f4c3d4dbb59ed6a48cf425
+      sha256: sha256:7b44190eeed385ce149a4f5cf6cb525c3d06b1463000c3372ae6941a0409e2a4
     - path: schemas/cxxlens.readiness.authorization.v1.schema.yaml
       sha256: sha256:7c14aa3727aa2b577ec5a4b3f858b8ebe1e1dbc4ed04a814246d869839bcc84e
     - path: schemas/cxxlens.readiness.gate-evidence.v1.schema.yaml
