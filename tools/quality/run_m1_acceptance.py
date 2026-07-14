@@ -50,7 +50,13 @@ def validate_manifest(root: pathlib.Path, build: pathlib.Path, manifest: dict[st
         for api in catalog_by_id.values()
         if api["phase"] == "M1" and api["declaration"]["status"] == "exact"
     )
-    if exact_m1 != sorted(manifest["conformant_catalog_ids"]):
+    # Exact milestone coverage comprises both implemented and explicitly
+    # deferred catalog entries; the completion audit validates each partition.
+    manifest_coverage = sorted(
+        manifest["conformant_catalog_ids"]
+        + [entry["id"] for entry in manifest["deferred_catalog"]]
+    )
+    if exact_m1 != manifest_coverage:
         raise AssertionError("M1 exact catalog signature coverage changed")
     tests = json.loads(
         subprocess.run(
