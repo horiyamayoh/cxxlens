@@ -1,0 +1,40 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-authority-transition-report.v1.schema.yaml
+title: cxxlens next-generation authority transition report v1
+type: object
+additionalProperties: false
+required:
+  - schema
+  - status
+  - issue
+  - tracking_issue
+  - commit
+  - tree
+  - worktree_clean
+  - input_digest
+  - inputs
+  - legacy_dispatch_authorized
+properties:
+  schema: {const: cxxlens.ng-authority-transition-report.v1}
+  status: {const: green}
+  issue: {const: '#57'}
+  tracking_issue: {const: '#56'}
+  commit: {$ref: '#/$defs/git_sha'}
+  tree: {$ref: '#/$defs/git_sha'}
+  worktree_clean: {const: true}
+  input_digest: {$ref: '#/$defs/digest'}
+  inputs:
+    type: array
+    minItems: 10
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [path, sha256]
+      properties:
+        path: {type: string, minLength: 1}
+        sha256: {$ref: '#/$defs/digest'}
+  legacy_dispatch_authorized: {const: false}
+$defs:
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  git_sha: {type: string, pattern: '^[0-9a-f]{40}$'}

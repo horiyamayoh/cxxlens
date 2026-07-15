@@ -17,6 +17,11 @@ import yaml
 
 SCHEMA_ID = "cxxlens.global-contract-conventions.v1"
 OWNERSHIP_SCHEMA_ID = "cxxlens.contract-ownership.v1"
+LEGACY_OWNERSHIP_SCHEMA_EXCLUSIONS = {
+    "cxxlens_legacy_api_baseline.schema.yaml",
+    "cxxlens_ng_authority_transition.schema.yaml",
+    "cxxlens_ng_authority_transition_report.schema.yaml",
+}
 EXPECTED_SECTIONS = {
     "naming_and_family",
     "exact_declaration_and_fingerprint",
@@ -273,6 +278,7 @@ def generate_ownership(
             "source_contract": "docs/design/public_contract_conventions.md#schema-ownership",
         }
         for path in sorted((root / "schemas").glob("*.schema.yaml"))
+        if path.name not in LEGACY_OWNERSHIP_SCHEMA_EXCLUSIONS
     ]
     manifest: dict[str, Any] = {
         "schema": OWNERSHIP_SCHEMA_ID,

@@ -15,11 +15,14 @@ cmake --build --preset dev-clang --target cxxlens-quality
 
 ## 公開 API と schema の変更
 
-1. ユースケース、要求 ID、API catalog ID を確認する。
+1. 次世代統合設計、要求 ID、relation/API/provider catalog ID または担当移行 issue を確認する。
 2. field semantics と invariant を定義する。
 3. canonical identity、C++ value type、serializer/schema、validator の順で変更する。
 4. positive、negative、determinism、root relocation のテストを追加する。
-5. Doxygen 契約、API catalog、設計書、release note を同時に更新する。
+5. Doxygen 契約、次世代 catalog/registry、設計書、release note を同時に更新する。
+
+旧 `schemas/cxxlens_public_api_contract.yaml` は移行 baselineです。新しい API ID、signature、packageを
+追加せず、旧atomic unit runnerを実装dispatchに使用しないでください。
 
 公開 API の意味、LLVM 対応方針、schema compatibility、決定性、安全 gate を変更する場合は
 ADR と設計レビューが必要です。単純な実装詳細や既存契約内のバグ修正には ADR は不要です。

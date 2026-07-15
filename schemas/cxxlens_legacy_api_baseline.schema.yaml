@@ -1,0 +1,77 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.legacy-api-baseline.v1.schema.yaml
+title: cxxlens legacy API migration baseline v1
+type: object
+additionalProperties: false
+required: [schema, document_version, captured_from, catalog, implementation, acceptance, preserved_invariants, semantic_digest]
+properties:
+  schema: {const: cxxlens.legacy-api-baseline.v1}
+  document_version: {const: 1.0.0}
+  captured_from:
+    type: object
+    additionalProperties: false
+    required: [commit, tree, freeze_input_fingerprint]
+    properties:
+      commit: {pattern: '^[0-9a-f]{40}$'}
+      tree: {pattern: '^[0-9a-f]{40}$'}
+      freeze_input_fingerprint: {pattern: '^sha256:[0-9a-f]{64}$'}
+  catalog:
+    type: object
+    additionalProperties: false
+    required: [packages, apis, file_sha256, signature_digest, signatures]
+    properties:
+      packages: {const: 22}
+      apis: {const: 124}
+      file_sha256: {pattern: '^sha256:[0-9a-f]{64}$'}
+      signature_digest: {pattern: '^sha256:[0-9a-f]{64}$'}
+      signatures:
+        type: array
+        minItems: 124
+        maxItems: 124
+        uniqueItems: true
+        items:
+          type: object
+          additionalProperties: false
+          required: [api_id, atomic_unit, package, signature_fingerprint]
+          properties:
+            api_id: {pattern: '^API-[A-Z]+-[0-9]{3}$'}
+            atomic_unit: {pattern: '^AU-[A-Z]+-[0-9]{3}$'}
+            package: {type: string, minLength: 1}
+            signature_fingerprint: {pattern: '^sha256:[0-9a-f]{64}$'}
+  implementation:
+    type: object
+    additionalProperties: false
+    required: [conformant_count, unimplemented_count, conformant, unimplemented]
+    properties:
+      conformant_count: {const: 47}
+      unimplemented_count: {const: 77}
+      conformant:
+        type: array
+        minItems: 47
+        maxItems: 47
+        uniqueItems: true
+        items: {pattern: '^API-[A-Z]+-[0-9]{3}$'}
+      unimplemented:
+        type: array
+        minItems: 77
+        maxItems: 77
+        uniqueItems: true
+        items: {pattern: '^API-[A-Z]+-[0-9]{3}$'}
+  acceptance:
+    type: array
+    minItems: 3
+    maxItems: 3
+    items:
+      type: object
+      additionalProperties: false
+      required: [profile, path, sha256]
+      properties:
+        profile: {enum: [M0, M1, M2]}
+        path: {type: string, minLength: 1}
+        sha256: {pattern: '^sha256:[0-9a-f]{64}$'}
+  preserved_invariants:
+    type: array
+    minItems: 8
+    uniqueItems: true
+    items: {type: string, minLength: 1}
+  semantic_digest: {pattern: '^sha256:[0-9a-f]{64}$'}

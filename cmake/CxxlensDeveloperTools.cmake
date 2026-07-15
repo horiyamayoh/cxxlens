@@ -161,6 +161,16 @@ add_custom_target(
   USES_TERMINAL VERBATIM)
 
 add_custom_target(
+  cxxlens-ng-authority-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_authority.py" check
+    --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_ng_authority.py"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-public-api-contract-freeze-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -171,9 +181,7 @@ add_custom_target(
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_public_api_contract_freeze.py"
   VERBATIM)
 add_dependencies(cxxlens-public-api-contract-freeze-check
-                 cxxlens-readiness-audit-check)
-add_dependencies(cxxlens-public-api-contract-freeze-check
-                 cxxlens-phase-b-contract-integration)
+                 cxxlens-ng-authority-check)
 
 add_custom_target(
   cxxlens-public-api-contract-freeze
@@ -432,6 +440,7 @@ add_dependencies(
   cxxlens-m0-completion-check
   cxxlens-m1-completion-check
   cxxlens-m2-completion-check
+  cxxlens-ng-authority-check
   cxxlens-public-boundary-check
   cxxlens-preprocessor-contract-check
   cxxlens-provisioning-contract-check

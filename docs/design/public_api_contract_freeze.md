@@ -1,5 +1,11 @@
 # Public API Contract Freeze (#54)
 
+> [!CAUTION]
+> Issue #57 によりこの freeze と Phase C authorization は失効した。以下は旧124 API の
+> migration provenance であり、新規 API 実装を許可しない。現行 authority は
+> `cxxlens_next_generation_integrated_design_ja.md` と
+> `../../schemas/cxxlens_ng_authority_transition.yaml` である。
+
 ## Authority and atomic transition
 
 `schemas/cxxlens_public_api_contract_freeze.yaml` is the deterministic Phase B freeze authority. It authorizes Phase C only when all 22 packages, 124 APIs, and 124 atomic units are covered exactly once and every package contract changes from `candidate` to `frozen` under issue `#54` in one catalog revision. Candidate manifests remain immutable provenance, so the fingerprints validated by issues `#52` and `#53` do not change during the transition.

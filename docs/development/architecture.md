@@ -22,4 +22,6 @@ Clang-free port は `src/llvm/common/`、native adapter は `src/llvm/clang22/` 
 - public expected failure は `std::expected<T, error>` で表す。
 - `src` の domain logic を `utils.cpp` や `helpers.cpp` に集約しない。
 
-正確な package 一覧、data flow、禁止事項は[統合設計書](../design/cxxlens_integrated_design_ja.md)を参照する。
+正確なlayer、data flow、禁止事項は
+[次世代統合設計書](../design/cxxlens_next_generation_integrated_design_ja.md)を参照する。旧package一覧は
+Issue #72で移行・除去するprovenanceであり、新規実装authorityではない。

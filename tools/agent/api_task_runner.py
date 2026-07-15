@@ -36,6 +36,27 @@ def fail(code: str, message: str) -> None:
     raise RunnerError(code, message)
 
 
+def reject_superseded_legacy_dispatch(root: pathlib.Path, mode: str) -> None:
+    """Refuse execution once the next-generation authority transition is active."""
+    if mode not in {"run", "integrate"}:
+        return
+    transition_path = root / "schemas/cxxlens_ng_authority_transition.yaml"
+    if not transition_path.is_file():
+        return
+    transition = yaml.safe_load(transition_path.read_text(encoding="utf-8"))
+    if not isinstance(transition, dict):
+        fail("runner.legacy-authority-invalid", str(transition_path))
+    dispatch = transition.get("dispatch", {})
+    if (
+        transition.get("state") == "active"
+        and dispatch.get("legacy_atomic_unit_runner") == "revoked"
+    ):
+        fail(
+            "runner.legacy-authority-superseded",
+            "legacy 124-API Phase C dispatch was revoked by #57; follow #56",
+        )
+
+
 def authorize_run(resolution: dict) -> None:
     if resolution["state"] not in {"ready", "complete"}:
         fail(
@@ -251,6 +272,7 @@ def arguments() -> argparse.Namespace:
 def main() -> int:
     args = arguments()
     root = args.root.resolve()
+    reject_superseded_legacy_dispatch(root, args.mode)
     report = load_json(root / "schemas/cxxlens.api-ready.report.v1.json")
     corpus = load_json(root / "schemas/cxxlens.agent-task-packet-corpus.v1.json")
     ownership = load_json(root / "schemas/cxxlens.agent-ownership.v1.json")

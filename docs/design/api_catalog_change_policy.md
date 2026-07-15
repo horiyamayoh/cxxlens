@@ -1,5 +1,10 @@
 # API catalog change policy
 
+> [!CAUTION]
+> Issue #57 以降、この方針は旧124 API baseline の同一性を保つための移行規則であり、
+> 新規 API を追加する authority ではない。次世代 API は新しい relation/registry contract
+> に従って定義する。
+
 `schemas/cxxlens_public_api_contract.yaml` is the sole machine-readable authority for public API
 IDs, symbols, declarations, state, dependencies, and atomic implementation units. Chapter 40 of the
 integrated design points to the generated `api_catalog_inventory.md` projection; hand-maintained

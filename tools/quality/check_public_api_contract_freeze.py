@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate and validate the commit-bound public API Contract Freeze gate."""
+"""Validate the superseded public API Contract Freeze as migration provenance."""
 
 from __future__ import annotations
 
@@ -414,10 +414,22 @@ def validate_manifest(root: pathlib.Path) -> dict[str, Any]:
     schema = load_yaml(root / "schemas/cxxlens_public_api_contract_freeze.schema.yaml")
     manifest = load_yaml(root / MANIFEST)
     schema_validate(manifest, schema)
-    validate_prerequisites(root)
-    expected = make_manifest(root)
-    if manifest != expected:
-        fail("public API Contract Freeze manifest is stale")
+    if manifest["state"] != "superseded" or manifest["phase_c_authorized"] is not False:
+        fail("legacy public API Contract Freeze still authorizes Phase C")
+    supersession = manifest["supersession"]
+    if (
+        supersession["issue"] != "#57"
+        or supersession["tracking_issue"] != "#56"
+        or supersession["replacement"]
+        != "schemas/cxxlens_ng_authority_transition.yaml"
+        or supersession["legacy_new_work_authorized"] is not False
+    ):
+        fail("legacy public API Contract Freeze supersession edge differs")
+    if manifest["summary"]["packages"] != 22 or manifest["summary"]["apis"] != 124:
+        fail("legacy public API Contract Freeze baseline count differs")
+    validate_downstream_edges(
+        root, load_yaml(root / "schemas/cxxlens_public_api_contract.yaml")
+    )
     return manifest
 
 
@@ -478,36 +490,22 @@ def arguments() -> argparse.Namespace:
 def main() -> int:
     args = arguments()
     root = args.root.resolve()
-    manifest_path = root / MANIFEST
     if args.mode == "generate":
-        validate_prerequisites(root)
-        manifest = make_manifest(root)
-        schema_validate(
-            manifest,
-            load_yaml(root / "schemas/cxxlens_public_api_contract_freeze.schema.yaml"),
-        )
-        manifest_path.write_text(
-            yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False, width=120),
-            encoding="utf-8",
+        fail(
+            "legacy public API Contract Freeze generation is forbidden after #57; "
+            "use check_ng_authority.py"
         )
     else:
         manifest = validate_manifest(root)
         if args.mode == "report":
-            if args.output is None or args.integration_report is None:
-                fail("report mode requires --output and --integration-report")
-            integration_report = (
-                args.integration_report
-                if args.integration_report.is_absolute()
-                else root / args.integration_report
+            fail(
+                "legacy public API Contract Freeze report is forbidden after #57; "
+                "use check_ng_authority.py report"
             )
-            report = exact_report(root, manifest, integration_report)
-            output = args.output if args.output.is_absolute() else root / args.output
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(
-        "public API Contract Freeze "
-        f"{args.mode} passed: 22 packages, 124 APIs, 124 atomic units, "
-        f"input {manifest['inputs']['fingerprint']}"
+        "superseded public API Contract Freeze check passed: "
+        "legacy 22 packages, 124 APIs, Phase C authorization revoked, "
+        f"historical input {manifest['inputs']['fingerprint']}"
     )
     return 0
 

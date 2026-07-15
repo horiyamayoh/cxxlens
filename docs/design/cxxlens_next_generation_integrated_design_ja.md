@@ -1,0 +1,3990 @@
+# cxxlens 次世代 Semantic Relation Platform
+
+## 改善版 統合設計書
+
+| 項目 | 値 |
+|---|---|
+| 文書 ID | `CXXLENS-NG-SRAD-002` |
+| 文書版 | `0.3.0-normative` |
+| 文書状態 | 規範・Issue #57 authority transition 反映版 |
+| 対象製品 | 次世代 `cxxlens` |
+| 基準言語 | C++23 |
+| 初期 primary platform | Linux |
+| 初期 reference frontend | Clang 22 |
+| 初期 reference store | in-memory / SQLite |
+| 設計基準 | `CXXLENS-NG-SRAD-001` と旧 `CXXLENS-SRAD-001` 資産の統合レビュー |
+| 作成日 | 2026-07-15 |
+
+本書は Issue #57 により次世代 `cxxlens` の最上位規範へ昇格した。旧
+`docs/design/cxxlens_integrated_design_ja.md` と旧 124 API freeze は移行時の provenance であり、
+新規 API、relation、provider、実装 dispatch を認可しない。
+
+---
+
+## 文書の位置付け
+
+本書は、次世代 `cxxlens` の製品境界、安定核、意味的不変条件、release profile、主要外部契約、検証・移行方針を定義する。
+
+本書は、すべての relation 列、wire byte encoding、SQL DDL、solver algorithm、filesystem 実装を一つに固定する文書ではない。詳細契約は次の独立した authority へ分割する。
+
+| Authority | 規範対象 |
+|---|---|
+| 本書 | 製品境界、層、依存方向、意味的不変条件、release profile |
+| Relation Registry / IDL | relation key、column、reference、merge、coverage、version |
+| Provider Protocol Specification | process protocol、manifest、task、batch、failure |
+| Public C++ API Catalog | signature、lifetime、threading、stability |
+| Acceptance Manifest | requirement、test、gate、evidence |
+| Security Profile | platform ごとの sandbox 強制能力 |
+| ADR | 選択理由、代替案、未確定実装方式 |
+| Examples / Tutorials | 非規範の利用例 |
+
+下位 authority が上位 authority と矛盾する場合、下位 authority を修正する。
+
+---
+
+## 規範キーワード
+
+- **MUST**: 必ず満たす。
+- **MUST NOT**: 行ってはならない。
+- **SHOULD**: 原則として満たす。逸脱には ADR と代替保証が必要。
+- **SHOULD NOT**: 原則として避ける。採用には ADR が必要。
+- **MAY**: 任意。
+- **INVARIANT**: provider、backend、execution path にかかわらず常に成立する。
+- **PROFILE**: release ごとに有効化される能力集合。
+- **EXPERIMENTAL**: source/semantic compatibility を約束しない。
+
+---
+
+## 0. 最終設計判断
+
+### 0.1 製品定義
+
+次世代 `cxxlens` は、次の製品である。
+
+> **実際の C/C++ build context に基づく versioned semantic claims を provider から収集し、明示的な condition・provenance・partiality とともに immutable snapshot へ公開し、typed/dynamic logical query と versioned analysis module から利用する Semantic Relation Platform。**
+
+次世代 `cxxlens` の安定核は、特定の lint、search、taint、rewrite、generator ではない。
+
+```text
+Project Catalog
++ Condition Universe
++ Versioned Relation Schema
++ Semantic Claims and Provenance
++ Immutable Snapshots
++ Materialization Runtime
++ Logical Query
++ Provider Contract
+```
+
+### 0.2 原案からの主要修正
+
+| 項目 | 改善版の判断 |
+|---|---|
+| 初期スコープ | 全機能同時実装ではなく NG0〜NG3 profile へ分割 |
+| coverage | provider execution accounting として維持 |
+| negation 根拠 | `closure_certificate` を独立導入 |
+| truth | policy 未確定の四値表を廃止し support-pair algebra を固定 |
+| condition | `condition_universe_id` に必ず bind |
+| build variant | provider/frontend identity を含めない |
+| provider 差 | `interpretation_domain` を導入し、即 conflict にしない |
+| identity | `semantic_key_id` / `assertion_id` / `content_digest` に分離 |
+| schema API | generated static API と runtime dynamic API を両方提供 |
+| query | logical IR のみ versioned。physical plan は internal |
+| ordering | relation は unordered。明示 order/export のみ順序保証 |
+| custom reducer | kernel callback ではなく normalization/derivation provider |
+| foreign key | hard reference と soft semantic reference を分離 |
+| native extension | third-party は専用 worker executable とする |
+| transaction | multi-file atomicity ではなく journaled recoverability |
+| public targets | 初期は少数の粗い target に限定 |
+| ABI | C++ source compatibility と binary ABI を分離 |
+| migration | 水平 phase ではなく end-to-end vertical slice を優先 |
+
+### 0.3 Release Profile
+
+#### NG0 — Semantic Relation Kernel
+
+1.0 候補の最小核。
+
+- project catalog
+- source snapshot
+- finite condition universe
+- versioned relation registry
+- static/dynamic relation access
+- observation / assertion / canonical claim
+- semantic key / assertion / content identity
+- immutable snapshot publication
+- in-memory / SQLite parity
+- positive monotone logical query
+- custom relation vertical slice
+- Clang 22 provider boundary
+- evidence / execution coverage / unresolved
+- deterministic semantic serialization
+- process failure isolation
+
+#### NG1 — Closure and Incrementality
+
+- partition invalidation
+- closure certificate
+- anti-join / difference / negation
+- bounded recursive query
+- transitive closure
+- production provider protocol
+- adjacent provider differential
+- multi-process immutable readers
+
+#### NG2 — Analysis Frameworks
+
+- graph algorithms
+- CFG
+- abstract interpretation
+- taint/resource exemplars
+- targeted native refinement
+- derived relation persistence
+
+#### NG3 — Mutation and Artifacts
+
+- patch plan
+- journaled source transaction
+- content-addressed artifact plan
+- verification provider chain
+- migration/mock/fuzz/harness recipes
+
+GCC、LLVM IR、object/binary、remote provider は profile と独立して追加可能だが、NG0 completion の blocker にはしない。
+
+### 0.4 初期非スコープ
+
+NG0 では次を安定契約にしない。
+
+- arbitrary recursive Datalog
+- non-stratified negation
+- generic abstract interpretation
+- whole-program soundness
+- distributed store
+- remote execution
+- stable C++ binary plugin ABI
+- arbitrary shared-library native provider loading
+- source mutation apply
+- artifact publication
+- GCC/IR/object の production support
+- symbolic presence condition / BDD
+- global cost-based optimizer
+- stable textual query language
+
+### 0.5 現行資産の扱い
+
+#### 継承する
+
+- root-independent canonical identity
+- half-open byte source span
+- macro/source origin
+- compile unit と build variant
+- no-shell compilation database parser
+- bounded response/config parsing
+- observation と detached semantic value の分離
+- evidence / coverage / unresolved
+- deterministic scheduler perturbation
+- Clang native lifetime confinement
+- process worker / prior snapshot preservation
+- no-first-wins reducer intent
+- in-memory / SQLite parity
+- warm-zero provisioning
+- stale digest edit precondition
+- acceptance manifest 思想
+
+#### 互換性対象から外す
+
+- central `fact_kind`
+- `fact_kind::custom`
+- opaque string/JSON custom payload
+- use-case profile enum
+- domain 固定 selector model
+- use-case 固定 query stage enum
+- single implementation target への全責務集約
+- 124 public API exact signature freeze
+- physical query plan の wire identity
+- framework-specific kernel enum
+
+---
+
+## 1. 製品ゴールと成功基準
+
+### 1.1 利用者
+
+- static analyzer author
+- organization-specific rule author
+- semantic search / migration tool author
+- compiler/frontend provider author
+- CI / IDE / review integrator
+- security reviewer
+- research analysis author
+- AI coding agent platform author
+
+### 1.2 成功基準
+
+#### Extension
+
+- 新しい relation を central enum/switch の変更なしで登録できる。
+- runtime custom relation が built-in relation と同じ store、query、index、provenance 契約を利用できる。
+- generated static type がない relation も dynamic query できる。
+- provider executable を kernel source 改修なしで追加できる。
+- Clang major の変更が stable semantic API を変更しない。
+
+#### Semantic correctness
+
+- empty rows と complete absence を区別する。
+- negation は closure certificate なしに確定しない。
+- provider unavailable を empty success にしない。
+- same-domain conflict と cross-domain differential disagreement を区別する。
+- direct observation と derived claim を区別する。
+- condition は明示 universe に bind される。
+- approximation、assumption、verification を独立表現する。
+
+#### Operational correctness
+
+- published snapshot は immutable。
+- failed materialization は prior snapshot を破壊しない。
+- native provider crash は host を破壊しない。
+- semantic digest は root、jobs、task order、backend に依存しない。
+- unchanged partition は warm run で provider execution を要求しない。
+- query は bounded、cancellable、streaming である。
+
+#### Usability
+
+- flagship call search は LLVM header なしで利用できる。
+- custom analyzer は static/dynamic query の双方を利用できる。
+- provider author は major-specific native SDK 内で compiler API を利用できる。
+- result から schema、producer、input、provenance、partiality を追跡できる。
+
+### 1.3 NG0 の代表証明
+
+1. `cc.call_site` と `company.lock.acquire` を同じ logical query で join できる。
+2. external relation registration に core source diff が不要である。
+3. memory と SQLite が同じ semantic snapshot digest を生成する。
+4. jobs 1/2/8、root relocation、cold/warm で semantic output が一致する。
+5. Clang worker crash 後も prior snapshot を query できる。
+6. incomplete execution 上の absence check が unknown を返す。
+7. generated static query と dynamic query が同じ logical IR digest を持つ。
+8. frontend/native pointer が observation、batch、snapshot へ入らない。
+
+---
+
+## 2. Core Invariants
+
+### INV-ARCH-001 — Dependency direction
+
+下位 component は上位 use-case component に依存してはならない。
+
+```text
+Applications / Recipes
+        ↓
+Semantic Services / Analysis Modules
+        ↓
+Logical Query
+        ↓
+Semantic Relation Kernel
+        ↓
+Provider Contract / Runtime Ports
+```
+
+Provider implementation は provider SDK/contract に依存するが、kernel は provider implementation を link-time dependency にしてはならない。
+
+### INV-ARCH-002 — Kernel ignorance
+
+Kernel は次を知ってはならない。
+
+- Clang AST node kind
+- GCC tree code
+- LLVM IR class
+- gMock/libFuzzer 等の framework
+- 特定 lint rule
+- 特定 relation ID の列内容
+- provider implementation 固有 enum
+- UI/SARIF presentation structure
+
+### INV-EXT-001 — Core-independent extension
+
+新 relation/provider/recipe の追加は、中央 enum、switch、registry source list の変更を要求してはならない。installation manifest または engine build configuration の追加は許可する。
+
+### INV-ID-001 — Stable semantic identity
+
+semantic identity は次へ依存してはならない。
+
+- absolute checkout root
+- pointer/address
+- timestamp
+- PID/thread ID
+- task completion order
+- hash table iteration
+- display prose
+- provider arrival order
+
+### INV-SOURCE-001 — Source coordinate
+
+authoritative source coordinate は immutable source snapshot に bind された half-open byte range `[begin,end)` とする。
+
+### INV-NATIVE-001 — Native lifetime confinement
+
+compiler-native object、pointer、reference、address、ABI-dependent handle は provider job/callback/thread 境界を越えてはならない。
+
+### INV-CLAIM-001 — Claim stages
+
+observation、assertion、canonical claim、derived claim を同一状態として扱ってはならない。
+
+### INV-PARTIAL-001 — No silent omission
+
+unsupported、unavailable、failed、truncated、stale、open-world を empty success として表してはならない。
+
+### INV-PARTIAL-002 — No inferred absence
+
+closure certificate がない relation domain で、row 不在から false/true を推測してはならない。
+
+### INV-MERGE-001 — No first-wins
+
+same-domain semantic disagreement を priority、arrival order、task orderで隠してはならない。
+
+### INV-SNAPSHOT-001 — Immutability
+
+published snapshot の semantic content は変更してはならない。
+
+### INV-SNAPSHOT-002 — Failure isolation
+
+failed/cancelled/rejected materialization は既存 published snapshot を破壊してはならない。
+
+### INV-QUERY-001 — Logical/physical separation
+
+versioned Query IR は logical semantics のみを表す。index、join algorithm、spill、thread schedule 等の physical decision を authority にしてはならない。
+
+### INV-DETERMINISM-001 — Semantic reproducibility
+
+同じ semantic inputs、registry、provider binaries/semantics、configuration に対する semantic output は、parallelism、task order、backend、root relocation で変化してはならない。
+
+### INV-ABI-001 — Native type isolation
+
+stable public semantic header は LLVM/Clang/GCC native type layout に依存してはならない。
+
+### INV-MUTATION-001 — Plan-first effect
+
+source/artifact effect は immutable plan、precondition、verification、journaled transaction を経由しなければならない。NG0 では effect apply を提供しない。
+
+---
+
+## 3. 論理アーキテクチャ
+
+### 3.1 Layer
+
+```mermaid
+flowchart TB
+    APP["Applications / CLI / CI / IDE / AI Tools"]
+    REC["Recipes / Rules / Migration / Generation"]
+    ANA["Semantic Services / Graph / Solver Modules"]
+    Q["Typed & Dynamic Logical Query"]
+    K["Semantic Relation Kernel"]
+    PC["Provider Contract / Runtime Ports"]
+    P["Provider Executables"]
+    IN["Sources / Build DB / Toolchains / Models / IR / Objects"]
+    ST["Snapshot Store"]
+
+    APP --> REC
+    APP --> ANA
+    REC --> ANA
+    REC --> Q
+    ANA --> Q
+    Q --> K
+    K --> ST
+    K --> PC
+    P --> PC
+    P --> IN
+```
+
+矢印は compile/link dependency ではなく利用方向を示す。provider executable は kernel library の下位実装ではなく、protocol peer である。
+
+### 3.2 Component responsibilities
+
+#### `base`
+
+- typed IDs
+- semantic version
+- canonical encoding
+- errors/diagnostics
+- evidence references
+- budgets
+- capability descriptors
+
+#### `kernel`
+
+- project catalog
+- source snapshots
+- condition universe
+- relation registry
+- claim validation
+- snapshot store port
+- materialization session
+- provider planning/runtime port
+- execution coverage
+- closure certificate registry
+
+#### `query`
+
+- generated static DSL
+- dynamic DSL
+- logical Query IR
+- type validation
+- execution API
+- physical planner interface
+- cursor/result model
+
+#### `cpp`
+
+- standard C/C++ relation descriptors
+- canonicalization providers
+- semantic services
+- identity contracts
+
+#### `provider_sdk`
+
+- provider manifest/task/batch value types
+- protocol client/server helpers
+- relation sink
+- native SDK shared utilities
+- conformance harness
+
+#### `recipes`
+
+- flagship semantic search
+- optional rule/report adapters
+- no kernel-private access
+
+### 3.3 Initial public CMake targets
+
+```text
+cxxlens::base
+cxxlens::kernel
+cxxlens::query
+cxxlens::cpp
+cxxlens::provider_sdk
+cxxlens::recipes
+cxxlens::cxxlens       INTERFACE aggregate of base/kernel/query/cpp
+```
+
+Provider package examples:
+
+```text
+cxxlens-clang-worker-22
+cxxlens-provider-clang22-sdk
+```
+
+`cxxlens::cxxlens` は provider executable、native SDK、recipes を強制 link してはならない。
+
+### 3.4 Physical package rule
+
+内部 target は public target より細分化してよい。dependency graph は CI で検証し、cycle を禁止する。
+
+```text
+base
+schema
+project
+condition
+claims
+store-port
+store-memory
+store-sqlite
+materialize
+query-ir
+query-exec
+cpp-relations
+cpp-normalizer
+provider-protocol
+provider-runtime
+```
+
+public target 数と internal package 数を同一にしない。
+
+---
+
+## 4. 用語
+
+| 用語 | 定義 |
+|---|---|
+| Project Catalog | compile unit、source input、toolchain context、variant を保持する immutable catalog |
+| Compile Unit | main source と一つの effective invocation の組 |
+| Build Variant | 製品の declaration/semantic に影響する build context の canonical identity |
+| Toolchain Context | production compiler、target、builtins、ABI、plugin/spec 等の build authority |
+| Condition Universe | 一つの catalog generation に属する build variant atom の有限集合 |
+| Presence Condition | condition universe 上で claim が成立する variant subset |
+| Interpretation Domain | claim がどの semantic interpretation/authority の下で成立するかを表す ID |
+| Observation | 一回の provider job が生成する provider-local record |
+| Assertion | schema-valid で直接 observation に基づく claim |
+| Canonical Claim | standard semantics に正規化された claim |
+| Derived Claim | query/analysis/provider が入力 claim から導出した claim |
+| Semantic Key | relation 内の同一意味対象を表す key identity |
+| Assertion ID | condition、interpretation、producer semantics を含む claim identity |
+| Content Digest | assertion の authoritative payload digest |
+| Relation | versioned schema を持つ claim set |
+| Partition | materialization/invalidation の単位 |
+| Snapshot | relation partitions を原子的に固定した immutable semantic view |
+| Execution Coverage | requested work unit がどう処理されたかの会計 |
+| Closure Certificate | 指定 domain で absence を確定できる根拠 |
+| Unresolved | 入力不足、unsupported、open world、budget 等の未解決状態 |
+| Claim Conflict | 同じ interpretation domain の functional claim が両立しない状態 |
+| Differential Disagreement | 異なる interpretation domain/provider view の差 |
+| Provider | relation delta、coverage、certificate を生成する executable/module |
+| Recipe | query/semantic service/plan を組み合わせた高水準機能 |
+
+---
+
+## 5. Identity and Canonical Encoding
+
+### 5.1 Strong IDs
+
+authoritative ID は strong type とする。
+
+```cpp
+template<class Tag>
+class typed_id;
+```
+
+最低限:
+
+```text
+project_id
+catalog_id
+compile_unit_id
+build_variant_id
+toolchain_context_id
+condition_universe_id
+condition_id
+interpretation_domain_id
+source_snapshot_id
+file_id
+source_span_id
+relation_name
+relation_descriptor_id
+semantic_key_id
+assertion_id
+content_digest
+snapshot_id
+partition_id
+provider_id
+provider_execution_id
+query_id
+recipe_id
+evidence_id
+closure_certificate_id
+```
+
+### 5.2 Three-part claim identity
+
+```text
+semantic_key_id = H(
+    relation name,
+    relation semantic major,
+    authoritative key tuple
+)
+
+assertion_id = H(
+    semantic_key_id,
+    condition universe,
+    canonical condition,
+    interpretation domain,
+    producer semantic contract
+)
+
+content_digest = H(
+    assertion_id,
+    authoritative payload tuple
+)
+```
+
+display fields、operational metrics、containing snapshot ID は含めない。
+
+### 5.3 Canonical tuple
+
+hash input は versioned length-prefixed binary tuple とする。
+
+MUST:
+
+- schema-defined field order
+- explicit type tags
+- canonical integer encoding
+- UTF-8 policy for semantic strings
+- bytes as bytes
+- sorted unique set
+- sorted map keys
+- explicit optional tag
+- stable symbolic enum ID
+- domain separation
+- full digest storage
+
+MUST NOT:
+
+- JSON text を identity authority にする
+- locale-dependent formatting
+- float を primary/semantic key に使う
+- unordered container iteration に依存する
+- display path/prose を含める
+
+semantic floating value を許可する relation は、NaN、signed zero、endianness を schema で定義する。NG0 standard relation は authoritative float を使用しない。
+
+### 5.4 Path domains
+
+path は単なる host absolute string ではなく domain 付き logical path とする。
+
+```text
+project://
+build://
+toolchain://
+sysroot://
+generated://
+provider://
+external://
+```
+
+`file_id` は path domain、normalized logical path、path contract version から作る。host mount path は evidence/operational metadata とする。
+
+### 5.5 Semantic and operational data
+
+#### Semantic
+
+- IDs
+- relation descriptor digest
+- claim key/payload
+- condition
+- interpretation domain
+- unresolved stable code
+- execution coverage classification
+- closure certificate
+- assumptions
+- verification level
+
+#### Operational
+
+- timestamp
+- elapsed time
+- PID
+- worker host
+- scheduling order
+- cache lookup latency
+- memory sample
+
+operational data は semantic digest に含めない。
+
+---
+
+## 6. Source Model
+
+### 6.1 Source snapshot
+
+```cpp
+struct source_file_snapshot {
+    file_id file;
+    source_snapshot_id snapshot;
+    content_digest content;
+    std::uint64_t size;
+    source_encoding encoding;
+    line_index_id line_index;
+};
+```
+
+source content は path 上の mutable file ではなく immutable blob として扱う。
+
+encoding は少なくとも次を表現する。
+
+```text
+utf8
+utf16le
+utf16be
+locale_dependent
+binary_or_unknown
+```
+
+compiler が byte stream として解釈した内容を authority とし、display conversion failure を semantic data loss にしてはならない。
+
+### 6.2 Source span
+
+```cpp
+struct source_span_ref {
+    source_snapshot_id snapshot;
+    file_id file;
+    std::uint64_t begin;
+    std::uint64_t end;
+    source_range_role role;
+    origin_id origin;
+    bool read_only;
+};
+```
+
+- range は `[begin,end)`
+- line/column は projection
+- invalid span は fabricated default に置き換えない
+- source snapshot mismatch は stale
+- source excerpt は privacy policy に従う
+
+### 6.3 Origin graph
+
+標準 origin kind:
+
+```text
+spelled_from
+expanded_from
+macro_argument_from
+macro_body_from
+instantiated_from
+generated_from
+inlined_from
+lowered_from
+imported_from
+```
+
+origin graph は DAG とする。cycle は batch rejection。
+
+many-to-many mapping を許可し、一つの「元位置」へ潰さない。
+
+---
+
+## 7. Project Catalog and Build Context
+
+### 7.1 Catalog opening
+
+Project Catalog は compilation database、source roots、path maps、environment policy、toolchain policy から構築する。
+
+MUST:
+
+- shell を実行しない
+- `arguments` array を優先
+- command string は bounded tokenizer
+- response file を size/depth/count budget 下で展開
+- duplicate JSON key、invalid Unicode、oversized input を拒否
+- distinct command を保持
+- raw/normalized/effective invocation を区別
+- mutable input digest を保持
+- unresolved executable/generated input を明示
+
+### 7.2 Invocation forms
+
+```cpp
+struct compile_invocation {
+    raw_invocation raw;
+    normalized_invocation normalized;
+    effective_invocation effective;
+};
+```
+
+#### Raw
+
+入力監査用。直接実行しない。
+
+#### Normalized
+
+- tokenization
+- response expansion
+- option classification
+- wrapper detection
+- lexical path normalization
+- semantic/nonsemantic flag classification
+
+#### Effective
+
+- sandbox logical paths
+- executable resolution
+- path map
+- rematerialized response file
+- output action redirection
+- environment allowlist
+- trust profile
+
+Provider は effective invocation を使用する。
+
+### 7.3 Build Variant
+
+Build Variant は製品の language semantics に影響する入力から作る。
+
+候補:
+
+```text
+language and standard
+target triple
+ABI/data layout
+predefined macros
+-D/-U
+include search identity
+forced include
+PCH/module inputs
+sysroot
+language-affecting flags
+production toolchain semantic mode
+product plugin/spec identity when authoritative
+```
+
+MUST NOT include:
+
+- analysis provider executable ID
+- analysis task order
+- output path
+- dependency file path
+- elapsed/runtime metadata
+
+flag を variant key から除外する場合、versioned argument classification registry と fixture が必要である。optimization flag は predefined macro 等へ影響し得るため、無条件に除外してはならない。
+
+### 7.4 Toolchain Context
+
+```text
+compiler family
+exact version/build
+target
+builtin header identity
+sysroot
+ABI
+plugin/spec/wrapper identity
+language runtime assumptions
+```
+
+production toolchain context と analysis provider identity を分離する。
+
+### 7.5 Environment Identity
+
+environment は allowlist を既定とする。
+
+- semantic value のみ identity 対象
+- secret は raw value を保存しない
+- secret-dependent semantics が不可避な場合は workspace-local keyed fingerprint
+- `LD_PRELOAD` 等の code injection variable は explicit trust profile がない限り拒否
+- locale は diagnostics と tokenization へ影響する場合に固定
+
+---
+
+## 8. Condition Universe and Presence Conditions
+
+### 8.1 Universe
+
+一つの catalog generation は `condition_universe_id` を持つ。
+
+```cpp
+struct condition_universe {
+    condition_universe_id id;
+    catalog_id catalog;
+    semantic_version semantics;
+    std::vector<build_variant_id> atoms;
+};
+```
+
+atoms は canonical sorted unique。
+
+### 8.2 Condition reference
+
+```cpp
+struct condition_ref {
+    condition_universe_id universe;
+    condition_id condition;
+};
+```
+
+異なる universe の condition を暗黙比較してはならない。
+
+### 8.3 NG0 representation
+
+NG0 は finite variant set のみを規範化する。
+
+semantic representation:
+
+```text
+canonical sorted set of build_variant_id
+```
+
+physical representation:
+
+- interned bitset
+- roaring bitmap
+- sorted vector
+
+のいずれでもよい。physical bit position は semantic identity ではない。
+
+### 8.4 Operations
+
+```cpp
+class condition_registry {
+public:
+    condition_ref none(condition_universe_id);
+    condition_ref all(condition_universe_id);
+    condition_ref variant(condition_universe_id, build_variant_id);
+    condition_ref set(condition_universe_id,
+                      std::span<const build_variant_id>);
+    result<condition_ref> unite(condition_ref, condition_ref);
+    result<condition_ref> intersect(condition_ref, condition_ref);
+    result<condition_ref> difference(condition_ref, condition_ref);
+    result<condition_ref> negate(condition_ref);
+    result<bool> overlaps(condition_ref, condition_ref) const;
+    result<bool> contains(condition_ref, condition_ref) const;
+};
+```
+
+### 8.5 Universe rebase
+
+catalog 更新後は新 universe を作る。
+
+rebase operation は:
+
+- common variant atoms
+- removed atoms
+- added atoms
+- unmapped atoms
+
+を明示する。旧 `all` を新 `all` と同一視しない。
+
+### 8.6 Canonical condition fragments
+
+coverage、conflict、closure を集計する場合、overlapping conditions を disjoint canonical fragments へ分割する。
+
+同じ `(domain,key,fragment)` を複数 execution coverage state に分類してはならない。
+
+---
+
+## 9. Relation Schema System
+
+### 9.1 Relation identity
+
+```text
+relation name: namespaced stable string
+semantic major: key/meaning/invariant compatibility
+descriptor version: exact major.minor.patch
+descriptor digest: exact schema bytes/semantics
+```
+
+例:
+
+```text
+cc.call_site
+semantic major 1
+descriptor 1.2.0
+```
+
+logical query は relation name + compatible major/minor requirement を参照し、snapshot は exact descriptor digest を記録する。
+
+### 9.2 Static and dynamic API
+
+#### Static generated API
+
+build-time に known な schema は C++ tag/view/builder を生成する。
+
+```cpp
+using R = cxxlens::cc::relations::call_site;
+auto q = query::from<R>();
+```
+
+#### Dynamic API
+
+runtime-discovered schema は descriptor/column stable ID から操作する。
+
+```cpp
+auto relation = registry.require("company.lock.acquire", major{1});
+auto lock = relation.column("lock");
+auto q = dynamic_query::from(relation).project(lock);
+```
+
+両 API は同じ logical IR を生成する。
+
+### 9.3 Descriptor
+
+relation descriptor は最低限次を持つ。
+
+```text
+name
+version
+semantics ID
+stability
+owner namespace
+column descriptors
+authoritative key
+functional/multivalued classification
+reference descriptors
+condition column policy
+interpretation policy
+merge policy
+partition hints
+index hints
+coverage domain
+closure kinds
+provenance minimum
+evolution policy
+```
+
+### 9.4 Column types
+
+NG0 scalar:
+
+```text
+bool
+signed/unsigned integer
+utf8_string
+bytes
+digest
+semantic_version
+typed_id
+open_symbol
+condition_ref
+source_span_id
+evidence_id
+```
+
+NG0 container:
+
+```text
+optional<T>
+list<T>
+set<T>
+struct<T>
+```
+
+NG0 では arbitrary map、nested union、float key を standard relation で使用しない。
+
+set は canonical sorted unique。list は order が semantics の一部である場合だけ使う。
+
+### 9.5 Open and closed symbols
+
+- open symbol: unknown value を保持できる。minor で symbol 追加可能。
+- closed symbol: exhaustive set。symbol 追加は major change。
+
+generated C++ API は open symbol を raw `enum class` のみで表してはならない。
+
+### 9.6 Key and claim cardinality
+
+#### Multivalued relation
+
+複数 row が自然に成立する。区別に必要な列を key に含める。
+
+例:
+
+```text
+cc.call_possible_target key = call + target + condition
+```
+
+#### Functional assertion
+
+同じ key/condition/interpretation で authoritative payload は一つであるべき。
+
+payload が異なる場合は claim conflict。
+
+schema は functional dependency を明示する。
+
+### 9.7 References
+
+#### Hard reference
+
+同一 staged snapshot 内で解決必須。
+
+欠落時:
+
+- batch rejection
+- schema error
+
+#### Soft semantic reference
+
+外部世界、未 materialize relation、provider limitation により欠落可能。
+
+欠落時:
+
+- row は保持可能
+- unresolved item と evidence が必須
+- closure を主張できない
+
+### 9.8 Declarative merge modes
+
+NG0 kernel merge:
+
+```text
+set
+multiset
+functional_assertion
+keyed_union
+operational_last_writer
+```
+
+`operational_last_writer` は semantic relation に使用してはならない。
+
+arbitrary custom reducer callback は kernel に登録しない。任意 normalization は versioned provider とする。
+
+### 9.9 Schema registration
+
+- engine build 前に registry を構築
+- registry digest を engine/snapshot へ bind
+- duplicate name/version/digest mismatch を拒否
+- incompatible key change を拒否
+- hard reference cycle を検証
+- runtime execution 中の registry mutation を禁止
+- schema 追加には新 engine generation が必要
+
+### 9.10 Evolution
+
+#### Patch
+
+- documentation correction
+- test metadata
+- validation message
+- accepted semantic value setを変えない
+
+validation tightening/looseningで row acceptance が変わる場合、patch にしてはならない。
+
+#### Minor
+
+- optional column
+- index/partition hint
+- open symbol追加
+- optional capability
+- unknown-preserving additive metadata
+
+#### Major
+
+- key変更
+- column semantics変更
+- required column
+- functional/multivalued変更
+- condition semantics変更
+- closure interpretation変更
+- identity contract変更
+- closed symbol追加
+- source coordinate semantics変更
+
+---
+
+## 10. Relation IDL Example
+
+```yaml
+schema: cxxlens.relation-definition/2
+
+relation:
+  name: cc.call_site
+  version: 1.0.0
+  semantics: cc-semantics/1
+  owner: cxxlens.standard.cc
+  stability: versioned
+
+claim:
+  cardinality: functional_assertion
+  key:
+    - call
+  condition:
+    required: true
+  interpretation:
+    required: true
+
+columns:
+  call:
+    type: typed_id<cc.call>
+    required: true
+  caller:
+    type: optional<typed_id<cc.entity>>
+  kind:
+    type: open_symbol<cc.call-kind/1>
+    required: true
+  source:
+    type: source_span_id
+    required: true
+  receiver_static_type:
+    type: optional<typed_id<cc.type>>
+  presence:
+    type: condition_ref
+    required: true
+
+references:
+  - column: caller
+    target: cc.entity.id
+    strength: soft_semantic
+    on_missing: unresolved
+  - column: source
+    target: source.span.id
+    strength: hard
+  - column: receiver_static_type
+    target: cc.type.id
+    strength: soft_semantic
+    on_missing: unresolved
+
+merge:
+  mode: functional_assertion
+  conflict_columns:
+    - caller
+    - kind
+    - receiver_static_type
+    - source
+
+partition:
+  suggested_keys:
+    - compile_unit
+    - interpretation_domain
+
+indexes:
+  suggested:
+    - [caller]
+    - [source]
+    - [presence]
+
+coverage:
+  execution_domain: call-extraction.compile-unit
+
+closure:
+  supported_kinds:
+    - relation-key-enumeration
+
+provenance:
+  minimum: direct_observation
+```
+
+schema の physical index、SQL table、wire layout は authority に含めない。
+
+---
+
+## 11. Claim and Provenance Model
+
+### 11.1 Pipeline
+
+```mermaid
+flowchart LR
+    N["Native State"]
+    O["Observation"]
+    V["Schema Validation"]
+    A["Assertion"]
+    C["Canonicalization"]
+    K["Canonical Claim"]
+    D["Derivation"]
+    R["Derived Claim"]
+
+    N --> O
+    O --> V
+    V --> A
+    A --> C
+    C --> K
+    K --> D
+    D --> R
+```
+
+### 11.2 Observation
+
+- provider/job local
+- provider-specific schema
+- native pointer禁止
+- compile unit / variant / source ownership必須
+- batch atomic
+- permanent canonical identityを要求しない
+- exact provider executionへ trace
+
+### 11.3 Assertion
+
+- schema-valid
+- direct observation に基づく
+- producer semantics を保持
+- provider-owned namespace でもよい
+- interpretation domain を持つ
+
+### 11.4 Canonical claim
+
+- standard relation semantics に適合
+- canonicalizer producer を保持
+- input assertions を provenance に保持
+- provider wording/native ID を authoritative payload にしない
+- canonicalization不能時は provider-local claimを保持し、捏造しない
+
+### 11.5 Derived claim
+
+- input semantic keys/assertions/content digests を保持
+- derivation provider/version を保持
+- assumptions/precision を保持
+- invalidation key を計算可能
+- fixed-pointの場合は convergence summary を保持
+
+### 11.6 Claim envelope
+
+```cpp
+struct claim_envelope {
+    relation_descriptor_id descriptor;
+    semantic_key_id semantic_key;
+    assertion_id assertion;
+    content_digest content;
+    condition_ref presence;
+    interpretation_domain_id interpretation;
+    producer_ref producer;
+    snapshot_id producer_input_snapshot;
+    evidence_id provenance_root;
+    guarantee guarantee;
+};
+```
+
+containing snapshot ID は store association として管理し、claim identity に含めない。
+
+### 11.7 Evidence graph
+
+node kinds:
+
+```text
+source_observation
+compile_context
+provider_execution
+canonicalization
+model_assumption
+derivation
+user_configuration
+dynamic_observation
+verification
+exclusion
+closure_proof
+```
+
+DAG とする。fixed-point は iteration summary node へ圧縮できる。
+
+retention policy:
+
+```text
+full
+compressed
+summary
+```
+
+finding/plan は原則 full、bulk relation は descriptor/policy に従う。
+
+---
+
+## 12. Interpretation Domain, Authority, Conflict
+
+### 12.1 Interpretation domain
+
+claim の semantic authority を表す。
+
+例:
+
+```text
+cc.canonical/1 + production GCC toolchain context
+cc.canonical/1 + Clang approximation
+frontend.clang22.native/1
+ir.llvm22.optimized/1
+dynamic.runtime-observation/1
+```
+
+provider implementation version と interpretation domain を同一視しない。certified provider が同じ semantic contract を実装する場合、同じ domain を宣言できる。
+
+### 12.2 Provider-owned observation
+
+未 certified provider は provider-owned namespace/domain へ出力する。standard canonical relation を直接出す場合、relation-specific conformance level を満たさなければならない。
+
+### 12.3 Same-domain claim conflict
+
+次をすべて満たす場合に `core.claim_conflict` を生成する。
+
+- same relation semantic major
+- same semantic key
+- overlapping presence condition
+- same interpretation domain
+- functional assertion relation
+- authoritative payload mismatch
+
+overlap condition だけを conflict fragment とし、非overlap fragment の claim は保持する。
+
+### 12.4 Differential disagreement
+
+異なる interpretation domain の結果差は `core.differential_disagreement` とする。
+
+分類:
+
+```text
+missing_claim
+additional_claim
+key_mismatch
+payload_mismatch
+condition_mismatch
+source_mismatch
+guarantee_mismatch
+closure_mismatch
+```
+
+### 12.5 Selection policy
+
+```text
+authoritative_exact
+preferred_approximation
+merge_same_domain
+differential_compare
+all_independent
+```
+
+arrival order は選択根拠にしない。
+
+selected policy、provider candidates、rejection reason は explain 可能でなければならない。
+
+---
+
+## 13. Truth and Guarantee
+
+### 13.1 Truth support
+
+boolean claim/check の truth は二ビット support として定義する。
+
+```cpp
+struct truth_support {
+    bool supports_true;
+    bool supports_false;
+};
+```
+
+名称:
+
+```text
+unknown  = {0,0}
+true     = {1,0}
+false    = {0,1}
+conflict = {1,1}
+```
+
+### 13.2 Operators
+
+```text
+NOT(t,f) = (f,t)
+
+AND((t1,f1),(t2,f2))
+  = (t1 AND t2, f1 OR f2)
+
+OR((t1,f1),(t2,f2))
+  = (t1 OR t2, f1 AND f2)
+```
+
+全 truth table は Appendix A を authority とする。
+
+planner/backend が unknown/conflict を false に coerce してはならない。
+
+### 13.3 Relation row と truth の区別
+
+通常の positive relation query は row stream を返す。各 row に四値 truth を付けることを必須にしない。
+
+truth_support は次に利用する。
+
+- `exists(query)`
+- `check(predicate)`
+- targeted refinement
+- functional claim resolution
+- rule condition
+- absence check with closure
+
+### 13.4 Result filtering policy
+
+truth algebra と filtering policy を分離する。
+
+```text
+true_only
+retain_unknown
+retain_conflict
+retain_all
+strict_known
+strict_nonconflicting
+```
+
+policy は truth 値そのものを変更しない。
+
+### 13.5 Guarantee
+
+```cpp
+enum class approximation_kind {
+    unknown,
+    under_approximation,
+    over_approximation,
+    exact
+};
+
+struct guarantee {
+    approximation_kind approximation;
+    scope_ref scope;
+    assumption_set_id assumptions;
+    verification_level verification;
+};
+```
+
+#### Meaning
+
+- `under_approximation`: returned positives は根拠を持つが、漏れ得る
+- `over_approximation`: 対象を覆うが false positive を含み得る
+- `exact`: 明示 scope/model/closure 内で exact
+- `unknown`: approximation relation を主張できない
+
+verification:
+
+```text
+unverified
+schema_validated
+frontend_replayed
+compiler_verified
+link_verified
+runtime_observed
+differentially_verified
+```
+
+confidence は optional とし、比較可能性を主張する場合 `calibration_id` を持つ。
+
+---
+
+## 14. Execution Coverage, Closure, Unresolved
+
+### 14.1 Execution coverage
+
+Provider/materialization が requested work unit をどう処理したかの完全会計。
+
+```cpp
+enum class coverage_state {
+    covered,
+    excluded,
+    not_applicable,
+    failed,
+    unresolved,
+    unsupported,
+    stale,
+    truncated
+};
+```
+
+```cpp
+struct coverage_unit {
+    coverage_domain_id domain;
+    stable_unit_key key;
+    condition_ref condition;
+    coverage_state state;
+    stable_reason_code reason;
+    std::optional<provider_execution_id> execution;
+};
+```
+
+disjoint condition fragment ごとに一つの state。
+
+### 14.2 Coverage invariant
+
+```text
+requested fragments
+  = covered
+  + excluded
+  + not_applicable
+  + failed
+  + unresolved
+  + unsupported
+  + stale
+  + truncated
+```
+
+coverage complete は execution accounting の完了を意味し、semantic closed world を自動的に意味しない。
+
+### 14.3 Closure certificate
+
+```cpp
+struct closure_certificate {
+    closure_certificate_id id;
+    relation_name relation;
+    semantic_version relation_major;
+    closure_kind kind;
+    analysis_scope scope;
+    key_domain_ref key_domain;
+    condition_ref condition;
+    interpretation_domain_id interpretation;
+    assumption_set_id assumptions;
+    snapshot_id input_snapshot;
+    producer_ref producer;
+    evidence_id evidence;
+};
+```
+
+NG1 standard closure kind:
+
+```text
+relation-key-enumeration
+call-target-set
+inheritance-subtype-set
+include-provider-set
+```
+
+certificate は relation/provider-specific rules に基づき生成・検証する。
+
+### 14.4 Negation rule
+
+anti-join、difference、absence、unreachable を確定するには、right/input relation の適切な closure certificate が必要。
+
+certificate がない場合:
+
+- positive rows は返してよい
+- absence result は unknown
+- unresolved に missing closure を記録
+- strict mode は structured failure
+
+### 14.5 Unresolved
+
+最低 field:
+
+```text
+stable code
+category
+scope/key
+condition
+interpretation domain
+required relation/capability/closure
+producer/execution
+assumptions
+suggested actions
+evidence
+```
+
+category:
+
+```text
+missing_input
+ambiguous_identity
+open_world
+unsupported_construct
+provider_unavailable
+precision_not_achieved
+budget_exhausted
+stale_input
+claim_conflict
+model_missing
+trust_boundary
+external_dependency
+closure_missing
+custom
+```
+
+message prose は control flow に使用しない。
+
+---
+
+## 15. Immutable Snapshot and Store
+
+### 15.1 Snapshot semantic identity
+
+```text
+snapshot_id = H(
+    snapshot semantics version,
+    catalog semantic digest,
+    condition universe ID,
+    relation registry digest,
+    selected interpretation policy digest,
+    canonical sorted partition manifests
+)
+```
+
+次を含めない。
+
+- timestamp
+- parent snapshot ID
+- publication sequence
+- store path
+- backend type
+- elapsed time
+
+同一 semantic content は同じ snapshot ID を持ち得る。lineage/publication record は別 metadata。
+
+### 15.2 Snapshot manifest
+
+```cpp
+struct snapshot_manifest {
+    snapshot_id id;
+    catalog_id catalog;
+    condition_universe_id universe;
+    content_digest relation_registry;
+    content_digest interpretation_policy;
+    semantic_version kernel_semantics;
+    semantic_version format;
+    std::vector<partition_manifest> partitions;
+    std::vector<closure_certificate_id> closures;
+};
+```
+
+operational publication record:
+
+```text
+parent snapshot
+created at
+writer process
+elapsed
+store generation
+```
+
+### 15.3 States
+
+```text
+building
+staged
+validating
+published
+rejected
+cancelled
+superseded
+corrupt
+```
+
+reader は published generation のみを見る。
+
+### 15.4 Partition
+
+partition key は descriptor hint と provider invalidation contract から作る。
+
+```text
+relation descriptor
+scope/compile unit
+condition fragment
+interpretation domain
+producer semantics
+precision
+model/assumption set
+```
+
+manifest:
+
+```text
+partition ID
+relation descriptor
+input digest
+content digest
+row/claim count
+coverage digest
+closure IDs
+producer
+state
+```
+
+partial partition を complete/closed として再利用してはならない。
+
+### 15.5 Store port
+
+```cpp
+class snapshot_store {
+public:
+    result<snapshot_handle> current(catalog_id) const;
+    result<snapshot_handle> open(snapshot_id) const;
+    result<std::unique_ptr<snapshot_writer>>
+        begin(snapshot_draft);
+    result<store_compatibility> compatibility() const;
+    result<void> compact();
+};
+```
+
+### 15.6 Cursor contract
+
+```cpp
+template<class Row>
+class row_cursor {
+public:
+    result<bool> next();
+    Row view() const;       // valid until next()/destruction
+    result<owned_row<Row>> copy() const;
+};
+```
+
+- `row_view` は cursor advance まで有効
+- snapshot handle は generation を pin
+- backend page/statement lifetime を API に漏らさない
+- row ごとの heap allocation を必須にしない
+- caller が長寿命化する場合 owned copy を明示
+
+### 15.7 Ordering
+
+relation/query result は unordered が既定。
+
+順序保証:
+
+- query `order_by`
+- canonical export
+- snapshot digest construction
+- acceptance comparison
+
+のみ。
+
+physical scan order を public semantics にしない。
+
+### 15.8 Reference backends
+
+NG0:
+
+- in-memory
+- SQLite
+
+両 backend は semantic claims、conditions、coverage、closures、unresolved、query results の意味的 equality を満たす。
+
+byte-for-byte physical storage equality は要求しない。
+
+### 15.9 Publication transaction
+
+```text
+created
+  -> staged
+  -> validated
+  -> committed
+or
+  -> rejected/rolled_back
+```
+
+commit 前の claim は reader から見えてはならない。
+
+foreign/reference validation、coverage balance、digest、conflict policy、required closure を commit 前に確認する。
+
+---
+
+## 16. Incremental Materialization
+
+### 16.1 Invalidation inputs
+
+```text
+source content digest
+include/generated dependency digest
+normalized/effective invocation digest
+toolchain context
+condition universe
+environment identity
+provider binary digest
+provider semantic contract
+relation descriptor digest
+normalizer/deriver version
+model/assumption pack
+precision profile
+```
+
+### 16.2 Provider contract
+
+provider descriptor は output partition ごとに invalidation input class を宣言する。
+
+engine は宣言だけを信用せず、conformance fixture で検証する。
+
+### 16.3 Reuse
+
+partition reuse 条件:
+
+- exact descriptor compatible
+- exact interpretation domain compatible
+- input digest一致
+- provider semantic contract一致
+- coverage/closure stateが要求を満たす
+- corruption check pass
+
+### 16.4 Warm-zero
+
+同一 input digest、provider set、registry、policy に対する unchanged materialization は frontend provider execution 0 を目標ではなく acceptance invariant とする。
+
+store metadata check、query、manifest publication は発生してよい。
+
+---
+
+## 17. Provider Contract and Runtime
+
+### 17.1 Dependency model
+
+```text
+kernel/runtime -> provider protocol port
+provider executable -> provider SDK/protocol
+```
+
+kernel target は Clang/GCC/LLVM library を link してはならない。
+
+### 17.2 Provider classes
+
+namespaced descriptor value:
+
+```text
+catalog
+source-frontend
+ir-frontend
+binary-frontend
+normalizer
+deriver
+solver
+model
+verification
+artifact
+import
+```
+
+central C++ enum で extension を閉じない。
+
+### 17.3 Provider manifest
+
+最低 field:
+
+```text
+provider ID/version
+binary digest
+publisher/license/signature
+protocol range
+platform tuples
+offered relation versions
+required relation/project inputs
+interpretation domains
+conformance levels
+invalidation contract
+determinism contract
+resource class
+sandbox minimum
+trust flags
+```
+
+provider ID/version だけで binary identity を仮定しない。
+
+### 17.4 Provider task
+
+```cpp
+struct provider_task {
+    provider_id provider;
+    provider_execution_id execution;
+    relation_requirements outputs;
+    input_partition_refs inputs;
+    project_input_slice project;
+    condition_ref condition;
+    interpretation_request interpretation;
+    execution_budget budget;
+    sandbox_requirement sandbox;
+};
+```
+
+### 17.5 Output
+
+```cpp
+struct provider_delta {
+    provider_execution_report execution;
+    std::vector<relation_batch> batches;
+    coverage_report coverage;
+    std::vector<closure_certificate_candidate> closures;
+    std::vector<unresolved> unresolved;
+    std::vector<diagnostic> diagnostics;
+};
+```
+
+closure candidate は engine/schema-specific validator を通るまで authority ではない。
+
+### 17.6 Batch atomicity
+
+- batch は exact relation descriptor と partition を固定
+- row count/column length/digest を検証
+- 一 row failure で batch 全体 rejection
+- task 内の独立 batch は policy により部分採用可能
+- 部分採用は coverage/unresolved に明示
+- hard reference を staged/base snapshot へ検証
+- soft reference 欠落は unresolved 化
+- output limit超過後の不定 partial publishは禁止
+
+### 17.7 Provider selection
+
+deterministic selection order:
+
+1. exact explicitly requested provider
+2. certified provider for requested interpretation
+3. project policy
+4. highest conformance
+5. compatible descriptor version
+6. stable provider ID/version/binary digest tie-break
+
+silent adjacent-version fallback 禁止。
+
+### 17.8 In-process providers
+
+NG0 で in-process を許可するのは次だけ。
+
+- product に静的 link された trusted provider
+- compiler-native library を link しない
+- immutable relation input のみ
+- source/network/process accessなし
+- bounded/cancellable
+- exact host build ABI
+- engine builder が明示登録
+
+third-party dynamic C++ plugin を in-process load しない。
+
+### 17.9 Out-of-process providers
+
+以下は process isolation required。
+
+- Clang/GCC frontend
+- LLVM IR parser
+- object/binary parser
+- product compiler/plugin execution
+- third-party native provider
+- crash/RSS riskの高い solver
+- remote bridge
+
+### 17.10 Native SDK packaging
+
+official worker 内の built-in extractor は静的 link 可。
+
+third-party Clang extractor は:
+
+1. exact major-specific SDK を使用
+2. 専用 worker executable を build
+3. provider manifest を持つ
+4. protocol で kernel へ接続
+5. callback 外へ native object を出さない
+
+generic `.so` plugin ABI は NG0/1 非スコープ。
+
+---
+
+## 18. Provider Protocol
+
+### 18.1 Goals
+
+- language neutral
+- framed
+- version/capability negotiation
+- bounded messages
+- backpressure
+- cancellation
+- streaming columnar batch
+- independent checksum
+- content-addressed blob reference
+- structured diagnostic/coverage/unresolved
+- crash/heartbeat detection
+- no C++ ABI
+
+### 18.2 Lifecycle
+
+```text
+HELLO
+HELLO_ACK
+SCHEMA_NEGOTIATE
+OPEN_TASK
+TASK_ACCEPTED
+INPUT_DESCRIPTOR / INPUT_STREAM
+BATCH_BEGIN
+COLUMN_CHUNK*
+BATCH_END
+BATCH_ACK / BATCH_REJECT
+COVERAGE_CHUNK
+UNRESOLVED_CHUNK
+CLOSURE_CANDIDATE
+PROGRESS
+CANCEL
+TASK_COMPLETE / TASK_FAILED
+CLOSE
+```
+
+### 18.3 Version
+
+- protocol major mismatch: reject
+- same major minor: feature negotiation
+- unknown required feature: reject
+- unknown optional feature: ignore/preserve per specification
+- relation schema negotiation は protocol version と独立
+
+### 18.4 Encoding
+
+exact wire encoding は ADR で確定する。R3 implementation 開始前に選定・fuzz fixture・license review を完了する。
+
+候補評価:
+
+```text
+language support
+schema evolution
+columnar transfer
+zero/low copy
+streaming
+fuzzability
+dependency/license
+debug tooling
+canonical checksum
+```
+
+logical message semantics は encoding 選択に依存させない。
+
+### 18.5 Input transfer
+
+- immutable project descriptor
+- sandbox logical path
+- content-addressed blob
+- relation partition stream
+- model pack
+- bounded candidate set
+
+host absolute path を identity としない。
+
+### 18.6 Budget
+
+最低:
+
+```text
+wall deadline
+CPU
+RSS/address space
+output bytes
+row count
+diagnostic count
+open files
+created files
+subprocess count
+progress rate
+```
+
+limit result は crash/timeout/cancel と区別する。
+
+---
+
+## 19. Native Clang Provider
+
+### 19.1 Worker
+
+Clang major ごとに独立 executable/package。
+
+```text
+cxxlens-clang-worker-22
+cxxlens-clang-worker-23
+```
+
+一 process に複数 major を link することを要求しない。
+
+### 19.2 Job lifetime
+
+compile unit job ごとに新規作成し、終了時に破棄する。
+
+```text
+VFS
+CompilerInvocation
+CompilerInstance
+DiagnosticsEngine
+FileManager
+SourceManager
+Preprocessor
+ASTContext
+FrontendAction
+optional CFG context
+```
+
+### 19.3 Borrow contract
+
+```cpp
+namespace cxxlens::provider::clang22 {
+
+class borrowed_translation_unit {
+public:
+    borrowed_translation_unit(const borrowed_translation_unit&) = delete;
+    borrowed_translation_unit& operator=(const borrowed_translation_unit&) = delete;
+
+    clang::CompilerInstance& compiler() const;
+    clang::ASTContext& ast() const;
+    clang::SourceManager& source_manager() const;
+    clang::Preprocessor& preprocessor() const;
+    const compile_unit_view& unit() const;
+};
+
+}
+```
+
+MUST NOT:
+
+- callback 外保存
+- cross-thread move/use
+- coroutine suspend
+- native pointer/address serialization
+- source location の未正規化出力
+- AST context の job 間共有
+
+### 19.4 Diagnostics and semantic loss
+
+AST が構築されたことだけを parse success としない。
+
+区別:
+
+```text
+fatal/error
+ignored semantic option
+unknown attribute
+unsupported pragma
+missing include/toolchain
+target/data-layout mismatch
+module/PCH mismatch
+frontend crash
+```
+
+GCC-specific inputをClangが警告付きで無視した場合、production semantic equivalenceを主張しない。
+
+### 19.5 Output boundary
+
+Clang provider は原則 provider-owned observation relation を出力する。
+
+```text
+frontend.clang22.entity_observation
+frontend.clang22.type_observation
+frontend.clang22.call_observation
+frontend.clang22.macro_observation
+```
+
+standard `cc.*` への canonicalization は normalizer provider が行う。
+
+---
+
+## 20. Logical Query
+
+### 20.1 Query layers
+
+```text
+Static C++ DSL
+Dynamic Schema DSL
+        ↓
+Versioned Logical Query IR
+        ↓
+Validated Logical Plan
+        ↓
+Internal Physical Plan
+        ↓
+Backend Execution
+```
+
+### 20.2 Logical IR authority
+
+含む:
+
+- relation name/version requirement
+- stable column ID
+- typed literals
+- logical operators
+- condition restriction
+- interpretation policy
+- closure requirements
+- budget
+- explicit ordering
+- output schema
+
+含めない:
+
+- index name
+- hash/nested-loop join
+- thread count
+- spill path
+- backend table
+- page size
+- estimated cost
+- cache hit
+
+### 20.3 NG0 operators
+
+```text
+scan
+filter
+project
+inner_join
+semi_join
+union
+distinct
+group
+aggregate
+order_by
+limit
+condition_restrict
+interpretation_restrict
+```
+
+set/multiset semantics は operator descriptor で明示する。
+
+### 20.4 NG1 operators
+
+```text
+anti_join
+difference
+exists_check
+absence_check
+recursive_union
+transitive_closure
+```
+
+absence-dependent operator は closure requirement を持つ。
+
+### 20.5 Static DSL
+
+```cpp
+using namespace cxxlens::query;
+using call = cxxlens::cc::relations::call_site;
+using entity = cxxlens::cc::relations::entity;
+
+auto q =
+    from<call>()
+      .join<entity>(
+          col<call::direct_target>() == col<entity::id>())
+      .where(
+          col<entity::qualified_name>() == value("app::dangerous"))
+      .project(
+          col<call::call>(),
+          col<call::caller>(),
+          col<call::source>());
+```
+
+exact generated names は API catalog で確定する。
+
+### 20.6 Dynamic DSL
+
+```cpp
+auto calls = registry.require("cc.call_site", major{1});
+auto entities = registry.require("cc.entity", major{1});
+
+auto q =
+    dynamic_query::from(calls)
+      .join(entities,
+            calls.column("direct_target") ==
+            entities.column("id"))
+      .where(
+            entities.column("qualified_name") ==
+            dynamic_value{"app::dangerous"});
+```
+
+static/dynamic query は同じ normalized logical IR digest を生成できなければならない。
+
+### 20.7 Condition semantics
+
+join output condition は input conditions の intersection。
+
+intersection が empty の row は出力しない。
+
+union は condition を保持し、same semantic output row を condition union で圧縮してよい。ただし interpretation/provenance 差を失ってはならない。
+
+### 20.8 Optional column semantics
+
+optional value の absence は SQL NULL の暗黙三値論理に依存させない。
+
+operators:
+
+```text
+is_present
+is_absent
+equals_present
+coalesce explicit
+```
+
+通常比較で absent をどう扱うかは Query IR version で固定し、semantic unknown と混同しない。
+
+### 20.9 Query result
+
+```cpp
+template<class Row>
+class query_result {
+public:
+    row_cursor<Row> rows() const;
+    query_execution_status execution() const;
+    std::span<const coverage_summary> input_coverage() const;
+    std::span<const closure_certificate_ref> closures() const;
+    std::span<const unresolved> unresolved_items() const;
+    std::span<const claim_conflict> conflicts() const;
+    guarantee summary_guarantee() const;
+    logical_explanation explain_logical() const;
+    physical_explanation explain_physical() const;
+};
+```
+
+success result が complete/closed を意味しない。
+
+### 20.10 Execution status
+
+```text
+complete
+truncated
+cancelled_with_partial
+failed_before_result
+```
+
+operation error と semantic partiality を区別する。
+
+### 20.11 Budgets
+
+```text
+max rows scanned
+max rows output
+max intermediate rows
+max memory
+max spill bytes
+wall deadline
+max partitions
+max recursive iterations (NG1)
+max refinements (NG2)
+```
+
+budget超過時:
+
+- unsafe intermediate stateをpublishしない
+- execution statusをtruncated
+- closureを生成しない
+- absenceを確定しない
+- continuationはoperator semanticsが安全な場合のみ
+
+### 20.12 Physical planning
+
+NG0 planner は deterministic reference implementation とする。
+
+- predicate/projection pushdown
+- declared index use
+- partition pruning
+- bounded join choice
+- stable tie-break
+
+cost-based optimization は internal experimental とし、semantic outputへ影響させない。
+
+---
+
+## 21. Standard C/C++ Semantic Model
+
+### 21.1 Namespace
+
+```text
+build.*
+source.*
+cc.*
+c.*
+cpp.*
+abi.*
+ir.*
+binary.*
+analysis.*
+model.*
+dynamic.*
+core.*
+frontend.<provider>.*
+<organization>.*
+```
+
+C/C++ 共通 call relation は `cc.call_site` に統一する。
+
+### 21.2 NG0 standard relations
+
+```text
+build.project
+build.compile_unit
+build.variant
+build.toolchain_context
+
+source.file
+source.span
+source.origin
+
+cc.entity
+cc.declaration
+cc.type
+cc.type_component
+cc.call_site
+cc.call_direct_target
+
+core.provider_execution
+core.unresolved
+core.claim_conflict
+core.differential_disagreement
+```
+
+### 21.3 Entity identity
+
+priority:
+
+1. language-defined external identity
+2. canonical owner + kind + structural signature
+3. template specialization key
+4. module/linkage/toolchain context where semantic
+5. local/internal entity source anchor + owner
+6. provider-local identity when canonicalization insufficient
+
+qualified display name 単独は禁止。
+
+provider USR は evidence/helper であり単独 authority にしない。
+
+canonicalization result:
+
+```text
+canonicalized
+provider_local
+ambiguous_equivalence_set
+```
+
+情報不足時に無理に merge しない。
+
+### 21.4 Type identity
+
+type constructor は structural。
+
+nominal record/enum type は entity ID 参照で cycle を切る。
+
+```text
+builtin
+pointer
+lvalue_reference
+rvalue_reference
+array
+function
+nominal_record
+nominal_enum
+alias
+member_pointer
+template_parameter
+template_specialization
+dependent
+unknown
+```
+
+pretty spelling は observation/display。
+
+dependent と unknown を同一視しない。
+
+### 21.5 Declaration
+
+```text
+entity
+source
+storage/linkage
+attributes
+presence
+implicit/deleted/defaulted/friend/exported
+```
+
+definition は NG1 standard relation に追加してよい。NG0 call search が必要とする minimum を優先する。
+
+### 21.6 Calls
+
+NG0:
+
+```text
+cc.call_site
+cc.call_direct_target
+```
+
+NG1:
+
+```text
+cc.call_argument
+cc.call_static_target
+cc.call_possible_target
+cc.call_resolution
+cc.call_receiver
+cc.call_conversion
+```
+
+分離する。
+
+- syntactic direct target
+- selected overload
+- static member target
+- possible dynamic target
+- indirect candidate
+- model target
+- unresolved boundary
+
+possible target relation は multivalued key に target を含め、複数候補を conflict にしない。
+
+### 21.7 References, inheritance, templates
+
+NG1 以降:
+
+```text
+cc.reference
+cc.reference_candidate
+cpp.inherits
+cpp.overrides
+cpp.template_pattern
+cpp.specialization
+cpp.instantiation
+source.macro_definition
+source.macro_expansion
+source.conditional_region
+cc.include
+```
+
+direct edge と transitive closure を別 relation にする。
+
+### 21.8 ABI/IR/binary
+
+source semantics から binary exactness を推測しない。
+
+ABI claim は target/toolchain/condition を必須とし、IR/object provider evidence に基づく。
+
+NG0 blocker にはしない。
+
+---
+
+## 22. Public C++ API
+
+### 22.1 API levels
+
+```text
+Level 1: Recipes
+Level 2: Semantic Services / Query
+Level 3: Dynamic Relation / Provider SDK
+Level 4: Native Major-specific SDK
+Level 5: Kernel Internal Ports
+```
+
+Level 5 は public stability 対象外。
+
+### 22.2 Project and engine example
+
+```cpp
+#include <cxxlens/kernel.hpp>
+#include <cxxlens/cpp.hpp>
+#include <cxxlens/recipes/search.hpp>
+
+int main() {
+    auto project = cxxlens::project_catalog::open({
+        .project_root = ".",
+        .compilation_database = "build/compile_commands.json",
+    });
+    if (!project) {
+        return 1;
+    }
+
+    auto engine = cxxlens::analysis_engine::default_local();
+    if (!engine) {
+        return 1;
+    }
+
+    auto session = engine->start(*project, {});
+    if (!session) {
+        return 1;
+    }
+
+    auto report =
+        cxxlens::recipes::calls_to_function("app::dangerous")
+            .run(*session);
+    if (!report) {
+        return 1;
+    }
+
+    return report->execution().is_usable() ? 0 : 2;
+}
+```
+
+examples は error handling を省略して契約を誤解させてはならない。
+
+### 22.3 Engine builder
+
+builder 固定項目:
+
+```text
+relation registry
+provider manifests
+store backend
+interpretation policy
+scheduler/resource policy
+sandbox policy
+environment policy
+telemetry sink
+cache policy
+trust policy
+```
+
+build後 immutable。
+
+### 22.4 Session
+
+session は operational state を持てる。
+
+- project/catalog generation に bind
+- materialization operation は serialize または transaction化
+- same snapshot query は concurrent
+- current snapshot publication は atomic
+- snapshot handle は thread-safe immutable
+
+### 22.5 Errors and partiality
+
+```cpp
+template<class T>
+using result = std::expected<T, error>;
+```
+
+operation error:
+
+- invalid argument
+- incompatible schema/protocol
+- store corruption
+- invariant violation
+- no usable result due cancellation
+- commit failure
+
+result object 内 partiality:
+
+- failed compile unit
+- unsupported construct
+- provider unavailable for subset
+- open world
+- missing closure
+- budget truncation
+- conflict/disagreement
+
+### 22.6 Exceptions
+
+- public expected failure は `result<T>`
+- protocol boundary を C++ exception が越えない
+- destructors は throw しない
+- callback exception は structured provider failure
+- allocation/process-fatal failure は別 policy
+- `noexcept` は実際の保証にのみ付与
+
+### 22.7 Thread/lifetime
+
+- immutable ID/value/snapshot descriptor は concurrent read 可
+- cursor は objectごとの documented thread affinity
+- row view は cursor advance まで
+- progress callback は internal lock 外
+- native borrowed TU は thread-affine
+- registry/engine configuration は build後 immutable
+- session materialization と query concurrency policy を API declaration ごとに記載
+
+### 22.8 Stability
+
+annotation:
+
+```text
+stable
+versioned
+experimental
+native-major-specific
+internal
+```
+
+pre-1.0:
+
+- source compatibility 非保証
+- binary ABI 非保証
+
+1.x:
+
+- `stable` C++ header の source compatibility を原則維持
+- C++ binary ABI は certified compiler/stdlib tuple でのみ別途宣言
+- protocol/schema semantics は独立 versioning
+- third-party C++ plugin ABI は非提供
+
+---
+
+## 23. Recipes and Analysis Modules
+
+### 23.1 Recipe contract
+
+Recipe は:
+
+- relation/capability requirements を事前計算
+- logical query/semantic service/plan へ lower
+- defaults を canonical serialize
+- coverage/closure/unresolved/conflict を隠さない
+- native pointer を保持しない
+- same snapshot/options で same semantic output
+- recipe version を独立管理
+
+### 23.2 NG0 flagship recipe
+
+```text
+calls_to_function
+```
+
+最低 output:
+
+```text
+matches
+input snapshot
+logical query ID
+relation descriptor versions
+execution status
+coverage summaries
+closure availability
+unresolved
+conflicts
+provenance references
+```
+
+NG0 は call search を end-to-end proof とし、recipe catalog を広げすぎない。
+
+### 23.3 Rule/finding — NG1以降
+
+finding identity は message text に依存しない。
+
+```text
+producer semantic ID/major
+authoritative subject semantic keys
+primary semantic location
+presence condition
+stable category
+```
+
+baseline は finding 有無だけでなく:
+
+- condition
+- guarantee
+- closure
+- coverage
+- interpretation
+- evidence producer
+
+を比較する。
+
+### 23.4 Graph/solver — NG2
+
+graph は relation view。
+
+persistent duplicate graph identity を主データにしない。
+
+abstract interpretation は:
+
+```text
+domain schema
+bottom/join/order/widen
+transfer provider
+precision axes
+convergence/budget
+assumptions
+derived relation output
+```
+
+を持つ。
+
+generic solver completion を kernel 1.0 blocker にしない。
+
+### 23.5 Rewrite/artifact — NG3
+
+source mutation は:
+
+```text
+immutable plan
+snapshot/source digest precondition
+condition reconciliation
+overlay verification
+journaled prepare/commit/recovery
+```
+
+artifact content は CAS blob ref を使う。
+
+multi-file transaction は「真の全file atomicity」ではなく、lock、journal、per-file atomic replace、recoverable state を保証する。
+
+---
+
+## 24. Security and Trust Boundary
+
+### 24.1 Untrusted inputs
+
+- compilation database
+- command string/response file
+- source/generated input
+- PCH/module
+- wrapper/plugin/spec
+- provider executable
+- schema/model pack
+- relation batch
+- snapshot/cache
+- query IR
+- report template
+- remote response
+
+### 24.2 Sandbox assurance
+
+```cpp
+enum class sandbox_assurance {
+    none,
+    best_effort,
+    enforced,
+    certified
+};
+```
+
+provider manifest は required minimum、runtime は achieved assurance を報告する。
+
+minimum を満たせなければ provider unavailable。silent degradation 禁止。
+
+### 24.3 Safe defaults
+
+- shell disabled
+- argv execution
+- network denied
+- project/toolchain read-only
+- bounded temporary write
+- environment allowlist
+- child process denied unless declared
+- product plugin/spec execution disabled
+- remote disabled
+- source mutation disabled
+- unsigned provider policy明示
+- provider output fully validated
+
+### 24.4 Product compiler/plugin trust
+
+product plugin/spec/wrapper を実行する profile は:
+
+- explicit opt-in
+- trusted code execution warning
+- exact executable/plugin digest
+- process tree tracking
+- output action redirection
+- network denied
+- bounded writable staging
+- environment allowlist
+- audit evidence
+
+を必須とする。
+
+### 24.5 Filesystem
+
+- logical sandbox paths
+- path containment
+- symlink policy
+- no device/FIFO/socket
+- special file rejection
+- unique task temp
+- read-only source/build mount
+- cleanup failure diagnostic
+- platform-specific Windows path designは support 前に追加
+
+### 24.6 Provider authenticity
+
+record:
+
+```text
+package identity
+binary digest
+publisher
+optional signature
+license
+protocol range
+relation offers
+trust flags
+sandbox requirement
+```
+
+enterprise mode は signed allowlist を提供可能。
+
+### 24.7 Privacy
+
+path projection:
+
+```text
+project_relative
+root_tokenized
+basename_only
+fully_redacted
+```
+
+source excerpt:
+
+```text
+allowed
+redacted
+hash_only
+disabled
+```
+
+secret environment value は report/snapshot へ保存しない。
+
+remote provider input scope は manifest/audit に記録する。
+
+---
+
+## 25. Determinism, Performance, Observability
+
+### 25.1 Determinism
+
+semantic canonicalization は次に依存しない。
+
+- filesystem enumeration
+- unordered container order
+- thread completion
+- provider arrival
+- random hash seed
+- root path
+- backend physical order
+
+provider が nondeterministic な場合:
+
+- seed
+- contract
+- nondeterministic dimensions
+- reproducibility limitation
+
+を記録し、certified canonical provider として扱わない場合がある。
+
+### 25.2 Canonical export
+
+canonical export order:
+
+```text
+relation name
+semantic major
+semantic key
+condition universe
+condition
+interpretation domain
+assertion ID
+content digest
+```
+
+通常 query cursor の順序とは別。
+
+### 25.3 Scale profiles
+
+| Profile | Compile Units | Relation Claims | Initial status |
+|---|---:|---:|---|
+| S | 1–100 | 100K以下 | NG0 production |
+| M | 100–5,000 | 10M以下 | NG0 qualification |
+| L | 5,000–50,000 | 100M以下 | architecture/performance qualification |
+| XL | 50,000+ | 100M超 | future |
+
+absolute performance は reference fixture/hardware manifest と一緒に報告する。
+
+### 25.4 Performance principles
+
+- AST job-local
+- columnar batches
+- dictionary encoding
+- partition pruning
+- projection/filter pushdown
+- bounded cursor
+- explicit sort only
+- content-addressed reuse
+- memory-aware provider concurrency
+- spill-capable large join
+- provenance retention policy
+- no row-by-row mandatory heap allocation
+- no unbounded vector result
+
+### 25.5 Resource safety
+
+budget予測超過時:
+
+- concurrency低下
+- spill
+- task split
+- query rejection
+- explicit truncation
+
+OOM後の不定 partial publication 禁止。
+
+### 25.6 Telemetry
+
+operational events:
+
+```text
+catalog.open
+materialization.plan
+provider.start/end
+batch.validate
+claim.merge/conflict
+snapshot.publish
+query.logical/physical/start/end
+cache.hit/miss
+closure.validate
+transaction.* (NG3)
+```
+
+telemetry は internal lock 外で通知し、semantic behavior に影響しない。
+
+---
+
+## 26. Verification and Acceptance
+
+### 26.1 Principle
+
+completion は code/document existence ではなく、commit/input-bound acceptance evidence で証明する。
+
+### 26.2 Machine-readable traceability
+
+各 requirement:
+
+```yaml
+id: FR-REL-EXT-001
+owner: schema-kernel
+profile: NG0
+contracts:
+  - relation-definition/2
+components:
+  - relation-registry
+tests:
+  - integration.external-relation
+gates:
+  - G1
+evidence:
+  - relation-conformance-report.json
+status: proposed
+```
+
+group-level table だけで complete を宣言しない。
+
+### 26.3 Gates
+
+#### G0 — Base invariants
+
+- canonical encoding
+- typed IDs
+- source spans
+- truth table
+- execution coverage balance
+- condition universe
+- public header native isolation
+
+#### G1 — Relation extension
+
+- dynamic relation registration
+- generated static relation
+- same logical IR
+- hard/soft reference
+- functional conflict
+- schema evolution
+- no central enum/switch
+
+#### G2 — Snapshot/store
+
+- immutable publication
+- prior snapshot survival
+- memory/SQLite parity
+- cursor lifetime
+- corruption detection
+- semantic/operational separation
+
+#### G3 — Query/search vertical slice
+
+- `cc.entity`
+- `cc.call_site`
+- custom relation join
+- typed/dynamic query
+- flagship recipe
+- budgets/cancellation
+- explicit partiality
+
+#### G4 — Provider isolation
+
+- protocol negotiation
+- exact Clang 22 worker
+- native lifetime
+- crash/timeout/cancel
+- malformed/oversized output
+- sandbox assurance
+- binary/input digest binding
+
+#### G5 — Closure/incrementality
+
+- closure certificate validation
+- incomplete absence unknown
+- anti-join with closure
+- warm-zero
+- affected partition invalidation
+- bounded recursion
+
+#### G6 — Standard semantics expansion
+
+- reference/inheritance/templates/macros
+- adjacent frontend differential
+- same-domain conflict vs differential disagreement
+- identity ambiguity
+
+#### G7 — Solver
+
+- CFG
+- custom domain
+- convergence/truncation
+- taint/resource exemplar
+- derived relation persistence
+
+#### G8 — Mutation/artifact
+
+- stale rejection
+- journal/recovery
+- overlay reparse
+- CAS artifact
+- no partial silent write
+
+#### GR — Release
+
+- install consumption
+- static/shared
+- compiler header matrix
+- provider package
+- security profile
+- real project qualification
+- performance manifest
+- docs/support matrix
+- license/notice
+
+### 26.4 Test classes
+
+- unit
+- property-based
+- schema negative vectors
+- protocol fuzz/conformance
+- native lifetime
+- backend parity
+- determinism perturbation
+- differential frontend
+- fault injection
+- security escape
+- incremental invalidation
+- performance/scale
+- real project
+- installed consumer
+- documentation state consistency
+
+### 26.5 Required perturbation matrix
+
+```text
+jobs: 1,2,8
+task order: forward,reverse,seeded-shuffle
+root: original,relocated
+backend: memory,SQLite
+cache: cold,warm
+library: static,shared
+public-header compiler: GCC,Clang
+provider: success,crash,timeout,malformed
+```
+
+semantic comparison は unordered relation digest と canonical export の両方で行う。
+
+---
+
+## 27. Migration Plan
+
+### 27.1 Principles
+
+- 既存資産を一括削除しない
+- existing acceptance behavior を先に capture
+- exact API freeze を解除
+- legacy API は use-case inventory とする
+- new core の長期二重実装を避ける
+- bridge は one-way/deprecated
+- main branch acceptance を維持
+- vertical slice ごとに production path を作る
+
+### 27.2 R0 — Contract reset
+
+Deliverables:
+
+```text
+ADR product redefinition
+ADR relation kernel
+ADR compatibility reset
+legacy-use-case-inventory.yaml
+existing-acceptance-baseline.json
+license decision
+support state update
+```
+
+Exit:
+
+- old freeze が authority でないことを README/docs に反映
+- no-new-v1-API gate
+- current M0/M1/M2 evidence capture
+- requirement IDs/owners確定
+
+### 27.3 R1 — Relation kernel vertical slice
+
+Implement:
+
+- IDs/encoding
+- condition universe
+- relation IDL/registry
+- static/dynamic API
+- claim envelope
+- memory/SQLite snapshot
+- positive scan/filter/join
+- v1 fact importer
+
+Relations:
+
+```text
+build.compile_unit
+source.file
+source.span
+cc.entity
+cc.call_site
+company.lock.acquire
+```
+
+Exit:
+
+- external relation core diff 0
+- custom/standard join
+- backend parity
+- root/jobs/order determinism
+- prior snapshot preserved
+
+### 27.4 R2 — Call search vertical slice
+
+Implement:
+
+- existing Clang observation adaptation
+- canonical entity/call normalizer
+- recipe `calls_to_function`
+- provenance/explain
+- input coverage
+
+Exit:
+
+- existing flagship search fixture 相当
+- LLVM-free consumer
+- empty/incomplete distinction
+- static/dynamic IR equality
+
+### 27.5 R3 — Provider boundary
+
+Implement:
+
+- final provider protocol
+- manifest/discovery
+- official Clang 22 worker
+- process pool
+- sandbox assurance
+- crash/timeout/malformed tests
+
+Exit:
+
+- kernel link closure LLVM-free
+- worker process required
+- provider inspect
+- binary/input/environment digest cache binding
+
+### 27.6 R4 — Closure/incremental
+
+Implement:
+
+- partition manifests
+- invalidation graph
+- closure certificates
+- anti-join/absence
+- bounded recursive closure
+
+Exit:
+
+- warm provider execution 0
+- incomplete negation unknown
+- single-header affected partition only
+- closure invalidation on provider/model change
+
+### 27.7 R5 — Semantic expansion
+
+- references
+- inheritance/override
+- templates/macros/include
+- adjacent Clang or synthetic second provider
+- differential disagreement
+
+### 27.8 R6 — Analysis
+
+- graph
+- CFG
+- abstract interpretation
+- taint/resource
+
+### 27.9 R7 — Mutation/artifact
+
+- patch plan
+- journal/recovery
+- artifact CAS
+- verification providers
+- migration/mock/fuzz exemplar
+
+### 27.10 Legacy bridge
+
+MAY:
+
+```text
+legacy fact_store -> read-only v2 snapshot adapter
+legacy call view -> cc relation projection
+legacy calls_to_function -> recipe wrapper
+```
+
+MUST:
+
+- separate `cxxlens::legacy`
+- deprecated
+- no new feature
+- no dropping partiality
+- removal milestone
+- one-way dependency legacy -> v2
+
+### 27.11 Asset mapping
+
+| 現行 | 次世代 |
+|---|---|
+| identity encoder | base identity contract |
+| source span | source snapshot/span |
+| workspace catalog | project catalog importer |
+| fact observation | provider assertion input |
+| reducer | canonicalizer fixtures/logic |
+| fact store | snapshot backend seed |
+| provisioning | materialization/invalidation |
+| selector/query | recipe/query acceptance |
+| search report | flagship recipe projection |
+| Clang adapter | official Clang provider |
+| worker IPC | protocol spike/input |
+| M0/M1/M2 manifests | new gate evidence |
+| 124 API catalog | legacy use-case inventory |
+
+---
+
+## 28. Governance and Versioning
+
+### 28.1 Version axes
+
+独立管理:
+
+```text
+distribution
+kernel semantics
+relation descriptor
+identity contract
+condition semantics
+snapshot format
+provider protocol
+provider implementation
+native SDK
+logical Query IR
+recipe semantics
+model/assumption pack
+patch/artifact plan
+```
+
+library version 一つから互換性を推測しない。
+
+### 28.2 ADR required
+
+- core abstraction追加
+- identity/condition semantics変更
+- relation key/functional classification変更
+- truth/closure semantics変更
+- protocol major変更
+- snapshot format変更
+- native lifetime緩和
+- in-process third-party provider
+- sandbox弱化
+- mutation default変更
+- determinism例外
+- license変更
+
+### 28.3 Stable API admission
+
+stable public API は次を満たす。
+
+- 二つ以上の independent consumer、または不可避な foundational invariant
+- 実装が存在
+- acceptance fixture
+- error/partial semantics
+- thread/lifetime/order
+- versioning
+- performance characteristics
+- lower-level escape path
+- experimental period
+- native API の単なる言い換えでない
+
+### 28.4 Relation review
+
+- use case
+- namespace ownership
+- authoritative key
+- cardinality
+- condition semantics
+- interpretation domain
+- hard/soft references
+- merge/conflict
+- coverage domain
+- closure support
+- provenance
+- partition/index hints
+- schema evolution
+- negative vectors
+- static/dynamic query example
+- provider conformance
+
+### 28.5 Provider certification
+
+```text
+experimental
+schema-conformant
+deterministic
+sandbox-qualified
+canonical-semantic-qualified
+cross-version-qualified
+production-supported
+```
+
+support matrix は provider/relation/toolchain tuple 単位。
+
+---
+
+## 29. Risks and Controls
+
+| ID | Risk | Control |
+|---|---|---|
+| R-001 | kernel が抽象的で使いにくい | flagship recipe を各 kernel slice と同時開発 |
+| R-002 | relation schema 乱立 | namespace ownership、review、catalog |
+| R-003 | custom relation が dynamic only で型安全性低下 | generated static + dynamic dual API |
+| R-004 | query engine過大 | NG0 positive operators、physical planner internal |
+| R-005 | negation誤用 | closure certificate を型/IR requirement化 |
+| R-006 | frontend identity誤統合 | provider-local/ambiguous states |
+| R-007 | conflict explosion | interpretation domain と authority policy |
+| R-008 | condition複雑化 | NG0 finite universe、symbolic延期 |
+| R-009 | provenance肥大 | retention policy、DAG compression |
+| R-010 | SQLite scale不足 | reference backend限定、L profile qualification |
+| R-011 | provider protocol overhead | columnar batch、CAS、worker pool |
+| R-012 | sandbox非対応platform | assurance level と fail-closed |
+| R-013 | C++ ABI期待誤認 | source/ABI/protocol compatibility明記 |
+| R-014 | migration二重保守 | vertical slice、one-way bridge、removal gate |
+| R-015 | docs/manifest drift | documentation consistency acceptance |
+| R-016 | schema compiler bootstrap | generated artifact reproducibility、checked-in policy ADR |
+| R-017 | closure certificate過大主張 | relation-specific validator/conformance |
+| R-018 | multi-file rollback失敗 | journal、recovery_required、platform qualification |
+| R-019 | secret fingerprint漏洩 | keyed local fingerprint、report redaction |
+| R-020 | public target乱立 | initial coarse targets、internal split |
+
+---
+
+## 30. Open Decisions
+
+以下は実装前 ADR で選定する。ただし本書の意味契約を変更してはならない。
+
+### OD-001 Wire encoding
+
+- control record format
+- columnar batch format
+- blob transport
+- checksum
+- dependency/license
+
+R3 前に確定。
+
+### OD-002 SQLite physical schema
+
+- normalized tables
+- columnar blob
+- hybrid
+- index generation
+- migration strategy
+
+public API/semantic snapshot へ漏らさない。
+
+### OD-003 Hash algorithm
+
+- full digest size
+- cryptographic/noncryptographic role
+- collision policy
+- domain separation
+
+algorithm/version を metadata に記録。
+
+### OD-004 Generated source policy
+
+- schema compiler bootstrap
+- checked-in generated files
+- release tarball policy
+- reproducibility check
+
+### OD-005 Provider discovery
+
+- explicit path
+- installation manifest
+- project config
+- system registry
+- signature policy
+
+PATH-only authorityは禁止。
+
+### OD-006 C++ module/header layout
+
+public source compatibility reviewで確定。native SDKをumbrellaへ含めない。
+
+### OD-007 Symbolic conditions
+
+finite universe が実証上不足した場合のみ、BDD/normalized expression profile を追加する。
+
+### OD-008 Multi-process store
+
+NG1 default:
+
+- single writer
+- immutable readers
+- process lock
+- daemon arbitration optional
+
+---
+
+## 31. Requirement Set
+
+本書の requirement は少数の実装可能な単位へまとめる。詳細 trace は machine-readable manifest を authority とする。
+
+### Core P0
+
+| ID | Requirement |
+|---|---|
+| FR-ID-001 | semantic ID は canonical versioned tuple から生成する |
+| FR-ID-002 | semantic key/assertion/content identity を分離する |
+| FR-SRC-001 | source span は snapshot-bound half-open byte range |
+| FR-PROJ-001 | compilation DB を no-shell/bounded で読み込む |
+| FR-PROJ-002 | raw/normalized/effective invocation を分離する |
+| FR-PROJ-003 | build variant と provider identity を分離する |
+| FR-COND-001 | condition は explicit universe に bind する |
+| FR-REL-001 | central relation enum を要求しない |
+| FR-REL-002 | static/dynamic relation API を同一 kernel で扱う |
+| FR-REL-003 | relation は key/cardinality/reference/merge を宣言する |
+| FR-CLAIM-001 | observation/assertion/canonical/derived を区別する |
+| FR-CLAIM-002 | interpretation domain を全 claim に付与する |
+| FR-CLAIM-003 | same-domain conflict と differential disagreement を分ける |
+| FR-STORE-001 | query は immutable published snapshot を読む |
+| FR-STORE-002 | publication は reader に対して atomic |
+| FR-STORE-003 | memory/SQLite は semantic parity を持つ |
+| FR-STORE-004 | cursor view lifetime を明示する |
+| FR-ENG-001 | provider dependency/selection は deterministic |
+| FR-ENG-002 | provider unavailable を empty success にしない |
+| FR-ENG-003 | native provider は process isolation required |
+| FR-QUERY-001 | logical IR と physical plan を分離する |
+| FR-QUERY-002 | NG0 positive typed/dynamic query を提供する |
+| FR-QUERY-003 | query は budget/cancel/cursor を持つ |
+| FR-PARTIAL-001 | execution coverage と closure を分離する |
+| FR-PARTIAL-002 | closureなしのabsenceはunknown |
+| FR-PROV-001 | claim は producer/input/provenanceへtrace可能 |
+| FR-DET-001 | root/jobs/order/backend invariant |
+| FR-SEC-001 | provider task は sandbox assurance を宣言/検証する |
+| FR-API-001 | stable semantic header は compiler-native type free |
+| FR-EXT-001 | external relation/provider追加にcore switch不要 |
+
+### NG1+
+
+| ID | Profile | Requirement |
+|---|---|---|
+| FR-CLOSURE-001 | NG1 | closure certificate validation |
+| FR-QUERY-NEG-001 | NG1 | anti-join/negation requires closure |
+| FR-QUERY-REC-001 | NG1 | bounded recursive query |
+| FR-INC-001 | NG1 | partition invalidation/warm-zero |
+| FR-GRAPH-001 | NG2 | relation graph algorithms |
+| FR-SOLVER-001 | NG2 | versioned abstract domain/solver |
+| FR-EDIT-001 | NG3 | immutable patch plan |
+| FR-EDIT-002 | NG3 | journaled recoverable apply |
+| FR-ART-001 | NG3 | CAS artifact plan |
+
+---
+
+## 32. Detailed NG0 Acceptance Checklist
+
+### Identity/condition
+
+- [ ] absolute root を identity へ含めない
+- [ ] full digest と contract version を保持
+- [ ] semantic key/assertion/content digest が独立
+- [ ] provider ID は build variant に入らない
+- [ ] condition は universe なしに作れない
+- [ ] different universe comparison は structured error
+- [ ] root relocationで同じ semantic IDs
+
+### Relation/schema
+
+- [ ] central `fact_kind` が v2 path にない
+- [ ] external relation registration に core source diffなし
+- [ ] static generated relation と dynamic relation が同じ descriptor
+- [ ] open symbol unknown preservation
+- [ ] hard reference missing は batch rejection
+- [ ] soft reference missing は unresolved
+- [ ] functional payload mismatch は conflict
+- [ ] arbitrary custom reducer callbackなし
+- [ ] schema compatibility negative vectors
+
+### Claims/provenance
+
+- [ ] native pointer/address payload rejection
+- [ ] observation/assertion/canonical relation separation
+- [ ] producer input snapshot 記録
+- [ ] multiple contributor evidence
+- [ ] same-domain conflict condition fragment
+- [ ] cross-domain差は differential disagreement
+- [ ] arrival order不変
+
+### Store
+
+- [ ] published snapshot immutable
+- [ ] failed publish後 prior snapshot readable
+- [ ] memory/SQLite semantic digest equality
+- [ ] operational timestamp excludes snapshot ID
+- [ ] cursor view invalidates on advance as documented
+- [ ] owned copy works after cursor destruction
+- [ ] corruption detected
+- [ ] partial partition not reused as complete
+
+### Query
+
+- [ ] typed/dynamic query logical IR equality
+- [ ] filter/project/inner/semi/union/distinct/aggregate
+- [ ] explicit order only order guarantee
+- [ ] condition intersection on join
+- [ ] interpretation restriction
+- [ ] bounded cursor
+- [ ] cancellation
+- [ ] budget truncation explicit
+- [ ] physical index choice not serialized authority
+- [ ] success does not imply closure
+
+### Provider
+
+- [ ] exact manifest/binary digest
+- [ ] process-isolated Clang worker
+- [ ] callback/thread lifetime tests
+- [ ] crash/timeout/cancel distinction
+- [ ] malformed batch atomic rejection
+- [ ] output limits
+- [ ] network denied under enforced profile
+- [ ] achieved sandbox assurance reported
+- [ ] no adjacent silent fallback
+- [ ] kernel link closure LLVM-free
+
+### End-to-end
+
+- [ ] `cc.call_site` materialization
+- [ ] `company.lock.acquire` materialization
+- [ ] cross-relation join
+- [ ] flagship call recipe
+- [ ] evidence drill-down
+- [ ] empty vs incomplete
+- [ ] jobs 1/2/8
+- [ ] root relocation
+- [ ] memory/SQLite
+- [ ] cold/warm
+- [ ] static/shared install consumer
+- [ ] README/support state matches acceptance manifest
+
+---
+
+## Appendix A. Truth Tables
+
+### NOT
+
+| A | NOT A |
+|---|---|
+| false | true |
+| true | false |
+| unknown | unknown |
+| conflict | conflict |
+
+### AND
+
+| AND | false | true | unknown | conflict |
+|---|---|---|---|---|
+| false | false | false | false | false |
+| true | false | true | unknown | conflict |
+| unknown | false | unknown | unknown | false |
+| conflict | false | conflict | false | conflict |
+
+### OR
+
+| OR | false | true | unknown | conflict |
+|---|---|---|---|---|
+| false | false | true | unknown | conflict |
+| true | true | true | true | true |
+| unknown | unknown | true | unknown | true |
+| conflict | conflict | true | true | conflict |
+
+これらは support-pair の式から一意に導出される。filtering policy は表を変更しない。
+
+---
+
+## Appendix B. Query IR Example
+
+```yaml
+schema: cxxlens.query/1
+
+inputs:
+  calls:
+    relation: cc.call_site
+    version: 1.x
+  targets:
+    relation: cc.call_direct_target
+    version: 1.x
+  entities:
+    relation: cc.entity
+    version: 1.x
+
+context:
+  interpretation:
+    policy: authoritative_exact
+  condition:
+    universe: condition-universe:...
+    restrict: condition:all
+
+operators:
+  - id: calls_scan
+    kind: scan
+    input: calls
+
+  - id: targets_scan
+    kind: scan
+    input: targets
+
+  - id: call_target_join
+    kind: inner_join
+    left: calls_scan
+    right: targets_scan
+    on:
+      eq: [calls.call, targets.call]
+
+  - id: entities_scan
+    kind: scan
+    input: entities
+
+  - id: entity_filter
+    kind: filter
+    input: entities_scan
+    predicate:
+      eq: [entities.qualified_name, "app::dangerous"]
+
+  - id: resolved
+    kind: inner_join
+    left: call_target_join
+    right: entity_filter
+    on:
+      eq: [targets.target, entities.id]
+
+  - id: output
+    kind: project
+    input: resolved
+    columns:
+      - calls.call
+      - calls.caller
+      - calls.source
+
+budget:
+  max_rows_scanned: 10000000
+  max_rows_output: 100000
+  max_memory_bytes: 536870912
+```
+
+IR は index 名や join algorithm を含まない。
+
+---
+
+## Appendix C. Provider Manifest Example
+
+```yaml
+schema: cxxlens.provider-manifest/2
+
+provider:
+  id: org.llvm.clang22.source
+  version: 1.0.0
+  binary_digest: sha256:...
+  publisher: cxxlens
+  license: Apache-2.0 WITH LLVM-exception
+
+protocol:
+  min: 1.0
+  max: 1.2
+
+runtime:
+  mode: process_required
+  executable: libexec/cxxlens/providers/clang22/cxxlens-clang-worker-22
+  platforms:
+    - linux-x86_64
+  deterministic: deterministic-given-inputs
+  sandbox_minimum: enforced
+
+offers:
+  - relation: frontend.clang22.entity_observation
+    versions: 1.x
+    scope: compile-unit
+  - relation: frontend.clang22.call_observation
+    versions: 1.x
+    scope: compile-unit
+
+interpretations:
+  - frontend.clang22.native/1
+
+requires:
+  project:
+    - effective-invocation
+    - source-snapshot
+    - toolchain-context
+
+invalidation:
+  - effective-invocation-digest
+  - source-dependency-digest
+  - toolchain-context
+  - provider-binary-digest
+  - environment-identity
+
+trust:
+  executes-product-compiler: false
+  executes-product-plugins: false
+
+resources:
+  class: ast-heavy
+  network: denied
+  filesystem: declared-inputs-readonly
+```
+
+---
+
+## Appendix D. Reproduction Manifest
+
+```yaml
+schema: cxxlens.reproduction/2
+
+distribution: ...
+kernel_semantics: ...
+git_revision: ...
+dirty: false
+
+catalog_digest: ...
+condition_universe: ...
+relation_registry_digest: ...
+interpretation_policy_digest: ...
+
+providers:
+  - id: ...
+    version: ...
+    binary_digest: ...
+
+configuration_digest: ...
+environment_identity: ...
+snapshot_id: ...
+query_or_recipe_digest: ...
+semantic_output_digest: ...
+
+operational:
+  created_at: ...
+  elapsed_ms: ...
+  peak_rss: ...
+```
+
+operational section は semantic output digest から除外する。
+
+---
+
+## Appendix E. Milestone Dependency Graph
+
+```mermaid
+flowchart LR
+    R0["R0 Contract Reset"]
+    R1["R1 Relation Kernel Slice"]
+    R2["R2 Call Search Slice"]
+    R3["R3 Provider Boundary"]
+    R4["R4 Closure / Incremental"]
+    R5["R5 Semantic Expansion"]
+    R6["R6 Graph / Solver"]
+    R7["R7 Mutation / Artifacts"]
+    V1["1.0 Review"]
+
+    R0 --> R1
+    R1 --> R2
+    R2 --> R3
+    R3 --> R4
+    R4 --> R5
+    R5 --> R6
+    R5 --> R7
+    R6 --> V1
+    R7 --> V1
+```
+
+1.0 review は R6/R7 の全機能を stable にすることを必須としない。NG0/NG1 の意味核が production evidence を持つことを優先する。
+
+---
+
+## 33. Final Architecture Statement
+
+次世代 `cxxlens` の価値は、機能数ではなく、異なる解析器が同じ意味契約を共有できることにある。
+
+1. frontend は native object ではなく observation を出力する。
+2. canonicalizer は interpretation domain と provenance を失わず standard claim を生成する。
+3. claim は condition universe、semantic key、assertion、content digest を持つ。
+4. snapshot は immutable かつ content-addressed である。
+5. query は logical semantics を authority とし、physical plan から独立する。
+6. execution coverage は作業会計、closure certificate は absence 証明である。
+7. provider 差は権威領域を考慮して conflict または differential disagreement とする。
+8. custom relation は static type の有無にかかわらず first-class kernel capability を利用する。
+9. native compiler API は major-specific worker 内へ閉じ込める。
+10. high-level recipe は kernel の意味的不完全性を隠さない。
+
+1.0 で凍結すべきものは、search、lint、taint、mock 等の API 数ではない。
+
+```text
+no silent omission
+no first-wins
+root-independent identity
+condition-universe binding
+interpretation-aware claims
+immutable snapshot publication
+explicit execution coverage
+certificate-based absence
+exact provenance
+native lifetime confinement
+process failure isolation
+logical/physical query separation
+core-independent extension
+```
+
+これらを小さな縦断 release で実証したとき、`cxxlens` は用途別 SDK の集合ではなく、多様な C/C++ 解析機を安全に構築できる長期安定な Semantic Relation Platform となる。

@@ -1,5 +1,9 @@
 # Agent ownership and dependency requests
 
+> [!CAUTION]
+> 本書の旧124 API ownershipはmigration provenanceである。次世代ownershipはIssue #56配下の
+> relation/API/provider contractで再発行する。
+
 `schemas/cxxlens.agent-ownership.v1.json` is the machine-readable change-control contract consumed
 after task-packet generation. It gives every tracked repository path one exclusive shared steward,
 generator, or package-integration role. Each atomic implementation unit receives three disjoint

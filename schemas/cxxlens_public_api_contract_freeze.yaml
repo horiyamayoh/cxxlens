@@ -1,7 +1,13 @@
 schema: cxxlens.public-api-contract-freeze.v1
 document_version: 1.0.0
-state: frozen
-phase_c_authorized: true
+state: superseded
+phase_c_authorized: false
+supersession:
+  issue: '#57'
+  tracking_issue: '#56'
+  replacement: schemas/cxxlens_ng_authority_transition.yaml
+  reason: product-redefined-as-semantic-relation-platform
+  legacy_new_work_authorized: false
 repository:
   binding: git-head-at-execution
   input_fingerprint: sha256:eae639d6990b5ae532ee786a59e2fe603c86271fc489b0c5fea05ffab0a0a546

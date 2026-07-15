@@ -1,12 +1,14 @@
 # cxxlens
 
-`cxxlens` は、実際のビルド条件を再現しながら C/C++ の意味に基づく検索、検査、変更、
-コード生成を行うための C++23 ライブラリです。LLVM/Clang の API をそのまま再公開せず、
-evidence、coverage、unresolved、保証レベルを伴うユースケース指向 API を提供します。
+`cxxlens` は、実際の C/C++ build context に基づく versioned semantic claim を provider から収集し、
+condition、provenance、partiality とともに immutable snapshotへ公開する C++23 Semantic Relation
+Platformです。Recipeに加え、typed/dynamic query、portable provider、Clang major-specific native
+providerを第一級の開発経路として提供します。
 
 > [!WARNING]
-> 現在は pre-alpha です。M0 基盤と Clang 22 frontend corridor までが実装済みで、上位の
-> fact extraction/query API はまだ利用できません。また、ライセンスは未決定です。
+> 現在は pre-alphaで、Issue #56 の NG Foundation Migration中です。旧M0/M1/M2実装は移行
+> baselineとして保持されていますが、旧124 API freezeとIssue #55は新規実装を認可しません。
+> また、ライセンスは未決定です。
 
 ## 要件
 
@@ -69,7 +71,7 @@ const auto product_versions = cxxlens::versions();
 
 ## 文書
 
-- [統合設計書](docs/design/cxxlens_integrated_design_ja.md) — 最上位の規範文書
+- [次世代統合設計書](docs/design/cxxlens_next_generation_integrated_design_ja.md) — 最上位の規範文書
 - [設計パッケージ](docs/design/README.md)
 - [アーキテクチャ](docs/development/architecture.md)
 - [ビルドとテスト](docs/development/build-and-test.md)
@@ -81,7 +83,8 @@ const auto product_versions = cxxlens::versions();
 - [Clang 22 frontend adapter contract](docs/development/clang-adapter.md)
 - [コントリビューション](CONTRIBUTING.md)
 
-旧二層構想の設計書は `docs/design/archive/` に保存していますが、現在の仕様判断には使用しません。
+旧統合設計、旧124 API catalog/freeze、旧二層構想は移行 provenanceです。新規設計・実装判断には
+使用せず、[authority transition](docs/design/adr/0004-legacy-contract-reset.md)に従います。
 
 ## 非目標
 

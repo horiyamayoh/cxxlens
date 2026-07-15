@@ -1,30 +1,16 @@
-name: API atomic-unit shard
+name: Legacy API atomic-unit dispatch (superseded)
 
-on:
-  workflow_dispatch:
-    inputs:
-      api_id:
-        description: Exact API catalog ID
-        required: true
-        type: string
+on: workflow_dispatch
 
 permissions:
   contents: read
 
 jobs:
-  resolve-and-run:
+  legacy-authority-superseded:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: python -m pip install --requirement tools/quality/requirements.txt
-      - name: Validate ready DAG
-        run: python3 tools/agent/ready_evaluator.py check --root .
-      - name: Run authorized shard
-        env:
-          CXXLENS_API_ID: ${{ inputs.api_id }}
-        run: >-
-          python3 tools/agent/api_task_runner.py run --root .
-          --api-id "$CXXLENS_API_ID" --execute
+      - name: Refuse superseded legacy dispatch
+        run: |
+          echo "legacy-authority-superseded: #57 revoked the old 124-API Phase C authority."
+          echo "Use the next-generation work tracked by #56."
+          exit 1

@@ -25,6 +25,7 @@ from api_task_runner import (  # noqa: E402
     authorize_integration,
     authorize_run,
     digest,
+    reject_superseded_legacy_dispatch,
     verify_conformant_artifacts,
 )
 from ownership_generator import (  # noqa: E402
@@ -93,6 +94,15 @@ class RunnerTest(unittest.TestCase):
         with self.assertRaises((ReadyError, RunnerError)) as raised:
             action()
         self.assertEqual(raised.exception.code, code)
+
+    def test_superseded_legacy_dispatch_is_rejected_before_execution(self) -> None:
+        for mode in ("run", "integrate"):
+            with self.subTest(mode=mode):
+                with self.assertRaisesRegex(
+                    RunnerError, "runner.legacy-authority-superseded"
+                ):
+                    reject_superseded_legacy_dispatch(ROOT, mode)
+        reject_superseded_legacy_dispatch(ROOT, "resolve")
 
     def test_full_dag_schema_states_shards_and_exactly_once_resolution(self) -> None:
         generated = self.generated()
@@ -358,7 +368,7 @@ class RunnerTest(unittest.TestCase):
             check=False,
         )
         self.assertNotEqual(bypassed.returncode, 0)
-        self.assertIn("runner.execution-required", bypassed.stderr)
+        self.assertIn("runner.legacy-authority-superseded", bypassed.stderr)
         other_path = next(
             tracked["path"]
             for tracked in self.ownership["tracked_paths"]
@@ -652,7 +662,7 @@ class RunnerTest(unittest.TestCase):
             check=False,
         )
         self.assertNotEqual(completed.returncode, 0)
-        self.assertIn("runner.not-ready", completed.stderr)
+        self.assertIn("runner.legacy-authority-superseded", completed.stderr)
         self.assert_code(
             "ready.unknown-api",
             lambda: resolve_api("API-NOT-999", self.report, self.corpus, self.ownership),

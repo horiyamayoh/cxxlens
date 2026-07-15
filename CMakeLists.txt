@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.25)
 project(
   cxxlens
   VERSION 0.1.0
-  DESCRIPTION "Use-case-driven C and C++ semantic analysis library"
+  DESCRIPTION "C and C++ Semantic Relation Platform"
   LANGUAGES CXX)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
@@ -185,6 +185,11 @@ install(
         schemas/cxxlens_phase_b_contract_integration.schema.yaml
         schemas/cxxlens_public_api_contract_freeze.yaml
         schemas/cxxlens_public_api_contract_freeze.schema.yaml
+        schemas/cxxlens_ng_authority_transition.yaml
+        schemas/cxxlens_ng_authority_transition.schema.yaml
+        schemas/cxxlens_ng_authority_transition_report.schema.yaml
+        schemas/cxxlens_legacy_api_baseline.yaml
+        schemas/cxxlens_legacy_api_baseline.schema.yaml
         schemas/cxxlens_contract_ownership.yaml
         schemas/cxxlens_contract_ownership.schema.yaml
         schemas/cxxlens_coverage.schema.yaml

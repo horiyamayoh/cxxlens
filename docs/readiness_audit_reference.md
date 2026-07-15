@@ -1,5 +1,9 @@
 # Parallel-wave readiness audit
 
+> [!CAUTION]
+> 旧124 API Phase C authorizationはIssue #57により失効した。checked-in auditは移行baselineの
+> fail-closed証拠としてのみ保持し、新規atomic unit dispatchには使用しない。
+
 The final audit independently regenerates and validates the catalog task packets, ownership map,
 dependency DAG, ready predicate, completion manifests, prompt resolutions, and CI shard handoffs.
 The authoritative catalog currently contains 22 packages and 124 API entries; older issue prose that

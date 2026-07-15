@@ -1,5 +1,9 @@
 # Ready DAG and API task runner
 
+> [!CAUTION]
+> 旧atomic API runnerのdispatch authorityはIssue #57により失効した。本書は移行監査用provenanceであり、
+> 新規実装を認可しない。
+
 The ready evaluator combines the task-packet corpus, ownership manifest, foundation completion
 manifests, fact/capability providers, and dependency requests. Its DAG nodes are atomic
 implementation units. Edges cover API dependencies, package engines, shared public types,

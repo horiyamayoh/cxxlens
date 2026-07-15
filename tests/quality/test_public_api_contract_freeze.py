@@ -16,7 +16,6 @@ sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
 from check_public_api_contract_freeze import (  # noqa: E402
     FreezeError,
-    PREREQUISITE_ISSUES,
     load_yaml,
     schema_validate,
     validate_downstream_edges,
@@ -35,9 +34,10 @@ class PublicApiContractFreezeTest(unittest.TestCase):
         )
         cls.catalog = load_yaml(ROOT / "schemas/cxxlens_public_api_contract.yaml")
 
-    def test_positive_freeze_is_complete_and_current(self) -> None:
+    def test_positive_freeze_is_complete_superseded_provenance(self) -> None:
         validated = validate_manifest(ROOT)
-        self.assertTrue(validated["phase_c_authorized"])
+        self.assertFalse(validated["phase_c_authorized"])
+        self.assertEqual(validated["state"], "superseded")
         self.assertEqual(validated["summary"]["apis"], 124)
         self.assertEqual(validated["summary"]["contract_states"], {"frozen": 22})
 
@@ -53,9 +53,12 @@ class PublicApiContractFreezeTest(unittest.TestCase):
         with self.assertRaisesRegex(FreezeError, "coverage differs"):
             validate_downstream_edges(ROOT, catalog)
 
-    def test_authorization_prerequisites_are_exact(self) -> None:
-        self.assertEqual(self.manifest["authorization"]["prerequisite_issues"], PREREQUISITE_ISSUES)
-        self.assertEqual(len(PREREQUISITE_ISSUES), 22)
+    def test_supersession_is_exact(self) -> None:
+        self.assertEqual(self.manifest["supersession"]["issue"], "#57")
+        self.assertEqual(self.manifest["supersession"]["tracking_issue"], "#56")
+        self.assertFalse(
+            self.manifest["supersession"]["legacy_new_work_authorized"]
+        )
 
 
 if __name__ == "__main__":

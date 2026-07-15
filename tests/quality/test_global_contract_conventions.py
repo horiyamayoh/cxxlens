@@ -69,6 +69,14 @@ class GlobalContractConventionsTest(unittest.TestCase):
         self.assertEqual(self.ownership["summary"]["shared_component_count"], 66)
         self.assertEqual(self.ownership["summary"]["provider_subject_count"], 26)
         self.assertEqual(self.ownership["summary"]["schema_count"], 85)
+        legacy_paths = {row["path"] for row in self.expected["schemas"]}
+        self.assertFalse(
+            any(
+                path.startswith("schemas/cxxlens_ng_")
+                or path == "schemas/cxxlens_legacy_api_baseline.schema.yaml"
+                for path in legacy_paths
+            )
+        )
 
     def test_missing_package_owner_is_rejected(self) -> None:
         document = copy.deepcopy(self.conventions)

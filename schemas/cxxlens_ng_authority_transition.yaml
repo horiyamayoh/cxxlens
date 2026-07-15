@@ -1,0 +1,84 @@
+schema: cxxlens.ng-authority-transition.v1
+document_version: 1.0.0
+state: active
+authority:
+  document: docs/design/cxxlens_next_generation_integrated_design_ja.md
+  document_id: CXXLENS-NG-SRAD-002
+  issue: '#57'
+  tracking_issue: '#56'
+superseded:
+  - id: legacy-integrated-design
+    path: docs/design/cxxlens_integrated_design_ja.md
+    disposition: migration-provenance
+    new_work_authorized: false
+  - id: legacy-api-catalog
+    path: schemas/cxxlens_public_api_contract.yaml
+    disposition: migration-provenance
+    new_work_authorized: false
+  - id: legacy-api-freeze
+    path: schemas/cxxlens_public_api_contract_freeze.yaml
+    disposition: migration-provenance
+    new_work_authorized: false
+dispatch:
+  legacy_phase_c_authorized: false
+  legacy_atomic_unit_runner: revoked
+  no_new_legacy_api: true
+  replacement_tracker: '#56'
+baseline:
+  path: schemas/cxxlens_legacy_api_baseline.yaml
+  source_commit: e1479b05e1e5a28cb36d32d2d1a9f7fb697d9f41
+  conformant_apis: 47
+  unimplemented_apis: 77
+preserved_invariants:
+  - root-independent-canonical-identity
+  - snapshot-bound-half-open-byte-source-span
+  - no-shell-compilation-database
+  - no-silent-omission
+  - no-first-wins
+  - evidence-coverage-unresolved-guarantee
+  - deterministic-reduction-and-serialization
+  - native-lifetime-confinement
+  - process-failure-isolation
+  - plan-before-side-effect
+validation:
+  checker: tools/quality/check_ng_authority.py
+  report_binding: exact-git-commit
+  inputs:
+    - .github/workflows/api-unit.yml
+    - .github/workflows/quality.yml
+    - AGENTS.md
+    - CMakeLists.txt
+    - README.md
+    - CONTRIBUTING.md
+    - cmake/CxxlensDeveloperTools.cmake
+    - docs/agent_ownership_reference.md
+    - docs/agent_runner_reference.md
+    - docs/agent_task_packet_reference.md
+    - docs/design/README.md
+    - docs/design/SHA256SUMS
+    - docs/design/api_catalog_change_policy.md
+    - docs/design/cxxlens_next_generation_integrated_design_ja.md
+    - docs/design/cxxlens_integrated_design_ja.md
+    - docs/design/public_api_contract_freeze.md
+    - docs/development/architecture.md
+    - docs/readiness_audit_reference.md
+    - docs/design/adr/0002-semantic-relation-platform.md
+    - docs/design/adr/0003-versioned-relation-kernel.md
+    - docs/design/adr/0004-legacy-contract-reset.md
+    - schemas/cxxlens.readiness.authorization.v1.json
+    - schemas/cxxlens_ng_authority_transition.yaml
+    - schemas/cxxlens_ng_authority_transition.schema.yaml
+    - schemas/cxxlens_ng_authority_transition_report.schema.yaml
+    - schemas/cxxlens_legacy_api_baseline.yaml
+    - schemas/cxxlens_legacy_api_baseline.schema.yaml
+    - schemas/cxxlens_public_api_contract.yaml
+    - schemas/cxxlens_public_api_contract_freeze.yaml
+    - schemas/cxxlens_public_api_contract_freeze.schema.yaml
+    - tools/agent/api_task_runner.py
+    - tools/quality/check_ng_authority.py
+    - tools/quality/check_global_contract_conventions.py
+    - tools/quality/check_public_api_contract_freeze.py
+    - tests/agent/runner/test_runner.py
+    - tests/quality/test_ng_authority.py
+    - tests/quality/test_global_contract_conventions.py
+    - tests/quality/test_public_api_contract_freeze.py

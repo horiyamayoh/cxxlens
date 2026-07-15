@@ -4,13 +4,15 @@
 
 判断が衝突する場合は、次の順序を優先する。
 
-1. `docs/design/cxxlens_integrated_design_ja.md` の原則と invariant
-2. `schemas/cxxlens_public_api_contract.yaml`
-3. package detail と accepted ADR
+1. `docs/design/cxxlens_next_generation_integrated_design_ja.md` の原則と invariant
+2. 次世代 Relation Registry / Provider Protocol / Public C++ API Catalog / Acceptance Manifest
+3. accepted ADR と担当 GitHub issue の exact contract
 4. acceptance fixture と実装
-5. `docs/design/archive/` の履歴資料
+5. `schemas/cxxlens_legacy_api_baseline.yaml` に固定された移行 provenance
+6. 旧 `docs/design/cxxlens_integrated_design_ja.md` と `docs/design/archive/` の履歴資料
 
-実装前に統合設計書の 0、6、7、8、37、39 章と、担当 API の catalog entry を読む。
+実装前に次世代統合設計書の 0、2、5〜9、11、14、15、17、20、26〜28 章と、担当 relation/API/provider の
+catalog entry または移行 issue を読む。旧124 API catalog/freezeは新規実装を認可しない。
 
 ## Required implementation rules
 
@@ -22,7 +24,8 @@
 - unordered container の iteration order を serialization や ID に使用しない。
 - read result は empty と unresolved を区別し、evidence/coverage/guarantee を落とさない。
 - mutation/generation は plan、独立 validator、dry-run、transaction の順を崩さない。
-- public API を変更したら API catalog、Doxygen、acceptance test、設計 traceability を更新する。
+- public API/relation/provider を変更したら次世代 catalog/registry、Doxygen、acceptance test、設計
+  traceability を更新する。旧124 API catalogへ新規surfaceを追加しない。
 
 ## Forbidden shortcuts
 

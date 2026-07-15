@@ -1,5 +1,9 @@
 # Agent task packet reference
 
+> [!CAUTION]
+> 本書と旧124 API task packetはIssue #57によりmigration provenanceとなった。新規dispatchには使用せず、
+> 次世代の担当issueとacceptance manifestを参照する。
+
 The task-packet corpus is the deterministic agent-facing projection of
 `schemas/cxxlens_public_api_contract.yaml`. It does not make planned declarations exact, infer
 ownership, or treat contract maturity as implementation readiness.

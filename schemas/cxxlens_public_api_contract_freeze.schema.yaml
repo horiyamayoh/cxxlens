@@ -3,12 +3,22 @@ $id: https://cxxlens.dev/schemas/cxxlens.public-api-contract-freeze.v1.schema.ya
 title: cxxlens public API contract freeze v1
 type: object
 additionalProperties: false
-required: [schema, document_version, state, phase_c_authorized, repository, inputs, summary, coverage, evidence, authorization]
+required: [schema, document_version, state, phase_c_authorized, supersession, repository, inputs, summary, coverage, evidence, authorization]
 properties:
   schema: {const: cxxlens.public-api-contract-freeze.v1}
   document_version: {const: 1.0.0}
-  state: {const: frozen}
-  phase_c_authorized: {const: true}
+  state: {const: superseded}
+  phase_c_authorized: {const: false}
+  supersession:
+    type: object
+    additionalProperties: false
+    required: [issue, tracking_issue, replacement, reason, legacy_new_work_authorized]
+    properties:
+      issue: {const: '#57'}
+      tracking_issue: {const: '#56'}
+      replacement: {const: schemas/cxxlens_ng_authority_transition.yaml}
+      reason: {const: product-redefined-as-semantic-relation-platform}
+      legacy_new_work_authorized: {const: false}
   repository:
     oneOf:
       - $ref: '#/$defs/source_binding'
