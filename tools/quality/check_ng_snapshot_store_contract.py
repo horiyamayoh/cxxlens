@@ -573,7 +573,7 @@ def validate_design(root: pathlib.Path) -> None:
         encoding="utf-8"
     )
     required = (
-        "0.8.0-normative",
+        "0.9.0-normative",
         "cxxlens_ng_snapshot_store_contract.yaml",
         "snapshot_series_selector",
         "producer_input_basis",

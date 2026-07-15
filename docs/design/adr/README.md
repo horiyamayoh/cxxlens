@@ -11,6 +11,7 @@
 | [0007](0007-logical-query-algebra.md) | Accepted | Logical Query IR v1 annotated multiset algebra | #61 |
 | [0008](0008-truth-guarantee-provenance-algebra.md) | Accepted | truth, guarantee, verification and provenance composition | #62 |
 | [0009](0009-snapshot-identity-publication-series.md) | Accepted | snapshot identity DAG, publication series and recovery | #63 |
+| [0010](0010-provider-wire-streaming-atomicity.md) | Accepted | provider wire, streaming, atomicity and failure contract | #64 |
 
 identity、condition、truth/closure、protocol major、snapshot format、native lifetime、sandbox、determinism、
 license を変更する場合は新しい ADR が必要です。履歴文書は ADR の代わりになりません。

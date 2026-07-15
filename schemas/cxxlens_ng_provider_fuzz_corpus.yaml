@@ -1,0 +1,18 @@
+schema: cxxlens.provider-fuzz-corpus.v1
+document_version: 1.0.0
+authority:
+  owner_issue: '#64'
+  decision_adr: docs/design/adr/0010-provider-wire-streaming-atomicity.md
+cases:
+  - {id: truncated-fixed-header, mutation: truncate-fixed-header, expected_reason: provider.truncated-stream}
+  - {id: bad-magic, mutation: replace-magic, expected_reason: provider.malformed-frame}
+  - {id: oversized-control, mutation: oversized-control-length, expected_reason: provider.output-limit}
+  - {id: oversized-payload, mutation: oversized-payload-length, expected_reason: provider.output-limit}
+  - {id: control-checksum, mutation: corrupt-control-checksum, expected_reason: provider.checksum-mismatch}
+  - {id: payload-checksum, mutation: corrupt-payload-checksum, expected_reason: provider.checksum-mismatch}
+  - {id: truncated-control, mutation: truncate-control, expected_reason: provider.truncated-stream}
+  - {id: truncated-payload, mutation: truncate-payload, expected_reason: provider.truncated-stream}
+  - {id: noncanonical-cbor-integer, mutation: noncanonical-cbor-integer, expected_reason: provider.malformed-frame}
+  - {id: duplicate-cbor-key, mutation: duplicate-cbor-key, expected_reason: provider.malformed-frame}
+  - {id: indefinite-cbor, mutation: indefinite-cbor, expected_reason: provider.malformed-frame}
+  - {id: unknown-required-message, mutation: unknown-required-message, expected_reason: provider.required-feature-missing}

@@ -5,8 +5,8 @@
 | 項目 | 値 |
 |---|---|
 | 文書 ID | `CXXLENS-NG-SRAD-002` |
-| 文書版 | `0.8.0-normative` |
-| 文書状態 | 規範・Issue #57 / Issue #59 / Issue #60 / Issue #61 / Issue #62 / Issue #63 反映版 |
+| 文書版 | `0.9.0-normative` |
+| 文書状態 | 規範・Issue #57 / Issue #59 / Issue #60 / Issue #61 / Issue #62 / Issue #63 / Issue #64 反映版 |
 | 対象製品 | 次世代 `cxxlens` |
 | 基準言語 | C++23 |
 | 初期 primary platform | Linux |
@@ -168,11 +168,12 @@ NG1 は 1.0 release に必須の production hardening である。1.0 review の
 G0 から G5、GR であり、R5、R6、R7 は 1.0 blocker ではない。NG2/NG3 の実装や追加は distribution
 major を自動的に上げない。accepted stable version axis を破壊するときだけ future major を要求する。
 
-NG0 provider protocol は manifest/digest、major/encoding negotiation、bounded frame、checksum、task/batch
-lifecycle、cancel/deadline、coverage/unresolved、structured failure、process isolation までを含む最小 protocol
-である。NG1 は streaming/backpressure、heartbeat、hung worker recovery、multi-process reader、adjacent
-provider differential、長時間 conformance を加える。詳細境界と release/version tuple は
-`schemas/cxxlens_ng_release_bundle.yaml` を規範とする。
+NG0 provider protocol は manifest/digest、major/feature negotiation、bounded frame、deterministic CBOR control、
+streaming column chunk、credit backpressure、ACK/同一 task transaction 内 resume、task/batch/group lifecycle、
+cancel/deadline、coverage/unresolved、structured failure、process isolation までを含む最小 protocol である。
+NG1 は durable resume token、heartbeat、progress-rate enforcement、spill staging、hung worker recovery、
+multi-process reader、adjacent provider differential、長時間 conformance を加える。詳細境界と
+release/version tuple は `schemas/cxxlens_ng_release_bundle.yaml` を規範とする。
 
 ### 0.4 初期非スコープ
 
@@ -2025,28 +2026,53 @@ struct provider_task {
 ### 17.5 Output
 
 ```cpp
-struct provider_delta {
+class provider_batch_sink {
+public:
+    result<void> begin_dependency_group(dependency_group_descriptor);
+    result<void> begin_atomic_output_group(atomic_output_group_descriptor);
+    result<void> begin_batch(relation_batch_descriptor);
+    result<void> push_column_chunk(column_chunk_view);
+    result<void> end_batch(relation_batch_digest);
+    result<void> seal_atomic_output_group();
+    result<void> seal_dependency_group();
+};
+
+struct provider_task_result {
     provider_execution_report execution;
-    std::vector<relation_batch> batches;
+    std::vector<dependency_group_id> adopted_dependency_groups;
     coverage_report coverage;
     std::vector<closure_certificate_candidate> closures;
     std::vector<unresolved> unresolved;
     std::vector<diagnostic> diagnostics;
+    provider_terminal terminal;
 };
 ```
+
+provider は output 全体を memory vector として返してはならない。`provider_batch_sink` は negotiated
+bytes/frames credit 内の column chunk を stream し、host 側 staging validator は allocation 前に frame
+limit を検査する。in-process provider も同じ logical stream state machine と validator を使用し、
+wire byte encode/decode の省略を semantic validation の bypass にしてはならない。
 
 closure candidate は engine/schema-specific validator を通るまで authority ではない。
 
 ### 17.6 Batch atomicity
 
-- batch は exact relation descriptor と partition を固定
-- row count/column length/digest を検証
-- 一 row failure で batch 全体 rejection
-- task 内の独立 batch は policy により部分採用可能
-- 部分採用は coverage/unresolved に明示
-- hard reference を staged/base snapshot へ検証
-- soft reference 欠落は unresolved 化
-- output limit超過後の不定 partial publishは禁止
+Issue #64 / ADR 0010 は次の 4 階層を分離する。
+
+- `batch`: exact relation descriptor、partition、atomic output group を固定する schema/shape 検証単位
+- `atomic_output_group`: stream output の最小不可分単位
+- `dependency_group`: adoption/rollback の最小不可分単位
+- snapshot draft: task result を unpublished のまま保持する transaction staging 単位
+
+batch は row count、column length/order、chunk digest、batch digest を検証し、1 row の failure で全体を
+reject する。staged output 間の hard reference が atomic output group を跨ぐ場合、それらは同じ
+`dependency_group` に属さなければならない。base snapshot または同一 group で解決できない hard
+reference は group 全体を reject し、soft reference 欠落は row と unresolved の両方を保持する。
+
+partial adoption は `OPEN_TASK` 時に宣言した dependency group 境界だけで許可する。implicit partial
+publish、unsealed group、output limit 後の不定 partial publish は禁止する。各 adopted group は
+coverage/unresolved を均衡させ、closure candidate の独立検証後にだけ snapshot draft へ採用する。
+published series head の更新は Issue #63 の snapshot transaction だけが行う。
 
 ### 17.7 Provider selection
 
@@ -2060,6 +2086,8 @@ deterministic selection order:
 6. stable provider ID/version/binary digest tie-break
 
 silent adjacent-version fallback 禁止。
+要求した provider、provider version、binary digest、semantic contract digest、relation version が一致しない
+候補への fallback は、caller policy が明示的に許可し、選択・棄却理由が explain 可能な場合に限る。
 
 ### 17.8 In-process providers
 
@@ -2101,6 +2129,17 @@ third-party Clang extractor は:
 
 generic `.so` plugin ABI は NG0/1 非スコープ。
 
+### 17.11 Task graph と fixed point
+
+runtime は required/provided relation、explicit task dependency、observation → assertion → canonical claim →
+derived claim の stage order から task DAG を作る。ready task は output stage、provider ID/version/binary
+digest、task ID の canonical tuple で安定ソートする。arrival order、unordered container order、provider ID
+tie-break で dependency cycle を隠してはならない。
+
+NG0 は cycle と fixed point を structured failure として reject する。NG1 で fixed point を許可するには、
+monotone lattice ID、join operator ID、convergence predicate ID、maximum iteration、execution budget の明示が
+必要である。この contract のない循環を暗黙の実行順序や bounded retry へ置き換えてはならない。
+
 ---
 
 ## 18. Provider Protocol
@@ -2128,7 +2167,8 @@ HELLO_ACK
 SCHEMA_NEGOTIATE
 OPEN_TASK
 TASK_ACCEPTED
-INPUT_DESCRIPTOR / INPUT_STREAM
+INPUT_DESCRIPTOR / INPUT_CHUNK
+CREDIT
 BATCH_BEGIN
 COLUMN_CHUNK*
 BATCH_END
@@ -2138,9 +2178,16 @@ UNRESOLVED_CHUNK
 CLOSURE_CANDIDATE
 PROGRESS
 CANCEL
+RESUME
 TASK_COMPLETE / TASK_FAILED
 CLOSE
+HEARTBEAT (NG1)
 ```
+
+各 stream の sequence は 0 から連続し、provider は host が付与した bytes と frames の両方の
+credit を消費する前に payload を送ってはならない。ACK は stream ID、highest contiguous
+sequence、staged digest に bind する。resume token はそれらに task ID と protocol session ID を加えて
+bind し、stale/foreign token を reject する。
 
 ### 18.3 Version
 
@@ -2152,23 +2199,20 @@ CLOSE
 
 ### 18.4 Encoding
 
-exact wire encoding は ADR で確定する。R3 implementation 開始前に選定・fuzz fixture・license review を完了する。
+Issue #64 / ADR 0010 で exact wire を確定した。machine-readable authority は
+`schemas/cxxlens_ng_provider_protocol.yaml` である。
 
-候補評価:
+- 104 byte fixed header: magic、protocol major/minor、message type、flags、stream ID、sequence、
+  control/payload length、各 full SHA-256
+- header は big-endian、control は RFC 8949 deterministic CBOR closed subset
+- indefinite length、float、tag、duplicate map key、non-shortest integer/length、invalid UTF-8 は reject
+- control/payload length と negotiated limit を allocation 前に検証
+- bulk data は validity bitset、fixed-width、offset、dictionary index、blob reference の binary column chunk
+- native struct layout、pointer、ABI-dependent payload は禁止
 
-```text
-language support
-schema evolution
-columnar transfer
-zero/low copy
-streaming
-fuzzability
-dependency/license
-debug tooling
-canonical checksum
-```
-
-logical message semantics は encoding 選択に依存させない。
+control と payload の checksum は独立し、logical message semantics は encoding implementation に依存させない。
+protocol 仕様は mandatory runtime library を追加しない。外部 CBOR implementation の採用には license review、
+canonical conformance vector、fuzz corpus 通過を必須とする。
 
 ### 18.5 Input transfer
 
@@ -2199,6 +2243,12 @@ progress rate
 ```
 
 limit result は crash/timeout/cancel と区別する。
+
+terminal reason は少なくとも timeout、cancelled、output-limit、crash、malformed-frame、
+checksum-mismatch、truncated-stream、schema-invalid、hard-reference-missing、coverage-incomplete を stable code で
+区別する。全ての non-success terminal は実行済み scope の coverage/unresolved を保持する。
+current/unsealed dependency group は rollback し、宣言済み partial policy の場合だけ prior adopted group を保持できる。
+malformed/oversized/truncated stream、provider crash、timeout は prior published snapshot を変更しない。
 
 ---
 
@@ -3746,15 +3796,12 @@ support matrix は provider/relation/toolchain tuple 単位。
 
 以下は実装前 ADR で選定する。ただし本書の意味契約を変更してはならない。
 
-### OD-001 Wire encoding
+### RD-001 Wire encoding — ADR 0010 で解決済み
 
-- control record format
-- columnar batch format
-- blob transport
-- checksum
-- dependency/license
-
-R3 前に確定。
+provider wire は 104 byte fixed header、deterministic CBOR control、binary column chunk、control/payload の
+独立 full SHA-256 を使用する。bounded allocation、credit backpressure、ACK/resume、dependency group
+atomicity は encoding implementation にかかわらず必須とする。external implementation は license review、
+canonical vector、fuzz corpus を通過しなければならない。
 
 ### OD-002 SQLite physical schema
 
@@ -3836,6 +3883,10 @@ NG1 default:
 | FR-ENG-001 | provider dependency/selection は deterministic |
 | FR-ENG-002 | provider unavailable を empty success にしない |
 | FR-ENG-003 | native provider は process isolation required |
+| FR-ENG-004 | provider output は bounded credit で streaming し、全件 memory vector を要求しない |
+| FR-ENG-005 | partial adoption は宣言済み dependency group 境界だけで行う |
+| FR-ENG-006 | task dependency cycle/fixed point を暗黙の順序に変換しない |
+| FR-ENG-007 | in/out-of-process provider は同一 logical validator/failure contract を通る |
 | FR-QUERY-001 | logical IR と physical plan を分離する |
 | FR-QUERY-002 | NG0 positive algebra と total-order boundary query を提供する |
 | FR-QUERY-003 | query は budget/cancel/cursor を持つ |
@@ -3941,9 +3992,21 @@ NG1 default:
 ### Provider
 
 - [ ] exact manifest/binary digest
+- [ ] 104 byte header / deterministic CBOR / column chunk canonical vector
+- [ ] malformed/truncated/oversized/checksum failure の stable rejection と fuzz corpus
+- [ ] bytes/frames credit と contiguous sequence の enforcement
+- [ ] ACK/resume token の stale/foreign rejection
+- [ ] provider output 全体の memory vector 化なし
+- [ ] batch / atomic output group / dependency group の不可分性
+- [ ] hard reference の cross-group staging rejection
+- [ ] partial adoption は宣言済み dependency group 境界のみ
+- [ ] task DAG の deterministic order と cycle rejection
+- [ ] NG0 fixed point rejection、NG1 explicit monotone contract 要求
 - [ ] process-isolated Clang worker
 - [ ] callback/thread lifetime tests
 - [ ] crash/timeout/cancel distinction
+- [ ] malformed/oversized/crash/timeout 後も prior published snapshot 不変
+- [ ] in-process / out-of-process / task order の semantic parity
 - [ ] malformed batch atomic rejection
 - [ ] output limits
 - [ ] network denied under enforced profile
@@ -4078,60 +4141,34 @@ IR は index 名や join algorithm を含まない。
 ## Appendix C. Provider Manifest Example
 
 ```yaml
-schema: cxxlens.provider-manifest/2
-
-provider:
-  id: org.llvm.clang22.source
-  version: 1.0.0
-  binary_digest: sha256:...
-  publisher: cxxlens
-  license: Apache-2.0 WITH LLVM-exception
-
-protocol:
-  min: 1.0
-  max: 1.2
-
-runtime:
-  mode: process_required
-  executable: libexec/cxxlens/providers/clang22/cxxlens-clang-worker-22
-  platforms:
-    - linux-x86_64
-  deterministic: deterministic-given-inputs
-  sandbox_minimum: enforced
-
-offers:
-  - relation: frontend.clang22.entity_observation
-    versions: 1.x
-    scope: compile-unit
-  - relation: frontend.clang22.call_observation
-    versions: 1.x
-    scope: compile-unit
-
-interpretations:
-  - frontend.clang22.native/1
-
-requires:
-  project:
-    - effective-invocation
-    - source-snapshot
-    - toolchain-context
-
-invalidation:
-  - effective-invocation-digest
-  - source-dependency-digest
-  - toolchain-context
-  - provider-binary-digest
-  - environment-identity
-
-trust:
-  executes-product-compiler: false
-  executes-product-plugins: false
-
-resources:
-  class: ast-heavy
-  network: denied
-  filesystem: declared-inputs-readonly
+schema: cxxlens.provider-manifest.v1
+provider_id: org.llvm.clang22.source
+provider_version: 1.0.0
+provider_binary_digest: sha256:<64 lowercase hex>
+provider_semantic_contract_digest: sha256:<64 lowercase hex>
+publisher: cxxlens.project
+license: Apache-2.0 WITH LLVM-exception
+signature: null
+protocol_range:
+  major: 1
+  minimum_minor: 0
+  maximum_minor: 0
+  required_features: [streamed-column-chunks, credit-backpressure]
+  optional_features: [durable-resume-token]
+platform_tuples: [linux-x86_64]
+offered_relations:
+  - frontend.clang22.entity_observation.v1
+  - frontend.clang22.call_observation.v1
+required_relations: []
+interpretation_domains: [frontend.clang22.native-1]
+invalidation_contract: sha256:<64 lowercase hex>
+determinism_contract: sha256:<64 lowercase hex>
+resource_class: ast-heavy
+sandbox_minimum: process-isolated
+task_stage: {input: observation, output: assertion}
 ```
+
+exact instance schema は `schemas/cxxlens_ng_provider_manifest.schema.yaml` である。
 
 ---
 

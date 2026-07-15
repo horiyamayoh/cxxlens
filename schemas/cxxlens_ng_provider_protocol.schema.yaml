@@ -1,0 +1,327 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.provider-protocol.v1
+type: object
+additionalProperties: false
+required:
+  - schema
+  - document_version
+  - maturity
+  - authority
+  - compatibility
+  - profiles
+  - wire
+  - message_types
+  - handshake
+  - columnar_chunks
+  - flow_control
+  - atomicity
+  - planning
+  - failures
+  - reuse_and_invalidation
+  - execution_surfaces
+  - fuzzing
+  - backend_authority
+properties:
+  schema: {const: cxxlens.provider-protocol.v1}
+  document_version: {const: 1.0.0}
+  maturity: {const: accepted}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, index, decision_adr, owner_issue, owner]
+    properties:
+      design:
+        const: docs/design/cxxlens_next_generation_integrated_design_ja.md#18-provider-protocol
+      index: {const: docs/design/catalogs/README.md}
+      decision_adr: {const: docs/design/adr/0010-provider-wire-streaming-atomicity.md}
+      owner_issue: {const: '#64'}
+      owner: {const: steward.ng-provider-protocol}
+  compatibility:
+    const:
+      version_axis: provider-protocol
+      current: 1.0.0
+      major_mismatch: reject
+      same_major_minor: feature-negotiation
+      relation_schema_axis: independent
+      adjacent_provider_fallback: explicit-only
+  profiles:
+    const:
+      NG0:
+        required:
+          - framed-wire
+          - deterministic-cbor-control
+          - streamed-column-chunks
+          - credit-backpressure
+          - ack-and-connection-resume
+          - atomic-dependency-groups
+          - bounded-budget
+          - structured-failure
+        fixed_point: reject
+        process_restart_resume: restart-atomic-output-group
+      NG1:
+        includes: NG0
+        required:
+          - durable-resume-token
+          - heartbeat
+          - progress-rate-enforcement
+          - spill-staging
+          - long-run-fault-qualification
+        fixed_point: explicit-monotone-contract-only
+  wire:
+    type: object
+    additionalProperties: false
+    required:
+      - magic_ascii
+      - fixed_header_bytes
+      - byte_order
+      - fixed_header_fields
+      - allocation_rule
+      - checksums
+      - limits
+      - control_encoding
+      - flags
+    properties:
+      magic_ascii: {const: CXXP}
+      fixed_header_bytes: {const: 104}
+      byte_order: {const: big-endian}
+      fixed_header_fields:
+        const:
+          - {name: magic, type: bytes, bytes: 4}
+          - {name: protocol_major, type: uint16, bytes: 2}
+          - {name: protocol_minor, type: uint16, bytes: 2}
+          - {name: message_type, type: uint16, bytes: 2}
+          - {name: flags, type: uint16, bytes: 2}
+          - {name: stream_id, type: uint64, bytes: 8}
+          - {name: sequence, type: uint64, bytes: 8}
+          - {name: control_length, type: uint32, bytes: 4}
+          - {name: payload_length, type: uint64, bytes: 8}
+          - {name: control_sha256, type: bytes, bytes: 32}
+          - {name: payload_sha256, type: bytes, bytes: 32}
+      allocation_rule:
+        const: validate-fixed-header-and-negotiated-limits-before-allocation
+      checksums: {const: independent-full-sha256}
+      limits:
+        const:
+          control_bytes: 65536
+          payload_bytes: 16777216
+          frame_bytes: 16842856
+      control_encoding:
+        const:
+          standard: RFC-8949
+          mode: deterministic-closed-subset
+          map_key_order: encoded-length-then-lexicographic
+          shortest_integer_and_length: required
+          duplicate_map_key: reject
+          indefinite_length: reject
+          floats: reject
+          tags: reject
+          invalid_utf8: reject
+      flags:
+        const:
+          required_extension: 1
+          optional_extension: 2
+          compressed_payload: 4
+          end_of_stream: 8
+  message_types:
+    type: object
+    additionalProperties: false
+    required: [registry, unknown_required, unknown_optional]
+    properties:
+      registry:
+        const:
+          - {id: 1, name: hello, direction: provider-to-host, profile: NG0}
+          - {id: 2, name: hello_ack, direction: host-to-provider, profile: NG0}
+          - {id: 3, name: schema_negotiate, direction: bidirectional, profile: NG0}
+          - {id: 4, name: open_task, direction: host-to-provider, profile: NG0}
+          - {id: 5, name: task_accepted, direction: provider-to-host, profile: NG0}
+          - {id: 6, name: input_descriptor, direction: host-to-provider, profile: NG0}
+          - {id: 7, name: input_chunk, direction: host-to-provider, profile: NG0}
+          - {id: 8, name: credit, direction: host-to-provider, profile: NG0}
+          - {id: 9, name: batch_begin, direction: provider-to-host, profile: NG0}
+          - {id: 10, name: column_chunk, direction: provider-to-host, profile: NG0}
+          - {id: 11, name: batch_end, direction: provider-to-host, profile: NG0}
+          - {id: 12, name: batch_ack, direction: host-to-provider, profile: NG0}
+          - {id: 13, name: batch_reject, direction: host-to-provider, profile: NG0}
+          - {id: 14, name: coverage_chunk, direction: provider-to-host, profile: NG0}
+          - {id: 15, name: unresolved_chunk, direction: provider-to-host, profile: NG0}
+          - {id: 16, name: closure_candidate, direction: provider-to-host, profile: NG0}
+          - {id: 17, name: progress, direction: provider-to-host, profile: NG0}
+          - {id: 18, name: cancel, direction: host-to-provider, profile: NG0}
+          - {id: 19, name: resume, direction: bidirectional, profile: NG0}
+          - {id: 20, name: task_complete, direction: provider-to-host, profile: NG0}
+          - {id: 21, name: task_failed, direction: provider-to-host, profile: NG0}
+          - {id: 22, name: close, direction: bidirectional, profile: NG0}
+          - {id: 23, name: heartbeat, direction: bidirectional, profile: NG1}
+      unknown_required: {const: reject}
+      unknown_optional: {const: skip-and-account}
+  handshake:
+    const:
+      hello_required:
+        - provider_id
+        - provider_version
+        - provider_binary_digest
+        - provider_semantic_contract_digest
+        - protocol_range
+        - required_features
+        - optional_features
+        - relation_offers
+        - platform_tuple
+      accept_requires:
+        - exact-protocol-major
+        - all-required-features
+        - compatible-relation-descriptors
+        - exact-requested-provider-identity
+      failure_reason_codes:
+        - provider.protocol-major-mismatch
+        - provider.required-feature-missing
+        - provider.relation-incompatible
+        - provider.binary-identity-mismatch
+  columnar_chunks:
+    const:
+      batch_scope: exact-relation-descriptor-partition-and-atomic-output-group
+      chunk_key:
+        - task_id
+        - dependency_group_id
+        - atomic_output_group_id
+        - batch_id
+        - column_id
+        - row_offset
+        - row_count
+        - chunk_index
+      encodings:
+        - validity-bitset-lsb0
+        - fixed-width-little-endian
+        - utf8-offsets-u32-little-endian
+        - bytes-offsets-u32-little-endian
+        - dictionary-index-u32-little-endian
+        - content-addressed-blob
+      native_layout_payload: forbidden
+      batch_end_binds:
+        - declared-row-count
+        - every-column-length
+        - canonical-column-order
+        - chunk-digests
+        - batch-digest
+  flow_control:
+    const:
+      model: host-granted-byte-and-frame-credit
+      send_precondition: both-credit-dimensions-available
+      sequence: contiguous-per-stream-from-zero
+      ack:
+        binds: [stream_id, highest_contiguous_sequence, staged_digest]
+        credit_return: explicit
+      resume_token:
+        binds:
+          - task_id
+          - stream_id
+          - highest_contiguous_acked_sequence
+          - staged_digest
+          - protocol_session_id
+        stale_or_foreign: reject
+      cancellation:
+        states: [requested, acknowledged, grace_expired, killed, terminal]
+        output_after_ack: reject
+  atomicity:
+    const:
+      units:
+        batch: schema-and-shape-validation
+        atomic_output_group: indivisible-stream-output
+        dependency_group: indivisible-adoption-and-rollback
+        snapshot_draft: unpublished-task-result
+      dependency_group_contains: one-or-more-atomic-output-groups
+      hard_reference_rule: staged-cross-group-targets-require-same-dependency-group
+      group_states: [created, streaming, sealed, validating, adopted, rejected, rolled_back]
+      adoption_preconditions:
+        - all-batches-sealed
+        - batch-digests-valid
+        - hard-references-resolved-in-base-or-group
+        - coverage-balanced
+        - unresolved-accounted
+        - closure-candidates-independently-validated
+      partial_adoption:
+        declaration_time: open-task
+        boundary: dependency-group-only
+        implicit: forbidden
+      publication: issue-63-snapshot-transaction-only
+  planning:
+    const:
+      inputs:
+        - required-relations
+        - provided-relations
+        - explicit-task-dependencies
+        - input-stage
+        - output-stage
+      stage_order: [observation, assertion, canonical_claim, derived_claim]
+      canonical_ready_order:
+        - output-stage
+        - provider-id
+        - provider-version
+        - provider-binary-digest
+        - task-id
+      cycle: reject
+      fixed_point:
+        NG0: reject
+        NG1_requires:
+          - monotone-lattice-id
+          - join-operator-id
+          - convergence-predicate-id
+          - max-iterations
+          - execution-budget
+  failures:
+    const:
+      terminal_reasons:
+        - provider.timeout
+        - provider.cancelled
+        - provider.output-limit
+        - provider.crash
+        - provider.malformed-frame
+        - provider.checksum-mismatch
+        - provider.truncated-stream
+        - provider.schema-invalid
+        - provider.hard-reference-missing
+        - provider.coverage-incomplete
+      current_dependency_group: rollback
+      unsealed_groups: rollback
+      prior_adopted_groups: retain-only-if-predeclared-partial-policy
+      prior_published_snapshot: immutable
+      coverage_and_unresolved: required-for-non-success-terminal
+  reuse_and_invalidation:
+    const:
+      exact_key_fields:
+        - provider-id
+        - provider-version
+        - provider-semantic-contract-digest
+        - provider-binary-digest
+        - protocol-major
+        - relation-descriptor-digests
+        - input-partition-digests
+        - condition-universe
+        - interpretation
+        - model-assumption-pack
+      semantic_contract_change: invalidate
+      binary_digest_change: invalidate
+      same_version_rebuild_equivalence: forbidden-without-issue-65-certification
+  execution_surfaces:
+    const:
+      in_process:
+        trust: product-linked-only
+        wire_bytes_required: false
+        logical_stream_state_machine: required
+      out_of_process:
+        wire_bytes_required: true
+        process-isolation: required
+      semantic_contract: identical
+      validator_bypass: forbidden
+  fuzzing:
+    const:
+      corpus: schemas/cxxlens_ng_provider_fuzz_corpus.yaml
+      parser_outcomes: [accepted, stable-rejection]
+      crash_hang_unbounded_allocation: forbidden
+      license_review: docs/design/adr/0010-provider-wire-streaming-atomicity.md#license-review
+  backend_authority:
+    const:
+      implementation: tools/quality/check_ng_provider_protocol.py
+      surfaces: [in_process, out_of_process]
+      orders: [forward, reverse, seeded-shuffle]
+      equality: semantic-task-result
+      conformance_vectors: schemas/cxxlens_ng_provider_conformance_vectors.yaml

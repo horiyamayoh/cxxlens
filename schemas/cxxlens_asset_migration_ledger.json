@@ -1,5 +1,5 @@
 {
-  "asset_count": 605,
+  "asset_count": 616,
   "assets": [
     {
       "authority": "operational",
@@ -916,6 +916,16 @@
       "disposition": "inherit",
       "owner": "steward.ng-authority",
       "path": "docs/design/adr/0009-snapshot-identity-publication-series.md",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-provider-protocol",
+      "path": "docs/design/adr/0010-provider-wire-streaming-atomicity.md",
       "profile": "NG0",
       "removal_issue": null,
       "replacement": null,
@@ -2664,8 +2674,88 @@
     {
       "authority": "normative",
       "disposition": "inherit",
-      "owner": "steward.ng-catalogs",
+      "owner": "steward.ng-provider-protocol",
+      "path": "schemas/cxxlens_ng_provider_conformance_report.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-provider-protocol",
+      "path": "schemas/cxxlens_ng_provider_conformance_vectors.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-provider-protocol",
+      "path": "schemas/cxxlens_ng_provider_conformance_vectors.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-provider-protocol",
+      "path": "schemas/cxxlens_ng_provider_fuzz_corpus.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-provider-protocol",
+      "path": "schemas/cxxlens_ng_provider_fuzz_corpus.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-provider-protocol",
+      "path": "schemas/cxxlens_ng_provider_manifest.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-provider-protocol",
+      "path": "schemas/cxxlens_ng_provider_protocol.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-provider-protocol",
       "path": "schemas/cxxlens_ng_provider_protocol.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-provider-protocol",
+      "path": "schemas/cxxlens_ng_provider_task.schema.yaml",
       "profile": "NG0",
       "removal_issue": null,
       "replacement": null,
@@ -5014,6 +5104,16 @@
     {
       "authority": "implementation",
       "disposition": "inherit",
+      "owner": "steward.ng-provider-protocol",
+      "path": "tests/quality/test_ng_provider_protocol.py",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
       "owner": "steward.ng-query",
       "path": "tests/quality/test_ng_query_contract.py",
       "profile": "NG0",
@@ -5774,6 +5874,16 @@
     {
       "authority": "implementation",
       "disposition": "inherit",
+      "owner": "steward.ng-provider-protocol",
+      "path": "tools/quality/check_ng_provider_protocol.py",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
       "owner": "steward.ng-query",
       "path": "tools/quality/check_ng_query_contract.py",
       "profile": "NG0",
@@ -6055,7 +6165,7 @@
   "classifications": {
     "archive": 37,
     "delete": 22,
-    "inherit": 92,
+    "inherit": 103,
     "migrate": 388,
     "replace": 66
   },
@@ -6063,5 +6173,5 @@
   "generated_by": "tools/quality/check_documentation_consistency.py",
   "schema": "cxxlens.asset-migration-ledger.v1",
   "source_policy": "schemas/cxxlens_asset_migration_policy.yaml",
-  "source_policy_digest": "sha256:3f19bce3c2fa84198af4222c97f094cd4454cda0bae45c9ebc597cd79a15c3dc"
+  "source_policy_digest": "sha256:2b4b32a55d88eaa0c60e9386b17c7cbbbee700c6beed3b721cec7ffdbe3141a6"
 }

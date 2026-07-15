@@ -626,7 +626,7 @@ def validate_design(root: pathlib.Path) -> None:
         encoding="utf-8"
     )
     required = (
-        "0.8.0-normative",
+        "0.9.0-normative",
         "schemas/cxxlens_ng_relation_registry.yaml",
         "envelope-presence-only",
         "cc.call_direct_target",

@@ -10,7 +10,7 @@
 | Logical Query Contract | `schemas/cxxlens_ng_logical_query_contract.yaml` | #61 | accepted exact contract |
 | Semantic Guarantee Contract | `schemas/cxxlens_ng_semantic_guarantee_contract.yaml` | #62 | accepted exact contract |
 | Snapshot / Store Contract | `schemas/cxxlens_ng_snapshot_store_contract.yaml` | #63 | accepted exact contract |
-| Provider Protocol | `schemas/cxxlens_ng_provider_protocol.yaml` | #58 → #64 | bootstrap |
+| Provider Protocol | `schemas/cxxlens_ng_provider_protocol.yaml` | #64 | accepted exact contract |
 | Public C++ API Catalog | `schemas/cxxlens_ng_public_api_catalog.yaml` | #58 → #66 | bootstrap |
 | Acceptance Manifest | `schemas/cxxlens_ng_acceptance_manifest.yaml` | #58 → #71 | bootstrap |
 | Security Profile | `schemas/cxxlens_ng_security_profile.yaml` | #58 → #65 | bootstrap |
@@ -43,6 +43,11 @@ Snapshot / Store Contract は Issue #63 により full SHA-256 と versioned bin
 snapshot identity DAG、tagged producer input basis、exact publication series selector、copy-on-write compaction、
 format migration、corruption recovery を固定しています。catalog-only `current` と prior publication への silent
 fallback は禁止されます。
+
+Provider Protocol は Issue #64 により 104 byte fixed header、deterministic CBOR control、binary column
+chunk、credit/ACK/resume、batch / atomic output group / dependency group の不可分性、deterministic task DAG、
+structured terminal failure を固定しています。全 output の memory vector 化、cycle/fixed point の silent
+ordering、undeclared partial adoption、adjacent version/provider への silent fallback は禁止されます。
 
 残る `maturity: bootstrap` catalog は名前空間、version axis、owner issue、依存関係の入口だけを固定します。
 entry の `status: contract-pending` は実装、stable API、release support を意味しません。各 owner issue が exact

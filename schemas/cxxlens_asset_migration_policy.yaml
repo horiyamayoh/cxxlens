@@ -236,6 +236,15 @@ overrides:
     record: *accepted_adr
   - path: docs/design/adr/0009-snapshot-identity-publication-series.md
     record: *accepted_adr
+  - path: docs/design/adr/0010-provider-wire-streaming-atomicity.md
+    record: &ng_provider_contract
+      disposition: inherit
+      status: active
+      owner: steward.ng-provider-protocol
+      profile: NG0
+      authority: normative
+      replacement: null
+      removal_issue: null
   - path: docs/design/SHA256SUMS
     record:
       disposition: inherit
@@ -417,7 +426,23 @@ overrides:
   - path: schemas/cxxlens_ng_store_conformance_report.schema.yaml
     record: *ng_store_contract
   - path: schemas/cxxlens_ng_provider_protocol.yaml
-    record: *ng_catalog
+    record: *ng_provider_contract
+  - path: schemas/cxxlens_ng_provider_protocol.schema.yaml
+    record: *ng_provider_contract
+  - path: schemas/cxxlens_ng_provider_manifest.schema.yaml
+    record: *ng_provider_contract
+  - path: schemas/cxxlens_ng_provider_task.schema.yaml
+    record: *ng_provider_contract
+  - path: schemas/cxxlens_ng_provider_conformance_vectors.yaml
+    record: *ng_provider_contract
+  - path: schemas/cxxlens_ng_provider_conformance_vectors.schema.yaml
+    record: *ng_provider_contract
+  - path: schemas/cxxlens_ng_provider_conformance_report.schema.yaml
+    record: *ng_provider_contract
+  - path: schemas/cxxlens_ng_provider_fuzz_corpus.yaml
+    record: *ng_provider_contract
+  - path: schemas/cxxlens_ng_provider_fuzz_corpus.schema.yaml
+    record: *ng_provider_contract
   - path: schemas/cxxlens_ng_public_api_catalog.yaml
     record: *ng_catalog
   - path: schemas/cxxlens_ng_acceptance_manifest.yaml
@@ -559,6 +584,17 @@ overrides:
       removal_issue: null
   - path: tests/quality/test_ng_snapshot_store_contract.py
     record: *ng_store_tooling
+  - path: tools/quality/check_ng_provider_protocol.py
+    record: &ng_provider_tooling
+      disposition: inherit
+      status: active
+      owner: steward.ng-provider-protocol
+      profile: NG0
+      authority: implementation
+      replacement: null
+      removal_issue: null
+  - path: tests/quality/test_ng_provider_protocol.py
+    record: *ng_provider_tooling
 
 drift:
   active_markdown:
@@ -578,6 +614,7 @@ drift:
     - docs/design/adr/0007-logical-query-algebra.md
     - docs/design/adr/0008-truth-guarantee-provenance-algebra.md
     - docs/design/adr/0009-snapshot-identity-publication-series.md
+    - docs/design/adr/0010-provider-wire-streaming-atomicity.md
     - docs/design/adr/README.md
     - docs/design/catalogs/README.md
     - docs/design/cxxlens_next_generation_integrated_design_ja.md

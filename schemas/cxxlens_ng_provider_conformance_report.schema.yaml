@@ -1,0 +1,42 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.provider-conformance-report.v1
+type: object
+additionalProperties: false
+required: [schema, contract_digest, vector_results, fuzz, surface_matrix, status]
+properties:
+  schema: {const: cxxlens.provider-conformance-report.v1}
+  contract_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  vector_results:
+    type: array
+    minItems: 34
+    maxItems: 34
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, decision, reason_code, matched]
+      properties:
+        id: {type: string, pattern: '^[a-z][a-z0-9_.-]+$'}
+        decision: {enum: [accepted, rejected]}
+        reason_code: {type: string, pattern: '^provider\.[a-z0-9_.-]+$'}
+        value: {}
+        matched: {const: true}
+  fuzz:
+    type: object
+    additionalProperties: false
+    required: [cases, stable_rejections, crashes, hangs, unbounded_allocations]
+    properties:
+      cases: {type: integer, minimum: 1}
+      stable_rejections: {type: integer, minimum: 1}
+      crashes: {const: 0}
+      hangs: {const: 0}
+      unbounded_allocations: {const: 0}
+  surface_matrix:
+    type: object
+    additionalProperties: false
+    required: [surfaces, orders, comparisons, all_equal]
+    properties:
+      surfaces: {const: [in_process, out_of_process]}
+      orders: {const: [forward, reverse, seeded-shuffle]}
+      comparisons: {const: 6}
+      all_equal: {const: true}
+  status: {const: green}

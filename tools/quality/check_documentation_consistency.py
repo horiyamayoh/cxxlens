@@ -27,6 +27,9 @@ CATALOG_SCHEMA = pathlib.Path("schemas/cxxlens_ng_catalog_bootstrap.schema.yaml"
 RELATION_REGISTRY_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_relation_registry.schema.yaml"
 )
+PROVIDER_PROTOCOL_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_provider_protocol.schema.yaml"
+)
 CATALOGS = {
     "relation-registry": pathlib.Path("schemas/cxxlens_ng_relation_registry.yaml"),
     "provider-protocol": pathlib.Path("schemas/cxxlens_ng_provider_protocol.yaml"),
@@ -252,21 +255,37 @@ def validate_archives_and_redirects(root: pathlib.Path, ledger: dict[str, Any]) 
 def validate_catalogs(root: pathlib.Path) -> None:
     bootstrap_schema = load_yaml(root / CATALOG_SCHEMA)
     relation_schema = load_yaml(root / RELATION_REGISTRY_SCHEMA)
+    provider_schema = load_yaml(root / PROVIDER_PROTOCOL_SCHEMA)
     index = (root / "docs/design/catalogs/README.md").read_text(encoding="utf-8")
     for expected_kind, relative in CATALOGS.items():
         document = load_yaml(root / relative)
-        schema = relation_schema if expected_kind == "relation-registry" else bootstrap_schema
+        schema = {
+            "relation-registry": relation_schema,
+            "provider-protocol": provider_schema,
+        }.get(expected_kind, bootstrap_schema)
         validate_schema(document, schema, f"NG {expected_kind}")
-        expected_maturity = "accepted" if expected_kind == "relation-registry" else "bootstrap"
-        if document["kind"] != expected_kind or document["maturity"] != expected_maturity:
+        expected_maturity = (
+            "accepted"
+            if expected_kind in {"relation-registry", "provider-protocol"}
+            else "bootstrap"
+        )
+        if document["maturity"] != expected_maturity:
             fail(f"NG catalog state differs: {relative}")
         if relative.as_posix() not in index:
             fail(f"NG catalog index does not reference {relative}")
         if expected_kind == "relation-registry":
+            if document["kind"] != expected_kind:
+                fail(f"NG catalog kind differs: {relative}")
             entries = {entry["name"]: entry for entry in document["relations"]}
             if len(entries) != len(document["relations"]):
                 fail(f"NG relation registry has duplicate relation names: {relative}")
+        elif expected_kind == "provider-protocol":
+            if document["schema"] != "cxxlens.provider-protocol.v1":
+                fail(f"NG provider protocol schema differs: {relative}")
+            entries = {}
         else:
+            if document["kind"] != expected_kind:
+                fail(f"NG catalog kind differs: {relative}")
             entries = {entry["id"]: entry for entry in document["entries"]}
             if len(entries) != len(document["entries"]):
                 fail(f"NG catalog has duplicate entry IDs: {relative}")
@@ -274,7 +293,7 @@ def validate_catalogs(root: pathlib.Path) -> None:
                 missing = sorted(set(entry.get("depends_on", [])) - set(entries))
                 if missing:
                     fail(f"NG catalog has missing dependencies: {relative}: {missing}")
-        for replacement in document["replaces"]:
+        for replacement in document.get("replaces", []):
             if not (root / replacement).exists():
                 fail(f"NG catalog replacement source is missing: {relative}: {replacement}")
 

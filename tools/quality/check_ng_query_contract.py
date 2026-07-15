@@ -1027,7 +1027,7 @@ def validate_design(root: pathlib.Path) -> None:
         encoding="utf-8"
     )
     for marker in (
-        "0.8.0-normative",
+        "0.9.0-normative",
         "schemas/cxxlens_ng_logical_query_contract.yaml",
         "annotated multiset",
         "query.limit.v1",

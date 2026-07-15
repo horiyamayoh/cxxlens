@@ -1,0 +1,21 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.provider-fuzz-corpus.v1
+type: object
+additionalProperties: false
+required: [schema, document_version, authority, cases]
+properties:
+  schema: {const: cxxlens.provider-fuzz-corpus.v1}
+  document_version: {type: string}
+  authority: {type: object, required: [owner_issue, decision_adr]}
+  cases:
+    type: array
+    minItems: 12
+    maxItems: 12
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, mutation, expected_reason]
+      properties:
+        id: {type: string, pattern: '^[a-z][a-z0-9_.-]+$'}
+        mutation: {type: string, minLength: 1}
+        expected_reason: {type: string, pattern: '^provider\.[a-z0-9_.-]+$'}

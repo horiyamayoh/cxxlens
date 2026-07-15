@@ -1,0 +1,32 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.provider-conformance-vectors.v1
+type: object
+additionalProperties: false
+required: [schema, document_version, authority, contract, vectors]
+properties:
+  schema: {const: cxxlens.provider-conformance-vectors.v1}
+  document_version: {type: string}
+  authority: {type: object, required: [owner_issue, decision_adr]}
+  contract: {const: schemas/cxxlens_ng_provider_protocol.yaml}
+  vectors:
+    type: array
+    minItems: 34
+    maxItems: 34
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, class, operation, input, expected]
+      properties:
+        id: {type: string, pattern: '^[a-z][a-z0-9_.-]+$'}
+        class: {enum: [positive, negative]}
+        operation:
+          enum: [wire, negotiate, flow, resume, group, plan, failure, reuse, surface_parity, fuzz]
+        input: {type: object, additionalProperties: true}
+        expected:
+          type: object
+          additionalProperties: false
+          required: [decision, reason_code]
+          properties:
+            decision: {enum: [accepted, rejected]}
+            reason_code: {type: string, pattern: '^provider\.[a-z0-9_.-]+$'}
+            value: {}

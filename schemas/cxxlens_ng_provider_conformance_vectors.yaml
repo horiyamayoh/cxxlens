@@ -1,0 +1,354 @@
+schema: cxxlens.provider-conformance-vectors.v1
+document_version: 1.0.0
+authority:
+  owner_issue: '#64'
+  decision_adr: docs/design/adr/0010-provider-wire-streaming-atomicity.md
+contract: schemas/cxxlens_ng_provider_protocol.yaml
+vectors:
+  - id: wire-round-trip
+    class: positive
+    operation: wire
+    input:
+      action: round_trip
+      message_type: 1
+      flags: 0
+      stream_id: 7
+      sequence: 0
+      control: {provider_id: provider.cc.clang22, features: [streaming, credit]}
+      payload_hex: '01020304'
+    expected: {decision: accepted, reason_code: provider.wire-valid}
+  - id: wire-truncated-header
+    class: negative
+    operation: wire
+    input: {action: mutate, mutation: truncate-fixed-header}
+    expected: {decision: rejected, reason_code: provider.truncated-stream}
+  - id: wire-oversized-payload
+    class: negative
+    operation: wire
+    input: {action: mutate, mutation: oversized-payload-length}
+    expected: {decision: rejected, reason_code: provider.output-limit}
+  - id: wire-payload-checksum
+    class: negative
+    operation: wire
+    input: {action: mutate, mutation: corrupt-payload-checksum}
+    expected: {decision: rejected, reason_code: provider.checksum-mismatch}
+  - id: wire-noncanonical-cbor
+    class: negative
+    operation: wire
+    input: {action: mutate, mutation: noncanonical-cbor-integer}
+    expected: {decision: rejected, reason_code: provider.malformed-frame}
+  - id: wire-unknown-optional
+    class: positive
+    operation: wire
+    input: {action: unknown_message, message_type: 65000, flags: 2}
+    expected:
+      decision: accepted
+      reason_code: provider.wire-valid
+      value: {skipped_optional: true}
+  - id: wire-unknown-required
+    class: negative
+    operation: wire
+    input: {action: unknown_message, message_type: 65000, flags: 1}
+    expected: {decision: rejected, reason_code: provider.required-feature-missing}
+  - id: negotiate-exact
+    class: positive
+    operation: negotiate
+    input: &negotiation
+      host: {major: 1, minor: 2, features: [streaming, credit, resume]}
+      requested:
+        provider_id: provider.cc.clang22
+        provider_version: 1.0.0
+        binary_digest: &digest_a sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      offered:
+        provider_id: provider.cc.clang22
+        provider_version: 1.0.0
+        binary_digest: *digest_a
+        semantic_contract_digest: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+        protocol: {major: 1, minimum_minor: 0, maximum_minor: 3}
+        required_features: [streaming, credit]
+        optional_features: [resume]
+    expected:
+      decision: accepted
+      reason_code: provider.negotiate-valid
+      value: {major: 1, minor: 2, features: [credit, resume, streaming]}
+  - id: negotiate-major-mismatch
+    class: negative
+    operation: negotiate
+    input:
+      <<: *negotiation
+      host: {major: 2, minor: 0, features: [streaming, credit]}
+    expected: {decision: rejected, reason_code: provider.protocol-major-mismatch}
+  - id: negotiate-required-feature-missing
+    class: negative
+    operation: negotiate
+    input:
+      <<: *negotiation
+      host: {major: 1, minor: 2, features: [streaming]}
+    expected: {decision: rejected, reason_code: provider.required-feature-missing}
+  - id: negotiate-binary-mismatch
+    class: negative
+    operation: negotiate
+    input:
+      <<: *negotiation
+      requested:
+        provider_id: provider.cc.clang22
+        provider_version: 1.0.0
+        binary_digest: sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    expected: {decision: rejected, reason_code: provider.binary-identity-mismatch}
+  - id: flow-credit-and-ack
+    class: positive
+    operation: flow
+    input:
+      stream_id: 7
+      staged_digest: *digest_a
+      credit: {bytes: 100, frames: 3}
+      frames:
+        - {sequence: 0, bytes: 20}
+        - {sequence: 1, bytes: 30}
+        - {sequence: 2, bytes: 40}
+      ack: {stream_id: 7, highest_contiguous_sequence: 2, staged_digest: *digest_a, return_bytes: 90, return_frames: 3}
+    expected:
+      decision: accepted
+      reason_code: provider.flow-valid
+      value: {highest_contiguous_sequence: 2, remaining_bytes: 100, remaining_frames: 3}
+  - id: flow-credit-exceeded
+    class: negative
+    operation: flow
+    input:
+      stream_id: 7
+      staged_digest: *digest_a
+      credit: {bytes: 50, frames: 2}
+      frames: [{sequence: 0, bytes: 51}]
+      ack: {stream_id: 7, highest_contiguous_sequence: 0, staged_digest: *digest_a, return_bytes: 0, return_frames: 0}
+    expected: {decision: rejected, reason_code: provider.credit-exceeded}
+  - id: flow-sequence-gap
+    class: negative
+    operation: flow
+    input:
+      stream_id: 7
+      staged_digest: *digest_a
+      credit: {bytes: 100, frames: 2}
+      frames: [{sequence: 1, bytes: 10}]
+      ack: {stream_id: 7, highest_contiguous_sequence: 1, staged_digest: *digest_a, return_bytes: 0, return_frames: 0}
+    expected: {decision: rejected, reason_code: provider.sequence-gap}
+  - id: resume-exact-token
+    class: positive
+    operation: resume
+    input:
+      expected: &resume
+        task_id: task-1
+        stream_id: 7
+        highest_contiguous_acked_sequence: 8
+        staged_digest: *digest_a
+        protocol_session_id: session-1
+      offered: *resume
+    expected:
+      decision: accepted
+      reason_code: provider.resume-valid
+      value: 9
+  - id: resume-foreign-session
+    class: negative
+    operation: resume
+    input:
+      expected: *resume
+      offered:
+        <<: *resume
+        protocol_session_id: session-other
+    expected: {decision: rejected, reason_code: provider.resume-token-stale}
+  - id: group-complete-adoption
+    class: positive
+    operation: group
+    input:
+      partial_policy: forbid
+      groups:
+        - id: dependency-1
+          state: sealed
+          atomic_groups: [output-a, output-b]
+          batches_sealed: true
+          digests_valid: true
+          coverage_balanced: true
+          unresolved_accounted: true
+          closures_valid: true
+          hard_references: [{source: output-b, target: output-a}]
+    expected:
+      decision: accepted
+      reason_code: provider.group-valid
+      value: {adopted: [dependency-1], rolled_back: [], prior_snapshot: unchanged}
+  - id: group-unsealed-rejected
+    class: negative
+    operation: group
+    input:
+      partial_policy: forbid
+      groups:
+        - id: dependency-1
+          state: streaming
+          atomic_groups: [output-a]
+          batches_sealed: false
+          digests_valid: true
+          coverage_balanced: true
+          unresolved_accounted: true
+          closures_valid: true
+          hard_references: []
+    expected: {decision: rejected, reason_code: provider.group-not-sealed}
+  - id: group-cross-dependency-hard-reference
+    class: negative
+    operation: group
+    input:
+      partial_policy: declared_dependency_groups
+      groups:
+        - {id: dependency-1, state: sealed, atomic_groups: [output-a], batches_sealed: true, digests_valid: true, coverage_balanced: true, unresolved_accounted: true, closures_valid: true, hard_references: [{source: output-a, target: output-b}]}
+        - {id: dependency-2, state: sealed, atomic_groups: [output-b], batches_sealed: true, digests_valid: true, coverage_balanced: true, unresolved_accounted: true, closures_valid: true, hard_references: []}
+    expected: {decision: rejected, reason_code: provider.hard-reference-group-mismatch}
+  - id: group-declared-partial-failure
+    class: positive
+    operation: group
+    input:
+      partial_policy: declared_dependency_groups
+      fail_group: dependency-2
+      groups:
+        - {id: dependency-1, state: sealed, atomic_groups: [output-a], batches_sealed: true, digests_valid: true, coverage_balanced: true, unresolved_accounted: true, closures_valid: true, hard_references: []}
+        - {id: dependency-2, state: streaming, atomic_groups: [output-b], batches_sealed: false, digests_valid: true, coverage_balanced: false, unresolved_accounted: true, closures_valid: true, hard_references: []}
+    expected:
+      decision: accepted
+      reason_code: provider.group-partial-valid
+      value: {adopted: [dependency-1], rolled_back: [dependency-2], prior_snapshot: unchanged}
+  - id: group-implicit-partial-forbidden
+    class: positive
+    operation: group
+    input:
+      partial_policy: forbid
+      fail_group: dependency-2
+      groups:
+        - {id: dependency-1, state: sealed, atomic_groups: [output-a], batches_sealed: true, digests_valid: true, coverage_balanced: true, unresolved_accounted: true, closures_valid: true, hard_references: []}
+        - {id: dependency-2, state: streaming, atomic_groups: [output-b], batches_sealed: false, digests_valid: true, coverage_balanced: false, unresolved_accounted: true, closures_valid: true, hard_references: []}
+    expected:
+      decision: accepted
+      reason_code: provider.group-rollback-valid
+      value: {adopted: [], rolled_back: [dependency-1, dependency-2], prior_snapshot: unchanged}
+  - id: plan-deterministic-dag
+    class: positive
+    operation: plan
+    input:
+      profile: NG0
+      tasks:
+        - {id: derive, provider_id: provider.derive, provider_version: 1.0.0, binary_digest: *digest_a, input_stage: canonical_claim, output_stage: derived_claim, depends_on: [normalize]}
+        - {id: observe, provider_id: provider.frontend, provider_version: 1.0.0, binary_digest: *digest_a, input_stage: observation, output_stage: assertion, depends_on: []}
+        - {id: normalize, provider_id: provider.normalize, provider_version: 1.0.0, binary_digest: *digest_a, input_stage: assertion, output_stage: canonical_claim, depends_on: [observe]}
+    expected:
+      decision: accepted
+      reason_code: provider.plan-valid
+      value: [observe, normalize, derive]
+  - id: plan-cycle-rejected
+    class: negative
+    operation: plan
+    input:
+      profile: NG0
+      tasks:
+        - {id: a, provider_id: p.a, provider_version: 1.0.0, binary_digest: *digest_a, input_stage: canonical_claim, output_stage: derived_claim, depends_on: [b]}
+        - {id: b, provider_id: p.b, provider_version: 1.0.0, binary_digest: *digest_a, input_stage: canonical_claim, output_stage: derived_claim, depends_on: [a]}
+    expected: {decision: rejected, reason_code: provider.dependency-cycle}
+  - id: plan-ng0-fixed-point-rejected
+    class: negative
+    operation: plan
+    input:
+      profile: NG0
+      fixed_point_contract: {monotone_lattice_id: lattice-1, join_operator_id: join-1, convergence_predicate_id: converge-1, max_iterations: 10, execution_budget: budget-1}
+      tasks:
+        - {id: a, provider_id: p.a, provider_version: 1.0.0, binary_digest: *digest_a, input_stage: canonical_claim, output_stage: derived_claim, depends_on: [a]}
+    expected: {decision: rejected, reason_code: provider.fixed-point-unsupported}
+  - id: plan-ng1-fixed-point-explicit
+    class: positive
+    operation: plan
+    input:
+      profile: NG1
+      fixed_point_contract: {monotone_lattice_id: lattice-1, join_operator_id: join-1, convergence_predicate_id: converge-1, max_iterations: 10, execution_budget: budget-1}
+      tasks:
+        - {id: a, provider_id: p.a, provider_version: 1.0.0, binary_digest: *digest_a, input_stage: canonical_claim, output_stage: derived_claim, depends_on: [a]}
+    expected:
+      decision: accepted
+      reason_code: provider.plan-fixed-point-valid
+      value: [fixed-point:a]
+  - id: plan-stage-regression
+    class: negative
+    operation: plan
+    input:
+      profile: NG0
+      tasks:
+        - {id: bad, provider_id: p.bad, provider_version: 1.0.0, binary_digest: *digest_a, input_stage: derived_claim, output_stage: assertion, depends_on: []}
+    expected: {decision: rejected, reason_code: provider.stage-regression}
+  - id: reuse-exact-key
+    class: positive
+    operation: reuse
+    input:
+      stored: &reuse
+        provider_id: provider.cc.clang22
+        provider_version: 1.0.0
+        semantic_contract_digest: *digest_a
+        binary_digest: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+        protocol_major: 1
+        relation_descriptor_digests: [relation-a]
+        input_partition_digests: [partition-a]
+        condition_universe: universe-1
+        interpretation: cc.canonical-1
+        model_assumption_pack: empty
+      requested: *reuse
+    expected:
+      decision: accepted
+      reason_code: provider.reuse-valid
+      value: reusable
+  - id: reuse-binary-change
+    class: negative
+    operation: reuse
+    input:
+      stored: *reuse
+      requested:
+        <<: *reuse
+        binary_digest: sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    expected: {decision: rejected, reason_code: provider.reuse-binary-mismatch}
+  - id: reuse-semantic-change
+    class: negative
+    operation: reuse
+    input:
+      stored: *reuse
+      requested:
+        <<: *reuse
+        semantic_contract_digest: sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    expected: {decision: rejected, reason_code: provider.reuse-semantic-mismatch}
+  - id: failure-timeout-isolated
+    class: positive
+    operation: failure
+    input: {reason: provider.timeout, coverage_accounted: true, unresolved_accounted: true, current_group: dependency-2, adopted_groups: [dependency-1], partial_policy: declared_dependency_groups}
+    expected:
+      decision: accepted
+      reason_code: provider.failure-valid
+      value: {terminal: provider.timeout, retained: [dependency-1], rolled_back: [dependency-2], prior_snapshot: unchanged}
+  - id: failure-output-limit-isolated
+    class: positive
+    operation: failure
+    input: {reason: provider.output-limit, coverage_accounted: true, unresolved_accounted: true, current_group: dependency-1, adopted_groups: [], partial_policy: forbid}
+    expected:
+      decision: accepted
+      reason_code: provider.failure-valid
+      value: {terminal: provider.output-limit, retained: [], rolled_back: [dependency-1], prior_snapshot: unchanged}
+  - id: failure-crash-missing-coverage
+    class: negative
+    operation: failure
+    input: {reason: provider.crash, coverage_accounted: false, unresolved_accounted: true, current_group: dependency-1, adopted_groups: [], partial_policy: forbid}
+    expected: {decision: rejected, reason_code: provider.failure-accounting-missing}
+  - id: in-out-process-semantic-parity
+    class: positive
+    operation: surface_parity
+    input:
+      rows:
+        - {relation: cc.entity.v1, key: entity-2, content: content-2}
+        - {relation: cc.entity.v1, key: entity-1, content: content-1}
+      coverage: [covered:unit-1, covered:unit-2]
+    expected: {decision: accepted, reason_code: provider.surface_parity-valid}
+  - id: fuzz-corpus-stable-rejection
+    class: positive
+    operation: fuzz
+    input: {corpus: schemas/cxxlens_ng_provider_fuzz_corpus.yaml}
+    expected:
+      decision: accepted
+      reason_code: provider.fuzz-valid
+      value: {cases: 12, stable_rejections: 12, crashes: 0, hangs: 0, unbounded_allocations: 0}
