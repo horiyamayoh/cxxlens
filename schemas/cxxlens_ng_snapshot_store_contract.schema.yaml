@@ -1,0 +1,99 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.snapshot-store-contract.v1
+type: object
+additionalProperties: false
+required:
+  - schema
+  - document_version
+  - maturity
+  - authority
+  - compatibility
+  - canonical_encoding
+  - canonical_vectors
+  - identity_graph
+  - claim_input_basis
+  - partition
+  - closure
+  - snapshot
+  - publication_series
+  - publication_transaction
+  - reader_pin
+  - compaction
+  - format_compatibility
+  - corruption
+  - backend_authority
+properties:
+  schema: {const: cxxlens.snapshot-store-contract.v1}
+  document_version: {$ref: '#/$defs/version'}
+  maturity: {const: accepted}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, decision_adr, owner_issue, owner]
+    properties:
+      design:
+        const: docs/design/cxxlens_next_generation_integrated_design_ja.md#15-immutable-snapshot-and-store
+      decision_adr:
+        const: docs/design/adr/0009-snapshot-identity-publication-series.md
+      owner_issue: {const: '#63'}
+      owner: {const: steward.ng-store-contract}
+  compatibility:
+    type: object
+    required:
+      - version_axis
+      - current
+      - unknown_identity_major
+      - unknown_snapshot_format_major
+      - semantic_identity_survives_format_migration
+  canonical_encoding:
+    type: object
+    required: [format, authority, serialized_identity, hash, value_types, prohibitions, collision]
+  canonical_vectors:
+    type: array
+    minItems: 2
+    items: {type: object, minProperties: 2}
+  identity_graph:
+    type: object
+    required: [roots, nodes, forbidden_edges, derived_prior_snapshot_rule]
+    properties:
+      roots: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/$defs/name'}}
+      nodes:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          additionalProperties: false
+          required: [id, domain, depends_on]
+          properties:
+            id: {$ref: '#/$defs/name'}
+            domain: {$ref: '#/$defs/name'}
+            depends_on:
+              type: array
+              minItems: 1
+              uniqueItems: true
+              items: {$ref: '#/$defs/name'}
+      forbidden_edges:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          additionalProperties: false
+          required: [from, to]
+          properties:
+            from: {$ref: '#/$defs/name'}
+            to: {$ref: '#/$defs/name'}
+      derived_prior_snapshot_rule: {const: strict-prior-generation-only}
+  claim_input_basis: {type: object, required: [field, containing_snapshot, variants]}
+  partition: {type: object, required: [identity_fields, content_fields, closure_ids_in_identity, partial_reuse_as_complete]}
+  closure: {type: object, required: [subject, identity_fields, forbidden_fields, mutation_of_any_identity_field_changes_id]}
+  snapshot: {type: object, required: [manifest_schema, identity_fields, excluded_fields, partition_projection]}
+  publication_series: {type: object, required: [selector_fields, series_id, current_api, catalog_only_lookup, missing_selector_field, cross_series_fallback, head_selection]}
+  publication_transaction: {type: object, required: [states, visible_states, commit, stale_parent, failed_publish_preserves_head, recovery]}
+  reader_pin: {type: object, required: [handle_pins, semantic_snapshot_immutable, reclamation]}
+  compaction: {type: object, required: [mode, validate_before_swap, failure_preserves_prior_generation, pinned_generation_reclamation]}
+  format_compatibility: {type: object, required: [physical_format_excluded_from_snapshot_id, direct_open, migration, migration_commit_requires_same_semantic_digest, incompatible_without_migrator]}
+  corruption: {type: object, required: [verify_on_open, corrupt_current, explicit_intact_prior_open, repair]}
+  backend_authority: {type: object, required: [implementation, backends, roots, jobs, orders, equality, conformance_vectors]}
+$defs:
+  version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+  name: {type: string, pattern: '^[a-z][a-z0-9_.-]+$'}

@@ -1,0 +1,271 @@
+schema: cxxlens.snapshot-store-contract.v1
+document_version: 1.0.0
+maturity: accepted
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md#15-immutable-snapshot-and-store
+  decision_adr: docs/design/adr/0009-snapshot-identity-publication-series.md
+  owner_issue: '#63'
+  owner: steward.ng-store-contract
+compatibility:
+  version_axis: snapshot-identity-and-publication
+  current: 1.0.0
+  unknown_identity_major: reject
+  unknown_snapshot_format_major: migrate-or-reject
+  semantic_identity_survives_format_migration: true
+canonical_encoding:
+  format: cxxlens-canonical-tuple-v1
+  authority: versioned-length-prefixed-binary
+  serialized_identity: "{identity-kind}:sha256:{64-lowercase-hex}"
+  hash:
+    algorithm: sha256
+    digest_bits: 256
+    truncation: forbidden
+    domain_prefix: "cxxlens\\0{identity-kind}\\0v1\\0"
+    algorithm_change: identity-contract-major
+  value_types:
+    - null
+    - boolean
+    - signed-integer
+    - bytes
+    - utf8-string
+    - ordered-tuple
+    - schema-ordered-record
+    - sorted-unique-set
+    - sorted-map
+  prohibitions:
+    - json-text-as-identity-authority
+    - locale-formatting
+    - unordered-iteration
+    - absolute-root
+    - timestamp
+    - task-order
+    - backend-layout
+  collision:
+    verify_full_digest: true
+    compare_canonical_bytes_on_duplicate: true
+    mismatch: quarantine-candidate-and-preserve-existing
+    reason_code: store.hash-collision
+canonical_vectors:
+  - id: primitive-boundaries-v1
+    kinds: [null, false, integer-zero, bytes-zero, text-zero, tuple-a-bc]
+    encoded_hex: '05000000000000000600000000000000010000000000000000020100000000000000000b0200000000000000000100000000000000000a03000000000000000130000000000000000a04000000000000000130000000000000002e050000000000000002000000000000000a04000000000000000161000000000000000b0400000000000000026263'
+  - id: domain-separated-digest-v1
+    domain: canonical-vector
+    values: [cxxlens, 1, true, null]
+    expected: canonical-vector:sha256:ee43d1e2b86e53b4b52e5452eec0fd6843e858cc0f0230b7f5bf7922b47dde90
+identity_graph:
+  roots:
+    - relation_descriptor_id
+    - authoritative_key_tuple
+    - authoritative_payload_tuple
+    - condition_universe_id
+    - canonical_condition
+    - interpretation_domain_id
+    - producer_semantic_contract
+    - producer_input_basis_digest
+    - coverage_units
+    - partition_scope
+    - precision_profile
+    - assumption_set_id
+    - catalog_semantic_digest
+    - relation_registry_digest
+    - interpretation_policy_digest
+    - closure_kind
+    - key_domain_digest
+    - evidence_digest
+  nodes:
+    - id: semantic_key_id
+      domain: semantic-key
+      depends_on:
+        - relation_descriptor_id
+        - authoritative_key_tuple
+    - id: assertion_id
+      domain: assertion
+      depends_on:
+        - semantic_key_id
+        - condition_universe_id
+        - canonical_condition
+        - interpretation_domain_id
+        - producer_semantic_contract
+    - id: claim_content_digest
+      domain: claim-content
+      depends_on:
+        - assertion_id
+        - authoritative_payload_tuple
+    - id: coverage_digest
+      domain: coverage
+      depends_on:
+        - coverage_units
+    - id: partition_id
+      domain: partition
+      depends_on:
+        - relation_descriptor_id
+        - partition_scope
+        - canonical_condition
+        - interpretation_domain_id
+        - producer_semantic_contract
+        - producer_input_basis_digest
+        - precision_profile
+        - assumption_set_id
+    - id: claim_set_digest
+      domain: claim-set
+      depends_on:
+        - claim_content_digest
+    - id: partition_content_digest
+      domain: partition-content
+      depends_on:
+        - partition_id
+        - claim_set_digest
+        - coverage_digest
+    - id: closure_certificate_id
+      domain: closure-certificate
+      depends_on:
+        - relation_descriptor_id
+        - partition_id
+        - partition_content_digest
+        - coverage_digest
+        - key_domain_digest
+        - canonical_condition
+        - interpretation_domain_id
+        - assumption_set_id
+        - closure_kind
+        - producer_semantic_contract
+        - evidence_digest
+    - id: snapshot_id
+      domain: snapshot
+      depends_on:
+        - catalog_semantic_digest
+        - condition_universe_id
+        - relation_registry_digest
+        - interpretation_policy_digest
+        - partition_content_digest
+        - closure_certificate_id
+  forbidden_edges:
+    - {from: containing_snapshot_id, to: claim_content_digest}
+    - {from: containing_snapshot_id, to: closure_certificate_id}
+    - {from: closure_certificate_id, to: partition_content_digest}
+  derived_prior_snapshot_rule: strict-prior-generation-only
+claim_input_basis:
+  field: producer_input_basis
+  containing_snapshot: forbidden
+  variants:
+    direct:
+      required: [kind, basis_digest]
+      forbidden: [input_snapshot, consumed_partition_content_digests]
+    derived:
+      required:
+        - kind
+        - input_snapshot
+        - consumed_partition_content_digests
+        - transform_semantics
+      input_snapshot: strict-prior-published-snapshot
+      consumed_partitions: canonical-sorted-unique
+partition:
+  identity_fields:
+    - relation_descriptor_id
+    - scope
+    - condition
+    - interpretation
+    - producer_semantics
+    - producer_input_basis_digest
+    - precision_profile
+    - assumption_set_id
+  content_fields:
+    - partition_id
+    - canonical_sorted_claim_content_digests
+    - coverage_digest
+  closure_ids_in_identity: forbidden
+  partial_reuse_as_complete: forbidden
+closure:
+  subject: exact-relation-partition-content-and-coverage
+  identity_fields:
+    - relation_descriptor_id
+    - subject_partition_id
+    - partition_content_digest
+    - coverage_digest
+    - key_domain_digest
+    - condition
+    - interpretation
+    - assumption_set_id
+    - closure_kind
+    - producer_semantics
+    - evidence_digest
+  forbidden_fields: [containing_snapshot_id, input_snapshot]
+  mutation_of_any_identity_field_changes_id: true
+snapshot:
+  manifest_schema: schemas/cxxlens_ng_snapshot_manifest.schema.yaml
+  identity_fields:
+    - snapshot_semantics_version
+    - catalog_semantic_digest
+    - condition_universe_id
+    - relation_registry_digest
+    - interpretation_policy_digest
+    - canonical_sorted_partition_manifest_projections
+    - canonical_sorted_closure_certificate_ids
+  excluded_fields:
+    - absolute_root
+    - jobs
+    - task_order
+    - backend
+    - physical_format
+    - publication_sequence
+    - parent_publication
+    - created_at
+    - writer
+  partition_projection:
+    - partition_id
+    - content_digest
+    - coverage_digest
+publication_series:
+  selector_fields:
+    - catalog_id
+    - channel_id
+    - engine_generation_id
+    - condition_universe_id
+    - relation_registry_digest
+    - interpretation_policy_digest
+    - trust_policy_digest
+  series_id: hash-exact-selector
+  current_api: current(snapshot_series_selector)
+  catalog_only_lookup: forbidden
+  missing_selector_field: reject
+  cross_series_fallback: forbidden
+  head_selection: highest-committed-monotonic-sequence
+publication_transaction:
+  states: [created, staged, validating, committed, rejected, rolled_back]
+  visible_states: [committed]
+  commit: compare-and-swap-series-head
+  stale_parent: reject
+  failed_publish_preserves_head: true
+  recovery: committed-journal-record-only
+reader_pin:
+  handle_pins: physical-publication-generation
+  semantic_snapshot_immutable: true
+  reclamation: after-last-pin
+compaction:
+  mode: copy-on-write-generation
+  validate_before_swap:
+    - physical-checksum
+    - semantic-snapshot-digest
+    - manifest-closure-binding
+  failure_preserves_prior_generation: true
+  pinned_generation_reclamation: deferred
+format_compatibility:
+  physical_format_excluded_from_snapshot_id: true
+  direct_open: compatible-major-and-declared-minor
+  migration: registered-deterministic-chain-only
+  migration_commit_requires_same_semantic_digest: true
+  incompatible_without_migrator: reject
+corruption:
+  verify_on_open: [manifest-digest, object-checksum, closure-binding]
+  corrupt_current: structured-failure-no-fallback
+  explicit_intact_prior_open: allowed
+  repair: new-validated-physical-generation
+backend_authority:
+  implementation: tools/quality/check_ng_snapshot_store_contract.py
+  backends: [memory, sqlite]
+  roots: [root-a, root-b]
+  jobs: [1, 8]
+  orders: [forward, reverse, seeded-shuffle]
+  equality: snapshot-semantic-id
+  conformance_vectors: schemas/cxxlens_ng_store_conformance_vectors.yaml

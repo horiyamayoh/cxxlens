@@ -115,7 +115,7 @@ properties:
     - columns
     properties:
       schema:
-        const: cxxlens.claim-envelope.v1
+        const: cxxlens.claim-envelope.v2
       instance_schema:
         const: schemas/cxxlens_ng_claim_envelope.schema.yaml
       visibility:

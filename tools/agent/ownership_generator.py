@@ -232,6 +232,11 @@ ROLE_DEFINITIONS: dict[str, tuple[str, str, str]] = {
         "#62",
         "Truth support, guarantee, verification modality, condition, assumption, and provenance algebra.",
     ),
+    "steward.ng-store-contract": (
+        "shared_steward",
+        "#63",
+        "Snapshot identity DAG, closure binding, publication series, compaction, and format contracts.",
+    ),
 }
 
 
@@ -318,6 +323,18 @@ NG_SEMANTIC_PATHS = {
     "schemas/cxxlens_ng_semantic_metadata.schema.yaml",
     "tests/quality/test_ng_semantic_guarantee.py",
     "tools/quality/check_ng_semantic_guarantee.py",
+}
+
+NG_STORE_CONTRACT_PATHS = {
+    "docs/design/adr/0009-snapshot-identity-publication-series.md",
+    "schemas/cxxlens_ng_snapshot_manifest.schema.yaml",
+    "schemas/cxxlens_ng_snapshot_store_contract.schema.yaml",
+    "schemas/cxxlens_ng_snapshot_store_contract.yaml",
+    "schemas/cxxlens_ng_store_conformance_report.schema.yaml",
+    "schemas/cxxlens_ng_store_conformance_vectors.schema.yaml",
+    "schemas/cxxlens_ng_store_conformance_vectors.yaml",
+    "tests/quality/test_ng_snapshot_store_contract.py",
+    "tools/quality/check_ng_snapshot_store_contract.py",
 }
 
 
@@ -483,6 +500,8 @@ def owner_for_path(
         return "steward.ng-query"
     if path in NG_SEMANTIC_PATHS:
         return "steward.ng-semantics"
+    if path in NG_STORE_CONTRACT_PATHS:
+        return "steward.ng-store-contract"
     if path.startswith(("tools/agent/ownership_", "tests/agent/ownership/")) or path in {
         "docs/agent_ownership_reference.md",
         "schemas/cxxlens.agent-ownership.v1.schema.yaml",

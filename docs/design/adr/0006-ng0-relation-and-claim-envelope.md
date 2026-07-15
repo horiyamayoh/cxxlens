@@ -6,6 +6,10 @@
 - Decision issue: #60
 - Tracking issue: #56
 
+> Amendment: ADR 0009 / Issue #63 upgrades the system envelope to
+> `cxxlens.claim-envelope.v2`. The condition authority and relation ID decisions in this
+> ADR remain accepted; producer input is now a tagged direct/derived basis.
+
 ## Context
 
 bootstrap relation registry は6個の relation 名だけを列挙し、列、key、reference、merge、coverage、closure、
@@ -29,7 +33,7 @@ NG0 standard relation 17個と external exemplar `company.lock.acquire` の全 d
 - optional additive minor と breaking major の evolution policy
 - generated C++ tag と dynamic lookup が利用する共通 ID source
 
-condition は system claim envelope の `system.claim.v1.presence` だけを authority とする。user relation は
+condition は system claim envelope の `system.claim.v2.presence` だけを authority とする。user relation は
 `presence` または `condition_ref` 列を重複して持たない。condition fragment は envelope から partition、
 conflict、coverage へ投影する。
 

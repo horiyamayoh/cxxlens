@@ -184,7 +184,7 @@ def validate_envelope(registry: dict[str, Any]) -> None:
         "interpretation",
         "stage",
         "producer",
-        "producer_input_snapshot",
+        "producer_input_basis",
         "provenance_root",
         "guarantee",
     }
@@ -192,6 +192,11 @@ def validate_envelope(registry: dict[str, Any]) -> None:
         fail("relation.envelope-incomplete", "system claim envelope column set differs")
     if by_name["presence"]["type"] != "condition_ref":
         fail("relation.envelope-condition-invalid", "presence must be condition_ref")
+    if by_name["producer_input_basis"]["type"] != "tagged<producer-input-basis/1>":
+        fail(
+            "relation.envelope-producer-basis-invalid",
+            "producer input basis must use the tagged store contract",
+        )
     if envelope["condition_authority"] != "envelope-presence-only":
         fail("relation.envelope-condition-invalid", "envelope is not condition authority")
     if envelope["instance_schema"] != CLAIM_ENVELOPE_SCHEMA.as_posix():
@@ -621,7 +626,7 @@ def validate_design(root: pathlib.Path) -> None:
         encoding="utf-8"
     )
     required = (
-        "0.7.0-normative",
+        "0.8.0-normative",
         "schemas/cxxlens_ng_relation_registry.yaml",
         "envelope-presence-only",
         "cc.call_direct_target",

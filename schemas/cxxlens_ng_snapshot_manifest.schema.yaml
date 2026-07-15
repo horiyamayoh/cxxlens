@@ -1,0 +1,63 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.snapshot-manifest.v1
+title: cxxlens semantic snapshot manifest
+type: object
+additionalProperties: false
+required: [schema, id, semantic]
+properties:
+  schema: {const: cxxlens.snapshot-manifest.v1}
+  id: {$ref: '#/$defs/typed_digest'}
+  semantic:
+    type: object
+    additionalProperties: false
+    required:
+      - snapshot_semantics_version
+      - catalog_semantic_digest
+      - condition_universe_id
+      - relation_registry_digest
+      - interpretation_policy_digest
+      - partitions
+      - closures
+    properties:
+      snapshot_semantics_version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+      catalog_semantic_digest: {$ref: '#/$defs/digest'}
+      condition_universe_id: {$ref: '#/$defs/strong_id'}
+      relation_registry_digest: {$ref: '#/$defs/digest'}
+      interpretation_policy_digest: {$ref: '#/$defs/digest'}
+      partitions:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/partition'}
+      closures:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/typed_digest'}
+$defs:
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  typed_digest:
+    type: string
+    pattern: '^[a-z][a-z0-9_.-]*:sha256:[0-9a-f]{64}$'
+  strong_id:
+    type: string
+    minLength: 1
+    maxLength: 512
+    pattern: '^[^\u0000-\u001f\u007f]+$'
+  partition:
+    type: object
+    additionalProperties: false
+    required:
+      - partition_id
+      - relation_descriptor_id
+      - input_basis_digest
+      - claim_set_digest
+      - coverage_digest
+      - content_digest
+      - claim_count
+    properties:
+      partition_id: {$ref: '#/$defs/typed_digest'}
+      relation_descriptor_id: {$ref: '#/$defs/strong_id'}
+      input_basis_digest: {$ref: '#/$defs/digest'}
+      claim_set_digest: {$ref: '#/$defs/typed_digest'}
+      coverage_digest: {$ref: '#/$defs/typed_digest'}
+      content_digest: {$ref: '#/$defs/typed_digest'}
+      claim_count: {type: integer, minimum: 0}

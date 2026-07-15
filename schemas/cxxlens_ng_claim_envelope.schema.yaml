@@ -1,5 +1,5 @@
 $schema: https://json-schema.org/draft/2020-12/schema
-$id: https://cxxlens.dev/schemas/cxxlens.claim-envelope.v1
+$id: https://cxxlens.dev/schemas/cxxlens.claim-envelope.v2
 title: cxxlens system claim envelope
 type: object
 additionalProperties: false
@@ -13,11 +13,12 @@ required:
   - interpretation
   - stage
   - producer
+  - producer_input_basis
   - provenance_root
   - guarantee
 properties:
   schema:
-    const: cxxlens.claim-envelope.v1
+    const: cxxlens.claim-envelope.v2
   descriptor:
     $ref: '#/$defs/strong_id'
   semantic_key:
@@ -25,8 +26,7 @@ properties:
   assertion:
     $ref: '#/$defs/strong_id'
   content:
-    type: string
-    pattern: '^sha256:[0-9a-f]{64}$'
+    $ref: '#/$defs/typed_digest'
   presence:
     type: object
     additionalProperties: false
@@ -42,16 +42,16 @@ properties:
     enum: [assertion, canonical_claim, derived_claim]
   producer:
     $ref: '#/$defs/strong_id'
-  producer_input_snapshot:
+  producer_input_basis:
     oneOf:
-      - $ref: '#/$defs/strong_id'
-      - type: 'null'
+      - $ref: '#/$defs/direct_basis'
+      - $ref: '#/$defs/derived_basis'
   provenance_root:
     $ref: '#/$defs/strong_id'
   guarantee:
     type: object
     additionalProperties: false
-    required: [approximation, scope, assumptions, verification]
+    required: [approximation, scope, assumptions, verification_modalities]
     properties:
       approximation:
         enum: [unknown, under_approximation, over_approximation, exact]
@@ -59,12 +59,45 @@ properties:
         $ref: '#/$defs/strong_id'
       assumptions:
         $ref: '#/$defs/strong_id'
-      verification:
-        enum: [unverified, schema_validated, frontend_replayed, compiler_verified,
-               link_verified, runtime_observed, differentially_verified]
+      verification_modalities:
+        type: array
+        uniqueItems: true
+        items:
+          type: string
+          pattern: '^[a-z][a-z0-9_.-]+$'
 $defs:
   strong_id:
     type: string
     minLength: 1
     maxLength: 512
     pattern: '^[^\u0000-\u001f\u007f]+$'
+  digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  typed_digest:
+    type: string
+    pattern: '^[a-z][a-z0-9_.-]*:sha256:[0-9a-f]{64}$'
+  direct_basis:
+    type: object
+    additionalProperties: false
+    required: [kind, basis_digest]
+    properties:
+      kind: {const: direct}
+      basis_digest: {$ref: '#/$defs/digest'}
+  derived_basis:
+    type: object
+    additionalProperties: false
+    required:
+      - kind
+      - input_snapshot
+      - consumed_partition_content_digests
+      - transform_semantics
+    properties:
+      kind: {const: derived}
+      input_snapshot: {$ref: '#/$defs/strong_id'}
+      consumed_partition_content_digests:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {$ref: '#/$defs/typed_digest'}
+      transform_semantics: {$ref: '#/$defs/digest'}

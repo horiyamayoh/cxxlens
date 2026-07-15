@@ -9,6 +9,7 @@
 | Relation Registry | `schemas/cxxlens_ng_relation_registry.yaml` | #60 | accepted exact contract |
 | Logical Query Contract | `schemas/cxxlens_ng_logical_query_contract.yaml` | #61 | accepted exact contract |
 | Semantic Guarantee Contract | `schemas/cxxlens_ng_semantic_guarantee_contract.yaml` | #62 | accepted exact contract |
+| Snapshot / Store Contract | `schemas/cxxlens_ng_snapshot_store_contract.yaml` | #63 | accepted exact contract |
 | Provider Protocol | `schemas/cxxlens_ng_provider_protocol.yaml` | #58 → #64 | bootstrap |
 | Public C++ API Catalog | `schemas/cxxlens_ng_public_api_catalog.yaml` | #58 → #66 | bootstrap |
 | Acceptance Manifest | `schemas/cxxlens_ng_acceptance_manifest.yaml` | #58 → #71 | bootstrap |
@@ -37,6 +38,11 @@ C++ signature の completion を意味しません。
 Semantic Guarantee Contract は Issue #62 により support-pair truth、soundness/completeness approximation、verification
 modality set、exact precondition、lossless provenance/summary drill-down を固定しています。filtering policy や
 confidence が truth/guarantee を格上げすることはありません。
+
+Snapshot / Store Contract は Issue #63 により full SHA-256 と versioned binary tuple、claim/partition/closure/
+snapshot identity DAG、tagged producer input basis、exact publication series selector、copy-on-write compaction、
+format migration、corruption recovery を固定しています。catalog-only `current` と prior publication への silent
+fallback は禁止されます。
 
 残る `maturity: bootstrap` catalog は名前空間、version axis、owner issue、依存関係の入口だけを固定します。
 entry の `status: contract-pending` は実装、stable API、release support を意味しません。各 owner issue が exact

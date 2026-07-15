@@ -1,5 +1,5 @@
 schema: cxxlens.relation-conformance-vectors.v1
-document_version: 1.0.0
+document_version: 1.1.0
 authority:
   owner_issue: '#60'
   decision_adr: docs/design/adr/0006-ng0-relation-and-claim-envelope.md
@@ -48,24 +48,26 @@ vectors:
     reason_code: relation.envelope-instance-valid
   input:
     document:
-      schema: cxxlens.claim-envelope.v1
+      schema: cxxlens.claim-envelope.v2
       descriptor: cc.call_site.v1
       semantic_key: semantic-key-call-1
       assertion: assertion-call-1
-      content: sha256:1111111111111111111111111111111111111111111111111111111111111111
+      content: claim-content:sha256:1111111111111111111111111111111111111111111111111111111111111111
       presence:
         universe: universe-1
         condition: condition-variant-1
       interpretation: cc.canonical-1
       stage: canonical_claim
       producer: provider-normalizer-1
-      producer_input_snapshot: snapshot-input-1
+      producer_input_basis:
+        kind: direct
+        basis_digest: sha256:2222222222222222222222222222222222222222222222222222222222222222
       provenance_root: evidence-1
       guarantee:
         approximation: exact
         scope: compile-unit-1
         assumptions: assumptions-empty-1
-        verification: schema_validated
+        verification_modalities: [schema_validated]
 - id: envelope-containing-snapshot-forbidden
   class: negative
   operation: validate_envelope_instance
@@ -74,23 +76,26 @@ vectors:
     reason_code: relation.envelope-instance-invalid
   input:
     document:
-      schema: cxxlens.claim-envelope.v1
+      schema: cxxlens.claim-envelope.v2
       descriptor: cc.call_site.v1
       semantic_key: semantic-key-call-1
       assertion: assertion-call-1
-      content: sha256:1111111111111111111111111111111111111111111111111111111111111111
+      content: claim-content:sha256:1111111111111111111111111111111111111111111111111111111111111111
       presence:
         universe: universe-1
         condition: condition-variant-1
       interpretation: cc.canonical-1
       stage: canonical_claim
       producer: provider-normalizer-1
+      producer_input_basis:
+        kind: direct
+        basis_digest: sha256:2222222222222222222222222222222222222222222222222222222222222222
       provenance_root: evidence-1
       guarantee:
         approximation: exact
         scope: compile-unit-1
         assumptions: assumptions-empty-1
-        verification: schema_validated
+        verification_modalities: [schema_validated]
       containing_snapshot: snapshot-output-1
 - id: hard-reference-resolved
   class: positive

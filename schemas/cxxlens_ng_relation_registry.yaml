@@ -1,6 +1,6 @@
 schema: cxxlens.relation-registry.v1
 kind: relation-registry
-document_version: 1.0.0
+document_version: 1.1.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -10,7 +10,7 @@ authority:
   owner: steward.ng-relations
 compatibility:
   version_axis: relation-descriptor
-  current: 1.0.0
+  current: 1.1.0
   semantic_major_policy: exact-major-compatible-minor
   unknown_optional_columns: preserve
   unknown_open_symbols: preserve
@@ -28,7 +28,7 @@ registry_policy:
   hard_reference_cycle: reject
   extension_code_change: forbidden
 system_claim_envelope:
-  schema: cxxlens.claim-envelope.v1
+  schema: cxxlens.claim-envelope.v2
   instance_schema: schemas/cxxlens_ng_claim_envelope.schema.yaml
   visibility: system-only
   condition_authority: envelope-presence-only
@@ -47,57 +47,57 @@ system_claim_envelope:
     - assertion
     - authoritative-payload-tuple
   columns:
-  - id: system.claim.v1.descriptor
+  - id: system.claim.v2.descriptor
     name: descriptor
     type: relation_descriptor_id
     required: true
     semantic_role: descriptor
-  - id: system.claim.v1.semantic_key
+  - id: system.claim.v2.semantic_key
     name: semantic_key
     type: semantic_key_id
     required: true
     semantic_role: key
-  - id: system.claim.v1.assertion
+  - id: system.claim.v2.assertion
     name: assertion
     type: assertion_id
     required: true
     semantic_role: assertion
-  - id: system.claim.v1.content
+  - id: system.claim.v2.content
     name: content
     type: content_digest
     required: true
     semantic_role: content
-  - id: system.claim.v1.presence
+  - id: system.claim.v2.presence
     name: presence
     type: condition_ref
     required: true
     semantic_role: condition
-  - id: system.claim.v1.interpretation
+  - id: system.claim.v2.interpretation
     name: interpretation
     type: interpretation_domain_id
     required: true
     semantic_role: interpretation
-  - id: system.claim.v1.stage
+  - id: system.claim.v2.stage
     name: stage
     type: closed_symbol<claim-stage/1>
     required: true
     semantic_role: stage
-  - id: system.claim.v1.producer
+  - id: system.claim.v2.producer
     name: producer
     type: producer_ref
     required: true
     semantic_role: producer
-  - id: system.claim.v1.producer_input_snapshot
-    name: producer_input_snapshot
-    type: optional<snapshot_id>
-    required: false
+  - id: system.claim.v2.producer_input_basis
+    name: producer_input_basis
+    type: tagged<producer-input-basis/1>
+    required: true
     semantic_role: producer
-  - id: system.claim.v1.provenance_root
+  - id: system.claim.v2.provenance_root
     name: provenance_root
     type: evidence_id
     required: true
     semantic_role: provenance
-  - id: system.claim.v1.guarantee
+  - id: system.claim.v2.guarantee
     name: guarantee
     type: guarantee
     required: true

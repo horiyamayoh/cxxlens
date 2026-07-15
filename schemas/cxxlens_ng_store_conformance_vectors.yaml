@@ -1,0 +1,380 @@
+schema: cxxlens.store-conformance-vectors.v1
+document_version: 1.0.0
+authority:
+  owner_issue: '#63'
+  decision_adr: docs/design/adr/0009-snapshot-identity-publication-series.md
+contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
+vectors:
+  - id: identity-graph-dag
+    class: positive
+    operation: identity_graph
+    input: {}
+    expected: {decision: accepted, reason_code: store.identity_graph-valid}
+  - id: identity-graph-cycle
+    class: negative
+    operation: identity_graph
+    input:
+      extra_dependency:
+        node: partition_content_digest
+        dependency: snapshot_id
+    expected: {decision: rejected, reason_code: store.identity-cycle}
+  - id: direct-input-basis
+    class: positive
+    operation: producer_basis
+    input:
+      basis:
+        kind: direct
+        basis_digest: &digest_a sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    expected: {decision: accepted, reason_code: store.producer_basis-valid}
+  - id: direct-input-basis-with-snapshot
+    class: negative
+    operation: producer_basis
+    input:
+      basis:
+        kind: direct
+        basis_digest: *digest_a
+        input_snapshot: snapshot-prior
+    expected: {decision: rejected, reason_code: store.direct-basis-snapshot-forbidden}
+  - id: derived-input-basis
+    class: positive
+    operation: producer_basis
+    input:
+      basis:
+        kind: derived
+        input_snapshot: snapshot-prior
+        input_generation: 4
+        output_generation: 5
+        consumed_partition_content_digests:
+          - partition-content:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+        transform_semantics: *digest_a
+    expected: {decision: accepted, reason_code: store.producer_basis-valid}
+  - id: derived-input-basis-missing-snapshot
+    class: negative
+    operation: producer_basis
+    input:
+      basis:
+        kind: derived
+        consumed_partition_content_digests: []
+        transform_semantics: *digest_a
+    expected: {decision: rejected, reason_code: store.derived-basis-incomplete}
+  - id: derived-input-basis-containing-generation
+    class: negative
+    operation: producer_basis
+    input:
+      basis:
+        kind: derived
+        input_snapshot: snapshot-containing
+        input_generation: 5
+        output_generation: 5
+        consumed_partition_content_digests:
+          - partition-content:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+        transform_semantics: *digest_a
+    expected: {decision: rejected, reason_code: store.derived-basis-not-prior}
+  - id: canonical-claim-identities
+    class: positive
+    operation: claim_identity
+    input:
+      relation_descriptor_id: cc.call_site.v1
+      semantic_major: 1
+      authoritative_key_tuple: [call-1]
+      condition_universe_id: universe-1
+      canonical_condition: condition-1
+      interpretation_domain_id: cc.canonical-1
+      producer_semantic_contract: *digest_a
+      authoritative_payload_tuple: [compile-unit-1, direct]
+    expected:
+      decision: accepted
+      reason_code: store.claim_identity-valid
+      value:
+        semantic_key_id: semantic-key:sha256:ac3f63290b7c6ebdc6f333eea07752bd32c5b0fa6df8b2ea56f136486e42aae4
+        assertion_id: assertion:sha256:83dc78eb2a592a09badb3eb16199aa25de05b7e4283a0281d56eea3ca6f8b5dc
+        content_digest: claim-content:sha256:3ea3d46232c1c1f29193563bd63e175e3bb0bf96b98f8d2f45602e46853f47d2
+  - id: claim-containing-snapshot-forbidden
+    class: negative
+    operation: claim_identity
+    input:
+      relation_descriptor_id: cc.call_site.v1
+      semantic_major: 1
+      authoritative_key_tuple: [call-1]
+      condition_universe_id: universe-1
+      canonical_condition: condition-1
+      interpretation_domain_id: cc.canonical-1
+      producer_semantic_contract: *digest_a
+      authoritative_payload_tuple: [compile-unit-1, direct]
+      containing_snapshot_id: snapshot-output
+    expected: {decision: rejected, reason_code: store.containing-snapshot-forbidden}
+  - id: closure-exact-binding
+    class: positive
+    operation: closure_binding
+    input: &closure
+      relation_descriptor_id: cc.call_direct_target.v1
+      subject_partition_id: partition:sha256:1111111111111111111111111111111111111111111111111111111111111111
+      partition_content_digest: partition-content:sha256:2222222222222222222222222222222222222222222222222222222222222222
+      coverage_digest: coverage:sha256:3333333333333333333333333333333333333333333333333333333333333333
+      key_domain_digest: sha256:4444444444444444444444444444444444444444444444444444444444444444
+      condition: condition-1
+      interpretation: cc.canonical-1
+      assumption_set_id: assumptions-empty
+      closure_kind: relation-key-enumeration
+      producer_semantics: *digest_a
+      evidence_digest: sha256:5555555555555555555555555555555555555555555555555555555555555555
+    expected: {decision: accepted, reason_code: store.closure_binding-valid}
+  - id: closure-containing-snapshot-forbidden
+    class: negative
+    operation: closure_binding
+    input:
+      <<: *closure
+      containing_snapshot_id: snapshot-output
+    expected: {decision: rejected, reason_code: store.closure-snapshot-forbidden}
+  - id: closure-input-snapshot-forbidden
+    class: negative
+    operation: closure_binding
+    input:
+      <<: *closure
+      input_snapshot: snapshot-input
+    expected: {decision: rejected, reason_code: store.closure-snapshot-forbidden}
+  - id: closure-field-mutation-changes-id
+    class: positive
+    operation: closure_mutation_matrix
+    input: *closure
+    expected:
+      decision: accepted
+      reason_code: store.closure_mutation_matrix-valid
+      value: {identity_fields: 11, distinct_ids: 12}
+  - id: snapshot-perturbation-matrix
+    class: positive
+    operation: snapshot_digest_matrix
+    input:
+      snapshot_semantics_version: 1.0.0
+      catalog_semantic_digest: sha256:6666666666666666666666666666666666666666666666666666666666666666
+      condition_universe_id: universe-1
+      relation_registry_digest: sha256:7777777777777777777777777777777777777777777777777777777777777777
+      interpretation_policy_digest: sha256:8888888888888888888888888888888888888888888888888888888888888888
+      partitions:
+        - relation_descriptor_id: cc.call_site.v1
+          scope: compile-unit-2
+          condition: condition-1
+          interpretation: cc.canonical-1
+          producer_semantics: *digest_a
+          input_basis_digest: sha256:9999999999999999999999999999999999999999999999999999999999999999
+          precision_profile: exact
+          assumption_set_id: assumptions-empty
+          claim_content_digests:
+            - claim-content:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          coverage_units: [covered:compile-unit-2]
+        - relation_descriptor_id: cc.call_site.v1
+          scope: compile-unit-1
+          condition: condition-1
+          interpretation: cc.canonical-1
+          producer_semantics: *digest_a
+          input_basis_digest: sha256:9999999999999999999999999999999999999999999999999999999999999999
+          precision_profile: exact
+          assumption_set_id: assumptions-empty
+          claim_content_digests:
+            - claim-content:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          coverage_units: [covered:compile-unit-1]
+      closure_ids:
+        - closure-certificate:sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    expected: {decision: accepted, reason_code: store.snapshot_digest_matrix-valid}
+  - id: current-exact-series
+    class: positive
+    operation: select_current
+    input:
+      selector: &selector
+        catalog_id: catalog-1
+        channel_id: stable
+        engine_generation_id: engine-ng0-1
+        condition_universe_id: universe-1
+        relation_registry_digest: *digest_a
+        interpretation_policy_digest: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+        trust_policy_digest: sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+      publications:
+        - {publication_id: pub-1, selector: *selector, sequence: 1, state: committed, physical_state: intact, snapshot_id: snapshot-1}
+        - {publication_id: pub-2, selector: *selector, sequence: 2, state: committed, physical_state: intact, snapshot_id: snapshot-2}
+    expected:
+      decision: accepted
+      reason_code: store.select_current-valid
+      value: snapshot-2
+  - id: current-catalog-only-rejected
+    class: negative
+    operation: select_current
+    input:
+      selector: {catalog_id: catalog-1}
+      publications: []
+    expected: {decision: rejected, reason_code: store.selection-authority-incomplete}
+  - id: current-cross-series-no-fallback
+    class: negative
+    operation: select_current
+    input:
+      selector: *selector
+      publications:
+        - publication_id: other-1
+          selector:
+            <<: *selector
+            channel_id: experimental
+          sequence: 9
+          state: committed
+          physical_state: intact
+          snapshot_id: snapshot-other
+    expected: {decision: rejected, reason_code: store.current-not-found}
+  - id: corrupt-current-no-fallback
+    class: negative
+    operation: select_current
+    input:
+      selector: *selector
+      publications:
+        - {publication_id: pub-1, selector: *selector, sequence: 1, state: committed, physical_state: intact, snapshot_id: snapshot-1}
+        - {publication_id: pub-2, selector: *selector, sequence: 2, state: committed, physical_state: corrupt, snapshot_id: snapshot-2}
+    expected: {decision: rejected, reason_code: store.current-corrupt}
+  - id: explicit-prior-remains-readable
+    class: positive
+    operation: open_publication
+    input:
+      publication_id: pub-1
+      publications:
+        - {publication_id: pub-1, selector: *selector, sequence: 1, state: committed, physical_state: intact, snapshot_id: snapshot-1}
+        - {publication_id: pub-2, selector: *selector, sequence: 2, state: committed, physical_state: corrupt, snapshot_id: snapshot-2}
+    expected:
+      decision: accepted
+      reason_code: store.open_publication-valid
+      value: snapshot-1
+  - id: failed-publish-preserves-head
+    class: positive
+    operation: publish
+    input:
+      current_head: pub-1
+      expected_parent: pub-1
+      candidate: pub-2
+      validated: false
+      history: [created, staged, validating, rejected, rolled_back]
+    expected:
+      decision: accepted
+      reason_code: store.publish-failure-isolated
+      value: pub-1
+  - id: successful-publish-atomic-head
+    class: positive
+    operation: publish
+    input:
+      current_head: pub-1
+      expected_parent: pub-1
+      candidate: pub-2
+      validated: true
+      history: [created, staged, validating, committed]
+    expected:
+      decision: accepted
+      reason_code: store.publish-valid
+      value: pub-2
+  - id: stale-parent-publish-rejected
+    class: negative
+    operation: publish
+    input:
+      current_head: pub-2
+      expected_parent: pub-1
+      candidate: pub-3
+      validated: true
+      history: [created, staged, validating, committed]
+    expected: {decision: rejected, reason_code: store.publish-stale-parent}
+  - id: pinned-compaction-copy-on-write
+    class: positive
+    operation: compact
+    input:
+      current_generation: gen-1
+      candidate_generation: gen-2
+      pinned_generations: [gen-1]
+      current_semantic_digest: *digest_a
+      candidate_semantic_digest: *digest_a
+      candidate_valid: true
+    expected:
+      decision: accepted
+      reason_code: store.compact-valid
+      value: {active_generation: gen-2, retained_generations: [gen-1]}
+  - id: failed-compaction-preserves-generation
+    class: positive
+    operation: compact
+    input:
+      current_generation: gen-1
+      candidate_generation: gen-2
+      pinned_generations: []
+      current_semantic_digest: *digest_a
+      candidate_semantic_digest: *digest_a
+      candidate_valid: false
+    expected:
+      decision: accepted
+      reason_code: store.compact-failure-isolated
+      value: {active_generation: gen-1, retained_generations: [gen-1]}
+  - id: compaction-semantic-drift-rejected
+    class: negative
+    operation: compact
+    input:
+      current_generation: gen-1
+      candidate_generation: gen-2
+      pinned_generations: []
+      current_semantic_digest: *digest_a
+      candidate_semantic_digest: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      candidate_valid: true
+    expected: {decision: rejected, reason_code: store.compact-semantic-drift}
+  - id: format-direct-compatible
+    class: positive
+    operation: format_open
+    input:
+      source_format: 1.2.0
+      reader_major: 1
+      semantic_digest: *digest_a
+      migrations: []
+    expected:
+      decision: accepted
+      reason_code: store.format_open-valid
+      value: *digest_a
+  - id: format-migration-preserves-semantics
+    class: positive
+    operation: format_open
+    input:
+      source_format: 1.2.0
+      reader_major: 2
+      semantic_digest: *digest_a
+      migrations:
+        - {from_major: 1, to_major: 2, result_semantic_digest: *digest_a}
+    expected:
+      decision: accepted
+      reason_code: store.format_migration-valid
+      value: *digest_a
+  - id: format-migration-semantic-drift
+    class: negative
+    operation: format_open
+    input:
+      source_format: 1.2.0
+      reader_major: 2
+      semantic_digest: *digest_a
+      migrations:
+        - {from_major: 1, to_major: 2, result_semantic_digest: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb}
+    expected: {decision: rejected, reason_code: store.format-migration-semantic-drift}
+  - id: format-incompatible-no-migrator
+    class: negative
+    operation: format_open
+    input:
+      source_format: 1.2.0
+      reader_major: 3
+      semantic_digest: *digest_a
+      migrations: []
+    expected: {decision: rejected, reason_code: store.format-incompatible}
+  - id: duplicate-object-same-bytes
+    class: positive
+    operation: collision
+    input:
+      existing_id: sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+      candidate_id: sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+      existing_canonical_hex: '010203'
+      candidate_canonical_hex: '010203'
+    expected:
+      decision: accepted
+      reason_code: store.collision_duplicate-valid
+      value: existing-object
+  - id: digest-collision-quarantined
+    class: negative
+    operation: collision
+    input:
+      existing_id: sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+      candidate_id: sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+      existing_canonical_hex: '010203'
+      candidate_canonical_hex: '010204'
+    expected: {decision: rejected, reason_code: store.hash-collision}

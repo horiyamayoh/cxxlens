@@ -32,12 +32,19 @@ entries:
     profile: NG0
     contract_issue: '#66'
     summary: Runtime descriptor and column access without central enums.
+  - id: public.snapshot-store
+    status: contract-pending
+    owner_issue: '#66'
+    profile: NG0
+    contract_issue: '#66'
+    depends_on: [public.project-catalog, public.relation-dynamic]
+    summary: Immutable snapshot handles, exact publication-series selection, and bounded cursors.
   - id: public.logical-query
     status: contract-pending
     owner_issue: '#66'
     profile: NG0
     contract_issue: '#66'
-    depends_on: [public.relation-static, public.relation-dynamic]
+    depends_on: [public.relation-static, public.relation-dynamic, public.snapshot-store]
     summary: Static and dynamic DSLs normalized to one Logical Query IR.
   - id: public.provider-sdk
     status: contract-pending

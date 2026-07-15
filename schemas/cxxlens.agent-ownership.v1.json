@@ -4,7 +4,7 @@
     "conventions": "sha256:fa58fa2f23591eafac9f46eb91fcfab01063681e453065b62d34bdab3fca8af1",
     "ownership_registry": "sha256:797e6a52c4c941ed4225b761ee070f5f00af4c10661d2ebd519e874391eec342"
   },
-  "repository_paths_digest": "sha256:4869a43974fb75027c9ae907a3b042638e2ee46cf0a35ccc741c1100a9e62b02",
+  "repository_paths_digest": "sha256:5bfbb194dbe3ffc370f072d69892247f1839aec723861275979628b185277bf9",
   "reserved_paths": [
     {
       "access": "exclusive_write",
@@ -307,6 +307,12 @@
       "kind": "shared_steward",
       "owner_issue": "#62",
       "responsibility": "Truth support, guarantee, verification modality, condition, assumption, and provenance algebra."
+    },
+    {
+      "id": "steward.ng-store-contract",
+      "kind": "shared_steward",
+      "owner_issue": "#63",
+      "responsibility": "Snapshot identity DAG, closure binding, publication series, compaction, and format contracts."
     },
     {
       "id": "steward.ownership",
@@ -1174,7 +1180,7 @@
     }
   ],
   "schema": "cxxlens.agent-ownership.v1",
-  "semantic_digest": "sha256:aa4366ce58fc92c0d20413d7f74dba6b012bd1749119287e00e53eab156674ae",
+  "semantic_digest": "sha256:0d933adf993122f7047c113e967f409ff332b444586976d82c6e476a58f620a9",
   "skeletons": [
     {
       "api_id": "API-CFG-001",
@@ -2919,12 +2925,12 @@
     },
     "generated_path_count": 7,
     "reserved_path_count": 11,
-    "role_count": 183,
+    "role_count": 184,
     "skeleton_state_counts": {
       "blocked": 0,
       "frozen": 124
     },
-    "tracked_path_count": 580,
+    "tracked_path_count": 589,
     "unit_count": 124
   },
   "task_packet_digest": "sha256:68bfa838af2de5910cfa1b4a0bf4dbc3a1d24eaa3f21fff1ec378dccff35176c",
@@ -3558,6 +3564,13 @@
       "generator_role": null,
       "owner_role": "steward.ng-semantics",
       "path": "docs/design/adr/0008-truth-guarantee-provenance-algebra.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-store-contract",
+      "path": "docs/design/adr/0009-snapshot-identity-publication-series.md"
     },
     {
       "access": "exclusive_write",
@@ -4860,6 +4873,48 @@
       "generator_role": null,
       "owner_role": "steward.ng-semantics",
       "path": "schemas/cxxlens_ng_semantic_metadata.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-store-contract",
+      "path": "schemas/cxxlens_ng_snapshot_manifest.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-store-contract",
+      "path": "schemas/cxxlens_ng_snapshot_store_contract.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-store-contract",
+      "path": "schemas/cxxlens_ng_snapshot_store_contract.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-store-contract",
+      "path": "schemas/cxxlens_ng_store_conformance_report.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-store-contract",
+      "path": "schemas/cxxlens_ng_store_conformance_vectors.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-store-contract",
+      "path": "schemas/cxxlens_ng_store_conformance_vectors.yaml"
     },
     {
       "access": "exclusive_write",
@@ -6335,6 +6390,13 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.ng-store-contract",
+      "path": "tests/quality/test_ng_snapshot_store_contract.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.quality",
       "path": "tests/quality/test_package_contract_candidates.py"
     },
@@ -6827,6 +6889,13 @@
       "generator_role": null,
       "owner_role": "steward.ng-semantics",
       "path": "tools/quality/check_ng_semantic_guarantee.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-store-contract",
+      "path": "tools/quality/check_ng_snapshot_store_contract.py"
     },
     {
       "access": "exclusive_write",

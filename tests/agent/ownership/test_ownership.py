@@ -202,6 +202,25 @@ class OwnershipTest(unittest.TestCase):
                 "tools/quality/check_ng_semantic_guarantee.py",
             },
         )
+        ng_store_contract_paths = {
+            item["path"]
+            for item in generated["tracked_paths"]
+            if item["owner_role"] == "steward.ng-store-contract"
+        }
+        self.assertEqual(
+            ng_store_contract_paths,
+            {
+                "docs/design/adr/0009-snapshot-identity-publication-series.md",
+                "schemas/cxxlens_ng_snapshot_manifest.schema.yaml",
+                "schemas/cxxlens_ng_snapshot_store_contract.schema.yaml",
+                "schemas/cxxlens_ng_snapshot_store_contract.yaml",
+                "schemas/cxxlens_ng_store_conformance_report.schema.yaml",
+                "schemas/cxxlens_ng_store_conformance_vectors.schema.yaml",
+                "schemas/cxxlens_ng_store_conformance_vectors.yaml",
+                "tests/quality/test_ng_snapshot_store_contract.py",
+                "tools/quality/check_ng_snapshot_store_contract.py",
+            },
+        )
         self.assertEqual(
             {item["api_id"] for item in generated["skeletons"]},
             {packet["api_id"] for packet in self.corpus["packets"]},

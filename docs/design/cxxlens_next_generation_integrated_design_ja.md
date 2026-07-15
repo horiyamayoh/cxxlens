@@ -5,8 +5,8 @@
 | 項目 | 値 |
 |---|---|
 | 文書 ID | `CXXLENS-NG-SRAD-002` |
-| 文書版 | `0.7.0-normative` |
-| 文書状態 | 規範・Issue #57 authority transition / Issue #59 release / Issue #60 relation / Issue #61 query / Issue #62 semantic guarantee 反映版 |
+| 文書版 | `0.8.0-normative` |
+| 文書状態 | 規範・Issue #57 / Issue #59 / Issue #60 / Issue #61 / Issue #62 / Issue #63 反映版 |
 | 対象製品 | 次世代 `cxxlens` |
 | 基準言語 | C++23 |
 | 初期 primary platform | Linux |
@@ -32,6 +32,8 @@
 | 本書 | 製品境界、層、依存方向、意味的不変条件、release profile |
 | Relation Registry / IDL | relation key、column、reference、merge、coverage、version |
 | Logical Query Contract / IR Schema | operator algebra、ordering、partiality、normalized digest |
+| Semantic Guarantee Contract | truth、approximation、verification、condition、provenance の合成 |
+| Snapshot / Store Contract | identity DAG、closure binding、publication series、format/compaction |
 | Provider Protocol Specification | process protocol、manifest、task、batch、failure |
 | Public C++ API Catalog | signature、lifetime、threading、stability |
 | Acceptance Manifest | requirement、test、gate、evidence |
@@ -1177,6 +1179,10 @@ system claim envelope を共有し、condition authority は `envelope-presence-
 `presence` / `condition_ref` を重複させない。system column は通常の user projection から除外し、明示要求時だけ
 stable system column ID で参照する。
 
+Issue #63 / ADR 0009 により system claim envelope は `cxxlens.claim-envelope.v2` へ更新された。producer input
+は `producer_input_basis` の tagged direct/derived variant とし、direct observation に snapshot ID を要求しない。
+derived claim だけが strict-prior published snapshot と consumed partition content digest を保持できる。
+
 static generated API と runtime dynamic API は同じ descriptor/column ID を使用し、Logical Query IR もその ID を
 operand とする。descriptor digest は exact descriptor の canonical projection から計算する。unknown open symbol と
 minor optional column は保持し、unknown closed symbol、minor required column、key/cardinality/condition/identity の
@@ -1195,7 +1201,9 @@ schema: cxxlens.relation-registry.v1
 system_claim_envelope:
   condition_authority: envelope-presence-only
   columns:
-    - {id: system.claim.v1.presence, name: presence, type: condition_ref}
+    - {id: system.claim.v2.presence, name: presence, type: condition_ref}
+    - {id: system.claim.v2.producer_input_basis, name: producer_input_basis,
+       type: tagged<producer-input-basis/1>}
 relations:
   - descriptor_id: cc.call_site.v1
     name: cc.call_site
@@ -1301,6 +1309,16 @@ flowchart LR
 ### 11.6 Claim envelope
 
 ```cpp
+struct direct_input_basis {
+    content_digest basis_digest;
+};
+
+struct derived_input_basis {
+    snapshot_id input_snapshot; // strict-prior published snapshot only
+    std::vector<content_digest> consumed_partition_contents;
+    content_digest transform_semantics;
+};
+
 struct claim_envelope {
     relation_descriptor_id descriptor;
     semantic_key_id semantic_key;
@@ -1309,13 +1327,17 @@ struct claim_envelope {
     condition_ref presence;
     interpretation_domain_id interpretation;
     producer_ref producer;
-    snapshot_id producer_input_snapshot;
+    std::variant<direct_input_basis, derived_input_basis> producer_input_basis;
     evidence_id provenance_root;
     guarantee guarantee;
 };
 ```
 
-containing snapshot ID は store association として管理し、claim identity に含めない。
+`producer_input_basis` の exact schema は `schemas/cxxlens_ng_claim_envelope.schema.yaml` と
+`schemas/cxxlens_ng_snapshot_store_contract.yaml` が所有する。direct basis は source/invocation/toolchain 等の
+semantic input digest を持ち snapshot を持たない。derived basis の `input_snapshot` は出力を収容する snapshot
+より前の generation でなければならない。containing snapshot ID は store association として管理し、claim、
+basis、certificate の identity に含めない。
 
 ### 11.7 Evidence graph
 
@@ -1603,17 +1625,17 @@ coverage complete は execution accounting の完了を意味し、semantic clos
 ```cpp
 struct closure_certificate {
     closure_certificate_id id;
-    relation_name relation;
-    semantic_version relation_major;
+    relation_descriptor_id relation;
+    partition_id subject_partition;
+    content_digest partition_content;
+    content_digest coverage;
     closure_kind kind;
-    analysis_scope scope;
     key_domain_ref key_domain;
     condition_ref condition;
     interpretation_domain_id interpretation;
     assumption_set_id assumptions;
-    snapshot_id input_snapshot;
-    producer_ref producer;
-    evidence_id evidence;
+    content_digest producer_semantics;
+    content_digest evidence;
 };
 ```
 
@@ -1626,7 +1648,10 @@ inheritance-subtype-set
 include-provider-set
 ```
 
-certificate は relation/provider-specific rules に基づき生成・検証する。
+certificate は relation/provider-specific rules に基づき生成・検証する。ID は上記全 field に domain-separated
+hash で bind し、いずれか一つが変われば certificate ID も変わる。`input_snapshot` と containing snapshot は
+持たない。certificate の subject は exact partition/content/coverage であり、snapshot は certificate ID を
+包含する一方向 edge だけを持つ。
 
 ### 14.4 Negation rule
 
@@ -1683,6 +1708,12 @@ message prose は control flow に使用しない。
 
 ### 15.1 Snapshot semantic identity
 
+Issue #63 の exact authority は `schemas/cxxlens_ng_snapshot_store_contract.yaml`
+（`cxxlens.snapshot-store-contract.v1`）と ADR 0009 である。identity は SHA-256 の全 256 bit と
+`cxxlens-canonical-tuple-v1` の versioned length-prefixed binary tuple を使用し、identity kind ごとに domain
+separation する。JSON text、absolute root、unordered iteration、timestamp、task order、backend layout は authority
+ではない。hash collision は candidate を quarantine し、既存 object を保持して fail closed とする。
+
 ```text
 snapshot_id = H(
     snapshot semantics version,
@@ -1690,7 +1721,8 @@ snapshot_id = H(
     condition universe ID,
     relation registry digest,
     selected interpretation policy digest,
-    canonical sorted partition manifests
+    canonical sorted partition manifest projections,
+    canonical sorted closure certificate IDs
 )
 ```
 
@@ -1701,6 +1733,8 @@ snapshot_id = H(
 - publication sequence
 - store path
 - backend type
+- jobs / task order
+- physical snapshot format
 - elapsed time
 
 同一 semantic content は同じ snapshot ID を持ち得る。lineage/publication record は別 metadata。
@@ -1710,12 +1744,11 @@ snapshot_id = H(
 ```cpp
 struct snapshot_manifest {
     snapshot_id id;
-    catalog_id catalog;
+    content_digest catalog_semantics;
     condition_universe_id universe;
     content_digest relation_registry;
     content_digest interpretation_policy;
-    semantic_version kernel_semantics;
-    semantic_version format;
+    semantic_version snapshot_semantics;
     std::vector<partition_manifest> partitions;
     std::vector<closure_certificate_id> closures;
 };
@@ -1728,8 +1761,12 @@ parent snapshot
 created at
 writer process
 elapsed
-store generation
+publication series / sequence
+physical format / generation / locator
 ```
+
+manifest の instance schema は `schemas/cxxlens_ng_snapshot_manifest.schema.yaml` とする。physical format と
+publication lineage は semantic manifest へ混入させない。
 
 ### 15.3 States
 
@@ -1769,19 +1806,20 @@ input digest
 content digest
 row/claim count
 coverage digest
-closure IDs
 producer
 state
 ```
 
-partial partition を complete/closed として再利用してはならない。
+partition content は canonical sorted claim content digest と coverage digest を bind する。partition identity または
+content projection に closure ID を含めないため、closure→partition→closure の逆 edge は作れない。partial
+partition を complete/closed として再利用してはならない。
 
 ### 15.5 Store port
 
 ```cpp
 class snapshot_store {
 public:
-    result<snapshot_handle> current(catalog_id) const;
+    result<snapshot_handle> current(snapshot_series_selector) const;
     result<snapshot_handle> open(snapshot_id) const;
     result<std::unique_ptr<snapshot_writer>>
         begin(snapshot_draft);
@@ -1789,6 +1827,10 @@ public:
     result<void> compact();
 };
 ```
+
+`snapshot_series_selector` は catalog、channel、engine generation、condition universe、relation registry digest、
+interpretation policy digest、trust policy digest をすべて明示する。この exact tuple から
+`snapshot_series_id` を作る。catalog-only lookup、ambient default、別 series の newest/first-wins fallback は禁止する。
 
 ### 15.6 Cursor contract
 
@@ -1803,7 +1845,7 @@ public:
 ```
 
 - `row_view` は cursor advance まで有効
-- snapshot handle は generation を pin
+- snapshot handle は open 時の物理 publication generation を pin
 - backend page/statement lifetime を API に漏らさない
 - row ごとの heap allocation を必須にしない
 - caller が長寿命化する場合 owned copy を明示
@@ -1848,6 +1890,21 @@ or
 commit 前の claim は reader から見えてはならない。
 
 foreign/reference validation、coverage balance、digest、conflict policy、required closure を commit 前に確認する。
+
+series head の更新は expected parent publication を使う compare-and-swap とする。stale parent は reject し、
+failed/cancelled/rejected publish は head を変更しない。recovery は committed journal record だけを可視化し、
+staged/validating object を current として採用しない。
+
+### 15.10 Reader pin、compaction、format、corruption
+
+compaction は copy-on-write physical generation を作り、physical checksum、semantic snapshot digest、closure binding
+を再検証してから locator を atomically swap する。失敗時は prior generation を維持し、pinned generation は最後の
+handle 解放まで回収しない。
+
+snapshot format は semantic snapshot ID から独立する。compatible major/minor を直接開くか、登録済みの
+deterministic migration chain だけを使用する。migration/compaction 後の semantic digest が元と異なる場合は commit
+しない。current head が corrupt な場合は prior head へ silent fallback せず structured failure を返す。caller が
+明示した intact prior publication は読み続けられ、repair は新しい validated physical generation として publish する。
 
 ---
 
@@ -3261,6 +3318,7 @@ group-level table だけで complete を宣言しない。
 - immutable publication
 - prior snapshot survival
 - memory/SQLite parity
+- root relocation / jobs / insertion order perturbation parity
 - cursor lifetime
 - corruption detection
 - semantic/operational separation
@@ -3708,14 +3766,11 @@ R3 前に確定。
 
 public API/semantic snapshot へ漏らさない。
 
-### OD-003 Hash algorithm
+### RD-003 Hash algorithm — ADR 0009 で解決済み
 
-- full digest size
-- cryptographic/noncryptographic role
-- collision policy
-- domain separation
-
-algorithm/version を metadata に記録。
+semantic identity は domain-separated SHA-256 full 256 bit と `cxxlens-canonical-tuple-v1` を使用する。truncation、
+silent algorithm fallback、JSON text authority を禁止する。algorithm/version を metadata に記録し、変更は
+identity-contract major とする。
 
 ### OD-004 Generated source policy
 
@@ -3839,7 +3894,8 @@ NG1 default:
 
 - [ ] native pointer/address payload rejection
 - [ ] observation/assertion/canonical relation separation
-- [ ] producer input snapshot 記録
+- [ ] producer input basis が direct/derived tagged model で記録される
+- [ ] containing snapshot なしで claim/certificate を検証できる
 - [ ] multiple contributor evidence
 - [ ] same-domain conflict condition fragment
 - [ ] cross-domain差は differential disagreement
@@ -3855,6 +3911,11 @@ NG1 default:
 - [ ] owned copy works after cursor destruction
 - [ ] corruption detected
 - [ ] partial partition not reused as complete
+- [ ] claim/partition/closure/snapshot identity graph が DAG
+- [ ] closure が subject/content/coverage/key-domain/condition/interpretation/assumption を bind
+- [ ] catalog-only current selection を拒否
+- [ ] failed publish/compaction/corruption 後も intact prior publication を明示 open 可能
+- [ ] root/jobs/order/backend で snapshot semantic digest 一致
 
 ### Query
 
