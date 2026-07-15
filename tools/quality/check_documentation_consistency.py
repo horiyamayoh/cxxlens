@@ -30,6 +30,9 @@ RELATION_REGISTRY_SCHEMA = pathlib.Path(
 PROVIDER_PROTOCOL_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_provider_protocol.schema.yaml"
 )
+SECURITY_PROFILE_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_security_profile.schema.yaml"
+)
 CATALOGS = {
     "relation-registry": pathlib.Path("schemas/cxxlens_ng_relation_registry.yaml"),
     "provider-protocol": pathlib.Path("schemas/cxxlens_ng_provider_protocol.yaml"),
@@ -256,17 +259,19 @@ def validate_catalogs(root: pathlib.Path) -> None:
     bootstrap_schema = load_yaml(root / CATALOG_SCHEMA)
     relation_schema = load_yaml(root / RELATION_REGISTRY_SCHEMA)
     provider_schema = load_yaml(root / PROVIDER_PROTOCOL_SCHEMA)
+    security_schema = load_yaml(root / SECURITY_PROFILE_SCHEMA)
     index = (root / "docs/design/catalogs/README.md").read_text(encoding="utf-8")
     for expected_kind, relative in CATALOGS.items():
         document = load_yaml(root / relative)
         schema = {
             "relation-registry": relation_schema,
             "provider-protocol": provider_schema,
+            "security-profile": security_schema,
         }.get(expected_kind, bootstrap_schema)
         validate_schema(document, schema, f"NG {expected_kind}")
         expected_maturity = (
             "accepted"
-            if expected_kind in {"relation-registry", "provider-protocol"}
+            if expected_kind in {"relation-registry", "provider-protocol", "security-profile"}
             else "bootstrap"
         )
         if document["maturity"] != expected_maturity:
@@ -282,6 +287,10 @@ def validate_catalogs(root: pathlib.Path) -> None:
         elif expected_kind == "provider-protocol":
             if document["schema"] != "cxxlens.provider-protocol.v1":
                 fail(f"NG provider protocol schema differs: {relative}")
+            entries = {}
+        elif expected_kind == "security-profile":
+            if document["schema"] != "cxxlens.security-profile.v1":
+                fail(f"NG security profile schema differs: {relative}")
             entries = {}
         else:
             if document["kind"] != expected_kind:

@@ -1,0 +1,141 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.security-profile.v1
+type: object
+additionalProperties: false
+required:
+  - schema
+  - kind
+  - document_version
+  - maturity
+  - authority
+  - registries
+  - signature_contract
+  - qualification
+  - discovery
+  - sandbox
+  - product_execution
+  - validation_boundary
+  - reason_codes
+  - backend_authority
+properties:
+  schema: {const: cxxlens.security-profile.v1}
+  kind: {const: security-profile}
+  document_version: {const: 1.0.0}
+  maturity: {const: accepted}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, index, decision_adr, owner_issue, owner]
+    properties:
+      design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
+      index: {const: docs/design/catalogs/README.md}
+      decision_adr: {const: docs/design/adr/0011-provider-trust-certification-discovery.md}
+      owner_issue: {const: '#65'}
+      owner: {const: steward.ng-security}
+  registries:
+    type: object
+    additionalProperties: false
+    required: [namespace, certification, support_matrix]
+    properties:
+      namespace: {const: schemas/cxxlens_ng_namespace_registry.yaml}
+      certification: {const: schemas/cxxlens_ng_provider_certification_registry.yaml}
+      support_matrix: {const: schemas/cxxlens_ng_provider_support_matrix.yaml}
+  signature_contract:
+    type: object
+    additionalProperties: false
+    required: [algorithm, subject_digest, domain, signed_fields, verifier_boundary, manifest_verdict_authority]
+    properties:
+      algorithm: {const: ed25519}
+      subject_digest: {const: domain-separated-sha256-full-256}
+      domain: {const: cxxlens-provider-signature-subject-v1}
+      signed_fields:
+        const: [provider_id, provider_version, package_identity, publisher, manifest_digest, binary_digest, semantic_contract_digest]
+      verifier_boundary: {const: trusted-signature-verifier-port}
+      manifest_verdict_authority: {const: forbidden}
+  qualification:
+    type: object
+    additionalProperties: false
+    required: [levels, canonical_authority_minimum, self_assertion, schema_conformance_grants_canonical_authority]
+    properties:
+      levels:
+        type: array
+        minItems: 7
+        maxItems: 7
+        items:
+          type: object
+          additionalProperties: false
+          required: [id, requires, grant]
+          properties:
+            id: {enum: [experimental, schema-conformant, deterministic, sandbox-qualified, canonical-semantic-qualified, cross-version-qualified, production-supported]}
+            requires: {type: array, uniqueItems: true, items: {$ref: '#/$defs/id'}}
+            grant: {$ref: '#/$defs/id'}
+      canonical_authority_minimum: {const: canonical-semantic-qualified}
+      self_assertion: {const: non-authoritative}
+      schema_conformance_grants_canonical_authority: {const: false}
+  discovery:
+    type: object
+    additionalProperties: false
+    required: [precedence, path_only, duplicate_exact_identity, shadowing, invalid_higher_precedence, fallback, explanation]
+    properties:
+      precedence: {const: [explicit_path, installation_manifest, project_config, system_registry]}
+      path_only: {const: forbidden}
+      duplicate_exact_identity: {const: reject-same-precedence-deduplicate-lower-precedence-with-explanation}
+      shadowing: {const: reject-provider-version-with-different-package-or-binary}
+      invalid_higher_precedence: {const: blocks-lower-precedence-fallback}
+      fallback: {const: explicit-policy-exact-tuple-only}
+      explanation: {const: selected-and-rejected-candidates-with-stable-reason-codes}
+  sandbox:
+    type: object
+    additionalProperties: false
+    required: [assurance_order, effective_minimum, insufficient, evidence_required, profiles]
+    properties:
+      assurance_order: {const: [none, best_effort, enforced, certified]}
+      effective_minimum: {const: max-of-manifest-request-security-profile}
+      insufficient: {const: provider-unavailable-no-degradation}
+      evidence_required: {const: [platform, mechanism, achieved, policy_digest, evidence_digest]}
+      profiles:
+        type: array
+        minItems: 4
+        items:
+          type: object
+          additionalProperties: false
+          required: [id, minimum, allowed_execution, network]
+          properties:
+            id: {$ref: '#/$defs/id'}
+            minimum: {enum: [none, best_effort, enforced, certified]}
+            allowed_execution: {type: array, uniqueItems: true, items: {$ref: '#/$defs/id'}}
+            network: {enum: [denied, unsupported]}
+  product_execution:
+    type: object
+    additionalProperties: false
+    required: [default, required_opt_in, digest_binding, audit_fields]
+    properties:
+      default: {const: disabled}
+      required_opt_in: {const: explicit-per-request}
+      digest_binding: {const: exact-executable-plugin-spec-digests}
+      audit_fields: {const: [execution_id, executable_digest, plugin_digests, process_tree_digest, environment_digest, network, writable_staging_digest, output_redirection_digest]}
+  validation_boundary:
+    type: object
+    additionalProperties: false
+    required: [inputs, before, checks, invalid]
+    properties:
+      inputs: {const: [provider_manifest, provider_output, schema_pack, model_pack, snapshot, cache]}
+      before: {const: authority-or-publication-or-cache-adoption}
+      checks: {const: [size_limit, schema_digest, canonical_encoding, reference_integrity, trust_binding]}
+      invalid: {const: reject-without-prior-snapshot-mutation}
+  reason_codes:
+    type: array
+    minItems: 16
+    uniqueItems: true
+    items: {type: string, pattern: '^security\.[a-z0-9-]+$'}
+  backend_authority:
+    type: object
+    additionalProperties: false
+    required: [implementation, vectors, report_schema, equality]
+    properties:
+      implementation: {const: tools/quality/check_ng_security_contract.py}
+      vectors: {const: schemas/cxxlens_ng_security_conformance_vectors.yaml}
+      report_schema: {const: schemas/cxxlens_ng_security_conformance_report.schema.yaml}
+      equality: {const: selection-and-rejection-explanation}
+$defs:
+  id: {type: string, minLength: 1, maxLength: 512}

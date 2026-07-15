@@ -1,42 +1,135 @@
-schema: cxxlens.ng-catalog-bootstrap.v1
+schema: cxxlens.security-profile.v1
 kind: security-profile
-document_version: 0.1.0
-maturity: bootstrap
+document_version: 1.0.0
+maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
   index: docs/design/catalogs/README.md
-  bootstrap_issue: '#58'
-  owner: steward.ng-catalogs
-compatibility:
-  version_axis: security-and-trust-profile
-  current: 0.1.0-bootstrap
-  exact_contract_issue: '#65'
-replaces:
-  - schemas/cxxlens_capabilities.schema.yaml
-  - schemas/cxxlens_frontend_worker_ipc.contract.yaml
-entries:
-  - id: trust.kernel-in-process
-    status: contract-pending
-    owner_issue: '#65'
-    profile: NG0
-    contract_issue: '#65'
-    summary: Statically linked, compiler-free, bounded trusted provider requirements.
-  - id: trust.native-worker
-    status: contract-pending
-    owner_issue: '#65'
-    profile: NG0
-    contract_issue: '#65'
-    summary: Process isolation, binary/input binding, sandbox assurance, and native confinement.
-  - id: trust.third-party-provider
-    status: contract-pending
-    owner_issue: '#65'
-    profile: NG0
-    contract_issue: '#65'
-    depends_on: [trust.native-worker]
-    summary: Discovery, publisher identity, certification, and policy-controlled execution.
-  - id: trust.remote-provider
-    status: unsupported
-    owner_issue: '#65'
-    profile: NG1
-    contract_issue: '#65'
-    summary: Remote execution is outside the NG0 production support profile.
+  decision_adr: docs/design/adr/0011-provider-trust-certification-discovery.md
+  owner_issue: '#65'
+  owner: steward.ng-security
+registries:
+  namespace: schemas/cxxlens_ng_namespace_registry.yaml
+  certification: schemas/cxxlens_ng_provider_certification_registry.yaml
+  support_matrix: schemas/cxxlens_ng_provider_support_matrix.yaml
+signature_contract:
+  algorithm: ed25519
+  subject_digest: domain-separated-sha256-full-256
+  domain: cxxlens-provider-signature-subject-v1
+  signed_fields:
+    - provider_id
+    - provider_version
+    - package_identity
+    - publisher
+    - manifest_digest
+    - binary_digest
+    - semantic_contract_digest
+  verifier_boundary: trusted-signature-verifier-port
+  manifest_verdict_authority: forbidden
+qualification:
+  levels:
+    - id: experimental
+      requires: []
+      grant: provider-owned-namespace-only
+    - id: schema-conformant
+      requires: [experimental]
+      grant: validated-shape-only
+    - id: deterministic
+      requires: [schema-conformant]
+      grant: deterministic-contract-qualified
+    - id: sandbox-qualified
+      requires: [schema-conformant]
+      grant: sandbox-profile-qualified
+    - id: canonical-semantic-qualified
+      requires: [deterministic, sandbox-qualified]
+      grant: registry-scoped-standard-authority
+    - id: cross-version-qualified
+      requires: [canonical-semantic-qualified]
+      grant: declared-cross-version-equivalence
+    - id: production-supported
+      requires: [canonical-semantic-qualified]
+      grant: support-matrix-scoped-production
+  canonical_authority_minimum: canonical-semantic-qualified
+  self_assertion: non-authoritative
+  schema_conformance_grants_canonical_authority: false
+discovery:
+  precedence: [explicit_path, installation_manifest, project_config, system_registry]
+  path_only: forbidden
+  duplicate_exact_identity: reject-same-precedence-deduplicate-lower-precedence-with-explanation
+  shadowing: reject-provider-version-with-different-package-or-binary
+  invalid_higher_precedence: blocks-lower-precedence-fallback
+  fallback: explicit-policy-exact-tuple-only
+  explanation: selected-and-rejected-candidates-with-stable-reason-codes
+sandbox:
+  assurance_order: [none, best_effort, enforced, certified]
+  effective_minimum: max-of-manifest-request-security-profile
+  insufficient: provider-unavailable-no-degradation
+  evidence_required: [platform, mechanism, achieved, policy_digest, evidence_digest]
+  profiles:
+    - id: trust.kernel-in-process
+      minimum: certified
+      allowed_execution: [statically-linked-compiler-free]
+      network: denied
+    - id: trust.native-worker
+      minimum: enforced
+      allowed_execution: [out-of-process-native-worker]
+      network: denied
+    - id: trust.third-party-provider
+      minimum: enforced
+      allowed_execution: [out-of-process-provider]
+      network: denied
+    - id: trust.remote-provider
+      minimum: certified
+      allowed_execution: []
+      network: unsupported
+product_execution:
+  default: disabled
+  required_opt_in: explicit-per-request
+  digest_binding: exact-executable-plugin-spec-digests
+  audit_fields:
+    - execution_id
+    - executable_digest
+    - plugin_digests
+    - process_tree_digest
+    - environment_digest
+    - network
+    - writable_staging_digest
+    - output_redirection_digest
+validation_boundary:
+  inputs: [provider_manifest, provider_output, schema_pack, model_pack, snapshot, cache]
+  before: authority-or-publication-or-cache-adoption
+  checks: [size_limit, schema_digest, canonical_encoding, reference_integrity, trust_binding]
+  invalid: reject-without-prior-snapshot-mutation
+reason_codes:
+  - security.audit-evidence-incomplete
+  - security.canonical-authority-denied
+  - security.certificate-valid
+  - security.certificate-revoked
+  - security.certificate-stale
+  - security.certificate-subject-mismatch
+  - security.certificate-untrusted-issuer
+  - security.certification-self-asserted
+  - security.discovery-empty
+  - security.downgrade-forbidden
+  - security.duplicate-provider
+  - security.namespace-collision
+  - security.namespace-authorized
+  - security.namespace-unowned
+  - security.opt-in-required
+  - security.path-only-discovery
+  - security.product-execution-authorized
+  - security.provider-selected
+  - security.provider-shadowing
+  - security.sandbox-insufficient
+  - security.sandbox-qualified
+  - security.signature-mismatch
+  - security.signature-missing
+  - security.support-tuple-unsupported
+  - security.support-tuple-qualified
+  - security.untrusted-input-invalid
+  - security.untrusted-input-valid
+backend_authority:
+  implementation: tools/quality/check_ng_security_contract.py
+  vectors: schemas/cxxlens_ng_security_conformance_vectors.yaml
+  report_schema: schemas/cxxlens_ng_security_conformance_report.schema.yaml
+  equality: selection-and-rejection-explanation

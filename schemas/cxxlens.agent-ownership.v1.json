@@ -4,7 +4,7 @@
     "conventions": "sha256:fa58fa2f23591eafac9f46eb91fcfab01063681e453065b62d34bdab3fca8af1",
     "ownership_registry": "sha256:797e6a52c4c941ed4225b761ee070f5f00af4c10661d2ebd519e874391eec342"
   },
-  "repository_paths_digest": "sha256:2a2bf1213c80d1e107a5e0bd9663217f344e82fe84244015d78680f384019c6f",
+  "repository_paths_digest": "sha256:85e4165793936dde0ad2a7034ea3f9b4bbd2b877209829b75ed7c55e8bffb4d3",
   "reserved_paths": [
     {
       "access": "exclusive_write",
@@ -307,6 +307,12 @@
       "kind": "shared_steward",
       "owner_issue": "#59",
       "responsibility": "Next-generation product boundary, release profile, compatibility bundle, and decision tooling."
+    },
+    {
+      "id": "steward.ng-security",
+      "kind": "shared_steward",
+      "owner_issue": "#65",
+      "responsibility": "Provider trust, namespace ownership, certification, discovery, sandbox, and support contracts."
     },
     {
       "id": "steward.ng-semantics",
@@ -1186,7 +1192,7 @@
     }
   ],
   "schema": "cxxlens.agent-ownership.v1",
-  "semantic_digest": "sha256:19acc0c4957881a4897138d0de516b45a5494fbaaa1c9596f423ff3459586b12",
+  "semantic_digest": "sha256:cb38f9373cb837b73c7c387c6c9e524fc1a6947fc5eba378877557e6d3a97922",
   "skeletons": [
     {
       "api_id": "API-CFG-001",
@@ -2931,12 +2937,12 @@
     },
     "generated_path_count": 7,
     "reserved_path_count": 11,
-    "role_count": 185,
+    "role_count": 186,
     "skeleton_state_counts": {
       "blocked": 0,
       "frozen": 124
     },
-    "tracked_path_count": 600,
+    "tracked_path_count": 613,
     "unit_count": 124
   },
   "task_packet_digest": "sha256:68bfa838af2de5910cfa1b4a0bf4dbc3a1d24eaa3f21fff1ec378dccff35176c",
@@ -3584,6 +3590,13 @@
       "generator_role": null,
       "owner_role": "steward.ng-provider-protocol",
       "path": "docs/design/adr/0010-provider-wire-streaming-atomicity.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-security",
+      "path": "docs/design/adr/0011-provider-trust-certification-discovery.md"
     },
     {
       "access": "exclusive_write",
@@ -4758,6 +4771,34 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_namespace_registry.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_namespace_registry.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_provider_certification_registry.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_provider_certification_registry.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.ng-provider-protocol",
       "path": "schemas/cxxlens_ng_provider_conformance_report.schema.yaml"
     },
@@ -4809,6 +4850,20 @@
       "generator_role": null,
       "owner_role": "steward.ng-provider-protocol",
       "path": "schemas/cxxlens_ng_provider_protocol.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_provider_support_matrix.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_provider_support_matrix.yaml"
     },
     {
       "access": "exclusive_write",
@@ -4898,7 +4953,35 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
-      "owner_role": "steward.ng-documentation",
+      "owner_role": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_security_conformance_report.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_security_conformance_vectors.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_security_conformance_vectors.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_security_profile.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-security",
       "path": "schemas/cxxlens_ng_security_profile.yaml"
     },
     {
@@ -6459,6 +6542,13 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.ng-security",
+      "path": "tests/quality/test_ng_security_contract.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.ng-semantics",
       "path": "tests/quality/test_ng_semantic_guarantee.py"
     },
@@ -6965,6 +7055,13 @@
       "generator_role": null,
       "owner_role": "steward.ng-release",
       "path": "tools/quality/check_ng_release_contract.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-security",
+      "path": "tools/quality/check_ng_security_contract.py"
     },
     {
       "access": "exclusive_write",

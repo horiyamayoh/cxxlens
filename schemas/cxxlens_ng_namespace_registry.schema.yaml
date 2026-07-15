@@ -1,0 +1,58 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.namespace-registry.v1
+type: object
+additionalProperties: false
+required: [schema, document_version, maturity, authority, mutation, entries, delegated_roots, provider_owned_rule]
+properties:
+  schema: {const: cxxlens.namespace-registry.v1}
+  document_version: {const: 1.0.0}
+  maturity: {const: accepted}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [owner_issue, decision_adr, owner]
+    properties:
+      owner_issue: {const: '#65'}
+      decision_adr: {const: docs/design/adr/0011-provider-trust-certification-discovery.md}
+      owner: {const: steward.ng-security}
+  mutation: {const: signed-registry-update-only}
+  entries:
+    type: array
+    minItems: 10
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, kind, prefix, owner, authority, grant_source, minimum_qualification]
+      properties:
+        id: {$ref: '#/$defs/id'}
+        kind: {enum: [relation, provider, interpretation]}
+        prefix: {type: string, pattern: '^[a-z][a-z0-9_.-]*\.$'}
+        owner: {$ref: '#/$defs/id'}
+        authority: {enum: [standard, custom, provider-owned]}
+        grant_source: {enum: [registry-only, exact-delegation, derived-provider-identity]}
+        minimum_qualification: {enum: [experimental, schema-conformant, canonical-semantic-qualified]}
+        status: {enum: [active, conformance-only]}
+    uniqueItems: true
+  delegated_roots:
+    type: array
+    minItems: 2
+    items:
+      type: object
+      additionalProperties: false
+      required: [kind, prefix, direct_claim, child_registration]
+      properties:
+        kind: {enum: [relation, provider, interpretation]}
+        prefix: {type: string, pattern: '^[a-z][a-z0-9_.-]*\.$'}
+        direct_claim: {const: forbidden}
+        child_registration: {const: exact-owner-entry-required}
+  provider_owned_rule:
+    type: object
+    additionalProperties: false
+    required: [relation_prefix, interpretation_prefix, derivation, standard_authority]
+    properties:
+      relation_prefix: {const: 'provider.<publisher>.<provider-id>.'}
+      interpretation_prefix: {const: 'provider.<publisher>.<provider-id>.'}
+      derivation: {const: exact-verified-provider-identity}
+      standard_authority: {const: false}
+$defs:
+  id: {type: string, minLength: 1, maxLength: 512}

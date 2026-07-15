@@ -1,5 +1,5 @@
 {
-  "asset_count": 616,
+  "asset_count": 629,
   "assets": [
     {
       "authority": "operational",
@@ -926,6 +926,16 @@
       "disposition": "inherit",
       "owner": "steward.ng-provider-protocol",
       "path": "docs/design/adr/0010-provider-wire-streaming-atomicity.md",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-security",
+      "path": "docs/design/adr/0011-provider-trust-certification-discovery.md",
       "profile": "NG0",
       "removal_issue": null,
       "replacement": null,
@@ -2674,6 +2684,46 @@
     {
       "authority": "normative",
       "disposition": "inherit",
+      "owner": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_namespace_registry.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_namespace_registry.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_provider_certification_registry.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_provider_certification_registry.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
       "owner": "steward.ng-provider-protocol",
       "path": "schemas/cxxlens_ng_provider_conformance_report.schema.yaml",
       "profile": "NG0",
@@ -2746,6 +2796,26 @@
       "disposition": "inherit",
       "owner": "steward.ng-provider-protocol",
       "path": "schemas/cxxlens_ng_provider_protocol.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_provider_support_matrix.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_provider_support_matrix.yaml",
       "profile": "NG0",
       "removal_issue": null,
       "replacement": null,
@@ -2874,7 +2944,47 @@
     {
       "authority": "normative",
       "disposition": "inherit",
-      "owner": "steward.ng-catalogs",
+      "owner": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_security_conformance_report.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_security_conformance_vectors.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_security_conformance_vectors.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-security",
+      "path": "schemas/cxxlens_ng_security_profile.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-security",
       "path": "schemas/cxxlens_ng_security_profile.yaml",
       "profile": "NG0",
       "removal_issue": null,
@@ -5144,6 +5254,16 @@
     {
       "authority": "implementation",
       "disposition": "inherit",
+      "owner": "steward.ng-security",
+      "path": "tests/quality/test_ng_security_contract.py",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
       "owner": "steward.ng-semantics",
       "path": "tests/quality/test_ng_semantic_guarantee.py",
       "profile": "NG0",
@@ -5914,6 +6034,16 @@
     {
       "authority": "implementation",
       "disposition": "inherit",
+      "owner": "steward.ng-security",
+      "path": "tools/quality/check_ng_security_contract.py",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
       "owner": "steward.ng-semantics",
       "path": "tools/quality/check_ng_semantic_guarantee.py",
       "profile": "NG0",
@@ -6165,7 +6295,7 @@
   "classifications": {
     "archive": 37,
     "delete": 22,
-    "inherit": 103,
+    "inherit": 116,
     "migrate": 388,
     "replace": 66
   },
@@ -6173,5 +6303,5 @@
   "generated_by": "tools/quality/check_documentation_consistency.py",
   "schema": "cxxlens.asset-migration-ledger.v1",
   "source_policy": "schemas/cxxlens_asset_migration_policy.yaml",
-  "source_policy_digest": "sha256:2b4b32a55d88eaa0c60e9386b17c7cbbbee700c6beed3b721cec7ffdbe3141a6"
+  "source_policy_digest": "sha256:2adf823ec21c7e99cdebd71d7fe251805011dce724525ab0f9eb1f35635fd281"
 }

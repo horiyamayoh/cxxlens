@@ -6,6 +6,7 @@ required:
   - schema
   - provider_id
   - provider_version
+  - package_identity
   - provider_binary_digest
   - provider_semantic_contract_digest
   - publisher
@@ -19,11 +20,14 @@ required:
   - determinism_contract
   - resource_class
   - sandbox_minimum
+  - requested_qualifications
+  - trust_flags
   - task_stage
 properties:
   schema: {const: cxxlens.provider-manifest.v1}
   provider_id: {$ref: '#/$defs/id'}
   provider_version: {$ref: '#/$defs/version'}
+  package_identity: {$ref: '#/$defs/id'}
   provider_binary_digest: {$ref: '#/$defs/digest'}
   provider_semantic_contract_digest: {$ref: '#/$defs/digest'}
   publisher: {$ref: '#/$defs/id'}
@@ -47,6 +51,15 @@ properties:
   determinism_contract: {$ref: '#/$defs/digest'}
   resource_class: {$ref: '#/$defs/id'}
   sandbox_minimum: {$ref: '#/$defs/id'}
+  requested_qualifications:
+    type: array
+    uniqueItems: true
+    items:
+      enum: [experimental, schema-conformant, deterministic, sandbox-qualified, canonical-semantic-qualified, cross-version-qualified, production-supported]
+  trust_flags:
+    type: array
+    uniqueItems: true
+    items: {$ref: '#/$defs/id'}
   task_stage:
     type: object
     additionalProperties: false

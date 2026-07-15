@@ -37,8 +37,11 @@ class DocumentationConsistencyTests(unittest.TestCase):
         provider = MODULE.load_yaml(ROOT / MODULE.CATALOGS["provider-protocol"])
         self.assertEqual(provider["maturity"], "accepted")
         self.assertEqual(provider["schema"], "cxxlens.provider-protocol.v1")
+        security = MODULE.load_yaml(ROOT / MODULE.CATALOGS["security-profile"])
+        self.assertEqual(security["maturity"], "accepted")
+        self.assertEqual(security["schema"], "cxxlens.security-profile.v1")
         for kind, path in MODULE.CATALOGS.items():
-            if kind not in {"relation-registry", "provider-protocol"}:
+            if kind not in {"relation-registry", "provider-protocol", "security-profile"}:
                 self.assertEqual(MODULE.load_yaml(ROOT / path)["maturity"], "bootstrap")
 
     def test_missing_replacement_is_rejected(self) -> None:

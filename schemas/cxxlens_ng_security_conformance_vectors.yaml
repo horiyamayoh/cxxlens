@@ -1,0 +1,38 @@
+schema: cxxlens.security-conformance-vectors.v1
+document_version: 1.0.0
+authority:
+  owner_issue: '#65'
+  decision_adr: docs/design/adr/0011-provider-trust-certification-discovery.md
+contract: schemas/cxxlens_ng_security_profile.yaml
+vectors:
+  - {id: namespace-standard-qualified, class: positive, operation: namespace, input: {scenario: standard-qualified}, expected: {decision: accepted, reason_code: security.namespace-authorized}}
+  - {id: namespace-standard-schema-only, class: negative, operation: namespace, input: {scenario: standard-schema-only}, expected: {decision: rejected, reason_code: security.canonical-authority-denied}}
+  - {id: namespace-self-asserted, class: negative, operation: namespace, input: {scenario: self-asserted-canonical}, expected: {decision: rejected, reason_code: security.certification-self-asserted}}
+  - {id: namespace-unknown-org, class: negative, operation: namespace, input: {scenario: unknown-org}, expected: {decision: rejected, reason_code: security.namespace-unowned}}
+  - {id: namespace-provider-owned, class: positive, operation: namespace, input: {scenario: provider-owned-exact}, expected: {decision: accepted, reason_code: security.namespace-authorized}}
+  - {id: namespace-provider-owned-foreign, class: negative, operation: namespace, input: {scenario: provider-owned-foreign}, expected: {decision: rejected, reason_code: security.namespace-collision}}
+  - {id: certificate-valid, class: positive, operation: certificate, input: {scenario: valid}, expected: {decision: accepted, reason_code: security.certificate-valid}}
+  - {id: certificate-signature-missing, class: negative, operation: certificate, input: {scenario: signature-missing}, expected: {decision: rejected, reason_code: security.signature-missing}}
+  - {id: certificate-signature-mismatch, class: negative, operation: certificate, input: {scenario: signature-mismatch}, expected: {decision: rejected, reason_code: security.signature-mismatch}}
+  - {id: certificate-untrusted-issuer, class: negative, operation: certificate, input: {scenario: untrusted-issuer}, expected: {decision: rejected, reason_code: security.certificate-untrusted-issuer}}
+  - {id: certificate-revoked, class: negative, operation: certificate, input: {scenario: revoked}, expected: {decision: rejected, reason_code: security.certificate-revoked}}
+  - {id: certificate-expired, class: negative, operation: certificate, input: {scenario: expired}, expected: {decision: rejected, reason_code: security.certificate-stale}}
+  - {id: certificate-subject-mismatch, class: negative, operation: certificate, input: {scenario: subject-mismatch}, expected: {decision: rejected, reason_code: security.certificate-subject-mismatch}}
+  - {id: discovery-explicit-selected, class: positive, operation: discovery, input: {scenario: explicit-selected}, expected: {decision: accepted, reason_code: security.provider-selected, value: explicit_path}}
+  - {id: discovery-install-selected, class: positive, operation: discovery, input: {scenario: installation-selected}, expected: {decision: accepted, reason_code: security.provider-selected, value: installation_manifest}}
+  - {id: discovery-path-only, class: negative, operation: discovery, input: {scenario: path-only}, expected: {decision: rejected, reason_code: security.path-only-discovery}}
+  - {id: discovery-shadowing, class: negative, operation: discovery, input: {scenario: shadowing}, expected: {decision: rejected, reason_code: security.provider-shadowing}}
+  - {id: discovery-duplicate, class: negative, operation: discovery, input: {scenario: same-precedence-duplicate}, expected: {decision: rejected, reason_code: security.duplicate-provider}}
+  - {id: discovery-downgrade-blocked, class: negative, operation: discovery, input: {scenario: invalid-explicit-with-lower-valid}, expected: {decision: rejected, reason_code: security.downgrade-forbidden}}
+  - {id: discovery-empty, class: negative, operation: discovery, input: {scenario: empty}, expected: {decision: rejected, reason_code: security.discovery-empty}}
+  - {id: sandbox-exact, class: positive, operation: sandbox, input: {scenario: exact}, expected: {decision: accepted, reason_code: security.sandbox-qualified, value: enforced}}
+  - {id: sandbox-higher, class: positive, operation: sandbox, input: {scenario: higher}, expected: {decision: accepted, reason_code: security.sandbox-qualified, value: certified}}
+  - {id: sandbox-insufficient, class: negative, operation: sandbox, input: {scenario: insufficient}, expected: {decision: rejected, reason_code: security.sandbox-insufficient}}
+  - {id: product-execution-opted-in, class: positive, operation: product_execution, input: {scenario: complete}, expected: {decision: accepted, reason_code: security.product-execution-authorized}}
+  - {id: product-execution-no-opt-in, class: negative, operation: product_execution, input: {scenario: no-opt-in}, expected: {decision: rejected, reason_code: security.opt-in-required}}
+  - {id: product-execution-audit-missing, class: negative, operation: product_execution, input: {scenario: audit-missing}, expected: {decision: rejected, reason_code: security.audit-evidence-incomplete}}
+  - {id: validation-complete, class: positive, operation: validation, input: {scenario: complete}, expected: {decision: accepted, reason_code: security.untrusted-input-valid}}
+  - {id: validation-schema-mismatch, class: negative, operation: validation, input: {scenario: schema-mismatch}, expected: {decision: rejected, reason_code: security.untrusted-input-invalid}}
+  - {id: support-conformance-tuple, class: positive, operation: support, input: {scenario: conformance-exact}, expected: {decision: accepted, reason_code: security.support-tuple-qualified, value: conformance-only}}
+  - {id: support-production-planned, class: negative, operation: support, input: {scenario: planned-as-production}, expected: {decision: rejected, reason_code: security.support-tuple-unsupported}}
+  - {id: support-unknown-tuple, class: negative, operation: support, input: {scenario: unknown}, expected: {decision: rejected, reason_code: security.support-tuple-unsupported}}

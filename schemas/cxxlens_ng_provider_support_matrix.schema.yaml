@@ -1,0 +1,42 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.provider-support-matrix.v1
+type: object
+additionalProperties: false
+required: [schema, document_version, maturity, authority, tuple_identity, entries]
+properties:
+  schema: {const: cxxlens.provider-support-matrix.v1}
+  document_version: {const: 1.0.0}
+  maturity: {const: accepted}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [owner_issue, decision_adr, owner]
+    properties:
+      owner_issue: {const: '#65'}
+      decision_adr: {const: docs/design/adr/0011-provider-trust-certification-discovery.md}
+      owner: {const: steward.ng-security}
+  tuple_identity: {const: [provider_id, provider_version, binary_digest, relation, interpretation, toolchain, platform]}
+  entries:
+    type: array
+    minItems: 3
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, provider_id, provider_version, binary_digest, relation, interpretation, toolchain, platform, status, qualification, evidence, blocker_issue]
+      properties:
+        id: {$ref: '#/$defs/id'}
+        provider_id: {$ref: '#/$defs/id'}
+        provider_version: {$ref: '#/$defs/version'}
+        binary_digest: {oneOf: [{$ref: '#/$defs/digest'}, {const: pending}]}
+        relation: {$ref: '#/$defs/id'}
+        interpretation: {$ref: '#/$defs/id'}
+        toolchain: {$ref: '#/$defs/id'}
+        platform: {$ref: '#/$defs/id'}
+        status: {enum: [conformance-only, planned, production-supported, unsupported]}
+        qualification: {$ref: '#/$defs/id'}
+        evidence: {oneOf: [{$ref: '#/$defs/digest'}, {const: pending}]}
+        blocker_issue: {oneOf: [{type: string, pattern: '^#[0-9]+$'}, {type: 'null'}]}
+$defs:
+  id: {type: string, minLength: 1, maxLength: 512}
+  version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}

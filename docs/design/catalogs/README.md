@@ -13,7 +13,7 @@
 | Provider Protocol | `schemas/cxxlens_ng_provider_protocol.yaml` | #64 | accepted exact contract |
 | Public C++ API Catalog | `schemas/cxxlens_ng_public_api_catalog.yaml` | #58 → #66 | bootstrap |
 | Acceptance Manifest | `schemas/cxxlens_ng_acceptance_manifest.yaml` | #58 → #71 | bootstrap |
-| Security Profile | `schemas/cxxlens_ng_security_profile.yaml` | #58 → #65 | bootstrap |
+| Security Profile | `schemas/cxxlens_ng_security_profile.yaml` | #65 | accepted exact contract |
 
 ## Cross-catalog release authority
 
@@ -48,6 +48,11 @@ Provider Protocol は Issue #64 により 104 byte fixed header、deterministic 
 chunk、credit/ACK/resume、batch / atomic output group / dependency group の不可分性、deterministic task DAG、
 structured terminal failure を固定しています。全 output の memory vector 化、cycle/fixed point の silent
 ordering、undeclared partial adoption、adjacent version/provider への silent fallback は禁止されます。
+
+Security Profile は Issue #65 により namespace owner、trusted certification/revocation、Ed25519 subject binding、
+discovery precedence、shadowing/downgrade rejection、sandbox assurance、product execution audit、untrusted validation
+boundary、provider/relation/interpretation/toolchain/platform support tuple を固定しています。manifest の自己認証と
+`schema-conformant` は standard canonical authority を付与しません。
 
 残る `maturity: bootstrap` catalog は名前空間、version axis、owner issue、依存関係の入口だけを固定します。
 entry の `status: contract-pending` は実装、stable API、release support を意味しません。各 owner issue が exact

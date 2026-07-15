@@ -242,6 +242,11 @@ ROLE_DEFINITIONS: dict[str, tuple[str, str, str]] = {
         "#64",
         "Provider wire, streaming, task graph, atomic adoption, failure, and conformance contracts.",
     ),
+    "steward.ng-security": (
+        "shared_steward",
+        "#65",
+        "Provider trust, namespace ownership, certification, discovery, sandbox, and support contracts.",
+    ),
 }
 
 
@@ -275,7 +280,6 @@ NG_DOCUMENTATION_PATHS = {
     "schemas/cxxlens_ng_acceptance_manifest.yaml",
     "schemas/cxxlens_ng_catalog_bootstrap.schema.yaml",
     "schemas/cxxlens_ng_public_api_catalog.yaml",
-    "schemas/cxxlens_ng_security_profile.yaml",
     "tests/quality/test_documentation_consistency.py",
     "tools/quality/check_documentation_consistency.py",
 }
@@ -354,6 +358,23 @@ NG_PROVIDER_PROTOCOL_PATHS = {
     "schemas/cxxlens_ng_provider_task.schema.yaml",
     "tests/quality/test_ng_provider_protocol.py",
     "tools/quality/check_ng_provider_protocol.py",
+}
+
+NG_SECURITY_PATHS = {
+    "docs/design/adr/0011-provider-trust-certification-discovery.md",
+    "schemas/cxxlens_ng_namespace_registry.schema.yaml",
+    "schemas/cxxlens_ng_namespace_registry.yaml",
+    "schemas/cxxlens_ng_provider_certification_registry.schema.yaml",
+    "schemas/cxxlens_ng_provider_certification_registry.yaml",
+    "schemas/cxxlens_ng_provider_support_matrix.schema.yaml",
+    "schemas/cxxlens_ng_provider_support_matrix.yaml",
+    "schemas/cxxlens_ng_security_conformance_report.schema.yaml",
+    "schemas/cxxlens_ng_security_conformance_vectors.schema.yaml",
+    "schemas/cxxlens_ng_security_conformance_vectors.yaml",
+    "schemas/cxxlens_ng_security_profile.schema.yaml",
+    "schemas/cxxlens_ng_security_profile.yaml",
+    "tests/quality/test_ng_security_contract.py",
+    "tools/quality/check_ng_security_contract.py",
 }
 
 
@@ -523,6 +544,8 @@ def owner_for_path(
         return "steward.ng-store-contract"
     if path in NG_PROVIDER_PROTOCOL_PATHS:
         return "steward.ng-provider-protocol"
+    if path in NG_SECURITY_PATHS:
+        return "steward.ng-security"
     if path.startswith(("tools/agent/ownership_", "tests/agent/ownership/")) or path in {
         "docs/agent_ownership_reference.md",
         "schemas/cxxlens.agent-ownership.v1.schema.yaml",

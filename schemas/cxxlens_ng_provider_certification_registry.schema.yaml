@@ -1,0 +1,110 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.provider-certification-registry.v1
+type: object
+additionalProperties: false
+required: [schema, document_version, maturity, authority, update_policy, trust_anchors, issuers, certificates, revocations]
+properties:
+  schema: {const: cxxlens.provider-certification-registry.v1}
+  document_version: {const: 1.0.0}
+  maturity: {const: accepted}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [owner_issue, decision_adr, owner]
+    properties:
+      owner_issue: {const: '#65'}
+      decision_adr: {const: docs/design/adr/0011-provider-trust-certification-discovery.md}
+      owner: {const: steward.ng-security}
+  update_policy:
+    type: object
+    additionalProperties: false
+    required: [source, signature, rollback, clock]
+    properties:
+      source: {const: explicit-installed-registry}
+      signature: {const: required}
+      rollback: {const: monotonically-increasing-sequence}
+      clock: {const: trusted-time-port}
+  trust_anchors:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, public_key_fingerprint, scope, production_use]
+      properties:
+        id: {$ref: '#/$defs/id'}
+        public_key_fingerprint: {$ref: '#/$defs/digest'}
+        scope: {enum: [conformance-only, production]}
+        production_use: {enum: [allowed, forbidden]}
+  issuers:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, trust_anchor, public_key_fingerprint, allowed_qualifications, namespace_prefixes, scope]
+      properties:
+        id: {$ref: '#/$defs/id'}
+        trust_anchor: {$ref: '#/$defs/id'}
+        public_key_fingerprint: {$ref: '#/$defs/digest'}
+        allowed_qualifications: {type: array, uniqueItems: true, items: {$ref: '#/$defs/id'}}
+        namespace_prefixes: {type: array, uniqueItems: true, items: {type: string, minLength: 2}}
+        scope: {enum: [conformance-only, production]}
+  certificates:
+    type: array
+    items: {$ref: '#/$defs/certificate'}
+  revocations:
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required: [certificate_id, effective_sequence, reason]
+      properties:
+        certificate_id: {$ref: '#/$defs/id'}
+        effective_sequence: {type: integer, minimum: 0}
+        reason: {$ref: '#/$defs/id'}
+$defs:
+  id: {type: string, minLength: 1, maxLength: 512}
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  certificate:
+    type: object
+    additionalProperties: false
+    required: [id, issuer, serial, subject, qualifications, validity, registry_sequence, certificate_signature]
+    properties:
+      id: {$ref: '#/$defs/id'}
+      issuer: {$ref: '#/$defs/id'}
+      serial: {$ref: '#/$defs/id'}
+      subject:
+        type: object
+        additionalProperties: false
+        required: [provider_id, provider_version, package_identity, publisher, manifest_digest, binary_digest, semantic_contract_digest]
+        properties:
+          provider_id: {$ref: '#/$defs/id'}
+          provider_version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+          package_identity: {$ref: '#/$defs/id'}
+          publisher: {$ref: '#/$defs/id'}
+          manifest_digest: {$ref: '#/$defs/digest'}
+          binary_digest: {$ref: '#/$defs/digest'}
+          semantic_contract_digest: {$ref: '#/$defs/digest'}
+      qualifications:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          additionalProperties: false
+          required: [level, relation, interpretation, toolchains, platforms]
+          properties:
+            level: {$ref: '#/$defs/id'}
+            relation: {$ref: '#/$defs/id'}
+            interpretation: {$ref: '#/$defs/id'}
+            toolchains: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/$defs/id'}}
+            platforms: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/$defs/id'}}
+      validity:
+        type: object
+        additionalProperties: false
+        required: [not_before_epoch, not_after_epoch]
+        properties:
+          not_before_epoch: {type: integer, minimum: 0}
+          not_after_epoch: {type: integer, minimum: 0}
+      registry_sequence: {type: integer, minimum: 0}
+      certificate_signature: {$ref: '#/$defs/digest'}

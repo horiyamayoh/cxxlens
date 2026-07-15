@@ -245,6 +245,15 @@ overrides:
       authority: normative
       replacement: null
       removal_issue: null
+  - path: docs/design/adr/0011-provider-trust-certification-discovery.md
+    record: &ng_security_contract
+      disposition: inherit
+      status: active
+      owner: steward.ng-security
+      profile: NG0
+      authority: normative
+      replacement: null
+      removal_issue: null
   - path: docs/design/SHA256SUMS
     record:
       disposition: inherit
@@ -448,7 +457,27 @@ overrides:
   - path: schemas/cxxlens_ng_acceptance_manifest.yaml
     record: *ng_catalog
   - path: schemas/cxxlens_ng_security_profile.yaml
-    record: *ng_catalog
+    record: *ng_security_contract
+  - path: schemas/cxxlens_ng_security_profile.schema.yaml
+    record: *ng_security_contract
+  - path: schemas/cxxlens_ng_namespace_registry.yaml
+    record: *ng_security_contract
+  - path: schemas/cxxlens_ng_namespace_registry.schema.yaml
+    record: *ng_security_contract
+  - path: schemas/cxxlens_ng_provider_certification_registry.yaml
+    record: *ng_security_contract
+  - path: schemas/cxxlens_ng_provider_certification_registry.schema.yaml
+    record: *ng_security_contract
+  - path: schemas/cxxlens_ng_provider_support_matrix.yaml
+    record: *ng_security_contract
+  - path: schemas/cxxlens_ng_provider_support_matrix.schema.yaml
+    record: *ng_security_contract
+  - path: schemas/cxxlens_ng_security_conformance_vectors.yaml
+    record: *ng_security_contract
+  - path: schemas/cxxlens_ng_security_conformance_vectors.schema.yaml
+    record: *ng_security_contract
+  - path: schemas/cxxlens_ng_security_conformance_report.schema.yaml
+    record: *ng_security_contract
   - path: schemas/cxxlens_ng_release_bundle.yaml
     record: &ng_release_contract
       disposition: inherit
@@ -595,6 +624,17 @@ overrides:
       removal_issue: null
   - path: tests/quality/test_ng_provider_protocol.py
     record: *ng_provider_tooling
+  - path: tools/quality/check_ng_security_contract.py
+    record: &ng_security_tooling
+      disposition: inherit
+      status: active
+      owner: steward.ng-security
+      profile: NG0
+      authority: implementation
+      replacement: null
+      removal_issue: null
+  - path: tests/quality/test_ng_security_contract.py
+    record: *ng_security_tooling
 
 drift:
   active_markdown:
@@ -615,6 +655,7 @@ drift:
     - docs/design/adr/0008-truth-guarantee-provenance-algebra.md
     - docs/design/adr/0009-snapshot-identity-publication-series.md
     - docs/design/adr/0010-provider-wire-streaming-atomicity.md
+    - docs/design/adr/0011-provider-trust-certification-discovery.md
     - docs/design/adr/README.md
     - docs/design/catalogs/README.md
     - docs/design/cxxlens_next_generation_integrated_design_ja.md

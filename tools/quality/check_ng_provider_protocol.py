@@ -625,6 +625,7 @@ def sample_manifest() -> dict[str, Any]:
         "schema": "cxxlens.provider-manifest.v1",
         "provider_id": "provider.cc.clang22",
         "provider_version": "1.0.0",
+        "package_identity": "pkg:cxxlens/provider-cc-clang22@1.0.0",
         "provider_binary_digest": "sha256:" + "a" * 64,
         "provider_semantic_contract_digest": "sha256:" + "b" * 64,
         "publisher": "cxxlens.project",
@@ -639,6 +640,8 @@ def sample_manifest() -> dict[str, Any]:
         "determinism_contract": "sha256:" + "d" * 64,
         "resource_class": "frontend-medium",
         "sandbox_minimum": "process-isolated",
+        "requested_qualifications": ["schema-conformant"],
+        "trust_flags": ["requires-trusted-registry-for-standard-authority"],
         "task_stage": {"input": "observation", "output": "assertion"},
     }
 
@@ -678,7 +681,7 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
 def validate_design(root: pathlib.Path) -> None:
     design = (root / "docs/design/cxxlens_next_generation_integrated_design_ja.md").read_text(encoding="utf-8")
     for marker in (
-        "0.9.0-normative", "cxxlens_ng_provider_protocol.yaml", "atomic_output_group",
+        "1.0.0-normative", "cxxlens_ng_provider_protocol.yaml", "atomic_output_group",
         "dependency_group", "deterministic CBOR", "Issue #64",
     ):
         if marker not in design:

@@ -1,0 +1,45 @@
+schema: cxxlens.provider-support-matrix.v1
+document_version: 1.0.0
+maturity: accepted
+authority:
+  owner_issue: '#65'
+  decision_adr: docs/design/adr/0011-provider-trust-certification-discovery.md
+  owner: steward.ng-security
+tuple_identity: [provider_id, provider_version, binary_digest, relation, interpretation, toolchain, platform]
+entries:
+  - id: support.kernel-build-project-linux
+    provider_id: cxxlens.kernel.builtin
+    provider_version: 1.0.0
+    binary_digest: pending
+    relation: build.project@1
+    interpretation: core.project-catalog@1
+    toolchain: none
+    platform: linux
+    status: planned
+    qualification: canonical-semantic-qualified
+    evidence: pending
+    blocker_issue: '#67'
+  - id: support.clang22-call-site-linux
+    provider_id: cxxlens.clang22.reference
+    provider_version: 1.0.0
+    binary_digest: pending
+    relation: cc.call_site@1
+    interpretation: cc.clang22-canonical@1
+    toolchain: clang-22
+    platform: linux
+    status: planned
+    qualification: canonical-semantic-qualified
+    evidence: pending
+    blocker_issue: '#70'
+  - id: support.company-lock-conformance
+    provider_id: cxxlens.conformance.company-lock
+    provider_version: 1.0.0
+    binary_digest: sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    relation: company.lock.acquire@1
+    interpretation: provider.cxxlens.conformance.company-lock@1
+    toolchain: fixture
+    platform: portable
+    status: conformance-only
+    qualification: schema-conformant
+    evidence: sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+    blocker_issue: '#73'

@@ -1,0 +1,24 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.security-conformance-report.v1
+type: object
+additionalProperties: false
+required: [schema, status, contract_digest, vector_count, accepted, rejected, reason_codes, registry_counts]
+properties:
+  schema: {const: cxxlens.security-conformance-report.v1}
+  status: {const: green}
+  contract_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  vector_count: {type: integer, minimum: 28}
+  accepted: {type: integer, minimum: 1}
+  rejected: {type: integer, minimum: 1}
+  reason_codes: {type: array, uniqueItems: true, items: {type: string, pattern: '^security\.[a-z0-9-]+$'}}
+  registry_counts:
+    type: object
+    additionalProperties: false
+    required: [namespaces, trust_anchors, issuers, certificates, support_tuples, production_certificates]
+    properties:
+      namespaces: {type: integer, minimum: 1}
+      trust_anchors: {type: integer, minimum: 1}
+      issuers: {type: integer, minimum: 1}
+      certificates: {type: integer, minimum: 0}
+      support_tuples: {type: integer, minimum: 1}
+      production_certificates: {const: 0}

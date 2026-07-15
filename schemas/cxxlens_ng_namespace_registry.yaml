@@ -1,0 +1,27 @@
+schema: cxxlens.namespace-registry.v1
+document_version: 1.0.0
+maturity: accepted
+authority:
+  owner_issue: '#65'
+  decision_adr: docs/design/adr/0011-provider-trust-certification-discovery.md
+  owner: steward.ng-security
+mutation: signed-registry-update-only
+entries:
+  - {id: relation.build, kind: relation, prefix: build., owner: cxxlens.project, authority: standard, grant_source: registry-only, minimum_qualification: canonical-semantic-qualified, status: active}
+  - {id: relation.source, kind: relation, prefix: source., owner: cxxlens.project, authority: standard, grant_source: registry-only, minimum_qualification: canonical-semantic-qualified, status: active}
+  - {id: relation.cc, kind: relation, prefix: cc., owner: cxxlens.project, authority: standard, grant_source: registry-only, minimum_qualification: canonical-semantic-qualified, status: active}
+  - {id: relation.core, kind: relation, prefix: core., owner: cxxlens.project, authority: standard, grant_source: registry-only, minimum_qualification: canonical-semantic-qualified, status: active}
+  - {id: relation.company-fixture, kind: relation, prefix: company., owner: cxxlens.conformance, authority: custom, grant_source: registry-only, minimum_qualification: schema-conformant, status: conformance-only}
+  - {id: provider.cxxlens, kind: provider, prefix: cxxlens., owner: cxxlens.project, authority: standard, grant_source: registry-only, minimum_qualification: canonical-semantic-qualified, status: active}
+  - {id: interpretation.cc, kind: interpretation, prefix: cc., owner: cxxlens.project, authority: standard, grant_source: registry-only, minimum_qualification: canonical-semantic-qualified, status: active}
+  - {id: interpretation.core, kind: interpretation, prefix: core., owner: cxxlens.project, authority: standard, grant_source: registry-only, minimum_qualification: canonical-semantic-qualified, status: active}
+  - {id: relation.provider-owned, kind: relation, prefix: provider., owner: exact-provider-identity, authority: provider-owned, grant_source: derived-provider-identity, minimum_qualification: schema-conformant, status: active}
+  - {id: interpretation.provider-owned, kind: interpretation, prefix: provider., owner: exact-provider-identity, authority: provider-owned, grant_source: derived-provider-identity, minimum_qualification: schema-conformant, status: active}
+delegated_roots:
+  - {kind: relation, prefix: org., direct_claim: forbidden, child_registration: exact-owner-entry-required}
+  - {kind: provider, prefix: org., direct_claim: forbidden, child_registration: exact-owner-entry-required}
+provider_owned_rule:
+  relation_prefix: 'provider.<publisher>.<provider-id>.'
+  interpretation_prefix: 'provider.<publisher>.<provider-id>.'
+  derivation: exact-verified-provider-identity
+  standard_authority: false

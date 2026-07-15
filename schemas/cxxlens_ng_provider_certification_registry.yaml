@@ -1,0 +1,26 @@
+schema: cxxlens.provider-certification-registry.v1
+document_version: 1.0.0
+maturity: accepted
+authority:
+  owner_issue: '#65'
+  decision_adr: docs/design/adr/0011-provider-trust-certification-discovery.md
+  owner: steward.ng-security
+update_policy:
+  source: explicit-installed-registry
+  signature: required
+  rollback: monotonically-increasing-sequence
+  clock: trusted-time-port
+trust_anchors:
+  - id: cxxlens.conformance-root.v1
+    public_key_fingerprint: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    scope: conformance-only
+    production_use: forbidden
+issuers:
+  - id: cxxlens.conformance-issuer.v1
+    trust_anchor: cxxlens.conformance-root.v1
+    public_key_fingerprint: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    allowed_qualifications: [schema-conformant, deterministic, sandbox-qualified, canonical-semantic-qualified]
+    namespace_prefixes: [company., provider.]
+    scope: conformance-only
+certificates: []
+revocations: []

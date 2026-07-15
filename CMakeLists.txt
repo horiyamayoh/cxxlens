@@ -222,9 +222,19 @@ install(
         schemas/cxxlens_ng_provider_conformance_report.schema.yaml
         schemas/cxxlens_ng_provider_fuzz_corpus.yaml
         schemas/cxxlens_ng_provider_fuzz_corpus.schema.yaml
+        schemas/cxxlens_ng_security_profile.schema.yaml
         schemas/cxxlens_ng_public_api_catalog.yaml
         schemas/cxxlens_ng_acceptance_manifest.yaml
         schemas/cxxlens_ng_security_profile.yaml
+        schemas/cxxlens_ng_namespace_registry.yaml
+        schemas/cxxlens_ng_namespace_registry.schema.yaml
+        schemas/cxxlens_ng_provider_certification_registry.yaml
+        schemas/cxxlens_ng_provider_certification_registry.schema.yaml
+        schemas/cxxlens_ng_provider_support_matrix.yaml
+        schemas/cxxlens_ng_provider_support_matrix.schema.yaml
+        schemas/cxxlens_ng_security_conformance_vectors.yaml
+        schemas/cxxlens_ng_security_conformance_vectors.schema.yaml
+        schemas/cxxlens_ng_security_conformance_report.schema.yaml
         schemas/cxxlens_ng_release_bundle.yaml
         schemas/cxxlens_ng_release_bundle.schema.yaml
         schemas/cxxlens_ng_compatibility_request.schema.yaml

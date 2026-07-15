@@ -243,6 +243,30 @@ class OwnershipTest(unittest.TestCase):
                 "tools/quality/check_ng_provider_protocol.py",
             },
         )
+        ng_security_paths = {
+            item["path"]
+            for item in generated["tracked_paths"]
+            if item["owner_role"] == "steward.ng-security"
+        }
+        self.assertEqual(
+            ng_security_paths,
+            {
+                "docs/design/adr/0011-provider-trust-certification-discovery.md",
+                "schemas/cxxlens_ng_namespace_registry.schema.yaml",
+                "schemas/cxxlens_ng_namespace_registry.yaml",
+                "schemas/cxxlens_ng_provider_certification_registry.schema.yaml",
+                "schemas/cxxlens_ng_provider_certification_registry.yaml",
+                "schemas/cxxlens_ng_provider_support_matrix.schema.yaml",
+                "schemas/cxxlens_ng_provider_support_matrix.yaml",
+                "schemas/cxxlens_ng_security_conformance_report.schema.yaml",
+                "schemas/cxxlens_ng_security_conformance_vectors.schema.yaml",
+                "schemas/cxxlens_ng_security_conformance_vectors.yaml",
+                "schemas/cxxlens_ng_security_profile.schema.yaml",
+                "schemas/cxxlens_ng_security_profile.yaml",
+                "tests/quality/test_ng_security_contract.py",
+                "tools/quality/check_ng_security_contract.py",
+            },
+        )
         self.assertEqual(
             {item["api_id"] for item in generated["skeletons"]},
             {packet["api_id"] for packet in self.corpus["packets"]},
