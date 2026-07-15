@@ -5,8 +5,8 @@
 | 項目 | 値 |
 |---|---|
 | 文書 ID | `CXXLENS-NG-SRAD-002` |
-| 文書版 | `0.3.0-normative` |
-| 文書状態 | 規範・Issue #57 authority transition 反映版 |
+| 文書版 | `0.4.0-normative` |
+| 文書状態 | 規範・Issue #57 authority transition / Issue #59 release contract 反映版 |
 | 対象製品 | 次世代 `cxxlens` |
 | 基準言語 | C++23 |
 | 初期 primary platform | Linux |
@@ -103,7 +103,8 @@ Project Catalog
 
 #### NG0 — Semantic Relation Kernel
 
-1.0 候補の最小核。
+NG0 は 1.0 候補の最小垂直スライスである。ただし NG0 completion だけで distribution 1.0 を
+production release してよい、という意味ではない。
 
 - project catalog
 - source snapshot
@@ -150,6 +151,25 @@ Project Catalog
 - migration/mock/fuzz/harness recipes
 
 GCC、LLVM IR、object/binary、remote provider は profile と独立して追加可能だが、NG0 completion の blocker にはしない。
+
+profile と distribution release の対応は次で一意に解釈する。
+
+| Profile | Release role | 1.0 blocker |
+|---|---|---|
+| NG0 | pre-1.0 で候補化する最小 kernel vertical slice | 必須 |
+| NG1 | 1.0 の closure、incrementality、provider production hardening | 必須 |
+| NG2 | 1.x へ独立追加可能な analysis capability | 不要 |
+| NG3 | 1.x へ独立追加可能な mutation/artifact capability | 不要 |
+
+NG1 は 1.0 release に必須の production hardening である。1.0 review の blocker は R0 から R4 および
+G0 から G5、GR であり、R5、R6、R7 は 1.0 blocker ではない。NG2/NG3 の実装や追加は distribution
+major を自動的に上げない。accepted stable version axis を破壊するときだけ future major を要求する。
+
+NG0 provider protocol は manifest/digest、major/encoding negotiation、bounded frame、checksum、task/batch
+lifecycle、cancel/deadline、coverage/unresolved、structured failure、process isolation までを含む最小 protocol
+である。NG1 は streaming/backpressure、heartbeat、hung worker recovery、multi-process reader、adjacent
+provider differential、長時間 conformance を加える。詳細境界と release/version tuple は
+`schemas/cxxlens_ng_release_bundle.yaml` を規範とする。
 
 ### 0.4 初期非スコープ
 
@@ -474,6 +494,11 @@ cxxlens-provider-clang22-sdk
 ```
 
 `cxxlens::cxxlens` は provider executable、native SDK、recipes を強制 link してはならない。
+
+1.0 の source compatibility authority は installed public header とする。C++ module は 1.0 の installed
+stable surface に含めない。module surface を提供する場合は `experimental` とし、header authority と同値で
+あることを別 gate で証明してから昇格する。native SDK は compiler/provider major ごとの別 package とし、
+umbrella target に含めない。
 
 ### 3.4 Physical package rule
 
@@ -3355,7 +3380,14 @@ Exit:
 - verification providers
 - migration/mock/fuzz exemplar
 
-### 27.10 Legacy bridge
+### 27.10 Distribution 1.0 review
+
+distribution 1.0 は R0–R4 を blocker とし、R0–R3 だけを完了した NG0 は候補 bundle として扱う。
+R4 の NG1 production hardening、G0–G5、GR、commit-bound qualification evidence が揃うまで
+`production_supported` にしてはならない。R5–R7 は 1.x capability train であり、1.0 review の依存辺に
+置かない。
+
+### 27.11 Legacy bridge
 
 MAY:
 
@@ -3374,7 +3406,7 @@ MUST:
 - removal milestone
 - one-way dependency legacy -> v2
 
-### 27.11 Asset mapping
+### 27.12 Asset mapping
 
 | 現行 | 次世代 |
 |---|---|
@@ -3417,6 +3449,20 @@ patch/artifact plan
 ```
 
 library version 一つから互換性を推測しない。
+
+`schemas/cxxlens_ng_release_bundle.yaml` は各 axis、利用 context、release profile、migration path を束ねる
+machine-readable authority である。互換性要求は `provider-handshake`、`snapshot-open`、`query-load`、
+`release-startup` のいずれかを指定し、その context の全 required axis を提示する。暗黙の bundle 選択、
+first-wins、major fallback は行わない。
+
+判定は必ず `supported`、`migration-required`、`unsupported` のいずれかと structured reason code を返す。
+same-major の新しい minor はその axis policy が許す場合だけ利用でき、古い minor は exact migration path が
+ある場合だけ `migration-required` になる。major mismatch、missing axis、unknown required feature、digest
+mismatch は `unsupported` である。unknown optional feature は利用不能のまま report に保持する。
+
+`inspect` は side-effect-free な契約判定を行う。`doctor` は同じ判定に runtime qualification evidence を
+加え、未 qualified release を `compat.release-not-qualified` として拒否する。両者とも fallback の有無を
+明示し、1.0 では常に `fallback_used: false` である。
 
 ### 28.2 ADR required
 
@@ -3944,13 +3990,16 @@ flowchart LR
     R2 --> R3
     R3 --> R4
     R4 --> R5
+    R4 --> V1
     R5 --> R6
     R5 --> R7
-    R6 --> V1
-    R7 --> V1
+    V1 --> V1X["1.x Capability Trains"]
+    R6 --> V1X
+    R7 --> V1X
 ```
 
-1.0 review は R6/R7 の全機能を stable にすることを必須としない。NG0/NG1 の意味核が production evidence を持つことを優先する。
+1.0 review は R0–R4 と G0–G5/GR の完了を要求する。R5/R6/R7 は 1.0 の依存辺に含めず、
+NG0/NG1 の意味核が production evidence を持つことを優先する。
 
 ---
 

@@ -212,6 +212,11 @@ ROLE_DEFINITIONS: dict[str, tuple[str, str, str]] = {
         "#58",
         "Next-generation documentation, catalog bootstrap, migration ledger, and drift gate.",
     ),
+    "steward.ng-release": (
+        "shared_steward",
+        "#59",
+        "Next-generation product boundary, release profile, compatibility bundle, and decision tooling.",
+    ),
 }
 
 
@@ -250,6 +255,17 @@ NG_DOCUMENTATION_PATHS = {
     "schemas/cxxlens_ng_security_profile.yaml",
     "tests/quality/test_documentation_consistency.py",
     "tools/quality/check_documentation_consistency.py",
+}
+
+
+NG_RELEASE_PATHS = {
+    "docs/design/adr/0005-product-boundary-release-compatibility.md",
+    "schemas/cxxlens_ng_compatibility_report.schema.yaml",
+    "schemas/cxxlens_ng_compatibility_request.schema.yaml",
+    "schemas/cxxlens_ng_release_bundle.schema.yaml",
+    "schemas/cxxlens_ng_release_bundle.yaml",
+    "tests/quality/test_ng_release_contract.py",
+    "tools/quality/check_ng_release_contract.py",
 }
 
 
@@ -407,6 +423,8 @@ def owner_for_path(
         return "steward.ng-authority"
     if path in NG_DOCUMENTATION_PATHS:
         return "steward.ng-documentation"
+    if path in NG_RELEASE_PATHS:
+        return "steward.ng-release"
     if path.startswith(("tools/agent/ownership_", "tests/agent/ownership/")) or path in {
         "docs/agent_ownership_reference.md",
         "schemas/cxxlens.agent-ownership.v1.schema.yaml",

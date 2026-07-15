@@ -1,0 +1,279 @@
+schema: cxxlens.ng-release-bundle.v1
+document_version: 1.0.0
+maturity: accepted-contract
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md
+  adr: docs/design/adr/0005-product-boundary-release-compatibility.md
+  decision_issue: '#59'
+  tracking_issue: '#56'
+
+product_boundary:
+  components:
+    - id: relation-kernel
+      domain: language-neutral
+      depends_on: []
+      forbidden_dependencies: [cc-cpp-semantics, native-provider]
+      exported_values: [relation-descriptor, semantic-claim, snapshot, logical-row]
+    - id: logical-query
+      domain: language-neutral
+      depends_on: [relation-kernel]
+      forbidden_dependencies: [cc-cpp-semantics, native-provider]
+      exported_values: [logical-query-ir, query-result, compatibility-report]
+    - id: cc-cpp-semantics
+      domain: cxx-project
+      depends_on: [relation-kernel, logical-query]
+      forbidden_dependencies: [native-provider]
+      exported_values: [cc-relation-descriptor, cc-semantic-service]
+    - id: portable-provider-sdk
+      domain: language-neutral
+      depends_on: [relation-kernel]
+      forbidden_dependencies: [cc-cpp-semantics, native-provider]
+      exported_values: [provider-manifest, provider-task, relation-batch]
+    - id: native-provider
+      domain: native-major-specific
+      depends_on: [cc-cpp-semantics, portable-provider-sdk]
+      forbidden_dependencies: []
+      exported_values: [detached-observation, provider-certificate]
+    - id: recipes
+      domain: application
+      depends_on: [cc-cpp-semantics, logical-query]
+      forbidden_dependencies: [native-provider]
+      exported_values: [recipe-descriptor, recipe-result]
+  invariants:
+    - id: boundary.kernel-language-neutral
+      rule: relation-kernel and logical-query never depend on C/C++ semantic or native-provider types.
+    - id: boundary.native-process-only
+      rule: compiler-native objects remain inside a major-specific provider process and never cross the protocol.
+    - id: boundary.provider-port
+      rule: the kernel consumes detached protocol values through a port and never links a provider implementation.
+    - id: boundary.recipe-downward-only
+      rule: recipes consume public query and C/C++ semantic contracts without kernel-private access.
+
+distribution_surface:
+  public_targets:
+    - name: cxxlens::base
+      component: relation-kernel
+      direct_dependencies: []
+      stability: stable-at-1.0
+    - name: cxxlens::kernel
+      component: relation-kernel
+      direct_dependencies: [cxxlens::base]
+      stability: stable-at-1.0
+    - name: cxxlens::query
+      component: logical-query
+      direct_dependencies: [cxxlens::base, cxxlens::kernel]
+      stability: stable-at-1.0
+    - name: cxxlens::cpp
+      component: cc-cpp-semantics
+      direct_dependencies: [cxxlens::base, cxxlens::kernel, cxxlens::query]
+      stability: stable-at-1.0
+    - name: cxxlens::provider_sdk
+      component: portable-provider-sdk
+      direct_dependencies: [cxxlens::base, cxxlens::kernel]
+      stability: versioned
+    - name: cxxlens::recipes
+      component: recipes
+      direct_dependencies: [cxxlens::base, cxxlens::kernel, cxxlens::query, cxxlens::cpp]
+      stability: versioned
+    - name: cxxlens::cxxlens
+      component: cc-cpp-semantics
+      direct_dependencies: [cxxlens::base, cxxlens::kernel, cxxlens::query, cxxlens::cpp]
+      stability: stable-at-1.0
+  aggregate_target: cxxlens::cxxlens
+  aggregate_excludes: [cxxlens::provider_sdk, cxxlens::recipes, native-provider, native-sdk]
+  native_packages: [cxxlens-clang-worker-22, cxxlens-provider-clang22-sdk]
+  source_surface:
+    headers: authoritative
+    cxx_modules: experimental-not-installed-in-1.0
+    umbrella_excludes: [provider-sdk, recipes, native-provider, native-sdk]
+  implementation_state: migration-pending
+  implementation_issue: '#67'
+
+stability_tiers:
+  - id: stable
+    source_compatibility: maintained-within-1.x
+    abi_compatibility: certified-tuples-only
+  - id: versioned
+    source_compatibility: axis-major-governed
+    abi_compatibility: not-implied
+  - id: experimental
+    source_compatibility: not-promised
+    abi_compatibility: not-promised
+  - id: native-major-specific
+    source_compatibility: exact-provider-major-and-toolchain
+    abi_compatibility: exact-certified-tuple-only
+  - id: internal
+    source_compatibility: none
+    abi_compatibility: none
+
+profiles:
+  - id: NG0
+    release_role: 1.0-candidate-minimum
+    first_eligible_release: pre-1.0
+    distribution_requirement: required-by-1.0
+    protocol_scope: minimal-vertical-slice
+  - id: NG1
+    release_role: 1.0-production-hardening
+    first_eligible_release: '1.0'
+    distribution_requirement: required-by-1.0
+    protocol_scope: production-hardening
+  - id: NG2
+    release_role: optional-analysis-capabilities
+    first_eligible_release: 1.x
+    distribution_requirement: not-a-1.0-blocker
+    protocol_scope: inherits-ng1
+  - id: NG3
+    release_role: optional-mutation-and-artifact-capabilities
+    first_eligible_release: 1.x
+    distribution_requirement: not-a-1.0-blocker
+    protocol_scope: inherits-ng1
+
+releases:
+  - id: ng0-contract-candidate
+    distribution_range: pre-1.0
+    state: contract-candidate
+    required_profiles: [NG0]
+    optional_profiles: []
+    blocker_migrations: [R0, R1, R2, R3]
+    blocker_gates: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4]
+    production_supported: false
+  - id: distribution-1.0
+    distribution_range: '1.0'
+    state: planned
+    required_profiles: [NG0, NG1]
+    optional_profiles: []
+    blocker_migrations: [R0, R1, R2, R3, R4]
+    blocker_gates: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4, gate.g5, gate.release]
+    production_supported: false
+  - id: distribution-1.x
+    distribution_range: 1.x
+    state: planned
+    required_profiles: [NG0, NG1]
+    optional_profiles: [NG2, NG3]
+    blocker_migrations: [R0, R1, R2, R3, R4]
+    blocker_gates: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4, gate.g5, gate.release]
+    production_supported: false
+  - id: future-major
+    distribution_range: 2.x+
+    state: conditional
+    required_profiles: [NG0, NG1]
+    optional_profiles: [NG2, NG3]
+    blocker_migrations: []
+    blocker_gates: []
+    production_supported: false
+    activation_rule: breaking-change-to-an-accepted-stable-version-axis
+
+non_blocking_migrations:
+  distribution-1.0: [R5, R6, R7]
+  distribution-1.x: [R5, R6, R7]
+
+provider_protocol_boundary:
+  NG0:
+    - manifest-and-binary-digest
+    - major-and-encoding-negotiation
+    - framed-bounded-task-and-batch
+    - checksums-and-schema-validation
+    - cancellation-deadline-and-terminal-state
+    - coverage-unresolved-and-structured-failure
+    - unknown-required-feature-rejection
+    - process-failure-isolation
+  NG1:
+    - streaming-backpressure-and-heartbeat
+    - hung-worker-recovery-and-long-run-qualification
+    - multi-process-immutable-readers
+    - adjacent-provider-differential
+    - production-conformance-and-compatibility-matrix
+  exact_contract_issue: '#64'
+
+version_axes:
+  - id: distribution
+    compatibility: exact-selected-release
+    migration: explicit-only
+  - id: kernel-semantics
+    compatibility: same-major-minimum-minor
+    migration: explicit-only
+  - id: relation-descriptor
+    compatibility: declared-major-minor-and-exact-digest
+    migration: explicit-only
+  - id: identity-contract
+    compatibility: exact-major
+    migration: explicit-only
+  - id: condition-semantics
+    compatibility: exact-major
+    migration: explicit-only
+  - id: snapshot-format
+    compatibility: same-major-minimum-minor
+    migration: explicit-only
+  - id: provider-protocol
+    compatibility: same-major-feature-negotiation
+    migration: reject-major-mismatch
+  - id: provider-implementation
+    compatibility: certified-tuple
+    migration: none
+  - id: native-sdk
+    compatibility: exact-provider-major-and-toolchain
+    migration: none
+  - id: logical-query-ir
+    compatibility: same-major-minimum-minor
+    migration: explicit-only
+  - id: recipe-semantics
+    compatibility: declared-major-minor
+    migration: explicit-only
+  - id: model-assumption-pack
+    compatibility: exact-digest
+    migration: explicit-only
+  - id: patch-artifact-plan
+    compatibility: same-major-minimum-minor
+    migration: explicit-only
+
+compatibility_contexts:
+  - id: provider-handshake
+    required_axes: [provider-protocol, provider-implementation, relation-descriptor, identity-contract, condition-semantics]
+  - id: snapshot-open
+    required_axes: [snapshot-format, relation-descriptor, identity-contract, condition-semantics]
+  - id: query-load
+    required_axes: [kernel-semantics, relation-descriptor, identity-contract, condition-semantics, logical-query-ir]
+  - id: release-startup
+    required_axes: [distribution, kernel-semantics, relation-descriptor, identity-contract, condition-semantics, snapshot-format, provider-protocol, provider-implementation, native-sdk, logical-query-ir, recipe-semantics, model-assumption-pack, patch-artifact-plan]
+
+compatibility_rules:
+  decisions: [supported, migration-required, unsupported]
+  no_implicit_bundle_selection: true
+  no_silent_fallback: true
+  required_feature_missing: unsupported
+  unknown_required_feature: unsupported
+  unknown_optional_feature: preserved-as-unavailable
+  missing_required_axis: unsupported
+  major_mismatch: unsupported
+  older_offered_minor: migration-required-only-with-explicit-path
+  newer_compatible_minor: supported
+  report_schema: schemas/cxxlens_ng_compatibility_report.schema.yaml
+  request_schema: schemas/cxxlens_ng_compatibility_request.schema.yaml
+
+migrations:
+  - id: snapshot-format-1.0-to-1.1
+    axis: snapshot-format
+    from: 1.0.0
+    to: 1.1.0
+    handler: cxxlens-migrate-snapshot-v1.0-to-v1.1
+    state: planned
+
+inspection:
+  inspect: side-effect-free-contract-decision
+  doctor: contract-decision-plus-runtime-qualification-findings
+  report_reason_codes:
+    - compat.exact
+    - compat.same-major
+    - compat.optional-feature-unavailable
+    - compat.migration-required
+    - compat.release-not-qualified
+    - compat.release-unknown
+    - compat.axis-missing
+    - compat.axis-duplicate
+    - compat.axis-major-mismatch
+    - compat.axis-version-mismatch
+    - compat.axis-version-too-old
+    - compat.contract-digest-mismatch
+    - compat.required-feature-missing
+    - compat.request-invalid
+  fallback_used: false

@@ -95,6 +95,7 @@ jobs:
         run: |
           cmake --build --preset docs --target cxxlens-documentation-consistency-check
           cmake --build --preset docs --target cxxlens-ng-authority-check
+          cmake --build --preset docs --target cxxlens-ng-release-contract-check
           cmake --build --preset docs --target cxxlens-api-contract-check
           cmake --build --preset docs --target cxxlens-design-package-check
           cmake --build --preset docs --target cxxlens-public-boundary-check

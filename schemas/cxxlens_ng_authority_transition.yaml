@@ -70,6 +70,7 @@ validation:
     - docs/design/adr/0002-semantic-relation-platform.md
     - docs/design/adr/0003-versioned-relation-kernel.md
     - docs/design/adr/0004-legacy-contract-reset.md
+    - docs/design/adr/0005-product-boundary-release-compatibility.md
     - schemas/cxxlens.readiness.authorization.v1.json
     - schemas/cxxlens.agent-ownership.v1.json
     - schemas/cxxlens.dependency-request.examples.v1.json
@@ -83,6 +84,10 @@ validation:
     - schemas/cxxlens_ng_public_api_catalog.yaml
     - schemas/cxxlens_ng_acceptance_manifest.yaml
     - schemas/cxxlens_ng_security_profile.yaml
+    - schemas/cxxlens_ng_release_bundle.yaml
+    - schemas/cxxlens_ng_release_bundle.schema.yaml
+    - schemas/cxxlens_ng_compatibility_request.schema.yaml
+    - schemas/cxxlens_ng_compatibility_report.schema.yaml
     - schemas/cxxlens_asset_migration_policy.yaml
     - schemas/cxxlens_asset_migration_policy.schema.yaml
     - schemas/cxxlens_asset_migration_ledger.json
@@ -95,12 +100,14 @@ validation:
     - tools/agent/api_task_runner.py
     - tools/agent/ownership_generator.py
     - tools/quality/check_ng_authority.py
+    - tools/quality/check_ng_release_contract.py
     - tools/quality/check_documentation_consistency.py
     - tools/quality/check_global_contract_conventions.py
     - tools/quality/check_public_api_contract_freeze.py
     - tests/agent/runner/test_runner.py
     - tests/agent/ownership/test_ownership.py
     - tests/quality/test_ng_authority.py
+    - tests/quality/test_ng_release_contract.py
     - tests/quality/test_documentation_consistency.py
     - tests/quality/test_global_contract_conventions.py
     - tests/quality/test_public_api_contract_freeze.py

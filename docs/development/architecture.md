@@ -28,6 +28,21 @@ Process-isolated native providers
 - compiler-native object は provider job/callback/thread の外へ出さない。
 - filesystem、process、time、digest は runtime port を通す。
 
+## Product boundary and public targets
+
+language-neutral な `relation-kernel` / `logical-query`、C/C++ project semantics、portable provider SDK、
+major-specific native provider、recipes を別 component として扱います。kernel/query から C/C++ semantics
+や native provider へ依存する辺は禁止です。これにより typed query や provider 下位層の開発者も、
+Clang AST lifetime や provider implementation の link dependency を負わずに契約を利用できます。
+
+1.0 の予定 public target は `cxxlens::base`、`cxxlens::kernel`、`cxxlens::query`、`cxxlens::cpp`、
+`cxxlens::provider_sdk`、`cxxlens::recipes` です。`cxxlens::cxxlens` は最初の4 target だけの aggregate で、
+provider SDK、recipes、native SDK/provider を含みません。現在の単一 target は移行 baseline であり、
+この target DAG の実装完了を意味しません。
+
+正確な boundary、target DAG、stability tier は
+[release bundle](../../schemas/cxxlens_ng_release_bundle.yaml) を参照してください。
+
 ## Semantic data flow
 
 ```text

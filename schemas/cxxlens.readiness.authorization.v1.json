@@ -4980,7 +4980,7 @@
     "validity": {
       "basis": "exact-source-and-observed-gates",
       "expires_on": "source-workflow-gate-or-input-drift",
-      "fingerprint_digest": "sha256:1d57a57d571bb4d64426ba7d651c11b020942705c21934e7bf7b07cd99535fbc",
+      "fingerprint_digest": "sha256:9e2dd59210806c4613c959ae38005df311996dec80118fa3ad4581729597db58",
       "state": "unverified"
     }
   },
@@ -5395,24 +5395,24 @@
     "packet_count": 124,
     "provider_ambiguity_count": 0,
     "reserved_path_count": 11,
-    "tracked_path_count": 547,
+    "tracked_path_count": 554,
     "unowned_path_count": 0,
     "write_overlap_count": 0
   },
   "input_fingerprints": {
     "audit_policy": "sha256:60f2f90383fe11bc0ba83baadf12dfe5d26d1a9d1237bf7033a6eb7bdb864242",
-    "build_gates": "sha256:7494e0e590e39b95c30123f0422ee5dc6aaca520de7616fcdc41cbf7baf7fd30",
+    "build_gates": "sha256:cd0622acf7275f10d6a9a4bd6064ad8a5c699c97d3e054c1d3b0d8ed899eaa23",
     "catalog": "sha256:6ced7bb9e9f15dbf268ec51b4f753525ecb4616fdfacbbb1f30ab251254e6f0f",
     "contract_ownership_registry": "sha256:797e6a52c4c941ed4225b761ee070f5f00af4c10661d2ebd519e874391eec342",
     "dependency_requests": "sha256:7b5e6a3c4dd637c512401d036bd20b0e92d545f2f4c509b89d43c89c25cbb2ea",
-    "design_package": "sha256:0a6af2baec5c75024b333255b574cbbdeb4d46d840b8c8dc57778d24c1bb67d1",
+    "design_package": "sha256:649cceac42f640d3ab88662c785bcd490c038226c8862c1f60ab1be9a32e409e",
     "global_contract_conventions": "sha256:fa58fa2f23591eafac9f46eb91fcfab01063681e453065b62d34bdab3fca8af1",
     "m0": "sha256:9e32e99675512405e1247fd92b8cfcbc5c6e99ab9dc0378833482541c0538f19",
     "m1": "sha256:ab374296a00ec4a0470230684f054d8c5c2d278994dc73e35aadfaaa9b2c9256",
     "m2": "sha256:b90978507eeb64de5599c47fdbec31c3b4c0607fd6391560735014f223db3e35",
-    "ownership": "sha256:b5cce069ae0bd0826f0850c18304ab570d68cfd8cb46bb8ea3514b1ceea790b3",
-    "quality_workflow": "sha256:68e92e1391688b998cb66b1bb556c39e7751e3093dffcc30b618bc9b89601432",
-    "ready_report": "sha256:e5a2597308575d7a9a84d84959024fcc393a38b83460d55e45547596f046178f",
+    "ownership": "sha256:befcf253940a650b47e455575092a95920edcab187f79c8473aaa4396b98bef4",
+    "quality_workflow": "sha256:6233d9bf2e8c86a872d57715d7c452a83198473d2ba42ae93346d9b8acfad63a",
+    "ready_report": "sha256:d70c4f0eb0ef840bc0090dac2118e4172c4c22d0fc6cfbf855d517fa0e6b6b55",
     "task_packets": "sha256:68bfa838af2de5910cfa1b4a0bf4dbc3a1d24eaa3f21fff1ec378dccff35176c"
   },
   "policy": {
@@ -5429,7 +5429,7 @@
     "waivers_allowed": false
   },
   "schema": "cxxlens.readiness.authorization.v1",
-  "semantic_digest": "sha256:708ed3ecc63c59cda55b4f4d3dd3f5e654d654d9f91a06cc44928cdc23884bed",
+  "semantic_digest": "sha256:20fe5fb8395848f3f625f703588b90eae54356fdb692990fa00d996bbedbdd57",
   "source_identity": {
     "binding": "unbound",
     "commit_sha": null,

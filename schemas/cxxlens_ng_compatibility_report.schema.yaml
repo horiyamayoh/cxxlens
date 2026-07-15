@@ -1,0 +1,126 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-compatibility-report.v1
+title: cxxlens next-generation compatibility report
+type: object
+additionalProperties: false
+required:
+  - schema
+  - request_id
+  - operation
+  - decision
+  - release_id
+  - selected_bundle
+  - context
+  - qualification_state
+  - axis_results
+  - reason_codes
+  - migration_steps
+  - environment_findings
+  - fallback_used
+properties:
+  schema:
+    const: cxxlens.ng-compatibility-report.v1
+  request_id:
+    type: string
+    pattern: '^[a-z][a-z0-9.-]+$'
+  operation:
+    enum: [inspect, doctor]
+  decision:
+    enum: [supported, migration-required, unsupported]
+  release_id:
+    type: string
+    pattern: '^[a-z][a-z0-9.-]+$'
+  selected_bundle:
+    oneOf:
+      - type: 'null'
+      - type: string
+        pattern: '^[a-z][a-z0-9.-]+$'
+  context:
+    enum: [provider-handshake, snapshot-open, query-load, release-startup]
+  qualification_state:
+    enum: [contract-candidate, planned, conditional, qualified, unknown]
+  axis_results:
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required:
+        - axis
+        - required_version
+        - offered_version
+        - status
+        - reason_codes
+        - missing_required_features
+        - unavailable_optional_features
+      properties:
+        axis:
+          type: string
+          pattern: '^[a-z][a-z0-9.-]+$'
+        required_version:
+          type: string
+          pattern: '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+        offered_version:
+          oneOf:
+            - type: 'null'
+            - type: string
+              pattern: '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+        status:
+          enum: [supported, migration-required, unsupported]
+        reason_codes:
+          $ref: '#/$defs/reasons'
+        missing_required_features:
+          $ref: '#/$defs/ids'
+        unavailable_optional_features:
+          $ref: '#/$defs/ids'
+  reason_codes:
+    $ref: '#/$defs/reasons'
+  migration_steps:
+    type: array
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [axis, migration_id, handler, state]
+      properties:
+        axis:
+          type: string
+          pattern: '^[a-z][a-z0-9.-]+$'
+        migration_id:
+          type: string
+          pattern: '^[a-z][a-z0-9.-]+$'
+        handler:
+          type: string
+          pattern: '^[a-z][a-z0-9.-]+$'
+        state:
+          enum: [planned, implemented, qualified]
+  environment_findings:
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required: [code, severity, message]
+      properties:
+        code:
+          type: string
+          pattern: '^compat\.[a-z][a-z-]+$'
+        severity:
+          enum: [info, warning, blocker]
+        message:
+          type: string
+          minLength: 1
+  fallback_used:
+    const: false
+$defs:
+  ids:
+    type: array
+    uniqueItems: true
+    items:
+      type: string
+      pattern: '^[a-z][a-z0-9.-]+$'
+  reasons:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      type: string
+      pattern: '^compat\.[a-z][a-z-]+$'

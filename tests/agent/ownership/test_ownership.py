@@ -128,6 +128,23 @@ class OwnershipTest(unittest.TestCase):
                 "tools/quality/check_ng_authority.py",
             },
         )
+        ng_release_paths = {
+            item["path"]
+            for item in generated["tracked_paths"]
+            if item["owner_role"] == "steward.ng-release"
+        }
+        self.assertEqual(
+            ng_release_paths,
+            {
+                "docs/design/adr/0005-product-boundary-release-compatibility.md",
+                "schemas/cxxlens_ng_compatibility_report.schema.yaml",
+                "schemas/cxxlens_ng_compatibility_request.schema.yaml",
+                "schemas/cxxlens_ng_release_bundle.schema.yaml",
+                "schemas/cxxlens_ng_release_bundle.yaml",
+                "tests/quality/test_ng_release_contract.py",
+                "tools/quality/check_ng_release_contract.py",
+            },
+        )
         self.assertEqual(
             {item["api_id"] for item in generated["skeletons"]},
             {packet["api_id"] for packet in self.corpus["packets"]},

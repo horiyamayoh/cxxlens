@@ -1,0 +1,385 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-release-bundle.v1
+title: cxxlens next-generation release bundle
+type: object
+additionalProperties: false
+required:
+  - schema
+  - document_version
+  - maturity
+  - authority
+  - product_boundary
+  - distribution_surface
+  - stability_tiers
+  - profiles
+  - releases
+  - non_blocking_migrations
+  - provider_protocol_boundary
+  - version_axes
+  - compatibility_contexts
+  - compatibility_rules
+  - migrations
+  - inspection
+properties:
+  schema:
+    const: cxxlens.ng-release-bundle.v1
+  document_version:
+    $ref: '#/$defs/semver'
+  maturity:
+    const: accepted-contract
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, adr, decision_issue, tracking_issue]
+    properties:
+      design:
+        const: docs/design/cxxlens_next_generation_integrated_design_ja.md
+      adr:
+        const: docs/design/adr/0005-product-boundary-release-compatibility.md
+      decision_issue:
+        const: '#59'
+      tracking_issue:
+        const: '#56'
+  product_boundary:
+    type: object
+    additionalProperties: false
+    required: [components, invariants]
+    properties:
+      components:
+        type: array
+        minItems: 6
+        uniqueItems: true
+        items:
+          type: object
+          additionalProperties: false
+          required: [id, domain, depends_on, forbidden_dependencies, exported_values]
+          properties:
+            id:
+              $ref: '#/$defs/id'
+            domain:
+              enum: [language-neutral, cxx-project, native-major-specific, application]
+            depends_on:
+              $ref: '#/$defs/id_array'
+            forbidden_dependencies:
+              $ref: '#/$defs/id_array'
+            exported_values:
+              $ref: '#/$defs/id_array'
+      invariants:
+        type: array
+        minItems: 4
+        uniqueItems: true
+        items:
+          type: object
+          additionalProperties: false
+          required: [id, rule]
+          properties:
+            id:
+              $ref: '#/$defs/id'
+            rule:
+              type: string
+              minLength: 1
+  distribution_surface:
+    type: object
+    additionalProperties: false
+    required:
+      - public_targets
+      - aggregate_target
+      - aggregate_excludes
+      - native_packages
+      - source_surface
+      - implementation_state
+      - implementation_issue
+    properties:
+      public_targets:
+        type: array
+        minItems: 7
+        uniqueItems: true
+        items:
+          type: object
+          additionalProperties: false
+          required: [name, component, direct_dependencies, stability]
+          properties:
+            name:
+              type: string
+              pattern: '^cxxlens::[a-z][a-z_]*$'
+            component:
+              $ref: '#/$defs/id'
+            direct_dependencies:
+              type: array
+              uniqueItems: true
+              items:
+                type: string
+                pattern: '^cxxlens::[a-z][a-z_]*$'
+            stability:
+              enum: [stable-at-1.0, versioned, experimental, native-major-specific, internal]
+      aggregate_target:
+        const: cxxlens::cxxlens
+      aggregate_excludes:
+        type: array
+        minItems: 4
+        uniqueItems: true
+        items:
+          type: string
+          minLength: 1
+      native_packages:
+        type: array
+        minItems: 2
+        uniqueItems: true
+        items:
+          type: string
+          minLength: 1
+      source_surface:
+        type: object
+        additionalProperties: false
+        required: [headers, cxx_modules, umbrella_excludes]
+        properties:
+          headers:
+            const: authoritative
+          cxx_modules:
+            const: experimental-not-installed-in-1.0
+          umbrella_excludes:
+            type: array
+            minItems: 4
+            uniqueItems: true
+            items:
+              type: string
+              minLength: 1
+      implementation_state:
+        const: migration-pending
+      implementation_issue:
+        const: '#67'
+  stability_tiers:
+    type: array
+    minItems: 5
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, source_compatibility, abi_compatibility]
+      properties:
+        id:
+          enum: [stable, versioned, experimental, native-major-specific, internal]
+        source_compatibility:
+          type: string
+          minLength: 1
+        abi_compatibility:
+          type: string
+          minLength: 1
+  profiles:
+    type: array
+    minItems: 4
+    maxItems: 4
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, release_role, first_eligible_release, distribution_requirement, protocol_scope]
+      properties:
+        id:
+          enum: [NG0, NG1, NG2, NG3]
+        release_role:
+          type: string
+          minLength: 1
+        first_eligible_release:
+          type: string
+          minLength: 1
+        distribution_requirement:
+          type: string
+          minLength: 1
+        protocol_scope:
+          type: string
+          minLength: 1
+  releases:
+    type: array
+    minItems: 4
+    maxItems: 4
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, distribution_range, state, required_profiles, optional_profiles, blocker_migrations, blocker_gates, production_supported]
+      properties:
+        id:
+          enum: [ng0-contract-candidate, distribution-1.0, distribution-1.x, future-major]
+        distribution_range:
+          type: string
+          minLength: 1
+        state:
+          enum: [contract-candidate, planned, conditional, qualified]
+        required_profiles:
+          $ref: '#/$defs/profile_array'
+        optional_profiles:
+          $ref: '#/$defs/profile_array'
+        blocker_migrations:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            pattern: '^R[0-7]$'
+        blocker_gates:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            pattern: '^gate\.(g[0-5]|release)$'
+        production_supported:
+          type: boolean
+        activation_rule:
+          type: string
+          minLength: 1
+  non_blocking_migrations:
+    type: object
+    additionalProperties: false
+    required: [distribution-1.0, distribution-1.x]
+    properties:
+      distribution-1.0:
+        $ref: '#/$defs/migration_array'
+      distribution-1.x:
+        $ref: '#/$defs/migration_array'
+  provider_protocol_boundary:
+    type: object
+    additionalProperties: false
+    required: [NG0, NG1, exact_contract_issue]
+    properties:
+      NG0:
+        $ref: '#/$defs/id_array'
+      NG1:
+        $ref: '#/$defs/id_array'
+      exact_contract_issue:
+        const: '#64'
+  version_axes:
+    type: array
+    minItems: 13
+    maxItems: 13
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, compatibility, migration]
+      properties:
+        id:
+          $ref: '#/$defs/id'
+        compatibility:
+          type: string
+          minLength: 1
+        migration:
+          type: string
+          minLength: 1
+  compatibility_contexts:
+    type: array
+    minItems: 4
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, required_axes]
+      properties:
+        id:
+          enum: [provider-handshake, snapshot-open, query-load, release-startup]
+        required_axes:
+          $ref: '#/$defs/id_array'
+  compatibility_rules:
+    type: object
+    additionalProperties: false
+    required:
+      - decisions
+      - no_implicit_bundle_selection
+      - no_silent_fallback
+      - required_feature_missing
+      - unknown_required_feature
+      - unknown_optional_feature
+      - missing_required_axis
+      - major_mismatch
+      - older_offered_minor
+      - newer_compatible_minor
+      - report_schema
+      - request_schema
+    properties:
+      decisions:
+        type: array
+        const: [supported, migration-required, unsupported]
+      no_implicit_bundle_selection:
+        const: true
+      no_silent_fallback:
+        const: true
+      required_feature_missing:
+        const: unsupported
+      unknown_required_feature:
+        const: unsupported
+      unknown_optional_feature:
+        const: preserved-as-unavailable
+      missing_required_axis:
+        const: unsupported
+      major_mismatch:
+        const: unsupported
+      older_offered_minor:
+        const: migration-required-only-with-explicit-path
+      newer_compatible_minor:
+        const: supported
+      report_schema:
+        const: schemas/cxxlens_ng_compatibility_report.schema.yaml
+      request_schema:
+        const: schemas/cxxlens_ng_compatibility_request.schema.yaml
+  migrations:
+    type: array
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, axis, from, to, handler, state]
+      properties:
+        id:
+          $ref: '#/$defs/id'
+        axis:
+          $ref: '#/$defs/id'
+        from:
+          $ref: '#/$defs/semver'
+        to:
+          $ref: '#/$defs/semver'
+        handler:
+          $ref: '#/$defs/id'
+        state:
+          enum: [planned, implemented, qualified]
+  inspection:
+    type: object
+    additionalProperties: false
+    required: [inspect, doctor, report_reason_codes, fallback_used]
+    properties:
+      inspect:
+        const: side-effect-free-contract-decision
+      doctor:
+        const: contract-decision-plus-runtime-qualification-findings
+      report_reason_codes:
+        $ref: '#/$defs/reason_array'
+      fallback_used:
+        const: false
+$defs:
+  id:
+    type: string
+    pattern: '^[a-z][a-z0-9.-]+$'
+  id_array:
+    type: array
+    uniqueItems: true
+    items:
+      $ref: '#/$defs/id'
+  migration_array:
+    type: array
+    uniqueItems: true
+    items:
+      type: string
+      pattern: '^R[0-7]$'
+  profile_array:
+    type: array
+    uniqueItems: true
+    items:
+      enum: [NG0, NG1, NG2, NG3]
+  reason_array:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      type: string
+      pattern: '^compat\.[a-z][a-z-]+$'
+  semver:
+    type: string
+    pattern: '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'

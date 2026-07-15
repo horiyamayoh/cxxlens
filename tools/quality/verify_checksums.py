@@ -20,6 +20,7 @@ PACKAGE_PATHS = (
     "docs/design/adr/0002-semantic-relation-platform.md",
     "docs/design/adr/0003-versioned-relation-kernel.md",
     "docs/design/adr/0004-legacy-contract-reset.md",
+    "docs/design/adr/0005-product-boundary-release-compatibility.md",
     "docs/design/catalogs/README.md",
     "schemas/cxxlens_ng_authority_transition.yaml",
     "schemas/cxxlens_ng_relation_registry.yaml",
@@ -27,6 +28,10 @@ PACKAGE_PATHS = (
     "schemas/cxxlens_ng_public_api_catalog.yaml",
     "schemas/cxxlens_ng_acceptance_manifest.yaml",
     "schemas/cxxlens_ng_security_profile.yaml",
+    "schemas/cxxlens_ng_release_bundle.yaml",
+    "schemas/cxxlens_ng_release_bundle.schema.yaml",
+    "schemas/cxxlens_ng_compatibility_request.schema.yaml",
+    "schemas/cxxlens_ng_compatibility_report.schema.yaml",
     "schemas/cxxlens_asset_migration_policy.yaml",
     "schemas/cxxlens_asset_migration_ledger.json",
 )

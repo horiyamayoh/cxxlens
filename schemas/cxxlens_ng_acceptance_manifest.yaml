@@ -55,12 +55,12 @@ entries:
     owner_issue: '#69'
     profile: NG1
     contract_issue: '#69'
-    depends_on: [gate.g2, gate.g3]
+    depends_on: [gate.g2, gate.g3, gate.g4]
     summary: Closure, incomplete absence, invalidation, warm-zero, and bounded recursion.
   - id: gate.release
     status: contract-pending
     owner_issue: '#71'
     profile: release
     contract_issue: '#71'
-    depends_on: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4]
+    depends_on: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4, gate.g5]
     summary: Install, package, security, support matrix, docs, and commit-bound completion.

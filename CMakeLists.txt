@@ -194,6 +194,10 @@ install(
         schemas/cxxlens_ng_public_api_catalog.yaml
         schemas/cxxlens_ng_acceptance_manifest.yaml
         schemas/cxxlens_ng_security_profile.yaml
+        schemas/cxxlens_ng_release_bundle.yaml
+        schemas/cxxlens_ng_release_bundle.schema.yaml
+        schemas/cxxlens_ng_compatibility_request.schema.yaml
+        schemas/cxxlens_ng_compatibility_report.schema.yaml
         schemas/cxxlens_asset_migration_policy.yaml
         schemas/cxxlens_asset_migration_policy.schema.yaml
         schemas/cxxlens_asset_migration_ledger.json

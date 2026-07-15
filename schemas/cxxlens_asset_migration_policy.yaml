@@ -226,6 +226,8 @@ overrides:
     record: *accepted_adr
   - path: docs/design/adr/0004-legacy-contract-reset.md
     record: *accepted_adr
+  - path: docs/design/adr/0005-product-boundary-release-compatibility.md
+    record: *accepted_adr
   - path: docs/design/SHA256SUMS
     record:
       disposition: inherit
@@ -340,6 +342,21 @@ overrides:
     record: *ng_catalog
   - path: schemas/cxxlens_ng_security_profile.yaml
     record: *ng_catalog
+  - path: schemas/cxxlens_ng_release_bundle.yaml
+    record: &ng_release_contract
+      disposition: inherit
+      status: active
+      owner: steward.ng-release
+      profile: release
+      authority: normative
+      replacement: null
+      removal_issue: null
+  - path: schemas/cxxlens_ng_release_bundle.schema.yaml
+    record: *ng_release_contract
+  - path: schemas/cxxlens_ng_compatibility_request.schema.yaml
+    record: *ng_release_contract
+  - path: schemas/cxxlens_ng_compatibility_report.schema.yaml
+    record: *ng_release_contract
   - path: schemas/cxxlens_asset_migration_policy.yaml
     record: &migration_ledger_contract
       disposition: inherit
@@ -405,6 +422,17 @@ overrides:
       authority: implementation
       replacement: null
       removal_issue: null
+  - path: tools/quality/check_ng_release_contract.py
+    record: &ng_release_tooling
+      disposition: inherit
+      status: active
+      owner: steward.ng-release
+      profile: release
+      authority: implementation
+      replacement: null
+      removal_issue: null
+  - path: tests/quality/test_ng_release_contract.py
+    record: *ng_release_tooling
 
 drift:
   active_markdown:
@@ -419,6 +447,7 @@ drift:
     - docs/design/adr/0002-semantic-relation-platform.md
     - docs/design/adr/0003-versioned-relation-kernel.md
     - docs/design/adr/0004-legacy-contract-reset.md
+    - docs/design/adr/0005-product-boundary-release-compatibility.md
     - docs/design/adr/README.md
     - docs/design/catalogs/README.md
     - docs/design/cxxlens_next_generation_integrated_design_ja.md
