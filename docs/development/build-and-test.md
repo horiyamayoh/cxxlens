@@ -10,9 +10,9 @@
 | `asan-ubsan` | Address/UndefinedBehavior Sanitizer |
 | `tsan` | LLVM-independent foundation の ThreadSanitizer gate |
 | `install-check` | Release build と install consumer test |
-| `m0-acceptance` | M0 semantic kernel completion gate |
-| `m1-acceptance` | M1 exact Clang 22 production-path gate |
-| `m2-acceptance` | M2 installed flagship search gate |
+| `m0-acceptance` | 移行元 M0 behavior baseline |
+| `m1-acceptance` | 移行元 exact Clang 22 production-path baseline |
+| `m2-acceptance` | 移行元 installed flagship baseline |
 
 ```sh
 python3 -m pip install --requirement tools/quality/requirements.txt
@@ -20,6 +20,15 @@ npm install --global markdownlint-cli2@0.18.1
 CXX=clang++ cmake --preset dev-clang
 cmake --build --preset dev-clang
 ctest --preset dev-clang
+cmake --build --preset dev-clang --target cxxlens-quality
+```
+
+documentation/authority のみを短時間で検査する場合は次を実行します。
+
+```sh
+cmake --preset docs
+cmake --build --preset docs --target cxxlens-documentation-consistency-check
+cmake --build --preset docs --target cxxlens-ng-authority-check
 ```
 
 Clang 22 が導入された CI では `CXX=clang++-22` を使用する。`CXXLENS_CLANG_ADAPTER=AUTO` は
@@ -34,7 +43,13 @@ exact LLVM/Clang 22 development package だけを受理し、隣接 major へ fa
 - `install`: install/export と downstream consumer
 - `concurrency`: scheduler、store、provisioning、process runtime の並列回帰
 
-## ThreadSanitizer nightly gate
+## NG acceptance direction
+
+次世代 gate は [Acceptance Manifest](../../schemas/cxxlens_ng_acceptance_manifest.yaml) の G0〜GR です。既存
+M0/M1/M2 target が成功しても NG0 completion にはなりません。各 NG gate は relation/query/store/provider
+contract の owner issue で production path へ接続し、最終的に #71 の commit-bound report へ統合します。
+
+## Legacy ThreadSanitizer baseline
 
 `tsan` preset は `CXXLENS_CLANG_ADAPTER=OFF` を固定し、LLVM-independent foundation を検査する。
 nightly は clean configure/build 後、意図的 data race fixture で TSan runtime が exit code 66 と
@@ -42,7 +57,7 @@ race diagnostic を返すことを先に確認する。その後、全 foundatio
 `concurrency` label を jobs 1/2/8 と固定 seed を含む test seam で5回反復する。これには #34 の
 scheduler identity/coalescing、#36 の concurrent process launch、#37 の timeout/cancel/crash
 isolation、fact store の snapshot read/single writer、provisioning publication が含まれる。
-`handle_segv=0` は #37 の real worker signal を TSan 自身の exit code に置換させないための runtime
+`handle_segv=0` は legacy worker signal を TSan 自身の exit code に置換させないための runtime
 設定であり、race report は `halt_on_error=1:exitcode=66` で fail-closed にする。
 
 ```sh

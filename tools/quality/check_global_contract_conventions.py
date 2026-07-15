@@ -18,9 +18,12 @@ import yaml
 SCHEMA_ID = "cxxlens.global-contract-conventions.v1"
 OWNERSHIP_SCHEMA_ID = "cxxlens.contract-ownership.v1"
 LEGACY_OWNERSHIP_SCHEMA_EXCLUSIONS = {
+    "cxxlens_asset_migration_ledger.schema.yaml",
+    "cxxlens_asset_migration_policy.schema.yaml",
     "cxxlens_legacy_api_baseline.schema.yaml",
     "cxxlens_ng_authority_transition.schema.yaml",
     "cxxlens_ng_authority_transition_report.schema.yaml",
+    "cxxlens_ng_catalog_bootstrap.schema.yaml",
 }
 EXPECTED_SECTIONS = {
     "naming_and_family",

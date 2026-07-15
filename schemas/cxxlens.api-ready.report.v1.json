@@ -10407,12 +10407,12 @@
   "input_fingerprints": {
     "contract_ownership_registry": "sha256:797e6a52c4c941ed4225b761ee070f5f00af4c10661d2ebd519e874391eec342",
     "dependency_requests": "sha256:7b5e6a3c4dd637c512401d036bd20b0e92d545f2f4c509b89d43c89c25cbb2ea",
-    "global_contract_conventions": "sha256:9597d2b4c8c47c93f19595fb227a394224b6a7deb0a771e81c10d86d59c492f2",
+    "global_contract_conventions": "sha256:fa58fa2f23591eafac9f46eb91fcfab01063681e453065b62d34bdab3fca8af1",
     "m0": "sha256:9e32e99675512405e1247fd92b8cfcbc5c6e99ab9dc0378833482541c0538f19",
     "m1": "sha256:ab374296a00ec4a0470230684f054d8c5c2d278994dc73e35aadfaaa9b2c9256",
     "m2": "sha256:b90978507eeb64de5599c47fdbec31c3b4c0607fd6391560735014f223db3e35",
-    "ownership": "sha256:3668b62f8304418cd7d2379a61905f8986fa32f7b4b5d4b9770e2782025eef56",
-    "task_packets": "sha256:e2007e75e7b21c8634bc39fa64fa608c61351806ca7cd51aad8b6eb3a764fe12"
+    "ownership": "sha256:aa03361f2164140c42359e8d5ea3de710559f87ff2e4c849590668efc7227b3e",
+    "task_packets": "sha256:68bfa838af2de5910cfa1b4a0bf4dbc3a1d24eaa3f21fff1ec378dccff35176c"
   },
   "nodes": [
     {
@@ -23981,7 +23981,7 @@
     ]
   },
   "schema": "cxxlens.api-ready.v1",
-  "semantic_digest": "sha256:8e96b9ffde80df60e4ec9149687a4ce37c056ae7f881f3e087ff26f1695491c1",
+  "semantic_digest": "sha256:8cd9db517db389662d3088c8cbd2fa81a0299048e6a2d5ff7bfb9d26c7a534df",
   "shards": [
     {
       "acceptance_command": {

@@ -1,0 +1,479 @@
+schema: cxxlens.asset-migration-policy.v1
+document_version: 1.0.0
+issue: '#58'
+output: schemas/cxxlens_asset_migration_ledger.json
+
+default_rules:
+  - prefix: .github/
+    record:
+      disposition: migrate
+      status: planned
+      owner: steward.ng-completion
+      profile: migration
+      authority: operational
+      replacement: null
+      removal_issue: '#72'
+  - prefix: cmake/
+    record:
+      disposition: migrate
+      status: planned
+      owner: steward.ng-build
+      profile: migration
+      authority: implementation
+      replacement: null
+      removal_issue: '#72'
+  - prefix: contracts/
+    record:
+      disposition: delete
+      status: planned
+      owner: steward.legacy-cleanup
+      profile: migration
+      authority: migration-provenance
+      replacement: schemas/cxxlens_ng_public_api_catalog.yaml
+      removal_issue: '#72'
+  - prefix: examples/
+    record:
+      disposition: replace
+      status: planned
+      owner: steward.ng-recipes
+      profile: migration
+      authority: implementation
+      replacement: docs/tutorials/README.md
+      removal_issue: '#72'
+  - prefix: include/
+    record:
+      disposition: replace
+      status: planned
+      owner: steward.ng-public-api
+      profile: migration
+      authority: implementation
+      replacement: schemas/cxxlens_ng_public_api_catalog.yaml
+      removal_issue: '#72'
+  - prefix: src/
+    record:
+      disposition: migrate
+      status: planned
+      owner: steward.ng-kernel
+      profile: migration
+      authority: implementation
+      replacement: null
+      removal_issue: '#72'
+  - prefix: tests/
+    record:
+      disposition: migrate
+      status: planned
+      owner: steward.ng-acceptance
+      profile: migration
+      authority: implementation
+      replacement: schemas/cxxlens_ng_acceptance_manifest.yaml
+      removal_issue: '#72'
+  - prefix: tools/
+    record:
+      disposition: migrate
+      status: planned
+      owner: steward.ng-tooling
+      profile: migration
+      authority: implementation
+      replacement: null
+      removal_issue: '#72'
+  - prefix: schemas/
+    record:
+      disposition: migrate
+      status: planned
+      owner: steward.ng-contracts
+      profile: migration
+      authority: migration-provenance
+      replacement: null
+      removal_issue: '#72'
+  - prefix: docs/archive/
+    record:
+      disposition: archive
+      status: archived
+      owner: steward.ng-docs
+      profile: migration
+      authority: migration-provenance
+      replacement: docs/design/cxxlens_next_generation_integrated_design_ja.md
+      removal_issue: '#72'
+
+overrides:
+  - path: .clang-format
+    record: &repository_config
+      disposition: inherit
+      status: active
+      owner: steward.repository
+      profile: repository
+      authority: operational
+      replacement: null
+      removal_issue: null
+  - path: .clang-tidy
+    record: *repository_config
+  - path: .editorconfig
+    record: *repository_config
+  - path: .gitignore
+    record: *repository_config
+  - path: .markdownlint-cli2.jsonc
+    record: *repository_config
+  - path: .yamllint.yaml
+    record: *repository_config
+  - path: AGENTS.md
+    record: &current_governance
+      disposition: inherit
+      status: active
+      owner: steward.ng-authority
+      profile: repository
+      authority: normative
+      replacement: null
+      removal_issue: null
+  - path: CONTRIBUTING.md
+    record: *current_governance
+  - path: README.md
+    record:
+      disposition: inherit
+      status: active
+      owner: steward.ng-docs
+      profile: repository
+      authority: informative
+      replacement: null
+      removal_issue: null
+  - path: SECURITY.md
+    record:
+      disposition: inherit
+      status: active
+      owner: steward.ng-security
+      profile: repository
+      authority: normative
+      replacement: null
+      removal_issue: null
+  - path: Doxyfile.in
+    record:
+      disposition: inherit
+      status: active
+      owner: steward.ng-docs
+      profile: repository
+      authority: operational
+      replacement: null
+      removal_issue: null
+  - path: CMakeLists.txt
+    record: &migration_build
+      disposition: migrate
+      status: planned
+      owner: steward.ng-build
+      profile: migration
+      authority: implementation
+      replacement: null
+      removal_issue: '#72'
+  - path: CMakePresets.json
+    record: *migration_build
+
+  - path: docs/README.md
+    record: &current_docs
+      disposition: inherit
+      status: active
+      owner: steward.ng-docs
+      profile: repository
+      authority: informative
+      replacement: null
+      removal_issue: null
+  - path: docs/archive/README.md
+    record: *current_docs
+  - path: docs/doxygen-main.md
+    record: *current_docs
+  - path: docs/support-matrix.md
+    record:
+      disposition: inherit
+      status: active
+      owner: steward.ng-release
+      profile: release
+      authority: informative
+      replacement: null
+      removal_issue: null
+  - path: docs/tutorials/README.md
+    record: *current_docs
+  - path: docs/design/README.md
+    record: *current_docs
+  - path: docs/design/cxxlens_next_generation_integrated_design_ja.md
+    record:
+      disposition: inherit
+      status: active
+      owner: steward.ng-authority
+      profile: NG0
+      authority: normative
+      replacement: null
+      removal_issue: null
+  - path: docs/design/catalogs/README.md
+    record:
+      disposition: inherit
+      status: active
+      owner: steward.ng-catalogs
+      profile: NG0
+      authority: normative
+      replacement: null
+      removal_issue: null
+  - path: docs/design/adr/README.md
+    record: *current_docs
+  - path: docs/design/adr/0001-frontend-worker-isolation.md
+    record: &accepted_adr
+      disposition: inherit
+      status: active
+      owner: steward.ng-authority
+      profile: NG0
+      authority: normative
+      replacement: null
+      removal_issue: null
+  - path: docs/design/adr/0002-semantic-relation-platform.md
+    record: *accepted_adr
+  - path: docs/design/adr/0003-versioned-relation-kernel.md
+    record: *accepted_adr
+  - path: docs/design/adr/0004-legacy-contract-reset.md
+    record: *accepted_adr
+  - path: docs/design/SHA256SUMS
+    record:
+      disposition: inherit
+      status: generated
+      owner: steward.ng-docs
+      profile: repository
+      authority: generated-inventory
+      replacement: null
+      removal_issue: null
+  - path: docs/design/api_catalog_inventory.md
+    record:
+      disposition: archive
+      status: legacy-baseline
+      owner: steward.legacy-api
+      profile: migration
+      authority: generated-inventory
+      replacement: schemas/cxxlens_ng_public_api_catalog.yaml
+      removal_issue: '#72'
+  - path: docs/design/api_catalog_change_policy.md
+    record: &legacy_redirect
+      disposition: replace
+      status: redirect
+      owner: steward.legacy-api
+      profile: migration
+      authority: migration-provenance
+      replacement: docs/design/catalogs/README.md
+      removal_issue: '#72'
+  - path: docs/design/contract_candidate_checklist.md
+    record: *legacy_redirect
+  - path: docs/design/high_risk_contract_validation.md
+    record: *legacy_redirect
+  - path: docs/design/VALIDATION_REPORT.md
+    record:
+      disposition: replace
+      status: redirect
+      owner: steward.legacy-api
+      profile: migration
+      authority: migration-provenance
+      replacement: docs/design/cxxlens_next_generation_integrated_design_ja.md
+      removal_issue: '#72'
+  - path: docs/design/phase_b_contract_integration.md
+    record: *legacy_redirect
+  - path: docs/design/public_api_contract_freeze.md
+    record: *legacy_redirect
+  - path: docs/design/public_contract_conventions.md
+    record: *legacy_redirect
+  - path: docs/design/package_contract_43.md
+    record: *legacy_redirect
+  - path: docs/design/package_contract_44.md
+    record: *legacy_redirect
+  - path: docs/design/package_contract_45.md
+    record: *legacy_redirect
+  - path: docs/design/package_contract_46.md
+    record: *legacy_redirect
+  - path: docs/design/package_contract_47.md
+    record: *legacy_redirect
+  - path: docs/design/package_contract_48.md
+    record: *legacy_redirect
+  - path: docs/design/package_contract_49.md
+    record: *legacy_redirect
+  - path: docs/design/package_contract_50.md
+    record: *legacy_redirect
+  - path: docs/design/package_contract_51.md
+    record: *legacy_redirect
+
+  - path: docs/development/architecture.md
+    record: *current_docs
+  - path: docs/development/build-and-test.md
+    record: *current_docs
+  - path: docs/development/canonical-identity.md
+    record: *current_docs
+  - path: docs/development/canonical-json-schema.md
+    record: *current_docs
+  - path: docs/development/coding-style.md
+    record: *current_docs
+  - path: docs/development/doxygen-style.md
+    record: *current_docs
+  - path: docs/development/evidence-coverage.md
+    record: *current_docs
+  - path: docs/development/runtime-ports.md
+    record: *current_docs
+  - path: docs/development/source-semantics.md
+    record: *current_docs
+  - path: docs/development/testing-fixtures.md
+    record: *current_docs
+  - path: docs/development/workspace-catalog.md
+    record:
+      disposition: replace
+      status: redirect
+      owner: steward.legacy-api
+      profile: migration
+      authority: migration-provenance
+      replacement: docs/design/cxxlens_next_generation_integrated_design_ja.md#7-project-catalog-and-build-context
+      removal_issue: '#72'
+
+  - path: schemas/cxxlens_ng_catalog_bootstrap.schema.yaml
+    record: &ng_catalog
+      disposition: inherit
+      status: active
+      owner: steward.ng-catalogs
+      profile: NG0
+      authority: normative
+      replacement: null
+      removal_issue: null
+  - path: schemas/cxxlens_ng_relation_registry.yaml
+    record: *ng_catalog
+  - path: schemas/cxxlens_ng_provider_protocol.yaml
+    record: *ng_catalog
+  - path: schemas/cxxlens_ng_public_api_catalog.yaml
+    record: *ng_catalog
+  - path: schemas/cxxlens_ng_acceptance_manifest.yaml
+    record: *ng_catalog
+  - path: schemas/cxxlens_ng_security_profile.yaml
+    record: *ng_catalog
+  - path: schemas/cxxlens_asset_migration_policy.yaml
+    record: &migration_ledger_contract
+      disposition: inherit
+      status: active
+      owner: steward.ng-docs
+      profile: migration
+      authority: normative
+      replacement: null
+      removal_issue: null
+  - path: schemas/cxxlens_asset_migration_policy.schema.yaml
+    record: *migration_ledger_contract
+  - path: schemas/cxxlens_asset_migration_ledger.schema.yaml
+    record: *migration_ledger_contract
+  - path: schemas/cxxlens_asset_migration_ledger.json
+    record:
+      disposition: inherit
+      status: generated
+      owner: steward.ng-docs
+      profile: migration
+      authority: generated-inventory
+      replacement: null
+      removal_issue: null
+  - path: schemas/cxxlens_ng_authority_transition.yaml
+    record: *migration_ledger_contract
+  - path: schemas/cxxlens_ng_authority_transition.schema.yaml
+    record: *migration_ledger_contract
+  - path: schemas/cxxlens_ng_authority_transition_report.schema.yaml
+    record: *migration_ledger_contract
+  - path: schemas/cxxlens_legacy_api_baseline.yaml
+    record:
+      disposition: archive
+      status: legacy-baseline
+      owner: steward.legacy-api
+      profile: migration
+      authority: migration-provenance
+      replacement: schemas/cxxlens_asset_migration_ledger.json
+      removal_issue: '#72'
+  - path: schemas/cxxlens_legacy_api_baseline.schema.yaml
+    record:
+      disposition: archive
+      status: legacy-baseline
+      owner: steward.legacy-api
+      profile: migration
+      authority: migration-provenance
+      replacement: schemas/cxxlens_asset_migration_ledger.schema.yaml
+      removal_issue: '#72'
+
+  - path: tools/quality/check_documentation_consistency.py
+    record:
+      disposition: inherit
+      status: active
+      owner: steward.ng-docs
+      profile: migration
+      authority: implementation
+      replacement: null
+      removal_issue: null
+  - path: tests/quality/test_documentation_consistency.py
+    record:
+      disposition: inherit
+      status: active
+      owner: steward.ng-docs
+      profile: migration
+      authority: implementation
+      replacement: null
+      removal_issue: null
+
+drift:
+  active_markdown:
+    - AGENTS.md
+    - CONTRIBUTING.md
+    - README.md
+    - SECURITY.md
+    - docs/README.md
+    - docs/archive/README.md
+    - docs/design/README.md
+    - docs/design/adr/0001-frontend-worker-isolation.md
+    - docs/design/adr/0002-semantic-relation-platform.md
+    - docs/design/adr/0003-versioned-relation-kernel.md
+    - docs/design/adr/0004-legacy-contract-reset.md
+    - docs/design/adr/README.md
+    - docs/design/catalogs/README.md
+    - docs/design/cxxlens_next_generation_integrated_design_ja.md
+    - docs/development/architecture.md
+    - docs/development/build-and-test.md
+    - docs/development/canonical-identity.md
+    - docs/development/canonical-json-schema.md
+    - docs/development/coding-style.md
+    - docs/development/doxygen-style.md
+    - docs/development/evidence-coverage.md
+    - docs/development/runtime-ports.md
+    - docs/development/source-semantics.md
+    - docs/development/testing-fixtures.md
+    - docs/doxygen-main.md
+    - docs/support-matrix.md
+    - docs/tutorials/README.md
+  stale_markers:
+    - id: legacy-api-id
+      pattern: '\bAPI-[A-Z][A-Z0-9-]*-[0-9]{3}\b'
+      allowed_paths: []
+    - id: central-fact-kind
+      pattern: '\bfact_kind(?:::[a-z_]+)?\b'
+      allowed_paths:
+        - docs/design/adr/0003-versioned-relation-kernel.md
+        - docs/design/cxxlens_next_generation_integrated_design_ja.md
+    - id: legacy-api-freeze
+      pattern: '(cxxlens_public_api_contract|124 API|124 public API|旧 124 API|public API contract freeze)'
+      allowed_paths:
+        - AGENTS.md
+        - CONTRIBUTING.md
+        - README.md
+        - docs/archive/README.md
+        - docs/design/README.md
+        - docs/design/adr/0002-semantic-relation-platform.md
+        - docs/design/adr/0004-legacy-contract-reset.md
+        - docs/design/cxxlens_next_generation_integrated_design_ja.md
+    - id: legacy-milestone
+      pattern: '(\bPhase [ABC]\b|\bM[012]\b|M0/M1/M2)'
+      allowed_paths:
+        - README.md
+        - docs/design/README.md
+        - docs/design/adr/0004-legacy-contract-reset.md
+        - docs/design/cxxlens_next_generation_integrated_design_ja.md
+        - docs/development/architecture.md
+        - docs/development/build-and-test.md
+        - docs/development/testing-fixtures.md
+        - docs/support-matrix.md
+    - id: legacy-package-contract
+      pattern: '(package_contract_|Package Contract)'
+      allowed_paths:
+        - docs/archive/README.md
+        - docs/design/README.md
+    - id: use-case-kernel
+      pattern: '(use-case-driven|public use-case API|use-case 固定)'
+      allowed_paths:
+        - docs/archive/README.md
+        - docs/design/adr/0003-versioned-relation-kernel.md
+        - docs/design/cxxlens_next_generation_integrated_design_ja.md

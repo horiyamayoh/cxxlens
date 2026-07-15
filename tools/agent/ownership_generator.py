@@ -207,6 +207,11 @@ ROLE_DEFINITIONS: dict[str, tuple[str, str, str]] = {
         "#57",
         "Next-generation authority transition, baseline, ADR, and fail-closed gate.",
     ),
+    "steward.ng-documentation": (
+        "shared_steward",
+        "#58",
+        "Next-generation documentation, catalog bootstrap, migration ledger, and drift gate.",
+    ),
 }
 
 
@@ -225,6 +230,29 @@ NG_AUTHORITY_PATHS = {
 }
 
 
+NG_DOCUMENTATION_PATHS = {
+    "docs/README.md",
+    "docs/archive/README.md",
+    "docs/design/README.md",
+    "docs/design/adr/README.md",
+    "docs/design/catalogs/README.md",
+    "docs/doxygen-main.md",
+    "docs/support-matrix.md",
+    "docs/tutorials/README.md",
+    "schemas/cxxlens_asset_migration_ledger.schema.yaml",
+    "schemas/cxxlens_asset_migration_policy.schema.yaml",
+    "schemas/cxxlens_asset_migration_policy.yaml",
+    "schemas/cxxlens_ng_acceptance_manifest.yaml",
+    "schemas/cxxlens_ng_catalog_bootstrap.schema.yaml",
+    "schemas/cxxlens_ng_provider_protocol.yaml",
+    "schemas/cxxlens_ng_public_api_catalog.yaml",
+    "schemas/cxxlens_ng_relation_registry.yaml",
+    "schemas/cxxlens_ng_security_profile.yaml",
+    "tests/quality/test_documentation_consistency.py",
+    "tools/quality/check_documentation_consistency.py",
+}
+
+
 GENERATED_PATHS = {
     "docs/design/api_catalog_inventory.md": "generator.catalog",
     "schemas/cxxlens_contract_ownership.yaml": "generator.catalog",
@@ -232,6 +260,7 @@ GENERATED_PATHS = {
     "schemas/cxxlens.agent-task-packet-validation-report.v1.json": "steward.task-packet",
     "schemas/cxxlens.agent-ownership.v1.json": "steward.ownership",
     "schemas/cxxlens.dependency-request.examples.v1.json": "steward.ownership",
+    "schemas/cxxlens_asset_migration_ledger.json": "steward.ng-documentation",
 }
 
 RESERVED_PATHS = [
@@ -376,6 +405,8 @@ def owner_for_path(
         return GENERATED_PATHS[path]
     if path in NG_AUTHORITY_PATHS:
         return "steward.ng-authority"
+    if path in NG_DOCUMENTATION_PATHS:
+        return "steward.ng-documentation"
     if path.startswith(("tools/agent/ownership_", "tests/agent/ownership/")) or path in {
         "docs/agent_ownership_reference.md",
         "schemas/cxxlens.agent-ownership.v1.schema.yaml",

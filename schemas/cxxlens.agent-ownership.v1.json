@@ -1,10 +1,10 @@
 {
   "global_contract_fingerprints": {
     "candidate_acceptance": "sha256:04f926517516b613434ca059bd290bf9c5e263fb6f53c274ee9c316166e7a1ab",
-    "conventions": "sha256:9597d2b4c8c47c93f19595fb227a394224b6a7deb0a771e81c10d86d59c492f2",
+    "conventions": "sha256:fa58fa2f23591eafac9f46eb91fcfab01063681e453065b62d34bdab3fca8af1",
     "ownership_registry": "sha256:797e6a52c4c941ed4225b761ee070f5f00af4c10661d2ebd519e874391eec342"
   },
-  "repository_paths_digest": "sha256:d5fe364034306bbf1a7c7f73a475c1efbf064cc11ae55da04faa38398ca1e144",
+  "repository_paths_digest": "sha256:118fcd96c7da3ce27e9a74a7de8e5ae9a375c6abecbd9f4f6c1c9b4e31c2cdd2",
   "reserved_paths": [
     {
       "access": "exclusive_write",
@@ -277,6 +277,12 @@
       "kind": "shared_steward",
       "owner_issue": "#57",
       "responsibility": "Next-generation authority transition, baseline, ADR, and fail-closed gate."
+    },
+    {
+      "id": "steward.ng-documentation",
+      "kind": "shared_steward",
+      "owner_issue": "#58",
+      "responsibility": "Next-generation documentation, catalog bootstrap, migration ledger, and drift gate."
     },
     {
       "id": "steward.ownership",
@@ -1144,7 +1150,7 @@
     }
   ],
   "schema": "cxxlens.agent-ownership.v1",
-  "semantic_digest": "sha256:3668b62f8304418cd7d2379a61905f8986fa32f7b4b5d4b9770e2782025eef56",
+  "semantic_digest": "sha256:aa03361f2164140c42359e8d5ea3de710559f87ff2e4c849590668efc7227b3e",
   "skeletons": [
     {
       "api_id": "API-CFG-001",
@@ -2887,17 +2893,17 @@
     "contract_state_counts": {
       "frozen": 124
     },
-    "generated_path_count": 6,
+    "generated_path_count": 7,
     "reserved_path_count": 11,
-    "role_count": 178,
+    "role_count": 179,
     "skeleton_state_counts": {
       "blocked": 0,
       "frozen": 124
     },
-    "tracked_path_count": 509,
+    "tracked_path_count": 546,
     "unit_count": 124
   },
-  "task_packet_digest": "sha256:e2007e75e7b21c8634bc39fa64fa608c61351806ca7cd51aad8b6eb3a764fe12",
+  "task_packet_digest": "sha256:68bfa838af2de5910cfa1b4a0bf4dbc3a1d24eaa3f21fff1ec378dccff35176c",
   "tracked_paths": [
     {
       "access": "exclusive_write",
@@ -3204,21 +3210,259 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
-      "owner_role": "steward.ownership",
-      "path": "docs/agent_ownership_reference.md"
+      "owner_role": "steward.ng-documentation",
+      "path": "docs/README.md"
     },
     {
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
-      "owner_role": "steward.task-packet",
-      "path": "docs/agent_task_packet_reference.md"
+      "owner_role": "steward.ng-documentation",
+      "path": "docs/archive/README.md"
     },
     {
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
-      "owner_role": "steward.design",
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/agent/agent_ownership_reference.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/agent/agent_runner_reference.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/agent/agent_task_packet_reference.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/agent/readiness_audit_reference.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/design/VALIDATION_REPORT.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/design/api_catalog_change_policy.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/design/contract_candidate_checklist.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/design/cxxlens_integrated_design_ja.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/design/high_risk_contract_validation.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/design/package_contract_43.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/design/package_contract_44.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/design/package_contract_45.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/design/package_contract_46.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/design/package_contract_47.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/design/package_contract_48.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/design/package_contract_49.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/design/package_contract_50.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/design/package_contract_51.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/design/phase_b_contract_integration.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/design/public_api_contract_freeze.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/design/public_contract_conventions.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/development/api-test-coverage.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/development/clang-adapter.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/development/configuration-resolver.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/development/fact-contract.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/development/fact-store.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/development/failure-contract.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/development/finding-contract.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/development/m0-acceptance.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/development/m2-acceptance.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/development/semantic-search.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/legacy-v1/development/workspace-catalog.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/pre-cxxlens/cxxred_upper_layer_design_ja.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.documentation",
+      "path": "docs/archive/pre-cxxlens/llvm_clang_wrapper_design_ja.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-documentation",
       "path": "docs/design/README.md"
     },
     {
@@ -3227,13 +3471,6 @@
       "generator_role": null,
       "owner_role": "steward.design",
       "path": "docs/design/SHA256SUMS"
-    },
-    {
-      "access": "exclusive_write",
-      "generated": false,
-      "generator_role": null,
-      "owner_role": "steward.design",
-      "path": "docs/design/VALIDATION_REPORT.md"
     },
     {
       "access": "exclusive_write",
@@ -3267,6 +3504,13 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.ng-documentation",
+      "path": "docs/design/adr/README.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "generator.catalog",
       "path": "docs/design/api_catalog_change_policy.md"
     },
@@ -3281,15 +3525,8 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
-      "owner_role": "steward.design",
-      "path": "docs/design/archive/cxxred_upper_layer_design_ja.md"
-    },
-    {
-      "access": "exclusive_write",
-      "generated": false,
-      "generator_role": null,
-      "owner_role": "steward.design",
-      "path": "docs/design/archive/llvm_clang_wrapper_design_ja.md"
+      "owner_role": "steward.ng-documentation",
+      "path": "docs/design/catalogs/README.md"
     },
     {
       "access": "exclusive_write",
@@ -3297,13 +3534,6 @@
       "generator_role": null,
       "owner_role": "steward.design",
       "path": "docs/design/contract_candidate_checklist.md"
-    },
-    {
-      "access": "exclusive_write",
-      "generated": false,
-      "generator_role": null,
-      "owner_role": "steward.design",
-      "path": "docs/design/cxxlens_integrated_design_ja.md"
     },
     {
       "access": "exclusive_write",
@@ -3408,13 +3638,6 @@
       "generated": false,
       "generator_role": null,
       "owner_role": "steward.documentation",
-      "path": "docs/development/api-test-coverage.md"
-    },
-    {
-      "access": "exclusive_write",
-      "generated": false,
-      "generator_role": null,
-      "owner_role": "steward.documentation",
       "path": "docs/development/architecture.md"
     },
     {
@@ -3443,21 +3666,7 @@
       "generated": false,
       "generator_role": null,
       "owner_role": "steward.documentation",
-      "path": "docs/development/clang-adapter.md"
-    },
-    {
-      "access": "exclusive_write",
-      "generated": false,
-      "generator_role": null,
-      "owner_role": "steward.documentation",
       "path": "docs/development/coding-style.md"
-    },
-    {
-      "access": "exclusive_write",
-      "generated": false,
-      "generator_role": null,
-      "owner_role": "steward.documentation",
-      "path": "docs/development/configuration-resolver.md"
     },
     {
       "access": "exclusive_write",
@@ -3478,56 +3687,7 @@
       "generated": false,
       "generator_role": null,
       "owner_role": "steward.documentation",
-      "path": "docs/development/fact-contract.md"
-    },
-    {
-      "access": "exclusive_write",
-      "generated": false,
-      "generator_role": null,
-      "owner_role": "steward.documentation",
-      "path": "docs/development/fact-store.md"
-    },
-    {
-      "access": "exclusive_write",
-      "generated": false,
-      "generator_role": null,
-      "owner_role": "steward.documentation",
-      "path": "docs/development/failure-contract.md"
-    },
-    {
-      "access": "exclusive_write",
-      "generated": false,
-      "generator_role": null,
-      "owner_role": "steward.documentation",
-      "path": "docs/development/finding-contract.md"
-    },
-    {
-      "access": "exclusive_write",
-      "generated": false,
-      "generator_role": null,
-      "owner_role": "steward.documentation",
-      "path": "docs/development/m0-acceptance.md"
-    },
-    {
-      "access": "exclusive_write",
-      "generated": false,
-      "generator_role": null,
-      "owner_role": "steward.documentation",
-      "path": "docs/development/m2-acceptance.md"
-    },
-    {
-      "access": "exclusive_write",
-      "generated": false,
-      "generator_role": null,
-      "owner_role": "steward.documentation",
       "path": "docs/development/runtime-ports.md"
-    },
-    {
-      "access": "exclusive_write",
-      "generated": false,
-      "generator_role": null,
-      "owner_role": "steward.documentation",
-      "path": "docs/development/semantic-search.md"
     },
     {
       "access": "exclusive_write",
@@ -3549,6 +3709,27 @@
       "generator_role": null,
       "owner_role": "steward.documentation",
       "path": "docs/development/workspace-catalog.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-documentation",
+      "path": "docs/doxygen-main.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-documentation",
+      "path": "docs/support-matrix.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-documentation",
+      "path": "docs/tutorials/README.md"
     },
     {
       "access": "exclusive_write",
@@ -4035,6 +4216,34 @@
     },
     {
       "access": "exclusive_write",
+      "generated": true,
+      "generator_role": "steward.ng-documentation",
+      "owner_role": "steward.ng-documentation",
+      "path": "schemas/cxxlens_asset_migration_ledger.json"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-documentation",
+      "path": "schemas/cxxlens_asset_migration_ledger.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-documentation",
+      "path": "schemas/cxxlens_asset_migration_policy.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-documentation",
+      "path": "schemas/cxxlens_asset_migration_policy.yaml"
+    },
+    {
+      "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
       "owner_role": "steward.schema",
@@ -4387,6 +4596,13 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.ng-documentation",
+      "path": "schemas/cxxlens_ng_acceptance_manifest.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.ng-authority",
       "path": "schemas/cxxlens_ng_authority_transition.schema.yaml"
     },
@@ -4403,6 +4619,41 @@
       "generator_role": null,
       "owner_role": "steward.ng-authority",
       "path": "schemas/cxxlens_ng_authority_transition_report.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-documentation",
+      "path": "schemas/cxxlens_ng_catalog_bootstrap.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-documentation",
+      "path": "schemas/cxxlens_ng_provider_protocol.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-documentation",
+      "path": "schemas/cxxlens_ng_public_api_catalog.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-documentation",
+      "path": "schemas/cxxlens_ng_relation_registry.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-documentation",
+      "path": "schemas/cxxlens_ng_security_profile.yaml"
     },
     {
       "access": "exclusive_write",
@@ -5829,6 +6080,13 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.ng-documentation",
+      "path": "tests/quality/test_documentation_consistency.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.quality",
       "path": "tests/quality/test_global_contract_conventions.py"
     },
@@ -6209,6 +6467,13 @@
       "generator_role": null,
       "owner_role": "steward.quality",
       "path": "tools/quality/check_doc_examples.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-documentation",
+      "path": "tools/quality/check_documentation_consistency.py"
     },
     {
       "access": "exclusive_write",

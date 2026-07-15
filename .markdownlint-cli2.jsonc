@@ -7,6 +7,7 @@
   },
   "ignores": [
     "build/**",
-    "docs/design/archive/**"
+    "docs/archive/legacy-v1/**",
+    "docs/archive/pre-cxxlens/**"
   ]
 }

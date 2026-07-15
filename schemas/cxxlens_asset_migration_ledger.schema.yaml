@@ -1,0 +1,76 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.asset-migration-ledger.v1
+title: cxxlens generated tracked asset migration ledger
+type: object
+additionalProperties: false
+required:
+  - schema
+  - document_version
+  - generated_by
+  - source_policy
+  - source_policy_digest
+  - asset_count
+  - classifications
+  - assets
+properties:
+  schema:
+    const: cxxlens.asset-migration-ledger.v1
+  document_version:
+    const: 1.0.0
+  generated_by:
+    const: tools/quality/check_documentation_consistency.py
+  source_policy:
+    const: schemas/cxxlens_asset_migration_policy.yaml
+  source_policy_digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  asset_count:
+    type: integer
+    minimum: 1
+  classifications:
+    type: object
+    additionalProperties:
+      type: integer
+      minimum: 0
+  assets:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      additionalProperties: false
+      required:
+        - path
+        - disposition
+        - status
+        - owner
+        - profile
+        - authority
+        - replacement
+        - removal_issue
+      properties:
+        path:
+          type: string
+          minLength: 1
+        disposition:
+          enum: [inherit, migrate, replace, archive, delete]
+        status:
+          enum: [active, planned, redirect, archived, legacy-baseline, generated]
+        owner:
+          type: string
+        profile:
+          enum: [NG0, NG1, NG2, NG3, migration, release, repository]
+        authority:
+          enum:
+            - normative
+            - informative
+            - implementation
+            - migration-provenance
+            - generated-inventory
+            - operational
+        replacement:
+          type: [string, 'null']
+        removal_issue:
+          anyOf:
+            - type: 'null'
+            - type: string
+              pattern: '^#[0-9]+$'

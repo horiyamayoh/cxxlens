@@ -1,23 +1,21 @@
-# Evidence and coverage accounting
+# Evidence, execution coverage, closure, and unresolved
 
-Structured evidence rows are authoritative. Their typed kind, normalized source, full supporting fact
-IDs, and typed attributes define semantic order and identity; summary wording is only a display
-projection. `evidence::add` and `merge` sort, deduplicate, and make union idempotent. Validation checks
-fact membership against the acquired snapshot and requires version/factory attributes for model,
-build-context, approximation, exclusion, and custom rows.
+evidence graph は source observation、compile context、provider execution、canonicalization、assumption、
+derivation、verification、exclusion、closure proof を結ぶ DAG です。summary prose は表示専用で、control flow
+や semantic identity に使用しません。
 
-A coverage report stores two authoritative collections: the requested universe and one terminal row
-for every request. The validator enforces:
+provider/materialization は requested condition fragment を次の terminal state へ exactly once で会計します。
 
 ```text
-requested - covered - excluded - failed - unresolved - not-applicable = 0
+requested = covered + excluded + not_applicable + failed + unresolved
+          + unsupported + stale + truncated
 ```
 
-Duplicate requests, missing rows, multiple terminal states, and unrequested rows are rejected. A
-report is complete only when accounting is valid and neither failed nor unresolved rows remain.
-Counts and `complete` are derived from rows during projection; there is no mutable summary state.
+coverage complete は execution accounting の完了であり、closed world を意味しません。absence、anti-join、
+difference、unreachable を確定するには relation/key domain/condition/interpretation/assumption/snapshot に bind
+された closure certificate が必要です。certificate がなければ positive rows は返せますが absence は unknown
+で、`closure_missing` unresolved を保持します。
 
-An exact guarantee requires complete coverage, achieved precision at least as strong as requested,
-and structured evidence for every non-empty requested universe. Sound over/under approximations
-require an approximation evidence row. Best-effort and heuristic results may be partial, but their
-failed and unresolved coverage remains explicit.
+query result は rows、execution status、input coverage、closures、unresolved、conflicts、summary guarantee を
+一体として返します。empty rows、failed operation、successful partial result、complete closed resultを相互に
+代用してはいけません。

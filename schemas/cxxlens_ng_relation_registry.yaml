@@ -1,0 +1,58 @@
+schema: cxxlens.ng-catalog-bootstrap.v1
+kind: relation-registry
+document_version: 0.1.0
+maturity: bootstrap
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md
+  index: docs/design/catalogs/README.md
+  bootstrap_issue: '#58'
+  owner: steward.ng-catalogs
+compatibility:
+  version_axis: relation-descriptor
+  current: 0.1.0-bootstrap
+  exact_contract_issue: '#60'
+replaces:
+  - schemas/cxxlens_fact.schema.yaml
+  - schemas/cxxlens_fact_contract.yaml
+  - schemas/cxxlens_custom_fact.schema.yaml
+entries:
+  - id: build.compile-unit
+    status: contract-pending
+    owner_issue: '#60'
+    profile: NG0
+    contract_issue: '#60'
+    summary: Canonical compile unit and effective invocation relation.
+  - id: source.file
+    status: contract-pending
+    owner_issue: '#60'
+    profile: NG0
+    contract_issue: '#60'
+    summary: Immutable source file snapshot relation.
+  - id: source.span
+    status: contract-pending
+    owner_issue: '#60'
+    profile: NG0
+    contract_issue: '#60'
+    depends_on: [source.file]
+    summary: Snapshot-bound half-open byte source span relation.
+  - id: cc.entity
+    status: contract-pending
+    owner_issue: '#60'
+    profile: NG0
+    contract_issue: '#60'
+    depends_on: [source.span]
+    summary: Canonical C and C++ semantic entity relation.
+  - id: cc.call-site
+    status: contract-pending
+    owner_issue: '#60'
+    profile: NG0
+    contract_issue: '#60'
+    depends_on: [cc.entity, source.span]
+    summary: Condition-aware C and C++ call-site relation.
+  - id: company.lock.acquire
+    status: contract-pending
+    owner_issue: '#60'
+    profile: NG0
+    contract_issue: '#60'
+    depends_on: [source.span]
+    summary: External custom relation used to prove core-independent extension.

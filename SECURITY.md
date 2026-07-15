@@ -8,3 +8,16 @@ Private vulnerability reporting が利用できる場合はそれを使用して
 
 解析対象の source、compile database、設定、diff、外部ツール出力は信頼できない入力として扱います。
 報告には再現に必要な最小情報だけを含め、secret や絶対 home path を除去してください。
+
+## Trust boundary
+
+- Clang/GCC frontend、third-party native provider、binary/IR parser は out-of-process で実行する。
+- provider binary digest、protocol range、input/environment digest、sandbox assurance を execution evidence に
+  bindする。
+- command string を shell へ渡さず、argv と environment allowlist を構造化する。
+- source excerpt、compile flag、environment、provider diagnostic は privacy policy 下で redaction する。
+- crash、timeout、malformed/oversized output、validation rejection は prior published snapshot を破壊しない。
+
+現在の qualified/unsupported state は [Security Profile](schemas/cxxlens_ng_security_profile.yaml) と
+[Support matrix](docs/support-matrix.md) を参照してください。bootstrap profile は security certification を
+意味しません。

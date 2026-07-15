@@ -1,0 +1,66 @@
+schema: cxxlens.ng-catalog-bootstrap.v1
+kind: acceptance-manifest
+document_version: 0.1.0
+maturity: bootstrap
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md
+  index: docs/design/catalogs/README.md
+  bootstrap_issue: '#58'
+  owner: steward.ng-catalogs
+compatibility:
+  version_axis: acceptance-contract
+  current: 0.1.0-bootstrap
+  exact_contract_issue: '#71'
+replaces:
+  - schemas/cxxlens_m0_completion.yaml
+  - schemas/cxxlens_m1_completion.yaml
+  - schemas/cxxlens_m2_completion.yaml
+entries:
+  - id: gate.g0
+    status: contract-pending
+    owner_issue: '#67'
+    profile: NG0
+    contract_issue: '#67'
+    summary: Base identity, source, condition, coverage, truth, and header invariants.
+  - id: gate.g1
+    status: contract-pending
+    owner_issue: '#67'
+    profile: NG0
+    contract_issue: '#67'
+    depends_on: [gate.g0]
+    summary: Relation extension, IDL evolution, references, and static/dynamic parity.
+  - id: gate.g2
+    status: contract-pending
+    owner_issue: '#68'
+    profile: NG0
+    contract_issue: '#68'
+    depends_on: [gate.g1]
+    summary: Immutable publication and memory/SQLite semantic parity.
+  - id: gate.g3
+    status: contract-pending
+    owner_issue: '#69'
+    profile: NG0
+    contract_issue: '#69'
+    depends_on: [gate.g2]
+    summary: Logical query, standard/custom join, budgets, and explicit partiality.
+  - id: gate.g4
+    status: contract-pending
+    owner_issue: '#70'
+    profile: NG0
+    contract_issue: '#70'
+    depends_on: [gate.g1]
+    summary: Provider protocol, Clang 22 worker, sandbox, crash, and malformed output.
+  - id: gate.g5
+    status: contract-pending
+    owner_issue: '#69'
+    profile: NG1
+    contract_issue: '#69'
+    depends_on: [gate.g2, gate.g3]
+    summary: Closure, incomplete absence, invalidation, warm-zero, and bounded recursion.
+  - id: gate.release
+    status: contract-pending
+    owner_issue: '#71'
+    profile: release
+    contract_issue: '#71'
+    depends_on: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4]
+    summary: Install, package, security, support matrix, docs, and commit-bound completion.

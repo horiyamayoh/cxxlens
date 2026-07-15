@@ -161,6 +161,17 @@ add_custom_target(
   USES_TERMINAL VERBATIM)
 
 add_custom_target(
+  cxxlens-documentation-consistency-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_documentation_consistency.py"
+    check --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_documentation_consistency.py"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-ng-authority-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -169,6 +180,8 @@ add_custom_target(
   COMMAND "${Python3_EXECUTABLE}"
           "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_ng_authority.py"
   VERBATIM)
+add_dependencies(cxxlens-ng-authority-check
+                 cxxlens-documentation-consistency-check)
 
 add_custom_target(
   cxxlens-public-api-contract-freeze-check
@@ -225,8 +238,8 @@ add_custom_target(
   cxxlens-design-package-check
   COMMAND
     "${Python3_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/verify_checksums.py"
-    "${CMAKE_CURRENT_SOURCE_DIR}/docs/design/SHA256SUMS"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/verify_checksums.py" check --root
+    "${CMAKE_CURRENT_SOURCE_DIR}"
   VERBATIM)
 
 add_custom_target(

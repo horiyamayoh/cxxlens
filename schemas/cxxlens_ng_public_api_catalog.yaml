@@ -1,0 +1,54 @@
+schema: cxxlens.ng-catalog-bootstrap.v1
+kind: public-cpp-api-catalog
+document_version: 0.1.0
+maturity: bootstrap
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md
+  index: docs/design/catalogs/README.md
+  bootstrap_issue: '#58'
+  owner: steward.ng-catalogs
+compatibility:
+  version_axis: public-cpp-source-api
+  current: 0.1.0-bootstrap
+  exact_contract_issue: '#66'
+replaces:
+  - schemas/cxxlens_public_api_contract.yaml
+entries:
+  - id: public.project-catalog
+    status: contract-pending
+    owner_issue: '#66'
+    profile: NG0
+    contract_issue: '#66'
+    summary: LLVM-free project and source snapshot values.
+  - id: public.relation-static
+    status: contract-pending
+    owner_issue: '#66'
+    profile: NG0
+    contract_issue: '#66'
+    summary: Generated typed relation tags, builders, and detached rows.
+  - id: public.relation-dynamic
+    status: contract-pending
+    owner_issue: '#66'
+    profile: NG0
+    contract_issue: '#66'
+    summary: Runtime descriptor and column access without central enums.
+  - id: public.logical-query
+    status: contract-pending
+    owner_issue: '#66'
+    profile: NG0
+    contract_issue: '#66'
+    depends_on: [public.relation-static, public.relation-dynamic]
+    summary: Static and dynamic DSLs normalized to one Logical Query IR.
+  - id: public.provider-sdk
+    status: contract-pending
+    owner_issue: '#66'
+    profile: NG0
+    contract_issue: '#66'
+    summary: Portable and major-specific provider authoring and conformance SDKs.
+  - id: public.recipe
+    status: contract-pending
+    owner_issue: '#73'
+    profile: NG0
+    contract_issue: '#73'
+    depends_on: [public.logical-query]
+    summary: Flagship call-search recipe over standard and custom relations.

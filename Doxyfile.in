@@ -1,7 +1,7 @@
 DOXYFILE_ENCODING      = UTF-8
 PROJECT_NAME           = "cxxlens"
 PROJECT_NUMBER         = "@PROJECT_VERSION@"
-PROJECT_BRIEF          = "Use-case-driven C and C++ semantic analysis library"
+PROJECT_BRIEF          = "C and C++ Semantic Relation Platform"
 OUTPUT_DIRECTORY       = "@CMAKE_CURRENT_BINARY_DIR@/doxygen"
 CREATE_SUBDIRS         = NO
 ALLOW_UNICODE_NAMES    = YES
@@ -65,7 +65,8 @@ WARN_IF_INCOMPLETE_DOC = YES
 WARN_NO_PARAMDOC       = NO
 WARN_AS_ERROR          = YES
 WARN_FORMAT            = "$file:$line: $text"
-INPUT                  = "@CMAKE_CURRENT_SOURCE_DIR@/include/cxxlens"
+INPUT                  = "@CMAKE_CURRENT_SOURCE_DIR@/include/cxxlens" \
+                         "@CMAKE_CURRENT_SOURCE_DIR@/docs/doxygen-main.md"
 INPUT_ENCODING         = UTF-8
 FILE_PATTERNS          = *.hpp *.md
 RECURSIVE              = YES
@@ -78,7 +79,7 @@ IMAGE_PATH             =
 INPUT_FILTER           =
 FILTER_PATTERNS        =
 FILTER_SOURCE_FILES    = NO
-USE_MDFILE_AS_MAINPAGE =
+USE_MDFILE_AS_MAINPAGE = "@CMAKE_CURRENT_SOURCE_DIR@/docs/doxygen-main.md"
 SOURCE_BROWSER         = YES
 INLINE_SOURCES         = NO
 STRIP_CODE_COMMENTS    = YES

@@ -1,21 +1,20 @@
 # Canonical identity
 
-Stable IDs are generated from a versioned, domain-separated, field-tagged binary encoding. Every
-field includes its name, type, and byte length. Fields and map entries are lexically ordered; sets are
-sorted and deduplicated; sequences preserve semantic order. Integers use fixed-width big-endian bytes.
-The encoder binds its format, domain, schema version, and semantics version before any payload field.
+次世代 claim identity は一つの汎用 ID に潰さず、次の三段階へ分離します。
 
-The current digest contract is `fnv1a64x4` version 1: four independently domain-separated FNV-1a 64
-lanes form a 64-hex full digest. It makes no cryptographic-security claim. A stable ID contains its
-domain prefix and the full digest. `short_display()` is UI-only and must never be stored, compared, or
-used for collision safety.
+```text
+semantic_key_id = H(relation name, semantic major, authoritative key tuple)
+assertion_id = H(semantic key, universe, condition, interpretation, producer semantics)
+content_digest = H(assertion, authoritative payload tuple)
+```
 
-Identity inputs may contain semantic values and validated project-relative source keys. Absolute
-paths, wall time, process/thread/pointer values, cache state, observation order, diagnostic message
-text, ambient randomness, and unordered-container iteration are forbidden. Root/display information
-belongs to operational presentation metadata.
+hash input は versioned、domain-separated、length-prefixed binary tuple です。field order と type tag は
+schema が定義し、integer、optional、set、map key、open symbol を canonical encoding します。JSON text、
+locale formatting、unordered iteration、display path/prose は identity authority にしません。
 
-The collision registry stores a canonical-payload fingerprint for every prefixed full ID.
-Re-registering the same payload is idempotent; a distinct payload at the same key is a hard error.
-Downstream packages define domain payload factories, but they must not create another encoder, digest
-format, or collision policy.
+absolute checkout root、pointer/address、timestamp、PID/thread ID、task/provider arrival order、cache state は
+operational metadata です。path は `project://`、`build://`、`toolchain://`、`sysroot://`、`generated://`、
+`provider://`、`external://` の logical domain と contract version に bind します。
+
+現在の `fnv1a64x4` encoder と collision registry は移行 seed であり、次世代 identity contract の
+algorithm/version は #63 で確定します。既存 digest を理由に新 relation key を旧形式へ固定してはいけません。

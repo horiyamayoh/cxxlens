@@ -1,13 +1,14 @@
 # cxxlens
 
 `cxxlens` は、実際の C/C++ build context に基づく versioned semantic claim を provider から収集し、
-condition、provenance、partiality とともに immutable snapshotへ公開する C++23 Semantic Relation
-Platformです。Recipeに加え、typed/dynamic query、portable provider、Clang major-specific native
-providerを第一級の開発経路として提供します。
+condition、provenance、partiality とともに immutable snapshot へ公開する C++23 Semantic Relation
+Platform です。Recipe 利用者だけでなく、typed/dynamic query、portable provider、Clang
+major-specific native provider の作者にも共通の identity、schema、validation、source mapping、
+failure isolation、conformance harness を提供します。
 
 > [!WARNING]
-> 現在は pre-alphaで、Issue #56 の NG Foundation Migration中です。旧M0/M1/M2実装は移行
-> baselineとして保持されていますが、旧124 API freezeとIssue #55は新規実装を認可しません。
+> 現在は pre-alpha で、Issue #56 の NG Foundation Migration 中です。既存実装と M0/M1/M2 gate は
+> 移行 baseline として保持されていますが、旧 124 API freeze と Issue #55 は新規実装を認可しません。
 > また、ライセンスは未決定です。
 
 ## 要件
@@ -18,8 +19,9 @@ providerを第一級の開発経路として提供します。
 - Doxygen 1.9.8 以上（ドキュメント生成時のみ）
 - Python 3.10 以上（品質検査時のみ）
 
-LLVM/Clang 22.1.8 は設計上の初期 baseline です。exact major が見つかれば adapter をリンクし、
-見つからなければ通常 API を削除せず structured unavailable を返します。
+Clang 22 は最初の公式 source provider baseline です。次世代 kernel は compiler library を link せず、
+major-specific worker を process 境界の外側に置きます。現在の linked adapter は移行元実装であり、
+Issue #70 で worker/provider protocol へ置き換えます。
 
 ## ビルドとテスト
 
@@ -47,15 +49,19 @@ cmake --preset docs
 cmake --build --preset docs --target docs
 ```
 
-M0 Semantic Kernel の全 acceptance criteria は、依存ツールを導入した clean checkout で
-次の一つの build targetから検証できます。
+既存挙動を固定する legacy M0 baseline は、依存ツールを導入した clean checkout で次の target から
+検証できます。これは次世代 NG0 completion の宣言ではありません。
 
 ```sh
 CXX=clang++ cmake --preset m0-acceptance
 cmake --build --preset m0-acceptance --target cxxlens-m0-acceptance
 ```
 
-## インストール後の利用
+## 現在のインストール確認
+
+次の例は移行中パッケージの install/export smoke test です。次世代 relation/query API は
+[Public C++ API Catalog](schemas/cxxlens_ng_public_api_catalog.yaml) の bootstrap state から段階的に
+実装します。
 
 ```cmake
 find_package(cxxlens 0.1 CONFIG REQUIRED)
@@ -69,22 +75,21 @@ target_compile_features(my_tool PRIVATE cxx_std_23)
 const auto product_versions = cxxlens::versions();
 ```
 
-## 文書
+## 文書と machine-readable contract
 
-- [次世代統合設計書](docs/design/cxxlens_next_generation_integrated_design_ja.md) — 最上位の規範文書
-- [設計パッケージ](docs/design/README.md)
+- [文書ポータル](docs/README.md) — current / migration / archive の境界
+- [次世代統合設計書](docs/design/cxxlens_next_generation_integrated_design_ja.md) — 最上位規範
+- [次世代 catalog/registry](docs/design/catalogs/README.md)
 - [アーキテクチャ](docs/development/architecture.md)
 - [ビルドとテスト](docs/development/build-and-test.md)
-- [コーディング規約](docs/development/coding-style.md)
-- [Doxygen 規約](docs/development/doxygen-style.md)
-- [M0 acceptance gate](docs/development/m0-acceptance.md)
-- [Workspace catalog contract](docs/development/workspace-catalog.md)
-- [Observation and immutable fact contract](docs/development/fact-contract.md)
-- [Clang 22 frontend adapter contract](docs/development/clang-adapter.md)
+- [Support matrix](docs/support-matrix.md)
+- [Security profile](schemas/cxxlens_ng_security_profile.yaml)
+- [Asset migration ledger](schemas/cxxlens_asset_migration_ledger.json)
 - [コントリビューション](CONTRIBUTING.md)
 
-旧統合設計、旧124 API catalog/freeze、旧二層構想は移行 provenanceです。新規設計・実装判断には
-使用せず、[authority transition](docs/design/adr/0004-legacy-contract-reset.md)に従います。
+旧統合設計、旧 124 API catalog/freeze、旧二層構想は [archive](docs/archive/README.md) と legacy
+baseline に隔離されています。新規判断へ復活させず、
+[authority transition](docs/design/adr/0004-legacy-contract-reset.md) と各 NG catalog を使用してください。
 
 ## 非目標
 

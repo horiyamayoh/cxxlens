@@ -196,7 +196,7 @@ def validate_entrypoints(root: pathlib.Path) -> None:
         "README.md": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
         "CONTRIBUTING.md": "旧 `schemas/cxxlens_public_api_contract.yaml` は移行 baseline",
         "docs/design/README.md": "CXXLENS-NG-SRAD-002",
-        "docs/readiness_audit_reference.md": "旧124 API Phase C authorizationはIssue #57により失効",
+        "docs/archive/legacy-v1/agent/readiness_audit_reference.md": "旧124 API Phase C authorizationはIssue #57により失効",
     }
     for relative, marker in expectations.items():
         text = (root / relative).read_text(encoding="utf-8")
@@ -245,7 +245,7 @@ def validate(root: pathlib.Path) -> tuple[dict[str, Any], dict[str, Any]]:
         fail("authority transition does not preserve the required invariants")
     superseded = {row["id"]: row for row in transition["superseded"]}
     expected_superseded = {
-        "legacy-integrated-design": "docs/design/cxxlens_integrated_design_ja.md",
+        "legacy-integrated-design": "docs/archive/legacy-v1/design/cxxlens_integrated_design_ja.md",
         "legacy-api-catalog": "schemas/cxxlens_public_api_contract.yaml",
         "legacy-api-freeze": "schemas/cxxlens_public_api_contract_freeze.yaml",
     }

@@ -1,19 +1,15 @@
-# Source semantics
+# Source snapshot and span semantics
 
-Source coordinates are byte-based. `byte_offset` is zero-based; line and UTF-8 byte column are
-one-based. A `file_range` is always half-open: `begin` is included and `end` is excluded. Empty token
-and EOF ranges therefore have equal offsets and remain valid.
+source content は mutable filesystem path ではなく、content digest と encoding を持つ immutable
+`source_file_snapshot` です。authoritative coordinate は snapshot と file に bind された half-open byte range
+`[begin,end)` で、line/column は projection です。
 
-A `file_id` stores a `file_`-prefixed full digest produced from a normalized project-relative semantic
-key such as `src/main.cpp`. It never stores a checkout root or display path. The identity factory
-rejects absolute keys, empty/dot/dot-dot components, backslashes, duplicate separators, and JSON-unsafe
-quotes. A UI may join the original semantic key with a checkout root for display, but that projection
-must not feed identity or canonical JSON.
+invalid、unknown、stale span を offset zero の valid range に置き換えません。source snapshot mismatch は
+structured stale state です。path identity は logical path domain と normalized path contract に基づき、host
+mount や absolute checkout root は evidence/operational metadata に分離します。
 
-A valid span retains primary, spelling, and expansion ranges independently. Macro frames are ordered
-from the outermost invocation to the innermost. Argument indexes are zero-based. Invalid and unknown
-locations use distinct states and must never be converted to a fabricated valid offset zero.
+spelling、macro argument/body/expansion、instantiation、generation、inline/lowering/import の由来は一つの
+「元位置」へ潰さず、many-to-many origin DAG として保持します。cycle は batch rejection です。
 
-Direct edit eligibility is conservative: only a validated, directly-spelled, non-macro, non-read-only
-span with a versioned source digest is eligible. Macro argument/body/expansion, implicit, generated,
-system, builtin, unknown, and invalid spans are not directly editable.
+直接編集は snapshot digest、origin、read-only policy を検証した spelled range だけを候補にできます。
+mutation は NG3 の plan、独立 validator、dry-run、journaled transaction を経るまで apply しません。

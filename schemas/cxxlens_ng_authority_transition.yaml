@@ -8,7 +8,7 @@ authority:
   tracking_issue: '#56'
 superseded:
   - id: legacy-integrated-design
-    path: docs/design/cxxlens_integrated_design_ja.md
+    path: docs/archive/legacy-v1/design/cxxlens_integrated_design_ja.md
     disposition: migration-provenance
     new_work_authorized: false
   - id: legacy-api-catalog
@@ -51,17 +51,22 @@ validation:
     - README.md
     - CONTRIBUTING.md
     - cmake/CxxlensDeveloperTools.cmake
-    - docs/agent_ownership_reference.md
-    - docs/agent_runner_reference.md
-    - docs/agent_task_packet_reference.md
+    - docs/archive/legacy-v1/agent/agent_ownership_reference.md
+    - docs/archive/legacy-v1/agent/agent_runner_reference.md
+    - docs/archive/legacy-v1/agent/agent_task_packet_reference.md
+    - docs/archive/legacy-v1/agent/readiness_audit_reference.md
+    - docs/README.md
+    - docs/archive/README.md
     - docs/design/README.md
     - docs/design/SHA256SUMS
+    - docs/design/adr/README.md
+    - docs/design/catalogs/README.md
     - docs/design/api_catalog_change_policy.md
     - docs/design/cxxlens_next_generation_integrated_design_ja.md
-    - docs/design/cxxlens_integrated_design_ja.md
+    - docs/archive/legacy-v1/design/cxxlens_integrated_design_ja.md
     - docs/design/public_api_contract_freeze.md
     - docs/development/architecture.md
-    - docs/readiness_audit_reference.md
+    - docs/support-matrix.md
     - docs/design/adr/0002-semantic-relation-platform.md
     - docs/design/adr/0003-versioned-relation-kernel.md
     - docs/design/adr/0004-legacy-contract-reset.md
@@ -72,6 +77,16 @@ validation:
     - schemas/cxxlens_ng_authority_transition.yaml
     - schemas/cxxlens_ng_authority_transition.schema.yaml
     - schemas/cxxlens_ng_authority_transition_report.schema.yaml
+    - schemas/cxxlens_ng_catalog_bootstrap.schema.yaml
+    - schemas/cxxlens_ng_relation_registry.yaml
+    - schemas/cxxlens_ng_provider_protocol.yaml
+    - schemas/cxxlens_ng_public_api_catalog.yaml
+    - schemas/cxxlens_ng_acceptance_manifest.yaml
+    - schemas/cxxlens_ng_security_profile.yaml
+    - schemas/cxxlens_asset_migration_policy.yaml
+    - schemas/cxxlens_asset_migration_policy.schema.yaml
+    - schemas/cxxlens_asset_migration_ledger.json
+    - schemas/cxxlens_asset_migration_ledger.schema.yaml
     - schemas/cxxlens_legacy_api_baseline.yaml
     - schemas/cxxlens_legacy_api_baseline.schema.yaml
     - schemas/cxxlens_public_api_contract.yaml
@@ -80,10 +95,12 @@ validation:
     - tools/agent/api_task_runner.py
     - tools/agent/ownership_generator.py
     - tools/quality/check_ng_authority.py
+    - tools/quality/check_documentation_consistency.py
     - tools/quality/check_global_contract_conventions.py
     - tools/quality/check_public_api_contract_freeze.py
     - tests/agent/runner/test_runner.py
     - tests/agent/ownership/test_ownership.py
     - tests/quality/test_ng_authority.py
+    - tests/quality/test_documentation_consistency.py
     - tests/quality/test_global_contract_conventions.py
     - tests/quality/test_public_api_contract_freeze.py

@@ -16,7 +16,7 @@
 | 作成日 | 2026-07-15 |
 
 本書は Issue #57 により次世代 `cxxlens` の最上位規範へ昇格した。旧
-`docs/design/cxxlens_integrated_design_ja.md` と旧 124 API freeze は移行時の provenance であり、
+`docs/archive/legacy-v1/design/cxxlens_integrated_design_ja.md` と旧 124 API freeze は移行時の provenance であり、
 新規 API、relation、provider、実装 dispatch を認可しない。
 
 ---

@@ -1,27 +1,61 @@
-# 開発アーキテクチャ
+# Development architecture
 
-`cxxlens` は利用者へ単一 target `cxxlens::cxxlens` を公開する。内部は package ごとに分割するが、
-利用者に LLVM wrapper と上位ライブラリの選択を要求しない。
+`cxxlens` の安定核は use-case API 群ではなく、versioned relation、semantic claim、immutable snapshot、
+logical query、provider contract です。
 
 ```text
-public use-case API
-  -> domain models / immutable plans
-    -> internal ports
-      -> LLVM-major-specific adapters
+Applications / Recipes
+        ↓
+Semantic Services / Analysis Modules
+        ↓
+Static DSL + Dynamic DSL
+        ↓
+Versioned Logical Query IR
+        ↓
+Semantic Relation Kernel
+        ↓
+Provider Protocol + Runtime Ports
+        ↓
+Process-isolated native providers
 ```
-
-Clang-free port は `src/llvm/common/`、native adapter は `src/llvm/clang22/` に隔離する。
-通常 public header は LLVM-free で、raw access は明示的な `interop/clang.hpp` callback 内だけに
-限定する。
 
 ## Dependency rules
 
-- `include/cxxlens/interop/clang.hpp` 以外の public header は Clang/LLVM 型を公開しない。
-- stable API は LLVM major や patch version の型レイアウトに依存しない。
-- service handle は将来 pImpl とし、semantic result/plan は immutable value とする。
-- public expected failure は `std::expected<T, error>` で表す。
-- `src` の domain logic を `utils.cpp` や `helpers.cpp` に集約しない。
+- kernel は Clang AST、GCC tree、LLVM IR、lint rule、特定 relation の列内容を知らない。
+- provider implementation は SDK/protocol に依存し、kernel は provider implementation を link しない。
+- 新 relation/provider/recipe は central enum、switch、registry source list の変更を要求しない。
+- stable public semantic header は compiler-native type layout に依存しない。
+- compiler-native object は provider job/callback/thread の外へ出さない。
+- filesystem、process、time、digest は runtime port を通す。
 
-正確なlayer、data flow、禁止事項は
-[次世代統合設計書](../design/cxxlens_next_generation_integrated_design_ja.md)を参照する。旧package一覧は
-Issue #72で移行・除去するprovenanceであり、新規実装authorityではない。
+## Semantic data flow
+
+```text
+Project Catalog + Source Snapshot + Condition Universe
+  -> provider observation
+  -> schema validation
+  -> assertion
+  -> canonical claim / derived claim
+  -> partition validation
+  -> immutable snapshot publication
+  -> logical query result
+```
+
+query result は rows だけでなく input coverage、closure、unresolved、conflict、summary guarantee を保持します。
+成功は complete/closed を意味せず、closure certificate のない absence は unknown です。
+
+## Identity and ordering
+
+semantic key、assertion、content digest を分離し、versioned length-prefixed canonical tuple から生成します。
+absolute root、pointer、timestamp、PID、task/provider arrival order、hash iteration、display prose は semantic
+identity に含めません。relation と query result は unordered が既定で、`order_by`、canonical export、
+digest construction、acceptance comparison だけが順序を保証します。
+
+## Migration boundary
+
+現在の `src/facts`、旧 selector/query plan、linked Clang adapter、M0/M1/M2 gate は移行 baseline です。
+[asset migration ledger](../../schemas/cxxlens_asset_migration_ledger.json) の disposition に従い、Issue #72 で
+production path から除去します。新規機能を旧 package/fact surface に追加してはいけません。
+
+正確な invariant は [次世代統合設計書](../design/cxxlens_next_generation_integrated_design_ja.md)、各 contract の
+状態は [catalog index](../design/catalogs/README.md) を参照してください。

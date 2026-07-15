@@ -54,6 +54,28 @@ def load_json(path: pathlib.Path) -> dict[str, Any]:
     return value
 
 
+def read_legacy_document(root: pathlib.Path, path: pathlib.Path) -> str:
+    """Follow a non-normative archive redirect for legacy evidence validation."""
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---\n"):
+        return text
+    end = text.find("\n---\n", 4)
+    if end < 0:
+        fail("high-risk.redirect", str(path))
+    metadata = yaml.safe_load(text[4:end])
+    if not isinstance(metadata, dict) or metadata.get("cxxlens_document_status") != "redirect":
+        return text
+    if metadata.get("cxxlens_authority") != "non-normative":
+        fail("high-risk.redirect-authority", str(path))
+    archive = metadata.get("cxxlens_archive")
+    if not isinstance(archive, str):
+        fail("high-risk.redirect-target", str(path))
+    archive_path = root / archive
+    if not archive_path.is_file():
+        fail("high-risk.redirect-target", archive)
+    return archive_path.read_text(encoding="utf-8")
+
+
 def semantic_digest(value: dict[str, Any]) -> str:
     unsigned = copy.deepcopy(value)
     unsigned.pop("semantic_digest", None)
@@ -90,7 +112,7 @@ def validate(
         if snapshot["fingerprint"] != groups[issue]["candidate_fingerprint"]:
             fail("high-risk.candidate-drift", issue)
         backlink = root / snapshot["backlink"].split("#", 1)[0]
-        if not backlink.is_file() or "## Issue #52 validation backlink" not in backlink.read_text(encoding="utf-8"):
+        if not backlink.is_file() or "## Issue #52 validation backlink" not in read_legacy_document(root, backlink):
             fail("high-risk.backlink", issue)
 
     catalog_apis = {

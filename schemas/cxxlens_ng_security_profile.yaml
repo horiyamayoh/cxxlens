@@ -1,0 +1,42 @@
+schema: cxxlens.ng-catalog-bootstrap.v1
+kind: security-profile
+document_version: 0.1.0
+maturity: bootstrap
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md
+  index: docs/design/catalogs/README.md
+  bootstrap_issue: '#58'
+  owner: steward.ng-catalogs
+compatibility:
+  version_axis: security-and-trust-profile
+  current: 0.1.0-bootstrap
+  exact_contract_issue: '#65'
+replaces:
+  - schemas/cxxlens_capabilities.schema.yaml
+  - schemas/cxxlens_frontend_worker_ipc.contract.yaml
+entries:
+  - id: trust.kernel-in-process
+    status: contract-pending
+    owner_issue: '#65'
+    profile: NG0
+    contract_issue: '#65'
+    summary: Statically linked, compiler-free, bounded trusted provider requirements.
+  - id: trust.native-worker
+    status: contract-pending
+    owner_issue: '#65'
+    profile: NG0
+    contract_issue: '#65'
+    summary: Process isolation, binary/input binding, sandbox assurance, and native confinement.
+  - id: trust.third-party-provider
+    status: contract-pending
+    owner_issue: '#65'
+    profile: NG0
+    contract_issue: '#65'
+    depends_on: [trust.native-worker]
+    summary: Discovery, publisher identity, certification, and policy-controlled execution.
+  - id: trust.remote-provider
+    status: unsupported
+    owner_issue: '#65'
+    profile: NG1
+    contract_issue: '#65'
+    summary: Remote execution is outside the NG0 production support profile.

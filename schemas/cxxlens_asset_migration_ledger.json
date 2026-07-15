@@ -1,0 +1,5647 @@
+{
+  "asset_count": 563,
+  "assets": [
+    {
+      "authority": "operational",
+      "disposition": "inherit",
+      "owner": "steward.repository",
+      "path": ".clang-format",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "operational",
+      "disposition": "inherit",
+      "owner": "steward.repository",
+      "path": ".clang-tidy",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "operational",
+      "disposition": "inherit",
+      "owner": "steward.repository",
+      "path": ".editorconfig",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "operational",
+      "disposition": "migrate",
+      "owner": "steward.ng-completion",
+      "path": ".github/CODEOWNERS",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "operational",
+      "disposition": "migrate",
+      "owner": "steward.ng-completion",
+      "path": ".github/workflows/api-unit.yml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "operational",
+      "disposition": "migrate",
+      "owner": "steward.ng-completion",
+      "path": ".github/workflows/nightly.yml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "operational",
+      "disposition": "migrate",
+      "owner": "steward.ng-completion",
+      "path": ".github/workflows/quality.yml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "operational",
+      "disposition": "inherit",
+      "owner": "steward.repository",
+      "path": ".gitignore",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "operational",
+      "disposition": "inherit",
+      "owner": "steward.repository",
+      "path": ".markdownlint-cli2.jsonc",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "operational",
+      "disposition": "inherit",
+      "owner": "steward.repository",
+      "path": ".yamllint.yaml",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-authority",
+      "path": "AGENTS.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-build",
+      "path": "CMakeLists.txt",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-build",
+      "path": "CMakePresets.json",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-authority",
+      "path": "CONTRIBUTING.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "operational",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "Doxyfile.in",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "informative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "README.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-security",
+      "path": "SECURITY.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-build",
+      "path": "cmake/CxxlensClangTargets.cmake",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-build",
+      "path": "cmake/CxxlensConfig.cmake.in",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-build",
+      "path": "cmake/CxxlensDeveloperTools.cmake",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-build",
+      "path": "cmake/CxxlensSanitizers.cmake",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-build",
+      "path": "cmake/CxxlensWarnings.cmake",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/43/core_findings.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/43/core_findings_usage.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/43/testing_plan_assertions.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/43/testing_plan_assertions_usage.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/44/interop_extractors.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/44/interop_extractors_usage.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/45/select_search_explain.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/45/select_search_explain_usage.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/46/graph.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/46/graph_usage.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/47/rules_report.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/47/rules_report_usage.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/48/transform.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/48/transform_usage.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/49/generate.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/49/generate_usage.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/50/flow.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/50/flow_models_usage.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/50/models.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/51/qa.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/51/review.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "delete",
+      "owner": "steward.legacy-cleanup",
+      "path": "contracts/candidates/51/review_qa_usage.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "informative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "docs/README.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "informative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/README.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/agent/agent_ownership_reference.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/agent/agent_runner_reference.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/agent/agent_task_packet_reference.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/agent/readiness_audit_reference.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/design/VALIDATION_REPORT.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/design/api_catalog_change_policy.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/design/contract_candidate_checklist.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/design/cxxlens_integrated_design_ja.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/design/high_risk_contract_validation.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/design/package_contract_43.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/design/package_contract_44.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/design/package_contract_45.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/design/package_contract_46.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/design/package_contract_47.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/design/package_contract_48.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/design/package_contract_49.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/design/package_contract_50.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/design/package_contract_51.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/design/phase_b_contract_integration.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/design/public_api_contract_freeze.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/design/public_contract_conventions.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/development/api-test-coverage.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/development/clang-adapter.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/development/configuration-resolver.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/development/fact-contract.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/development/fact-store.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/development/failure-contract.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/development/finding-contract.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/development/m0-acceptance.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/development/m2-acceptance.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/development/semantic-search.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/legacy-v1/development/workspace-catalog.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/pre-cxxlens/cxxred_upper_layer_design_ja.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.ng-docs",
+      "path": "docs/archive/pre-cxxlens/llvm_clang_wrapper_design_ja.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "archived"
+    },
+    {
+      "authority": "informative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "docs/design/README.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "generated-inventory",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "docs/design/SHA256SUMS",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "generated"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "replace",
+      "owner": "steward.legacy-api",
+      "path": "docs/design/VALIDATION_REPORT.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "status": "redirect"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-authority",
+      "path": "docs/design/adr/0001-frontend-worker-isolation.md",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-authority",
+      "path": "docs/design/adr/0002-semantic-relation-platform.md",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-authority",
+      "path": "docs/design/adr/0003-versioned-relation-kernel.md",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-authority",
+      "path": "docs/design/adr/0004-legacy-contract-reset.md",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "informative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "docs/design/adr/README.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "replace",
+      "owner": "steward.legacy-api",
+      "path": "docs/design/api_catalog_change_policy.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/catalogs/README.md",
+      "status": "redirect"
+    },
+    {
+      "authority": "generated-inventory",
+      "disposition": "archive",
+      "owner": "steward.legacy-api",
+      "path": "docs/design/api_catalog_inventory.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "legacy-baseline"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-catalogs",
+      "path": "docs/design/catalogs/README.md",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "replace",
+      "owner": "steward.legacy-api",
+      "path": "docs/design/contract_candidate_checklist.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/catalogs/README.md",
+      "status": "redirect"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-authority",
+      "path": "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "replace",
+      "owner": "steward.legacy-api",
+      "path": "docs/design/high_risk_contract_validation.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/catalogs/README.md",
+      "status": "redirect"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "replace",
+      "owner": "steward.legacy-api",
+      "path": "docs/design/package_contract_43.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/catalogs/README.md",
+      "status": "redirect"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "replace",
+      "owner": "steward.legacy-api",
+      "path": "docs/design/package_contract_44.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/catalogs/README.md",
+      "status": "redirect"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "replace",
+      "owner": "steward.legacy-api",
+      "path": "docs/design/package_contract_45.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/catalogs/README.md",
+      "status": "redirect"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "replace",
+      "owner": "steward.legacy-api",
+      "path": "docs/design/package_contract_46.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/catalogs/README.md",
+      "status": "redirect"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "replace",
+      "owner": "steward.legacy-api",
+      "path": "docs/design/package_contract_47.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/catalogs/README.md",
+      "status": "redirect"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "replace",
+      "owner": "steward.legacy-api",
+      "path": "docs/design/package_contract_48.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/catalogs/README.md",
+      "status": "redirect"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "replace",
+      "owner": "steward.legacy-api",
+      "path": "docs/design/package_contract_49.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/catalogs/README.md",
+      "status": "redirect"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "replace",
+      "owner": "steward.legacy-api",
+      "path": "docs/design/package_contract_50.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/catalogs/README.md",
+      "status": "redirect"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "replace",
+      "owner": "steward.legacy-api",
+      "path": "docs/design/package_contract_51.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/catalogs/README.md",
+      "status": "redirect"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "replace",
+      "owner": "steward.legacy-api",
+      "path": "docs/design/phase_b_contract_integration.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/catalogs/README.md",
+      "status": "redirect"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "replace",
+      "owner": "steward.legacy-api",
+      "path": "docs/design/public_api_contract_freeze.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/catalogs/README.md",
+      "status": "redirect"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "replace",
+      "owner": "steward.legacy-api",
+      "path": "docs/design/public_contract_conventions.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/catalogs/README.md",
+      "status": "redirect"
+    },
+    {
+      "authority": "informative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "docs/development/architecture.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "informative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "docs/development/build-and-test.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "informative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "docs/development/canonical-identity.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "informative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "docs/development/canonical-json-schema.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "informative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "docs/development/coding-style.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "informative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "docs/development/doxygen-style.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "informative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "docs/development/evidence-coverage.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "informative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "docs/development/runtime-ports.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "informative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "docs/development/source-semantics.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "informative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "docs/development/testing-fixtures.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "replace",
+      "owner": "steward.legacy-api",
+      "path": "docs/development/workspace-catalog.md",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/design/cxxlens_next_generation_integrated_design_ja.md#7-project-catalog-and-build-context",
+      "status": "redirect"
+    },
+    {
+      "authority": "informative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "docs/doxygen-main.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "informative",
+      "disposition": "inherit",
+      "owner": "steward.ng-release",
+      "path": "docs/support-matrix.md",
+      "profile": "release",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "informative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "docs/tutorials/README.md",
+      "profile": "repository",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/m2-flagship/CMakeLists.txt",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/m2-flagship/main.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/configuration.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/copy.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/core.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/explain.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/facts.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/flow.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/fuzz.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/generate.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/graph.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/interop.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/method_harness.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/mock.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/models.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/qa.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/report.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/review.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/rules.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/search.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/select.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/testing.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/transform.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/packages/workspace.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/configuration.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/core.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/core/evidence.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/core/failure.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/core/finding.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/core/identity.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/core/schema.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/cxxlens.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/explain.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/facts.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/flow.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/generate.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/graph.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/interop/clang.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/models.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/qa.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/report.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/review.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/rules.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/search.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/select.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/source.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/testing.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/transform.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/workspace.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens.agent-ownership.v1.json",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens.agent-ownership.v1.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens.agent-task-packet-corpus.v1.json",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens.agent-task-packet-validation-report.v1.json",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens.agent-task-packet-validation-report.v1.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens.agent-task-packet.v1.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens.api-ready.execution-result.v1.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens.api-ready.report.v1.json",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens.api-ready.run-manifest.v1.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens.api-ready.v1.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens.config.explain.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens.config.resolved.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens.config.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens.dependency-request.examples.v1.json",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens.dependency-request.v1.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens.readiness.authorization.v1.json",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens.readiness.authorization.v1.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens.readiness.gate-evidence.v1.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_agent_task_card.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_analysis_scope.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_api_catalog.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_api_model_pack.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_api_test_coverage.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_api_test_coverage.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_api_test_coverage_report.json",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_api_test_coverage_report.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_apply_result.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "generated-inventory",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "schemas/cxxlens_asset_migration_ledger.json",
+      "profile": "migration",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "generated"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "schemas/cxxlens_asset_migration_ledger.schema.yaml",
+      "profile": "migration",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "schemas/cxxlens_asset_migration_policy.schema.yaml",
+      "profile": "migration",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "schemas/cxxlens_asset_migration_policy.yaml",
+      "profile": "migration",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_capabilities.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_contract_ownership.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_contract_ownership.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_coverage.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_coverage_delta.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_custom_fact.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_diagnostic.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_edit_plan.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_effect_summary.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_error.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_evidence.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_evidence_coverage_contract.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_explanation.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_fact.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_fact_conformance.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_fact_conformance.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_fact_contract.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_fact_contract.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_fact_profile.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_fact_requirement.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_failure_contract.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_finding.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_finding_contract.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_finding_set.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_flow_options.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_frontend_batch.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_frontend_worker_ipc.contract.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_generation_options.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_generation_plan.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_generation_result.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_global_contract_conventions.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_global_contract_conventions.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_graph.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_graph_options.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_high_risk_contract_validation.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_high_risk_contract_validation.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_identity_contract.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_incremental_provisioning_contract.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.legacy-api",
+      "path": "schemas/cxxlens_legacy_api_baseline.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_asset_migration_ledger.schema.yaml",
+      "status": "legacy-baseline"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "archive",
+      "owner": "steward.legacy-api",
+      "path": "schemas/cxxlens_legacy_api_baseline.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_asset_migration_ledger.json",
+      "status": "legacy-baseline"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_m0_acceptance_report.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_m0_completion.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_m0_completion.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_m1_acceptance_report.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_m1_completion.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_m1_completion.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_m2_acceptance_report.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_m2_completion.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_m2_completion.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_method_spec.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-catalogs",
+      "path": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "schemas/cxxlens_ng_authority_transition.schema.yaml",
+      "profile": "migration",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "schemas/cxxlens_ng_authority_transition.yaml",
+      "profile": "migration",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "schemas/cxxlens_ng_authority_transition_report.schema.yaml",
+      "profile": "migration",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-catalogs",
+      "path": "schemas/cxxlens_ng_catalog_bootstrap.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-catalogs",
+      "path": "schemas/cxxlens_ng_provider_protocol.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-catalogs",
+      "path": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-catalogs",
+      "path": "schemas/cxxlens_ng_relation_registry.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-catalogs",
+      "path": "schemas/cxxlens_ng_security_profile.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_observation.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_package_contract_candidates.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_package_contract_candidates.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_phase_b_contract_integration.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_phase_b_contract_integration.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_provisioning_trace.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_public_api_contract.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_public_api_contract_freeze.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_public_api_contract_freeze.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_qa_profile.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_qa_report.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_query_execution.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_query_plan.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_query_trace.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_reduction_trace.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_rendered_report.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_report_options.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_resource_report.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_review_baseline.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_review_diff.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_review_report.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_rule.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_scheduler_trace.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_schema_compatibility.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_search_options.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_search_report.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_selector.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_selector_reason_codes.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_source_span.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_sqlite_store_contract.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_sqlite_store_contract.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_suppression.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_taint_report.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_testing_fixture.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_transform_options.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_transform_transaction.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_unresolved.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_virtual_candidate_resolution.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_workspace_context.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "migration-provenance",
+      "disposition": "migrate",
+      "owner": "steward.ng-contracts",
+      "path": "schemas/cxxlens_workspace_doctor.schema.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/config/configuration.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/config/configuration_data.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/config/configuration_loader.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/config/configuration_spec.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/config/configuration_spec.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/config/environment_adapter.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/config/environment_port.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/config/yaml_loader.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/core/canonical_encoding.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/core/canonical_encoding.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/core/canonical_json.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/core/canonical_json.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/core/capability_access.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/core/evidence.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/core/failure.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/core/finding.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/core/json_projections.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/core/json_projections.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/core/schema_registry.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/core/version.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/explain/explain.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/facts/fact_contract.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/facts/fact_contract.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/facts/fact_profile.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/facts/reducer.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/facts/reducer.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/graph/virtual_candidate_resolver.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/graph/virtual_candidate_resolver.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/clang22/call_relation_extractor.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/clang22/call_relation_extractor.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/clang22/frontend_job.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/clang22/frontend_job.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/clang22/frontend_worker.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/clang22/frontend_worker.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/clang22/frontend_worker_main.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/clang22/preprocessor_extractor.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/clang22/preprocessor_extractor.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/clang22/source_map_adapter.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/clang22/source_map_adapter.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/clang22/symbol_type_extractor.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/clang22/symbol_type_extractor.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/common/borrowed_lifetime.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/common/borrowed_lifetime.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/common/frontend_port.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/common/frontend_port.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/common/frontend_worker_ipc.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/llvm/common/frontend_worker_ipc.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/query/predicate_evaluator.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/query/predicate_evaluator.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/query/query_executor.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/query/query_executor.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/query/query_plan.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/query/query_plan.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/query/refinement_port.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/runtime/dynamic_library_adapter.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/runtime/dynamic_library_port.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/runtime/fault_plan.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/runtime/fault_plan.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/runtime/filesystem_adapter.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/runtime/filesystem_port.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/runtime/hash_adapter.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/runtime/hash_port.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/runtime/process_adapter.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/runtime/process_port.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/runtime/runtime_support.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/runtime/time_adapter.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/runtime/time_port.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/search/search.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/search/search_report.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/search/search_report_access.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/select/selector.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/select/selector_ast.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/select/selector_json.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/source/source_span.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/store/binary_codec.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/store/binary_codec.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/store/fact_store_access.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/store/fact_values.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/store/in_memory/in_memory_store.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/store/sqlite/sqlite_api.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/store/sqlite/sqlite_api.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/store/sqlite/sqlite_store.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/store/store_port.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/store/store_port.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/testing/fault_plan.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/testing/json_parser.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/testing/json_parser.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/testing/result_assertion.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/testing/workspace_fixture.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/testing/workspace_fixture_data.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/workspace/catalog.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/workspace/catalog_access.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/workspace/frontend_scheduler_worker.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/workspace/frontend_scheduler_worker.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/workspace/provisioning.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/workspace/provisioning.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/workspace/scheduler.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/workspace/scheduler.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/workspace/semantic_path.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/workspace/value_access.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/CMakeLists.txt",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/adapter/clang22/preprocessor_extractor_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/adapter/clang22/semantic_extractor_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/adapter/clang22/test_preprocessor_process.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/adapter/clang22/test_semantic_process.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/agent/ownership/fixtures/negative_cases.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/agent/ownership/test_ownership.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/agent/readiness/fixtures/negative_cases.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/agent/readiness/test_readiness_audit.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/agent/runner/fixtures/negative_cases.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/agent/runner/test_runner.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/agent/task_packet/fixtures/negative_cases.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/agent/task_packet/test_task_packet.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/config/test_configuration_process.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/contract_spikes/high_risk_contract_spike.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/contract_spikes/high_risk_validation_evidence.json",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/contract_spikes/test_high_risk_contract_validation.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/evidence/test_evidence_process.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/facts/test_fact_schemas.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/finding/test_finding_process.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/fixtures/frontend_worker_fixture.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/fixtures/m0/ambiguous/basic.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/fixtures/m0/negative/basic.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/fixtures/m0/positive/basic.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/fixtures/tsan_race_fixture.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/frontend/test_frontend_schema.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/golden/clang22/preprocessor_v1.txt",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/golden/clang22/semantic_v1.txt",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/golden/config/resolved_v1.sha256",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/golden/evidence_coverage/canonical_v1.txt",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/golden/facts/reducer_v1.json",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/golden/finding/canonical_v1.txt",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/golden/identity/canonical_v1.txt",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/golden/json/m0_documents_v1.sha256",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/golden/query/canonical_v1.sha256",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/golden/scheduler/canonical_v1.json",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/golden/search/canonical_v1.sha256",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/golden/selectors/m2_v1.jsonl",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/golden/source/direct.json",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/golden/source/nested_macro.json",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/golden/store/snapshot_binary_v1.txt",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/golden/testing/fixture_v1.sha256",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/identity/test_identity_process.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/install/consumer/CMakeLists.txt",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/install/consumer/main.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/install/run_install_test.cmake.in",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/integration/m1_conformance_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/integration/m2_search_conformance_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/link/clang22_link_closure_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/public_headers/configuration_header_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/public_headers/core_header_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/public_headers/cxxlens_header_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/public_headers/evidence_header_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/public_headers/explain_header_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/public_headers/facts_header_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/public_headers/failure_header_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/public_headers/finding_header_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/public_headers/identity_header_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/public_headers/interop_clang_header_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/public_headers/schema_header_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/public_headers/search_header_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/public_headers/select_header_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/public_headers/source_header_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/public_headers/testing_header_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/public_headers/workspace_header_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/quality/test_api_contract.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/quality/test_api_test_coverage.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "tests/quality/test_documentation_consistency.py",
+      "profile": "migration",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/quality/test_global_contract_conventions.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/quality/test_ng_authority.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/quality/test_package_contract_candidates.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/quality/test_public_api_contract_freeze.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/quality/test_tsan_gate.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/query/test_query_process.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/scheduler/test_scheduler_process.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/schema/test_m0_serialization.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/schema/test_source_schema.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/search/test_search_process.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/select/test_selector_process.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/support/discover_fixtures.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/testing/test_testing_fixture_process.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/tsan/suppressions.yaml",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/tsan/tsan.supp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/tsan/verify_tsan_detection.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/config/configuration_process_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/config/configuration_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/core/canonical_json_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/core/evidence_coverage_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/core/failure_contract_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/core/finding_contract_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/core/m0_serialization_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/core/schema_registry_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/facts/fact_contract_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/facts/reducer/reducer_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/facts/reducer/test_reducer_process.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/identity/canonical_identity_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/llvm/frontend_job_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/query/query_engine_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/query/query_fixture.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/query/query_process.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/runtime/runtime_ports_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/search/search_fixture.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/search/search_process.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/search/search_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/select/selector_process.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/select/selector_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/source/source_span_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/store/fact_store_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/store/test_fact_store_process.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/testing/testing_fixture_process_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/testing/testing_substrate_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/version_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/workspace/provisioning_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/workspace/scheduler_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/unit/workspace/workspace_catalog_test.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/workspace/test_provisioning_contract.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-acceptance",
+      "path": "tests/workspace/test_workspace_process.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/agent/api_task_runner.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/agent/ownership_generator.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/agent/readiness_audit.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/agent/ready_evaluator.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/agent/task_packet_generator.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/agent/unit_local_gate.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_api_test_coverage.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_clang_adapter.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_configuration_contract.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_doc_examples.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-docs",
+      "path": "tools/quality/check_documentation_consistency.py",
+      "profile": "migration",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_evidence_contract.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_fact_contract.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_fact_reducer.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_failure_contract.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_finding_contract.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_format.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_global_contract_conventions.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_high_risk_contract_validation.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_identity_path.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_m0_completion.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_m1_completion.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_m2_completion.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_ng_authority.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_package_contract_candidates.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_phase_b_contract_integration.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_preprocessor_extractor.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_provisioning_contract.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_public_api_contract_freeze.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_public_headers.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_runtime_port_usage.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_scheduler_contract.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_semantic_extractor.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_serialization_contract.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_testing_contract.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_tsan_gate.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/check_workspace_contract.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/generate_api_catalog_inventory.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/migrate_api_contract_v2.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/requirements.txt",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/run_m0_acceptance.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/run_m1_acceptance.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/run_m2_acceptance.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/run_text_lints.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/validate_api_contract.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/verify_checksums.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-tooling",
+      "path": "tools/quality/verify_doxygen.py",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    }
+  ],
+  "classifications": {
+    "archive": 37,
+    "delete": 22,
+    "inherit": 50,
+    "migrate": 388,
+    "replace": 66
+  },
+  "document_version": "1.0.0",
+  "generated_by": "tools/quality/check_documentation_consistency.py",
+  "schema": "cxxlens.asset-migration-ledger.v1",
+  "source_policy": "schemas/cxxlens_asset_migration_policy.yaml",
+  "source_policy_digest": "sha256:f5d233e3ca6fd81a04c33fc05f449578c56b31347c03dfe837ca5edbebfdb29f"
+}

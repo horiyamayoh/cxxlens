@@ -1,0 +1,43 @@
+schema: cxxlens.ng-catalog-bootstrap.v1
+kind: provider-protocol
+document_version: 0.1.0
+maturity: bootstrap
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md
+  index: docs/design/catalogs/README.md
+  bootstrap_issue: '#58'
+  owner: steward.ng-catalogs
+compatibility:
+  version_axis: provider-protocol
+  current: 0.1.0-bootstrap
+  exact_contract_issue: '#64'
+replaces:
+  - schemas/cxxlens_frontend_worker_ipc.contract.yaml
+entries:
+  - id: provider.manifest
+    status: contract-pending
+    owner_issue: '#64'
+    profile: NG0
+    contract_issue: '#64'
+    summary: Provider identity, binary digest, capabilities, trust, and compatibility.
+  - id: provider.handshake
+    status: contract-pending
+    owner_issue: '#64'
+    profile: NG0
+    contract_issue: '#64'
+    depends_on: [provider.manifest]
+    summary: Fail-closed protocol and encoding negotiation.
+  - id: provider.task-stream
+    status: contract-pending
+    owner_issue: '#64'
+    profile: NG0
+    contract_issue: '#64'
+    depends_on: [provider.handshake]
+    summary: Bounded task, batch, coverage, unresolved, cancel, and completion lifecycle.
+  - id: provider.discovery
+    status: contract-pending
+    owner_issue: '#65'
+    profile: NG0
+    contract_issue: '#65'
+    depends_on: [provider.manifest]
+    summary: Policy-controlled discovery, trust, certification, and deterministic selection.
