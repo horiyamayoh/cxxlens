@@ -74,7 +74,10 @@ def git(root: pathlib.Path, *arguments: str) -> str:
 
 
 def repository_assets(root: pathlib.Path) -> list[str]:
-    output = git(root, "ls-files", "--cached", "--others", "--exclude-standard", "-z")
+    # The ledger is a contract over repository-owned assets. CI setup may create
+    # untracked helper files in the checkout, so only the Git index is authoritative.
+    # Contributors stage newly added assets before regenerating the ledger.
+    output = git(root, "ls-files", "--cached", "-z")
     paths = {item for item in output.split("\0") if item}
     paths.add(LEDGER.as_posix())
     result = []

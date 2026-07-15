@@ -21,7 +21,9 @@ cmake --build --preset dev-clang --target cxxlens-quality
 4. positive、negative、determinism、root relocation のテストを追加する。
 5. Doxygen 契約、次世代 catalog/registry、設計書、release note を同時に更新する。
 6. 既存資産を継承・移行・置換・archive・削除する場合は asset migration policy を更新し、ledger を
-   generator から再生成する。
+   generator から再生成する。新規資産は先に Git index へ追加し、`python3
+   tools/quality/check_documentation_consistency.py generate --root .` を実行する。CI setup が作る
+   untracked helper は repository asset として扱わない。
 
 旧 `schemas/cxxlens_public_api_contract.yaml` は移行 baselineです。新しい API ID、signature、packageを
 追加せず、旧atomic unit runnerを実装dispatchに使用しないでください。
