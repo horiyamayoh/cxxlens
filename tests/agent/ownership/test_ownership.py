@@ -164,6 +164,25 @@ class OwnershipTest(unittest.TestCase):
                 "tools/quality/check_ng_relation_contract.py",
             },
         )
+        ng_query_paths = {
+            item["path"]
+            for item in generated["tracked_paths"]
+            if item["owner_role"] == "steward.ng-query"
+        }
+        self.assertEqual(
+            ng_query_paths,
+            {
+                "docs/design/adr/0007-logical-query-algebra.md",
+                "schemas/cxxlens_ng_logical_query_contract.schema.yaml",
+                "schemas/cxxlens_ng_logical_query_contract.yaml",
+                "schemas/cxxlens_ng_logical_query_ir.schema.yaml",
+                "schemas/cxxlens_ng_query_conformance_report.schema.yaml",
+                "schemas/cxxlens_ng_query_conformance_vectors.schema.yaml",
+                "schemas/cxxlens_ng_query_conformance_vectors.yaml",
+                "tests/quality/test_ng_query_contract.py",
+                "tools/quality/check_ng_query_contract.py",
+            },
+        )
         self.assertEqual(
             {item["api_id"] for item in generated["skeletons"]},
             {packet["api_id"] for packet in self.corpus["packets"]},

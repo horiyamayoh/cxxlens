@@ -1,0 +1,557 @@
+schema: cxxlens.query-conformance-vectors.v1
+document_version: 1.0.0
+authority:
+  owner_issue: '#61'
+  decision_adr: docs/design/adr/0007-logical-query-algebra.md
+contract: schemas/cxxlens_ng_logical_query_contract.yaml
+vectors:
+- id: exact-query-contract
+  class: positive
+  operation: validate_contract
+  expected:
+    decision: accepted
+    reason_code: query.contract-valid
+  input:
+    document: canonical
+- id: scan-missing-descriptor
+  class: negative
+  operation: validate_operator_use
+  expected:
+    decision: rejected
+    reason_code: query.scan-descriptor-missing
+  input:
+    operator: query.scan.v1
+    case: missing-descriptor
+- id: filter-implicit-sql-null
+  class: negative
+  operation: validate_operator_use
+  expected:
+    decision: rejected
+    reason_code: query.sql-null-forbidden
+  input:
+    operator: query.filter.v1
+    case: implicit-sql-null
+- id: project-implicit-distinct
+  class: negative
+  operation: validate_operator_use
+  expected:
+    decision: rejected
+    reason_code: query.project-distinct-forbidden
+  input:
+    operator: query.project.v1
+    case: implicit-distinct
+- id: inner-join-implicit-null-equality
+  class: negative
+  operation: validate_operator_use
+  expected:
+    decision: rejected
+    reason_code: query.join-present-equality-required
+  input:
+    operator: query.inner_join.v1
+    case: implicit-null-equality
+- id: semi-join-right-multiplicity
+  class: negative
+  operation: validate_operator_use
+  expected:
+    decision: rejected
+    reason_code: query.semi-join-left-multiplicity-required
+  input:
+    operator: query.semi_join.v1
+    case: right-multiplicity-leak
+- id: union-schema-mismatch
+  class: negative
+  operation: validate_operator_use
+  expected:
+    decision: rejected
+    reason_code: query.union-schema-mismatch
+  input:
+    operator: query.union.v1
+    case: mismatched-schema
+- id: distinct-condition-in-key
+  class: negative
+  operation: validate_operator_use
+  expected:
+    decision: rejected
+    reason_code: query.distinct-key-invalid
+  input:
+    operator: query.distinct.v1
+    case: condition-in-key
+- id: order-by-without-total-tie-break
+  class: negative
+  operation: validate_operator_use
+  expected:
+    decision: rejected
+    reason_code: query.order-not-total
+  input:
+    operator: query.order_by.v1
+    case: missing-total-tie-break
+- id: limit-without-order
+  class: negative
+  operation: validate_operator_use
+  expected:
+    decision: rejected
+    reason_code: query.limit-unordered
+  input:
+    operator: query.limit.v1
+    case: unordered-input
+- id: condition-restrict-empty
+  class: negative
+  operation: validate_operator_use
+  expected:
+    decision: rejected
+    reason_code: query.condition-empty-restriction
+  input:
+    operator: query.condition_restrict.v1
+    case: empty-alternatives
+- id: interpretation-restrict-implicit-default
+  class: negative
+  operation: validate_operator_use
+  expected:
+    decision: rejected
+    reason_code: query.interpretation-default-forbidden
+  input:
+    operator: query.interpretation_restrict.v1
+    case: implicit-default
+- id: group-is-ng1
+  class: positive
+  operation: validate_deferred_operator
+  expected:
+    decision: accepted
+    reason_code: query.operator-deferred
+  input:
+    operator: query.group.v1
+    attempt_profile: NG1
+- id: aggregate-partial-is-not-ng0
+  class: negative
+  operation: validate_deferred_operator
+  expected:
+    decision: rejected
+    reason_code: query.partial-aggregate
+  input:
+    operator: query.aggregate.v1
+    attempt_profile: NG0
+- id: static-dynamic-normalized-digest
+  class: positive
+  operation: compare_normalized_ir
+  expected:
+    decision: accepted
+    reason_code: query.normalized-digest-equal
+  input:
+    static: &flagship_query
+      schema: cxxlens.logical-query-ir.v1
+      ir_version: 1.0.0
+      surface: static
+      relation_requirements:
+      - descriptor_id: cc.call_site.v1
+        minimum_minor: 0
+        maximum_minor: any-compatible
+      - descriptor_id: cc.call_direct_target.v1
+        minimum_minor: 0
+        maximum_minor: any-compatible
+      - descriptor_id: cc.entity.v1
+        minimum_minor: 0
+        maximum_minor: any-compatible
+      root:
+        operator: query.project.v1
+        inputs:
+        - operator: query.limit.v1
+          inputs:
+          - operator: query.order_by.v1
+            inputs:
+            - operator: query.distinct.v1
+              inputs:
+              - operator: query.filter.v1
+                inputs:
+                - operator: query.inner_join.v1
+                  inputs:
+                  - operator: query.inner_join.v1
+                    inputs:
+                    - operator: query.semi_join.v1
+                      inputs:
+                      - operator: query.union.v1
+                        inputs:
+                        - operator: query.condition_restrict.v1
+                          inputs:
+                          - operator: query.interpretation_restrict.v1
+                            inputs:
+                            - operator: query.scan.v1
+                              inputs: []
+                              arguments:
+                                descriptor_id: cc.call_site.v1
+                                alias: calls_debug
+                            arguments:
+                              interpretation: cc.canonical-1
+                          arguments:
+                            universe: build-matrix-1
+                            alternatives: [debug]
+                        - operator: query.condition_restrict.v1
+                          inputs:
+                          - operator: query.interpretation_restrict.v1
+                            inputs:
+                            - operator: query.scan.v1
+                              inputs: []
+                              arguments:
+                                descriptor_id: cc.call_site.v1
+                                alias: calls_release
+                            arguments:
+                              interpretation: cc.canonical-1
+                          arguments:
+                            universe: build-matrix-1
+                            alternatives: [release]
+                        arguments: {}
+                      - operator: query.scan.v1
+                        inputs: []
+                        arguments:
+                          descriptor_id: cc.call_direct_target.v1
+                          alias: targets
+                      arguments:
+                        predicate:
+                          kind: column_equals_present
+                          left:
+                            column_id: cc.call_site.v1.call
+                            availability: require
+                          right:
+                            column_id: cc.call_direct_target.v1.call
+                            availability: require
+                    - operator: query.scan.v1
+                      inputs: []
+                      arguments:
+                        descriptor_id: cc.call_direct_target.v1
+                        alias: targets_join
+                    arguments:
+                      predicate:
+                        kind: column_equals_present
+                        left:
+                          column_id: cc.call_site.v1.call
+                          availability: require
+                        right:
+                          column_id: cc.call_direct_target.v1.call
+                          availability: require
+                  - operator: query.scan.v1
+                    inputs: []
+                    arguments:
+                      descriptor_id: cc.entity.v1
+                      alias: entities
+                  arguments:
+                    predicate:
+                      kind: column_equals_present
+                      left:
+                        column_id: cc.call_direct_target.v1.target
+                        availability: require
+                      right:
+                        column_id: cc.entity.v1.entity
+                        availability: require
+                arguments:
+                  predicate:
+                    kind: equals_present
+                    column:
+                      column_id: cc.entity.v1.qualified_name
+                      availability: require
+                    literal:
+                      type: utf8_string
+                      value: app::dangerous
+              arguments: {}
+            arguments:
+              keys:
+              - column:
+                  column_id: cc.call_site.v1.call
+                  availability: require
+                direction: ascending
+                cell_state_order: [absent, present, unknown]
+          arguments:
+            count: 2
+        arguments:
+          columns:
+          - column:
+              column_id: cc.call_site.v1.call
+              availability: require
+            output: output.call
+          - column:
+              column_id: cc.call_site.v1.source
+              availability: require
+            output: output.source
+      output_schema:
+      - id: output.call
+        type: typed_id<cc_call_id>
+        required: true
+      - id: output.source
+        type: typed_id<source_span_id>
+        required: true
+      condition_policy:
+        require_same_universe: true
+        empty_intersection: discard
+      interpretation_policy:
+        join_compatibility: exact-id-equality
+    dynamic:
+      <<: *flagship_query
+      surface: dynamic
+      relation_requirements:
+      - descriptor_id: cc.entity.v1
+        minimum_minor: 0
+        maximum_minor: any-compatible
+      - descriptor_id: cc.call_direct_target.v1
+        minimum_minor: 0
+        maximum_minor: any-compatible
+      - descriptor_id: cc.call_site.v1
+        minimum_minor: 0
+        maximum_minor: any-compatible
+- id: backend-and-order-parity
+  class: positive
+  operation: evaluate_backend_matrix
+  expected:
+    decision: accepted
+    reason_code: query.backend-matrix-equal
+    execution_status: complete
+    row_count: 2
+  input:
+    ir: *flagship_query
+    dataset: &flagship_dataset
+      cc.call_site.v1:
+      - values:
+          cc.call_site.v1.call: {state: present, type: 'typed_id<cc_call_id>', value: call-4}
+          cc.call_site.v1.source: {state: present, type: 'typed_id<source_span_id>', value: span-4}
+        multiplicity: 1
+        presence: {universe: build-matrix-1, alternatives: [debug, release]}
+        interpretation: cc.canonical-1
+        claim_contributors: [claim-call-4]
+        provenance: [evidence-call-4]
+      - values:
+          cc.call_site.v1.call: {state: present, type: 'typed_id<cc_call_id>', value: call-2}
+          cc.call_site.v1.source: {state: present, type: 'typed_id<source_span_id>', value: span-2}
+        multiplicity: 1
+        presence: {universe: build-matrix-1, alternatives: [debug, release]}
+        interpretation: cc.canonical-1
+        claim_contributors: [claim-call-2]
+        provenance: [evidence-call-2]
+      - values:
+          cc.call_site.v1.call: {state: present, type: 'typed_id<cc_call_id>', value: call-1}
+          cc.call_site.v1.source: {state: present, type: 'typed_id<source_span_id>', value: span-1}
+        multiplicity: 1
+        presence: {universe: build-matrix-1, alternatives: [debug, release]}
+        interpretation: cc.canonical-1
+        claim_contributors: [claim-call-1]
+        provenance: [evidence-call-1]
+      cc.call_direct_target.v1:
+      - values:
+          cc.call_direct_target.v1.call: {state: present, type: 'typed_id<cc_call_id>', value: call-2}
+          cc.call_direct_target.v1.target: {state: present, type: 'typed_id<cc_entity_id>', value: entity-safe}
+        multiplicity: 1
+        presence: {universe: build-matrix-1, alternatives: [debug, release]}
+        interpretation: cc.canonical-1
+        claim_contributors: [claim-target-2]
+        provenance: [evidence-target-2]
+      - values:
+          cc.call_direct_target.v1.call: {state: present, type: 'typed_id<cc_call_id>', value: call-1}
+          cc.call_direct_target.v1.target: {state: present, type: 'typed_id<cc_entity_id>', value: entity-danger}
+        multiplicity: 1
+        presence: {universe: build-matrix-1, alternatives: [debug, release]}
+        interpretation: cc.canonical-1
+        claim_contributors: [claim-target-1]
+        provenance: [evidence-target-1]
+      - values:
+          cc.call_direct_target.v1.call: {state: present, type: 'typed_id<cc_call_id>', value: call-4}
+          cc.call_direct_target.v1.target: {state: present, type: 'typed_id<cc_entity_id>', value: entity-danger}
+        multiplicity: 1
+        presence: {universe: build-matrix-1, alternatives: [debug, release]}
+        interpretation: cc.canonical-1
+        claim_contributors: [claim-target-4]
+        provenance: [evidence-target-4]
+      cc.entity.v1:
+      - values:
+          cc.entity.v1.entity: {state: present, type: 'typed_id<cc_entity_id>', value: entity-safe}
+          cc.entity.v1.qualified_name: {state: present, type: utf8_string, value: app::safe}
+        multiplicity: 1
+        presence: {universe: build-matrix-1, alternatives: [debug, release]}
+        interpretation: cc.canonical-1
+        claim_contributors: [claim-entity-safe]
+        provenance: [evidence-entity-safe]
+      - values:
+          cc.entity.v1.entity: {state: present, type: 'typed_id<cc_entity_id>', value: entity-danger}
+          cc.entity.v1.qualified_name: {state: present, type: utf8_string, value: app::dangerous}
+        multiplicity: 1
+        presence: {universe: build-matrix-1, alternatives: [debug, release]}
+        interpretation: cc.canonical-1
+        claim_contributors: [claim-entity-danger]
+        provenance: [evidence-entity-danger]
+- id: deterministic-output-truncation
+  class: positive
+  operation: evaluate_backend_matrix
+  expected:
+    decision: accepted
+    reason_code: query.backend-matrix-equal
+    execution_status: truncated
+    row_count: 1
+  input:
+    ir:
+      <<: *flagship_query
+      runtime_budget:
+        max_rows_output: 1
+    dataset: *flagship_dataset
+- id: tagged-absent
+  class: positive
+  operation: validate_cell
+  expected:
+    decision: accepted
+    reason_code: query.cell-valid
+  input:
+    cell: {state: absent}
+- id: tagged-semantic-unknown
+  class: positive
+  operation: validate_cell
+  expected:
+    decision: accepted
+    reason_code: query.cell-valid
+  input:
+    cell: {state: unknown, reason: unresolved-qualified-name}
+- id: sql-null-is-not-absence
+  class: negative
+  operation: validate_cell
+  expected:
+    decision: rejected
+    reason_code: query.sql-null-forbidden
+  input:
+    cell: {state: present, type: utf8_string, value: null}
+- id: missing-optional-as-explicit-absent
+  class: positive
+  operation: validate_schema_minor
+  expected:
+    decision: accepted
+    reason_code: query.schema-minor-compatible
+  input:
+    column_id: cc.call_site.v1.model_hint
+    column_required: false
+    column_available: false
+    access: absent_if_schema_missing
+- id: missing-optional-direct-reference
+  class: negative
+  operation: validate_schema_minor
+  expected:
+    decision: rejected
+    reason_code: query.optional-column-unavailable
+  input:
+    column_id: cc.call_site.v1.model_hint
+    column_required: false
+    column_available: false
+    access: require
+- id: missing-required-column
+  class: negative
+  operation: validate_schema_minor
+  expected:
+    decision: rejected
+    reason_code: query.required-column-missing
+  input:
+    column_id: cc.call_site.v1.call
+    column_required: true
+    column_available: false
+    access: require
+- id: dynamic-literal-exact-type
+  class: positive
+  operation: validate_dynamic_literal
+  expected:
+    decision: accepted
+    reason_code: query.literal-valid
+  input:
+    column_id: cc.entity.v1.qualified_name
+    literal: {type: utf8_string, value: app::dangerous}
+- id: dynamic-literal-type-mismatch
+  class: negative
+  operation: validate_dynamic_literal
+  expected:
+    decision: rejected
+    reason_code: query.literal-type-mismatch
+  input:
+    column_id: cc.entity.v1.qualified_name
+    literal: {type: bytes, value: app::dangerous}
+- id: dynamic-literal-type-missing
+  class: negative
+  operation: validate_dynamic_literal
+  expected:
+    decision: rejected
+    reason_code: query.literal-type-missing
+  input:
+    column_id: cc.entity.v1.qualified_name
+    literal: {value: app::dangerous}
+- id: ordered-continuation-bound
+  class: positive
+  operation: validate_continuation
+  expected:
+    decision: accepted
+    reason_code: query.continuation-valid
+  input:
+    ordering: total
+    prefix_sealed: true
+    token: &continuation_binding
+      logical_ir_digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+      snapshot_id: snapshot-1
+      relation_descriptor_digests: sha256:2222222222222222222222222222222222222222222222222222222222222222
+      total_order_specification: sha256:3333333333333333333333333333333333333333333333333333333333333333
+      last_total_key: sha256:4444444444444444444444444444444444444444444444444444444444444444
+      result_schema_digest: sha256:5555555555555555555555555555555555555555555555555555555555555555
+    current: *continuation_binding
+- id: stale-continuation-snapshot
+  class: negative
+  operation: validate_continuation
+  expected:
+    decision: rejected
+    reason_code: query.continuation-stale
+  input:
+    ordering: total
+    prefix_sealed: true
+    token: *continuation_binding
+    current:
+      <<: *continuation_binding
+      snapshot_id: snapshot-2
+- id: unsealed-upstream-interruption
+  class: positive
+  operation: validate_partial_execution
+  expected:
+    decision: accepted
+    reason_code: query.partial-safe
+    execution_status: failed_before_result
+    row_count: 0
+  input:
+    kind: upstream-interruption-unsealed
+    published_rows: 0
+- id: sealed-ordered-cancel-prefix
+  class: positive
+  operation: validate_partial_execution
+  expected:
+    decision: accepted
+    reason_code: query.partial-safe
+    execution_status: cancelled_with_partial
+    row_count: 2
+  input:
+    kind: ordered-sealed-prefix
+    ordered: true
+    prefix_sealed: true
+    published_rows: 2
+- id: partial-aggregate-publication
+  class: negative
+  operation: validate_partial_execution
+  expected:
+    decision: rejected
+    reason_code: query.partial-aggregate
+  input:
+    kind: partial-aggregate
+    published_rows: 1
+- id: logical-ir-without-physical-fields
+  class: positive
+  operation: validate_logical_authority
+  expected:
+    decision: accepted
+    reason_code: query.logical-authority-clean
+  input:
+    document:
+      operator: query.scan.v1
+      descriptor_id: cc.call_site.v1
+- id: physical-index-is-not-logical-authority
+  class: negative
+  operation: validate_logical_authority
+  expected:
+    decision: rejected
+    reason_code: query.physical-authority-leak
+  input:
+    document:
+      operator: query.scan.v1
+      descriptor_id: cc.call_site.v1
+      index_name: sqlite-call-index

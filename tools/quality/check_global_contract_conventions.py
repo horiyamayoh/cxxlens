@@ -31,6 +31,10 @@ LEGACY_OWNERSHIP_SCHEMA_EXCLUSIONS = {
     "cxxlens_ng_relation_conformance_report.schema.yaml",
     "cxxlens_ng_relation_conformance_vectors.schema.yaml",
     "cxxlens_ng_relation_registry.schema.yaml",
+    "cxxlens_ng_logical_query_contract.schema.yaml",
+    "cxxlens_ng_logical_query_ir.schema.yaml",
+    "cxxlens_ng_query_conformance_report.schema.yaml",
+    "cxxlens_ng_query_conformance_vectors.schema.yaml",
 }
 EXPECTED_SECTIONS = {
     "naming_and_family",

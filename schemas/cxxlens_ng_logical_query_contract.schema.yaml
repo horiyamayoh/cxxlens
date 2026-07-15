@@ -1,0 +1,287 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.logical-query-contract.v1
+title: cxxlens NG0 logical query algebra contract
+type: object
+additionalProperties: false
+required:
+- schema
+- document_version
+- maturity
+- authority
+- compatibility
+- logical_ir
+- collection_model
+- condition_algebra
+- interpretation_algebra
+- evidence_algebra
+- ordering
+- partial_execution
+- schema_compatibility
+- canonicalization
+- operator_profiles
+- deferred_operators
+- execution_result
+- reference_evaluator
+properties:
+  schema:
+    const: cxxlens.logical-query-contract.v1
+  document_version:
+    $ref: '#/$defs/semantic_version'
+  maturity:
+    const: accepted
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, decision_adr, owner_issue, owner]
+    properties:
+      design:
+        const: docs/design/cxxlens_next_generation_integrated_design_ja.md#20-logical-query
+      decision_adr:
+        const: docs/design/adr/0007-logical-query-algebra.md
+      owner_issue:
+        const: '#61'
+      owner:
+        const: steward.ng-query
+  compatibility:
+    type: object
+    additionalProperties: false
+    required: [version_axis, current, semantic_major, minor_policy, unknown_operator]
+    properties:
+      version_axis:
+        const: logical-query-ir
+      current:
+        $ref: '#/$defs/semantic_version'
+      semantic_major:
+        const: 1
+      minor_policy:
+        const: additive-optional-preserving
+      unknown_operator:
+        const: reject
+  logical_ir:
+    type: object
+    additionalProperties: false
+    required:
+    - schema_id
+    - instance_schema
+    - canonical_encoding
+    - digest_domain
+    - digest_projection
+    - physical_fields_forbidden
+    properties:
+      schema_id:
+        const: cxxlens.logical-query-ir.v1
+      instance_schema:
+        const: schemas/cxxlens_ng_logical_query_ir.schema.yaml
+      canonical_encoding:
+        const: canonical-json-rfc8785-profile
+      digest_domain:
+        const: cxxlens.logical-query-ir.v1
+      digest_projection:
+        type: object
+        additionalProperties: false
+        required: [include, exclude]
+        properties:
+          include:
+            $ref: '#/$defs/nonempty_strings'
+          exclude:
+            $ref: '#/$defs/nonempty_strings'
+      physical_fields_forbidden:
+        $ref: '#/$defs/nonempty_strings'
+  collection_model:
+    type: object
+    required: [kind, occurrence, cell_states, null_policy, duplicate_policy]
+  condition_algebra:
+    type: object
+    required:
+    - representation
+    - require_same_universe
+    - empty
+    - filter_project
+    - inner_join
+    - semi_join
+    - union
+    - distinct
+  interpretation_algebra:
+    type: object
+    required:
+    - join_compatibility
+    - incompatible_join
+    - project_filter_union
+    - distinct_partition
+    - restriction
+  evidence_algebra:
+    type: object
+    required:
+    - filter_project_restrictions
+    - join
+    - semi_join
+    - union
+    - distinct
+  ordering:
+    type: object
+    required:
+    - default
+    - observable_only_after
+    - total_order
+    - unordered_comparison
+    - physical_scan_order_observable
+    - limit_requires_total_order
+  partial_execution:
+    type: object
+    required:
+    - root_output_cap
+    - upstream_interruption
+    - continuation
+    - aggregate_partial
+  schema_compatibility:
+    type: object
+    required:
+    - relation_requirement
+    - major_mismatch
+    - required_column_missing
+    - optional_column_missing
+    - unknown_optional_minor_column
+    - dynamic_literal
+  canonicalization:
+    type: object
+    required:
+    - static_dynamic_surface_removed
+    - relation_requirements_sort
+    - object_members_sort
+    - set_members_sort
+    - commutative_predicates_sort
+    - typed_literals
+    - node_digest
+    - physical_information_in_digest
+  operator_profiles:
+    type: array
+    minItems: 11
+    maxItems: 11
+    items:
+      $ref: '#/$defs/operator_profile'
+  deferred_operators:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, earliest_profile, reason]
+      properties:
+        id:
+          $ref: '#/$defs/operator_id'
+        earliest_profile:
+          enum: [NG1, NG2, NG3]
+        reason:
+          type: string
+          minLength: 1
+  execution_result:
+    type: object
+    additionalProperties: false
+    required:
+    - statuses
+    - complete_does_not_imply_closed_world
+    - required_side_channels
+    - physical_explanation_semantic_authority
+    properties:
+      statuses:
+        type: array
+        const: [complete, truncated, cancelled_with_partial, failed_before_result]
+      complete_does_not_imply_closed_world:
+        const: true
+      required_side_channels:
+        $ref: '#/$defs/nonempty_strings'
+      physical_explanation_semantic_authority:
+        const: false
+  reference_evaluator:
+    type: object
+    additionalProperties: false
+    required: [implementation, source_backends, physical_orders, comparison, conformance_vectors]
+    properties:
+      implementation:
+        const: tools/quality/check_ng_query_contract.py
+      source_backends:
+        type: array
+        const: [memory, sqlite]
+      physical_orders:
+        type: array
+        const: [forward, reverse, seeded-shuffle]
+      comparison:
+        const: canonical-semantic-result
+      conformance_vectors:
+        const: schemas/cxxlens_ng_query_conformance_vectors.yaml
+$defs:
+  semantic_version:
+    type: string
+    pattern: ^[0-9]+\.[0-9]+\.[0-9]+$
+  nonempty_strings:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      type: string
+      minLength: 1
+  operator_id:
+    type: string
+    pattern: ^query\.[a-z][a-z0-9_]*\.v[1-9][0-9]*$
+  operator_profile:
+    type: object
+    additionalProperties: false
+    required:
+    - id
+    - name
+    - profile
+    - arity
+    - input_collection
+    - output_collection
+    - monotonicity
+    - multiplicity
+    - condition
+    - interpretation
+    - evidence
+    - ordering
+    - partial
+    - required_arguments
+    properties:
+      id:
+        $ref: '#/$defs/operator_id'
+      name:
+        type: string
+        pattern: ^[a-z][a-z0-9_]*$
+      profile:
+        const: NG0
+      arity:
+        type: integer
+        minimum: 0
+        maximum: 2
+      input_collection:
+        type: string
+        minLength: 1
+      output_collection:
+        type: string
+        minLength: 1
+      monotonicity:
+        enum: [positive, positive-idempotent, non-monotone-boundary]
+      multiplicity:
+        type: string
+        minLength: 1
+      condition:
+        type: string
+        minLength: 1
+      interpretation:
+        type: string
+        minLength: 1
+      evidence:
+        type: string
+        minLength: 1
+      ordering:
+        type: string
+        minLength: 1
+      partial:
+        type: string
+        minLength: 1
+      required_arguments:
+        type: array
+        uniqueItems: true
+        items:
+          type: string
+          pattern: ^[a-z][a-z0-9_]*$

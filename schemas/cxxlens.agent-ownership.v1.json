@@ -4,7 +4,7 @@
     "conventions": "sha256:fa58fa2f23591eafac9f46eb91fcfab01063681e453065b62d34bdab3fca8af1",
     "ownership_registry": "sha256:797e6a52c4c941ed4225b761ee070f5f00af4c10661d2ebd519e874391eec342"
   },
-  "repository_paths_digest": "sha256:9a3cc264f3d8fb6967cdf24e9bc6f6652f017ad4b22d556b46740d393a4376fd",
+  "repository_paths_digest": "sha256:db69c4620e0141aa13b97b84ba09547e94f43bfddb7da7d5827a50e34cbcd48e",
   "reserved_paths": [
     {
       "access": "exclusive_write",
@@ -283,6 +283,12 @@
       "kind": "shared_steward",
       "owner_issue": "#58",
       "responsibility": "Next-generation documentation, catalog bootstrap, migration ledger, and drift gate."
+    },
+    {
+      "id": "steward.ng-query",
+      "kind": "shared_steward",
+      "owner_issue": "#61",
+      "responsibility": "Logical Query IR algebra, ordering, partiality, normalization, and backend reference conformance."
     },
     {
       "id": "steward.ng-relations",
@@ -1162,7 +1168,7 @@
     }
   ],
   "schema": "cxxlens.agent-ownership.v1",
-  "semantic_digest": "sha256:46a692748e62732c91642c7d74d609dfcb15c9e922e65a893ac4605841b022b9",
+  "semantic_digest": "sha256:bfbf3ea71413f69c49adce7e77d183af5f611373042f1e4b519ff1960a58e883",
   "skeletons": [
     {
       "api_id": "API-CFG-001",
@@ -2907,12 +2913,12 @@
     },
     "generated_path_count": 7,
     "reserved_path_count": 11,
-    "role_count": 181,
+    "role_count": 182,
     "skeleton_state_counts": {
       "blocked": 0,
       "frozen": 124
     },
-    "tracked_path_count": 562,
+    "tracked_path_count": 571,
     "unit_count": 124
   },
   "task_packet_digest": "sha256:68bfa838af2de5910cfa1b4a0bf4dbc3a1d24eaa3f21fff1ec378dccff35176c",
@@ -3532,6 +3538,13 @@
       "generator_role": null,
       "owner_role": "steward.ng-relations",
       "path": "docs/design/adr/0006-ng0-relation-and-claim-envelope.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-query",
+      "path": "docs/design/adr/0007-logical-query-algebra.md"
     },
     {
       "access": "exclusive_write",
@@ -4685,6 +4698,27 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.ng-query",
+      "path": "schemas/cxxlens_ng_logical_query_contract.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-query",
+      "path": "schemas/cxxlens_ng_logical_query_contract.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-query",
+      "path": "schemas/cxxlens_ng_logical_query_ir.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.ng-documentation",
       "path": "schemas/cxxlens_ng_provider_protocol.yaml"
     },
@@ -4694,6 +4728,27 @@
       "generator_role": null,
       "owner_role": "steward.ng-documentation",
       "path": "schemas/cxxlens_ng_public_api_catalog.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-query",
+      "path": "schemas/cxxlens_ng_query_conformance_report.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-query",
+      "path": "schemas/cxxlens_ng_query_conformance_vectors.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-query",
+      "path": "schemas/cxxlens_ng_query_conformance_vectors.yaml"
     },
     {
       "access": "exclusive_write",
@@ -6197,6 +6252,13 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.ng-query",
+      "path": "tests/quality/test_ng_query_contract.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.ng-relations",
       "path": "tests/quality/test_ng_relation_contract.py"
     },
@@ -6675,6 +6737,13 @@
       "generator_role": null,
       "owner_role": "steward.ng-authority",
       "path": "tools/quality/check_ng_authority.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-query",
+      "path": "tools/quality/check_ng_query_contract.py"
     },
     {
       "access": "exclusive_write",

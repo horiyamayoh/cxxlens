@@ -1,5 +1,5 @@
 {
-  "asset_count": 578,
+  "asset_count": 587,
   "assets": [
     {
       "authority": "operational",
@@ -886,6 +886,16 @@
       "disposition": "inherit",
       "owner": "steward.ng-authority",
       "path": "docs/design/adr/0006-ng0-relation-and-claim-envelope.md",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-authority",
+      "path": "docs/design/adr/0007-logical-query-algebra.md",
       "profile": "NG0",
       "removal_issue": null,
       "replacement": null,
@@ -2604,6 +2614,36 @@
     {
       "authority": "normative",
       "disposition": "inherit",
+      "owner": "steward.ng-query",
+      "path": "schemas/cxxlens_ng_logical_query_contract.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-query",
+      "path": "schemas/cxxlens_ng_logical_query_contract.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-query",
+      "path": "schemas/cxxlens_ng_logical_query_ir.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
       "owner": "steward.ng-catalogs",
       "path": "schemas/cxxlens_ng_provider_protocol.yaml",
       "profile": "NG0",
@@ -2616,6 +2656,36 @@
       "disposition": "inherit",
       "owner": "steward.ng-catalogs",
       "path": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-query",
+      "path": "schemas/cxxlens_ng_query_conformance_report.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-query",
+      "path": "schemas/cxxlens_ng_query_conformance_vectors.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-query",
+      "path": "schemas/cxxlens_ng_query_conformance_vectors.yaml",
       "profile": "NG0",
       "removal_issue": null,
       "replacement": null,
@@ -4804,6 +4874,16 @@
     {
       "authority": "implementation",
       "disposition": "inherit",
+      "owner": "steward.ng-query",
+      "path": "tests/quality/test_ng_query_contract.py",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
       "owner": "steward.ng-relations",
       "path": "tests/quality/test_ng_relation_contract.py",
       "profile": "NG0",
@@ -5534,6 +5614,16 @@
     {
       "authority": "implementation",
       "disposition": "inherit",
+      "owner": "steward.ng-query",
+      "path": "tools/quality/check_ng_query_contract.py",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
       "owner": "steward.ng-relations",
       "path": "tools/quality/check_ng_relation_contract.py",
       "profile": "NG0",
@@ -5785,7 +5875,7 @@
   "classifications": {
     "archive": 37,
     "delete": 22,
-    "inherit": 65,
+    "inherit": 74,
     "migrate": 388,
     "replace": 66
   },
@@ -5793,5 +5883,5 @@
   "generated_by": "tools/quality/check_documentation_consistency.py",
   "schema": "cxxlens.asset-migration-ledger.v1",
   "source_policy": "schemas/cxxlens_asset_migration_policy.yaml",
-  "source_policy_digest": "sha256:281788efde16d4d2dc28086a4941b78cb9e4789c48b0c807498086683b2c69a7"
+  "source_policy_digest": "sha256:a17be78249b892cb529d98ef1de8e12ef3b48abe40be075460a6ddfdab49f095"
 }

@@ -1,0 +1,361 @@
+schema: cxxlens.logical-query-contract.v1
+document_version: 1.0.0
+maturity: accepted
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md#20-logical-query
+  decision_adr: docs/design/adr/0007-logical-query-algebra.md
+  owner_issue: '#61'
+  owner: steward.ng-query
+compatibility:
+  version_axis: logical-query-ir
+  current: 1.0.0
+  semantic_major: 1
+  minor_policy: additive-optional-preserving
+  unknown_operator: reject
+logical_ir:
+  schema_id: cxxlens.logical-query-ir.v1
+  instance_schema: schemas/cxxlens_ng_logical_query_ir.schema.yaml
+  canonical_encoding: canonical-json-rfc8785-profile
+  digest_domain: cxxlens.logical-query-ir.v1
+  digest_projection:
+    include:
+    - schema
+    - ir_version
+    - relation_requirements
+    - root
+    - output_schema
+    - condition_policy
+    - interpretation_policy
+    exclude:
+    - surface
+    - source_locations
+    - physical_plan
+    - runtime_budget
+  physical_fields_forbidden:
+  - backend_table
+  - cache_hit
+  - estimated_cost
+  - hash_join
+  - index_name
+  - nested_loop_join
+  - page_size
+  - partition_worker
+  - spill_path
+  - thread_count
+collection_model:
+  kind: annotated_multiset
+  occurrence:
+    values: stable-column-id-to-tagged-cell
+    multiplicity: positive-integer
+    presence: condition-universe-and-canonical-alternative-set
+    interpretation: stable-interpretation-id
+    claim_contributors: canonical-assertion-id-set
+    provenance: canonical-evidence-id-set
+  cell_states:
+  - id: present
+    fields: [type, value]
+    meaning: typed value is present
+  - id: absent
+    fields: []
+    meaning: optional column is absent in this row
+  - id: unknown
+    fields: [reason]
+    meaning: value is semantically unresolved and is not absence
+  null_policy:
+    sql_null_is_semantic_value: false
+    implicit_three_valued_logic: forbidden
+    normal_equals: equals_present
+    predicates:
+    - is_present
+    - is_absent
+    - is_unknown
+    - equals_present
+    - coalesce_explicit
+  duplicate_policy:
+    default: preserve-multiplicity
+    project: no-implicit-distinct
+    union: bag-union
+    distinct_key: values-plus-universe-plus-interpretation
+    distinct_merge:
+      multiplicity: one
+      condition: union
+      claim_contributors: canonical-set-union
+      provenance: canonical-set-union
+condition_algebra:
+  representation: finite-canonical-alternative-set-ng0
+  require_same_universe: true
+  empty: no-output
+  filter_project: preserve
+  inner_join: intersection
+  semi_join: union-of-compatible-intersections-per-left-occurrence
+  union: preserve-per-occurrence
+  distinct: union-for-same-values-universe-interpretation
+interpretation_algebra:
+  join_compatibility: exact-id-equality
+  incompatible_join: no-output
+  project_filter_union: preserve
+  distinct_partition: interpretation-id
+  restriction: exact-id-filter
+evidence_algebra:
+  filter_project_restrictions: preserve
+  join: canonical-set-union
+  semi_join: canonical-set-union-of-all-witnesses
+  union: preserve-per-occurrence
+  distinct: canonical-set-union
+ordering:
+  default: unordered
+  observable_only_after: query.order_by.v1
+  total_order:
+    user_keys: ordered-stable-column-ids
+    cell_state_order: explicit-per-key
+    final_tie_break: canonical-annotated-row-digest
+  unordered_comparison: canonical-semantic-multiset
+  physical_scan_order_observable: false
+  limit_requires_total_order: true
+partial_execution:
+  root_output_cap:
+    precondition: upstream-logically-complete
+    unordered_result: canonical-semantic-set-prefix
+    ordered_result: total-order-prefix
+    status: truncated
+  upstream_interruption:
+    unsealed_rows: discard
+    no_sealed_rows_status: failed_before_result
+    sealed_rows_status: cancelled_with_partial
+  continuation:
+    allowed_only_for: total-ordered-sealed-prefix
+    token_binds:
+    - logical_ir_digest
+    - snapshot_id
+    - relation_descriptor_digests
+    - total_order_specification
+    - last_total_key
+    - result_schema_digest
+    forbidden_for:
+    - unordered-result
+    - unsealed-prefix
+    - schema-major-mismatch
+    - snapshot-mismatch
+  aggregate_partial: forbidden-ng0
+schema_compatibility:
+  relation_requirement: descriptor-id-plus-minor-range
+  major_mismatch: reject
+  required_column_missing: reject
+  optional_column_missing:
+    direct_reference: reject
+    absent_if_schema_missing: tagged-absent
+  unknown_optional_minor_column: preserve
+  dynamic_literal:
+    require_explicit_type: true
+    exact_column_type_match: true
+    narrowing_conversion: reject
+canonicalization:
+  static_dynamic_surface_removed: true
+  relation_requirements_sort: descriptor-id
+  object_members_sort: utf8-code-unit
+  set_members_sort: canonical-json
+  commutative_predicates_sort: normalized-child-digest
+  typed_literals: exact-type-and-canonical-value
+  node_digest: recursive-content-digest
+  physical_information_in_digest: false
+operator_profiles:
+- id: query.scan.v1
+  name: scan
+  profile: NG0
+  arity: 0
+  input_collection: none
+  output_collection: annotated-multiset
+  monotonicity: positive
+  multiplicity: preserve-source-claim-occurrences
+  condition: preserve
+  interpretation: preserve
+  evidence: preserve
+  ordering: unordered
+  partial: canonical-prefix-after-source-prefix-sealed
+  required_arguments: [descriptor_id, alias]
+- id: query.filter.v1
+  name: filter
+  profile: NG0
+  arity: 1
+  input_collection: annotated-multiset
+  output_collection: annotated-multiset
+  monotonicity: positive
+  multiplicity: preserve-selected-occurrences
+  condition: preserve
+  interpretation: preserve
+  evidence: preserve
+  ordering: preserve-input
+  partial: preserve-safe-input-prefix
+  required_arguments: [predicate]
+- id: query.project.v1
+  name: project
+  profile: NG0
+  arity: 1
+  input_collection: annotated-multiset
+  output_collection: annotated-multiset
+  monotonicity: positive
+  multiplicity: preserve-no-implicit-distinct
+  condition: preserve
+  interpretation: preserve
+  evidence: preserve
+  ordering: preserve-if-order-keys-retained
+  partial: preserve-safe-input-prefix
+  required_arguments: [columns]
+- id: query.inner_join.v1
+  name: inner_join
+  profile: NG0
+  arity: 2
+  input_collection: annotated-multiset
+  output_collection: annotated-multiset
+  monotonicity: positive
+  multiplicity: multiply-compatible-occurrences
+  condition: intersection-drop-empty
+  interpretation: exact-equality
+  evidence: canonical-set-union
+  ordering: unordered
+  partial: left-prefix-after-right-complete-and-left-prefix-sealed
+  required_arguments: [predicate]
+- id: query.semi_join.v1
+  name: semi_join
+  profile: NG0
+  arity: 2
+  input_collection: annotated-multiset
+  output_collection: annotated-multiset
+  monotonicity: positive
+  multiplicity: preserve-left-occurrence
+  condition: union-compatible-intersections
+  interpretation: exact-equality
+  evidence: union-left-and-all-compatible-witnesses
+  ordering: preserve-left
+  partial: left-prefix-after-right-complete-and-left-prefix-sealed
+  required_arguments: [predicate]
+- id: query.union.v1
+  name: union
+  profile: NG0
+  arity: 2
+  input_collection: same-schema-annotated-multiset
+  output_collection: annotated-multiset
+  monotonicity: positive
+  multiplicity: bag-addition
+  condition: preserve-per-occurrence
+  interpretation: preserve-per-occurrence
+  evidence: preserve-per-occurrence
+  ordering: unordered
+  partial: merge-prefix-after-each-input-head-sealed
+  required_arguments: []
+- id: query.distinct.v1
+  name: distinct
+  profile: NG0
+  arity: 1
+  input_collection: annotated-multiset
+  output_collection: annotated-set
+  monotonicity: positive-idempotent
+  multiplicity: one-per-values-universe-interpretation
+  condition: union
+  interpretation: partition
+  evidence: canonical-set-union
+  ordering: unordered
+  partial: group-after-all-equal-key-sources-sealed
+  required_arguments: []
+- id: query.order_by.v1
+  name: order_by
+  profile: NG0
+  arity: 1
+  input_collection: annotated-multiset
+  output_collection: total-ordered-annotated-multiset
+  monotonicity: non-monotone-boundary
+  multiplicity: preserve
+  condition: preserve
+  interpretation: preserve
+  evidence: preserve
+  ordering: explicit-keys-plus-canonical-row-tie-break
+  partial: prefix-after-global-order-boundary-sealed
+  required_arguments: [keys]
+- id: query.limit.v1
+  name: limit
+  profile: NG0
+  arity: 1
+  input_collection: total-ordered-annotated-multiset
+  output_collection: total-ordered-annotated-multiset
+  monotonicity: non-monotone-boundary
+  multiplicity: preserve-prefix
+  condition: preserve
+  interpretation: preserve
+  evidence: preserve
+  ordering: preserve-total-order
+  partial: complete-after-n-ordered-rows-sealed
+  required_arguments: [count]
+- id: query.condition_restrict.v1
+  name: condition_restrict
+  profile: NG0
+  arity: 1
+  input_collection: annotated-multiset
+  output_collection: annotated-multiset
+  monotonicity: positive
+  multiplicity: preserve-nonempty-intersections
+  condition: intersection-drop-empty
+  interpretation: preserve
+  evidence: preserve
+  ordering: preserve-input
+  partial: preserve-safe-input-prefix
+  required_arguments: [universe, alternatives]
+- id: query.interpretation_restrict.v1
+  name: interpretation_restrict
+  profile: NG0
+  arity: 1
+  input_collection: annotated-multiset
+  output_collection: annotated-multiset
+  monotonicity: positive
+  multiplicity: preserve-selected-occurrences
+  condition: preserve
+  interpretation: exact-id-filter
+  evidence: preserve
+  ordering: preserve-input
+  partial: preserve-safe-input-prefix
+  required_arguments: [interpretation]
+deferred_operators:
+- id: query.group.v1
+  earliest_profile: NG1
+  reason: group completeness and partial publication require a sealed input contract
+- id: query.aggregate.v1
+  earliest_profile: NG1
+  reason: aggregate values are invalid before group closure and cannot publish partial NG0 values
+- id: query.anti_join.v1
+  earliest_profile: NG1
+  reason: absence requires closure certificates
+- id: query.difference.v1
+  earliest_profile: NG1
+  reason: absence requires closure certificates
+- id: query.exists_check.v1
+  earliest_profile: NG1
+  reason: explicit existence result contract is outside NG0 rows
+- id: query.absence_check.v1
+  earliest_profile: NG1
+  reason: absence requires closure certificates
+- id: query.recursive_union.v1
+  earliest_profile: NG1
+  reason: recursive fixpoint and iteration budgets are not NG0
+- id: query.transitive_closure.v1
+  earliest_profile: NG1
+  reason: recursive closure certificates are not NG0
+execution_result:
+  statuses:
+  - complete
+  - truncated
+  - cancelled_with_partial
+  - failed_before_result
+  complete_does_not_imply_closed_world: true
+  required_side_channels:
+  - input_coverage
+  - closure_certificates
+  - unresolved
+  - claim_conflicts
+  - summary_guarantee
+  - logical_explanation
+  physical_explanation_semantic_authority: false
+reference_evaluator:
+  implementation: tools/quality/check_ng_query_contract.py
+  source_backends: [memory, sqlite]
+  physical_orders: [forward, reverse, seeded-shuffle]
+  comparison: canonical-semantic-result
+  conformance_vectors: schemas/cxxlens_ng_query_conformance_vectors.yaml

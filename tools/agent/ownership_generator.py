@@ -222,6 +222,11 @@ ROLE_DEFINITIONS: dict[str, tuple[str, str, str]] = {
         "#60",
         "NG0 exact relation IDL, system claim envelope, evolution vectors, and conformance tooling.",
     ),
+    "steward.ng-query": (
+        "shared_steward",
+        "#61",
+        "Logical Query IR algebra, ordering, partiality, normalization, and backend reference conformance.",
+    ),
 }
 
 
@@ -283,6 +288,19 @@ NG_RELATION_PATHS = {
     "schemas/cxxlens_ng_relation_registry.yaml",
     "tests/quality/test_ng_relation_contract.py",
     "tools/quality/check_ng_relation_contract.py",
+}
+
+
+NG_QUERY_PATHS = {
+    "docs/design/adr/0007-logical-query-algebra.md",
+    "schemas/cxxlens_ng_logical_query_contract.schema.yaml",
+    "schemas/cxxlens_ng_logical_query_contract.yaml",
+    "schemas/cxxlens_ng_logical_query_ir.schema.yaml",
+    "schemas/cxxlens_ng_query_conformance_report.schema.yaml",
+    "schemas/cxxlens_ng_query_conformance_vectors.schema.yaml",
+    "schemas/cxxlens_ng_query_conformance_vectors.yaml",
+    "tests/quality/test_ng_query_contract.py",
+    "tools/quality/check_ng_query_contract.py",
 }
 
 
@@ -444,6 +462,8 @@ def owner_for_path(
         return "steward.ng-release"
     if path in NG_RELATION_PATHS:
         return "steward.ng-relations"
+    if path in NG_QUERY_PATHS:
+        return "steward.ng-query"
     if path.startswith(("tools/agent/ownership_", "tests/agent/ownership/")) or path in {
         "docs/agent_ownership_reference.md",
         "schemas/cxxlens.agent-ownership.v1.schema.yaml",

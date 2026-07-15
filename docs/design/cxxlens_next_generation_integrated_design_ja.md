@@ -5,8 +5,8 @@
 | 項目 | 値 |
 |---|---|
 | 文書 ID | `CXXLENS-NG-SRAD-002` |
-| 文書版 | `0.5.0-normative` |
-| 文書状態 | 規範・Issue #57 authority transition / Issue #59 release contract / Issue #60 exact relation contract 反映版 |
+| 文書版 | `0.6.0-normative` |
+| 文書状態 | 規範・Issue #57 authority transition / Issue #59 release contract / Issue #60 relation / Issue #61 query contract 反映版 |
 | 対象製品 | 次世代 `cxxlens` |
 | 基準言語 | C++23 |
 | 初期 primary platform | Linux |
@@ -31,6 +31,7 @@
 |---|---|
 | 本書 | 製品境界、層、依存方向、意味的不変条件、release profile |
 | Relation Registry / IDL | relation key、column、reference、merge、coverage、version |
+| Logical Query Contract / IR Schema | operator algebra、ordering、partiality、normalized digest |
 | Provider Protocol Specification | process protocol、manifest、task、batch、failure |
 | Public C++ API Catalog | signature、lifetime、threading、stability |
 | Acceptance Manifest | requirement、test、gate、evidence |
@@ -115,7 +116,7 @@ production release してよい、という意味ではない。
 - semantic key / assertion / content identity
 - immutable snapshot publication
 - in-memory / SQLite parity
-- positive monotone logical query
+- positive logical algebra と total-order boundary query
 - custom relation vertical slice
 - Clang 22 provider boundary
 - evidence / execution coverage / unresolved
@@ -2228,6 +2229,11 @@ Internal Physical Plan
 Backend Execution
 ```
 
+`schemas/cxxlens_ng_logical_query_contract.yaml` と
+`schemas/cxxlens_ng_logical_query_ir.schema.yaml` が Logical Query IR v1 の exact authority である。本節と ADR 0007
+は意味的不変条件を定義し、operator descriptor、instance shape、stable reason code は machine-readable contract
+を参照する。
+
 ### 20.2 Logical IR authority
 
 含む:
@@ -2254,7 +2260,54 @@ Backend Execution
 - estimated cost
 - cache hit
 
-### 20.3 NG0 operators
+runtime budget は query execution request に属し、normalized semantic digest には含めない。意味的な件数制限は
+`query.limit.v1` operator として IR に含める。physical explanation は観測可能でよいが、logical result、cache
+key、continuation compatibility の authority ではない。
+
+normalized IR は次の canonical projection で digest 化する。
+
+- static/dynamic surface、source location、runtime budget を除去
+- relation requirement を descriptor ID 順に整列
+- object/set を canonical JSON 順へ正規化
+- `and` / `or` operand と bag union input を normalized child digest 順へ正規化
+- typed literal は exact type と canonical value の組で保持
+- physical field を検出した場合は fail closed
+
+static/dynamic query は同じ normalized IR digest を生成しなければならない。
+
+### 20.3 Collection and cell algebra
+
+Logical Query IR v1 の既定 collection は annotated multiset である。一 occurrence は次を持つ。
+
+```text
+stable column ID -> tagged cell
+positive multiplicity
+condition universe + canonical alternatives
+interpretation ID
+canonical assertion contributor set
+canonical provenance set
+```
+
+cell state は次の三つであり、互いに置換できない。
+
+```text
+present(type, value)
+absent
+unknown(reason)
+```
+
+SQL NULL を semantic value または implicit three-valued logic として使用してはならない。通常比較は
+`equals_present` であり、`is_present`、`is_absent`、`is_unknown`、explicit coalesce だけが state を解釈する。
+
+duplicate 規則:
+
+- `scan` / `filter` / `project` は occurrence multiplicity を保存
+- `project` は implicit distinct を行わない
+- `union` は bag addition
+- `distinct` だけが values + universe + interpretation で統合
+- `distinct` は multiplicity を1にし、condition、contributors、provenance を canonical union
+
+### 20.4 NG0 operators
 
 ```text
 scan
@@ -2264,19 +2317,37 @@ inner_join
 semi_join
 union
 distinct
-group
-aggregate
 order_by
 limit
 condition_restrict
 interpretation_restrict
 ```
 
-set/multiset semantics は operator descriptor で明示する。
+`scan`、`filter`、`project`、`inner_join`、`semi_join`、`union`、`distinct`、二つの restriction は positive
+algebra である。`order_by` と `limit` は non-monotone boundary operator として NG0 に残す。したがって NG0
+全体を `positive monotone` とは呼ばない。
 
-### 20.4 NG1 operators
+operator ごとの規範規則:
+
+| Operator | Multiplicity | Condition | Interpretation / evidence | Ordering / partial |
+|---|---|---|---|---|
+| `scan` | claim occurrence を保存 | 保存 | 保存 | unordered、source prefix seal 後だけ partial |
+| `filter` | selected occurrence を保存 | 保存 | 保存 | safe input prefix を保存 |
+| `project` | 保存、implicit distinct 禁止 | 保存 | 保存 | order key を残す場合だけ order 保存 |
+| `inner_join` | compatible multiplicity の積 | intersection、empty は破棄 | interpretation exact equality、evidence union | unordered、right complete + left sealed prefix |
+| `semi_join` | left occurrence を一度だけ保存 | compatible intersection の union | 全 witness evidence を union | left order/prefix を条件付き保存 |
+| `union` | bag addition | occurrence ごとに保存 | occurrence ごとに保存 | unordered、全 input head seal 後だけ merge prefix |
+| `distinct` | values + universe + interpretation ごとに1 | union | contributor/provenance union | unordered、同一 key source seal 後だけ group |
+| `order_by` | 保存 | 保存 | 保存 | explicit key + canonical row tie-break の total order |
+| `limit` | ordered prefix を保存 | 保存 | 保存 | total-ordered sealed input が必須 |
+| `condition_restrict` | nonempty intersection を保存 | restriction と intersection | 保存 | safe input prefix を保存 |
+| `interpretation_restrict` | exact ID match を保存 | 保存 | exact ID filter | safe input prefix を保存 |
+
+### 20.5 Deferred operators
 
 ```text
+group
+aggregate
 anti_join
 difference
 exists_check
@@ -2285,9 +2356,12 @@ recursive_union
 transitive_closure
 ```
 
-absence-dependent operator は closure requirement を持つ。
+`group` / `aggregate` は sealed group と partial publication の contract が未成立のため NG1 以降へ移す。
+aggregate は group input が complete になる前に値を publish してはならない。absence-dependent operator は
+closure requirement を持つ。recursive operator は fixpoint、iteration budget、partial closure を別 contract で
+固定するまで NG0 に入れない。
 
-### 20.5 Static DSL
+### 20.6 Static DSL
 
 ```cpp
 using namespace cxxlens::query;
@@ -2311,7 +2385,7 @@ auto q =
 
 exact generated names は API catalog で確定する。
 
-### 20.6 Dynamic DSL
+### 20.7 Dynamic DSL
 
 ```cpp
 auto calls = registry.require("cc.call_site", major{1});
@@ -2333,17 +2407,23 @@ auto q =
 
 static/dynamic query は同じ normalized logical IR digest を生成できなければならない。
 
-### 20.7 Condition semantics
+dynamic literal は explicit type を必須とし、参照 column の present type と exact match しなければならない。
+implicit narrowing、string coercion、diagnostic prose による型判定は禁止する。
+
+### 20.8 Condition, interpretation, and evidence
 
 join output condition は input conditions の intersection。
 
 intersection が empty の row は出力しない。
 
-union は condition を保持し、same semantic output row を condition union で圧縮してよい。ただし interpretation/provenance 差を失ってはならない。
+union は occurrence ごとの condition を保持する。`distinct` は同じ values、universe、interpretation の condition
+を union してよいが、interpretation を跨いで圧縮してはならない。join は interpretation exact equality の input
+だけを組み合わせる。project/filter/restriction は contributor/provenance を保存し、join は canonical set union、
+semi-join は全 compatible witness の evidence union を返す。
 
-### 20.8 Optional column semantics
+### 20.9 Optional column and schema minor semantics
 
-optional value の absence は SQL NULL の暗黙三値論理に依存させない。
+optional value の absence は tagged `absent` であり、semantic `unknown(reason)` と異なる。
 
 operators:
 
@@ -2354,9 +2434,11 @@ equals_present
 coalesce explicit
 ```
 
-通常比較で absent をどう扱うかは Query IR version で固定し、semantic unknown と混同しない。
+relation requirement は descriptor ID と compatible minor range を持つ。major mismatch と required column missing は
+拒否する。optional minor column が snapshot descriptor にない場合、通常参照は拒否し、明示した
+`absent_if_schema_missing` だけが tagged absent を返す。unknown optional minor column は round-trip 時に保持する。
 
-### 20.9 Query result
+### 20.10 Query result
 
 ```cpp
 template<class Row>
@@ -2376,7 +2458,7 @@ public:
 
 success result が complete/closed を意味しない。
 
-### 20.10 Execution status
+### 20.11 Execution status and deterministic partiality
 
 ```text
 complete
@@ -2387,7 +2469,29 @@ failed_before_result
 
 operation error と semantic partiality を区別する。
 
-### 20.11 Budgets
+partial publication は operator descriptor の seal 条件に従う。
+
+- upstream logically complete 後の output cap は、ordered result なら total-order prefix、unordered result なら
+  canonical semantic set prefix を返し `truncated` とする
+- upstream interruption の unsealed row は publish しない
+- sealed row がなければ `failed_before_result`
+- `cancelled_with_partial` は一つ以上の sealed row がある場合だけ使用
+- partial aggregate は NG0 で拒否
+
+continuation は total-ordered sealed prefix だけに発行し、次の全項目へ bind する。
+
+```text
+logical IR digest
+snapshot ID
+relation descriptor digests
+total order specification
+last total key
+result schema digest
+```
+
+unordered result、unsealed prefix、stale snapshot、schema major mismatch の continuation は fail closed とする。
+
+### 20.12 Budgets
 
 ```text
 max rows scanned
@@ -2407,9 +2511,9 @@ budget超過時:
 - execution statusをtruncated
 - closureを生成しない
 - absenceを確定しない
-- continuationはoperator semanticsが安全な場合のみ
+- continuationは上記 seal / total-order / binding 条件を満たす場合のみ
 
-### 20.12 Physical planning
+### 20.13 Physical planning and executable conformance
 
 NG0 planner は deterministic reference implementation とする。
 
@@ -2420,6 +2524,11 @@ NG0 planner は deterministic reference implementation とする。
 - stable tie-break
 
 cost-based optimization は internal experimental とし、semantic outputへ影響させない。
+
+`tools/quality/check_ng_query_contract.py` の reference evaluator は Logical Query IR v1 の executable oracle である。
+同じ vector を memory/SQLite input と forward/reverse/seeded-shuffle physical order で評価し、multiplicity、condition、
+interpretation、contributors、provenance、execution status を含む canonical semantic result を比較する。これは
+production backend qualification の代替ではなく、後続実装が一致すべき規範 oracle である。
 
 ---
 
@@ -3136,6 +3245,9 @@ group-level table だけで complete を宣言しない。
 - `cc.call_site`
 - custom relation join
 - typed/dynamic query
+- normalized IR digest equality
+- memory/SQLite/reference evaluator parity
+- orderなし limit rejection
 - flagship recipe
 - budgets/cancellation
 - explicit partiality
@@ -3526,7 +3638,7 @@ support matrix は provider/relation/toolchain tuple 単位。
 | R-001 | kernel が抽象的で使いにくい | flagship recipe を各 kernel slice と同時開発 |
 | R-002 | relation schema 乱立 | namespace ownership、review、catalog |
 | R-003 | custom relation が dynamic only で型安全性低下 | generated static + dynamic dual API |
-| R-004 | query engine過大 | NG0 positive operators、physical planner internal |
+| R-004 | query engine過大 | NG0 positive algebra と boundary operator を分離、physical planner internal |
 | R-005 | negation誤用 | closure certificate を型/IR requirement化 |
 | R-006 | frontend identity誤統合 | provider-local/ambiguous states |
 | R-007 | conflict explosion | interpretation domain と authority policy |
@@ -3644,8 +3756,11 @@ NG1 default:
 | FR-ENG-002 | provider unavailable を empty success にしない |
 | FR-ENG-003 | native provider は process isolation required |
 | FR-QUERY-001 | logical IR と physical plan を分離する |
-| FR-QUERY-002 | NG0 positive typed/dynamic query を提供する |
+| FR-QUERY-002 | NG0 positive algebra と total-order boundary query を提供する |
 | FR-QUERY-003 | query は budget/cancel/cursor を持つ |
+| FR-QUERY-004 | set/bag、cell state、condition、interpretation、evidence algebra を operator ごとに固定する |
+| FR-QUERY-005 | orderなし limit と unsealed partial/continuation を拒否する |
+| FR-QUERY-006 | static/dynamic surface は同じ normalized IR digest を生成する |
 | FR-PARTIAL-001 | execution coverage と closure を分離する |
 | FR-PARTIAL-002 | closureなしのabsenceはunknown |
 | FR-PROV-001 | claim は producer/input/provenanceへtrace可能 |
@@ -3718,13 +3833,21 @@ NG1 default:
 ### Query
 
 - [ ] typed/dynamic query logical IR equality
-- [ ] filter/project/inner/semi/union/distinct/aggregate
+- [ ] 11 NG0 operator の exact descriptor と negative vector
+- [ ] filter/project/inner/semi/union/distinct の bag semantics
+- [ ] group/aggregate は sealed input contract まで deferred
 - [ ] explicit order only order guarantee
+- [ ] orderなし limit rejection
 - [ ] condition intersection on join
 - [ ] interpretation restriction
+- [ ] contributor/provenance preservation
+- [ ] absent/unknown/SQL NULL distinction
+- [ ] optional minor column と dynamic literal validation
 - [ ] bounded cursor
 - [ ] cancellation
 - [ ] budget truncation explicit
+- [ ] safe continuation binding と stale rejection
+- [ ] memory/SQLite/order perturbation reference parity
 - [ ] physical index choice not serialized authority
 - [ ] success does not imply closure
 

@@ -1,0 +1,256 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.logical-query-ir.v1
+title: cxxlens versioned Logical Query IR
+type: object
+additionalProperties: false
+required:
+- schema
+- ir_version
+- relation_requirements
+- root
+- output_schema
+- condition_policy
+- interpretation_policy
+properties:
+  schema:
+    const: cxxlens.logical-query-ir.v1
+  ir_version:
+    const: 1.0.0
+  surface:
+    enum: [static, dynamic, normalized]
+  relation_requirements:
+    type: array
+    minItems: 1
+    items:
+      $ref: '#/$defs/relation_requirement'
+  root:
+    $ref: '#/$defs/node'
+  output_schema:
+    type: array
+    minItems: 1
+    items:
+      $ref: '#/$defs/output_column'
+  condition_policy:
+    type: object
+    additionalProperties: false
+    required: [require_same_universe, empty_intersection]
+    properties:
+      require_same_universe:
+        const: true
+      empty_intersection:
+        const: discard
+  interpretation_policy:
+    type: object
+    additionalProperties: false
+    required: [join_compatibility]
+    properties:
+      join_compatibility:
+        const: exact-id-equality
+  runtime_budget:
+    type: object
+    additionalProperties: false
+    minProperties: 1
+    properties:
+      max_rows_scanned:
+        type: integer
+        minimum: 0
+      max_rows_output:
+        type: integer
+        minimum: 0
+      max_intermediate_rows:
+        type: integer
+        minimum: 0
+      max_memory_bytes:
+        type: integer
+        minimum: 0
+      max_spill_bytes:
+        type: integer
+        minimum: 0
+      max_partitions:
+        type: integer
+        minimum: 0
+      wall_deadline_ns:
+        type: integer
+        minimum: 0
+$defs:
+  relation_requirement:
+    type: object
+    additionalProperties: false
+    required: [descriptor_id, minimum_minor, maximum_minor]
+    properties:
+      descriptor_id:
+        $ref: '#/$defs/descriptor_id'
+      minimum_minor:
+        type: integer
+        minimum: 0
+      maximum_minor:
+        oneOf:
+        - type: integer
+          minimum: 0
+        - const: any-compatible
+  descriptor_id:
+    type: string
+    pattern: ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+\.v[1-9][0-9]*$
+  column_id:
+    type: string
+    pattern: ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+\.v[1-9][0-9]*\.[a-z][a-z0-9_]*$
+  column_ref:
+    type: object
+    additionalProperties: false
+    required: [column_id, availability]
+    properties:
+      column_id:
+        $ref: '#/$defs/column_id'
+      availability:
+        enum: [require, absent_if_schema_missing]
+  typed_literal:
+    type: object
+    additionalProperties: false
+    required: [type, value]
+    properties:
+      type:
+        type: string
+        minLength: 1
+      value: {}
+  predicate:
+    oneOf:
+    - type: object
+      additionalProperties: false
+      required: [kind, column, literal]
+      properties:
+        kind:
+          const: equals_present
+        column:
+          $ref: '#/$defs/column_ref'
+        literal:
+          $ref: '#/$defs/typed_literal'
+    - type: object
+      additionalProperties: false
+      required: [kind, column]
+      properties:
+        kind:
+          enum: [is_present, is_absent, is_unknown]
+        column:
+          $ref: '#/$defs/column_ref'
+    - type: object
+      additionalProperties: false
+      required: [kind, left, right]
+      properties:
+        kind:
+          const: column_equals_present
+        left:
+          $ref: '#/$defs/column_ref'
+        right:
+          $ref: '#/$defs/column_ref'
+    - type: object
+      additionalProperties: false
+      required: [kind, operands]
+      properties:
+        kind:
+          enum: [and, or]
+        operands:
+          type: array
+          minItems: 2
+          items:
+            $ref: '#/$defs/predicate'
+  projection:
+    type: object
+    additionalProperties: false
+    required: [column, output]
+    properties:
+      column:
+        $ref: '#/$defs/column_ref'
+      output:
+        type: string
+        pattern: ^output\.[a-z][a-z0-9_]*$
+  order_key:
+    type: object
+    additionalProperties: false
+    required: [column, direction, cell_state_order]
+    properties:
+      column:
+        $ref: '#/$defs/column_ref'
+      direction:
+        enum: [ascending, descending]
+      cell_state_order:
+        type: array
+        minItems: 3
+        maxItems: 3
+        uniqueItems: true
+        items:
+          enum: [absent, present, unknown]
+  arguments:
+    type: object
+    additionalProperties: false
+    properties:
+      descriptor_id:
+        $ref: '#/$defs/descriptor_id'
+      alias:
+        type: string
+        pattern: ^[a-z][a-z0-9_]*$
+      predicate:
+        $ref: '#/$defs/predicate'
+      columns:
+        type: array
+        minItems: 1
+        items:
+          $ref: '#/$defs/projection'
+      keys:
+        type: array
+        minItems: 1
+        items:
+          $ref: '#/$defs/order_key'
+      count:
+        type: integer
+        minimum: 0
+      universe:
+        type: string
+        minLength: 1
+      alternatives:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          type: string
+          minLength: 1
+      interpretation:
+        type: string
+        minLength: 1
+  node:
+    type: object
+    additionalProperties: false
+    required: [operator, inputs, arguments]
+    properties:
+      operator:
+        enum:
+        - query.scan.v1
+        - query.filter.v1
+        - query.project.v1
+        - query.inner_join.v1
+        - query.semi_join.v1
+        - query.union.v1
+        - query.distinct.v1
+        - query.order_by.v1
+        - query.limit.v1
+        - query.condition_restrict.v1
+        - query.interpretation_restrict.v1
+      inputs:
+        type: array
+        maxItems: 2
+        items:
+          $ref: '#/$defs/node'
+      arguments:
+        $ref: '#/$defs/arguments'
+  output_column:
+    type: object
+    additionalProperties: false
+    required: [id, type, required]
+    properties:
+      id:
+        type: string
+        pattern: ^output\.[a-z][a-z0-9_]*$
+      type:
+        type: string
+        minLength: 1
+      required:
+        type: boolean
