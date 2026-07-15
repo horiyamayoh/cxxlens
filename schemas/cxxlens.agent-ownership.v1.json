@@ -4,7 +4,7 @@
     "conventions": "sha256:fa58fa2f23591eafac9f46eb91fcfab01063681e453065b62d34bdab3fca8af1",
     "ownership_registry": "sha256:797e6a52c4c941ed4225b761ee070f5f00af4c10661d2ebd519e874391eec342"
   },
-  "repository_paths_digest": "sha256:118fcd96c7da3ce27e9a74a7de8e5ae9a375c6abecbd9f4f6c1c9b4e31c2cdd2",
+  "repository_paths_digest": "sha256:fbf0d190d24cb1920cb05c95f66d7e84973b6b3c4440ce2818daf71a38077faa",
   "reserved_paths": [
     {
       "access": "exclusive_write",
@@ -1150,7 +1150,7 @@
     }
   ],
   "schema": "cxxlens.agent-ownership.v1",
-  "semantic_digest": "sha256:aa03361f2164140c42359e8d5ea3de710559f87ff2e4c849590668efc7227b3e",
+  "semantic_digest": "sha256:b5cce069ae0bd0826f0850c18304ab570d68cfd8cb46bb8ea3514b1ceea790b3",
   "skeletons": [
     {
       "api_id": "API-CFG-001",
@@ -2900,7 +2900,7 @@
       "blocked": 0,
       "frozen": 124
     },
-    "tracked_path_count": 546,
+    "tracked_path_count": 547,
     "unit_count": 124
   },
   "task_packet_digest": "sha256:68bfa838af2de5910cfa1b4a0bf4dbc3a1d24eaa3f21fff1ec378dccff35176c",
@@ -3471,6 +3471,13 @@
       "generator_role": null,
       "owner_role": "steward.design",
       "path": "docs/design/SHA256SUMS"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.design",
+      "path": "docs/design/VALIDATION_REPORT.md"
     },
     {
       "access": "exclusive_write",
