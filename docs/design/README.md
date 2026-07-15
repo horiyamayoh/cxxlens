@@ -20,7 +20,7 @@ machine-readable catalog の入口です。
 ## Current design assets
 
 - `cxxlens_next_generation_integrated_design_ja.md` — `CXXLENS-NG-SRAD-002`、版
-  `0.6.0-normative` の最上位設計
+  `0.7.0-normative` の最上位設計
 - `catalogs/README.md` — Relation Registry、Provider Protocol、Public C++ API Catalog、Acceptance
   Manifest、Security Profile の index
 - `adr/README.md` — ADR state と replacement chain の index

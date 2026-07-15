@@ -221,6 +221,19 @@ add_dependencies(cxxlens-ng-query-contract-check
                  cxxlens-ng-relation-contract-check)
 
 add_custom_target(
+  cxxlens-ng-semantic-guarantee-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_semantic_guarantee.py"
+    check --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_ng_semantic_guarantee.py"
+  VERBATIM)
+add_dependencies(cxxlens-ng-semantic-guarantee-check
+                 cxxlens-ng-query-contract-check)
+
+add_custom_target(
   cxxlens-public-api-contract-freeze-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -492,6 +505,7 @@ add_dependencies(
   cxxlens-m2-completion-check
   cxxlens-ng-authority-check
   cxxlens-ng-query-contract-check
+  cxxlens-ng-semantic-guarantee-check
   cxxlens-ng-relation-contract-check
   cxxlens-ng-release-contract-check
   cxxlens-public-boundary-check

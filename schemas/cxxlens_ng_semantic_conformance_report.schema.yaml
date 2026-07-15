@@ -1,0 +1,19 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.semantic-conformance-report.v1
+type: object
+additionalProperties: false
+required: [schema, contract_digest, vector_results, backend_matrix, status]
+properties:
+  schema: {const: cxxlens.semantic-conformance-report.v1}
+  contract_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  vector_results: {type: array, minItems: 1, items: {type: object}}
+  backend_matrix:
+    type: object
+    additionalProperties: false
+    required: [backends, orders, comparisons, all_equal]
+    properties:
+      backends: {const: [memory, sqlite]}
+      orders: {const: [forward, reverse, seeded-shuffle]}
+      comparisons: {type: integer, minimum: 1}
+      all_equal: {const: true}
+  status: {const: green}

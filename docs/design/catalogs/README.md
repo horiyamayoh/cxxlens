@@ -8,6 +8,7 @@
 |---|---|---|---|
 | Relation Registry | `schemas/cxxlens_ng_relation_registry.yaml` | #60 | accepted exact contract |
 | Logical Query Contract | `schemas/cxxlens_ng_logical_query_contract.yaml` | #61 | accepted exact contract |
+| Semantic Guarantee Contract | `schemas/cxxlens_ng_semantic_guarantee_contract.yaml` | #62 | accepted exact contract |
 | Provider Protocol | `schemas/cxxlens_ng_provider_protocol.yaml` | #58 → #64 | bootstrap |
 | Public C++ API Catalog | `schemas/cxxlens_ng_public_api_catalog.yaml` | #58 → #66 | bootstrap |
 | Acceptance Manifest | `schemas/cxxlens_ng_acceptance_manifest.yaml` | #58 → #71 | bootstrap |
@@ -32,6 +33,10 @@ Logical Query Contract は Issue #61 により `cxxlens.logical-query-contract.v
 11 NG0 operator、ordering/partial/continuation、normalized IR digest、memory/SQLite reference evaluator を固定して
 います。これは logical semantics の executable oracle であり、production query backend や Issue #66 の公開
 C++ signature の completion を意味しません。
+
+Semantic Guarantee Contract は Issue #62 により support-pair truth、soundness/completeness approximation、verification
+modality set、exact precondition、lossless provenance/summary drill-down を固定しています。filtering policy や
+confidence が truth/guarantee を格上げすることはありません。
 
 残る `maturity: bootstrap` catalog は名前空間、version axis、owner issue、依存関係の入口だけを固定します。
 entry の `status: contract-pending` は実装、stable API、release support を意味しません。各 owner issue が exact

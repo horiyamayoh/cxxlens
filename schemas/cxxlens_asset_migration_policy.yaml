@@ -232,6 +232,8 @@ overrides:
     record: *accepted_adr
   - path: docs/design/adr/0007-logical-query-algebra.md
     record: *accepted_adr
+  - path: docs/design/adr/0008-truth-guarantee-provenance-algebra.md
+    record: *accepted_adr
   - path: docs/design/SHA256SUMS
     record:
       disposition: inherit
@@ -374,6 +376,25 @@ overrides:
     record: *ng_query_contract
   - path: schemas/cxxlens_ng_query_conformance_report.schema.yaml
     record: *ng_query_contract
+  - path: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
+    record: &ng_semantic_contract
+      disposition: inherit
+      status: active
+      owner: steward.ng-semantics
+      profile: NG0
+      authority: normative
+      replacement: null
+      removal_issue: null
+  - path: schemas/cxxlens_ng_semantic_guarantee_contract.schema.yaml
+    record: *ng_semantic_contract
+  - path: schemas/cxxlens_ng_semantic_metadata.schema.yaml
+    record: *ng_semantic_contract
+  - path: schemas/cxxlens_ng_semantic_conformance_vectors.yaml
+    record: *ng_semantic_contract
+  - path: schemas/cxxlens_ng_semantic_conformance_vectors.schema.yaml
+    record: *ng_semantic_contract
+  - path: schemas/cxxlens_ng_semantic_conformance_report.schema.yaml
+    record: *ng_semantic_contract
   - path: schemas/cxxlens_ng_provider_protocol.yaml
     record: *ng_catalog
   - path: schemas/cxxlens_ng_public_api_catalog.yaml
@@ -495,6 +516,17 @@ overrides:
       removal_issue: null
   - path: tests/quality/test_ng_query_contract.py
     record: *ng_query_tooling
+  - path: tools/quality/check_ng_semantic_guarantee.py
+    record: &ng_semantic_tooling
+      disposition: inherit
+      status: active
+      owner: steward.ng-semantics
+      profile: NG0
+      authority: implementation
+      replacement: null
+      removal_issue: null
+  - path: tests/quality/test_ng_semantic_guarantee.py
+    record: *ng_semantic_tooling
 
 drift:
   active_markdown:
@@ -512,6 +544,7 @@ drift:
     - docs/design/adr/0005-product-boundary-release-compatibility.md
     - docs/design/adr/0006-ng0-relation-and-claim-envelope.md
     - docs/design/adr/0007-logical-query-algebra.md
+    - docs/design/adr/0008-truth-guarantee-provenance-algebra.md
     - docs/design/adr/README.md
     - docs/design/catalogs/README.md
     - docs/design/cxxlens_next_generation_integrated_design_ja.md

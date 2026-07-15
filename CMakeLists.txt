@@ -201,6 +201,12 @@ install(
         schemas/cxxlens_ng_query_conformance_vectors.yaml
         schemas/cxxlens_ng_query_conformance_vectors.schema.yaml
         schemas/cxxlens_ng_query_conformance_report.schema.yaml
+        schemas/cxxlens_ng_semantic_guarantee_contract.yaml
+        schemas/cxxlens_ng_semantic_guarantee_contract.schema.yaml
+        schemas/cxxlens_ng_semantic_metadata.schema.yaml
+        schemas/cxxlens_ng_semantic_conformance_vectors.yaml
+        schemas/cxxlens_ng_semantic_conformance_vectors.schema.yaml
+        schemas/cxxlens_ng_semantic_conformance_report.schema.yaml
         schemas/cxxlens_ng_provider_protocol.yaml
         schemas/cxxlens_ng_public_api_catalog.yaml
         schemas/cxxlens_ng_acceptance_manifest.yaml

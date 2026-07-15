@@ -1,0 +1,57 @@
+schema: cxxlens.semantic-conformance-vectors.v1
+document_version: 1.0.0
+authority: {owner_issue: '#62', decision_adr: docs/design/adr/0008-truth-guarantee-provenance-algebra.md}
+contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
+vectors:
+- {id: truth-not-conflict, class: positive, operation: truth, input: {operator: not, values: [conflict]}, expected: {decision: accepted, reason_code: semantic.truth-valid, value: conflict}}
+- {id: truth-and-unknown-false, class: positive, operation: truth, input: {operator: and, values: [unknown, 'false']}, expected: {decision: accepted, reason_code: semantic.truth-valid, value: 'false'}}
+- {id: truth-or-unknown-conflict, class: positive, operation: truth, input: {operator: or, values: [unknown, conflict]}, expected: {decision: accepted, reason_code: semantic.truth-valid, value: 'true'}}
+- {id: truth-evidence-conflict, class: positive, operation: truth, input: {operator: evidence, values: ['true', 'false']}, expected: {decision: accepted, reason_code: semantic.truth-valid, value: conflict}}
+- {id: unknown-bool-coercion, class: negative, operation: filter, input: {truth: unknown, policy: true_only, coerce_to_bool: true}, expected: {decision: rejected, reason_code: semantic.truth-coercion-forbidden}}
+- {id: conflict-bool-coercion, class: negative, operation: filter, input: {truth: conflict, policy: true_only, coerce_to_bool: true}, expected: {decision: rejected, reason_code: semantic.truth-coercion-forbidden}}
+- {id: filter-does-not-mutate, class: positive, operation: filter, input: {truth: conflict, policy: retain_conflict}, expected: {decision: accepted, reason_code: semantic.filter-valid, value: {selected: true, truth: conflict}}}
+- {id: compiler-runtime-incomparable, class: positive, operation: compare_verification, input: {left: [compiler_verified], right: [runtime_observed]}, expected: {decision: accepted, reason_code: semantic.compare_verification-valid, value: incomparable}}
+- {id: replay-stronger-schema, class: positive, operation: compare_verification, input: {left: [frontend_replayed], right: [schema_validated]}, expected: {decision: accepted, reason_code: semantic.compare_verification-valid, value: stronger}}
+- {id: exact-under-compose-under, class: positive, operation: compose_approximation, input: {values: [exact, under_approximation]}, expected: {decision: accepted, reason_code: semantic.compose_approximation-valid, value: under_approximation}}
+- {id: under-over-compose-unknown, class: positive, operation: compose_approximation, input: {values: [under_approximation, over_approximation]}, expected: {decision: accepted, reason_code: semantic.compose_approximation-valid, value: unknown}}
+- {id: exact-limit-becomes-under, class: positive, operation: compose_approximation, input: {values: [exact], operator: limit}, expected: {decision: accepted, reason_code: semantic.compose_approximation-valid, value: under_approximation}}
+- {id: exact-complete, class: positive, operation: validate_exact, input: {approximation: exact, scope: scope-1, interpretation: cc.canonical-1, coverage: [covered], closures: [closure-1], requires_closure: true, condition_partition_complete: true, assumptions: [], conflict: false, unresolved: false}, expected: {decision: accepted, reason_code: semantic.validate_exact-valid, value: valid}}
+- {id: exact-blocking-coverage, class: negative, operation: validate_exact, input: {approximation: exact, scope: scope-1, interpretation: cc.canonical-1, coverage: [covered, unresolved], closures: [], requires_closure: false, condition_partition_complete: true, assumptions: [], conflict: false, unresolved: true}, expected: {decision: rejected, reason_code: semantic.exact-coverage-incomplete}}
+- {id: exact-missing-closure, class: negative, operation: validate_exact, input: {approximation: exact, scope: scope-1, interpretation: cc.canonical-1, coverage: [covered], closures: [], requires_closure: true, condition_partition_complete: true, assumptions: [], conflict: false, unresolved: false}, expected: {decision: rejected, reason_code: semantic.exact-closure-missing}}
+- {id: exact-condition-gap, class: negative, operation: validate_exact, input: {approximation: exact, scope: scope-1, interpretation: cc.canonical-1, coverage: [covered], closures: [], requires_closure: false, condition_partition_complete: false, assumptions: [], conflict: false, unresolved: false}, expected: {decision: rejected, reason_code: semantic.exact-condition-incomplete}}
+- &join
+  id: join-metadata
+  class: positive
+  operation: compose_metadata
+  input:
+    operator: join
+    values: &metadata
+    - {approximation: exact, scope: scope-a, condition: {universe: u1, alternatives: [debug, release]}, interpretation: cc.canonical-1, assumptions: [a1], verification_modalities: [compiler_verified], contributors: [claim-a], provenance: [evidence-a]}
+    - {approximation: under_approximation, scope: scope-b, condition: {universe: u1, alternatives: [debug]}, interpretation: cc.canonical-1, assumptions: [a2], verification_modalities: [runtime_observed], contributors: [claim-b], provenance: [evidence-b]}
+  expected: {decision: accepted, reason_code: semantic.compose_metadata-valid}
+- {id: join-interpretation-mismatch, class: negative, operation: compose_metadata, input: {operator: join, values: [{approximation: exact, scope: s1, condition: {universe: u, alternatives: [x]}, interpretation: i1, assumptions: [], verification_modalities: [], contributors: [c1], provenance: [p1]}, {approximation: exact, scope: s2, condition: {universe: u, alternatives: [x]}, interpretation: i2, assumptions: [], verification_modalities: [], contributors: [c2], provenance: [p2]}]}, expected: {decision: rejected, reason_code: semantic.interpretation-mismatch}}
+- id: backend-order-parity
+  class: positive
+  operation: backend_matrix
+  input: {operator: join, values: *metadata}
+  expected: {decision: accepted, reason_code: semantic.backend_matrix-valid}
+- id: summary-conservative
+  class: positive
+  operation: summarize
+  input:
+    fragments:
+    - {approximation: exact, coverage: [covered], condition_partition_complete: true, conflict: false, unresolved: false, requires_closure: false, closures: [], assumptions: [a1], verification_modalities: [compiler_verified]}
+    - {approximation: under_approximation, coverage: [covered], condition_partition_complete: true, conflict: false, unresolved: false, requires_closure: false, closures: [], assumptions: [a2], verification_modalities: [runtime_observed]}
+  expected: {decision: accepted, reason_code: semantic.summarize-valid}
+- id: provenance-compression-valid
+  class: positive
+  operation: validate_compression
+  input: {algorithm_id: dag-set-v1, canonical_child_root_ids: [p1, p2], child_count: 2, child_set_digest: 'sha256:0a28944dab55ca77f6772f5c895d8db7e84f8b3dcd1c5d4d2a01b14f60dbae7e', resolver_ref: cas-1, retention_policy: compressed}
+  expected: {decision: accepted, reason_code: semantic.validate_compression-valid, value: valid}
+- id: provenance-compression-no-resolver
+  class: negative
+  operation: validate_compression
+  input: {algorithm_id: dag-set-v1, canonical_child_root_ids: [p1], child_count: 1, child_set_digest: 'sha256:a49ba8bb2e513b949be40d114a144ced7ad3852164005c4ad1878e10049b787a', resolver_ref: '', retention_policy: compressed}
+  expected: {decision: rejected, reason_code: semantic.provenance-compression-lossy}
+- {id: confidence-comparable, class: positive, operation: compare_confidence, input: {left: {value: 0.9, calibration_id: c1, population_id: p1, metric: precision}, right: {value: 0.8, calibration_id: c1, population_id: p1, metric: precision}}, expected: {decision: accepted, reason_code: semantic.compare_confidence-valid, value: higher}}
+- {id: confidence-incomparable, class: positive, operation: compare_confidence, input: {left: {value: 0.9, calibration_id: c1, population_id: p1, metric: precision}, right: {value: 0.8, calibration_id: c2, population_id: p1, metric: precision}}, expected: {decision: accepted, reason_code: semantic.compare_confidence-valid, value: incomparable}}

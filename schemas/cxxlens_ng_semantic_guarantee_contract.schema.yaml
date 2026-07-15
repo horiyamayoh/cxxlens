@@ -1,0 +1,43 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.semantic-guarantee-contract.v1
+type: object
+additionalProperties: false
+required: [schema, document_version, maturity, authority, compatibility, instance_schema, truth, approximation, verification, scope_and_assumptions, exact_preconditions, confidence, provenance, summary_guarantee, operator_composition, backend_authority]
+properties:
+  schema: {const: cxxlens.semantic-guarantee-contract.v1}
+  document_version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+  maturity: {const: accepted}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, decision_adr, owner_issue, owner]
+    properties:
+      design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md#13-truth-and-guarantee}
+      decision_adr: {const: docs/design/adr/0008-truth-guarantee-provenance-algebra.md}
+      owner_issue: {const: '#62'}
+      owner: {const: steward.ng-semantics}
+  compatibility: {type: object, required: [version_axis, current, unknown_modality, unknown_approximation_axis]}
+  instance_schema: {const: schemas/cxxlens_ng_semantic_metadata.schema.yaml}
+  truth: {type: object, required: [representation, values, knowledge_order, truth_order, operators, coercions, filtering]}
+  approximation: {type: object, required: [representation, values, composition]}
+  verification: {type: object, required: [representation, ordinal_comparison, modalities, comparison, composition]}
+  scope_and_assumptions: {type: object, required: [scope, assumptions, condition, interpretation]}
+  exact_preconditions: {type: object, required: [sound_positives, complete_scope, coverage, closure, scope, assumptions, interpretation, conflicts, unresolved]}
+  confidence: {type: object, required: [optional, representation, required_fields_when_present, comparison, affects_truth, upgrades_approximation]}
+  provenance: {type: object, required: [graph, contributor_identity, composition, compression]}
+  summary_guarantee: {type: object, required: [operation, required_fields, approximation, verification, assumptions, exact_requires, drill_down]}
+  operator_composition:
+    type: array
+    minItems: 12
+    maxItems: 12
+    items:
+      type: object
+      additionalProperties: false
+      required: [operator, approximation, condition, provenance, exact_precondition]
+      properties:
+        operator: {type: string, minLength: 1}
+        approximation: {type: string, minLength: 1}
+        condition: {type: string, minLength: 1}
+        provenance: {type: string, minLength: 1}
+        exact_precondition: {type: string, minLength: 1}
+  backend_authority: {type: object, required: [implementation, backends, orders, equality, conformance_vectors]}

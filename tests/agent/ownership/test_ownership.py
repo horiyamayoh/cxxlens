@@ -183,6 +183,25 @@ class OwnershipTest(unittest.TestCase):
                 "tools/quality/check_ng_query_contract.py",
             },
         )
+        ng_semantic_paths = {
+            item["path"]
+            for item in generated["tracked_paths"]
+            if item["owner_role"] == "steward.ng-semantics"
+        }
+        self.assertEqual(
+            ng_semantic_paths,
+            {
+                "docs/design/adr/0008-truth-guarantee-provenance-algebra.md",
+                "schemas/cxxlens_ng_semantic_conformance_report.schema.yaml",
+                "schemas/cxxlens_ng_semantic_conformance_vectors.schema.yaml",
+                "schemas/cxxlens_ng_semantic_conformance_vectors.yaml",
+                "schemas/cxxlens_ng_semantic_guarantee_contract.schema.yaml",
+                "schemas/cxxlens_ng_semantic_guarantee_contract.yaml",
+                "schemas/cxxlens_ng_semantic_metadata.schema.yaml",
+                "tests/quality/test_ng_semantic_guarantee.py",
+                "tools/quality/check_ng_semantic_guarantee.py",
+            },
+        )
         self.assertEqual(
             {item["api_id"] for item in generated["skeletons"]},
             {packet["api_id"] for packet in self.corpus["packets"]},

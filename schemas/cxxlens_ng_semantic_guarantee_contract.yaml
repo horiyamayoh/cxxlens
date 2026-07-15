@@ -1,0 +1,217 @@
+schema: cxxlens.semantic-guarantee-contract.v1
+document_version: 1.0.0
+maturity: accepted
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md#13-truth-and-guarantee
+  decision_adr: docs/design/adr/0008-truth-guarantee-provenance-algebra.md
+  owner_issue: '#62'
+  owner: steward.ng-semantics
+compatibility:
+  version_axis: truth-guarantee-semantics
+  current: 1.0.0
+  unknown_modality: preserve
+  unknown_approximation_axis: reject
+instance_schema: schemas/cxxlens_ng_semantic_metadata.schema.yaml
+truth:
+  representation: independent-positive-negative-support
+  values:
+  - {id: unknown, positive: false, negative: false}
+  - {id: 'true', positive: true, negative: false}
+  - {id: 'false', positive: false, negative: true}
+  - {id: conflict, positive: true, negative: true}
+  knowledge_order:
+    rule: componentwise-support-inclusion
+    bottom: unknown
+    top: conflict
+    incomparable: ['true', 'false']
+  truth_order:
+    rule: negative-reversed-positive-forward
+    bottom: 'false'
+    top: 'true'
+    incomparable: [unknown, conflict]
+  operators:
+    not: swap-positive-negative
+    and:
+      positive: all
+      negative: any
+    or:
+      positive: any
+      negative: all
+    evidence_aggregate:
+      positive: any-contributor-positive
+      negative: any-contributor-negative
+  coercions:
+    unknown_to_false: forbidden
+    conflict_to_false: forbidden
+    conflict_to_true: forbidden
+    bool_requires: exactly-one-support
+  filtering:
+    authority: selection-only
+    mutates_truth: false
+    policies: [true_only, retain_unknown, retain_conflict, retain_all, strict_known, strict_nonconflicting]
+approximation:
+  representation: independent-soundness-completeness-claims
+  values:
+  - {id: unknown, sound_positives: false, complete_scope: false}
+  - {id: under_approximation, sound_positives: true, complete_scope: false}
+  - {id: over_approximation, sound_positives: false, complete_scope: true}
+  - {id: exact, sound_positives: true, complete_scope: true}
+  composition:
+    positive-relational-operator: componentwise-all
+    distinct: preserve
+    filter: input-meet-predicate-guarantee
+    project: input-meet-projection-guarantee
+    inner_join: all-inputs-and-operator
+    semi_join: all-inputs-and-operator
+    union: all-inputs-and-operator
+    condition_restrict: preserve-on-restricted-condition
+    interpretation_restrict: preserve-on-restricted-domain
+    order_by: preserve
+    limit: under-unless-proven-complete-for-declared-scope
+    derivation: all-inputs-and-transformer
+    group: deferred-sealed-input-required
+    aggregate: deferred-sealed-input-required
+verification:
+  representation: canonical-modality-set-with-implication-closure
+  ordinal_comparison: forbidden
+  modalities:
+  - id: schema_validated
+    implies: []
+  - id: frontend_replayed
+    implies: [schema_validated]
+  - id: compiler_verified
+    implies: [schema_validated]
+  - id: link_verified
+    implies: [schema_validated]
+  - id: runtime_observed
+    implies: [schema_validated]
+  - id: differentially_verified
+    implies: [schema_validated]
+  comparison:
+    rule: implication-closed-set-inclusion
+    equal: same-closure
+    stronger: strict-superset
+    weaker: strict-subset
+    otherwise: incomparable
+  composition:
+    output_modalities: implication-closed-intersection
+    contributor_modalities: retained-in-drill-down
+scope_and_assumptions:
+  scope:
+    identity: stable-scope-id-plus-canonical-domain
+    join: declared-scope-intersection
+    union: declared-compatible-scope-union
+    restrict: canonical-subscope
+    empty_intersection: no-output
+    incomparable_scope: no-summary-upgrade
+  assumptions:
+    representation: canonical-assumption-id-set
+    composition: canonical-set-union
+    discharge: explicit-evidence-edge-only
+    implicit_drop: forbidden
+  condition:
+    join: intersection
+    union: preserve-or-distinct-union
+    filter_project: preserve
+    summary: exact-fragment-partition
+  interpretation:
+    join: exact-id-equality
+    distinct: partition
+    summary: partition-no-cross-domain-upgrade
+exact_preconditions:
+  sound_positives: true
+  complete_scope: true
+  coverage:
+    required: true
+    accepted_states: [covered, excluded, not_applicable]
+    rejecting_states: [failed, unresolved, unsupported, stale, truncated]
+  closure:
+    required_for: [absence, exhaustive-enumeration, limit-completeness, aggregate-completeness]
+    validator: relation-and-scope-specific
+  scope:
+    declared: true
+    fully_partitioned_by_condition: true
+  assumptions:
+    declared: true
+    verified_or_retained: true
+  interpretation:
+    declared: true
+  conflicts:
+    overlapping_same_domain: reject-exact
+  unresolved:
+    overlapping_scope: reject-exact
+confidence:
+  optional: true
+  representation: calibrated-estimate
+  required_fields_when_present: [value, calibration_id, population_id, metric]
+  comparison:
+    allowed_only_if: same-calibration-population-and-metric
+    otherwise: incomparable
+  affects_truth: false
+  upgrades_approximation: false
+provenance:
+  graph: content-addressed-dag
+  contributor_identity: assertion-id-plus-content-digest
+  composition:
+    filter_project_restrict: preserve-all
+    join: canonical-set-union
+    semi_join: left-plus-all-compatible-witnesses
+    union: preserve-occurrences
+    distinct: canonical-set-union
+    derivation: all-inputs-plus-transformer
+  compression:
+    allowed: true
+    replacement_node_requires:
+    - algorithm_id
+    - canonical_child_root_ids
+    - child_count
+    - child_set_digest
+    - resolver_ref
+    - retention_policy
+    lossless_identity: true
+    child_omission_without_resolver: forbidden
+summary_guarantee:
+  operation: conservative-meet-with-lossless-fragment-index
+  required_fields:
+  - approximation
+  - scope
+  - condition_partition
+  - interpretation_partitions
+  - assumptions
+  - verification_modalities
+  - fragment_count
+  - fragment_set_digest
+  - drill_down_ref
+  approximation: componentwise-all-fragments
+  verification: implication-closed-intersection
+  assumptions: canonical-set-union
+  exact_requires:
+  - every-fragment-exact
+  - coverage-balanced-without-blocking-state
+  - required-closures-valid
+  - condition-partition-complete
+  - no-overlapping-same-domain-conflict
+  - no-overlapping-unresolved
+  drill_down:
+    resolves_all_fragments: true
+    fragment-digest-verified: true
+    contributor-evidence-reachable: true
+operator_composition:
+- {operator: query.scan.v1, approximation: preserve-claim, condition: preserve, provenance: preserve, exact_precondition: claim-and-snapshot-validated}
+- {operator: query.filter.v1, approximation: meet-input-predicate, condition: preserve, provenance: preserve, exact_precondition: exact-predicate}
+- {operator: query.project.v1, approximation: meet-input-projection, condition: preserve, provenance: preserve, exact_precondition: lossless-declared-projection}
+- {operator: query.inner_join.v1, approximation: meet-all, condition: intersection, provenance: union-all, exact_precondition: exact-inputs-compatible-scope}
+- {operator: query.semi_join.v1, approximation: meet-all, condition: union-compatible-intersections, provenance: left-plus-witnesses, exact_precondition: exact-right-existence-domain}
+- {operator: query.union.v1, approximation: meet-all, condition: preserve, provenance: preserve-occurrences, exact_precondition: complete-compatible-scopes}
+- {operator: query.distinct.v1, approximation: preserve, condition: union-by-partition, provenance: union-all, exact_precondition: lossless-contributor-union}
+- {operator: query.order_by.v1, approximation: preserve, condition: preserve, provenance: preserve, exact_precondition: total-order-does-not-upgrade}
+- {operator: query.limit.v1, approximation: under-by-default, condition: preserve-prefix, provenance: preserve-prefix, exact_precondition: declared-scope-complete-and-sealed}
+- {operator: query.condition_restrict.v1, approximation: preserve-subscope, condition: intersection, provenance: preserve, exact_precondition: exact-restriction}
+- {operator: query.interpretation_restrict.v1, approximation: preserve-domain, condition: preserve, provenance: preserve, exact_precondition: exact-domain-filter}
+- {operator: derivation, approximation: meet-inputs-transformer, condition: declared-transform, provenance: all-inputs-plus-transformer, exact_precondition: exact-transformer-and-inputs}
+backend_authority:
+  implementation: tools/quality/check_ng_semantic_guarantee.py
+  backends: [memory, sqlite]
+  orders: [forward, reverse, seeded-shuffle]
+  equality: canonical-semantic-metadata
+  conformance_vectors: schemas/cxxlens_ng_semantic_conformance_vectors.yaml

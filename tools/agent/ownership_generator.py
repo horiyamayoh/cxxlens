@@ -227,6 +227,11 @@ ROLE_DEFINITIONS: dict[str, tuple[str, str, str]] = {
         "#61",
         "Logical Query IR algebra, ordering, partiality, normalization, and backend reference conformance.",
     ),
+    "steward.ng-semantics": (
+        "shared_steward",
+        "#62",
+        "Truth support, guarantee, verification modality, condition, assumption, and provenance algebra.",
+    ),
 }
 
 
@@ -301,6 +306,18 @@ NG_QUERY_PATHS = {
     "schemas/cxxlens_ng_query_conformance_vectors.yaml",
     "tests/quality/test_ng_query_contract.py",
     "tools/quality/check_ng_query_contract.py",
+}
+
+NG_SEMANTIC_PATHS = {
+    "docs/design/adr/0008-truth-guarantee-provenance-algebra.md",
+    "schemas/cxxlens_ng_semantic_conformance_report.schema.yaml",
+    "schemas/cxxlens_ng_semantic_conformance_vectors.schema.yaml",
+    "schemas/cxxlens_ng_semantic_conformance_vectors.yaml",
+    "schemas/cxxlens_ng_semantic_guarantee_contract.schema.yaml",
+    "schemas/cxxlens_ng_semantic_guarantee_contract.yaml",
+    "schemas/cxxlens_ng_semantic_metadata.schema.yaml",
+    "tests/quality/test_ng_semantic_guarantee.py",
+    "tools/quality/check_ng_semantic_guarantee.py",
 }
 
 
@@ -464,6 +481,8 @@ def owner_for_path(
         return "steward.ng-relations"
     if path in NG_QUERY_PATHS:
         return "steward.ng-query"
+    if path in NG_SEMANTIC_PATHS:
+        return "steward.ng-semantics"
     if path.startswith(("tools/agent/ownership_", "tests/agent/ownership/")) or path in {
         "docs/agent_ownership_reference.md",
         "schemas/cxxlens.agent-ownership.v1.schema.yaml",
