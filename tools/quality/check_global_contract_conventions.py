@@ -24,9 +24,13 @@ LEGACY_OWNERSHIP_SCHEMA_EXCLUSIONS = {
     "cxxlens_ng_authority_transition.schema.yaml",
     "cxxlens_ng_authority_transition_report.schema.yaml",
     "cxxlens_ng_catalog_bootstrap.schema.yaml",
+    "cxxlens_ng_claim_envelope.schema.yaml",
     "cxxlens_ng_compatibility_report.schema.yaml",
     "cxxlens_ng_compatibility_request.schema.yaml",
     "cxxlens_ng_release_bundle.schema.yaml",
+    "cxxlens_ng_relation_conformance_report.schema.yaml",
+    "cxxlens_ng_relation_conformance_vectors.schema.yaml",
+    "cxxlens_ng_relation_registry.schema.yaml",
 }
 EXPECTED_SECTIONS = {
     "naming_and_family",

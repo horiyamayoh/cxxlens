@@ -30,6 +30,14 @@ class DocumentationConsistencyTests(unittest.TestCase):
         )
         MODULE.validate_documentation(ROOT, policy, actual)
 
+    def test_relation_registry_is_the_only_accepted_exact_catalog(self) -> None:
+        relation = MODULE.load_yaml(ROOT / MODULE.CATALOGS["relation-registry"])
+        self.assertEqual(relation["maturity"], "accepted")
+        self.assertEqual(relation["schema"], "cxxlens.relation-registry.v1")
+        for kind, path in MODULE.CATALOGS.items():
+            if kind != "relation-registry":
+                self.assertEqual(MODULE.load_yaml(ROOT / path)["maturity"], "bootstrap")
+
     def test_missing_replacement_is_rejected(self) -> None:
         record = {
             "disposition": "replace",

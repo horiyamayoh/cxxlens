@@ -1,0 +1,78 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.relation-conformance-vectors.v1
+title: cxxlens relation contract conformance vectors
+type: object
+additionalProperties: false
+required:
+- schema
+- document_version
+- authority
+- registry
+- vectors
+properties:
+  schema:
+    const: cxxlens.relation-conformance-vectors.v1
+  document_version:
+    type: string
+    pattern: ^[0-9]+\.[0-9]+\.[0-9]+$
+  authority:
+    type: object
+    additionalProperties: false
+    required:
+    - owner_issue
+    - decision_adr
+    properties:
+      owner_issue:
+        const: '#60'
+      decision_adr:
+        const: docs/design/adr/0006-ng0-relation-and-claim-envelope.md
+  registry:
+    const: schemas/cxxlens_ng_relation_registry.yaml
+  vectors:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - class
+      - operation
+      - expected
+      - input
+      properties:
+        id:
+          type: string
+          pattern: ^[a-z][a-z0-9_.-]+$
+        class:
+          enum:
+          - positive
+          - negative
+        operation:
+          enum:
+          - validate_registry
+          - validate_envelope_instance
+          - resolve_reference
+          - validate_symbol
+          - validate_evolution
+          - compare_api_ids
+          - register_extension
+          - validate_query_columns
+        expected:
+          type: object
+          additionalProperties: false
+          required:
+          - decision
+          - reason_code
+          properties:
+            decision:
+              enum:
+              - accepted
+              - rejected
+            reason_code:
+              type: string
+              pattern: ^relation\.[a-z0-9.-]+$
+        input:
+          type: object
+          minProperties: 1
+          additionalProperties: true

@@ -1,0 +1,589 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.relation-registry.v1
+title: cxxlens NG0 exact relation registry
+type: object
+additionalProperties: false
+required:
+- schema
+- kind
+- document_version
+- maturity
+- authority
+- compatibility
+- replaces
+- registry_policy
+- system_claim_envelope
+- api_projection
+- symbol_contracts
+- evolution_policies
+- relations
+properties:
+  schema:
+    const: cxxlens.relation-registry.v1
+  kind:
+    const: relation-registry
+  document_version:
+    $ref: '#/$defs/semantic_version'
+  maturity:
+    const: accepted
+  authority:
+    type: object
+    additionalProperties: false
+    required:
+    - design
+    - index
+    - decision_adr
+    - owner_issue
+    - owner
+    properties:
+      design:
+        const: docs/design/cxxlens_next_generation_integrated_design_ja.md
+      index:
+        const: docs/design/catalogs/README.md
+      decision_adr:
+        const: docs/design/adr/0006-ng0-relation-and-claim-envelope.md
+      owner_issue:
+        const: '#60'
+      owner:
+        const: steward.ng-relations
+  compatibility:
+    type: object
+    additionalProperties: false
+    required:
+    - version_axis
+    - current
+    - semantic_major_policy
+    - unknown_optional_columns
+    - unknown_open_symbols
+    - unknown_closed_symbols
+    properties:
+      version_axis:
+        const: relation-descriptor
+      current:
+        $ref: '#/$defs/semantic_version'
+      semantic_major_policy:
+        const: exact-major-compatible-minor
+      unknown_optional_columns:
+        const: preserve
+      unknown_open_symbols:
+        const: preserve
+      unknown_closed_symbols:
+        const: reject
+  replaces:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      type: string
+      minLength: 1
+  registry_policy:
+    type: object
+    additionalProperties: false
+    required:
+    - mutation
+    - discovery
+    - duplicate_descriptor
+    - digest_mismatch
+    - incompatible_key_change
+    - hard_reference_cycle
+    - extension_code_change
+    properties:
+      mutation:
+        const: build-time-only
+      discovery:
+        const: descriptor-document-or-installation-manifest
+      duplicate_descriptor:
+        const: reject
+      digest_mismatch:
+        const: reject
+      incompatible_key_change:
+        const: reject
+      hard_reference_cycle:
+        const: reject
+      extension_code_change:
+        const: forbidden
+  system_claim_envelope:
+    type: object
+    additionalProperties: false
+    required:
+    - schema
+    - instance_schema
+    - visibility
+    - condition_authority
+    - user_column_projection
+    - identity
+    - columns
+    properties:
+      schema:
+        const: cxxlens.claim-envelope.v1
+      instance_schema:
+        const: schemas/cxxlens_ng_claim_envelope.schema.yaml
+      visibility:
+        const: system-only
+      condition_authority:
+        const: envelope-presence-only
+      user_column_projection:
+        const: excluded-unless-explicitly-requested
+      identity:
+        type: object
+        additionalProperties: false
+        required:
+        - semantic_key
+        - assertion
+        - content
+        properties:
+          semantic_key:
+            type: array
+            const:
+            - descriptor
+            - authoritative-key-tuple
+          assertion:
+            type: array
+            const:
+            - semantic-key
+            - condition-universe
+            - canonical-condition
+            - interpretation-domain
+            - producer-semantic-contract
+          content:
+            type: array
+            const:
+            - assertion
+            - authoritative-payload-tuple
+      columns:
+        type: array
+        minItems: 1
+        items:
+          $ref: '#/$defs/system_column'
+  api_projection:
+    type: object
+    additionalProperties: false
+    required:
+    - static
+    - dynamic
+    - logical_ir
+    - parity
+    properties:
+      static:
+        type: object
+        additionalProperties: false
+        required:
+        - descriptor_source
+        - column_source
+        properties:
+          descriptor_source:
+            const: relations[].descriptor_id
+          column_source:
+            const: relations[].columns[].id
+      dynamic:
+        type: object
+        additionalProperties: false
+        required:
+        - relation_lookup
+        - descriptor_result
+        - column_lookup
+        - column_result
+        properties:
+          relation_lookup:
+            const:
+            - name
+            - semantic-major
+          descriptor_result:
+            const: relations[].descriptor_id
+          column_lookup:
+            const: name
+          column_result:
+            const: relations[].columns[].id
+      logical_ir:
+        type: object
+        additionalProperties: false
+        required:
+        - relation_operand
+        - column_operand
+        properties:
+          relation_operand:
+            const: descriptor_id
+          column_operand:
+            const: column_id
+      parity:
+        const: exact-id-equality
+  symbol_contracts:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - openness
+      - values
+      - unknown_value
+      properties:
+        id:
+          type: string
+          pattern: ^[a-z][a-z0-9_.-]+/[0-9]+$
+        openness:
+          enum:
+          - open
+          - closed
+        values:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            pattern: ^[a-z][a-z0-9_.-]+$
+        unknown_value:
+          enum:
+          - preserve
+          - reject
+  evolution_policies:
+    type: array
+    minItems: 1
+    items:
+      $ref: '#/$defs/evolution_policy'
+  relations:
+    type: array
+    minItems: 1
+    items:
+      $ref: '#/$defs/relation'
+$defs:
+  semantic_version:
+    type: string
+    pattern: ^[0-9]+\.[0-9]+\.[0-9]+$
+  stable_id:
+    type: string
+    pattern: ^[a-z][a-z0-9_.-]+$
+  relation_name:
+    type: string
+    pattern: ^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$
+  column_type:
+    type: string
+    pattern: ^[a-z][a-z0-9_.<>/,-]+$
+  system_column:
+    type: object
+    additionalProperties: false
+    required:
+    - id
+    - name
+    - type
+    - required
+    - semantic_role
+    properties:
+      id:
+        $ref: '#/$defs/stable_id'
+      name:
+        type: string
+        pattern: ^[a-z][a-z0-9_]*$
+      type:
+        $ref: '#/$defs/column_type'
+      required:
+        type: boolean
+      semantic_role:
+        enum:
+        - descriptor
+        - key
+        - assertion
+        - content
+        - condition
+        - interpretation
+        - stage
+        - producer
+        - provenance
+        - guarantee
+  column:
+    type: object
+    additionalProperties: false
+    required:
+    - id
+    - name
+    - type
+    - required
+    - identity_role
+    properties:
+      id:
+        $ref: '#/$defs/stable_id'
+      name:
+        type: string
+        pattern: ^[a-z][a-z0-9_]*$
+      type:
+        $ref: '#/$defs/column_type'
+      required:
+        type: boolean
+      identity_role:
+        enum:
+        - claim_key
+        - authoritative_payload
+        - display
+      semantic:
+        type: string
+        minLength: 1
+  reference:
+    type: object
+    additionalProperties: false
+    required:
+    - source_columns
+    - target_relation
+    - target_columns
+    - strength
+    - on_missing
+    properties:
+      source_columns:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          $ref: '#/$defs/stable_id'
+      target_relation:
+        $ref: '#/$defs/relation_name'
+      target_columns:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          $ref: '#/$defs/stable_id'
+      strength:
+        enum:
+        - hard
+        - soft_semantic
+      on_missing:
+        enum:
+        - reject_batch
+        - unresolved
+      container_elements:
+        type: boolean
+  evolution_policy:
+    type: object
+    additionalProperties: false
+    required:
+    - id
+    - patch
+    - minor
+    - major
+    - old_reader_unknown_optional
+    - new_reader_missing_optional
+    properties:
+      id:
+        $ref: '#/$defs/stable_id'
+      patch:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          enum:
+          - documentation
+          - test-metadata
+          - validation-message
+      minor:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          enum:
+          - optional-column
+          - index-hint
+          - partition-hint
+          - open-symbol
+          - optional-capability
+          - unknown-preserving-metadata
+      major:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          enum:
+          - key
+          - column-semantics
+          - required-column
+          - cardinality
+          - condition-semantics
+          - closure-interpretation
+          - identity-contract
+          - closed-symbol
+          - source-coordinate-semantics
+      old_reader_unknown_optional:
+        const: preserve
+      new_reader_missing_optional:
+        const: absent
+  relation:
+    type: object
+    additionalProperties: false
+    required:
+    - descriptor_id
+    - name
+    - version
+    - semantic_major
+    - semantics
+    - owner_namespace
+    - stability
+    - profile
+    - summary
+    - generated_cpp_tag
+    - claim
+    - columns
+    - references
+    - merge
+    - partition
+    - indexes
+    - coverage
+    - closure
+    - provenance
+    - evolution_policy
+    properties:
+      descriptor_id:
+        $ref: '#/$defs/stable_id'
+      name:
+        $ref: '#/$defs/relation_name'
+      version:
+        $ref: '#/$defs/semantic_version'
+      semantic_major:
+        type: integer
+        minimum: 1
+      semantics:
+        type: string
+        pattern: ^[a-z][a-z0-9_.-]+/[0-9]+$
+      owner_namespace:
+        type: string
+        pattern: ^[a-z][a-z0-9_.-]+$
+      stability:
+        enum:
+        - versioned
+        - external-versioned
+      profile:
+        const: NG0
+      summary:
+        type: string
+        minLength: 1
+      generated_cpp_tag:
+        type: string
+        pattern: ^cxxlens::[a-z][a-z0-9_:]*$
+      claim:
+        type: object
+        additionalProperties: false
+        required:
+        - cardinality
+        - key
+        - condition_policy
+        - interpretation_required
+        - domain_identity
+        properties:
+          cardinality:
+            enum:
+            - functional_assertion
+            - multivalued
+          key:
+            type: array
+            minItems: 1
+            uniqueItems: true
+            items:
+              $ref: '#/$defs/stable_id'
+          condition_policy:
+            const: claim-envelope-required
+          interpretation_required:
+            const: true
+          domain_identity:
+            type: object
+            additionalProperties: false
+            required:
+            - result_column
+            - projection
+            - contract
+            properties:
+              result_column:
+                oneOf:
+                - $ref: '#/$defs/stable_id'
+                - type: 'null'
+              projection:
+                type: array
+                minItems: 1
+                uniqueItems: true
+                items:
+                  $ref: '#/$defs/stable_id'
+              contract:
+                const: canonical-binary-tuple-v1
+      columns:
+        type: array
+        minItems: 1
+        items:
+          $ref: '#/$defs/column'
+      references:
+        type: array
+        items:
+          $ref: '#/$defs/reference'
+      merge:
+        type: object
+        additionalProperties: false
+        required:
+        - mode
+        - conflict_columns
+        properties:
+          mode:
+            enum:
+            - functional_assertion
+            - set
+          conflict_columns:
+            type: array
+            uniqueItems: true
+            items:
+              $ref: '#/$defs/stable_id'
+      partition:
+        type: object
+        additionalProperties: false
+        required:
+        - suggested_keys
+        - condition_fragment
+        - interpretation_domain
+        properties:
+          suggested_keys:
+            type: array
+            minItems: 1
+            uniqueItems: true
+            items:
+              $ref: '#/$defs/stable_id'
+          condition_fragment:
+            const: envelope
+          interpretation_domain:
+            const: envelope
+      indexes:
+        type: array
+        items:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/$defs/stable_id'
+      coverage:
+        type: object
+        additionalProperties: false
+        required:
+        - execution_domain
+        properties:
+          execution_domain:
+            type: string
+            pattern: ^[a-z][a-z0-9_.-]+$
+      closure:
+        type: object
+        additionalProperties: false
+        required:
+        - supported_kinds
+        properties:
+          supported_kinds:
+            type: array
+            uniqueItems: true
+            items:
+              enum:
+              - relation-key-enumeration
+      provenance:
+        type: object
+        additionalProperties: false
+        required:
+        - minimum
+        properties:
+          minimum:
+            enum:
+            - direct_observation
+            - canonicalization
+            - derivation
+            - system_accounting
+      evolution_policy:
+        $ref: '#/$defs/stable_id'

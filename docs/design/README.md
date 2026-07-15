@@ -20,7 +20,7 @@ machine-readable catalog の入口です。
 ## Current design assets
 
 - `cxxlens_next_generation_integrated_design_ja.md` — `CXXLENS-NG-SRAD-002`、版
-  `0.4.0-normative` の最上位設計
+  `0.5.0-normative` の最上位設計
 - `catalogs/README.md` — Relation Registry、Provider Protocol、Public C++ API Catalog、Acceptance
   Manifest、Security Profile の index
 - `adr/README.md` — ADR state と replacement chain の index
@@ -37,5 +37,5 @@ machine-readable catalog の入口です。
 4. positive/negative/perturbation fixture と acceptance evidence を定義する。
 5. 旧資産を触る場合は ledger の disposition、replacement、removal issue を確認する。
 
-bootstrap catalog は配置と ownership を固定する R0 contract です。`contract-pending` entry を実装済み・
-stable と解釈してはいけません。
+bootstrap catalog は配置と ownership を固定する R0 contract です。owner issue が accepted exact contract へ
+昇格していない `contract-pending` entry を実装済み・stable と解釈してはいけません。

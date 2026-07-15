@@ -228,6 +228,8 @@ overrides:
     record: *accepted_adr
   - path: docs/design/adr/0005-product-boundary-release-compatibility.md
     record: *accepted_adr
+  - path: docs/design/adr/0006-ng0-relation-and-claim-envelope.md
+    record: *accepted_adr
   - path: docs/design/SHA256SUMS
     record:
       disposition: inherit
@@ -333,7 +335,24 @@ overrides:
       replacement: null
       removal_issue: null
   - path: schemas/cxxlens_ng_relation_registry.yaml
-    record: *ng_catalog
+    record: &ng_relation_contract
+      disposition: inherit
+      status: active
+      owner: steward.ng-relations
+      profile: NG0
+      authority: normative
+      replacement: null
+      removal_issue: null
+  - path: schemas/cxxlens_ng_claim_envelope.schema.yaml
+    record: *ng_relation_contract
+  - path: schemas/cxxlens_ng_relation_registry.schema.yaml
+    record: *ng_relation_contract
+  - path: schemas/cxxlens_ng_relation_conformance_vectors.yaml
+    record: *ng_relation_contract
+  - path: schemas/cxxlens_ng_relation_conformance_vectors.schema.yaml
+    record: *ng_relation_contract
+  - path: schemas/cxxlens_ng_relation_conformance_report.schema.yaml
+    record: *ng_relation_contract
   - path: schemas/cxxlens_ng_provider_protocol.yaml
     record: *ng_catalog
   - path: schemas/cxxlens_ng_public_api_catalog.yaml
@@ -433,6 +452,17 @@ overrides:
       removal_issue: null
   - path: tests/quality/test_ng_release_contract.py
     record: *ng_release_tooling
+  - path: tools/quality/check_ng_relation_contract.py
+    record: &ng_relation_tooling
+      disposition: inherit
+      status: active
+      owner: steward.ng-relations
+      profile: NG0
+      authority: implementation
+      replacement: null
+      removal_issue: null
+  - path: tests/quality/test_ng_relation_contract.py
+    record: *ng_relation_tooling
 
 drift:
   active_markdown:
@@ -448,6 +478,7 @@ drift:
     - docs/design/adr/0003-versioned-relation-kernel.md
     - docs/design/adr/0004-legacy-contract-reset.md
     - docs/design/adr/0005-product-boundary-release-compatibility.md
+    - docs/design/adr/0006-ng0-relation-and-claim-envelope.md
     - docs/design/adr/README.md
     - docs/design/catalogs/README.md
     - docs/design/cxxlens_next_generation_integrated_design_ja.md

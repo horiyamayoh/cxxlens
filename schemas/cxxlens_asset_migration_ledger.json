@@ -1,5 +1,5 @@
 {
-  "asset_count": 570,
+  "asset_count": 578,
   "assets": [
     {
       "authority": "operational",
@@ -876,6 +876,16 @@
       "disposition": "inherit",
       "owner": "steward.ng-authority",
       "path": "docs/design/adr/0005-product-boundary-release-compatibility.md",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-authority",
+      "path": "docs/design/adr/0006-ng0-relation-and-claim-envelope.md",
       "profile": "NG0",
       "removal_issue": null,
       "replacement": null,
@@ -2564,6 +2574,16 @@
     {
       "authority": "normative",
       "disposition": "inherit",
+      "owner": "steward.ng-relations",
+      "path": "schemas/cxxlens_ng_claim_envelope.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
       "owner": "steward.ng-release",
       "path": "schemas/cxxlens_ng_compatibility_report.schema.yaml",
       "profile": "release",
@@ -2604,7 +2624,47 @@
     {
       "authority": "normative",
       "disposition": "inherit",
-      "owner": "steward.ng-catalogs",
+      "owner": "steward.ng-relations",
+      "path": "schemas/cxxlens_ng_relation_conformance_report.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-relations",
+      "path": "schemas/cxxlens_ng_relation_conformance_vectors.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-relations",
+      "path": "schemas/cxxlens_ng_relation_conformance_vectors.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-relations",
+      "path": "schemas/cxxlens_ng_relation_registry.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-relations",
       "path": "schemas/cxxlens_ng_relation_registry.yaml",
       "profile": "NG0",
       "removal_issue": null,
@@ -4744,6 +4804,16 @@
     {
       "authority": "implementation",
       "disposition": "inherit",
+      "owner": "steward.ng-relations",
+      "path": "tests/quality/test_ng_relation_contract.py",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
       "owner": "steward.ng-release",
       "path": "tests/quality/test_ng_release_contract.py",
       "profile": "release",
@@ -5464,6 +5534,16 @@
     {
       "authority": "implementation",
       "disposition": "inherit",
+      "owner": "steward.ng-relations",
+      "path": "tools/quality/check_ng_relation_contract.py",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
       "owner": "steward.ng-release",
       "path": "tools/quality/check_ng_release_contract.py",
       "profile": "release",
@@ -5705,7 +5785,7 @@
   "classifications": {
     "archive": 37,
     "delete": 22,
-    "inherit": 57,
+    "inherit": 65,
     "migrate": 388,
     "replace": 66
   },
@@ -5713,5 +5793,5 @@
   "generated_by": "tools/quality/check_documentation_consistency.py",
   "schema": "cxxlens.asset-migration-ledger.v1",
   "source_policy": "schemas/cxxlens_asset_migration_policy.yaml",
-  "source_policy_digest": "sha256:fda8b4d929a29d76cabd8a0d3ad1bceb6b1384f36f60f52211ad7e0a19912ab7"
+  "source_policy_digest": "sha256:281788efde16d4d2dc28086a4941b78cb9e4789c48b0c807498086683b2c69a7"
 }

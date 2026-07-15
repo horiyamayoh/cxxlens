@@ -145,6 +145,25 @@ class OwnershipTest(unittest.TestCase):
                 "tools/quality/check_ng_release_contract.py",
             },
         )
+        ng_relation_paths = {
+            item["path"]
+            for item in generated["tracked_paths"]
+            if item["owner_role"] == "steward.ng-relations"
+        }
+        self.assertEqual(
+            ng_relation_paths,
+            {
+                "docs/design/adr/0006-ng0-relation-and-claim-envelope.md",
+                "schemas/cxxlens_ng_claim_envelope.schema.yaml",
+                "schemas/cxxlens_ng_relation_conformance_report.schema.yaml",
+                "schemas/cxxlens_ng_relation_conformance_vectors.schema.yaml",
+                "schemas/cxxlens_ng_relation_conformance_vectors.yaml",
+                "schemas/cxxlens_ng_relation_registry.schema.yaml",
+                "schemas/cxxlens_ng_relation_registry.yaml",
+                "tests/quality/test_ng_relation_contract.py",
+                "tools/quality/check_ng_relation_contract.py",
+            },
+        )
         self.assertEqual(
             {item["api_id"] for item in generated["skeletons"]},
             {packet["api_id"] for packet in self.corpus["packets"]},

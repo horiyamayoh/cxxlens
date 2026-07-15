@@ -1,0 +1,283 @@
+schema: cxxlens.relation-conformance-vectors.v1
+document_version: 1.0.0
+authority:
+  owner_issue: '#60'
+  decision_adr: docs/design/adr/0006-ng0-relation-and-claim-envelope.md
+registry: schemas/cxxlens_ng_relation_registry.yaml
+vectors:
+- id: exact-registry
+  class: positive
+  operation: validate_registry
+  expected:
+    decision: accepted
+    reason_code: relation.registry-valid
+  input:
+    patches: []
+- id: envelope-only-condition
+  class: negative
+  operation: validate_registry
+  expected:
+    decision: rejected
+    reason_code: relation.condition-duplicated
+  input:
+    patches:
+    - op: add
+      path: /relations/11/columns/-
+      value:
+        id: cc.call_site.v1.presence
+        name: presence
+        type: condition_ref
+        required: true
+        identity_role: authoritative_payload
+- id: noncircular-domain-identity
+  class: negative
+  operation: validate_registry
+  expected:
+    decision: rejected
+    reason_code: relation.identity-cycle
+  input:
+    patches:
+    - op: add
+      path: /relations/11/claim/domain_identity/projection/-
+      value: cc.call_site.v1.call
+- id: envelope-instance-valid
+  class: positive
+  operation: validate_envelope_instance
+  expected:
+    decision: accepted
+    reason_code: relation.envelope-instance-valid
+  input:
+    document:
+      schema: cxxlens.claim-envelope.v1
+      descriptor: cc.call_site.v1
+      semantic_key: semantic-key-call-1
+      assertion: assertion-call-1
+      content: sha256:1111111111111111111111111111111111111111111111111111111111111111
+      presence:
+        universe: universe-1
+        condition: condition-variant-1
+      interpretation: cc.canonical-1
+      stage: canonical_claim
+      producer: provider-normalizer-1
+      producer_input_snapshot: snapshot-input-1
+      provenance_root: evidence-1
+      guarantee:
+        approximation: exact
+        scope: compile-unit-1
+        assumptions: assumptions-empty-1
+        verification: schema_validated
+- id: envelope-containing-snapshot-forbidden
+  class: negative
+  operation: validate_envelope_instance
+  expected:
+    decision: rejected
+    reason_code: relation.envelope-instance-invalid
+  input:
+    document:
+      schema: cxxlens.claim-envelope.v1
+      descriptor: cc.call_site.v1
+      semantic_key: semantic-key-call-1
+      assertion: assertion-call-1
+      content: sha256:1111111111111111111111111111111111111111111111111111111111111111
+      presence:
+        universe: universe-1
+        condition: condition-variant-1
+      interpretation: cc.canonical-1
+      stage: canonical_claim
+      producer: provider-normalizer-1
+      provenance_root: evidence-1
+      guarantee:
+        approximation: exact
+        scope: compile-unit-1
+        assumptions: assumptions-empty-1
+        verification: schema_validated
+      containing_snapshot: snapshot-output-1
+- id: hard-reference-resolved
+  class: positive
+  operation: resolve_reference
+  expected:
+    decision: accepted
+    reason_code: relation.reference-resolved
+  input:
+    relation: source.span
+    source_column: source.span.v1.snapshot
+    source_value: source-snapshot-1
+    available_target_values:
+    - source-snapshot-1
+    unresolved_accounted: false
+- id: hard-reference-missing
+  class: negative
+  operation: resolve_reference
+  expected:
+    decision: rejected
+    reason_code: relation.hard-reference-missing
+  input:
+    relation: source.span
+    source_column: source.span.v1.snapshot
+    source_value: source-snapshot-missing
+    available_target_values: []
+    unresolved_accounted: true
+- id: soft-reference-missing-accounted
+  class: positive
+  operation: resolve_reference
+  expected:
+    decision: accepted
+    reason_code: relation.soft-reference-unresolved
+  input:
+    relation: source.span
+    source_column: source.span.v1.origin
+    source_value: origin-missing
+    available_target_values: []
+    unresolved_accounted: true
+- id: soft-reference-missing-unaccounted
+  class: negative
+  operation: resolve_reference
+  expected:
+    decision: rejected
+    reason_code: relation.soft-reference-unaccounted
+  input:
+    relation: source.span
+    source_column: source.span.v1.origin
+    source_value: origin-missing
+    available_target_values: []
+    unresolved_accounted: false
+- id: open-symbol-unknown-preserved
+  class: positive
+  operation: validate_symbol
+  expected:
+    decision: accepted
+    reason_code: relation.open-symbol-preserved
+  input:
+    type: open_symbol<cc.call-kind/1>
+    value: vendor_future_call
+- id: closed-symbol-unknown-rejected
+  class: negative
+  operation: validate_symbol
+  expected:
+    decision: rejected
+    reason_code: relation.closed-symbol-unknown
+  input:
+    type: closed_symbol<claim-stage/1>
+    value: future_claim_stage
+- id: minor-optional-column-preserved
+  class: positive
+  operation: validate_evolution
+  expected:
+    decision: accepted
+    reason_code: relation.minor-additive
+  input:
+    relation: cc.call_site
+    from_version: 1.0.0
+    to_version: 1.1.0
+    change: optional-column
+    column:
+      id: cc.call_site.v1.model_hint
+      name: model_hint
+      type: optional<utf8_string>
+      required: false
+      identity_role: authoritative_payload
+    old_reader_behavior: preserve
+- id: minor-required-column-rejected
+  class: negative
+  operation: validate_evolution
+  expected:
+    decision: rejected
+    reason_code: relation.major-change-required
+  input:
+    relation: cc.call_site
+    from_version: 1.0.0
+    to_version: 1.1.0
+    change: required-column
+    column:
+      id: cc.call_site.v1.new_required
+      name: new_required
+      type: utf8_string
+      required: true
+      identity_role: authoritative_payload
+    old_reader_behavior: reject
+- id: static-dynamic-column-parity
+  class: positive
+  operation: compare_api_ids
+  expected:
+    decision: accepted
+    reason_code: relation.api-id-parity
+  input:
+    static_descriptor_id: cc.call_site.v1
+    dynamic_descriptor_id: cc.call_site.v1
+    static_column_id: cc.call_site.v1.source
+    dynamic_column_id: cc.call_site.v1.source
+- id: static-dynamic-column-mismatch
+  class: negative
+  operation: compare_api_ids
+  expected:
+    decision: rejected
+    reason_code: relation.api-id-mismatch
+  input:
+    static_descriptor_id: cc.call_site.v1
+    dynamic_descriptor_id: cc.call_site.v1
+    static_column_id: cc.call_site.v1.source
+    dynamic_column_id: cc.call_site.v1.caller
+- id: external-relation-registration
+  class: positive
+  operation: register_extension
+  expected:
+    decision: accepted
+    reason_code: relation.extension-code-diff-zero
+  input:
+    exemplar: company.lock.acquire
+    new_name: organization.risk.signal
+    owner_namespace: organization.example
+    central_enum_changes: 0
+    central_switch_changes: 0
+    central_source_list_changes: 0
+- id: external-relation-central-switch
+  class: negative
+  operation: register_extension
+  expected:
+    decision: rejected
+    reason_code: relation.extension-code-change
+  input:
+    exemplar: company.lock.acquire
+    new_name: organization.risk.signal
+    owner_namespace: organization.example
+    central_enum_changes: 0
+    central_switch_changes: 1
+    central_source_list_changes: 0
+- id: exact-call-model
+  class: positive
+  operation: validate_query_columns
+  expected:
+    decision: accepted
+    reason_code: relation.query-columns-valid
+  input:
+    columns:
+    - relation: cc.call_site
+      column: call
+    - relation: cc.call_direct_target
+      column: call
+    - relation: cc.call_direct_target
+      column: target
+    - relation: cc.entity
+      column: entity
+    - relation: cc.entity
+      column: qualified_name
+- id: stale-inline-direct-target
+  class: negative
+  operation: validate_query_columns
+  expected:
+    decision: rejected
+    reason_code: relation.query-column-unknown
+  input:
+    columns:
+    - relation: cc.call_site
+      column: direct_target
+- id: call-site-partition-column
+  class: negative
+  operation: validate_registry
+  expected:
+    decision: rejected
+    reason_code: relation.partition-column-unknown
+  input:
+    patches:
+    - op: remove
+      path: /relations/11/columns/1

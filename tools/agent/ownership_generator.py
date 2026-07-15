@@ -217,6 +217,11 @@ ROLE_DEFINITIONS: dict[str, tuple[str, str, str]] = {
         "#59",
         "Next-generation product boundary, release profile, compatibility bundle, and decision tooling.",
     ),
+    "steward.ng-relations": (
+        "shared_steward",
+        "#60",
+        "NG0 exact relation IDL, system claim envelope, evolution vectors, and conformance tooling.",
+    ),
 }
 
 
@@ -251,7 +256,6 @@ NG_DOCUMENTATION_PATHS = {
     "schemas/cxxlens_ng_catalog_bootstrap.schema.yaml",
     "schemas/cxxlens_ng_provider_protocol.yaml",
     "schemas/cxxlens_ng_public_api_catalog.yaml",
-    "schemas/cxxlens_ng_relation_registry.yaml",
     "schemas/cxxlens_ng_security_profile.yaml",
     "tests/quality/test_documentation_consistency.py",
     "tools/quality/check_documentation_consistency.py",
@@ -266,6 +270,19 @@ NG_RELEASE_PATHS = {
     "schemas/cxxlens_ng_release_bundle.yaml",
     "tests/quality/test_ng_release_contract.py",
     "tools/quality/check_ng_release_contract.py",
+}
+
+
+NG_RELATION_PATHS = {
+    "docs/design/adr/0006-ng0-relation-and-claim-envelope.md",
+    "schemas/cxxlens_ng_claim_envelope.schema.yaml",
+    "schemas/cxxlens_ng_relation_conformance_report.schema.yaml",
+    "schemas/cxxlens_ng_relation_conformance_vectors.schema.yaml",
+    "schemas/cxxlens_ng_relation_conformance_vectors.yaml",
+    "schemas/cxxlens_ng_relation_registry.schema.yaml",
+    "schemas/cxxlens_ng_relation_registry.yaml",
+    "tests/quality/test_ng_relation_contract.py",
+    "tools/quality/check_ng_relation_contract.py",
 }
 
 
@@ -425,6 +442,8 @@ def owner_for_path(
         return "steward.ng-documentation"
     if path in NG_RELEASE_PATHS:
         return "steward.ng-release"
+    if path in NG_RELATION_PATHS:
+        return "steward.ng-relations"
     if path.startswith(("tools/agent/ownership_", "tests/agent/ownership/")) or path in {
         "docs/agent_ownership_reference.md",
         "schemas/cxxlens.agent-ownership.v1.schema.yaml",

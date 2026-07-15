@@ -1,0 +1,51 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.relation-conformance-report.v1
+title: cxxlens relation conformance report
+type: object
+additionalProperties: false
+required: [schema, status, registry, registry_digest, descriptors, vectors]
+properties:
+  schema:
+    const: cxxlens.relation-conformance-report.v1
+  status:
+    const: green
+  registry:
+    const: schemas/cxxlens_ng_relation_registry.yaml
+  registry_digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  descriptors:
+    type: array
+    minItems: 18
+    items:
+      type: object
+      additionalProperties: false
+      required: [name, descriptor_id, version, digest]
+      properties:
+        name:
+          type: string
+        descriptor_id:
+          type: string
+        version:
+          type: string
+          pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'
+        digest:
+          type: string
+          pattern: '^sha256:[0-9a-f]{64}$'
+  vectors:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, class, decision, reason_code]
+      properties:
+        id:
+          type: string
+        class:
+          enum: [positive, negative]
+        decision:
+          enum: [accepted, rejected]
+        reason_code:
+          type: string
+          pattern: '^relation\.[a-z0-9.-]+$'

@@ -5,8 +5,8 @@
 | 項目 | 値 |
 |---|---|
 | 文書 ID | `CXXLENS-NG-SRAD-002` |
-| 文書版 | `0.4.0-normative` |
-| 文書状態 | 規範・Issue #57 authority transition / Issue #59 release contract 反映版 |
+| 文書版 | `0.5.0-normative` |
+| 文書状態 | 規範・Issue #57 authority transition / Issue #59 release contract / Issue #60 exact relation contract 反映版 |
 | 対象製品 | 次世代 `cxxlens` |
 | 基準言語 | C++23 |
 | 初期 primary platform | Linux |
@@ -1168,91 +1168,74 @@ validation tightening/looseningで row acceptance が変わる場合、patch に
 - closed symbol追加
 - source coordinate semantics変更
 
+### 9.11 NG0 exact registry と claim envelope
+
+Issue #60 で accepted となった exact authority は
+`schemas/cxxlens_ng_relation_registry.yaml`（`cxxlens.relation-registry.v1`）である。全 user relation は
+system claim envelope を共有し、condition authority は `envelope-presence-only` とする。relation payload に
+`presence` / `condition_ref` を重複させない。system column は通常の user projection から除外し、明示要求時だけ
+stable system column ID で参照する。
+
+static generated API と runtime dynamic API は同じ descriptor/column ID を使用し、Logical Query IR もその ID を
+operand とする。descriptor digest は exact descriptor の canonical projection から計算する。unknown open symbol と
+minor optional column は保持し、unknown closed symbol、minor required column、key/cardinality/condition/identity の
+変更は fail closed または semantic major change とする。
+
+registry の build-time generation は descriptor document または installation manifest を探索する。external
+relation の追加に中央 enum、switch、source list の変更を要求してはならない。hard reference は staged/base
+snapshot で解決できなければ batch reject、soft semantic reference は row と `core.unresolved` をともに保持する。
+
 ---
 
 ## 10. Relation IDL Example
 
 ```yaml
-schema: cxxlens.relation-definition/2
+schema: cxxlens.relation-registry.v1
+system_claim_envelope:
+  condition_authority: envelope-presence-only
+  columns:
+    - {id: system.claim.v1.presence, name: presence, type: condition_ref}
+relations:
+  - descriptor_id: cc.call_site.v1
+    name: cc.call_site
+    version: 1.0.0
+    claim:
+      cardinality: functional_assertion
+      key: [cc.call_site.v1.call]
+      condition_policy: claim-envelope-required
+    columns:
+      - {id: cc.call_site.v1.call, name: call, type: typed_id<cc_call_id>}
+      - {id: cc.call_site.v1.compile_unit, name: compile_unit,
+         type: typed_id<compile_unit_id>}
+      - {id: cc.call_site.v1.caller, name: caller,
+         type: optional<typed_id<cc_entity_id>>}
+      - {id: cc.call_site.v1.kind, name: kind, type: open_symbol<cc.call-kind/1>}
+      - {id: cc.call_site.v1.source, name: source, type: typed_id<source_span_id>}
+      - {id: cc.call_site.v1.receiver_static_type, name: receiver_static_type,
+         type: optional<typed_id<cc_type_id>>}
+      - {id: cc.call_site.v1.ordinal, name: ordinal, type: uint64}
+    partition:
+      suggested_keys: [cc.call_site.v1.compile_unit]
+      condition_fragment: envelope
+      interpretation_domain: envelope
 
-relation:
-  name: cc.call_site
-  version: 1.0.0
-  semantics: cc-semantics/1
-  owner: cxxlens.standard.cc
-  stability: versioned
-
-claim:
-  cardinality: functional_assertion
-  key:
-    - call
-  condition:
-    required: true
-  interpretation:
-    required: true
-
-columns:
-  call:
-    type: typed_id<cc.call>
-    required: true
-  caller:
-    type: optional<typed_id<cc.entity>>
-  kind:
-    type: open_symbol<cc.call-kind/1>
-    required: true
-  source:
-    type: source_span_id
-    required: true
-  receiver_static_type:
-    type: optional<typed_id<cc.type>>
-  presence:
-    type: condition_ref
-    required: true
-
-references:
-  - column: caller
-    target: cc.entity.id
-    strength: soft_semantic
-    on_missing: unresolved
-  - column: source
-    target: source.span.id
-    strength: hard
-  - column: receiver_static_type
-    target: cc.type.id
-    strength: soft_semantic
-    on_missing: unresolved
-
-merge:
-  mode: functional_assertion
-  conflict_columns:
-    - caller
-    - kind
-    - receiver_static_type
-    - source
-
-partition:
-  suggested_keys:
-    - compile_unit
-    - interpretation_domain
-
-indexes:
-  suggested:
-    - [caller]
-    - [source]
-    - [presence]
-
-coverage:
-  execution_domain: call-extraction.compile-unit
-
-closure:
-  supported_kinds:
-    - relation-key-enumeration
-
-provenance:
-  minimum: direct_observation
+  - descriptor_id: cc.call_direct_target.v1
+    name: cc.call_direct_target
+    version: 1.0.0
+    claim:
+      cardinality: functional_assertion
+      key: [cc.call_direct_target.v1.call]
+      condition_policy: claim-envelope-required
+    columns:
+      - {id: cc.call_direct_target.v1.call, name: call, type: typed_id<cc_call_id>}
+      - {id: cc.call_direct_target.v1.target, name: target,
+         type: typed_id<cc_entity_id>}
+      - {id: cc.call_direct_target.v1.resolution, name: resolution,
+         type: open_symbol<cc.direct-target-resolution/1>}
 ```
 
-schema の physical index、SQL table、wire layout は authority に含めない。
+上記は call model の抜粋である。全列、reference、merge、coverage、closure、provenance、evolution の exact
+authority は registry 本体とする。physical index、SQL table、wire layout は authority に含めない。
 
 ---
 
@@ -2309,12 +2292,15 @@ absence-dependent operator は closure requirement を持つ。
 ```cpp
 using namespace cxxlens::query;
 using call = cxxlens::cc::relations::call_site;
+using direct = cxxlens::cc::relations::call_direct_target;
 using entity = cxxlens::cc::relations::entity;
 
 auto q =
     from<call>()
+      .join<direct>(
+          col<call::call>() == col<direct::call>())
       .join<entity>(
-          col<call::direct_target>() == col<entity::id>())
+          col<direct::target>() == col<entity::entity>())
       .where(
           col<entity::qualified_name>() == value("app::dangerous"))
       .project(
@@ -2329,13 +2315,17 @@ exact generated names は API catalog で確定する。
 
 ```cpp
 auto calls = registry.require("cc.call_site", major{1});
+auto direct_targets = registry.require("cc.call_direct_target", major{1});
 auto entities = registry.require("cc.entity", major{1});
 
 auto q =
     dynamic_query::from(calls)
+      .join(direct_targets,
+            calls.column("call") ==
+            direct_targets.column("call"))
       .join(entities,
-            calls.column("direct_target") ==
-            entities.column("id"))
+            direct_targets.column("target") ==
+            entities.column("entity"))
       .where(
             entities.column("qualified_name") ==
             dynamic_value{"app::dangerous"});

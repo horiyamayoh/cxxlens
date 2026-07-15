@@ -1,0 +1,70 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.claim-envelope.v1
+title: cxxlens system claim envelope
+type: object
+additionalProperties: false
+required:
+  - schema
+  - descriptor
+  - semantic_key
+  - assertion
+  - content
+  - presence
+  - interpretation
+  - stage
+  - producer
+  - provenance_root
+  - guarantee
+properties:
+  schema:
+    const: cxxlens.claim-envelope.v1
+  descriptor:
+    $ref: '#/$defs/strong_id'
+  semantic_key:
+    $ref: '#/$defs/strong_id'
+  assertion:
+    $ref: '#/$defs/strong_id'
+  content:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  presence:
+    type: object
+    additionalProperties: false
+    required: [universe, condition]
+    properties:
+      universe:
+        $ref: '#/$defs/strong_id'
+      condition:
+        $ref: '#/$defs/strong_id'
+  interpretation:
+    $ref: '#/$defs/strong_id'
+  stage:
+    enum: [assertion, canonical_claim, derived_claim]
+  producer:
+    $ref: '#/$defs/strong_id'
+  producer_input_snapshot:
+    oneOf:
+      - $ref: '#/$defs/strong_id'
+      - type: 'null'
+  provenance_root:
+    $ref: '#/$defs/strong_id'
+  guarantee:
+    type: object
+    additionalProperties: false
+    required: [approximation, scope, assumptions, verification]
+    properties:
+      approximation:
+        enum: [unknown, under_approximation, over_approximation, exact]
+      scope:
+        $ref: '#/$defs/strong_id'
+      assumptions:
+        $ref: '#/$defs/strong_id'
+      verification:
+        enum: [unverified, schema_validated, frontend_replayed, compiler_verified,
+               link_verified, runtime_observed, differentially_verified]
+$defs:
+  strong_id:
+    type: string
+    minLength: 1
+    maxLength: 512
+    pattern: '^[^\u0000-\u001f\u007f]+$'

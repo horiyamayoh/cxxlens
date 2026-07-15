@@ -1,0 +1,726 @@
+#!/usr/bin/env python3
+"""Validate the NG0 exact relation, claim-envelope, and conformance contract."""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import hashlib
+import json
+import pathlib
+import re
+import sys
+from collections import defaultdict
+from typing import Any
+
+import jsonschema
+import yaml
+
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+REGISTRY = pathlib.Path("schemas/cxxlens_ng_relation_registry.yaml")
+REGISTRY_SCHEMA = pathlib.Path("schemas/cxxlens_ng_relation_registry.schema.yaml")
+CLAIM_ENVELOPE_SCHEMA = pathlib.Path("schemas/cxxlens_ng_claim_envelope.schema.yaml")
+VECTORS = pathlib.Path("schemas/cxxlens_ng_relation_conformance_vectors.yaml")
+VECTORS_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_relation_conformance_vectors.schema.yaml"
+)
+REPORT_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_relation_conformance_report.schema.yaml"
+)
+
+REQUIRED_RELATIONS = {
+    "build.project",
+    "build.compile_unit",
+    "build.variant",
+    "build.toolchain_context",
+    "source.file",
+    "source.span",
+    "source.origin",
+    "cc.entity",
+    "cc.declaration",
+    "cc.type",
+    "cc.type_component",
+    "cc.call_site",
+    "cc.call_direct_target",
+    "core.provider_execution",
+    "core.unresolved",
+    "core.claim_conflict",
+    "core.differential_disagreement",
+    "company.lock.acquire",
+}
+
+REQUIRED_VECTOR_IDS = {
+    "exact-registry",
+    "envelope-only-condition",
+    "noncircular-domain-identity",
+    "envelope-instance-valid",
+    "envelope-containing-snapshot-forbidden",
+    "hard-reference-resolved",
+    "hard-reference-missing",
+    "soft-reference-missing-accounted",
+    "soft-reference-missing-unaccounted",
+    "open-symbol-unknown-preserved",
+    "closed-symbol-unknown-rejected",
+    "minor-optional-column-preserved",
+    "minor-required-column-rejected",
+    "static-dynamic-column-parity",
+    "static-dynamic-column-mismatch",
+    "external-relation-registration",
+    "external-relation-central-switch",
+    "exact-call-model",
+    "stale-inline-direct-target",
+    "call-site-partition-column",
+}
+
+
+class RelationContractError(ValueError):
+    """A stable NG relation-contract violation."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(f"{code}: {message}")
+        self.code = code
+
+
+def fail(code: str, message: str) -> None:
+    raise RelationContractError(code, message)
+
+
+def load_yaml(path: pathlib.Path) -> dict[str, Any]:
+    value = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        fail("relation.document-invalid", f"expected mapping: {path}")
+    return value
+
+
+def schema_validate(document: Any, schema: dict[str, Any], label: str) -> None:
+    try:
+        jsonschema.Draft202012Validator.check_schema(schema)
+        jsonschema.Draft202012Validator(schema).validate(document)
+    except (jsonschema.SchemaError, jsonschema.ValidationError) as error:
+        fail("relation.schema-invalid", f"{label}: {error.message}")
+
+
+def canonical_json(value: Any) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+
+
+def digest(value: Any) -> str:
+    return "sha256:" + hashlib.sha256(canonical_json(value)).hexdigest()
+
+
+def registry_semantic_projection(registry: dict[str, Any]) -> dict[str, Any]:
+    """Exclude migration/document metadata and relation registration order."""
+    return {
+        "schema": registry["schema"],
+        "document_version": registry["document_version"],
+        "compatibility": registry["compatibility"],
+        "registry_policy": registry["registry_policy"],
+        "system_claim_envelope": registry["system_claim_envelope"],
+        "api_projection": registry["api_projection"],
+        "symbol_contracts": sorted(
+            registry["symbol_contracts"], key=lambda row: row["id"]
+        ),
+        "evolution_policies": sorted(
+            registry["evolution_policies"], key=lambda row: row["id"]
+        ),
+        "relations": sorted(registry["relations"], key=lambda row: row["name"]),
+    }
+
+
+def rows_by(rows: list[dict[str, Any]], field: str, label: str) -> dict[str, dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        grouped[row[field]].append(row)
+    duplicates = sorted(key for key, values in grouped.items() if len(values) != 1)
+    if duplicates:
+        fail("relation.duplicate-id", f"{label} duplicates: {duplicates}")
+    return {key: values[0] for key, values in grouped.items()}
+
+
+def assert_acyclic(graph: dict[str, set[str]]) -> None:
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(node: str) -> None:
+        if node in visiting:
+            fail("relation.hard-reference-cycle", f"hard reference cycle includes {node}")
+        if node in visited:
+            return
+        visiting.add(node)
+        for target in sorted(graph[node]):
+            visit(target)
+        visiting.remove(node)
+        visited.add(node)
+
+    for node in sorted(graph):
+        visit(node)
+
+
+def _column_maps(
+    relation: dict[str, Any],
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    return (
+        rows_by(relation["columns"], "id", f"{relation['name']} column IDs"),
+        rows_by(relation["columns"], "name", f"{relation['name']} column names"),
+    )
+
+
+def validate_envelope(registry: dict[str, Any]) -> None:
+    envelope = registry["system_claim_envelope"]
+    columns = rows_by(envelope["columns"], "id", "claim envelope column IDs")
+    by_name = rows_by(envelope["columns"], "name", "claim envelope column names")
+    expected_names = {
+        "descriptor",
+        "semantic_key",
+        "assertion",
+        "content",
+        "presence",
+        "interpretation",
+        "stage",
+        "producer",
+        "producer_input_snapshot",
+        "provenance_root",
+        "guarantee",
+    }
+    if set(by_name) != expected_names:
+        fail("relation.envelope-incomplete", "system claim envelope column set differs")
+    if by_name["presence"]["type"] != "condition_ref":
+        fail("relation.envelope-condition-invalid", "presence must be condition_ref")
+    if envelope["condition_authority"] != "envelope-presence-only":
+        fail("relation.envelope-condition-invalid", "envelope is not condition authority")
+    if envelope["instance_schema"] != CLAIM_ENVELOPE_SCHEMA.as_posix():
+        fail("relation.envelope-schema-invalid", "claim envelope instance schema differs")
+    if len(columns) != len(envelope["columns"]):
+        fail("relation.duplicate-id", "claim envelope column IDs are not unique")
+    identity = envelope["identity"]
+    if "canonical-condition" not in identity["assertion"]:
+        fail("relation.identity-condition-missing", "assertion ID omits condition")
+    if "condition" in identity["semantic_key"]:
+        fail("relation.identity-cycle", "semantic key includes condition")
+
+
+def validate_registry(
+    registry: dict[str, Any],
+    *,
+    schema: dict[str, Any] | None = None,
+) -> dict[str, dict[str, Any]]:
+    if schema is not None:
+        schema_validate(registry, schema, "relation registry")
+    validate_envelope(registry)
+
+    relations = rows_by(registry["relations"], "name", "relation names")
+    rows_by(registry["relations"], "descriptor_id", "relation descriptor IDs")
+    missing = sorted(REQUIRED_RELATIONS - set(relations))
+    if missing:
+        fail("relation.required-relation-missing", f"required relations missing: {missing}")
+
+    evolution = rows_by(registry["evolution_policies"], "id", "evolution policies")
+    symbols = rows_by(registry["symbol_contracts"], "id", "symbol contracts")
+    all_column_ids: set[str] = {
+        column["id"] for column in registry["system_claim_envelope"]["columns"]
+    }
+    relation_columns: dict[str, dict[str, dict[str, Any]]] = {}
+
+    for name, relation in relations.items():
+        major = int(relation["version"].split(".", 1)[0])
+        expected_descriptor = f"{name}.v{major}"
+        if relation["semantic_major"] != major or relation["descriptor_id"] != expected_descriptor:
+            fail(
+                "relation.descriptor-id-invalid",
+                f"{name} descriptor ID/version/semantic major disagree",
+            )
+        columns, names = _column_maps(relation)
+        relation_columns[name] = columns
+        duplicate_global = sorted(set(columns) & all_column_ids)
+        if duplicate_global:
+            fail("relation.duplicate-id", f"global column IDs duplicate: {duplicate_global}")
+        all_column_ids.update(columns)
+        prefix = f"{name}.v{major}."
+        if any(not identifier.startswith(prefix) for identifier in columns):
+            fail("relation.column-id-invalid", f"{name} column ID has another owner")
+        if "presence" in names or any(
+            column["type"] == "condition_ref" for column in columns.values()
+        ):
+            fail(
+                "relation.condition-duplicated",
+                f"{name} duplicates envelope presence in user columns",
+            )
+
+        key = set(relation["claim"]["key"])
+        if not key.issubset(columns):
+            fail("relation.key-column-unknown", f"{name} key names unknown columns")
+        role_key = {
+            identifier
+            for identifier, column in columns.items()
+            if column["identity_role"] == "claim_key"
+        }
+        if key != role_key:
+            fail("relation.key-role-mismatch", f"{name} key and claim_key roles differ")
+
+        for key_column in relation["partition"]["suggested_keys"]:
+            if key_column not in columns:
+                fail(
+                    "relation.partition-column-unknown",
+                    f"{name} partition references {key_column}",
+                )
+        for index in relation["indexes"]:
+            if not set(index).issubset(columns):
+                fail("relation.index-column-unknown", f"{name} index names unknown column")
+
+        domain = relation["claim"]["domain_identity"]
+        result = domain["result_column"]
+        projection = set(domain["projection"])
+        if result is not None:
+            if result not in columns:
+                fail("relation.identity-column-unknown", f"{name} result ID is unknown")
+            if result in projection:
+                fail("relation.identity-cycle", f"{name} ID projection contains its result")
+            if result not in key:
+                fail("relation.identity-key-mismatch", f"{name} result ID is not a key")
+        if not projection.issubset(columns):
+            fail("relation.identity-column-unknown", f"{name} ID projection is unknown")
+        display = {
+            identifier
+            for identifier, column in columns.items()
+            if column["identity_role"] == "display"
+        }
+        if projection & display:
+            fail("relation.identity-display-field", f"{name} ID uses display fields")
+
+        cardinality = relation["claim"]["cardinality"]
+        merge = relation["merge"]
+        expected_mode = "functional_assertion" if cardinality == "functional_assertion" else "set"
+        if merge["mode"] != expected_mode:
+            fail("relation.merge-cardinality-mismatch", f"{name} merge mode differs")
+        conflicts = set(merge["conflict_columns"])
+        if not conflicts.issubset(columns):
+            fail("relation.conflict-column-unknown", f"{name} conflict column unknown")
+        authoritative_payload = {
+            identifier
+            for identifier, column in columns.items()
+            if column["identity_role"] == "authoritative_payload"
+        }
+        if cardinality == "functional_assertion" and conflicts != authoritative_payload:
+            fail(
+                "relation.conflict-projection-incomplete",
+                f"{name} conflict projection must include every authoritative payload column",
+            )
+        if cardinality == "multivalued" and conflicts:
+            fail("relation.multivalue-conflict-invalid", f"{name} set has conflict columns")
+        if relation["evolution_policy"] not in evolution:
+            fail("relation.evolution-policy-unknown", f"{name} evolution policy missing")
+
+        for column in columns.values():
+            match = re.fullmatch(r"closed_symbol<([^>]+)>", column["type"])
+            if match and match.group(1) not in symbols:
+                fail(
+                    "relation.closed-symbol-contract-missing",
+                    f"{name}.{column['name']} lacks a symbol contract",
+                )
+
+    hard_graph = {name: set() for name in relations}
+    for name, relation in relations.items():
+        columns = relation_columns[name]
+        for reference in relation["references"]:
+            if not set(reference["source_columns"]).issubset(columns):
+                fail(
+                    "relation.reference-column-unknown",
+                    f"{name} reference source is unknown",
+                )
+            target_name = reference["target_relation"]
+            if target_name not in relations:
+                fail(
+                    "relation.reference-target-unknown",
+                    f"{name} references unknown relation {target_name}",
+                )
+            target_columns = relation_columns[target_name]
+            if not set(reference["target_columns"]).issubset(target_columns):
+                fail(
+                    "relation.reference-column-unknown",
+                    f"{name} reference target column is unknown",
+                )
+            if reference["strength"] == "hard":
+                if reference["on_missing"] != "reject_batch":
+                    fail("relation.hard-reference-policy", f"{name} hard reference is not rejecting")
+                hard_graph[name].add(target_name)
+            elif reference["on_missing"] != "unresolved":
+                fail("relation.soft-reference-policy", f"{name} soft reference is not accounted")
+    assert_acyclic(hard_graph)
+
+    call_site = relations["cc.call_site"]
+    _, call_names = _column_maps(call_site)
+    if "compile_unit" not in call_names:
+        fail("relation.partition-column-unknown", "cc.call_site lacks compile_unit")
+    if "direct_target" in call_names:
+        fail("relation.call-model-duplicated", "direct target is embedded in cc.call_site")
+    direct = relations["cc.call_direct_target"]
+    _, direct_names = _column_maps(direct)
+    if set(direct_names) != {"call", "target", "resolution"}:
+        fail("relation.call-model-invalid", "cc.call_direct_target columns differ")
+    if relations["company.lock.acquire"]["stability"] != "external-versioned":
+        fail("relation.extension-not-external", "external exemplar is not external-versioned")
+    return relations
+
+
+def apply_patches(document: dict[str, Any], patches: list[dict[str, Any]]) -> dict[str, Any]:
+    result = copy.deepcopy(document)
+    for patch in patches:
+        parts = [part.replace("~1", "/").replace("~0", "~") for part in patch["path"].split("/")[1:]]
+        if not parts:
+            fail("relation.vector-invalid", "patch cannot replace the document root")
+        parent: Any = result
+        for part in parts[:-1]:
+            parent = parent[int(part)] if isinstance(parent, list) else parent[part]
+        leaf = parts[-1]
+        operation = patch["op"]
+        if operation == "add":
+            if isinstance(parent, list):
+                if leaf == "-":
+                    parent.append(copy.deepcopy(patch["value"]))
+                else:
+                    parent.insert(int(leaf), copy.deepcopy(patch["value"]))
+            else:
+                parent[leaf] = copy.deepcopy(patch["value"])
+        elif operation == "remove":
+            if isinstance(parent, list):
+                parent.pop(int(leaf))
+            else:
+                del parent[leaf]
+        elif operation == "replace":
+            if isinstance(parent, list):
+                parent[int(leaf)] = copy.deepcopy(patch["value"])
+            else:
+                parent[leaf] = copy.deepcopy(patch["value"])
+        else:
+            fail("relation.vector-invalid", f"unknown patch operation {operation}")
+    return result
+
+
+def resolve_reference(
+    registry: dict[str, Any],
+    input_value: dict[str, Any],
+) -> tuple[str, str]:
+    relation = next(
+        row for row in registry["relations"] if row["name"] == input_value["relation"]
+    )
+    matches = [
+        reference
+        for reference in relation["references"]
+        if input_value["source_column"] in reference["source_columns"]
+    ]
+    if len(matches) != 1:
+        fail("relation.vector-invalid", "reference vector does not select exactly one reference")
+    reference = matches[0]
+    if input_value["source_value"] in input_value["available_target_values"]:
+        return "accepted", "relation.reference-resolved"
+    if reference["strength"] == "hard":
+        return "rejected", "relation.hard-reference-missing"
+    if input_value["unresolved_accounted"]:
+        return "accepted", "relation.soft-reference-unresolved"
+    return "rejected", "relation.soft-reference-unaccounted"
+
+
+def validate_symbol(
+    registry: dict[str, Any],
+    input_value: dict[str, Any],
+) -> tuple[str, str]:
+    match = re.fullmatch(r"(open|closed)_symbol<([^>]+)>", input_value["type"])
+    if match is None:
+        fail("relation.vector-invalid", "symbol vector type is invalid")
+    openness, contract_id = match.groups()
+    contracts = {row["id"]: row for row in registry["symbol_contracts"]}
+    contract = contracts.get(contract_id)
+    if openness == "open":
+        if contract is not None and contract["openness"] != "open":
+            fail("relation.symbol-openness-mismatch", f"{contract_id} is not open")
+        return "accepted", "relation.open-symbol-preserved"
+    if contract is None or contract["openness"] != "closed":
+        fail("relation.closed-symbol-contract-missing", f"{contract_id} is not closed")
+    if input_value["value"] not in contract["values"]:
+        return "rejected", "relation.closed-symbol-unknown"
+    return "accepted", "relation.closed-symbol-known"
+
+
+def semver(value: str) -> tuple[int, int, int]:
+    match = re.fullmatch(r"([0-9]+)\.([0-9]+)\.([0-9]+)", value)
+    if match is None:
+        fail("relation.vector-invalid", f"invalid semantic version {value}")
+    return tuple(int(part) for part in match.groups())  # type: ignore[return-value]
+
+
+def validate_evolution(
+    registry: dict[str, Any],
+    input_value: dict[str, Any],
+) -> tuple[str, str]:
+    relations = {row["name"]: row for row in registry["relations"]}
+    relation = relations[input_value["relation"]]
+    policies = {row["id"]: row for row in registry["evolution_policies"]}
+    policy = policies[relation["evolution_policy"]]
+    before = semver(input_value["from_version"])
+    after = semver(input_value["to_version"])
+    if before[0] != after[0] or after <= before:
+        return "rejected", "relation.major-change-required"
+    change = input_value["change"]
+    column = input_value["column"]
+    if (
+        change in policy["minor"]
+        and change == "optional-column"
+        and column["required"] is False
+        and input_value["old_reader_behavior"] == policy["old_reader_unknown_optional"]
+    ):
+        return "accepted", "relation.minor-additive"
+    return "rejected", "relation.major-change-required"
+
+
+def compare_api_ids(input_value: dict[str, Any]) -> tuple[str, str]:
+    if (
+        input_value["static_descriptor_id"] == input_value["dynamic_descriptor_id"]
+        and input_value["static_column_id"] == input_value["dynamic_column_id"]
+    ):
+        return "accepted", "relation.api-id-parity"
+    return "rejected", "relation.api-id-mismatch"
+
+
+def _replace_strings(value: Any, old: str, new: str) -> Any:
+    if isinstance(value, str):
+        return value.replace(old, new)
+    if isinstance(value, list):
+        return [_replace_strings(item, old, new) for item in value]
+    if isinstance(value, dict):
+        return {key: _replace_strings(item, old, new) for key, item in value.items()}
+    return value
+
+
+def register_extension(
+    registry: dict[str, Any],
+    input_value: dict[str, Any],
+    schema: dict[str, Any],
+) -> tuple[str, str]:
+    code_changes = sum(
+        input_value[field]
+        for field in (
+            "central_enum_changes",
+            "central_switch_changes",
+            "central_source_list_changes",
+        )
+    )
+    if code_changes:
+        return "rejected", "relation.extension-code-change"
+    exemplar = next(
+        row for row in registry["relations"] if row["name"] == input_value["exemplar"]
+    )
+    old_name = exemplar["name"]
+    new_name = input_value["new_name"]
+    extension = _replace_strings(copy.deepcopy(exemplar), old_name, new_name)
+    extension["name"] = new_name
+    extension["descriptor_id"] = f"{new_name}.v{extension['semantic_major']}"
+    extension["owner_namespace"] = input_value["owner_namespace"]
+    extension["semantics"] = f"{new_name}/1"
+    extension["generated_cpp_tag"] = (
+        "cxxlens::" + "::".join(new_name.split("."))
+    )
+    candidate = copy.deepcopy(registry)
+    candidate["relations"].append(extension)
+    validate_registry(candidate, schema=schema)
+    return "accepted", "relation.extension-code-diff-zero"
+
+
+def validate_query_columns(
+    registry: dict[str, Any],
+    input_value: dict[str, Any],
+) -> tuple[str, str]:
+    relations = {row["name"]: row for row in registry["relations"]}
+    for operand in input_value["columns"]:
+        relation = relations.get(operand["relation"])
+        if relation is None:
+            return "rejected", "relation.query-relation-unknown"
+        names = {column["name"] for column in relation["columns"]}
+        if operand["column"] not in names:
+            return "rejected", "relation.query-column-unknown"
+    return "accepted", "relation.query-columns-valid"
+
+
+def execute_vector(
+    registry: dict[str, Any],
+    registry_schema: dict[str, Any],
+    vector: dict[str, Any],
+) -> tuple[str, str]:
+    operation = vector["operation"]
+    input_value = vector["input"]
+    if operation == "validate_registry":
+        candidate = apply_patches(registry, input_value["patches"])
+        try:
+            validate_registry(candidate, schema=registry_schema)
+        except RelationContractError as error:
+            return "rejected", error.code
+        return "accepted", "relation.registry-valid"
+    if operation == "validate_envelope_instance":
+        try:
+            schema_validate(
+                input_value["document"],
+                load_yaml(ROOT / CLAIM_ENVELOPE_SCHEMA),
+                "claim envelope instance",
+            )
+        except RelationContractError:
+            return "rejected", "relation.envelope-instance-invalid"
+        return "accepted", "relation.envelope-instance-valid"
+    if operation == "resolve_reference":
+        return resolve_reference(registry, input_value)
+    if operation == "validate_symbol":
+        return validate_symbol(registry, input_value)
+    if operation == "validate_evolution":
+        return validate_evolution(registry, input_value)
+    if operation == "compare_api_ids":
+        return compare_api_ids(input_value)
+    if operation == "register_extension":
+        return register_extension(registry, input_value, registry_schema)
+    if operation == "validate_query_columns":
+        return validate_query_columns(registry, input_value)
+    fail("relation.vector-invalid", f"unknown vector operation {operation}")
+
+
+def validate_vectors(
+    registry: dict[str, Any],
+    registry_schema: dict[str, Any],
+    vectors: dict[str, Any],
+) -> list[dict[str, str]]:
+    by_id = rows_by(vectors["vectors"], "id", "conformance vector IDs")
+    if set(by_id) != REQUIRED_VECTOR_IDS:
+        fail("relation.vector-set-invalid", "required conformance vector set differs")
+    results = []
+    for vector in vectors["vectors"]:
+        decision, reason_code = execute_vector(registry, registry_schema, vector)
+        expected = vector["expected"]
+        if decision != expected["decision"] or reason_code != expected["reason_code"]:
+            fail(
+                "relation.vector-result-mismatch",
+                f"{vector['id']} returned {decision}/{reason_code}, expected "
+                f"{expected['decision']}/{expected['reason_code']}",
+            )
+        if (vector["class"] == "positive") != (decision == "accepted"):
+            fail("relation.vector-class-mismatch", f"{vector['id']} class differs")
+        results.append(
+            {
+                "id": vector["id"],
+                "class": vector["class"],
+                "decision": decision,
+                "reason_code": reason_code,
+            }
+        )
+    return results
+
+
+def validate_design(root: pathlib.Path) -> None:
+    design = (root / "docs/design/cxxlens_next_generation_integrated_design_ja.md").read_text(
+        encoding="utf-8"
+    )
+    required = (
+        "0.5.0-normative",
+        "schemas/cxxlens_ng_relation_registry.yaml",
+        "envelope-presence-only",
+        "cc.call_direct_target",
+        "Issue #60",
+    )
+    for marker in required:
+        if marker not in design:
+            fail("relation.design-marker-missing", f"design marker missing: {marker}")
+    for stale in ("col<call::direct_target>()", 'calls.column("direct_target")'):
+        if stale in design:
+            fail("relation.call-example-stale", f"stale call model remains: {stale}")
+    index = (root / "docs/design/catalogs/README.md").read_text(encoding="utf-8")
+    if "accepted exact contract" not in index or "#60" not in index:
+        fail("relation.catalog-index-stale", "catalog index does not show accepted #60")
+
+
+def validate_contract(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    registry = load_yaml(root / REGISTRY)
+    registry_schema = load_yaml(root / REGISTRY_SCHEMA)
+    vectors = load_yaml(root / VECTORS)
+    claim_schema = load_yaml(root / CLAIM_ENVELOPE_SCHEMA)
+    schema_validate(registry, registry_schema, "relation registry")
+    try:
+        jsonschema.Draft202012Validator.check_schema(claim_schema)
+    except jsonschema.SchemaError as error:
+        fail("relation.schema-invalid", f"claim envelope schema: {error.message}")
+    schema_validate(vectors, load_yaml(root / VECTORS_SCHEMA), "relation vectors")
+    validate_registry(registry)
+    results = validate_vectors(registry, registry_schema, vectors)
+    for replacement in registry["replaces"]:
+        if not (root / replacement).is_file():
+            fail("relation.replacement-missing", f"replacement source missing: {replacement}")
+    validate_design(root)
+    return registry, results
+
+
+def make_report(
+    registry: dict[str, Any],
+    vector_results: list[dict[str, str]],
+) -> dict[str, Any]:
+    descriptors = [
+        {
+            "name": row["name"],
+            "descriptor_id": row["descriptor_id"],
+            "version": row["version"],
+            "digest": digest(row),
+        }
+        for row in sorted(registry["relations"], key=lambda item: item["name"])
+    ]
+    return {
+        "schema": "cxxlens.relation-conformance-report.v1",
+        "status": "green",
+        "registry": REGISTRY.as_posix(),
+        "registry_digest": digest(registry_semantic_projection(registry)),
+        "descriptors": descriptors,
+        "vectors": vector_results,
+    }
+
+
+def arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("mode", choices=("check", "report"))
+    parser.add_argument("--root", type=pathlib.Path, default=ROOT)
+    parser.add_argument("--output", type=pathlib.Path)
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = arguments()
+    root = args.root.resolve()
+    registry, results = validate_contract(root)
+    report = make_report(registry, results)
+    schema_validate(report, load_yaml(root / REPORT_SCHEMA), "relation report")
+    if args.mode == "report":
+        if args.output is None:
+            fail("relation.output-missing", "report mode requires --output")
+        output = args.output if args.output.is_absolute() else root / args.output
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+    print(
+        "NG relation contract passed: "
+        f"{len(registry['relations'])} descriptors, {len(results)} vectors, "
+        f"{report['registry_digest']}"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (
+        RelationContractError,
+        json.JSONDecodeError,
+        jsonschema.ValidationError,
+        OSError,
+        yaml.YAMLError,
+    ) as error:
+        print(f"NG relation contract failed: {error}", file=sys.stderr)
+        raise SystemExit(1) from error

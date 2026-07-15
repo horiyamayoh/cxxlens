@@ -189,7 +189,12 @@ install(
         schemas/cxxlens_ng_authority_transition.schema.yaml
         schemas/cxxlens_ng_authority_transition_report.schema.yaml
         schemas/cxxlens_ng_catalog_bootstrap.schema.yaml
+        schemas/cxxlens_ng_claim_envelope.schema.yaml
         schemas/cxxlens_ng_relation_registry.yaml
+        schemas/cxxlens_ng_relation_registry.schema.yaml
+        schemas/cxxlens_ng_relation_conformance_vectors.yaml
+        schemas/cxxlens_ng_relation_conformance_vectors.schema.yaml
+        schemas/cxxlens_ng_relation_conformance_report.schema.yaml
         schemas/cxxlens_ng_provider_protocol.yaml
         schemas/cxxlens_ng_public_api_catalog.yaml
         schemas/cxxlens_ng_acceptance_manifest.yaml

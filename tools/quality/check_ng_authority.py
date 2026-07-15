@@ -207,7 +207,7 @@ def validate_entrypoints(root: pathlib.Path) -> None:
     )
     for marker in (
         "CXXLENS-NG-SRAD-002",
-        "0.4.0-normative",
+        "0.5.0-normative",
         "Issue #57 により次世代 `cxxlens` の最上位規範へ昇格",
     ):
         if marker not in design:

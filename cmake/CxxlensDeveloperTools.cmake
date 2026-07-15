@@ -196,6 +196,19 @@ add_custom_target(
 add_dependencies(cxxlens-ng-release-contract-check cxxlens-ng-authority-check)
 
 add_custom_target(
+  cxxlens-ng-relation-contract-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_relation_contract.py"
+    check --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_ng_relation_contract.py"
+  VERBATIM)
+add_dependencies(cxxlens-ng-relation-contract-check
+                 cxxlens-ng-release-contract-check)
+
+add_custom_target(
   cxxlens-public-api-contract-freeze-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -466,6 +479,7 @@ add_dependencies(
   cxxlens-m1-completion-check
   cxxlens-m2-completion-check
   cxxlens-ng-authority-check
+  cxxlens-ng-relation-contract-check
   cxxlens-ng-release-contract-check
   cxxlens-public-boundary-check
   cxxlens-preprocessor-contract-check
