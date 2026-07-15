@@ -4,7 +4,7 @@
     "conventions": "sha256:9597d2b4c8c47c93f19595fb227a394224b6a7deb0a771e81c10d86d59c492f2",
     "ownership_registry": "sha256:797e6a52c4c941ed4225b761ee070f5f00af4c10661d2ebd519e874391eec342"
   },
-  "repository_paths_digest": "sha256:c6eef59c026d84c2bc34154894610b6e02ac8e348d759f8e227f6064816877be",
+  "repository_paths_digest": "sha256:d5fe364034306bbf1a7c7f73a475c1efbf064cc11ae55da04faa38398ca1e144",
   "reserved_paths": [
     {
       "access": "exclusive_write",
@@ -271,6 +271,12 @@
       "kind": "shared_steward",
       "owner_issue": "#5",
       "responsibility": "Canonical encoding, typed identity, and collision policy."
+    },
+    {
+      "id": "steward.ng-authority",
+      "kind": "shared_steward",
+      "owner_issue": "#57",
+      "responsibility": "Next-generation authority transition, baseline, ADR, and fail-closed gate."
     },
     {
       "id": "steward.ownership",
@@ -1138,7 +1144,7 @@
     }
   ],
   "schema": "cxxlens.agent-ownership.v1",
-  "semantic_digest": "sha256:2312cd8d4b983b10e431e8307daf4f4cd3af04287e4c6b71bd0abcac320419fd",
+  "semantic_digest": "sha256:3668b62f8304418cd7d2379a61905f8986fa32f7b4b5d4b9770e2782025eef56",
   "skeletons": [
     {
       "api_id": "API-CFG-001",
@@ -2883,12 +2889,12 @@
     },
     "generated_path_count": 6,
     "reserved_path_count": 11,
-    "role_count": 177,
+    "role_count": 178,
     "skeleton_state_counts": {
       "blocked": 0,
       "frozen": 124
     },
-    "tracked_path_count": 498,
+    "tracked_path_count": 509,
     "unit_count": 124
   },
   "task_packet_digest": "sha256:e2007e75e7b21c8634bc39fa64fa608c61351806ca7cd51aad8b6eb3a764fe12",
@@ -3240,6 +3246,27 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.ng-authority",
+      "path": "docs/design/adr/0002-semantic-relation-platform.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-authority",
+      "path": "docs/design/adr/0003-versioned-relation-kernel.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-authority",
+      "path": "docs/design/adr/0004-legacy-contract-reset.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "generator.catalog",
       "path": "docs/design/api_catalog_change_policy.md"
     },
@@ -3277,6 +3304,13 @@
       "generator_role": null,
       "owner_role": "steward.design",
       "path": "docs/design/cxxlens_integrated_design_ja.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-authority",
+      "path": "docs/design/cxxlens_next_generation_integrated_design_ja.md"
     },
     {
       "access": "exclusive_write",
@@ -4269,6 +4303,20 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.ng-authority",
+      "path": "schemas/cxxlens_legacy_api_baseline.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-authority",
+      "path": "schemas/cxxlens_legacy_api_baseline.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.schema",
       "path": "schemas/cxxlens_m0_acceptance_report.schema.yaml"
     },
@@ -4334,6 +4382,27 @@
       "generator_role": null,
       "owner_role": "steward.schema",
       "path": "schemas/cxxlens_method_spec.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-authority",
+      "path": "schemas/cxxlens_ng_authority_transition.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-authority",
+      "path": "schemas/cxxlens_ng_authority_transition.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-authority",
+      "path": "schemas/cxxlens_ng_authority_transition_report.schema.yaml"
     },
     {
       "access": "exclusive_write",
@@ -5767,6 +5836,13 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.ng-authority",
+      "path": "tests/quality/test_ng_authority.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.quality",
       "path": "tests/quality/test_package_contract_candidates.py"
     },
@@ -6217,6 +6293,13 @@
       "generator_role": null,
       "owner_role": "steward.quality",
       "path": "tools/quality/check_m2_completion.py"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.ng-authority",
+      "path": "tools/quality/check_ng_authority.py"
     },
     {
       "access": "exclusive_write",

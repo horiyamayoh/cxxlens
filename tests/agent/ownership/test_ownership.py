@@ -107,6 +107,27 @@ class OwnershipTest(unittest.TestCase):
         tracked = [item["path"] for item in generated["tracked_paths"]]
         self.assertEqual(tracked, sorted(baseline_paths))
         self.assertEqual(len(tracked), len(set(tracked)))
+        ng_authority_paths = {
+            item["path"]
+            for item in generated["tracked_paths"]
+            if item["owner_role"] == "steward.ng-authority"
+        }
+        self.assertEqual(
+            ng_authority_paths,
+            {
+                "docs/design/adr/0002-semantic-relation-platform.md",
+                "docs/design/adr/0003-versioned-relation-kernel.md",
+                "docs/design/adr/0004-legacy-contract-reset.md",
+                "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+                "schemas/cxxlens_legacy_api_baseline.schema.yaml",
+                "schemas/cxxlens_legacy_api_baseline.yaml",
+                "schemas/cxxlens_ng_authority_transition.schema.yaml",
+                "schemas/cxxlens_ng_authority_transition.yaml",
+                "schemas/cxxlens_ng_authority_transition_report.schema.yaml",
+                "tests/quality/test_ng_authority.py",
+                "tools/quality/check_ng_authority.py",
+            },
+        )
         self.assertEqual(
             {item["api_id"] for item in generated["skeletons"]},
             {packet["api_id"] for packet in self.corpus["packets"]},

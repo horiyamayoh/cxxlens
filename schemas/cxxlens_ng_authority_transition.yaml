@@ -66,6 +66,9 @@ validation:
     - docs/design/adr/0003-versioned-relation-kernel.md
     - docs/design/adr/0004-legacy-contract-reset.md
     - schemas/cxxlens.readiness.authorization.v1.json
+    - schemas/cxxlens.agent-ownership.v1.json
+    - schemas/cxxlens.dependency-request.examples.v1.json
+    - schemas/cxxlens.api-ready.report.v1.json
     - schemas/cxxlens_ng_authority_transition.yaml
     - schemas/cxxlens_ng_authority_transition.schema.yaml
     - schemas/cxxlens_ng_authority_transition_report.schema.yaml
@@ -75,10 +78,12 @@ validation:
     - schemas/cxxlens_public_api_contract_freeze.yaml
     - schemas/cxxlens_public_api_contract_freeze.schema.yaml
     - tools/agent/api_task_runner.py
+    - tools/agent/ownership_generator.py
     - tools/quality/check_ng_authority.py
     - tools/quality/check_global_contract_conventions.py
     - tools/quality/check_public_api_contract_freeze.py
     - tests/agent/runner/test_runner.py
+    - tests/agent/ownership/test_ownership.py
     - tests/quality/test_ng_authority.py
     - tests/quality/test_global_contract_conventions.py
     - tests/quality/test_public_api_contract_freeze.py

@@ -202,6 +202,26 @@ ROLE_DEFINITIONS: dict[str, tuple[str, str, str]] = {
         "#30",
         "Independent readiness audit, authorization, rollback, and re-audit contracts.",
     ),
+    "steward.ng-authority": (
+        "shared_steward",
+        "#57",
+        "Next-generation authority transition, baseline, ADR, and fail-closed gate.",
+    ),
+}
+
+
+NG_AUTHORITY_PATHS = {
+    "docs/design/adr/0002-semantic-relation-platform.md",
+    "docs/design/adr/0003-versioned-relation-kernel.md",
+    "docs/design/adr/0004-legacy-contract-reset.md",
+    "docs/design/cxxlens_next_generation_integrated_design_ja.md",
+    "schemas/cxxlens_legacy_api_baseline.schema.yaml",
+    "schemas/cxxlens_legacy_api_baseline.yaml",
+    "schemas/cxxlens_ng_authority_transition.schema.yaml",
+    "schemas/cxxlens_ng_authority_transition.yaml",
+    "schemas/cxxlens_ng_authority_transition_report.schema.yaml",
+    "tests/quality/test_ng_authority.py",
+    "tools/quality/check_ng_authority.py",
 }
 
 
@@ -354,6 +374,8 @@ def owner_for_path(
         return unit_owners[0]
     if path in GENERATED_PATHS:
         return GENERATED_PATHS[path]
+    if path in NG_AUTHORITY_PATHS:
+        return "steward.ng-authority"
     if path.startswith(("tools/agent/ownership_", "tests/agent/ownership/")) or path in {
         "docs/agent_ownership_reference.md",
         "schemas/cxxlens.agent-ownership.v1.schema.yaml",

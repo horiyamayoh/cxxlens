@@ -112,7 +112,7 @@ eca4dde5ce6a27ecf2384f79c8bdecfc82e9960e217ce67cb10112528cb7b469  ../../schemas/
 b4c5c9a0041032f58168cab2c03047d93eaf397cdc527d1c34963c87b6e5622d  public_api_contract_freeze.md
 d11252db9a94eaf5d7466bad2b20172ba67a85b668d91160bd2807090a110e38  ../../schemas/cxxlens_public_api_contract_freeze.schema.yaml
 e798903fe8caf70f3a1adf12954e38d127891ae82d066a1c273b188a7057e403  ../../schemas/cxxlens_public_api_contract_freeze.yaml
-a67493233fb6b6f59755d6ae1c5c1f14d2325aa60c933be38f8e0983859e9260  ../../schemas/cxxlens_ng_authority_transition.yaml
+09435dc425424c2ff858ae75511834ac33fbcf157287afcb518d8df53c78303e  ../../schemas/cxxlens_ng_authority_transition.yaml
 6f03e6e110c6eed4b4c21fe84e48aa8fead557ab609189c4bd2c407035b229c1  ../../schemas/cxxlens_ng_authority_transition.schema.yaml
 2091ba8f300410a0c48802b11927030328e74e71e2d756e212b2c53cf2960f96  ../../schemas/cxxlens_ng_authority_transition_report.schema.yaml
 f500370ea9e27c3f11286196fe36d1b88161f4959d83bee5c257341b19e19e52  ../../schemas/cxxlens_legacy_api_baseline.yaml
