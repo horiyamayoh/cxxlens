@@ -9,9 +9,8 @@
 ## Context
 
 ADR 0009 は semantic snapshot identity、publication series、transaction、reader pin を backend 非依存で確定したが、
-SQLite の物理 schema は未決定だった。旧 `cxxlens.sqlite-fact-store.v1` は legacy fact record 専用であり、relation claim、
-condition、closure、unresolved と exact series selector を格納できない。旧 schema を拡張すると legacy contract と
-NG semantic contract の authority が再び混在する。
+SQLite の物理 schema は未決定だった。relation claim、condition、closure、unresolved、exact series selector を
+一つの semantic contract として保存できる専用 format が必要だった。
 
 ## Decision
 
@@ -29,10 +28,6 @@ minor を 2.1.0 へ進め、payload v2 に query annotation projection を追加
   成功後だけ更新する。
 - compaction は payload を新 physical generation へ copy-on-write し、既存 handle が pin する generation は
   shared token の最終解放まで保持する。
-
-旧 v1 fact store は source を変更しない一方向 migration bridge だけを許す。bridge は legacy fact を accepted
-relation mapper へ渡した後、通常の claim/partition validator と v2 publication transaction を通す。silent row
-copy、v1/v2 dual write、v2 から v1 への downgrade は禁止し、bridge は Issue #72 で撤去する。
 
 ## Consequences
 

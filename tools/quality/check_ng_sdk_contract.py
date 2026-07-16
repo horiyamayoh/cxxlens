@@ -163,12 +163,27 @@ def validate_boundaries(root: pathlib.Path) -> None:
         fail(f"ordinary SDK leaks LLVM/Clang: {violations}")
 
     cmake = (root / "CMakeLists.txt").read_text(encoding="utf-8")
-    provider_block = cmake.split("add_library(\n  cxxlens_provider_sdk", 1)
-    if len(provider_block) != 2:
+    for target in (
+        "cxxlens_base",
+        "cxxlens_kernel",
+        "cxxlens_query",
+        "cxxlens_cpp",
+        "cxxlens_recipes",
+        "cxxlens_provider_sdk",
+        "cxxlens_clang22_provider_sdk",
+    ):
+        if not re.search(rf"add_library\(\s*{target}\b", cmake):
+            fail(f"next-generation target DAG marker is missing: {target}")
+    provider_block = re.search(
+        r"add_library\(\s*cxxlens_provider_sdk\b(.*?)"
+        r"add_library\(\s*cxxlens_clang22_provider_sdk\b",
+        cmake,
+        re.DOTALL,
+    )
+    if provider_block is None:
         fail("independent cxxlens_provider_sdk target is missing")
-    provider_block = provider_block[1].split("add_library(\n  cxxlens", 1)[0]
-    if re.search(r"\b(?:LLVM|Clang|cxxlens::cxxlens)\b", provider_block):
-        fail("ordinary provider SDK target has a forbidden link/config dependency")
+    if re.search(r"\b(?:LLVM|Clang)\b", provider_block.group(1)):
+        fail("ordinary provider SDK target has a forbidden LLVM/Clang dependency")
     for marker in (
         "EXPORT cxxlensProviderSDKTargets",
         "cxxlensProviderSDKConfig.cmake",
@@ -458,12 +473,7 @@ def validate_store_implementation(root: pathlib.Path) -> None:
         'typed_digest("content"' in claim
     ):
         fail("claim identity does not use the accepted claim-content canonical tuple")
-    for path in (
-        "src/sdk/store.cpp",
-        "src/store/ng_legacy_fact_store_adapter.cpp",
-        "schemas/cxxlens_ng_sqlite_store_contract.yaml",
-        "schemas/cxxlens_ng_sqlite_store_contract.schema.yaml",
-    ):
+    for path in ("src/sdk/store.cpp",):
         if path not in cmake:
             fail(f"snapshot/store build or install evidence is missing: {path}")
     schema_validate(

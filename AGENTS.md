@@ -9,13 +9,11 @@
    Acceptance Manifest、Security Profile
 3. accepted ADR と担当 GitHub issue の exact contract
 4. acceptance fixture と実装
-5. `schemas/cxxlens_legacy_api_baseline.yaml` に固定された移行 provenance
-6. `docs/archive/` の履歴資料
+5. `docs/archive/` の履歴資料
 
 実装前に次世代統合設計書の 0、2、5〜9、11、14、15、17、20、26〜28 章と、担当 relation/API/provider の
 catalog entry または移行 issue を読む。旧124 API catalog/freezeは新規実装を認可しない。
-旧資産を変更する場合は `schemas/cxxlens_asset_migration_ledger.json` の disposition、owner、replacement、
-removal issue も確認する。
+`schemas/cxxlens_asset_migration_ledger.json` の archived entry は履歴であり、active authority ではない。
 
 ## Required implementation rules
 

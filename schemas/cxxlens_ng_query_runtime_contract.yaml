@@ -25,7 +25,7 @@ input:
       - claim-content
       - provenance-root
       - guarantee
-    legacy_payload_without_annotations: reject-query-not-synthesize
+    annotationless_payload: reject-query-not-synthesize
   logical_ir:
     version: 1.0.0
     validation: exact-operator-arguments-column-shape-and-order

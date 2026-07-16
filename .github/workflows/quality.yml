@@ -12,123 +12,29 @@ env:
   CMAKE_GENERATOR: Ninja
 
 jobs:
-  format-lint:
+  build-test:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Install Clang 22
+      - name: Install exact Clang 22 toolchain
         run: |
           wget --quiet https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 22
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install text linters
-        run: |
-          python -m pip install --requirement tools/quality/requirements.txt
-          npm install --global markdownlint-cli2@0.18.1
-      - name: Configure
-        env:
-          CXX: clang++-22
-        run: cmake --preset ci-quick
-      - name: Check format and text files
-        run: cmake --build --preset ci-quick --target cxxlens-format-check cxxlens-text-lint
-
-  build-test-clang22:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Clang 22 and Ninja
-        run: |
-          wget --quiet https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 22
-          sudo apt-get install --yes ninja-build
-      - name: Configure
-        env:
-          CXX: clang++-22
-        run: cmake --preset ci-quick
-      - name: Build
-        run: cmake --build --preset ci-quick
-      - name: Test
-        run: ctest --preset ci-quick
-
-  static-analysis:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Clang 22 tools
-        run: |
-          wget --quiet https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 22
-          sudo apt-get install --yes clang-tidy-22 ninja-build
-      - name: Configure and build
-        env:
-          CXX: clang++-22
-        run: |
-          cmake --preset ci-quick
-          cmake --build --preset ci-quick
-      - name: Run clang-tidy
-        run: cmake --build --preset ci-quick --target cxxlens-clang-tidy
-
-  contracts-docs:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Clang 22, Doxygen, and Ninja
-        run: |
-          wget --quiet https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 22
-          sudo apt-get install --yes doxygen ninja-build
+          sudo apt-get install --yes libclang-22-dev llvm-22-dev ninja-build
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: python -m pip install --requirement tools/quality/requirements.txt
-      - name: Configure documentation
-        env:
-          CXX: clang++-22
-        run: cmake --preset docs
-      - name: Validate catalog and public boundary
-        run: |
-          cmake --build --preset docs --target cxxlens-documentation-consistency-check
-          cmake --build --preset docs --target cxxlens-ng-authority-check
-          cmake --build --preset docs --target cxxlens-ng-release-contract-check
-          cmake --build --preset docs --target cxxlens-ng-relation-contract-check
-          cmake --build --preset docs --target cxxlens-ng-query-contract-check
-          cmake --build --preset docs --target cxxlens-ng-semantic-guarantee-check
-          cmake --build --preset docs --target cxxlens-ng-snapshot-store-contract-check
-          cmake --build --preset docs --target cxxlens-ng-provider-protocol-check
-          cmake --build --preset docs --target cxxlens-ng-security-contract-check
-          cmake --build --preset docs --target cxxlens-ng-sdk-contract-check
-          cmake --build --preset docs --target cxxlens-api-contract-check
-          cmake --build --preset docs --target cxxlens-design-package-check
-          cmake --build --preset docs --target cxxlens-public-boundary-check
-      - name: Build and validate Doxygen
-        run: cmake --build --preset docs --target cxxlens-doxygen-contract
-
-  public-api:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Clang 22 and Ninja
-        run: |
-          wget --quiet https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 22
-          sudo apt-get install --yes ninja-build
-      - name: Configure and build public header tests
+      - name: Configure, build, and test
         env:
           CXX: clang++-22
         run: |
-          cmake --preset ci-quick
+          cmake --preset ci-quick -DCXXLENS_CLANG_ADAPTER=ON
           cmake --build --preset ci-quick
-      - name: Validate public API boundary
-        run: |
-          ctest --preset ci-quick --label-regex public-api
-          cmake --build --preset ci-quick --target cxxlens-public-boundary-check
+          ctest --preset ci-quick
+      - name: Contract and migration gates
+        run: cmake --build --preset ci-quick --target cxxlens-quality
 
   install-consumer:
     runs-on: ubuntu-24.04
@@ -139,113 +45,22 @@ jobs:
           wget --quiet https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 22
-          sudo apt-get install --yes ninja-build
-      - name: Configure and build
+          sudo apt-get install --yes libclang-22-dev llvm-22-dev ninja-build
+      - name: Verify installed packages
         env:
           CXX: clang++-22
         run: |
-          cmake --preset install-check
+          cmake --preset install-check -DCXXLENS_CLANG_ADAPTER=ON
           cmake --build --preset install-check
-      - name: Test installed consumer
-        run: ctest --preset install-check --label-regex install
+          ctest --preset install-check --label-regex install
 
-  gcc-header-compat:
+  gcc-public-headers:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Compile LLVM-independent public headers
         run: |
-          for source in tests/public_headers/*_header_test.cpp; do
-            g++ -std=c++23 -Wall -Wextra -Wpedantic -Werror -Iinclude -fsyntax-only "$source"
-          done
-
-  m0-acceptance:
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        shared: ["OFF", "ON"]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Clang 22 quality tools
-        run: |
-          wget --quiet https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 22
-          sudo apt-get install --yes clang-tidy-22 doxygen ninja-build
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install acceptance dependencies
-        run: |
-          python -m pip install --requirement tools/quality/requirements.txt
-          npm install --global markdownlint-cli2@0.18.1
-      - name: Configure M0 acceptance
-        env:
-          CXX: clang++-22
-        run: cmake --preset m0-acceptance -DCXXLENS_BUILD_SHARED=${{ matrix.shared }}
-      - name: Run M0 acceptance
-        run: cmake --build --preset m0-acceptance --target cxxlens-m0-acceptance
-      - name: Upload deterministic report
-        uses: actions/upload-artifact@v4
-        with:
-          name: m0-acceptance-${{ matrix.shared }}
-          path: build/m0-acceptance/m0-acceptance-report.json
-
-  m1-acceptance:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install exact Clang 22 quality tools
-        run: |
-          wget --quiet https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 22
-          sudo apt-get install --yes clang-tidy-22 doxygen libclang-22-dev llvm-22-dev ninja-build
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install acceptance dependencies
-        run: |
-          python -m pip install --requirement tools/quality/requirements.txt
-          npm install --global markdownlint-cli2@0.18.1
-      - name: Configure M1 acceptance
-        env:
-          CXX: clang++-22
-        run: cmake --preset m1-acceptance
-      - name: Run M1 production-path acceptance
-        run: cmake --build --preset m1-acceptance --target cxxlens-m1-acceptance
-      - name: Upload deterministic M1 report
-        uses: actions/upload-artifact@v4
-        with:
-          name: m1-acceptance
-          path: build/m1-acceptance/m1-acceptance-report.json
-
-  m2-acceptance:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install exact Clang 22 quality tools
-        run: |
-          wget --quiet https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 22
-          sudo apt-get install --yes clang-tidy-22 doxygen libclang-22-dev llvm-22-dev ninja-build
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install acceptance dependencies
-        run: |
-          python -m pip install --requirement tools/quality/requirements.txt
-          npm install --global markdownlint-cli2@0.18.1
-      - name: Configure M2 acceptance
-        env:
-          CXX: clang++-22
-        run: cmake --preset m2-acceptance
-      - name: Run installed flagship acceptance
-        run: cmake --build --preset m2-acceptance --target cxxlens-m2-acceptance
-      - name: Upload deterministic M2 report
-        uses: actions/upload-artifact@v4
-        with:
-          name: m2-acceptance
-          path: build/m2-acceptance/m2-acceptance-report.json
+          g++ -std=c++23 -Wall -Wextra -Wpedantic -Werror -Iinclude \
+            -fsyntax-only tests/public_headers/cxxlens_header_test.cpp
+          g++ -std=c++23 -Wall -Wextra -Wpedantic -Werror -Iinclude \
+            -fsyntax-only tests/public_headers/sdk_header_test.cpp

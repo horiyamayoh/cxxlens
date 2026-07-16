@@ -36,7 +36,7 @@ packages:
     target: cxxlens::clang22_provider_sdk
     headers: [include/cxxlens/provider/clang22.hpp]
     llvm_clang_dependency: explicit-native-only
-    link_dependencies: [cxxlens::provider_sdk, cxxlens::cxxlens, clang-22]
+    link_dependencies: [cxxlens::provider_sdk, clang-22]
 
 author_paths:
   - id: generated-typed-query
@@ -210,12 +210,12 @@ entries:
       - name: claim_annotation_cursor
         kind: class
         signature: 'snapshot_handle::open_claims(relation_descriptor_id); result<optional<claim_annotation_view>> next(); copy()'
-    errors: [sdk.snapshot-unknown-relation, sdk.snapshot-relation-mismatch, sdk.snapshot-empty, sdk.row-descriptor-mismatch, sdk.row-view-expired, sdk.cursor-thread-violation, sdk.query-annotations-unavailable, sdk.claim-annotation-view-expired, sdk.claim-annotation-cursor-thread-violation, store.backend-unavailable, store.claim-invalid, store.closure-binding-mismatch, store.closure-duplicate, store.closure-invalid, store.closure-subject-missing, store.compact-validation-failed, store.condition-universe-mismatch, store.corrupt, store.coverage-duplicate, store.coverage-invalid, store.current-ambiguous, store.current-corrupt, store.current-not-found, store.derived-basis-not-prior, store.draft-authority-mismatch, store.format-incompatible, store.hash-collision, store.legacy-mapping-mismatch, store.legacy-request-invalid, store.legacy-source-invalid, store.partial-partition-closure, store.partition-basis-mismatch, store.partition-claim-duplicate, store.partition-claim-mismatch, store.partition-duplicate, store.partition-invalid, store.partition-relation-unknown, store.publication-corrupt, store.publication-not-found, store.publish-stale-parent, store.registry-mismatch, store.selection-authority-incomplete, store.snapshot-not-found, store.sqlite-failure, store.sqlite-path-empty, store.transaction-state]
-    lifetime: [snapshot-handle-pins-immutable-physical-generation, row-and-claim-annotation-views-expire-on-cursor-advance, owned-copy-outlives-cursor, legacy-adapter-is-one-way-and-removed-by-issue-72]
+    errors: [sdk.snapshot-unknown-relation, sdk.snapshot-relation-mismatch, sdk.snapshot-empty, sdk.row-descriptor-mismatch, sdk.row-view-expired, sdk.cursor-thread-violation, sdk.query-annotations-unavailable, sdk.claim-annotation-view-expired, sdk.claim-annotation-cursor-thread-violation, store.backend-unavailable, store.claim-invalid, store.closure-binding-mismatch, store.closure-duplicate, store.closure-invalid, store.closure-subject-missing, store.compact-validation-failed, store.condition-universe-mismatch, store.corrupt, store.coverage-duplicate, store.coverage-invalid, store.current-ambiguous, store.current-corrupt, store.current-not-found, store.derived-basis-not-prior, store.draft-authority-mismatch, store.format-incompatible, store.hash-collision, store.partial-partition-closure, store.partition-basis-mismatch, store.partition-claim-duplicate, store.partition-claim-mismatch, store.partition-duplicate, store.partition-invalid, store.partition-relation-unknown, store.publication-corrupt, store.publication-not-found, store.publish-stale-parent, store.registry-mismatch, store.selection-authority-incomplete, store.snapshot-not-found, store.sqlite-failure, store.sqlite-path-empty, store.transaction-state]
+    lifetime: [snapshot-handle-pins-immutable-physical-generation, row-and-claim-annotation-views-expire-on-cursor-advance, owned-copy-outlives-cursor]
     threading: [snapshot-store-and-handles-concurrent-readable, writer-row-cursor-and-claim-annotation-cursor-thread-confined, publication-head-update-is-serialized]
-    versioning: [snapshot-identity-v1-excludes-publication-and-physical-format, sqlite-physical-format-v2.1-with-query-annotation-payload-v2, payload-v1-query-rejected-without-synthesis, legacy-fact-store-v1-source-only]
+    versioning: [snapshot-identity-v1-excludes-publication-and-physical-format, sqlite-physical-format-v2.1-with-query-annotation-payload-v2, payload-v1-query-rejected-without-synthesis]
     invariants: [exact-seven-field-series-selector, stage-validate-publish-order, staged-data-invisible, stale-parent-rejected, failed-publish-preserves-head, partial-partition-never-closed, memory-and-sqlite-semantic-parity, canonical-export-ordered, corruption-never-falls-back, compaction-defers-pinned-generation-reclamation]
-    implementation_evidence: [src/sdk/store.cpp, src/store/ng_legacy_fact_store_adapter.cpp, examples/sdk/snapshot_store.cpp, tests/unit/sdk/store_test.cpp, tests/unit/store/fact_store_test.cpp, schemas/cxxlens_ng_snapshot_manifest.schema.yaml, schemas/cxxlens_ng_sqlite_store_contract.yaml, docs/design/adr/0013-ng-sqlite-physical-store.md]
+    implementation_evidence: [src/sdk/store.cpp, examples/sdk/snapshot_store.cpp, tests/unit/sdk/store_test.cpp, schemas/cxxlens_ng_snapshot_manifest.schema.yaml, schemas/cxxlens_ng_sqlite_store_contract.yaml, docs/design/adr/0013-ng-sqlite-physical-store.md]
 
   - id: public.logical-query
     status: implemented
@@ -342,14 +342,14 @@ entries:
     symbols:
       - name: with_translation_unit
         kind: function
-        signature: 'result<void> with_translation_unit(workspace&, compile_unit_id, translation_unit_callback, execution_context)'
+        signature: 'result<void> with_translation_unit(const translation_unit_input&, translation_unit_callback)'
       - name: normalize_source
         kind: function
-        signature: 'result<source_span> normalize_source(borrowed_translation_unit&, const clang::SourceRange&)'
+        signature: 'result<detached_source_span> normalize_source(borrowed_translation_unit&, const clang::SourceRange&)'
       - name: detach_scalar
         kind: template
         signature: 'template<detachable_scalar T> sdk::result<sdk::detached_cell> detach_scalar(T&&)'
-    errors: [native.unsupported-detachment, native.address-escape, interop.unsupported-clang-major]
+    errors: [native.unsupported-detachment, native.address-escape, native.input-invalid, native.parse-failed, native.source-span-invalid, native.unsupported-clang-major]
     lifetime: [translation-unit-and-ast-objects-are-borrowed-callback-only, outputs-must-be-detached-before-return]
     threading: [borrowed-translation-unit-is-not-copyable-or-transferable, callback-is-synchronous]
     versioning: [clang-major-is-explicit-in-package-target-header-and-namespace]
@@ -360,7 +360,7 @@ entries:
     status: implemented
     owner_issue: '#66'
     profile: NG0
-    target: cxxlens::provider_sdk
+    target: cxxlens::recipes
     headers: [include/cxxlens/sdk/recipe.hpp]
     symbols:
       - name: recipe_plan

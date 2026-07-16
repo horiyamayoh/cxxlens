@@ -10,7 +10,6 @@ required:
 - maturity
 - authority
 - compatibility
-- replaces
 - registry_policy
 - system_claim_envelope
 - api_projection
@@ -69,13 +68,6 @@ properties:
         const: preserve
       unknown_closed_symbols:
         const: reject
-  replaces:
-    type: array
-    minItems: 1
-    uniqueItems: true
-    items:
-      type: string
-      minLength: 1
   registry_policy:
     type: object
     additionalProperties: false

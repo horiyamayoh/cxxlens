@@ -8,7 +8,7 @@
 namespace
 {
 	using namespace cxxlens;
-	using namespace cxxlens::detail;
+	using namespace cxxlens::detail::clang22;
 
 	void require(const bool condition, const std::string& message)
 	{
@@ -19,60 +19,34 @@ namespace
 		}
 	}
 
-	[[nodiscard]] source_span span()
+	[[nodiscard]] detached_observation observation(const observation_kind kind,
+												   std::string semantic_key)
 	{
-		const file_id file{"file_" + std::string(64U, 'f')};
-		source_span value;
-		value.primary = {
-			source_point::at(file, 10U, 2U, 3U),
-			source_point::at(file, 14U, 2U, 7U),
-			source_range_kind::token,
-		};
-		value.origin = source_origin::directly_spelled;
-		value.digest = {"sha256", 1U, std::string(64U, 'd')};
-		return value;
-	}
-
-	[[nodiscard]] facts::observation_record observation(const frontend::observation_batch& batch,
-														const fact_kind kind,
-														std::string semantic_key)
-	{
-		facts::observation_record value;
-		value.adapter_id = batch.adapter_id;
-		value.adapter_version = batch.adapter_version;
-		value.llvm_major = 22U;
-		value.compile_unit = batch.unit;
-		value.variant = batch.variant;
+		detached_observation value;
 		value.kind = kind;
-		value.source = span();
-		value.payload_version = 1U;
-		value.payload.emplace("semantic_key", std::move(semantic_key));
+		value.compile_unit = "cu-" + std::string(64U, 'a');
+		value.semantic_key = std::move(semantic_key);
+		value.source_span_id = "span-" + std::string(64U, 'd');
 		return value;
 	}
 
-	[[nodiscard]] frontend::observation_batch batch()
+	[[nodiscard]] observation_batch batch()
 	{
-		frontend::observation_batch value;
-		value.adapter_id = "clang22.frontend";
-		value.adapter_version = "1.0.0";
-		value.unit = compile_unit_id{"cu_" + std::string(64U, 'a')};
-		value.variant = build_variant_id{"variant_" + std::string(64U, 'b')};
-		value.coverage.parsed = 1U;
+		observation_batch value;
+		value.unit = "cu-" + std::string(64U, 'a');
+		value.variant = "variant-" + std::string(64U, 'b');
 
-		auto entity = observation(value, fact_kind::symbol, "entity");
-		entity.payload.emplace("symbol.id", "symbol_" + std::string(64U, 'c'));
+		auto entity = observation(observation_kind::entity, "clang-usr:target");
 		entity.payload.emplace("symbol.kind", "function");
 		entity.payload.emplace("symbol.qualified_name", "ns::target");
-		entity.name = facts::name_identity{
-			"ns::target", "c:@N@ns@F@target#", std::nullopt, std::nullopt, std::nullopt};
+		entity.payload.emplace("symbol.signature", "int ()");
 
-		auto type = observation(value, fact_kind::type, "type");
-		type.payload.emplace("type.id", "type_" + std::string(64U, 'e'));
-		type.type = facts::type_identity{"int", "builtin(i32)", std::nullopt, {}, true};
+		auto type = observation(observation_kind::type, "type:int");
+		type.payload.emplace("type.canonical", "int");
 
-		auto call = observation(value, fact_kind::call, "call");
+		auto call = observation(observation_kind::call, "call:main:12");
 		call.payload.emplace("call.kind", "direct_function");
-		call.payload.emplace("call.direct_callee", "symbol_" + std::string(64U, 'c'));
+		call.payload.emplace("call.direct_callee", "clang-usr:target");
 		value.observations = {std::move(entity), std::move(type), std::move(call)};
 		require(value.validate().has_value(), "normalizer fixture batch is invalid");
 		return value;
@@ -81,7 +55,6 @@ namespace
 
 int main()
 {
-	using namespace cxxlens;
 	using namespace cxxlens::detail::clang22;
 
 	require(entity_observation_descriptor().validate().has_value(),
@@ -91,6 +64,19 @@ int main()
 	require(call_observation_descriptor().validate().has_value(),
 			"call observation descriptor is invalid");
 
+	clang22_task_input task{
+		"cu-" + std::string(64U, 'a'),
+		"variant-" + std::string(64U, 'b'),
+		"input.cpp",
+		"int target(); int main(){ return target(); }",
+		{"-std=c++23"},
+	};
+	auto encoded = encode_task_input(task);
+	require(encoded.has_value(), "task input encoding failed");
+	auto decoded = decode_task_input(*encoded);
+	require(decoded && decoded->source == task.source && decoded->arguments == task.arguments,
+			"task input did not round trip");
+
 	auto exact = canonicalize_provider_batch(
 		batch(), "sha256:1111111111111111111111111111111111111111111111111111111111111111", true);
 	require(exact && exact->exact_equivalence && exact->entity_observations.size() == 1U &&
@@ -99,8 +85,7 @@ int main()
 				exact->direct_targets.size() == 1U && exact->unresolved.empty(),
 			"exact Clang observation canonicalization failed");
 
-	compile_command gcc_specific;
-	gcc_specific.arguments = {"g++", "-fabi-version=18", "-c", "input.cpp"};
+	const std::vector<std::string> gcc_specific{"g++", "-fabi-version=18", "-c", "input.cpp"};
 	std::vector<std::string> limitations;
 	require(!invocation_has_exact_equivalence(gcc_specific, limitations) &&
 				limitations.front().starts_with("ignored-or-gcc-specific-option:"),

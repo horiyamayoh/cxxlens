@@ -656,9 +656,6 @@ def validate_contract(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str
     schema_validate(vectors, load_yaml(root / VECTORS_SCHEMA), "relation vectors")
     validate_registry(registry)
     results = validate_vectors(registry, registry_schema, vectors)
-    for replacement in registry["replaces"]:
-        if not (root / replacement).is_file():
-            fail("relation.replacement-missing", f"replacement source missing: {replacement}")
     validate_design(root)
     return registry, results
 

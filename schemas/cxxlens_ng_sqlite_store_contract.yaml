@@ -53,7 +53,7 @@ payload:
       - provenance_root
       - guarantee
       - relation_coverage
-    legacy_v1_query: reject-with-sdk.query-annotations-unavailable
+    annotationless_payload_query: reject-with-sdk.query-annotations-unavailable
 transaction:
   journal_mode: WAL
   synchronous: FULL
@@ -69,10 +69,3 @@ corruption:
   semantic_digest_mismatch: mark-publication-corrupt
   current_fallback: forbidden
   explicit_intact_prior_open: allowed
-migration:
-  source_format: cxxlens.sqlite-fact-store.v1
-  direction: one-way-to-ng-v2
-  source_mutation: forbidden
-  bridge: src/store/ng_legacy_fact_store_adapter.cpp
-  bridge_removal_issue: '#72'
-  semantic_digest_validation_after_mapping: required

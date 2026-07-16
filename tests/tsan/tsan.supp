@@ -1,2 +1,0 @@
-# Intentionally empty: no third-party ThreadSanitizer false positive is accepted.
-# Every future entry must also be recorded in suppressions.yaml.

@@ -15,10 +15,6 @@ compatibility:
   unknown_optional_columns: preserve
   unknown_open_symbols: preserve
   unknown_closed_symbols: reject
-replaces:
-- schemas/cxxlens_fact.schema.yaml
-- schemas/cxxlens_fact_contract.yaml
-- schemas/cxxlens_custom_fact.schema.yaml
 registry_policy:
   mutation: build-time-only
   discovery: descriptor-document-or-installation-manifest

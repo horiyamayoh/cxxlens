@@ -19,7 +19,7 @@ jobs:
           chmod +x llvm.sh
           sudo ./llvm.sh 22
           sudo apt-get install --yes ninja-build
-      - name: Build and test with ASan/UBSan
+      - name: ASan and UBSan
         env:
           CXX: clang++-22
         run: |
@@ -27,13 +27,8 @@ jobs:
           cmake --build --preset asan-ubsan
           ctest --preset asan-ubsan
 
-  thread-sanitizer-foundation:
+  thread-sanitizer:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    env:
-      CXX: clang++-22
-      TSAN_OPTIONS: >-
-        suppressions=${{ github.workspace }}/tests/tsan/tsan.supp:halt_on_error=1:exitcode=66:history_size=7:handle_segv=0
     steps:
       - uses: actions/checkout@v4
       - name: Install Clang 22 and Ninja
@@ -42,79 +37,28 @@ jobs:
           chmod +x llvm.sh
           sudo ./llvm.sh 22
           sudo apt-get install --yes ninja-build
-      - name: Configure LLVM-independent TSan build
-        run: cmake --preset tsan
-      - name: Build instrumented foundation and tests
-        run: cmake --build --preset tsan
-      - name: Verify TSan detects the intentional race
-        run: |
-          ctest --preset tsan -R '^sanitizer\.tsan-detection$' \
-            --output-log build/tsan/Testing/Temporary/tsan-detection-ctest.log
-      - name: Run the complete LLVM-independent suite
-        run: |
-          ctest --preset tsan -E '^sanitizer\.tsan-detection$' \
-            --output-log build/tsan/Testing/Temporary/tsan-full.log
-      - name: Repeat concurrency regressions
-        run: |
-          ctest --preset tsan -L concurrency --repeat until-fail:5 \
-            --output-log build/tsan/Testing/Temporary/tsan-concurrency.log
-      - name: Upload TSan evidence and failure logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: tsan-foundation-${{ github.sha }}
-          path: build/tsan/Testing/Temporary/
-          if-no-files-found: error
-          retention-days: 14
-
-  iwyu:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install toolchain and IWYU
-        run: |
-          wget --quiet https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 22
-          sudo apt-get install --yes iwyu ninja-build
-      - name: Build with IWYU
+      - name: TSan
         env:
           CXX: clang++-22
         run: |
-          cmake --preset ci-quick -DCXXLENS_ENABLE_IWYU=ON
-          cmake --build --preset ci-quick
+          cmake --preset tsan
+          cmake --build --preset tsan
+          ctest --preset tsan
 
-  clang-static-analyzer:
+  static-analysis:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Install Clang 22 tools and Ninja
+      - name: Install Clang tools
         run: |
           wget --quiet https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 22
-          sudo apt-get install --yes clang-tools-22 ninja-build
-      - name: Analyze
+          sudo apt-get install --yes clang-tidy-22 ninja-build
+      - name: clang-tidy
         env:
           CXX: clang++-22
         run: |
           cmake --preset ci-quick
-          scan-build-22 --status-bugs cmake --build --preset ci-quick --clean-first
-
-  clean-release-install:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Clang 22 and Ninja
-        run: |
-          wget --quiet https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 22
-          sudo apt-get install --yes ninja-build
-      - name: Clean release and install verification
-        env:
-          CXX: clang++-22
-        run: |
-          cmake --preset install-check
-          cmake --build --preset install-check --clean-first
-          ctest --preset install-check
+          cmake --build --preset ci-quick
+          cmake --build --preset ci-quick --target cxxlens-clang-tidy

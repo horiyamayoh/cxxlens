@@ -4,38 +4,80 @@
 
 #include <concepts>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
-#include <cxxlens/interop/clang.hpp>
 #include <cxxlens/sdk/provider.hpp>
 
 namespace clang
 {
+	class ASTContext;
+	class SourceManager;
 	class SourceRange;
 } // namespace clang
 
 namespace cxxlens::provider::clang22
 {
-	/** @brief Callback-scoped native translation unit; never store or move across threads. */
-	using borrowed_translation_unit = interop::borrowed_clang_tu;
-	/** @brief Move-only synchronous native extractor callback. */
-	using translation_unit_callback = interop::clang_tu_callback;
-
-	/** @brief Run one fresh Clang 22 job with the existing process/lifetime boundary. */
-	[[nodiscard]] inline result<void> with_translation_unit(workspace& workspace,
-															compile_unit_id unit,
-															translation_unit_callback callback,
-															execution_context context = {})
+	namespace detail
 	{
-		return interop::with_translation_unit(
-			workspace, std::move(unit), std::move(callback), std::move(context));
-	}
+		struct native_access;
+	} // namespace detail
 
-	/** @brief Normalize a native source range to a detached, half-open source value. */
-	[[nodiscard]] result<source_span> normalize_source(borrowed_translation_unit& unit,
-													   const clang::SourceRange& range);
+	/** @brief One in-memory Clang translation-unit request with explicit arguments. */
+	struct translation_unit_input
+	{
+		std::string logical_path;
+		std::string source;
+		std::vector<std::string> arguments;
+		[[nodiscard]] sdk::result<void> validate() const;
+	};
+
+	/** @brief Callback-scoped native translation unit; never store or move across threads. */
+	class borrowed_translation_unit
+	{
+	  public:
+		borrowed_translation_unit(const borrowed_translation_unit&) = delete;
+		borrowed_translation_unit& operator=(const borrowed_translation_unit&) = delete;
+		borrowed_translation_unit(borrowed_translation_unit&&) = delete;
+		borrowed_translation_unit& operator=(borrowed_translation_unit&&) = delete;
+
+		/** @brief Borrow the Clang AST only for the active callback. */
+		[[nodiscard]] clang::ASTContext& ast() const noexcept;
+		/** @brief Borrow the Clang source manager only for the active callback. */
+		[[nodiscard]] clang::SourceManager& source_manager() const noexcept;
+
+	  private:
+		borrowed_translation_unit(clang::ASTContext& ast, clang::SourceManager& source_manager);
+		clang::ASTContext* ast_{};
+		clang::SourceManager* source_manager_{};
+		friend struct detail::native_access;
+	};
+
+	/** @brief Move-only synchronous native extractor callback. */
+	using translation_unit_callback =
+		std::move_only_function<sdk::result<void>(borrowed_translation_unit&)>;
+
+	/** @brief Run one fresh in-memory Clang 22 job and detach all output before return. */
+	[[nodiscard]] sdk::result<void> with_translation_unit(const translation_unit_input& input,
+														  translation_unit_callback callback);
+
+	/** @brief Detached half-open source location independent from Clang object lifetime. */
+	struct detached_source_span
+	{
+		std::string logical_path;
+		std::uint64_t begin{};
+		std::uint64_t end{};
+		bool read_only{};
+		std::string id;
+		[[nodiscard]] sdk::result<void> validate() const;
+	};
+
+	/** @brief Normalize a native source range to a detached half-open source value. */
+	[[nodiscard]] sdk::result<detached_source_span>
+	normalize_source(borrowed_translation_unit& unit, const clang::SourceRange& range);
 
 	/** @brief Validate that a detached row contains no native pointer/address marker. */
 	[[nodiscard]] sdk::result<void> detect_native_escape(const sdk::detached_row& row);

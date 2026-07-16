@@ -9,10 +9,8 @@
 ## Context
 
 provider wire、trust/discovery、author SDK は確定したが、host が executable を安全に起動して framed stream を
-検証する production runtime は存在しなかった。既存 `cxxlens-frontend-worker` は legacy IPC で
-`observation_batch` を返し、Clang implementation は main library に同居している。また、Clang observation を
-standard `cc.*` relation へ変換する責務と、GCC 固有・無視された semantic option を exact と誤認しない規則が
-実装境界として固定されていなかった。
+検証する production runtime は存在しなかった。また、Clang observation を standard `cc.*` relation へ変換する
+責務と、GCC 固有・無視された semantic option を exact と誤認しない規則が実装境界として固定されていなかった。
 
 ## Decision
 
@@ -28,8 +26,8 @@ host input と provider output は ADR 0010 の frame を連結した一回の b
 timeout、cancel、output limit、signal crash、malformed/checksum/truncated stream、schema/coverage failure は別の
 stable terminal とする。失敗 transcript は unpublished であり、既存 snapshot series head を変更しない。
 
-official executable は `cxxlens-clang-worker-22` とする。worker は legacy frontend request を migration input として
-受け取れるが、外部境界は provider protocol だけである。Clang native object は job/callback/thread/process 内に閉じ、
+official executable は `cxxlens-clang-worker-22` とする。worker input は provider-owned detached task value とし、
+外部境界は provider protocol だけである。Clang native object は job/callback/thread/process 内に閉じ、
 provider output は detached `frontend.clang22.*_observation` と canonicalized `cc.entity`、`cc.call_site`、
 `cc.call_direct_target` row に限定する。
 
@@ -46,7 +44,6 @@ PATH-only、shadowing、上位 invalid candidate からの downgrade、無許可
 
 - query/store/kernel の SDK link closure は LLVM/Clang-free のまま process provider を利用できる。
 - exact Clang major と native SDK は独立 package/executable に閉じる。
-- legacy frontend IPC は worker 内部の migration input であり、#72 で削除できる。
 - real-time duplex credit、durable resume、multi-worker warm pool は NG1 hardening とし、NG0 transcript と同じ
   semantic validator を共有する。
 

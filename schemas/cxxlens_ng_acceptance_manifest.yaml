@@ -11,10 +11,6 @@ compatibility:
   version_axis: acceptance-contract
   current: 0.1.0-bootstrap
   exact_contract_issue: '#71'
-replaces:
-  - schemas/cxxlens_m0_completion.yaml
-  - schemas/cxxlens_m1_completion.yaml
-  - schemas/cxxlens_m2_completion.yaml
 entries:
   - id: gate.g0
     status: contract-pending

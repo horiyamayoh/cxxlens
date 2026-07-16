@@ -1,7 +1,6 @@
 #include <cxxlens/cxxlens.hpp>
 
-auto main() -> int
+int main()
 {
-	const cxxlens::path current{"."};
-	return current.empty() || cxxlens::versions().llvm.major != 22U ? 1 : 0;
+	return cxxlens::sdk::semantic_digest("public-header", "cxxlens").empty() ? 1 : 0;
 }

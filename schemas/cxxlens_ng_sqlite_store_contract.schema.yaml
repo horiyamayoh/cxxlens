@@ -16,7 +16,6 @@ required:
   - transaction
   - compaction
   - corruption
-  - migration
 properties:
   schema: {const: cxxlens.ng-sqlite-store-contract.v1}
   document_version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
@@ -52,7 +51,6 @@ properties:
   transaction: {$ref: '#/$defs/open_object'}
   compaction: {$ref: '#/$defs/open_object'}
   corruption: {$ref: '#/$defs/open_object'}
-  migration: {$ref: '#/$defs/open_object'}
 $defs:
   open_object:
     type: object
