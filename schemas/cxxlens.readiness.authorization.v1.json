@@ -4980,7 +4980,7 @@
     "validity": {
       "basis": "exact-source-and-observed-gates",
       "expires_on": "source-workflow-gate-or-input-drift",
-      "fingerprint_digest": "sha256:32f93c68f033c7f410d1dc959a4b14af060d22645e6a0386aa3ca04b02b9bcfd",
+      "fingerprint_digest": "sha256:c0441e8b6f0cf6e1e90e98f1caed80b9572e82cc52c7f4c2430f6dbb09b48c2f",
       "state": "unverified"
     }
   },
@@ -5401,7 +5401,7 @@
   },
   "input_fingerprints": {
     "audit_policy": "sha256:60f2f90383fe11bc0ba83baadf12dfe5d26d1a9d1237bf7033a6eb7bdb864242",
-    "build_gates": "sha256:e1d5f6568d5cb313e24719bdb8a8bc33623d8e5008ce34d7ea4d709383069a5d",
+    "build_gates": "sha256:db738019a7932ad5eb4624e478508ad7ece7fa7edffcb58982585b2832ce4fb1",
     "catalog": "sha256:6ced7bb9e9f15dbf268ec51b4f753525ecb4616fdfacbbb1f30ab251254e6f0f",
     "contract_ownership_registry": "sha256:797e6a52c4c941ed4225b761ee070f5f00af4c10661d2ebd519e874391eec342",
     "dependency_requests": "sha256:7b5e6a3c4dd637c512401d036bd20b0e92d545f2f4c509b89d43c89c25cbb2ea",
@@ -5429,7 +5429,7 @@
     "waivers_allowed": false
   },
   "schema": "cxxlens.readiness.authorization.v1",
-  "semantic_digest": "sha256:e847f515d90b83d9d609e08c867eb30d8bc42e2c6f1d95863ba5059a74c60e3e",
+  "semantic_digest": "sha256:accc3225e305fa84284dd93538cbe80e6b3c4b9b7b4e5e70128d68454abf9624",
   "source_identity": {
     "binding": "unbound",
     "commit_sha": null,

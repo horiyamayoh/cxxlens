@@ -112,6 +112,22 @@ foreach(example IN ITEMS dynamic_literal_type_mismatch unordered_limit
                        PROPERTIES LABELS "sdk;negative;acceptance")
 endforeach()
 
+add_custom_target(cxxlens-sdk-test-binaries)
+add_dependencies(
+  cxxlens-sdk-test-binaries
+  cxxlens-public-header-provider-clang22
+  cxxlens-public-header-sdk
+  cxxlens-sdk-example-clang22-native
+  cxxlens-sdk-example-dynamic_query
+  cxxlens-sdk-example-portable_provider
+  cxxlens-sdk-example-recipe
+  cxxlens-sdk-example-typed_query
+  cxxlens-sdk-negative-dynamic_literal_type_mismatch
+  cxxlens-sdk-negative-invalid_recipe
+  cxxlens-sdk-negative-provider_no_credit
+  cxxlens-sdk-negative-unordered_limit
+  cxxlens-unit-sdk)
+
 add_executable(cxxlens-unit-selectors unit/select/selector_test.cpp)
 target_link_libraries(cxxlens-unit-selectors PRIVATE cxxlens::cxxlens)
 target_include_directories(cxxlens-unit-selectors
@@ -782,6 +798,7 @@ if(CXXLENS_CLANG22_AVAILABLE)
   add_custom_target(cxxlens-m1-test-binaries)
   add_dependencies(
     cxxlens-m1-test-binaries
+    cxxlens-sdk-test-binaries
     cxxlens-clang22-link-closure
     cxxlens-clang22-preprocessor
     cxxlens-clang22-semantic
@@ -803,6 +820,7 @@ if(CXXLENS_CLANG22_AVAILABLE)
   add_custom_target(cxxlens-m2-test-binaries)
   add_dependencies(
     cxxlens-m2-test-binaries
+    cxxlens-sdk-test-binaries
     cxxlens-m2-search-conformance
     cxxlens-public-header-cxxlens
     cxxlens-public-header-explain
@@ -818,6 +836,7 @@ endif()
 add_custom_target(cxxlens-m0-test-binaries)
 add_dependencies(
   cxxlens-m0-test-binaries
+  cxxlens-sdk-test-binaries
   cxxlens-frontend-worker
   cxxlens-public-header-configuration
   cxxlens-public-header-core
