@@ -15,10 +15,10 @@ entries:
     interpretation: core.project-catalog@1
     toolchain: none
     platform: linux
-    status: planned
+    status: conformance-only
     qualification: canonical-semantic-qualified
     evidence: pending
-    blocker_issue: '#67'
+    blocker_issue: null
   - id: support.clang22-call-site-linux
     provider_id: cxxlens.clang22.reference
     provider_version: 1.0.0

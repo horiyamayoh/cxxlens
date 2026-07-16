@@ -1,0 +1,129 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-foundation-completion-report.v1
+title: cxxlens next-generation foundation completion report
+type: object
+additionalProperties: false
+required:
+  - schema
+  - result
+  - manifest_digest
+  - git
+  - authority_digests
+  - version_contracts
+  - evidence_claims
+  - ci
+  - issue_states
+  - asset_ledger
+  - audits
+  - reproduction
+properties:
+  schema: {const: cxxlens.ng-foundation-completion-report.v1}
+  result: {const: passed}
+  manifest_digest: {$ref: '#/$defs/digest'}
+  git:
+    type: object
+    additionalProperties: false
+    required: [revision, tree, branch, clean]
+    properties:
+      revision: {type: string, pattern: '^[0-9a-f]{40}$'}
+      tree: {type: string, pattern: '^[0-9a-f]{40}$'}
+      branch: {const: main}
+      clean: {const: true}
+  authority_digests:
+    type: object
+    minProperties: 20
+    additionalProperties: {$ref: '#/$defs/digest'}
+  version_contracts:
+    type: object
+    minProperties: 11
+    additionalProperties: {type: string, minLength: 1}
+  evidence_claims:
+    type: object
+    minProperties: 7
+    additionalProperties:
+      type: object
+      additionalProperties: false
+      required: [paths, digests]
+      properties:
+        paths:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {type: string, minLength: 1}
+        digests:
+          type: object
+          minProperties: 1
+          additionalProperties: {$ref: '#/$defs/digest'}
+  ci:
+    type: object
+    additionalProperties: false
+    required: [repository, run_url, jobs]
+    properties:
+      repository: {type: string, pattern: '^[^/]+/[^/]+$'}
+      run_url: {type: string, minLength: 1}
+      jobs:
+        type: object
+        minProperties: 3
+        additionalProperties: {const: success}
+  issue_states:
+    type: object
+    additionalProperties: false
+    required: [required_closed, gate_issue, tracking_issue]
+    properties:
+      required_closed:
+        type: object
+        minProperties: 16
+        additionalProperties: {const: closed}
+      gate_issue: {const: open}
+      tracking_issue: {const: open}
+  asset_ledger:
+    type: object
+    additionalProperties: false
+    required: [digest, asset_count, classifications]
+    properties:
+      digest: {$ref: '#/$defs/digest'}
+      asset_count: {type: integer, minimum: 1}
+      classifications:
+        type: object
+        additionalProperties: false
+        required: [active, archived, generated]
+        properties:
+          active: {type: integer, minimum: 1}
+          archived: {type: integer, minimum: 0}
+          generated: {const: 1}
+  audits:
+    type: object
+    additionalProperties: false
+    required:
+      - legacy_assets
+      - legacy_authority_references
+      - legacy_code_paths
+      - legacy_schemas
+      - legacy_public_headers
+      - legacy_ci_gates
+      - migration_blockers
+      - unowned_contracts
+      - documentation_drift
+    properties:
+      legacy_assets: {const: 0}
+      legacy_authority_references: {const: 0}
+      legacy_code_paths: {const: 0}
+      legacy_schemas: {const: 0}
+      legacy_public_headers: {const: 0}
+      legacy_ci_gates: {const: 0}
+      migration_blockers: {const: 0}
+      unowned_contracts: {const: 0}
+      documentation_drift: {const: 0}
+  reproduction:
+    type: object
+    additionalProperties: false
+    required: [distribution, kernel_semantics, relation_registry_digest, generated_at]
+    properties:
+      distribution: {const: ng-foundation}
+      kernel_semantics: {const: 1.0.0}
+      relation_registry_digest: {$ref: '#/$defs/digest'}
+      generated_at: {type: string, format: date-time}
+$defs:
+  digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'

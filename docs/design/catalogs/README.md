@@ -11,9 +11,12 @@
 | Provider Protocol | `schemas/cxxlens_ng_provider_protocol.yaml` | #64 | accepted exact contract |
 | Provider Runtime | `schemas/cxxlens_ng_provider_runtime_contract.yaml` | #70 | implemented |
 | Public C++ API Catalog | `schemas/cxxlens_ng_public_api_catalog.yaml` | #66–#70 | implemented |
-| Acceptance Manifest | `schemas/cxxlens_ng_acceptance_manifest.yaml` | #71 | contract pending |
+| Acceptance Manifest | `schemas/cxxlens_ng_acceptance_manifest.yaml` | #71 | implemented foundation gates |
+| Foundation Completion | `schemas/cxxlens_ng_foundation_completion_manifest.yaml` | #71 | implemented, CI commit-bound report |
 | Security Profile | `schemas/cxxlens_ng_security_profile.yaml` | #65 | accepted exact contract |
 | Release Bundle | `schemas/cxxlens_ng_release_bundle.yaml` | #59 | accepted exact contract |
 
 各 contract の schema、positive/negative conformance vector、report schema は同じ prefix で配置します。
-catalog entry が `contract-pending` の場合、その surface は実装済み・stable・production-supported ではありません。
+G5 と distribution release gate は foundation completion とは別に deferred であり、production-supported を
+意味しません。catalog entry が `contract-pending` の場合、その surface は実装済み・stable・production-supported
+ではありません。

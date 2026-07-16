@@ -1,0 +1,52 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-acceptance-manifest.v1
+title: cxxlens next-generation acceptance manifest
+type: object
+additionalProperties: false
+required: [schema, kind, document_version, maturity, authority, compatibility, entries]
+properties:
+  schema: {const: cxxlens.ng-acceptance-manifest.v1}
+  kind: {const: acceptance-manifest}
+  document_version: {$ref: '#/$defs/semver'}
+  maturity: {const: implemented}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, index, bootstrap_issue, exact_contract_issue, owner]
+    properties:
+      design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
+      index: {const: docs/design/catalogs/README.md}
+      bootstrap_issue: {const: '#58'}
+      exact_contract_issue: {const: '#71'}
+      owner: {const: steward.ng-catalogs}
+  compatibility:
+    type: object
+    additionalProperties: false
+    required: [version_axis, current]
+    properties:
+      version_axis: {const: acceptance-contract}
+      current: {$ref: '#/$defs/semver'}
+  entries:
+    type: array
+    minItems: 8
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, status, owner_issue, profile, contract_issue, evidence, summary]
+      properties:
+        id: {type: string, pattern: '^gate\.[a-z0-9-]+$'}
+        status: {enum: [implemented, deferred]}
+        owner_issue: {type: string, pattern: '^#[0-9]+$'}
+        profile: {enum: [NG0, NG1, foundation, release]}
+        contract_issue: {type: string, pattern: '^#[0-9]+$'}
+        depends_on:
+          type: array
+          uniqueItems: true
+          items: {type: string, pattern: '^gate\.[a-z0-9-]+$'}
+        evidence:
+          type: array
+          uniqueItems: true
+          items: {type: string, minLength: 1}
+        summary: {type: string, minLength: 1}
+$defs:
+  semver: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}

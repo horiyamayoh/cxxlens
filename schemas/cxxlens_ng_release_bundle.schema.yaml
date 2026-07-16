@@ -145,7 +145,7 @@ properties:
               type: string
               minLength: 1
       implementation_state:
-        const: migration-pending
+        const: implemented
       implementation_issue:
         const: '#67'
   stability_tiers:

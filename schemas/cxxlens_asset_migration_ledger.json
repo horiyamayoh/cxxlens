@@ -1,5 +1,5 @@
 {
-  "asset_count": 252,
+  "asset_count": 259,
   "assets": [
     {
       "authority": "active",
@@ -570,6 +570,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/development/extending-platform.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/doxygen-main.md",
       "removal_issue": null,
       "replacement": null,
@@ -871,6 +878,13 @@
     },
     {
       "authority": "active",
+      "path": "schemas/cxxlens_ng_acceptance_manifest.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "schemas/cxxlens_ng_acceptance_manifest.yaml",
       "removal_issue": null,
       "replacement": null,
@@ -893,6 +907,27 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_compatibility_request.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_foundation_completion_manifest.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_foundation_completion_manifest.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_foundation_completion_report.schema.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1515,6 +1550,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_foundation_completion.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_ng_migration_completion.py",
       "removal_issue": null,
       "replacement": null,
@@ -1628,6 +1670,13 @@
     {
       "authority": "active",
       "path": "tools/quality/check_format.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tools/quality/check_ng_foundation_completion.py",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1767,7 +1816,7 @@
     }
   ],
   "classifications": {
-    "active": 216,
+    "active": 223,
     "archived": 35,
     "generated": 1
   },

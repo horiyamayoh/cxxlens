@@ -1,62 +1,95 @@
-schema: cxxlens.ng-catalog-bootstrap.v1
+schema: cxxlens.ng-acceptance-manifest.v1
 kind: acceptance-manifest
-document_version: 0.1.0
-maturity: bootstrap
+document_version: 1.0.0
+maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
   index: docs/design/catalogs/README.md
   bootstrap_issue: '#58'
+  exact_contract_issue: '#71'
   owner: steward.ng-catalogs
 compatibility:
   version_axis: acceptance-contract
-  current: 0.1.0-bootstrap
-  exact_contract_issue: '#71'
+  current: 1.0.0
 entries:
   - id: gate.g0
-    status: contract-pending
+    status: implemented
     owner_issue: '#67'
     profile: NG0
     contract_issue: '#67'
+    evidence:
+      - tests/unit/sdk/sdk_test.cpp
+      - tests/public_headers/sdk_header_test.cpp
+      - tools/quality/check_ng_semantic_guarantee.py
     summary: Base identity, source, condition, coverage, truth, and header invariants.
   - id: gate.g1
-    status: contract-pending
+    status: implemented
     owner_issue: '#67'
     profile: NG0
     contract_issue: '#67'
     depends_on: [gate.g0]
+    evidence:
+      - schemas/cxxlens_ng_relation_registry.yaml
+      - tools/quality/check_ng_relation_contract.py
+      - tools/quality/check_ng_sdk_contract.py
     summary: Relation extension, IDL evolution, references, and static/dynamic parity.
   - id: gate.g2
-    status: contract-pending
+    status: implemented
     owner_issue: '#68'
     profile: NG0
     contract_issue: '#68'
     depends_on: [gate.g1]
+    evidence:
+      - tests/unit/sdk/store_test.cpp
+      - tools/quality/check_ng_snapshot_store_contract.py
+      - tests/install/sdk_consumer/main.cpp
     summary: Immutable publication and memory/SQLite semantic parity.
   - id: gate.g3
-    status: contract-pending
-    owner_issue: '#69'
+    status: implemented
+    owner_issue: '#73'
     profile: NG0
-    contract_issue: '#69'
+    contract_issue: '#73'
     depends_on: [gate.g2]
-    summary: Logical query, standard/custom join, budgets, and explicit partiality.
+    evidence:
+      - tests/unit/sdk/query_runtime_test.cpp
+      - tests/integration/r2_vertical_slice_test.cpp
+      - examples/sdk/recipe.cpp
+    summary: Logical query, standard/custom join, budgets, explicit partiality, and flagship recipe.
   - id: gate.g4
-    status: contract-pending
+    status: implemented
     owner_issue: '#70'
     profile: NG0
     contract_issue: '#70'
     depends_on: [gate.g1]
+    evidence:
+      - tests/unit/sdk/provider_runtime_test.cpp
+      - tests/adapter/clang22/provider_worker_protocol_test.cpp
+      - tests/adapter/clang22/provider_normalizer_test.cpp
     summary: Provider protocol, Clang 22 worker, sandbox, crash, and malformed output.
   - id: gate.g5
-    status: contract-pending
+    status: deferred
     owner_issue: '#69'
     profile: NG1
     contract_issue: '#69'
     depends_on: [gate.g2, gate.g3, gate.g4]
+    evidence: []
     summary: Closure, incomplete absence, invalidation, warm-zero, and bounded recursion.
+  - id: gate.foundation
+    status: implemented
+    owner_issue: '#71'
+    profile: foundation
+    contract_issue: '#71'
+    depends_on: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4]
+    evidence:
+      - schemas/cxxlens_ng_foundation_completion_manifest.yaml
+      - tools/quality/check_ng_foundation_completion.py
+      - .github/workflows/quality.yml
+    summary: Commit-bound completion of the migrated semantic relation foundation.
   - id: gate.release
-    status: contract-pending
+    status: deferred
     owner_issue: '#71'
     profile: release
     contract_issue: '#71'
     depends_on: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4, gate.g5]
-    summary: Install, package, security, support matrix, docs, and commit-bound completion.
+    evidence: []
+    summary: Distribution 1.0 install, security, support, performance, and production qualification.

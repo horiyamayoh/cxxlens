@@ -1,0 +1,118 @@
+schema: cxxlens.ng-foundation-completion-manifest.v1
+document_version: 1.0.0
+maturity: implemented
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md
+  acceptance_manifest: schemas/cxxlens_ng_acceptance_manifest.yaml
+  release_bundle: schemas/cxxlens_ng_release_bundle.yaml
+  gate_issue: '#71'
+  tracking_issue: '#56'
+binding:
+  report_schema: schemas/cxxlens_ng_foundation_completion_report.schema.yaml
+  revision: git-head
+  tree: git-head-tree
+  clean_worktree: required
+  branch: main
+required_closed_issues: [57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 72, 73]
+version_contracts:
+  relation_registry: 1.1.0
+  claim_envelope: cxxlens.claim-envelope.v2
+  identity_encoding: cxxlens-canonical-tuple-v1
+  condition_semantics: finite-canonical-alternative-set-ng0
+  logical_query_ir: 1.0.0
+  query_runtime: 1.0.0
+  provider_protocol: 1.0.0
+  snapshot_identity: 1.0.0
+  snapshot_payload: cxxlens.ng-snapshot-payload.v3
+  sqlite_physical_format: 2.2.0
+  recipe_semantics: cxxlens.recipes.calls_to_function-1.0.0
+authority_documents:
+  - docs/design/cxxlens_next_generation_integrated_design_ja.md
+  - docs/design/adr/0002-semantic-relation-platform.md
+  - docs/design/adr/0003-versioned-relation-kernel.md
+  - docs/design/adr/0005-product-boundary-release-compatibility.md
+  - docs/design/adr/0006-ng0-relation-and-claim-envelope.md
+  - docs/design/adr/0007-logical-query-algebra.md
+  - docs/design/adr/0008-truth-guarantee-provenance-algebra.md
+  - docs/design/adr/0009-snapshot-identity-publication-series.md
+  - docs/design/adr/0010-provider-wire-streaming-atomicity.md
+  - docs/design/adr/0011-provider-trust-certification-discovery.md
+  - docs/design/adr/0012-author-sdk-surface.md
+  - docs/design/adr/0013-ng-sqlite-physical-store.md
+  - docs/design/adr/0014-deterministic-reference-query-runtime.md
+  - docs/design/adr/0015-process-provider-runtime-clang22-normalizer.md
+  - schemas/cxxlens_ng_relation_registry.yaml
+  - schemas/cxxlens_ng_logical_query_contract.yaml
+  - schemas/cxxlens_ng_semantic_guarantee_contract.yaml
+  - schemas/cxxlens_ng_snapshot_store_contract.yaml
+  - schemas/cxxlens_ng_sqlite_store_contract.yaml
+  - schemas/cxxlens_ng_provider_protocol.yaml
+  - schemas/cxxlens_ng_provider_runtime_contract.yaml
+  - schemas/cxxlens_ng_security_profile.yaml
+  - schemas/cxxlens_ng_provider_support_matrix.yaml
+  - schemas/cxxlens_ng_public_api_catalog.yaml
+  - schemas/cxxlens_ng_acceptance_manifest.yaml
+  - schemas/cxxlens_ng_release_bundle.yaml
+evidence:
+  required_ci_jobs: [build-test, install-consumer, gcc-public-headers]
+  required_paths:
+    - tests/unit/sdk/sdk_test.cpp
+    - tests/unit/sdk/store_test.cpp
+    - tests/unit/sdk/query_runtime_test.cpp
+    - tests/unit/sdk/provider_runtime_test.cpp
+    - tests/integration/r2_vertical_slice_test.cpp
+    - tests/adapter/clang22/provider_worker_protocol_test.cpp
+    - tests/adapter/clang22/provider_normalizer_test.cpp
+    - tests/install/run_install_test.cmake.in
+    - tools/quality/check_ng_relation_contract.py
+    - tools/quality/check_ng_query_contract.py
+    - tools/quality/check_ng_snapshot_store_contract.py
+    - tools/quality/check_ng_provider_runtime.py
+    - tools/quality/check_ng_security_contract.py
+    - tools/quality/check_ng_migration_completion.py
+  claims:
+    standard_custom_relation:
+      - schemas/cxxlens_ng_relation_conformance_vectors.yaml
+      - tests/integration/r2_vertical_slice_test.cpp
+    memory_sqlite_parity:
+      - schemas/cxxlens_ng_store_conformance_vectors.yaml
+      - tests/unit/sdk/store_test.cpp
+      - tests/unit/sdk/query_runtime_test.cpp
+    static_dynamic_ir_parity:
+      - schemas/cxxlens_ng_query_conformance_vectors.yaml
+      - examples/sdk/typed_query.cpp
+      - examples/sdk/dynamic_query.cpp
+    provider_fault_sandbox_native_lifetime:
+      - schemas/cxxlens_ng_provider_conformance_vectors.yaml
+      - schemas/cxxlens_ng_security_conformance_vectors.yaml
+      - tests/unit/sdk/provider_runtime_test.cpp
+      - tests/adapter/clang22/provider_worker_protocol_test.cpp
+      - examples/sdk/negative/native_pointer_escape.cpp
+    root_jobs_order_backend_cold_warm:
+      - schemas/cxxlens_ng_store_conformance_vectors.yaml
+      - schemas/cxxlens_ng_query_conformance_vectors.yaml
+      - tests/integration/r2_vertical_slice_test.cpp
+    installed_consumers_and_sdks:
+      - tests/install/run_install_test.cmake.in
+      - examples/sdk/portable_provider.cpp
+      - examples/sdk/clang22_native_provider.cpp
+      - examples/sdk/recipe.cpp
+    security_and_conformance:
+      - tools/quality/check_ng_relation_contract.py
+      - tools/quality/check_ng_query_contract.py
+      - tools/quality/check_ng_snapshot_store_contract.py
+      - tools/quality/check_ng_provider_protocol.py
+      - tools/quality/check_ng_security_contract.py
+zero_audits:
+  - legacy_assets
+  - legacy_authority_references
+  - legacy_code_paths
+  - legacy_schemas
+  - legacy_public_headers
+  - legacy_ci_gates
+  - migration_blockers
+  - unowned_contracts
+  - documentation_drift
+handoff_documents:
+  - docs/development/extending-platform.md
+  - docs/tutorials/README.md

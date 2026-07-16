@@ -166,7 +166,8 @@ foreach(
         security_contract
         release_contract
         sdk_contract
-        migration_completion)
+        migration_completion
+        foundation_completion)
   add_test(NAME "quality.ng-${contract}"
            COMMAND "${Python3_EXECUTABLE}"
                    "${PROJECT_SOURCE_DIR}/tests/quality/test_ng_${contract}.py")

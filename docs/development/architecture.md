@@ -13,7 +13,7 @@ cxxlens::cpp
 
 cxxlens::query → cxxlens::recipes
 cxxlens::cxxlens = base + kernel + query + cpp
-cxxlens::cxxlens + recipes → cxxlens::provider_sdk
+cxxlens::base + cxxlens::kernel → cxxlens::provider_sdk
 cxxlens::provider_sdk + exact Clang 22 → cxxlens::clang22_provider_sdk
 ```
 
@@ -47,4 +47,5 @@ closure certificate のない absence は unknown であり、empty と unresolv
 - mutation/generation を追加する場合は plan、独立 validator、dry-run、transaction の順を守る。
 
 詳細は [次世代統合設計](../design/cxxlens_next_generation_integrated_design_ja.md) と
-[Public API catalog](../../schemas/cxxlens_ng_public_api_catalog.yaml) を参照してください。
+[Public API catalog](../../schemas/cxxlens_ng_public_api_catalog.yaml) を参照してください。新しい relation、API、
+recipe、provider を追加する具体的な順序は [Extending the platform](extending-platform.md) にあります。

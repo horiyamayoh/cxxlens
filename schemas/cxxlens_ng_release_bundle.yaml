@@ -86,7 +86,7 @@ distribution_surface:
     headers: authoritative
     cxx_modules: experimental-not-installed-in-1.0
     umbrella_excludes: [provider-sdk, recipes, native-provider, native-sdk]
-  implementation_state: migration-pending
+  implementation_state: implemented
   implementation_issue: '#67'
 
 stability_tiers:

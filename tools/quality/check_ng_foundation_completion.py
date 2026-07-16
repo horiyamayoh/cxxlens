@@ -1,0 +1,433 @@
+#!/usr/bin/env python3
+"""Validate the NG foundation and emit a final commit-bound completion report."""
+
+from __future__ import annotations
+
+import argparse
+import datetime
+import hashlib
+import json
+import os
+import pathlib
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+from typing import Any
+
+import jsonschema
+import yaml
+
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+MANIFEST = pathlib.Path("schemas/cxxlens_ng_foundation_completion_manifest.yaml")
+MANIFEST_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_foundation_completion_manifest.schema.yaml"
+)
+REPORT_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_foundation_completion_report.schema.yaml"
+)
+ACCEPTANCE = pathlib.Path("schemas/cxxlens_ng_acceptance_manifest.yaml")
+ACCEPTANCE_SCHEMA = pathlib.Path("schemas/cxxlens_ng_acceptance_manifest.schema.yaml")
+RELEASE_BUNDLE = pathlib.Path("schemas/cxxlens_ng_release_bundle.yaml")
+SUPPORT_MATRIX = pathlib.Path("schemas/cxxlens_ng_provider_support_matrix.yaml")
+PUBLIC_API = pathlib.Path("schemas/cxxlens_ng_public_api_catalog.yaml")
+LEDGER = pathlib.Path("schemas/cxxlens_asset_migration_ledger.json")
+EXPECTED_ZERO_AUDITS = {
+    "legacy_assets",
+    "legacy_authority_references",
+    "legacy_code_paths",
+    "legacy_schemas",
+    "legacy_public_headers",
+    "legacy_ci_gates",
+    "migration_blockers",
+    "unowned_contracts",
+    "documentation_drift",
+}
+
+
+class CompletionError(ValueError):
+    """A fail-closed foundation completion violation."""
+
+
+def fail(message: str) -> None:
+    raise CompletionError(message)
+
+
+def load_document(path: pathlib.Path) -> dict[str, Any]:
+    text = path.read_text(encoding="utf-8")
+    value = json.loads(text) if path.suffix == ".json" else yaml.safe_load(text)
+    if not isinstance(value, dict):
+        fail(f"expected mapping: {path}")
+    return value
+
+
+def validate_schema(document: Any, schema: dict[str, Any], label: str) -> None:
+    try:
+        jsonschema.Draft202012Validator.check_schema(schema)
+        jsonschema.Draft202012Validator(
+            schema,
+            format_checker=jsonschema.Draft202012Validator.FORMAT_CHECKER,
+        ).validate(document)
+    except (jsonschema.SchemaError, jsonschema.ValidationError) as error:
+        fail(f"{label} schema validation failed: {error.message}")
+
+
+def sha256(path: pathlib.Path) -> str:
+    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def rows_by_id(rows: list[dict[str, Any]], label: str) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        identifier = row["id"]
+        if identifier in result:
+            fail(f"{label} contains duplicate ID: {identifier}")
+        result[identifier] = row
+    return result
+
+
+def run_check(root: pathlib.Path, relative: str, *arguments: str) -> None:
+    completed = subprocess.run(
+        [sys.executable, str(root / relative), *arguments],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip()
+        fail(f"{relative} failed: {detail}")
+
+
+def validate_versions(root: pathlib.Path, expected: dict[str, str]) -> None:
+    relation = load_document(root / "schemas/cxxlens_ng_relation_registry.yaml")
+    logical = load_document(root / "schemas/cxxlens_ng_logical_query_contract.yaml")
+    runtime = load_document(root / "schemas/cxxlens_ng_query_runtime_contract.yaml")
+    snapshot = load_document(root / "schemas/cxxlens_ng_snapshot_store_contract.yaml")
+    sqlite = load_document(root / "schemas/cxxlens_ng_sqlite_store_contract.yaml")
+    actual = {
+        "relation_registry": relation["compatibility"]["current"],
+        "claim_envelope": relation["system_claim_envelope"]["schema"],
+        "identity_encoding": snapshot["canonical_encoding"]["format"],
+        "condition_semantics": logical["condition_algebra"]["representation"],
+        "logical_query_ir": logical["compatibility"]["current"],
+        "query_runtime": runtime["compatibility"]["current"],
+        "provider_protocol": load_document(
+            root / "schemas/cxxlens_ng_provider_protocol.yaml"
+        )["compatibility"]["current"],
+        "snapshot_identity": snapshot["compatibility"]["current"],
+        "snapshot_payload": sqlite["payload"]["write_schema"],
+        "sqlite_physical_format": sqlite["physical_format"]["current"],
+        "recipe_semantics": "cxxlens.recipes.calls_to_function-1.0.0",
+    }
+    if actual != expected:
+        fail(f"foundation version contract differs: expected={expected}, actual={actual}")
+
+
+def validate_documents(root: pathlib.Path) -> dict[str, Any]:
+    manifest = load_document(root / MANIFEST)
+    validate_schema(
+        manifest,
+        load_document(root / MANIFEST_SCHEMA),
+        "foundation completion manifest",
+    )
+
+    acceptance = load_document(root / ACCEPTANCE)
+    validate_schema(
+        acceptance,
+        load_document(root / ACCEPTANCE_SCHEMA),
+        "acceptance manifest",
+    )
+    gates = rows_by_id(acceptance["entries"], "acceptance manifest")
+    required_implemented = {
+        "gate.g0",
+        "gate.g1",
+        "gate.g2",
+        "gate.g3",
+        "gate.g4",
+        "gate.foundation",
+    }
+    if any(gates[identifier]["status"] != "implemented" for identifier in required_implemented):
+        fail("G0-G4 and gate.foundation must be implemented")
+    if gates["gate.g5"]["status"] != "deferred" or gates["gate.release"]["status"] != "deferred":
+        fail("G5 and distribution release must remain explicitly deferred")
+
+    release = load_document(root / RELEASE_BUNDLE)
+    if release["distribution_surface"]["implementation_state"] != "implemented":
+        fail("distribution surface is not implemented")
+
+    support = load_document(root / SUPPORT_MATRIX)
+    blockers = [row["id"] for row in support["entries"] if row["blocker_issue"] is not None]
+    if blockers:
+        fail(f"provider support matrix contains migration blockers: {blockers}")
+
+    public_api = load_document(root / PUBLIC_API)
+    pending = [
+        row["id"] for row in public_api["entries"] if row["status"] != "implemented"
+    ]
+    if public_api["maturity"] != "implemented" or pending:
+        fail(f"public API catalog contains non-implemented entries: {pending}")
+
+    if set(manifest["zero_audits"]) != EXPECTED_ZERO_AUDITS:
+        fail("foundation zero-audit set differs from the accepted gate")
+
+    machine_authorities = [
+        relative
+        for relative in manifest["authority_documents"]
+        if relative.startswith("schemas/") and relative.endswith(".yaml")
+    ]
+    for relative in machine_authorities:
+        authority = load_document(root / relative).get("authority")
+        if not isinstance(authority, dict) or not any(
+            key in authority
+            for key in ("owner", "owner_issue", "decision_issue", "exact_contract_issue")
+        ):
+            fail(f"foundation machine authority is unowned: {relative}")
+
+    for relative in [
+        *manifest["authority_documents"],
+        *manifest["evidence"]["required_paths"],
+        *[
+            path
+            for paths in manifest["evidence"]["claims"].values()
+            for path in paths
+        ],
+        *manifest["handoff_documents"],
+    ]:
+        if not (root / relative).is_file():
+            fail(f"foundation evidence path is missing: {relative}")
+
+    validate_versions(root, manifest["version_contracts"])
+    run_check(
+        root,
+        "tools/quality/check_ng_migration_completion.py",
+        "check",
+        "--root",
+        str(root),
+    )
+    run_check(
+        root,
+        "tools/quality/check_documentation_consistency.py",
+        "check",
+        "--root",
+        str(root),
+    )
+    return manifest
+
+
+def git_output(root: pathlib.Path, *arguments: str) -> str:
+    completed = subprocess.run(
+        ["git", "-C", str(root), *arguments],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        fail(f"git {' '.join(arguments)} failed: {completed.stderr.strip()}")
+    return completed.stdout.strip()
+
+
+def current_git_state(root: pathlib.Path) -> dict[str, Any]:
+    return {
+        "revision": git_output(root, "rev-parse", "HEAD"),
+        "tree": git_output(root, "rev-parse", "HEAD^{tree}"),
+        "branch": git_output(root, "branch", "--show-current"),
+        "clean": git_output(root, "status", "--porcelain=v1") == "",
+    }
+
+
+def github_issue_states(repository: str, issue_numbers: list[int], token: str) -> dict[int, str]:
+    result: dict[int, str] = {}
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "cxxlens-foundation-completion",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    for number in issue_numbers:
+        request = urllib.request.Request(
+            f"https://api.github.com/repos/{repository}/issues/{number}",
+            headers=headers,
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                document = json.load(response)
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+            fail(f"could not read GitHub issue #{number}: {error}")
+        result[number] = document["state"]
+    return result
+
+
+def build_report(
+    root: pathlib.Path,
+    manifest: dict[str, Any],
+    *,
+    git_state: dict[str, Any],
+    issue_states: dict[int, str],
+    repository: str,
+    run_url: str,
+    ci_jobs: list[str],
+    generated_at: str,
+    expected_revision: str | None = None,
+) -> dict[str, Any]:
+    if expected_revision and git_state["revision"] != expected_revision:
+        fail(
+            "checked-out revision differs from workflow revision: "
+            f"{git_state['revision']} != {expected_revision}"
+        )
+    if git_state != {
+        "revision": git_state["revision"],
+        "tree": git_state["tree"],
+        "branch": "main",
+        "clean": True,
+    }:
+        fail(f"final report requires clean main checkout: {git_state}")
+
+    required_jobs = manifest["evidence"]["required_ci_jobs"]
+    if sorted(ci_jobs) != sorted(required_jobs):
+        fail(f"CI job evidence differs: expected={required_jobs}, actual={ci_jobs}")
+
+    missing_closed = [
+        number
+        for number in manifest["required_closed_issues"]
+        if issue_states.get(number) != "closed"
+    ]
+    if missing_closed:
+        fail(f"required issues are not closed: {missing_closed}")
+    if issue_states.get(71) != "open" or issue_states.get(56) != "open":
+        fail("gate and tracking issues must be open while the final gate is evaluated")
+
+    ledger = load_document(root / LEDGER)
+    authority_digests = {
+        relative: sha256(root / relative)
+        for relative in manifest["authority_documents"]
+    }
+    evidence_claims = {
+        claim: {
+            "paths": paths,
+            "digests": {path: sha256(root / path) for path in paths},
+        }
+        for claim, paths in manifest["evidence"]["claims"].items()
+    }
+    report = {
+        "schema": "cxxlens.ng-foundation-completion-report.v1",
+        "result": "passed",
+        "manifest_digest": sha256(root / MANIFEST),
+        "git": git_state,
+        "authority_digests": authority_digests,
+        "version_contracts": manifest["version_contracts"],
+        "evidence_claims": evidence_claims,
+        "ci": {
+            "repository": repository,
+            "run_url": run_url,
+            "jobs": {job: "success" for job in sorted(ci_jobs)},
+        },
+        "issue_states": {
+            "required_closed": {
+                str(number): "closed"
+                for number in sorted(manifest["required_closed_issues"])
+            },
+            "gate_issue": "open",
+            "tracking_issue": "open",
+        },
+        "asset_ledger": {
+            "digest": sha256(root / LEDGER),
+            "asset_count": ledger["asset_count"],
+            "classifications": ledger["classifications"],
+        },
+        "audits": {
+            "legacy_assets": 0,
+            "legacy_authority_references": 0,
+            "legacy_code_paths": 0,
+            "legacy_schemas": 0,
+            "legacy_public_headers": 0,
+            "legacy_ci_gates": 0,
+            "migration_blockers": 0,
+            "unowned_contracts": 0,
+            "documentation_drift": 0,
+        },
+        "reproduction": {
+            "distribution": "ng-foundation",
+            "kernel_semantics": "1.0.0",
+            "relation_registry_digest": sha256(
+                root / "schemas/cxxlens_ng_relation_registry.yaml"
+            ),
+            "generated_at": generated_at,
+        },
+    }
+    validate_schema(
+        report,
+        load_document(root / REPORT_SCHEMA),
+        "foundation completion report",
+    )
+    return report
+
+
+def arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("command", choices=("check", "report"))
+    parser.add_argument("--root", type=pathlib.Path, default=ROOT)
+    parser.add_argument("--output", type=pathlib.Path)
+    parser.add_argument("--repository")
+    parser.add_argument("--run-url")
+    parser.add_argument("--expected-revision")
+    parser.add_argument("--branch", default="main")
+    parser.add_argument("--ci-job", action="append", default=[])
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = arguments()
+    root = args.root.resolve()
+    try:
+        manifest = validate_documents(root)
+        if args.command == "check":
+            print("NG foundation completion static checks passed")
+            return 0
+        if not args.output or not args.repository or not args.run_url:
+            fail("report requires --output, --repository, and --run-url")
+        numbers = [*manifest["required_closed_issues"], 71, 56]
+        issue_states = github_issue_states(
+            args.repository,
+            sorted(set(numbers)),
+            os.environ.get("GITHUB_TOKEN", ""),
+        )
+        generated_at = (
+            datetime.datetime.now(datetime.timezone.utc)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+        git_state = current_git_state(root)
+        git_state["branch"] = args.branch
+        report = build_report(
+            root,
+            manifest,
+            git_state=git_state,
+            issue_states=issue_states,
+            repository=args.repository,
+            run_url=args.run_url,
+            ci_jobs=args.ci_job,
+            generated_at=generated_at,
+            expected_revision=args.expected_revision,
+        )
+        args.output.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+    except (
+        CompletionError,
+        OSError,
+        subprocess.SubprocessError,
+        yaml.YAMLError,
+    ) as error:
+        print(f"NG foundation completion check failed: {error}", file=sys.stderr)
+        return 1
+    print("NG foundation completion report passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,116 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-foundation-completion-manifest.v1
+title: cxxlens next-generation foundation completion manifest
+type: object
+additionalProperties: false
+required:
+  - schema
+  - document_version
+  - maturity
+  - authority
+  - binding
+  - required_closed_issues
+  - version_contracts
+  - authority_documents
+  - evidence
+  - zero_audits
+  - handoff_documents
+properties:
+  schema: {const: cxxlens.ng-foundation-completion-manifest.v1}
+  document_version: {const: 1.0.0}
+  maturity: {const: implemented}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, acceptance_manifest, release_bundle, gate_issue, tracking_issue]
+    properties:
+      design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
+      acceptance_manifest: {const: schemas/cxxlens_ng_acceptance_manifest.yaml}
+      release_bundle: {const: schemas/cxxlens_ng_release_bundle.yaml}
+      gate_issue: {const: '#71'}
+      tracking_issue: {const: '#56'}
+  binding:
+    type: object
+    additionalProperties: false
+    required: [report_schema, revision, tree, clean_worktree, branch]
+    properties:
+      report_schema: {const: schemas/cxxlens_ng_foundation_completion_report.schema.yaml}
+      revision: {const: git-head}
+      tree: {const: git-head-tree}
+      clean_worktree: {const: required}
+      branch: {const: main}
+  required_closed_issues:
+    type: array
+    minItems: 16
+    uniqueItems: true
+    items: {type: integer, minimum: 1}
+  version_contracts:
+    type: object
+    additionalProperties: {type: string, minLength: 1}
+    required:
+      - relation_registry
+      - claim_envelope
+      - identity_encoding
+      - condition_semantics
+      - logical_query_ir
+      - query_runtime
+      - provider_protocol
+      - snapshot_identity
+      - snapshot_payload
+      - sqlite_physical_format
+      - recipe_semantics
+  authority_documents:
+    type: array
+    minItems: 20
+    uniqueItems: true
+    items: {type: string, minLength: 1}
+  evidence:
+    type: object
+    additionalProperties: false
+    required: [required_ci_jobs, required_paths, claims]
+    properties:
+      required_ci_jobs:
+        type: array
+        minItems: 3
+        uniqueItems: true
+        items: {type: string, minLength: 1}
+      required_paths:
+        type: array
+        minItems: 12
+        uniqueItems: true
+        items: {type: string, minLength: 1}
+      claims:
+        type: object
+        additionalProperties:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {type: string, minLength: 1}
+        required:
+          - standard_custom_relation
+          - memory_sqlite_parity
+          - static_dynamic_ir_parity
+          - provider_fault_sandbox_native_lifetime
+          - root_jobs_order_backend_cold_warm
+          - installed_consumers_and_sdks
+          - security_and_conformance
+  zero_audits:
+    type: array
+    minItems: 4
+    uniqueItems: true
+    items:
+      enum:
+        - legacy_assets
+        - legacy_authority_references
+        - legacy_code_paths
+        - legacy_schemas
+        - legacy_public_headers
+        - legacy_ci_gates
+        - migration_blockers
+        - unowned_contracts
+        - documentation_drift
+  handoff_documents:
+    type: array
+    minItems: 2
+    uniqueItems: true
+    items: {type: string, minLength: 1}

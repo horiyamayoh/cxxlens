@@ -74,6 +74,17 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-ng-foundation-completion-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_foundation_completion.py"
+    check --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_ng_foundation_completion.py"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-public-boundary-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -115,6 +126,7 @@ add_dependencies(
   cxxlens-quality
   cxxlens-design-package-check
   cxxlens-documentation-consistency-check
+  cxxlens-ng-foundation-completion-check
   cxxlens-ng-provider-protocol-check
   cxxlens-ng-provider-runtime-check
   cxxlens-ng-migration-completion-check
