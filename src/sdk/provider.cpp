@@ -188,6 +188,63 @@ namespace cxxlens::sdk::provider
 				output << value << '\n';
 			return output.str();
 		}
+
+		[[nodiscard]] std::string_view sandbox_name(const sandbox_assurance value) noexcept
+		{
+			switch (value)
+			{
+				case sandbox_assurance::none:
+					return "none";
+				case sandbox_assurance::best_effort:
+					return "best_effort";
+				case sandbox_assurance::enforced:
+					return "enforced";
+				case sandbox_assurance::certified:
+					return "certified";
+			}
+			return "none";
+		}
+
+		[[nodiscard]] std::string_view source_name(const discovery_source value) noexcept
+		{
+			switch (value)
+			{
+				case discovery_source::explicit_path:
+					return "explicit_path";
+				case discovery_source::installation_manifest:
+					return "installation_manifest";
+				case discovery_source::project_config:
+					return "project_config";
+				case discovery_source::system_registry:
+					return "system_registry";
+			}
+			return "system_registry";
+		}
+
+		[[nodiscard]] std::uint8_t source_rank(const discovery_source value) noexcept
+		{
+			return static_cast<std::uint8_t>(value);
+		}
+
+		[[nodiscard]] bool sandbox_satisfies(const sandbox_assurance achieved,
+											 const sandbox_assurance required) noexcept
+		{
+			return static_cast<std::uint8_t>(achieved) >= static_cast<std::uint8_t>(required);
+		}
+
+		[[nodiscard]] std::optional<sandbox_assurance>
+		parse_sandbox(const std::string_view value) noexcept
+		{
+			if (value == "none")
+				return sandbox_assurance::none;
+			if (value == "best_effort")
+				return sandbox_assurance::best_effort;
+			if (value == "enforced")
+				return sandbox_assurance::enforced;
+			if (value == "certified")
+				return sandbox_assurance::certified;
+			return std::nullopt;
+		}
 	} // namespace
 
 	result<std::vector<std::byte>> encode_frame(const frame& value, const protocol_limits limits)
@@ -261,6 +318,109 @@ namespace cxxlens::sdk::provider
 		if (!std::ranges::equal(control_digest, input.subspan(40U, 32U)) ||
 			!std::ranges::equal(payload_digest, input.subspan(72U, 32U)))
 			return cxxlens::sdk::unexpected(provider_error("provider.checksum-mismatch", "digest"));
+		return output;
+	}
+
+	result<std::vector<frame>> decode_frame_stream(const std::span<const std::byte> input,
+												   const protocol_limits limits,
+												   const std::uint64_t maximum_frames)
+	{
+		if (maximum_frames == 0U)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.stream-invalid", "maximum_frames"));
+		std::vector<frame> output;
+		std::size_t offset{};
+		while (offset < input.size())
+		{
+			if (output.size() >= maximum_frames)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.oversized-frame", "frame-count"));
+			if (input.size() - offset < header_size)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.truncated-stream", "header"));
+			const auto header = input.subspan(offset, header_size);
+			const auto control_length = read_big_endian<std::uint32_t>(header, 28U);
+			const auto payload_length = read_big_endian<std::uint64_t>(header, 32U);
+			if (control_length > limits.max_control_bytes ||
+				payload_length > limits.max_payload_bytes ||
+				payload_length >
+					std::numeric_limits<std::size_t>::max() - header_size - control_length)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.oversized-frame", "length"));
+			const auto frame_size =
+				header_size + control_length + static_cast<std::size_t>(payload_length);
+			if (frame_size > input.size() - offset)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.truncated-stream", "frame"));
+			auto decoded = decode_frame(input.subspan(offset, frame_size), limits);
+			if (!decoded)
+				return cxxlens::sdk::unexpected(std::move(decoded.error()));
+			output.push_back(std::move(*decoded));
+			offset += frame_size;
+		}
+		if (output.empty())
+			return cxxlens::sdk::unexpected(provider_error("provider.truncated-stream", "empty"));
+		return output;
+	}
+
+	result<std::string> decode_control_text(const std::span<const std::byte> control)
+	{
+		if (control.empty())
+			return cxxlens::sdk::unexpected(provider_error("provider.malformed-frame", "control"));
+		const auto initial = std::to_integer<std::uint8_t>(control.front());
+		if ((initial & 0xe0U) != 0x60U)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.malformed-frame", "control-type"));
+		std::size_t offset{1U};
+		std::uint64_t length = initial & 0x1fU;
+		if (length == 24U)
+		{
+			if (control.size() < 2U)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.truncated-stream", "control-length"));
+			length = std::to_integer<std::uint8_t>(control[1U]);
+			offset = 2U;
+			if (length < 24U)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.malformed-frame", "non-shortest-control"));
+		}
+		else if (length == 25U)
+		{
+			if (control.size() < 3U)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.truncated-stream", "control-length"));
+			length = read_big_endian<std::uint16_t>(control, 1U);
+			offset = 3U;
+			if (length <= std::numeric_limits<std::uint8_t>::max())
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.malformed-frame", "non-shortest-control"));
+		}
+		else if (length == 26U)
+		{
+			if (control.size() < 5U)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.truncated-stream", "control-length"));
+			length = read_big_endian<std::uint32_t>(control, 1U);
+			offset = 5U;
+			if (length <= std::numeric_limits<std::uint16_t>::max())
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.malformed-frame", "non-shortest-control"));
+		}
+		else if (length >= 27U)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.malformed-frame", "control-length"));
+		if (length != control.size() - offset)
+			return cxxlens::sdk::unexpected(provider_error("provider.truncated-stream", "control"));
+		std::string output;
+		output.reserve(static_cast<std::size_t>(length));
+		for (const auto value : control.subspan(offset))
+		{
+			const auto byte = std::to_integer<unsigned char>(value);
+			if (byte == 0U)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.malformed-frame", "control-utf8"));
+			output.push_back(static_cast<char>(byte));
+		}
 		return output;
 	}
 
@@ -567,6 +727,212 @@ namespace cxxlens::sdk::provider
 			   << json_string(task_input_stage) << ",\"output\":" << json_string(task_output_stage)
 			   << "},\"trust_flags\":" << canonical_array(trust_flags) << '}';
 		return output.str();
+	}
+
+	result<void> sandbox_requirement::validate() const
+	{
+		if (!canonical_digest(policy_digest))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.sandbox-requirement-invalid", "policy_digest"));
+		return {};
+	}
+
+	result<void> sandbox_report::validate() const
+	{
+		if (platform.empty() || !unique_nonempty(mechanisms) || !canonical_digest(policy_digest) ||
+			!canonical_digest(evidence_digest))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.sandbox-report-invalid", "report"));
+		return {};
+	}
+
+	std::string sandbox_report::canonical_form() const
+	{
+		return "{\"achieved\":" + json_string(sandbox_name(achieved)) +
+			",\"evidence_digest\":" + json_string(evidence_digest) +
+			",\"mechanisms\":" + canonical_array(mechanisms) +
+			",\"platform\":" + json_string(platform) +
+			",\"policy_digest\":" + json_string(policy_digest) + "}";
+	}
+
+	std::string provider_selection::canonical_form() const
+	{
+		std::ostringstream output;
+		output << "{\"decisions\":[";
+		for (std::size_t index = 0U; index < decisions.size(); ++index)
+		{
+			if (index != 0U)
+				output << ',';
+			const auto& decision = decisions[index];
+			output << "{\"binary_digest\":" << json_string(decision.binary_digest)
+				   << ",\"provider_id\":" << json_string(decision.provider_id)
+				   << ",\"provider_version\":" << json_string(decision.provider_version.string())
+				   << ",\"reason\":" << json_string(decision.reason)
+				   << ",\"selected\":" << (decision.selected ? "true" : "false")
+				   << ",\"source\":" << json_string(source_name(decision.source)) << '}';
+		}
+		output << "],\"fallback_used\":" << (fallback_used ? "true" : "false")
+			   << ",\"selected_manifest\":" << candidate.description.canonical_json()
+			   << ",\"selected_source\":" << json_string(source_name(candidate.source)) << '}';
+		return output.str();
+	}
+
+	result<provider_selection> select_provider(const provider_selection_request& request,
+											   const std::span<const provider_candidate> candidates)
+	{
+		if (!namespaced(request.provider_id) || request.provider_version.major == 0U ||
+			!canonical_digest(request.provider_binary_digest) ||
+			!canonical_digest(request.provider_semantic_contract_digest))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.selection-invalid", "identity"));
+		if (auto valid = request.sandbox.validate(); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		if (candidates.empty())
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.not-found", request.provider_id));
+
+		std::map<std::pair<std::string, std::string>, std::set<std::pair<std::string, std::string>>>
+			binaries;
+		for (const auto& candidate : candidates)
+			binaries[{candidate.description.provider_id,
+					  candidate.description.provider_version.string()}]
+				.emplace(candidate.description.package_identity,
+						 candidate.description.provider_binary_digest);
+		for (const auto& [identity, values] : binaries)
+			if (values.size() > 1U)
+				return cxxlens::sdk::unexpected(
+					provider_error("security.provider-shadowing", identity.first, identity.second));
+
+		std::vector<std::size_t> order(candidates.size());
+		for (std::size_t index = 0U; index < order.size(); ++index)
+			order[index] = index;
+		std::ranges::sort(order,
+						  [&](const std::size_t left, const std::size_t right)
+						  {
+							  const auto& lhs = candidates[left];
+							  const auto& rhs = candidates[right];
+							  return std::tuple{source_rank(lhs.source),
+												lhs.description.provider_id,
+												lhs.description.provider_version,
+												lhs.description.provider_binary_digest} <
+								  std::tuple{source_rank(rhs.source),
+											 rhs.description.provider_id,
+											 rhs.description.provider_version,
+											 rhs.description.provider_binary_digest};
+						  });
+
+		std::vector<provider_candidate_decision> decisions;
+		decisions.reserve(candidates.size());
+		std::optional<std::uint8_t> exact_precedence;
+		for (const auto index : order)
+		{
+			const auto& candidate = candidates[index];
+			if (candidate.description.provider_id == request.provider_id &&
+				candidate.description.provider_version == request.provider_version)
+			{
+				exact_precedence = exact_precedence
+					? std::min(*exact_precedence, source_rank(candidate.source))
+					: source_rank(candidate.source);
+			}
+		}
+
+		std::optional<std::size_t> selected;
+		bool selected_fallback{};
+		for (const auto index : order)
+		{
+			const auto& candidate = candidates[index];
+			provider_candidate_decision decision{candidate.source,
+												 candidate.description.provider_id,
+												 candidate.description.provider_version,
+												 candidate.description.provider_binary_digest,
+												 false,
+												 {}};
+			const bool exact = candidate.description.provider_id == request.provider_id &&
+				candidate.description.provider_version == request.provider_version &&
+				candidate.description.provider_binary_digest == request.provider_binary_digest &&
+				candidate.description.provider_semantic_contract_digest ==
+					request.provider_semantic_contract_digest;
+			const bool adjacent =
+				candidate.description.provider_id == request.provider_id && !exact;
+			if (!candidate.authoritative_path)
+				decision.reason = "security.path-only-discovery";
+			else if (auto manifest_valid = candidate.description.validate(); !manifest_valid)
+				decision.reason = manifest_valid.error().code;
+			else if (!candidate.validation_error.empty())
+				decision.reason = candidate.validation_error;
+			else if (!candidate.trust_valid)
+				decision.reason = "security.signature-untrusted";
+			else if (request.require_certification && !candidate.certification_valid)
+				decision.reason = "security.certification-missing";
+			else if (auto sandbox_valid = candidate.sandbox.validate(); !sandbox_valid)
+				decision.reason = sandbox_valid.error().code;
+			else if (candidate.sandbox.policy_digest != request.sandbox.policy_digest)
+				decision.reason = "security.sandbox-policy-mismatch";
+			else
+			{
+				const auto manifest_minimum = parse_sandbox(candidate.description.sandbox_minimum);
+				const auto effective_minimum = manifest_minimum &&
+						static_cast<std::uint8_t>(*manifest_minimum) >
+							static_cast<std::uint8_t>(request.sandbox.minimum)
+					? *manifest_minimum
+					: request.sandbox.minimum;
+				if (!manifest_minimum)
+					decision.reason = "provider.manifest-invalid";
+				else if (!sandbox_satisfies(candidate.sandbox.achieved, effective_minimum))
+					decision.reason = "security.sandbox-insufficient";
+				else if (exact)
+				{
+					if (exact_precedence && source_rank(candidate.source) != *exact_precedence)
+						decision.reason = "security.downgrade-forbidden";
+					else
+					{
+						decision.selected = true;
+						decision.reason = "selected-exact";
+						selected = index;
+					}
+				}
+				else if (adjacent && request.allow_adjacent_fallback && !exact_precedence)
+				{
+					decision.selected = true;
+					decision.reason = "selected-explicit-fallback";
+					selected = index;
+					selected_fallback = true;
+				}
+				else if (adjacent)
+					decision.reason = "provider.adjacent-fallback-forbidden";
+				else
+					decision.reason = "provider.identity-mismatch";
+			}
+			decisions.push_back(std::move(decision));
+			if (selected)
+				break;
+		}
+		for (std::size_t decision_index = decisions.size(); decision_index < order.size();
+			 ++decision_index)
+		{
+			const auto& candidate = candidates[order[decision_index]];
+			decisions.push_back({candidate.source,
+								 candidate.description.provider_id,
+								 candidate.description.provider_version,
+								 candidate.description.provider_binary_digest,
+								 false,
+								 "provider.lower-precedence-not-considered"});
+		}
+		if (!selected)
+		{
+			const bool downgrade = exact_precedence &&
+				std::ranges::any_of(decisions,
+									[](const provider_candidate_decision& decision)
+									{
+										return decision.reason != "provider.identity-mismatch" &&
+											decision.reason !=
+											"provider.adjacent-fallback-forbidden";
+									});
+			return cxxlens::sdk::unexpected(
+				provider_error(downgrade ? "security.downgrade-forbidden" : "provider.not-found",
+							   request.provider_id));
+		}
+		return provider_selection{candidates[*selected], std::move(decisions), selected_fallback};
 	}
 
 	result<std::vector<scaffold_file>> make_scaffold(const scaffold_options& options)

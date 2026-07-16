@@ -2,6 +2,7 @@ set(test_root "@CMAKE_CURRENT_BINARY_DIR@/install-consumer")
 set(install_prefix "${test_root}/prefix")
 set(consumer_build "${test_root}/build")
 set(sdk_consumer_build "${test_root}/sdk-build")
+set(clang22_sdk_consumer_build "${test_root}/clang22-sdk-build")
 set(phase_b_report "${test_root}/phase-b-contract-integration-report.json")
 
 file(REMOVE_RECURSE "${test_root}")
@@ -31,6 +32,7 @@ foreach(
     "${install_prefix}/lib/cmake/cxxlensClang22ProviderSDK/cxxlensClang22ProviderSDKConfig.cmake"
     "${install_prefix}/bin/cxxlens-provider-scaffold"
     "${install_prefix}/bin/cxxlens-sdk-doctor"
+    "${install_prefix}/bin/cxxlens-clang-worker-22"
     "${install_prefix}/bin/cxxlens-relation-idl"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_public_api_contract.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_public_api_catalog.yaml"
@@ -40,6 +42,9 @@ foreach(
     "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_query_runtime_contract.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_query_runtime_contract.schema.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_query_execution_result.schema.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_provider_runtime_contract.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_provider_runtime_contract.schema.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_provider_execution_report.schema.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_phase_b_contract_integration.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_phase_b_contract_integration.schema.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens.agent-task-packet-corpus.v1.json"
@@ -119,3 +124,20 @@ execute_process(COMMAND "@CMAKE_COMMAND@" --build "${sdk_consumer_build}"
 
 execute_process(COMMAND "${sdk_consumer_build}/cxxlens-sdk-consumer"
                 RESULT_VARIABLE sdk_run_result COMMAND_ERROR_IS_FATAL ANY)
+
+execute_process(
+  COMMAND
+    "@CMAKE_COMMAND@" -S
+    "@CMAKE_CURRENT_SOURCE_DIR@/install/clang22_sdk_consumer" -B
+    "${clang22_sdk_consumer_build}" "-DCMAKE_PREFIX_PATH=${install_prefix}"
+    "-DCMAKE_CXX_COMPILER=@CMAKE_CXX_COMPILER@" "-DLLVM_DIR=@LLVM_DIR@"
+    "-DClang_DIR=@Clang_DIR@"
+  RESULT_VARIABLE clang22_sdk_configure_result COMMAND_ERROR_IS_FATAL ANY)
+
+execute_process(
+  COMMAND "@CMAKE_COMMAND@" --build "${clang22_sdk_consumer_build}"
+  RESULT_VARIABLE clang22_sdk_build_result COMMAND_ERROR_IS_FATAL ANY)
+
+execute_process(
+  COMMAND "${clang22_sdk_consumer_build}/cxxlens-clang22-sdk-consumer"
+  RESULT_VARIABLE clang22_sdk_run_result COMMAND_ERROR_IS_FATAL ANY)

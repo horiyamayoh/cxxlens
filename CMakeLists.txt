@@ -46,6 +46,8 @@ add_library(
   src/sdk/claim.cpp
   src/sdk/common.cpp
   src/sdk/provider.cpp
+  src/runtime/provider_process_adapter.cpp
+  src/sdk/provider_runtime.cpp
   src/sdk/query.cpp
   src/sdk/query_execution.cpp
   src/sdk/query_ir_decoder.cpp
@@ -145,6 +147,16 @@ cxxlens_set_project_warnings(cxxlens)
 cxxlens_enable_sanitizers(cxxlens)
 cxxlens_configure_clang22(cxxlens)
 
+add_library(cxxlens_clang22_provider_runtime STATIC
+            src/llvm/clang22/provider_worker.cpp)
+target_link_libraries(cxxlens_clang22_provider_runtime
+                      PUBLIC cxxlens::cxxlens cxxlens::provider_sdk)
+target_include_directories(cxxlens_clang22_provider_runtime
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_clang22_provider_runtime PUBLIC cxx_std_23)
+cxxlens_set_project_warnings(cxxlens_clang22_provider_runtime)
+cxxlens_enable_sanitizers(cxxlens_clang22_provider_runtime)
+
 add_library(cxxlens_clang22_provider_sdk INTERFACE)
 add_library(cxxlens::clang22_provider_sdk ALIAS cxxlens_clang22_provider_sdk)
 target_link_libraries(cxxlens_clang22_provider_sdk
@@ -174,6 +186,16 @@ target_compile_features(cxxlens-frontend-worker PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens-frontend-worker)
 cxxlens_enable_sanitizers(cxxlens-frontend-worker)
 
+add_executable(cxxlens-clang-worker-22
+               src/llvm/clang22/provider_worker_main.cpp)
+target_link_libraries(cxxlens-clang-worker-22
+                      PRIVATE cxxlens_clang22_provider_runtime)
+target_include_directories(cxxlens-clang-worker-22
+                           PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-clang-worker-22 PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-clang-worker-22)
+cxxlens_enable_sanitizers(cxxlens-clang-worker-22)
+
 if(CXXLENS_ENABLE_CLANG_TIDY)
   find_program(CXXLENS_CLANG_TIDY NAMES clang-tidy-22 clang-tidy REQUIRED)
   set_target_properties(
@@ -196,7 +218,7 @@ if(CXXLENS_BUILD_QUALITY_TOOLS OR CXXLENS_BUILD_DOCS)
 endif()
 
 install(
-  TARGETS cxxlens cxxlens-frontend-worker
+  TARGETS cxxlens cxxlens-frontend-worker cxxlens-clang-worker-22
   EXPORT cxxlensTargets
   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
@@ -271,6 +293,9 @@ install(
         schemas/cxxlens_ng_query_runtime_contract.yaml
         schemas/cxxlens_ng_query_runtime_contract.schema.yaml
         schemas/cxxlens_ng_query_execution_result.schema.yaml
+        schemas/cxxlens_ng_provider_runtime_contract.yaml
+        schemas/cxxlens_ng_provider_runtime_contract.schema.yaml
+        schemas/cxxlens_ng_provider_execution_report.schema.yaml
         schemas/cxxlens_ng_semantic_guarantee_contract.yaml
         schemas/cxxlens_ng_semantic_guarantee_contract.schema.yaml
         schemas/cxxlens_ng_semantic_metadata.schema.yaml

@@ -3,9 +3,11 @@
 /** @file provider.hpp @brief Portable provider authoring without manual wire framing. */
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <span>
 #include <stop_token>
@@ -67,6 +69,13 @@ namespace cxxlens::sdk::provider
 	/** @brief Decode, bound-check, and verify exactly one protocol frame. */
 	[[nodiscard]] result<frame> decode_frame(std::span<const std::byte> input,
 											 protocol_limits limits = {});
+	/** @brief Decode a bounded concatenated transcript without accepting trailing fragments. */
+	[[nodiscard]] result<std::vector<frame>>
+	decode_frame_stream(std::span<const std::byte> input,
+						protocol_limits limits = {},
+						std::uint64_t maximum_frames = 65536U);
+	/** @brief Decode one deterministic-CBOR text control value. */
+	[[nodiscard]] result<std::string> decode_control_text(std::span<const std::byte> control);
 
 	/** @brief Streaming byte destination implemented by process or in-memory transports. */
 	class frame_sink
@@ -296,6 +305,191 @@ namespace cxxlens::sdk::provider
 		std::string task_output_stage{"observation"};
 		[[nodiscard]] result<void> validate() const;
 		[[nodiscard]] std::string canonical_json() const;
+	};
+
+	/** @brief Ordered sandbox assurance achieved by a process transport. */
+	enum class sandbox_assurance : std::uint8_t
+	{
+		none,
+		best_effort,
+		enforced,
+		certified,
+	};
+
+	/** @brief Effective sandbox minimum and its versioned policy identity. */
+	struct sandbox_requirement
+	{
+		sandbox_assurance minimum{sandbox_assurance::enforced};
+		std::string policy_digest;
+		[[nodiscard]] result<void> validate() const;
+	};
+
+	/** @brief Runtime sandbox evidence; manifest self-claims are never copied here. */
+	struct sandbox_report
+	{
+		std::string platform;
+		std::vector<std::string> mechanisms;
+		sandbox_assurance achieved{sandbox_assurance::none};
+		std::string policy_digest;
+		std::string evidence_digest;
+		[[nodiscard]] result<void> validate() const;
+		[[nodiscard]] std::string canonical_form() const;
+	};
+
+	/** @brief Deterministic provider discovery precedence. */
+	enum class discovery_source : std::uint8_t
+	{
+		explicit_path,
+		installation_manifest,
+		project_config,
+		system_registry,
+	};
+
+	/** @brief One discovered candidate before trust, compatibility, and sandbox selection. */
+	struct provider_candidate
+	{
+		manifest description;
+		discovery_source source{discovery_source::system_registry};
+		std::vector<std::string> executable_argv;
+		bool authoritative_path{};
+		bool trust_valid{};
+		bool certification_valid{};
+		sandbox_report sandbox;
+		std::string validation_error;
+	};
+
+	/** @brief Exact requested provider identity; adjacent fallback is opt-in only. */
+	struct provider_selection_request
+	{
+		std::string provider_id;
+		semantic_version provider_version;
+		std::string provider_binary_digest;
+		std::string provider_semantic_contract_digest;
+		sandbox_requirement sandbox;
+		bool require_certification{true};
+		bool allow_adjacent_fallback{};
+	};
+
+	/** @brief Explainable decision for every discovered candidate. */
+	struct provider_candidate_decision
+	{
+		discovery_source source{discovery_source::system_registry};
+		std::string provider_id;
+		semantic_version provider_version;
+		std::string binary_digest;
+		bool selected{};
+		std::string reason;
+		[[nodiscard]] bool operator==(const provider_candidate_decision&) const = default;
+	};
+
+	/** @brief Exact selected candidate plus complete rejection/fallback evidence. */
+	struct provider_selection
+	{
+		provider_candidate candidate;
+		std::vector<provider_candidate_decision> decisions;
+		bool fallback_used{};
+		[[nodiscard]] std::string canonical_form() const;
+	};
+
+	/** @brief Select one exact provider without PATH authority or silent downgrade. */
+	[[nodiscard]] result<provider_selection>
+	select_provider(const provider_selection_request& request,
+					std::span<const provider_candidate> candidates);
+
+	/** @brief Process transport outcome before provider protocol validation. */
+	enum class process_status : std::uint8_t
+	{
+		exited,
+		timed_out,
+		cancelled,
+		output_limit,
+		crashed,
+		unavailable,
+		launch_failed,
+	};
+
+	/** @brief Shell-free bounded process invocation owned by the provider runtime port. */
+	struct process_invocation
+	{
+		std::vector<std::string> argv;
+		std::vector<std::byte> standard_input;
+		std::string working_directory;
+		std::vector<std::pair<std::string, std::string>> environment;
+		execution_budget budget;
+		sandbox_requirement sandbox;
+		std::string expected_binary_digest;
+	};
+
+	/** @brief Detached process result with achieved sandbox evidence. */
+	struct process_output
+	{
+		process_status status{process_status::launch_failed};
+		int exit_code{};
+		int termination_signal{};
+		std::vector<std::byte> standard_output;
+		std::string standard_error;
+		sandbox_report sandbox;
+		std::string failure_code;
+	};
+
+	/** @brief Port isolating filesystem/process/platform effects from provider semantics. */
+	class provider_process_port
+	{
+	  public:
+		virtual ~provider_process_port() = default;
+		[[nodiscard]] virtual result<process_output> run(const process_invocation& invocation,
+														 std::stop_token cancellation) const = 0;
+	};
+
+	/** @brief Create the Linux production argv/process-group/sandbox transport. */
+	[[nodiscard]] std::unique_ptr<provider_process_port> make_system_provider_process_port();
+
+	/** @brief Opaque provider task payload plus exact semantic/cache identity binding. */
+	struct process_task_request
+	{
+		provider_selection selection;
+		std::string task_id;
+		std::vector<std::byte> payload;
+		std::string task_input_digest;
+		std::string normalized_invocation_digest;
+		std::string toolchain_digest;
+		std::string environment_digest;
+		sandbox_requirement sandbox;
+		execution_budget budget;
+		protocol_limits limits;
+		protocol_credit output_credit{67108864U, 65536U};
+		std::stop_token cancellation;
+	};
+
+	/** @brief Structured process-provider execution report with validated transcript. */
+	struct process_execution_report
+	{
+		std::string terminal;
+		manifest provider;
+		std::string task_input_digest;
+		std::string normalized_invocation_digest;
+		std::string toolchain_digest;
+		std::string environment_digest;
+		sandbox_report sandbox;
+		std::vector<frame> frames;
+		std::vector<unresolved_item> diagnostics;
+		int exit_code{};
+		int termination_signal{};
+		[[nodiscard]] bool succeeded() const noexcept;
+		[[nodiscard]] std::string canonical_form() const;
+		[[nodiscard]] std::string semantic_digest() const;
+	};
+
+	/** @brief Backend-independent host validator for one out-of-process provider task. */
+	class process_provider_runtime
+	{
+	  public:
+		explicit process_provider_runtime(const provider_process_port& processes);
+		[[nodiscard]] result<process_execution_report>
+		execute(const process_task_request& request) const;
+
+	  private:
+		const provider_process_port* processes_{};
 	};
 
 	/** @brief Rendered provider project file without direct filesystem effects. */

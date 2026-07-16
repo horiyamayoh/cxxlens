@@ -39,6 +39,7 @@ EXPECTED_IMPLEMENTED_ENTRIES = {
     "public.logical-query",
     "public.query-runtime",
     "public.provider-sdk",
+    "public.provider-runtime",
     "public.native-provider-sdk",
     "public.recipe-foundation",
 }

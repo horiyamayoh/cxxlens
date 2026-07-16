@@ -1,0 +1,72 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens_ng_provider_execution_report.schema.yaml
+title: cxxlens provider execution report v1
+type: object
+additionalProperties: false
+required:
+  - schema
+  - terminal
+  - provider
+  - input_binding
+  - sandbox
+  - frames
+  - diagnostics
+  - semantic_digest
+properties:
+  schema: {const: cxxlens.provider-execution-report.v1}
+  terminal:
+    pattern: '^(provider|security)\.[a-z0-9-]+$'
+  provider:
+    type: object
+    additionalProperties: false
+    required: [id, version, binary_digest, semantic_contract_digest]
+    properties:
+      id: {type: string, minLength: 1}
+      version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+      binary_digest: {$ref: '#/$defs/digest'}
+      semantic_contract_digest: {$ref: '#/$defs/digest'}
+  input_binding:
+    type: object
+    additionalProperties: false
+    required: [task, invocation, toolchain, environment]
+    properties:
+      task: {$ref: '#/$defs/digest'}
+      invocation: {$ref: '#/$defs/digest'}
+      toolchain: {$ref: '#/$defs/digest'}
+      environment: {$ref: '#/$defs/digest'}
+  sandbox:
+    type: object
+    additionalProperties: false
+    required: [platform, mechanisms, achieved, policy_digest, evidence_digest]
+    properties:
+      platform: {type: string, minLength: 1}
+      mechanisms:
+        type: array
+        uniqueItems: true
+        items: {type: string, minLength: 1}
+      achieved: {enum: [none, best_effort, enforced, certified]}
+      policy_digest: {$ref: '#/$defs/digest'}
+      evidence_digest: {$ref: '#/$defs/digest'}
+  frames:
+    type: object
+    additionalProperties: false
+    required: [count, last_sequence, transcript_digest]
+    properties:
+      count: {type: integer, minimum: 0}
+      last_sequence: {type: [integer, 'null'], minimum: 0}
+      transcript_digest: {$ref: '#/$defs/digest'}
+  diagnostics:
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required: [code, subject, detail]
+      properties:
+        code: {type: string, pattern: '^(provider|security)\.[a-z0-9-]+$'}
+        subject: {type: string}
+        detail: {type: string}
+  semantic_digest: {$ref: '#/$defs/digest'}
+$defs:
+  digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'

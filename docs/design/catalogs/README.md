@@ -77,6 +77,12 @@ deterministic reference planner/executor、annotated query result cursor、budge
 conflict/guarantee と logical/physical explain を production SDK に追加しました。memory/SQLite は同じ Logical
 Query IR と semantic rows を返し、physical backend 情報は logical authority へ入りません。
 
+Issue #70 は同 catalog を 1.4.0 へ進め、exact provider selection、Linux process/sandbox port、binary digest
+preflight、bounded provider transcript validator、`cxxlens-clang-worker-22`、Clang observation から
+`cc.entity` / `cc.call_site` / `cc.call_direct_target` への canonical normalizer を追加しました。GCC 固有または
+無視された semantic option、fatal/error、source normalization failure は exact とせず、provider-local
+observation、coverage、unresolved evidence を保持します。
+
 残る `maturity: bootstrap` catalog は acceptance manifest であり、名前空間、version axis、owner issue、依存関係の入口だけを固定します。
 entry の `status: contract-pending` は実装、stable API、release support を意味しません。各 owner issue が exact
 contract、validator、negative vector、conformance report を追加した時点でのみ maturity を進めます。

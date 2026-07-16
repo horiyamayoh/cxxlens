@@ -11,6 +11,7 @@ entries:
   - {id: relation.source, kind: relation, prefix: source., owner: cxxlens.project, authority: standard, grant_source: registry-only, minimum_qualification: canonical-semantic-qualified, status: active}
   - {id: relation.cc, kind: relation, prefix: cc., owner: cxxlens.project, authority: standard, grant_source: registry-only, minimum_qualification: canonical-semantic-qualified, status: active}
   - {id: relation.core, kind: relation, prefix: core., owner: cxxlens.project, authority: standard, grant_source: registry-only, minimum_qualification: canonical-semantic-qualified, status: active}
+  - {id: relation.frontend-clang22, kind: relation, prefix: frontend.clang22., owner: cxxlens.clang22.reference, authority: provider-owned, grant_source: registry-only, minimum_qualification: schema-conformant, status: active}
   - {id: relation.company-fixture, kind: relation, prefix: company., owner: cxxlens.conformance, authority: custom, grant_source: registry-only, minimum_qualification: schema-conformant, status: conformance-only}
   - {id: provider.cxxlens, kind: provider, prefix: cxxlens., owner: cxxlens.project, authority: standard, grant_source: registry-only, minimum_qualification: canonical-semantic-qualified, status: active}
   - {id: interpretation.cc, kind: interpretation, prefix: cc., owner: cxxlens.project, authority: standard, grant_source: registry-only, minimum_qualification: canonical-semantic-qualified, status: active}

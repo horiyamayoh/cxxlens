@@ -1,0 +1,166 @@
+schema: cxxlens.provider-runtime-contract.v1
+document_version: 1.0.0
+maturity: accepted
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md#17-provider-model
+  decision_adr: docs/design/adr/0015-process-provider-runtime-clang22-normalizer.md
+  owner_issue: '#70'
+  owner: steward.ng-provider-runtime
+dependencies:
+  - schemas/cxxlens_ng_provider_protocol.yaml
+  - schemas/cxxlens_ng_security_profile.yaml
+  - schemas/cxxlens_ng_provider_manifest.schema.yaml
+  - schemas/cxxlens_ng_snapshot_store_contract.yaml
+runtime:
+  process_effect_boundary: provider-process-port
+  supported_platform:
+    NG0: linux-glibc
+    other: provider.runtime-unavailable
+  launch:
+    shell: forbidden
+    argv: required
+    environment: explicit-allowlist
+    standard_input: anonymous-bounded-object
+    process_group: required
+    timeout_kills_process_group: true
+    cancellation_kills_process_group: true
+    stdout_stderr_combined_limit: required
+  sandbox:
+    assurance_order: [none, best_effort, enforced, certified]
+    effective_minimum: max(manifest, request, security-profile)
+    insufficient: security.sandbox-insufficient
+    report_fields: [platform, mechanisms, achieved, policy_digest, evidence_digest]
+    linux_enforced_mechanisms:
+      - no-shell-argv-exec
+      - explicit-environment
+      - anonymous-readonly-input
+      - process-group-cleanup
+      - address-space-limit
+      - cpu-limit
+      - output-file-size-limit
+      - open-file-limit
+      - subprocess-limit
+      - no-new-privileges
+      - network-syscall-deny
+  identity_binding:
+    required:
+      - provider_id
+      - provider_version
+      - provider_binary_digest
+      - provider_semantic_contract_digest
+      - task_input_digest
+      - normalized_invocation_digest
+      - toolchain_digest
+      - environment_digest
+      - sandbox_policy_digest
+    omitted_from_semantic_claim_identity:
+      - process_id
+      - wall_duration
+      - physical_executable_path
+selection:
+  precedence: [explicit_path, installation_manifest, project_config, system_registry]
+  exact_before_fallback: true
+  path_only: reject
+  shadowing: reject-all
+  higher_precedence_invalid: no-downgrade
+  adjacent_provider_or_version: explicit-policy-only
+  explanation:
+    all_candidates: required
+    fields: [source, exact_identity, selected, reason, fallback_used]
+protocol_session:
+  host_input:
+    - hello_ack
+    - schema_negotiate
+    - open_task
+    - credit
+    - close
+  provider_output:
+    - hello
+    - task_accepted
+    - batch_begin
+    - column_chunk
+    - batch_end
+    - coverage_chunk
+    - unresolved_chunk
+    - progress
+    - task_complete
+  sequence: contiguous-from-zero
+  terminal_last: required
+  output_after_terminal: reject
+  malformed_or_truncated: reject
+terminal:
+  stable:
+    - provider.success
+    - provider.timeout
+    - provider.cancelled
+    - provider.output-limit
+    - provider.crash
+    - provider.malformed-frame
+    - provider.checksum-mismatch
+    - provider.truncated-stream
+    - provider.schema-invalid
+    - provider.coverage-incomplete
+    - provider.runtime-unavailable
+    - provider.binary-identity-mismatch
+    - provider.frontend-request-invalid
+    - security.sandbox-insufficient
+  prior_published_snapshot: immutable
+  unsealed_output: discarded
+clang22:
+  executable: cxxlens-clang-worker-22
+  package: cxxlensClang22ProviderSDK
+  provider_id: cxxlens.clang22.reference
+  provider_version: 1.0.0
+  exact_major: 22
+  adjacent_major_fallback: forbidden
+  job_local_native_objects:
+    - VFS
+    - CompilerInvocation
+    - CompilerInstance
+    - DiagnosticsEngine
+    - FileManager
+    - SourceManager
+    - Preprocessor
+    - ASTContext
+    - FrontendAction
+  native_escape:
+    callback: forbidden
+    thread: forbidden
+    process: forbidden
+    serialized_pointer_or_address: forbidden
+  observations:
+    - frontend.clang22.entity_observation.v1
+    - frontend.clang22.type_observation.v1
+    - frontend.clang22.call_observation.v1
+  canonical_outputs:
+    - cc.entity.v1
+    - cc.call_site.v1
+    - cc.call_direct_target.v1
+  semantic_loss:
+    fatal_or_error: non-exact
+    ignored_semantic_option: non-exact
+    gcc_specific_option: non-exact
+    missing_source_normalization: unresolved-no-fabrication
+  normalizer:
+    identity_inputs:
+      - structural_observation
+      - normalized_source
+      - compile_unit
+      - variant
+      - toolchain
+    forbidden_identity_inputs:
+      - pretty_name_only
+      - native_pointer
+      - host_absolute_path
+      - observation_arrival_order
+report:
+  schema: schemas/cxxlens_ng_provider_execution_report.schema.yaml
+acceptance:
+  - kernel-query-store-link-closure-is-llvm-free
+  - native-object-never-crosses-callback-thread-process
+  - crash-timeout-cancel-malformed-are-distinct
+  - failed-worker-preserves-prior-snapshot
+  - semantic-loss-never-claims-exact-equivalence
+  - adjacent-provider-never-silent-fallback
+  - insufficient-enforced-sandbox-is-unavailable
+  - worker-native-sdk-provider-package-install-conformance

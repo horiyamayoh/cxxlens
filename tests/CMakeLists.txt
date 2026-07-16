@@ -76,6 +76,67 @@ set_tests_properties(
   PROPERTIES LABELS
              "unit;sdk;query;store;sqlite;determinism;budget;cancellation")
 
+add_executable(cxxlens-provider-process-fixture
+               fixtures/provider_process_fixture.cpp)
+target_link_libraries(cxxlens-provider-process-fixture
+                      PRIVATE cxxlens::provider_sdk)
+target_compile_features(cxxlens-provider-process-fixture PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-provider-process-fixture)
+
+add_executable(cxxlens-unit-sdk-provider-runtime
+               unit/sdk/provider_runtime_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-provider-runtime
+                      PRIVATE cxxlens::provider_sdk)
+target_compile_features(cxxlens-unit-sdk-provider-runtime PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-sdk-provider-runtime)
+add_test(NAME unit.sdk-provider-runtime
+         COMMAND cxxlens-unit-sdk-provider-runtime
+                 "$<TARGET_FILE:cxxlens-provider-process-fixture>")
+set_tests_properties(
+  unit.sdk-provider-runtime
+  PROPERTIES LABELS
+             "unit;sdk;provider;process;sandbox;security;budget;cancellation")
+
+add_executable(cxxlens-clang22-provider-normalizer
+               adapter/clang22/provider_normalizer_test.cpp)
+target_link_libraries(cxxlens-clang22-provider-normalizer
+                      PRIVATE cxxlens_clang22_provider_runtime)
+target_include_directories(cxxlens-clang22-provider-normalizer
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_compile_features(cxxlens-clang22-provider-normalizer PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-clang22-provider-normalizer)
+add_test(NAME adapter.clang22-provider-normalizer
+         COMMAND cxxlens-clang22-provider-normalizer)
+set_tests_properties(
+  adapter.clang22-provider-normalizer
+  PROPERTIES LABELS
+             "adapter;provider;clang22;normalizer;identity;coverage;unresolved")
+
+add_executable(cxxlens-clang22-provider-worker-protocol
+               adapter/clang22/provider_worker_protocol_test.cpp)
+target_link_libraries(cxxlens-clang22-provider-worker-protocol
+                      PRIVATE cxxlens::provider_sdk)
+target_compile_features(cxxlens-clang22-provider-worker-protocol
+                        PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-clang22-provider-worker-protocol)
+add_test(NAME adapter.clang22-provider-worker-protocol
+         COMMAND cxxlens-clang22-provider-worker-protocol
+                 "$<TARGET_FILE:cxxlens-clang-worker-22>")
+set_tests_properties(
+  adapter.clang22-provider-worker-protocol
+  PROPERTIES LABELS
+             "adapter;provider;clang22;process;protocol;sandbox;security")
+
+add_test(
+  NAME link.provider-sdk-llvm-free
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/link/provider_sdk_link_closure.py"
+    "$<TARGET_FILE:cxxlens-unit-sdk-query-runtime>")
+set_tests_properties(
+  link.provider-sdk-llvm-free
+  PROPERTIES LABELS "link;sdk;query;store;provider;llvm-free;acceptance")
+
 add_executable(cxxlens-public-header-sdk public_headers/sdk_header_test.cpp)
 target_link_libraries(cxxlens-public-header-sdk PRIVATE cxxlens::provider_sdk)
 target_compile_features(cxxlens-public-header-sdk PRIVATE cxx_std_23)
@@ -145,6 +206,11 @@ add_dependencies(
   cxxlens-sdk-test-binaries
   cxxlens-public-header-provider-clang22
   cxxlens-public-header-sdk
+  cxxlens-provider-process-fixture
+  cxxlens-clang22-provider-normalizer
+  cxxlens-clang22-provider-worker-protocol
+  cxxlens-clang-worker-22
+  cxxlens-unit-sdk-provider-runtime
   cxxlens-unit-sdk-query-runtime
   cxxlens-sdk-example-clang22-native
   cxxlens-sdk-example-dynamic_query

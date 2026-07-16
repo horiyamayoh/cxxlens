@@ -105,7 +105,7 @@ def render(relation: dict[str, object]) -> str:
             f'\t\t\t\toutput.semantic_major = {int(relation["semantic_major"])}U;',
             f'\t\t\t\toutput.semantics = "{string(str(relation["semantics"]))}";',
             f'\t\t\t\toutput.owner_namespace = "{string(str(relation["owner_namespace"]))}";',
-            f'\t\t\t\toutput.contract_canonical = "{string(contract_canonical)}";',
+            f'\t\t\t\toutput.contract_canonical = R"cxxlens({contract_canonical})cxxlens";',
             "\t\t\t\toutput.columns = {",
         ]
     )

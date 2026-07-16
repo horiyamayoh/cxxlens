@@ -1,5 +1,5 @@
 {
-  "asset_count": 693,
+  "asset_count": 711,
   "assets": [
     {
       "authority": "operational",
@@ -986,6 +986,16 @@
       "disposition": "inherit",
       "owner": "steward.ng-query",
       "path": "docs/design/adr/0014-deterministic-reference-query-runtime.md",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-provider-runtime",
+      "path": "docs/design/adr/0015-process-provider-runtime-clang22-normalizer.md",
       "profile": "NG0",
       "removal_issue": null,
       "replacement": null,
@@ -3084,6 +3094,16 @@
     {
       "authority": "normative",
       "disposition": "inherit",
+      "owner": "steward.ng-provider-runtime",
+      "path": "schemas/cxxlens_ng_provider_execution_report.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
       "owner": "steward.ng-provider-protocol",
       "path": "schemas/cxxlens_ng_provider_fuzz_corpus.schema.yaml",
       "profile": "NG0",
@@ -3126,6 +3146,26 @@
       "disposition": "inherit",
       "owner": "steward.ng-provider-protocol",
       "path": "schemas/cxxlens_ng_provider_protocol.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-provider-runtime",
+      "path": "schemas/cxxlens_ng_provider_runtime_contract.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-provider-runtime",
+      "path": "schemas/cxxlens_ng_provider_runtime_contract.yaml",
       "profile": "NG0",
       "removal_issue": null,
       "replacement": null,
@@ -4283,6 +4323,36 @@
     },
     {
       "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
+      "path": "src/llvm/clang22/provider_worker.cpp",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
+      "path": "src/llvm/clang22/provider_worker.hpp",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
+      "path": "src/llvm/clang22/provider_worker_main.cpp",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
       "disposition": "migrate",
       "owner": "steward.ng-kernel",
       "path": "src/llvm/clang22/source_map_adapter.cpp",
@@ -4553,6 +4623,16 @@
     },
     {
       "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
+      "path": "src/runtime/provider_process_adapter.cpp",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
       "disposition": "migrate",
       "owner": "steward.ng-kernel",
       "path": "src/runtime/runtime_support.hpp",
@@ -4606,6 +4686,16 @@
       "disposition": "inherit",
       "owner": "steward.ng-sdk",
       "path": "src/sdk/provider.cpp",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
+      "path": "src/sdk/provider_runtime.cpp",
       "profile": "NG0",
       "removal_issue": null,
       "replacement": null,
@@ -5053,6 +5143,26 @@
     },
     {
       "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
+      "path": "tests/adapter/clang22/provider_normalizer_test.cpp",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
+      "path": "tests/adapter/clang22/provider_worker_protocol_test.cpp",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
       "disposition": "migrate",
       "owner": "steward.ng-acceptance",
       "path": "tests/adapter/clang22/semantic_extractor_test.cpp",
@@ -5273,6 +5383,16 @@
     },
     {
       "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
+      "path": "tests/fixtures/provider_process_fixture.cpp",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
       "disposition": "migrate",
       "owner": "steward.ng-acceptance",
       "path": "tests/fixtures/tsan_race_fixture.cpp",
@@ -5463,6 +5583,26 @@
     },
     {
       "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
+      "path": "tests/install/clang22_sdk_consumer/CMakeLists.txt",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
+      "path": "tests/install/clang22_sdk_consumer/main.cpp",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
       "disposition": "migrate",
       "owner": "steward.ng-acceptance",
       "path": "tests/install/consumer/CMakeLists.txt",
@@ -5540,6 +5680,16 @@
       "removal_issue": "#72",
       "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
       "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
+      "path": "tests/link/provider_sdk_link_closure.py",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
     },
     {
       "authority": "implementation",
@@ -5776,6 +5926,16 @@
       "disposition": "inherit",
       "owner": "steward.ng-provider-protocol",
       "path": "tests/quality/test_ng_provider_protocol.py",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-provider-runtime",
+      "path": "tests/quality/test_ng_provider_runtime.py",
       "profile": "NG0",
       "removal_issue": null,
       "replacement": null,
@@ -6160,6 +6320,16 @@
       "removal_issue": "#72",
       "replacement": "schemas/cxxlens_ng_acceptance_manifest.yaml",
       "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
+      "path": "tests/unit/sdk/provider_runtime_test.cpp",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
     },
     {
       "authority": "implementation",
@@ -6604,6 +6774,16 @@
     {
       "authority": "implementation",
       "disposition": "inherit",
+      "owner": "steward.ng-provider-runtime",
+      "path": "tools/quality/check_ng_provider_runtime.py",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
       "owner": "steward.ng-query",
       "path": "tools/quality/check_ng_query_contract.py",
       "profile": "NG0",
@@ -6935,7 +7115,7 @@
   "classifications": {
     "archive": 37,
     "delete": 22,
-    "inherit": 178,
+    "inherit": 196,
     "migrate": 390,
     "replace": 66
   },
@@ -6943,5 +7123,5 @@
   "generated_by": "tools/quality/check_documentation_consistency.py",
   "schema": "cxxlens.asset-migration-ledger.v1",
   "source_policy": "schemas/cxxlens_asset_migration_policy.yaml",
-  "source_policy_digest": "sha256:2ccd8a45780a14e2aedc9845b0f0b391dd29205eb9bf4e2970ae3873bc8f074d"
+  "source_policy_digest": "sha256:6731fe6933ea0a189077a4d1d97d1efd0da3492de903a32bc5e5679a9d8701b7"
 }

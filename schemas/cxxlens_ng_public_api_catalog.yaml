@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.3.0
+document_version: 1.4.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -304,6 +304,35 @@ entries:
     invariants: [provider-author-does-not-construct-frames-or-checksums, credit-and-sequence-fail-closed, coverage-unresolved-evidence-not-omitted, cxxlens-provider-manifest-v1-schema-exact]
     implementation_evidence: [src/sdk/provider.cpp, src/sdk/testing.cpp, examples/sdk/portable_provider.cpp, tools/sdk/provider_scaffold_main.cpp]
 
+  - id: public.provider-runtime
+    status: implemented
+    owner_issue: '#70'
+    profile: NG0
+    target: cxxlens::provider_sdk
+    headers: [include/cxxlens/sdk/provider.hpp]
+    symbols:
+      - name: provider selection
+        kind: function-family
+        signature: 'provider_candidate; provider_selection_request; provider_selection; result<provider_selection> select_provider(const provider_selection_request&, span<const provider_candidate>)'
+      - name: provider process port
+        kind: class
+        signature: 'provider_process_port::run(const process_invocation&, stop_token) const; unique_ptr<provider_process_port> make_system_provider_process_port()'
+      - name: process provider runtime
+        kind: class
+        signature: 'process_provider_runtime(const provider_process_port&); result<process_execution_report> execute(const process_task_request&) const'
+      - name: sandbox values
+        kind: value
+        signature: 'sandbox_assurance; sandbox_requirement; sandbox_report; process_status; process_invocation; process_output'
+      - name: provider frame decoding
+        kind: function-family
+        signature: 'decode_frame_stream(span<const byte>, protocol_limits, uint64_t); decode_control_text(span<const byte>)'
+    errors: [provider.adjacent-fallback-forbidden, provider.binary-identity-mismatch, provider.cancelled, provider.checksum-mismatch, provider.crash, provider.identity-mismatch, provider.lower-precedence-not-considered, provider.malformed-frame, provider.not-found, provider.output-limit, provider.process-launch-failed, provider.process-request-invalid, provider.runtime-unavailable, provider.sandbox-report-invalid, provider.sandbox-requirement-invalid, provider.schema-invalid, provider.selection-invalid, provider.stream-invalid, provider.success, provider.task-invalid, provider.timeout, provider.truncated-stream, provider.worker-stderr, security.certification-missing, security.downgrade-forbidden, security.path-only-discovery, security.provider-shadowing, security.sandbox-insufficient, security.sandbox-policy-mismatch, security.signature-untrusted]
+    lifetime: [process-input-output-report-and-frames-are-value-owned, process-port-is-synchronously-borrowed-by-runtime, native-compiler-objects-never-enter-this-api]
+    threading: [runtime-is-concurrent-readable-when-port-is, each-process-task-has-independent-stop-token-and-budget, provider-worker-output-is-detached-before-process-exit]
+    versioning: [selection-requires-exact-provider-version-binary-and-semantic-digests, adjacent-fallback-is-explicit-only, process-report-schema-is-independent-from-provider-protocol]
+    invariants: [argv-only-no-shell, executable-content-digest-verified-before-launch, effective-sandbox-minimum-fail-closed, sequence-and-terminal-validated, crash-timeout-cancel-malformed-distinct, failed-worker-does-not-publish-snapshot]
+    implementation_evidence: [src/sdk/provider.cpp, src/runtime/provider_process_adapter.cpp, src/sdk/provider_runtime.cpp, src/llvm/clang22/provider_worker.cpp, tests/unit/sdk/provider_runtime_test.cpp, tests/adapter/clang22/provider_worker_protocol_test.cpp, tests/link/provider_sdk_link_closure.py, schemas/cxxlens_ng_provider_runtime_contract.yaml, schemas/cxxlens_ng_provider_execution_report.schema.yaml, docs/design/adr/0015-process-provider-runtime-clang22-normalizer.md]
+
   - id: public.native-provider-sdk
     status: implemented
     owner_issue: '#66'
@@ -325,7 +354,7 @@ entries:
     threading: [borrowed-translation-unit-is-not-copyable-or-transferable, callback-is-synchronous]
     versioning: [clang-major-is-explicit-in-package-target-header-and-namespace]
     invariants: [pointer-types-rejected-at-compile-time, source-range-normalized-to-half-open-detached-source-span, no-silent-clang-major-fallback]
-    implementation_evidence: [src/llvm/clang22/provider_sdk.cpp, examples/sdk/clang22_native_provider.cpp, tests/public_headers/provider_clang22_header_test.cpp]
+    implementation_evidence: [src/llvm/clang22/provider_sdk.cpp, src/llvm/clang22/provider_worker.cpp, examples/sdk/clang22_native_provider.cpp, tests/public_headers/provider_clang22_header_test.cpp, tests/adapter/clang22/provider_normalizer_test.cpp, tests/install/clang22_sdk_consumer/main.cpp]
 
   - id: public.recipe-foundation
     status: implemented

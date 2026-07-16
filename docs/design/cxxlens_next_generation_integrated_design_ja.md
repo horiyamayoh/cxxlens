@@ -2136,6 +2136,13 @@ third-party dynamic C++ plugin を in-process load しない。
 - crash/RSS riskの高い solver
 - remote bridge
 
+NG0 reference implementation は `cxxlens::sdk::provider::process_provider_runtime` と
+`provider_process_port` である。Linux/glibc port は executable の actual content digest を manifest と照合してから、
+shell を介さない argv、explicit environment、anonymous sealed input、process group、resource limit、
+`no_new_privs`、network syscall deny を適用する。timeout、cancel、output limit、signal crash、
+malformed/truncated stream は同一 failure に潰さず、sandbox minimum 未達時は起動しない。詳細 contract は
+`schemas/cxxlens_ng_provider_runtime_contract.yaml` と ADR 0015 を authority とする。
+
 ### 17.10 Native SDK packaging
 
 official worker 内の built-in extractor は静的 link 可。
@@ -2363,6 +2370,12 @@ frontend.clang22.macro_observation
 ```
 
 standard `cc.*` への canonicalization は normalizer provider が行う。
+
+NG0 reference path は `cxxlens-clang-worker-22` 内で既存 Clang 22 extractor の detached observation を受け、
+provider protocol で上記 observation と `cc.entity`、`cc.call_site`、`cc.call_direct_target` を同時に出力する。
+identity は structural observation、normalized source、compile unit、variant、toolchain から導出し、legacy symbol
+ID は batch 内対応付けにのみ使う。source がない call や direct target を対応付けられない call は observation を
+保持したまま unresolved とし、standard row を捏造しない。
 
 ---
 
@@ -4264,7 +4277,7 @@ IR は index 名や join algorithm を含まない。
 
 ```yaml
 schema: cxxlens.provider-manifest.v1
-provider_id: org.llvm.clang22.source
+provider_id: cxxlens.clang22.reference
 provider_version: 1.0.0
 provider_binary_digest: sha256:<64 lowercase hex>
 provider_semantic_contract_digest: sha256:<64 lowercase hex>
@@ -4277,17 +4290,21 @@ protocol_range:
   maximum_minor: 0
   required_features: [streamed-column-chunks, credit-backpressure]
   optional_features: [durable-resume-token]
-platform_tuples: [linux-x86_64]
+platform_tuples: [linux-glibc]
 offered_relations:
   - frontend.clang22.entity_observation.v1
+  - frontend.clang22.type_observation.v1
   - frontend.clang22.call_observation.v1
+  - cc.entity.v1
+  - cc.call_site.v1
+  - cc.call_direct_target.v1
 required_relations: []
-interpretation_domains: [frontend.clang22.native-1]
+interpretation_domains: [cc.clang22-canonical-1]
 invalidation_contract: sha256:<64 lowercase hex>
 determinism_contract: sha256:<64 lowercase hex>
 resource_class: ast-heavy
-sandbox_minimum: process-isolated
-task_stage: {input: observation, output: assertion}
+sandbox_minimum: enforced
+task_stage: {input: observation, output: observation}
 ```
 
 exact instance schema は `schemas/cxxlens_ng_provider_manifest.schema.yaml` である。

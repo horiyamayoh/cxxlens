@@ -273,6 +273,19 @@ add_dependencies(cxxlens-ng-security-contract-check
                  cxxlens-ng-provider-protocol-check)
 
 add_custom_target(
+  cxxlens-ng-provider-runtime-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_provider_runtime.py"
+    check --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_ng_provider_runtime.py"
+  VERBATIM)
+add_dependencies(cxxlens-ng-provider-runtime-check
+                 cxxlens-ng-security-contract-check)
+
+add_custom_target(
   cxxlens-ng-sdk-contract-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -285,7 +298,7 @@ add_custom_target(
   DEPENDS cxxlens-provider-scaffold cxxlens-sdk-doctor
   VERBATIM)
 add_dependencies(cxxlens-ng-sdk-contract-check
-                 cxxlens-ng-security-contract-check)
+                 cxxlens-ng-provider-runtime-check)
 
 add_custom_target(
   cxxlens-public-api-contract-freeze-check
@@ -562,6 +575,7 @@ add_dependencies(
   cxxlens-ng-semantic-guarantee-check
   cxxlens-ng-snapshot-store-contract-check
   cxxlens-ng-provider-protocol-check
+  cxxlens-ng-provider-runtime-check
   cxxlens-ng-security-contract-check
   cxxlens-ng-sdk-contract-check
   cxxlens-ng-relation-contract-check

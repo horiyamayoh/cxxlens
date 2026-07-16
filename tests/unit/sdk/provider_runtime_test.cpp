@@ -1,0 +1,348 @@
+#include <array>
+#include <csignal>
+#include <cstdlib>
+#include <fstream>
+#include <iostream>
+#include <iterator>
+#include <limits>
+#include <stop_token>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include <cxxlens/sdk.hpp>
+
+namespace
+{
+	using namespace cxxlens::sdk;
+	using namespace cxxlens::sdk::provider;
+
+	constexpr std::string_view binary_digest =
+		"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+	constexpr std::string_view semantic_contract_digest =
+		"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+	constexpr std::string_view policy_digest =
+		"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+
+	void require(const bool condition, const std::string& message)
+	{
+		if (!condition)
+		{
+			std::cerr << message << '\n';
+			std::exit(1);
+		}
+	}
+
+	[[nodiscard]] std::string executable_digest(const std::string& executable)
+	{
+		std::ifstream input{executable, std::ios::binary};
+		require(input.good(), "provider fixture could not be opened");
+		const std::string bytes{std::istreambuf_iterator<char>{input},
+								std::istreambuf_iterator<char>{}};
+		require(!input.bad(), "provider fixture could not be read");
+		return content_digest(std::as_bytes(std::span{bytes}));
+	}
+
+	[[nodiscard]] relation_descriptor snapshot_test_descriptor()
+	{
+		relation_descriptor value;
+		value.id = "company.test.runtime_snapshot.v1";
+		value.name = "company.test.runtime_snapshot";
+		value.version = {1U, 0U, 0U};
+		value.semantic_major = 1U;
+		value.semantics = "company.test.runtime_snapshot/1";
+		value.owner_namespace = "company.test";
+		value.columns = {
+			{"company.test.runtime_snapshot.v1.key",
+			 "key",
+			 {scalar_kind::typed_id, "runtime_snapshot_id", false},
+			 true,
+			 column_role::claim_key},
+		};
+		value.key_columns = {"company.test.runtime_snapshot.v1.key"};
+		value.merge = merge_mode::set;
+		value.descriptor_digest =
+			semantic_digest("cxxlens.relation-descriptor.v1", value.canonical_form());
+		return value;
+	}
+
+	[[nodiscard]] detached_row snapshot_test_row()
+	{
+		auto descriptor = snapshot_test_descriptor();
+		row_builder builder{descriptor};
+		require(
+			builder
+				.set(
+					{descriptor.id, descriptor.columns.front().id, descriptor.columns.front().type},
+					detached_cell::typed("runtime_snapshot_id", "runtime:snapshot:1"))
+				.has_value(),
+			"snapshot test row setup failed");
+		auto row = std::move(builder).finish();
+		require(row.has_value(), "snapshot test row validation failed");
+		return std::move(*row);
+	}
+
+	[[nodiscard]] partition_draft snapshot_test_partition(const relation_engine& engine)
+	{
+		observation observed{
+			snapshot_test_row(),
+			{"runtime-universe", {"all"}},
+			"company.test.runtime-canonical-1",
+			{"company.test.process-provider", std::string{binary_digest}},
+			{"sha256:7777777777777777777777777777777777777777777777777777777777777777"},
+			"evidence:runtime-snapshot",
+			{"exact", "partition", "assumptions:none", {"schema_validated"}},
+		};
+		auto assertion = make_assertion(engine, std::move(observed));
+		require(assertion.has_value(), "snapshot test assertion failed");
+		partition_draft draft;
+		draft.relation_descriptor_id = snapshot_test_descriptor().id;
+		draft.scope = "runtime-scope";
+		draft.condition = {"runtime-universe", {"all"}};
+		draft.interpretation = "company.test.runtime-canonical-1";
+		draft.producer_semantics = binary_digest;
+		draft.precision_profile = "exact";
+		draft.assumption_set_id = "assumptions:none";
+		draft.claims = {std::move(*assertion)};
+		auto basis = claim_input_basis_digest(draft.claims.front().input_basis);
+		require(basis.has_value(), "snapshot test input basis failed");
+		draft.producer_input_basis_digest = std::move(*basis);
+		draft.coverage = {{"runtime", "runtime-scope", "covered", ""}};
+		return draft;
+	}
+
+	[[nodiscard]] manifest make_manifest(const semantic_version version = {1U, 0U, 0U},
+										 std::string binary = std::string{binary_digest})
+	{
+		manifest value;
+		value.provider_id = "company.test.process-provider";
+		value.provider_version = version;
+		value.package_identity = "company.test.process-provider.package";
+		value.publisher = "company.test";
+		value.license = "Apache-2.0";
+		value.protocol = {1U, 0U, 0U, {"credit-backpressure"}, {}};
+		value.platform_tuples = {"linux-glibc"};
+		value.provider_binary_digest = std::move(binary);
+		value.provider_semantic_contract_digest = semantic_contract_digest;
+		value.offered_relations = {"company.lock.acquire@1"};
+		value.interpretation_domains = {"provider.company.test.process-provider"};
+		value.invalidation_contract =
+			"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+		value.determinism_contract =
+			"sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+		value.resource_class = "provider.test";
+		value.sandbox_minimum = "enforced";
+		value.requested_qualifications = {"canonical-semantic-qualified"};
+		return value;
+	}
+
+	[[nodiscard]] sandbox_report make_sandbox(const sandbox_assurance achieved)
+	{
+		return {"linux-glibc",
+				{"no-shell-argv-exec"},
+				achieved,
+				std::string{policy_digest},
+				"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"};
+	}
+
+	[[nodiscard]] provider_candidate
+	candidate(const std::string& executable,
+			  const std::string& mode,
+			  const discovery_source source = discovery_source::explicit_path,
+			  const sandbox_assurance achieved = sandbox_assurance::enforced)
+	{
+		return {make_manifest({1U, 0U, 0U}, executable_digest(executable)),
+				source,
+				{executable, mode},
+				true,
+				true,
+				true,
+				make_sandbox(achieved),
+				{}};
+	}
+
+	[[nodiscard]] provider_selection_request selection_request(const std::string& executable)
+	{
+		return {"company.test.process-provider",
+				{1U, 0U, 0U},
+				executable_digest(executable),
+				std::string{semantic_contract_digest},
+				{sandbox_assurance::enforced, std::string{policy_digest}},
+				true,
+				false};
+	}
+
+	[[nodiscard]] process_task_request task(provider_selection selection)
+	{
+		process_task_request request;
+		request.selection = std::move(selection);
+		request.task_id = "task-1";
+		request.payload = {std::byte{0x01}, std::byte{0x02}, std::byte{0x03}};
+		request.task_input_digest = content_digest(request.payload);
+		request.normalized_invocation_digest =
+			"sha256:1111111111111111111111111111111111111111111111111111111111111111";
+		request.toolchain_digest =
+			"sha256:2222222222222222222222222222222222222222222222222222222222222222";
+		request.environment_digest =
+			"sha256:3333333333333333333333333333333333333333333333333333333333333333";
+		request.sandbox = {sandbox_assurance::enforced, std::string{policy_digest}};
+		request.budget.wall_ms = 2000U;
+		request.budget.cpu_ms = 2000U;
+		request.budget.rss_bytes = 256U * 1024U * 1024U;
+		request.budget.output_bytes = 4U * 1024U * 1024U;
+		request.budget.open_files = 64U;
+		request.budget.subprocesses = 1U;
+		return request;
+	}
+
+	[[nodiscard]] provider_selection select(const std::string& executable, const std::string& mode)
+	{
+		const auto value = candidate(executable, mode);
+		auto selected = select_provider(selection_request(executable), std::span{&value, 1U});
+		require(selected.has_value(), "exact provider selection failed");
+		return std::move(*selected);
+	}
+
+	void check_selection(const std::string& executable)
+	{
+		auto exact = candidate(executable, "success");
+		auto selected = select_provider(selection_request(executable), std::span{&exact, 1U});
+		require(selected && !selected->fallback_used &&
+					selected->decisions.front().reason == "selected-exact",
+				"exact selection was not explained");
+
+		auto adjacent = exact;
+		adjacent.description.provider_version = {1U, 1U, 0U};
+		auto rejected = select_provider(selection_request(executable), std::span{&adjacent, 1U});
+		require(!rejected && rejected.error().code == "provider.not-found",
+				"adjacent provider version silently fell back");
+
+		auto shadow = exact;
+		shadow.description.package_identity = "company.test.shadow.package";
+		shadow.description.provider_binary_digest =
+			"sha256:9999999999999999999999999999999999999999999999999999999999999999";
+		std::array shadowed{exact, shadow};
+		auto ambiguous = select_provider(selection_request(executable), shadowed);
+		require(!ambiguous && ambiguous.error().code == "security.provider-shadowing",
+				"provider shadowing was first-wins selected");
+
+		auto weak = candidate(
+			executable, "success", discovery_source::explicit_path, sandbox_assurance::best_effort);
+		auto unavailable = select_provider(selection_request(executable), std::span{&weak, 1U});
+		require(!unavailable && unavailable.error().code == "security.downgrade-forbidden",
+				"insufficient enforced sandbox was selected");
+
+		auto path_only = exact;
+		path_only.authoritative_path = false;
+		auto path_rejected =
+			select_provider(selection_request(executable), std::span{&path_only, 1U});
+		require(!path_rejected && path_rejected.error().code == "security.downgrade-forbidden",
+				"PATH-only provider discovery became authority");
+	}
+
+	void check_process_faults(const std::string& executable)
+	{
+		auto processes = make_system_provider_process_port();
+		require(processes != nullptr, "system provider process port unavailable");
+		process_provider_runtime runtime{*processes};
+
+		for (const auto mode : {"success", "network-check"})
+		{
+			auto request = task(select(executable, mode));
+			auto report = runtime.execute(request);
+			require(report && report->succeeded() &&
+						report->frames.front().type == message_type::hello &&
+						report->frames.back().type == message_type::task_complete &&
+						report->sandbox.achieved == sandbox_assurance::enforced &&
+						report->canonical_form().contains("cxxlens.provider-execution-report.v1"),
+					std::string{"successful process provider failed: "} + mode);
+		}
+
+		auto failed = runtime.execute(task(select(executable, "failed")));
+		require(failed && failed->terminal == "provider.schema-invalid",
+				"provider task failure lost its structured terminal");
+
+		auto crash = runtime.execute(task(select(executable, "crash")));
+		require(crash && crash->terminal == "provider.crash" &&
+					crash->termination_signal == SIGSEGV,
+				"worker crash was not distinguished");
+
+		auto timeout_request = task(select(executable, "timeout"));
+		timeout_request.budget.wall_ms = 25U;
+		auto timeout = runtime.execute(timeout_request);
+		require(timeout && timeout->terminal == "provider.timeout",
+				"worker timeout was not distinguished");
+
+		auto cancelled_request = task(select(executable, "timeout"));
+		std::stop_source cancelled;
+		cancelled.request_stop();
+		cancelled_request.cancellation = cancelled.get_token();
+		auto cancellation = runtime.execute(cancelled_request);
+		require(cancellation && cancellation->terminal == "provider.cancelled",
+				"worker cancellation was not distinguished");
+
+		auto malformed = runtime.execute(task(select(executable, "malformed")));
+		require(malformed && malformed->terminal == "provider.truncated-stream",
+				"malformed worker output was not distinguished");
+
+		auto limited_request = task(select(executable, "output-limit"));
+		limited_request.budget.output_bytes = 4096U;
+		auto limited = runtime.execute(limited_request);
+		require(limited && limited->terminal == "provider.output-limit",
+				"worker output limit was not distinguished");
+
+		auto identity = runtime.execute(task(select(executable, "wrong-identity")));
+		require(identity && identity->terminal == "provider.binary-identity-mismatch",
+				"worker identity mismatch was accepted");
+	}
+
+	void check_prior_snapshot_preserved(const std::string& executable)
+	{
+		relation_registry registry;
+		require(registry.add(snapshot_test_descriptor()).has_value(),
+				"snapshot registry setup failed");
+		auto engine = registry.build("provider-runtime-snapshot");
+		require(engine.has_value(), "snapshot relation engine failed");
+		auto store = make_in_memory_snapshot_store(*engine);
+		require(store.has_value(), "snapshot store failed");
+		snapshot_series_selector selector{
+			"catalog",
+			"scope",
+			std::string{engine->generation()},
+			"runtime-universe",
+			std::string{engine->registry_digest()},
+			"sha256:4444444444444444444444444444444444444444444444444444444444444444",
+			"sha256:5555555555555555555555555555555555555555555555555555555555555555"};
+		auto writer = store->begin(snapshot_draft{
+			selector,
+			{1U, 0U, 0U},
+			"sha256:6666666666666666666666666666666666666666666666666666666666666666",
+			std::nullopt});
+		require(writer.has_value(), "snapshot writer failed");
+		auto staged = writer->stage(snapshot_test_partition(*engine));
+		require(staged.has_value(),
+				"baseline snapshot staging failed: " +
+					(staged ? std::string{} : staged.error().code + " " + staged.error().detail));
+		require(writer->validate().has_value(), "baseline snapshot validation failed");
+		auto published = writer->publish();
+		require(published.has_value(), "baseline snapshot failed");
+		const auto prior = published->manifest().id;
+
+		auto processes = make_system_provider_process_port();
+		process_provider_runtime runtime{*processes};
+		auto failed = runtime.execute(task(select(executable, "crash")));
+		require(failed && !failed->succeeded(), "crashing provider unexpectedly succeeded");
+		auto current = store->current(selector);
+		require(current && current->manifest().id == prior,
+				"failed worker destroyed or replaced the prior snapshot");
+	}
+} // namespace
+
+int main(const int argument_count, const char* const* arguments)
+{
+	require(argument_count == 2, "provider process fixture path missing");
+	const std::string executable{arguments[1]};
+	check_selection(executable);
+	check_process_faults(executable);
+	check_prior_snapshot_preserved(executable);
+}

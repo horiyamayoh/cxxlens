@@ -1,0 +1,57 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens_ng_provider_runtime_contract.schema.yaml
+title: cxxlens provider runtime contract
+type: object
+additionalProperties: false
+required:
+  - schema
+  - document_version
+  - maturity
+  - authority
+  - dependencies
+  - runtime
+  - selection
+  - protocol_session
+  - terminal
+  - clang22
+  - report
+  - acceptance
+properties:
+  schema: {const: cxxlens.provider-runtime-contract.v1}
+  document_version: {const: 1.0.0}
+  maturity: {const: accepted}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, decision_adr, owner_issue, owner]
+    properties:
+      design: {type: string, minLength: 1}
+      decision_adr: {type: string, minLength: 1}
+      owner_issue: {const: '#70'}
+      owner: {const: steward.ng-provider-runtime}
+  dependencies:
+    type: array
+    minItems: 4
+    uniqueItems: true
+    items: {type: string, minLength: 1}
+  runtime: {$ref: '#/$defs/open_object'}
+  selection: {$ref: '#/$defs/open_object'}
+  protocol_session: {$ref: '#/$defs/open_object'}
+  terminal: {$ref: '#/$defs/open_object'}
+  clang22: {$ref: '#/$defs/open_object'}
+  report:
+    type: object
+    additionalProperties: false
+    required: [schema]
+    properties:
+      schema: {const: schemas/cxxlens_ng_provider_execution_report.schema.yaml}
+  acceptance:
+    type: array
+    minItems: 8
+    uniqueItems: true
+    items: {type: string, pattern: '^[a-z0-9-]+$'}
+$defs:
+  open_object:
+    type: object
+    minProperties: 1
+    additionalProperties: true
