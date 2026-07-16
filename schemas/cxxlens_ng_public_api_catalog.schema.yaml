@@ -1,0 +1,126 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-public-api-catalog.v1
+title: cxxlens next-generation public C++ API catalog
+type: object
+additionalProperties: false
+required:
+  - schema
+  - kind
+  - document_version
+  - maturity
+  - authority
+  - compatibility
+  - packages
+  - author_paths
+  - entries
+properties:
+  schema: {const: cxxlens.ng-public-api-catalog.v1}
+  kind: {const: public-cpp-api-catalog}
+  document_version: {$ref: '#/$defs/version'}
+  maturity: {const: implemented}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, index, decision_adr, owner_issue, owner]
+    properties:
+      design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
+      index: {const: docs/design/catalogs/README.md}
+      decision_adr: {const: docs/design/adr/0012-author-sdk-surface.md}
+      owner_issue: {const: '#66'}
+      owner: {const: steward.ng-sdk}
+  compatibility:
+    type: object
+    additionalProperties: false
+    required: [version_axis, current, relation_axis, query_ir_axis, provider_protocol_axis]
+    properties:
+      version_axis: {const: public-cpp-source-api}
+      current: {$ref: '#/$defs/version'}
+      relation_axis: {const: relation-descriptor}
+      query_ir_axis: {const: logical-query-ir}
+      provider_protocol_axis: {const: provider-protocol}
+  packages:
+    type: array
+    minItems: 2
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, cmake_package, target, headers, llvm_clang_dependency, link_dependencies]
+      properties:
+        id: {$ref: '#/$defs/id'}
+        cmake_package: {type: string, minLength: 1}
+        target: {type: string, pattern: '^cxxlens::[a-z0-9_]+$'}
+        headers: {$ref: '#/$defs/paths'}
+        llvm_clang_dependency: {enum: [forbidden, explicit-native-only]}
+        link_dependencies: {type: array, uniqueItems: true, items: {type: string}}
+  author_paths:
+    type: array
+    minItems: 5
+    maxItems: 5
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, entry, implementation, positive_example, negative_example, harness]
+      properties:
+        id:
+          enum: [generated-typed-query, runtime-dynamic-query, portable-provider, clang22-native-provider, high-level-recipe]
+        entry: {$ref: '#/$defs/id'}
+        implementation: {$ref: '#/$defs/path'}
+        positive_example: {$ref: '#/$defs/path'}
+        negative_example: {$ref: '#/$defs/path'}
+        negative_mode: {enum: [compile-fail, runtime-rejection]}
+        harness: {$ref: '#/$defs/path'}
+  entries:
+    type: array
+    minItems: 8
+    items:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - status
+        - owner_issue
+        - profile
+        - target
+        - headers
+        - symbols
+        - errors
+        - lifetime
+        - threading
+        - versioning
+        - invariants
+        - implementation_evidence
+      properties:
+        id: {$ref: '#/$defs/id'}
+        status: {enum: [implemented, contract-pending]}
+        owner_issue: {type: string, pattern: '^#[0-9]+$'}
+        profile: {enum: [NG0, NG1, NG2, NG3]}
+        target: {type: string, pattern: '^cxxlens::[a-z0-9_]+$'}
+        headers: {$ref: '#/$defs/paths'}
+        symbols:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [name, kind, signature]
+            properties:
+              name: {type: string, minLength: 1}
+              kind: {enum: [value, class, concept, function, function-family, template]}
+              signature: {type: string, minLength: 1}
+        errors: {type: array, uniqueItems: true, items: {$ref: '#/$defs/id'}}
+        lifetime: {type: array, minItems: 1, uniqueItems: true, items: {type: string, minLength: 1}}
+        threading: {type: array, minItems: 1, uniqueItems: true, items: {type: string, minLength: 1}}
+        versioning: {type: array, minItems: 1, uniqueItems: true, items: {type: string, minLength: 1}}
+        invariants: {type: array, minItems: 1, uniqueItems: true, items: {type: string, minLength: 1}}
+        implementation_evidence: {$ref: '#/$defs/paths'}
+        depends_on: {type: array, uniqueItems: true, items: {$ref: '#/$defs/id'}}
+$defs:
+  id: {type: string, pattern: '^[a-z][a-z0-9_.-]+$'}
+  version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+  path: {type: string, pattern: '^(include|src|tests|examples|tools|schemas|docs|cmake)/.+'}
+  paths:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {$ref: '#/$defs/path'}

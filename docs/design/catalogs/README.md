@@ -1,8 +1,7 @@
 # Next-generation catalog and registry index
 
-以下は次世代設計の machine-readable entry point です。Issue #58 が配置した catalog は
-`cxxlens.ng-catalog-bootstrap.v1` から開始し、各 exact-contract issue が個別の versioned schema と validator へ
-昇格させます。
+以下は次世代設計の machine-readable entry point です。Issue #58 が配置した bootstrap catalog は、各
+exact-contract issue が個別の versioned schema、validator、positive/negative vector へ昇格させます。
 
 | Contract | Path | Owner | State |
 |---|---|---|---|
@@ -11,7 +10,7 @@
 | Semantic Guarantee Contract | `schemas/cxxlens_ng_semantic_guarantee_contract.yaml` | #62 | accepted exact contract |
 | Snapshot / Store Contract | `schemas/cxxlens_ng_snapshot_store_contract.yaml` | #63 | accepted exact contract |
 | Provider Protocol | `schemas/cxxlens_ng_provider_protocol.yaml` | #64 | accepted exact contract |
-| Public C++ API Catalog | `schemas/cxxlens_ng_public_api_catalog.yaml` | #58 → #66 | bootstrap |
+| Public C++ API Catalog | `schemas/cxxlens_ng_public_api_catalog.yaml` | #66 | implemented exact contract |
 | Acceptance Manifest | `schemas/cxxlens_ng_acceptance_manifest.yaml` | #58 → #71 | bootstrap |
 | Security Profile | `schemas/cxxlens_ng_security_profile.yaml` | #65 | accepted exact contract |
 
@@ -54,6 +53,12 @@ discovery precedence、shadowing/downgrade rejection、sandbox assurance、produ
 boundary、provider/relation/interpretation/toolchain/platform support tuple を固定しています。manifest の自己認証と
 `schema-conformant` は standard canonical authority を付与しません。
 
-残る `maturity: bootstrap` catalog は名前空間、version axis、owner issue、依存関係の入口だけを固定します。
+Public C++ API Catalog は Issue #66 により `cxxlens.ng-public-api-catalog.v1` へ昇格し、generated typed query、
+runtime dynamic query、portable provider、Clang 22 native provider、high-level recipe foundation の5経路を、
+signature、error、lifetime、threading、versioning、実装/正例/負例/harness とともに固定しています。通常の
+`cxxlens::provider_sdk` は LLVM/Clang を link/fetch せず、native surface は `cxxlens::clang22_provider_sdk` に
+明示分離されます。flagship recipe の completion は引き続き Issue #73 が所有します。
+
+残る `maturity: bootstrap` catalog は acceptance manifest であり、名前空間、version axis、owner issue、依存関係の入口だけを固定します。
 entry の `status: contract-pending` は実装、stable API、release support を意味しません。各 owner issue が exact
 contract、validator、negative vector、conformance report を追加した時点でのみ maturity を進めます。

@@ -37,5 +37,6 @@ machine-readable catalog の入口です。
 4. positive/negative/perturbation fixture と acceptance evidence を定義する。
 5. 旧資産を触る場合は ledger の disposition、replacement、removal issue を確認する。
 
-bootstrap catalog は配置と ownership を固定する R0 contract です。owner issue が accepted exact contract へ
-昇格していない `contract-pending` entry を実装済み・stable と解釈してはいけません。
+bootstrap catalog は配置と ownership を固定する R0 contract です。Public C++ API Catalog は Issue #66 で exact
+implemented contract へ昇格済みですが、`public.recipe` のように個別 entry が `contract-pending` の場合は
+実装済み・stable と解釈してはいけません。

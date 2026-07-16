@@ -24,6 +24,7 @@ POLICY_SCHEMA = pathlib.Path("schemas/cxxlens_asset_migration_policy.schema.yaml
 LEDGER = pathlib.Path("schemas/cxxlens_asset_migration_ledger.json")
 LEDGER_SCHEMA = pathlib.Path("schemas/cxxlens_asset_migration_ledger.schema.yaml")
 CATALOG_SCHEMA = pathlib.Path("schemas/cxxlens_ng_catalog_bootstrap.schema.yaml")
+PUBLIC_API_SCHEMA = pathlib.Path("schemas/cxxlens_ng_public_api_catalog.schema.yaml")
 RELATION_REGISTRY_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_relation_registry.schema.yaml"
 )
@@ -260,6 +261,7 @@ def validate_catalogs(root: pathlib.Path) -> None:
     relation_schema = load_yaml(root / RELATION_REGISTRY_SCHEMA)
     provider_schema = load_yaml(root / PROVIDER_PROTOCOL_SCHEMA)
     security_schema = load_yaml(root / SECURITY_PROFILE_SCHEMA)
+    public_api_schema = load_yaml(root / PUBLIC_API_SCHEMA)
     index = (root / "docs/design/catalogs/README.md").read_text(encoding="utf-8")
     for expected_kind, relative in CATALOGS.items():
         document = load_yaml(root / relative)
@@ -267,13 +269,15 @@ def validate_catalogs(root: pathlib.Path) -> None:
             "relation-registry": relation_schema,
             "provider-protocol": provider_schema,
             "security-profile": security_schema,
+            "public-cpp-api-catalog": public_api_schema,
         }.get(expected_kind, bootstrap_schema)
         validate_schema(document, schema, f"NG {expected_kind}")
-        expected_maturity = (
-            "accepted"
-            if expected_kind in {"relation-registry", "provider-protocol", "security-profile"}
-            else "bootstrap"
-        )
+        expected_maturity = {
+            "relation-registry": "accepted",
+            "provider-protocol": "accepted",
+            "security-profile": "accepted",
+            "public-cpp-api-catalog": "implemented",
+        }.get(expected_kind, "bootstrap")
         if document["maturity"] != expected_maturity:
             fail(f"NG catalog state differs: {relative}")
         if relative.as_posix() not in index:

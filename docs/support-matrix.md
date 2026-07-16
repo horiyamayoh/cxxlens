@@ -8,11 +8,11 @@
 | NG2 / NG3 | optional 1.x capability trains; not 1.0 blockers | owner issue + #71 |
 | Language | C++23 | build and public-header gates |
 | Host | Linux primary | acceptance manifest |
-| Public semantic headers | LLVM-free invariant; vNext contract pending | #66, G0, GR |
-| Clang 22 source provider | legacy adapter baseline; process provider pending | #70, G4 |
+| Author SDK (`cxxlens::provider_sdk`) | implemented/installed; LLVM-free build and consumer qualified | #66; release qualification remains #71 |
+| Clang 22 native author SDK | callback/detachment helpers implemented; process provider pending | #66, #70, G4 |
 | In-memory snapshot | legacy fact-store seed; vNext pending | #68, G2 |
 | SQLite snapshot | legacy fact-store seed; vNext pending | #68, G2 |
-| Static/dynamic query | contract pending | #61, #69, G3 |
+| Static/dynamic query authoring | common descriptor/IR SDK implemented; production execution backend pending | #61, #66, #69, G3 |
 | Provider trust/discovery | exact security contract accepted; production certificate absent | #65, #70, G4 |
 | GCC/IR/object/binary provider | not NG0 production scope | future provider entry |
 | Stable third-party C++ binary plugin ABI | unsupported | design section 0.4 |

@@ -273,6 +273,21 @@ add_dependencies(cxxlens-ng-security-contract-check
                  cxxlens-ng-provider-protocol-check)
 
 add_custom_target(
+  cxxlens-ng-sdk-contract-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_sdk_contract.py" check
+    --root "${CMAKE_CURRENT_SOURCE_DIR}" --compiler "${CMAKE_CXX_COMPILER}"
+    --scaffold "$<TARGET_FILE:cxxlens-provider-scaffold>" --doctor
+    "$<TARGET_FILE:cxxlens-sdk-doctor>"
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_ng_sdk_contract.py"
+  DEPENDS cxxlens-provider-scaffold cxxlens-sdk-doctor
+  VERBATIM)
+add_dependencies(cxxlens-ng-sdk-contract-check
+                 cxxlens-ng-security-contract-check)
+
+add_custom_target(
   cxxlens-public-api-contract-freeze-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -548,6 +563,7 @@ add_dependencies(
   cxxlens-ng-snapshot-store-contract-check
   cxxlens-ng-provider-protocol-check
   cxxlens-ng-security-contract-check
+  cxxlens-ng-sdk-contract-check
   cxxlens-ng-relation-contract-check
   cxxlens-ng-release-contract-check
   cxxlens-public-boundary-check
@@ -656,6 +672,8 @@ if(CXXLENS_BUILD_DOCS)
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/verify_doxygen.py"
       "${CMAKE_CURRENT_BINARY_DIR}/doxygen/xml" --candidate-manifest
       "${CMAKE_CURRENT_SOURCE_DIR}/schemas/cxxlens_package_contract_candidates.yaml"
+      --ng-catalog
+      "${CMAKE_CURRENT_SOURCE_DIR}/schemas/cxxlens_ng_public_api_catalog.yaml"
     COMMAND
       "${Python3_EXECUTABLE}"
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_doc_examples.py"

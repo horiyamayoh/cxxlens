@@ -57,23 +57,28 @@ CXX=clang++ cmake --preset m0-acceptance
 cmake --build --preset m0-acceptance --target cxxlens-m0-acceptance
 ```
 
-## 現在のインストール確認
+## Author SDK
 
-次の例は移行中パッケージの install/export smoke test です。次世代 relation/query API は
-[Public C++ API Catalog](schemas/cxxlens_ng_public_api_catalog.yaml) の bootstrap state から段階的に
-実装します。
+generated/dynamic query、detached relation/snapshot、portable provider、conformance harness は LLVM/Clang に
+依存しない独立 package から利用できます。
 
 ```cmake
-find_package(cxxlens 0.1 CONFIG REQUIRED)
-target_link_libraries(my_tool PRIVATE cxxlens::cxxlens)
+find_package(cxxlensProviderSDK 0.1 CONFIG REQUIRED)
+target_link_libraries(my_tool PRIVATE cxxlens::provider_sdk)
 target_compile_features(my_tool PRIVATE cxx_std_23)
 ```
 
 ```cpp
-#include <cxxlens/cxxlens.hpp>
+#include <cxxlens/relations/cc_call_site.hpp>
+#include <cxxlens/sdk.hpp>
 
-const auto product_versions = cxxlens::versions();
+auto query = cxxlens::sdk::query::from<cxxlens::cc::relations::call_site>();
 ```
+
+Clang 22 native helper は `find_package(cxxlensClang22ProviderSDK)` と
+`cxxlens::clang22_provider_sdk` へ明示 opt-in します。5経路の runnable example は
+[SDK tutorials](docs/tutorials/README.md)、exact contract は
+[Public C++ API Catalog](schemas/cxxlens_ng_public_api_catalog.yaml) を参照してください。
 
 ## 文書と machine-readable contract
 

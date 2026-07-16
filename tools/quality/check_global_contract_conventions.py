@@ -41,6 +41,7 @@ LEGACY_OWNERSHIP_SCHEMA_EXCLUSIONS = {
     "cxxlens_ng_provider_manifest.schema.yaml",
     "cxxlens_ng_provider_protocol.schema.yaml",
     "cxxlens_ng_provider_task.schema.yaml",
+    "cxxlens_ng_public_api_catalog.schema.yaml",
     "cxxlens_ng_security_profile.schema.yaml",
     "cxxlens_ng_namespace_registry.schema.yaml",
     "cxxlens_ng_provider_certification_registry.schema.yaml",

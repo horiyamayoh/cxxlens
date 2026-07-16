@@ -1,61 +1,290 @@
-schema: cxxlens.ng-catalog-bootstrap.v1
+schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 0.1.0
-maturity: bootstrap
+document_version: 1.0.0
+maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
   index: docs/design/catalogs/README.md
-  bootstrap_issue: '#58'
-  owner: steward.ng-catalogs
+  decision_adr: docs/design/adr/0012-author-sdk-surface.md
+  owner_issue: '#66'
+  owner: steward.ng-sdk
 compatibility:
   version_axis: public-cpp-source-api
-  current: 0.1.0-bootstrap
-  exact_contract_issue: '#66'
-replaces:
-  - schemas/cxxlens_public_api_contract.yaml
+  current: 1.0.0
+  relation_axis: relation-descriptor
+  query_ir_axis: logical-query-ir
+  provider_protocol_axis: provider-protocol
+
+packages:
+  - id: author-sdk
+    cmake_package: cxxlensProviderSDK
+    target: cxxlens::provider_sdk
+    headers:
+      - include/cxxlens/sdk.hpp
+      - include/cxxlens/sdk/common.hpp
+      - include/cxxlens/sdk/relation.hpp
+      - include/cxxlens/sdk/query.hpp
+      - include/cxxlens/sdk/provider.hpp
+      - include/cxxlens/sdk/testing.hpp
+      - include/cxxlens/sdk/recipe.hpp
+    llvm_clang_dependency: forbidden
+    link_dependencies: [cxx-standard-library]
+  - id: clang22-native-author-sdk
+    cmake_package: cxxlensClang22ProviderSDK
+    target: cxxlens::clang22_provider_sdk
+    headers: [include/cxxlens/provider/clang22.hpp]
+    llvm_clang_dependency: explicit-native-only
+    link_dependencies: [cxxlens::provider_sdk, cxxlens::cxxlens, clang-22]
+
+author_paths:
+  - id: generated-typed-query
+    entry: public.relation-static
+    implementation: include/cxxlens/relations/cc_call_site.hpp
+    positive_example: examples/sdk/typed_query.cpp
+    negative_example: examples/sdk/negative/generated_unknown_column.cpp
+    negative_mode: compile-fail
+    harness: tests/unit/sdk/sdk_test.cpp
+  - id: runtime-dynamic-query
+    entry: public.relation-dynamic
+    implementation: src/sdk/query.cpp
+    positive_example: examples/sdk/dynamic_query.cpp
+    negative_example: examples/sdk/negative/dynamic_literal_type_mismatch.cpp
+    negative_mode: runtime-rejection
+    harness: tests/unit/sdk/sdk_test.cpp
+  - id: portable-provider
+    entry: public.provider-sdk
+    implementation: src/sdk/provider.cpp
+    positive_example: examples/sdk/portable_provider.cpp
+    negative_example: examples/sdk/negative/provider_no_credit.cpp
+    negative_mode: runtime-rejection
+    harness: tests/unit/sdk/sdk_test.cpp
+  - id: clang22-native-provider
+    entry: public.native-provider-sdk
+    implementation: src/llvm/clang22/provider_sdk.cpp
+    positive_example: examples/sdk/clang22_native_provider.cpp
+    negative_example: examples/sdk/negative/native_pointer_escape.cpp
+    negative_mode: compile-fail
+    harness: tests/unit/sdk/sdk_test.cpp
+  - id: high-level-recipe
+    entry: public.recipe-foundation
+    implementation: src/sdk/recipe.cpp
+    positive_example: examples/sdk/recipe.cpp
+    negative_example: examples/sdk/negative/invalid_recipe.cpp
+    negative_mode: runtime-rejection
+    harness: tests/unit/sdk/sdk_test.cpp
+
 entries:
+  - id: public.common
+    status: implemented
+    owner_issue: '#66'
+    profile: NG0
+    target: cxxlens::provider_sdk
+    headers: [include/cxxlens/sdk/common.hpp]
+    symbols:
+      - name: result
+        kind: template
+        signature: 'template<class T> class result; result<void>; struct error; struct semantic_version'
+      - name: semantic_digest
+        kind: function-family
+        signature: 'string semantic_digest(string_view domain, string_view bytes); string content_digest(span<const byte>)'
+    errors: []
+    lifetime: [result-and-error-own-their-values]
+    threading: [value-objects-follow-contained-value-threading]
+    versioning: [semantic-digest-requires-explicit-domain, source-api-axis-independent-from-standard-library-expected]
+    invariants: [success-and-error-are-disjoint, digest-is-full-lowercase-sha256]
+    implementation_evidence: [src/sdk/common.cpp, tests/unit/sdk/sdk_test.cpp]
+
   - id: public.project-catalog
-    status: contract-pending
+    status: implemented
     owner_issue: '#66'
     profile: NG0
-    contract_issue: '#66'
-    summary: LLVM-free project and source snapshot values.
+    target: cxxlens::provider_sdk
+    headers: [include/cxxlens/sdk/relation.hpp]
+    symbols:
+      - name: project_catalog
+        kind: value
+        signature: 'struct project_catalog { string catalog_id; string catalog_digest; string logical_root; vector<string> compile_units; result<void> validate() const; }'
+    errors: [sdk.project-catalog-invalid]
+    lifetime: [value-owned-and-detached]
+    threading: [immutable-values-may-be-copied-across-threads]
+    versioning: [catalog-digest-binds-exact-input]
+    invariants: [compile-units-canonical-sorted-unique, no-first-wins]
+    implementation_evidence: [src/sdk/relation.cpp, tests/unit/sdk/sdk_test.cpp]
+
   - id: public.relation-static
-    status: contract-pending
+    status: implemented
     owner_issue: '#66'
     profile: NG0
-    contract_issue: '#66'
-    summary: Generated typed relation tags, builders, and detached rows.
+    target: cxxlens::provider_sdk
+    headers: [include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/sdk/relation.hpp]
+    symbols:
+      - name: query.from
+        kind: template
+        signature: 'template<relation_tag Relation> result<query::builder> query::from(string_view alias = {})'
+      - name: query.col
+        kind: template
+        signature: 'template<column_tag Column> column_ref query::col()'
+      - name: row_builder
+        kind: class
+        signature: 'row_builder(relation_descriptor); result<void> set(column_ref, detached_cell); result<detached_row> finish() &&'
+    errors: [sdk.relation-invalid, sdk.column-invalid, sdk.duplicate-column, sdk.descriptor-digest-mismatch, sdk.cell-invalid, sdk.foreign-column, sdk.duplicate-cell, sdk.cell-type-mismatch, sdk.required-cell-missing, sdk.unknown-cell]
+    lifetime: [generated-tags-are-static-metadata, rows-are-value-owned-and-detached]
+    threading: [generated-descriptor-is-immutable, builders-are-thread-confined]
+    versioning: [tag-binds-exact-descriptor-id-and-semantic-major]
+    invariants: [generated-from-accepted-relation-registry, native-pointers-not-representable]
+    implementation_evidence: [tools/sdk/relation_idl_compiler.py, src/sdk/relation.cpp, examples/sdk/typed_query.cpp]
+
   - id: public.relation-dynamic
-    status: contract-pending
+    status: implemented
     owner_issue: '#66'
     profile: NG0
-    contract_issue: '#66'
-    summary: Runtime descriptor and column access without central enums.
+    target: cxxlens::provider_sdk
+    headers: [include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
+    symbols:
+      - name: relation_registry
+        kind: class
+        signature: 'result<void> add(relation_descriptor); result<dynamic_relation> require(string_view name, uint32_t semantic_major) const'
+      - name: dynamic_query.from
+        kind: function
+        signature: 'static result<query::builder> dynamic_query::from(const dynamic_relation&, string_view alias = {})'
+    errors: [sdk.relation-invalid, sdk.descriptor-digest-mismatch, sdk.duplicate-descriptor, sdk.descriptor-conflict, sdk.relation-not-found, sdk.relation-major-mismatch, sdk.column-not-found]
+    lifetime: [dynamic-relation-shares-immutable-descriptor-ownership]
+    threading: [published-dynamic-relations-are-immutable]
+    versioning: [lookup-requires-explicit-semantic-major, no-adjacent-version-fallback]
+    invariants: [duplicate-and-conflict-reject, same-descriptor-model-as-generated-tags]
+    implementation_evidence: [src/sdk/relation.cpp, examples/sdk/dynamic_query.cpp, tests/unit/sdk/sdk_test.cpp]
+
   - id: public.snapshot-store
-    status: contract-pending
+    status: implemented
     owner_issue: '#66'
     profile: NG0
-    contract_issue: '#66'
-    depends_on: [public.project-catalog, public.relation-dynamic]
-    summary: Immutable snapshot handles, exact publication-series selection, and bounded cursors.
+    target: cxxlens::provider_sdk
+    headers: [include/cxxlens/sdk/relation.hpp]
+    symbols:
+      - name: snapshot_builder
+        kind: class
+        signature: 'result<void> add(detached_row); result<snapshot_handle> publish() &&'
+      - name: row_cursor
+        kind: class
+        signature: 'result<optional<row_view>> next()'
+    errors: [sdk.snapshot-unknown-relation, sdk.snapshot-relation-mismatch, sdk.snapshot-empty, sdk.row-descriptor-mismatch, sdk.row-view-expired, sdk.cursor-thread-violation]
+    lifetime: [snapshot-handle-owns-immutable-data, row-view-expires-on-cursor-advance]
+    threading: [snapshot-handles-concurrent-readable, row-cursor-thread-affine]
+    versioning: [snapshot-id-binds-descriptor-digests-and-canonical-rows]
+    invariants: [publish-atomically-after-independent-row-validation, empty-distinct-from-error]
+    implementation_evidence: [src/sdk/relation.cpp, tests/unit/sdk/sdk_test.cpp]
+
   - id: public.logical-query
-    status: contract-pending
+    status: implemented
     owner_issue: '#66'
     profile: NG0
-    contract_issue: '#66'
-    depends_on: [public.relation-static, public.relation-dynamic, public.snapshot-store]
-    summary: Static and dynamic DSLs normalized to one Logical Query IR.
+    target: cxxlens::provider_sdk
+    headers: [include/cxxlens/sdk/query.hpp]
+    symbols:
+      - name: query.builder
+        kind: class
+        signature: 'from(const relation_descriptor&, string_view alias); where; project; inner_join; semi_join; union_with(const builder&); distinct; order_by; limit; condition_restrict(string_view universe, alternatives); interpretation_restrict(string_view)'
+      - name: query.literal
+        kind: value
+        signature: 'boolean; signed_integer; unsigned_integer; utf8; typed; exact(value_type, scalar_value)'
+      - name: logical_query_ir
+        kind: value
+        signature: 'result<void> validate() const; string canonical_form() const; string digest() const'
+    errors: [sdk.query-alias-invalid, sdk.query-literal-type-mismatch, sdk.query-column-type-mismatch, sdk.query-foreign-column, sdk.query-column-mismatch, sdk.query-empty-expression, sdk.query-empty-projection, sdk.query-empty-order, sdk.query-project-terminal, sdk.query-union-schema-mismatch, sdk.query-limit-requires-order, sdk.query-condition-missing, sdk.query-interpretation-missing, sdk.query-ir-invalid, sdk.query-duplicate-relation, sdk.query-nontopological-node, sdk.query-node-invalid, sdk.query-root-missing, sdk.query-output-column-foreign]
+    lifetime: [builder-and-ir-own-all-descriptors-expressions-and-strings]
+    threading: [builders-are-thread-confined, completed-ir-is-value-owned]
+    versioning: [logical-query-ir-version-is-independent, operator-ids-are-versioned]
+    invariants: [typed-and-dynamic-paths-normalize-to-identical-ir, no-implicit-literal-coercion, limit-requires-total-order]
+    implementation_evidence: [src/sdk/query.cpp, examples/sdk/typed_query.cpp, examples/sdk/dynamic_query.cpp, tests/unit/sdk/sdk_test.cpp]
+
   - id: public.provider-sdk
-    status: contract-pending
+    status: implemented
     owner_issue: '#66'
     profile: NG0
-    contract_issue: '#66'
-    summary: Portable and major-specific provider authoring and conformance SDKs.
+    target: cxxlens::provider_sdk
+    headers: [include/cxxlens/sdk/provider.hpp, include/cxxlens/sdk/testing.hpp]
+    symbols:
+      - name: portable_provider
+        kind: class
+        signature: 'virtual string_view id() const noexcept; virtual semantic_version version() const noexcept; virtual result<void> run(const task&, context&)'
+      - name: relation_sink
+        kind: class
+        signature: 'result<void> begin(string dependency_group, string atomic_output_group, string batch_id); result<void> push(const detached_row&); result<void> end()'
+      - name: protocol_writer
+        kind: class
+        signature: 'protocol_writer(frame_sink&, protocol_limits); void grant_credit(protocol_credit); result<void> send(message_type, span<const byte> control, span<const byte> payload)'
+      - name: run_worker
+        kind: function
+        signature: 'result<void> run_worker(portable_provider&, const task&, protocol_writer&, execution_context)'
+      - name: execution_budget
+        kind: value
+        signature: 'struct execution_budget { wall_ms; cpu_ms; rss_bytes; output_bytes; rows; diagnostics; open_files; created_files; subprocesses; }'
+      - name: provider.manifest
+        kind: value
+        signature: 'result<void> validate() const; string canonical_json() const; exact cxxlens.provider-manifest.v1 fields'
+      - name: provider_harness
+        kind: class
+        signature: 'result<conformance_report> run(portable_provider&, const task&, provider_fault) const'
+    errors: [provider.oversized-control, provider.oversized-payload, provider.oversized-frame, provider.unknown-message-type, provider.malformed-frame, provider.protocol-major-mismatch, provider.checksum-mismatch, provider.truncated-stream, provider.backpressure, provider.batch-state-invalid, provider.coverage-invalid, provider.coverage-duplicate-request, provider.coverage-duplicate-state, provider.coverage-unrequested, provider.coverage-incomplete, provider.unresolved-invalid, provider.evidence-invalid, provider.manifest-invalid, provider.scaffold-invalid, provider.cancelled, provider.output-limit, provider.task-invalid, provider.noncontiguous-sequence, sdk.golden-mismatch, sdk.harness-empty-transcript, sdk.harness-fault-not-observed]
+    lifetime: [provider-context-and-relation-sink-are-callback-scoped, protocol-writer-borrows-frame-sink]
+    threading: [worker-callback-is-synchronous-and-thread-confined, cancellation-is-stop-token-based]
+    versioning: [frame-binds-provider-protocol-v1, manifest-binds-provider-binary-and-semantic-digests]
+    invariants: [provider-author-does-not-construct-frames-or-checksums, credit-and-sequence-fail-closed, coverage-unresolved-evidence-not-omitted, cxxlens-provider-manifest-v1-schema-exact]
+    implementation_evidence: [src/sdk/provider.cpp, src/sdk/testing.cpp, examples/sdk/portable_provider.cpp, tools/sdk/provider_scaffold_main.cpp]
+
+  - id: public.native-provider-sdk
+    status: implemented
+    owner_issue: '#66'
+    profile: NG0
+    target: cxxlens::clang22_provider_sdk
+    headers: [include/cxxlens/provider/clang22.hpp]
+    symbols:
+      - name: with_translation_unit
+        kind: function
+        signature: 'result<void> with_translation_unit(workspace&, compile_unit_id, translation_unit_callback, execution_context)'
+      - name: normalize_source
+        kind: function
+        signature: 'result<source_span> normalize_source(borrowed_translation_unit&, const clang::SourceRange&)'
+      - name: detach_scalar
+        kind: template
+        signature: 'template<detachable_scalar T> sdk::result<sdk::detached_cell> detach_scalar(T&&)'
+    errors: [native.unsupported-detachment, native.address-escape, interop.unsupported-clang-major]
+    lifetime: [translation-unit-and-ast-objects-are-borrowed-callback-only, outputs-must-be-detached-before-return]
+    threading: [borrowed-translation-unit-is-not-copyable-or-transferable, callback-is-synchronous]
+    versioning: [clang-major-is-explicit-in-package-target-header-and-namespace]
+    invariants: [pointer-types-rejected-at-compile-time, source-range-normalized-to-half-open-detached-source-span, no-silent-clang-major-fallback]
+    implementation_evidence: [src/llvm/clang22/provider_sdk.cpp, examples/sdk/clang22_native_provider.cpp, tests/public_headers/provider_clang22_header_test.cpp]
+
+  - id: public.recipe-foundation
+    status: implemented
+    owner_issue: '#66'
+    profile: NG0
+    target: cxxlens::provider_sdk
+    headers: [include/cxxlens/sdk/recipe.hpp]
+    symbols:
+      - name: recipe_plan
+        kind: class
+        signature: 'static result<recipe_plan> lower(recipe_descriptor, query::logical_query_ir); vector<relation_descriptor> requirements() const; string explain() const'
+    errors: [sdk.recipe-invalid]
+    lifetime: [recipe-plan-owns-exact-query-ir]
+    threading: [completed-recipe-plan-is-value-owned]
+    versioning: [recipe-version-is-independent-from-query-ir-and-relation-versions]
+    invariants: [lowering-preserves-relation-requirements-and-partiality, high-level-api-does-not-hide-unresolved-contract]
+    implementation_evidence: [src/sdk/recipe.cpp, examples/sdk/recipe.cpp]
+
   - id: public.recipe
     status: contract-pending
     owner_issue: '#73'
     profile: NG0
-    contract_issue: '#73'
-    depends_on: [public.logical-query]
-    summary: Flagship call-search recipe over standard and custom relations.
+    target: cxxlens::provider_sdk
+    headers: [include/cxxlens/sdk/recipe.hpp]
+    symbols:
+      - name: flagship-call-search
+        kind: function-family
+        signature: 'reserved for Issue #73 over recipe_plan and logical_query_ir'
+    errors: [sdk.recipe-invalid]
+    lifetime: [must-own-lowered-query-and-result]
+    threading: [must-not-weaken-underlying-query-threading-contract]
+    versioning: [recipe-semantics-axis-independent]
+    invariants: [must-preserve-evidence-coverage-unresolved-guarantee]
+    implementation_evidence: [docs/design/cxxlens_next_generation_integrated_design_ja.md]

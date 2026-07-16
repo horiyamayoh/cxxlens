@@ -66,11 +66,13 @@ validation:
     - docs/archive/legacy-v1/design/cxxlens_integrated_design_ja.md
     - docs/design/public_api_contract_freeze.md
     - docs/development/architecture.md
+    - docs/doxygen-main.md
     - docs/support-matrix.md
     - docs/design/adr/0002-semantic-relation-platform.md
     - docs/design/adr/0003-versioned-relation-kernel.md
     - docs/design/adr/0004-legacy-contract-reset.md
     - docs/design/adr/0005-product-boundary-release-compatibility.md
+    - docs/design/adr/0012-author-sdk-surface.md
     - schemas/cxxlens.readiness.authorization.v1.json
     - schemas/cxxlens.agent-ownership.v1.json
     - schemas/cxxlens.dependency-request.examples.v1.json
@@ -81,7 +83,11 @@ validation:
     - schemas/cxxlens_ng_catalog_bootstrap.schema.yaml
     - schemas/cxxlens_ng_relation_registry.yaml
     - schemas/cxxlens_ng_provider_protocol.yaml
+    - schemas/cxxlens_ng_provider_manifest.schema.yaml
+    - schemas/cxxlens_ng_logical_query_contract.yaml
+    - schemas/cxxlens_ng_logical_query_ir.schema.yaml
     - schemas/cxxlens_ng_public_api_catalog.yaml
+    - schemas/cxxlens_ng_public_api_catalog.schema.yaml
     - schemas/cxxlens_ng_acceptance_manifest.yaml
     - schemas/cxxlens_ng_security_profile.yaml
     - schemas/cxxlens_ng_release_bundle.yaml
@@ -101,13 +107,16 @@ validation:
     - tools/agent/ownership_generator.py
     - tools/quality/check_ng_authority.py
     - tools/quality/check_ng_release_contract.py
+    - tools/quality/check_ng_sdk_contract.py
     - tools/quality/check_documentation_consistency.py
     - tools/quality/check_global_contract_conventions.py
     - tools/quality/check_public_api_contract_freeze.py
+    - tools/quality/verify_doxygen.py
     - tests/agent/runner/test_runner.py
     - tests/agent/ownership/test_ownership.py
     - tests/quality/test_ng_authority.py
     - tests/quality/test_ng_release_contract.py
+    - tests/quality/test_ng_sdk_contract.py
     - tests/quality/test_documentation_consistency.py
     - tests/quality/test_global_contract_conventions.py
     - tests/quality/test_public_api_contract_freeze.py

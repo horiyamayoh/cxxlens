@@ -6,14 +6,14 @@
 |---|---|
 | 文書 ID | `CXXLENS-NG-SRAD-002` |
 | 文書版 | `1.0.0-normative` |
-| 文書状態 | 規範・Issue #57 / Issue #59 / Issue #60 / Issue #61 / Issue #62 / Issue #63 / Issue #64 / Issue #65 反映版 |
+| 文書状態 | 規範・Issue #57 / Issue #59 / Issue #60 / Issue #61 / Issue #62 / Issue #63 / Issue #64 / Issue #65 / Issue #66 反映版 |
 | 対象製品 | 次世代 `cxxlens` |
 | 基準言語 | C++23 |
 | 初期 primary platform | Linux |
 | 初期 reference frontend | Clang 22 |
 | 初期 reference store | in-memory / SQLite |
 | 設計基準 | `CXXLENS-NG-SRAD-001` と旧 `CXXLENS-SRAD-001` 資産の統合レビュー |
-| 作成日 | 2026-07-15 |
+| 作成日 | 2026-07-16 |
 
 本書は Issue #57 により次世代 `cxxlens` の最上位規範へ昇格した。旧
 `docs/archive/legacy-v1/design/cxxlens_integrated_design_ja.md` と旧 124 API freeze は移行時の provenance であり、
@@ -2935,10 +2935,9 @@ session は operational state を持てる。
 
 ### 22.5 Errors and partiality
 
-```cpp
-template<class T>
-using result = std::expected<T, error>;
-```
+`result<T>` は `std::expected<T, error>` と同じ value-or-structured-error 意味を持つ。公開 representation を
+特定 standard library の `std::expected` 実装有無に依存させず、`has_value()`、`value()`、`error()`、
+dereference/arrow を提供する。expected failure の discriminator は diagnostic prose ではなく `error.code` である。
 
 operation error:
 
@@ -3001,6 +3000,37 @@ pre-1.0:
 - C++ binary ABI は certified compiler/stdlib tuple でのみ別途宣言
 - protocol/schema semantics は独立 versioning
 - third-party C++ plugin ABI は非提供
+
+### 22.9 Author SDK の concrete surface
+
+Issue #66 で、次の二 package を installable production surface として導入した。
+
+| Package | Target | 用途 | LLVM/Clang boundary |
+|---|---|---|---|
+| `cxxlensProviderSDK` | `cxxlens::provider_sdk` | generated/dynamic relation、Logical Query IR、detached snapshot、portable provider、harness、recipe lowering | 通常 header/link とも禁止 |
+| `cxxlensClang22ProviderSDK` | `cxxlens::clang22_provider_sdk` | callback-scoped Clang 22 source normalization と detachment | `<cxxlens/provider/clang22.hpp>` だけで明示 opt-in |
+
+5 author path は次の同一 semantic substrate を使う。
+
+```text
+generated typed query ─┐
+runtime dynamic query ─┴─ relation_descriptor + column_ref + logical_query_ir
+portable provider ─────── detached_row + protocol/partiality helpers
+Clang 22 native provider ─ borrowed TU -> normalized source -> detached_row
+high-level recipe ─────── exact relation requirements + logical_query_ir
+```
+
+generated tag は accepted Relation Registry から `cxxlens-relation-idl` が生成する。新 relation/provider の追加は
+SDK core の enum、switch、source registry を変更しない。provider 作者は `relation_sink`、coverage/unresolved/
+evidence builder、`run_worker` を使い、frame header、sequence、credit、checksum を直接構成しない。native 作者は
+borrowed TU/AST object を callback 外へ保存、所有、thread 移送せず、source と semantic value を detached value
+へ変換する。
+
+exact signature、error、lifetime、threading、versioning、実装 evidence は
+`schemas/cxxlens_ng_public_api_catalog.yaml` を authority とする。IDL generation、compile-fail、LLVM-free install
+consumer に加え、C++ 生成値を既存の `cxxlens.logical-query-ir.v1` reference validator と
+`cxxlens.provider-manifest.v1` schema へ入力する gate は `cxxlens-ng-sdk-contract-check` である。product 全体の target DAG と provider-to-snapshot
+vertical slice は Issue #67 以降、flagship `calls_to_function` recipe は Issue #73 が所有する。
 
 ---
 

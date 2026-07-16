@@ -13,6 +13,7 @@ include_pattern = re.compile(r"^\s*#\s*include\s*[<\"](?:clang|llvm)/", re.MULTI
 allowed_roots = (
     root / "src/llvm/clang22",
     root / "include/cxxlens/interop",
+    root / "include/cxxlens/provider/clang22.hpp",
 )
 for path in list((root / "src").rglob("*.cpp")) + list((root / "src").rglob("*.hpp")) + list(
     (root / "include").rglob("*.hpp")
@@ -27,7 +28,7 @@ if include_pattern.search(common) or re.search(r"\b(?:clang|llvm)::", common):
 ordinary = "\n".join(
     path.read_text()
     for path in (root / "include/cxxlens").rglob("*.hpp")
-    if not path.is_relative_to(root / "include/cxxlens/interop")
+    if not any(path.is_relative_to(base) for base in allowed_roots[1:])
 )
 if re.search(r"\b(?:clang|llvm)::", ordinary) or include_pattern.search(ordinary):
     raise SystemExit("ordinary public headers expose Clang/LLVM")

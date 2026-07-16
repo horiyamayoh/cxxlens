@@ -14,6 +14,11 @@ FORBIDDEN = (
     re.compile(r"#\s*include\s*[<\"](?:clang|llvm)/"),
 )
 
+EXPLICIT_NATIVE_HEADERS = {
+    pathlib.Path("interop/clang.hpp"),
+    pathlib.Path("provider/clang22.hpp"),
+}
+
 
 def main() -> int:
     if len(sys.argv) != 2:
@@ -22,7 +27,7 @@ def main() -> int:
     root = pathlib.Path(sys.argv[1])
     violations: list[str] = []
     for header in sorted(root.rglob("*.hpp")):
-        if header.relative_to(root) == pathlib.Path("interop/clang.hpp"):
+        if header.relative_to(root) in EXPLICIT_NATIVE_HEADERS:
             continue
         for line_number, line in enumerate(header.read_text(encoding="utf-8").splitlines(), 1):
             if any(pattern.search(line) for pattern in FORBIDDEN):

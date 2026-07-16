@@ -1,6 +1,7 @@
 set(test_root "@CMAKE_CURRENT_BINARY_DIR@/install-consumer")
 set(install_prefix "${test_root}/prefix")
 set(consumer_build "${test_root}/build")
+set(sdk_consumer_build "${test_root}/sdk-build")
 set(phase_b_report "${test_root}/phase-b-contract-integration-report.json")
 
 file(REMOVE_RECURSE "${test_root}")
@@ -20,7 +21,18 @@ foreach(
     "${install_prefix}/include/cxxlens/workspace.hpp"
     "${install_prefix}/include/cxxlens/facts.hpp"
     "${install_prefix}/include/cxxlens/interop/clang.hpp"
+    "${install_prefix}/include/cxxlens/sdk.hpp"
+    "${install_prefix}/include/cxxlens/sdk/provider.hpp"
+    "${install_prefix}/include/cxxlens/provider/clang22.hpp"
+    "${install_prefix}/include/cxxlens/relations/cc_call_site.hpp"
+    "${install_prefix}/lib/cmake/cxxlensProviderSDK/cxxlensProviderSDKConfig.cmake"
+    "${install_prefix}/lib/cmake/cxxlensClang22ProviderSDK/cxxlensClang22ProviderSDKConfig.cmake"
+    "${install_prefix}/bin/cxxlens-provider-scaffold"
+    "${install_prefix}/bin/cxxlens-sdk-doctor"
+    "${install_prefix}/bin/cxxlens-relation-idl"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_public_api_contract.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_public_api_catalog.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_public_api_catalog.schema.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_phase_b_contract_integration.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_phase_b_contract_integration.schema.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens.agent-task-packet-corpus.v1.json"
@@ -54,6 +66,7 @@ foreach(
     "${install_prefix}/share/doc/cxxlens/examples/m2-flagship/main.cpp"
     "${install_prefix}/share/doc/cxxlens/examples/packages/core.cpp"
     "${install_prefix}/share/doc/cxxlens/examples/packages/interop.cpp"
+    "${install_prefix}/share/doc/cxxlens/examples/sdk/typed_query.cpp"
     "${install_prefix}/share/doc/cxxlens/README.md"
     "${install_prefix}/share/doc/cxxlens/SECURITY.md")
   if(NOT EXISTS "${required}")
@@ -84,3 +97,16 @@ execute_process(COMMAND "@CMAKE_COMMAND@" --build "${consumer_build}"
 
 execute_process(COMMAND "${consumer_build}/cxxlens-consumer"
                 RESULT_VARIABLE run_result COMMAND_ERROR_IS_FATAL ANY)
+
+execute_process(
+  COMMAND
+    "@CMAKE_COMMAND@" -S "@CMAKE_CURRENT_SOURCE_DIR@/install/sdk_consumer" -B
+    "${sdk_consumer_build}" "-DCMAKE_PREFIX_PATH=${install_prefix}"
+    "-DCMAKE_CXX_COMPILER=@CMAKE_CXX_COMPILER@"
+  RESULT_VARIABLE sdk_configure_result COMMAND_ERROR_IS_FATAL ANY)
+
+execute_process(COMMAND "@CMAKE_COMMAND@" --build "${sdk_consumer_build}"
+                RESULT_VARIABLE sdk_build_result COMMAND_ERROR_IS_FATAL ANY)
+
+execute_process(COMMAND "${sdk_consumer_build}/cxxlens-sdk-consumer"
+                RESULT_VARIABLE sdk_run_result COMMAND_ERROR_IS_FATAL ANY)

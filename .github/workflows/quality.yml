@@ -102,6 +102,7 @@ jobs:
           cmake --build --preset docs --target cxxlens-ng-snapshot-store-contract-check
           cmake --build --preset docs --target cxxlens-ng-provider-protocol-check
           cmake --build --preset docs --target cxxlens-ng-security-contract-check
+          cmake --build --preset docs --target cxxlens-ng-sdk-contract-check
           cmake --build --preset docs --target cxxlens-api-contract-check
           cmake --build --preset docs --target cxxlens-design-package-check
           cmake --build --preset docs --target cxxlens-public-boundary-check

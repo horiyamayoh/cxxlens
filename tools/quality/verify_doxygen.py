@@ -21,6 +21,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("xml_directory", type=pathlib.Path)
     parser.add_argument("--candidate-manifest", type=pathlib.Path)
+    parser.add_argument("--ng-catalog", type=pathlib.Path)
     args = parser.parse_args()
     xml_directory = args.xml_directory
     failures: list[str] = []
@@ -58,6 +59,19 @@ def main() -> int:
                     planned_contracts.setdefault(member, set()).add(contract["api_id"])
                     planned_required[member] += 1
     observed_planned: collections.Counter[str] = collections.Counter()
+    ng_headers: set[str] = set()
+    observed_ng_headers: collections.Counter[str] = collections.Counter()
+    if args.ng_catalog:
+        ng_catalog = yaml.safe_load(args.ng_catalog.read_text(encoding="utf-8"))
+        for entry in ng_catalog["entries"]:
+            if entry["status"] != "implemented":
+                continue
+            if not all(
+                entry[field]
+                for field in ("symbols", "lifetime", "threading", "versioning", "invariants")
+            ):
+                failures.append(f"{entry['id']}: incomplete NG Doxygen/catalog obligation")
+            ng_headers.update(entry["headers"])
 
     for xml_file in sorted(xml_directory.glob("*.xml")):
         root = ET.parse(xml_file).getroot()
@@ -71,6 +85,15 @@ def main() -> int:
             qualified_name = text(member.find("qualifiedname")) or text(member.find("name"))
             location = member.find("location")
             location_file = "" if location is None else (location.get("file") or "")
+            matching_ng_headers = {
+                header for header in ng_headers if location_file.endswith(header)
+            }
+            if matching_ng_headers:
+                for header in matching_ng_headers:
+                    observed_ng_headers[header] += 1
+                # NG API callable details are exact in cxxlens.ng-public-api-catalog.v1;
+                # Doxygen owns the navigable file/type surface without duplicating that contract.
+                continue
             if qualified_name in planned_contracts:
                 observed_planned[qualified_name] += 1
                 continue
@@ -122,12 +145,21 @@ def main() -> int:
             "planned catalog members absent from Doxygen XML: "
             + ", ".join(f"{name} ({count})" for name, count in sorted(missing_planned.items()))
         )
+    missing_ng_headers = sorted(
+        header for header in ng_headers if observed_ng_headers[header] == 0
+    )
+    if missing_ng_headers:
+        failures.append(
+            "implemented NG catalog headers have no Doxygen callable: "
+            + ", ".join(missing_ng_headers)
+        )
     if failures:
         print("Doxygen contract validation failed:\n" + "\n".join(failures), file=sys.stderr)
         return 1
     print(
         f"validated Doxygen contracts for {checked} public callables "
-        f"({sum(observed_planned.values())} planned declarations bound to exact manifest obligations)"
+        f"({sum(observed_planned.values())} planned declarations and "
+        f"{sum(observed_ng_headers.values())} NG callables bound to exact catalog obligations)"
     )
     return 0
 

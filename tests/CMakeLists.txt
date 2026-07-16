@@ -47,6 +47,71 @@ cxxlens_set_project_warnings(cxxlens-unit-version)
 add_test(NAME unit.version COMMAND cxxlens-unit-version)
 set_tests_properties(unit.version PROPERTIES LABELS unit)
 
+add_executable(cxxlens-unit-sdk unit/sdk/sdk_test.cpp)
+target_link_libraries(cxxlens-unit-sdk PRIVATE cxxlens::provider_sdk
+                                               cxxlens::cxxlens)
+target_compile_features(cxxlens-unit-sdk PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-sdk)
+add_test(NAME unit.sdk COMMAND cxxlens-unit-sdk)
+set_tests_properties(
+  unit.sdk PROPERTIES LABELS "unit;sdk;relation;query;provider;native")
+
+add_executable(cxxlens-public-header-sdk public_headers/sdk_header_test.cpp)
+target_link_libraries(cxxlens-public-header-sdk PRIVATE cxxlens::provider_sdk)
+target_compile_features(cxxlens-public-header-sdk PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-public-header-sdk)
+add_test(NAME public-api.sdk-header COMMAND cxxlens-public-header-sdk)
+set_tests_properties(public-api.sdk-header
+                     PROPERTIES LABELS "public-api;sdk;llvm-free")
+
+add_executable(cxxlens-public-header-provider-clang22
+               public_headers/provider_clang22_header_test.cpp)
+target_link_libraries(cxxlens-public-header-provider-clang22
+                      PRIVATE cxxlens::clang22_provider_sdk)
+target_compile_features(cxxlens-public-header-provider-clang22
+                        PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-public-header-provider-clang22)
+add_test(NAME public-api.provider-clang22-header
+         COMMAND cxxlens-public-header-provider-clang22)
+set_tests_properties(public-api.provider-clang22-header
+                     PROPERTIES LABELS "public-api;native-sdk;clang22")
+
+foreach(example IN ITEMS typed_query dynamic_query portable_provider recipe)
+  set(target_name "cxxlens-sdk-example-${example}")
+  add_executable(${target_name}
+                 "${PROJECT_SOURCE_DIR}/examples/sdk/${example}.cpp")
+  target_link_libraries(${target_name} PRIVATE cxxlens::provider_sdk)
+  target_compile_features(${target_name} PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(${target_name})
+  add_test(NAME "sdk.example-${example}" COMMAND ${target_name})
+  set_tests_properties("sdk.example-${example}"
+                       PROPERTIES LABELS "sdk;example;acceptance")
+endforeach()
+
+add_executable(cxxlens-sdk-example-clang22-native
+               "${PROJECT_SOURCE_DIR}/examples/sdk/clang22_native_provider.cpp")
+target_link_libraries(cxxlens-sdk-example-clang22-native
+                      PRIVATE cxxlens::clang22_provider_sdk)
+target_compile_features(cxxlens-sdk-example-clang22-native PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-sdk-example-clang22-native)
+add_test(NAME sdk.example-clang22-native
+         COMMAND cxxlens-sdk-example-clang22-native)
+set_tests_properties(sdk.example-clang22-native
+                     PROPERTIES LABELS "sdk;example;native-sdk;acceptance")
+
+foreach(example IN ITEMS dynamic_literal_type_mismatch unordered_limit
+                         invalid_recipe provider_no_credit)
+  set(target_name "cxxlens-sdk-negative-${example}")
+  add_executable(${target_name}
+                 "${PROJECT_SOURCE_DIR}/examples/sdk/negative/${example}.cpp")
+  target_link_libraries(${target_name} PRIVATE cxxlens::provider_sdk)
+  target_compile_features(${target_name} PRIVATE cxx_std_23)
+  cxxlens_set_project_warnings(${target_name})
+  add_test(NAME "sdk.negative-${example}" COMMAND ${target_name})
+  set_tests_properties("sdk.negative-${example}"
+                       PROPERTIES LABELS "sdk;negative;acceptance")
+endforeach()
+
 add_executable(cxxlens-unit-selectors unit/select/selector_test.cpp)
 target_link_libraries(cxxlens-unit-selectors PRIVATE cxxlens::cxxlens)
 target_include_directories(cxxlens-unit-selectors

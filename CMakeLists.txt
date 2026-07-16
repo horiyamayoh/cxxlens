@@ -41,6 +41,30 @@ else()
 endif()
 
 add_library(
+  cxxlens_provider_sdk
+  ${CXXLENS_LIBRARY_TYPE}
+  src/sdk/common.cpp
+  src/sdk/provider.cpp
+  src/sdk/query.cpp
+  src/sdk/recipe.cpp
+  src/sdk/relation.cpp
+  src/sdk/testing.cpp)
+add_library(cxxlens::provider_sdk ALIAS cxxlens_provider_sdk)
+target_compile_features(cxxlens_provider_sdk PUBLIC cxx_std_23)
+target_include_directories(
+  cxxlens_provider_sdk
+  PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+         "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
+set_target_properties(
+  cxxlens_provider_sdk
+  PROPERTIES CXX_EXTENSIONS OFF
+             EXPORT_NAME provider_sdk
+             VERSION "${PROJECT_VERSION}"
+             SOVERSION "${PROJECT_VERSION_MAJOR}")
+cxxlens_set_project_warnings(cxxlens_provider_sdk)
+cxxlens_enable_sanitizers(cxxlens_provider_sdk)
+
+add_library(
   cxxlens
   ${CXXLENS_LIBRARY_TYPE}
   src/config/configuration.cpp
@@ -64,6 +88,7 @@ add_library(
   src/llvm/common/frontend_port.cpp
   src/llvm/common/frontend_worker_ipc.cpp
   src/llvm/clang22/frontend_job.cpp
+  src/llvm/clang22/provider_sdk.cpp
   src/llvm/clang22/frontend_worker.cpp
   src/llvm/clang22/call_relation_extractor.cpp
   src/llvm/clang22/preprocessor_extractor.cpp
@@ -114,6 +139,26 @@ cxxlens_set_project_warnings(cxxlens)
 cxxlens_enable_sanitizers(cxxlens)
 cxxlens_configure_clang22(cxxlens)
 
+add_library(cxxlens_clang22_provider_sdk INTERFACE)
+add_library(cxxlens::clang22_provider_sdk ALIAS cxxlens_clang22_provider_sdk)
+target_link_libraries(cxxlens_clang22_provider_sdk
+                      INTERFACE cxxlens::cxxlens cxxlens::provider_sdk)
+target_compile_features(cxxlens_clang22_provider_sdk INTERFACE cxx_std_23)
+set_target_properties(cxxlens_clang22_provider_sdk
+                      PROPERTIES EXPORT_NAME clang22_provider_sdk)
+
+add_executable(cxxlens-provider-scaffold tools/sdk/provider_scaffold_main.cpp)
+target_link_libraries(cxxlens-provider-scaffold PRIVATE cxxlens::provider_sdk)
+target_compile_features(cxxlens-provider-scaffold PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-provider-scaffold)
+cxxlens_enable_sanitizers(cxxlens-provider-scaffold)
+
+add_executable(cxxlens-sdk-doctor tools/sdk/sdk_doctor_main.cpp)
+target_link_libraries(cxxlens-sdk-doctor PRIVATE cxxlens::provider_sdk)
+target_compile_features(cxxlens-sdk-doctor PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-sdk-doctor)
+cxxlens_enable_sanitizers(cxxlens-sdk-doctor)
+
 add_executable(cxxlens-frontend-worker
                src/llvm/clang22/frontend_worker_main.cpp)
 target_link_libraries(cxxlens-frontend-worker PRIVATE cxxlens::cxxlens)
@@ -152,6 +197,22 @@ install(
   RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
   INCLUDES
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+install(
+  TARGETS cxxlens_provider_sdk
+  EXPORT cxxlensProviderSDKTargets
+  ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+  INCLUDES
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+install(TARGETS cxxlens-provider-scaffold cxxlens-sdk-doctor
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+install(
+  PROGRAMS tools/sdk/relation_idl_compiler.py
+  DESTINATION "${CMAKE_INSTALL_BINDIR}"
+  RENAME cxxlens-relation-idl)
+install(TARGETS cxxlens_clang22_provider_sdk
+        EXPORT cxxlensClang22ProviderSDKTargets)
 install(DIRECTORY include/ DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 install(
   FILES schemas/cxxlens.config.explain.schema.yaml
@@ -224,6 +285,7 @@ install(
         schemas/cxxlens_ng_provider_fuzz_corpus.schema.yaml
         schemas/cxxlens_ng_security_profile.schema.yaml
         schemas/cxxlens_ng_public_api_catalog.yaml
+        schemas/cxxlens_ng_public_api_catalog.schema.yaml
         schemas/cxxlens_ng_acceptance_manifest.yaml
         schemas/cxxlens_ng_security_profile.yaml
         schemas/cxxlens_ng_namespace_registry.yaml
@@ -331,6 +393,8 @@ install(DIRECTORY examples/m2-flagship
         DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cxxlens/examples")
 install(DIRECTORY examples/packages
         DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cxxlens/examples")
+install(DIRECTORY examples/sdk
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cxxlens/examples")
 
 configure_package_config_file(
   cmake/CxxlensConfig.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/cxxlensConfig.cmake"
@@ -348,3 +412,40 @@ install(
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/cxxlensConfig.cmake"
               "${CMAKE_CURRENT_BINARY_DIR}/cxxlensConfigVersion.cmake"
         DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlens")
+
+configure_package_config_file(
+  cmake/cxxlensProviderSDKConfig.cmake.in
+  "${CMAKE_CURRENT_BINARY_DIR}/cxxlensProviderSDKConfig.cmake"
+  INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlensProviderSDK")
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/cxxlensProviderSDKConfigVersion.cmake"
+  VERSION "${PROJECT_VERSION}"
+  COMPATIBILITY SameMajorVersion)
+install(
+  EXPORT cxxlensProviderSDKTargets
+  FILE cxxlensProviderSDKTargets.cmake
+  NAMESPACE cxxlens::
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlensProviderSDK")
+install(
+  FILES "${CMAKE_CURRENT_BINARY_DIR}/cxxlensProviderSDKConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/cxxlensProviderSDKConfigVersion.cmake"
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlensProviderSDK")
+
+configure_package_config_file(
+  cmake/cxxlensClang22ProviderSDKConfig.cmake.in
+  "${CMAKE_CURRENT_BINARY_DIR}/cxxlensClang22ProviderSDKConfig.cmake"
+  INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlensClang22ProviderSDK")
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/cxxlensClang22ProviderSDKConfigVersion.cmake"
+  VERSION "${PROJECT_VERSION}"
+  COMPATIBILITY SameMajorVersion)
+install(
+  EXPORT cxxlensClang22ProviderSDKTargets
+  FILE cxxlensClang22ProviderSDKTargets.cmake
+  NAMESPACE cxxlens::
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlensClang22ProviderSDK")
+install(
+  FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/cxxlensClang22ProviderSDKConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/cxxlensClang22ProviderSDKConfigVersion.cmake"
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cxxlensClang22ProviderSDK")

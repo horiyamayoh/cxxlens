@@ -40,8 +40,11 @@ class DocumentationConsistencyTests(unittest.TestCase):
         security = MODULE.load_yaml(ROOT / MODULE.CATALOGS["security-profile"])
         self.assertEqual(security["maturity"], "accepted")
         self.assertEqual(security["schema"], "cxxlens.security-profile.v1")
+        public_api = MODULE.load_yaml(ROOT / MODULE.CATALOGS["public-cpp-api-catalog"])
+        self.assertEqual(public_api["maturity"], "implemented")
+        self.assertEqual(public_api["schema"], "cxxlens.ng-public-api-catalog.v1")
         for kind, path in MODULE.CATALOGS.items():
-            if kind not in {"relation-registry", "provider-protocol", "security-profile"}:
+            if kind == "acceptance-manifest":
                 self.assertEqual(MODULE.load_yaml(ROOT / path)["maturity"], "bootstrap")
 
     def test_missing_replacement_is_rejected(self) -> None:

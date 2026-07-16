@@ -133,9 +133,18 @@ def validate_metadata(root: pathlib.Path) -> tuple[dict[str, Any], dict[str, Any
     actual_headers = {
         path.relative_to(root).as_posix() for path in public_root.rglob("*.hpp")
     }
-    declared_headers = set(manifest["public_headers"]["ordinary"]) | {
+    declared_legacy_headers = set(manifest["public_headers"]["ordinary"]) | {
         manifest["public_headers"]["explicit_interop"]
     }
+    ng_catalog = load_yaml(root / "schemas/cxxlens_ng_public_api_catalog.yaml")
+    declared_ng_headers = {
+        header
+        for package in ng_catalog["packages"]
+        for header in package["headers"]
+    } | {header for entry in ng_catalog["entries"] for header in entry["headers"]}
+    if declared_legacy_headers & declared_ng_headers:
+        fail("legacy and next-generation public header inventories overlap")
+    declared_headers = declared_legacy_headers | declared_ng_headers
     if actual_headers != declared_headers:
         fail(
             "public header inventory drift: "
