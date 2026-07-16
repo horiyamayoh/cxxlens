@@ -302,7 +302,7 @@ namespace cxxlens::sdk
 			auto state = reader.unsigned_value();
 			auto has_value = reader.boolean();
 			if (!scalar || !parameter || !optional || !state || !has_value ||
-				*scalar > static_cast<std::uint8_t>(scalar_kind::closed_symbol) ||
+				*scalar > static_cast<std::uint8_t>(scalar_kind::set) ||
 				*state > static_cast<std::uint8_t>(cell_state::unknown))
 				return unexpected(store_error("store.corrupt", "cell", "invalid-header"));
 			detached_cell output;
@@ -475,12 +475,14 @@ namespace cxxlens::sdk
 			writer.string(value.semantic_key);
 			writer.string(value.assertion);
 			writer.string(value.content);
+			writer.string(value.producer.id);
+			writer.string(value.producer.semantic_contract);
 			writer.string(value.provenance_root);
 			encode_guarantee(writer, value.guarantee);
 		}
 
-		[[nodiscard]] result<snapshot_claim_annotation>
-		decode_annotation(binary_reader& reader, const relation_descriptor& descriptor)
+		[[nodiscard]] result<snapshot_claim_annotation> decode_annotation(
+			binary_reader& reader, const relation_descriptor& descriptor, const bool has_producer)
 		{
 			auto row = decode_row(reader);
 			auto condition = decode_condition(reader);
@@ -488,6 +490,17 @@ namespace cxxlens::sdk
 			auto semantic_key = reader.string();
 			auto assertion = reader.string();
 			auto content = reader.string();
+			claim_producer producer{
+				"cxxlens.snapshot-legacy-unknown",
+				"sha256:0000000000000000000000000000000000000000000000000000000000000000"};
+			if (has_producer)
+			{
+				auto id = reader.string();
+				auto contract = reader.string();
+				if (!id || !contract || id->empty() || contract->empty())
+					return unexpected(store_error("store.corrupt", "claim-annotation", "producer"));
+				producer = {std::move(*id), std::move(*contract)};
+			}
 			auto provenance = reader.string();
 			auto guarantee = decode_guarantee(reader);
 			if (!row || !condition || !interpretation || !semantic_key || !assertion || !content ||
@@ -501,6 +514,7 @@ namespace cxxlens::sdk
 											 std::move(*semantic_key),
 											 std::move(*assertion),
 											 std::move(*content),
+											 std::move(producer),
 											 std::move(*provenance),
 											 std::move(*guarantee)};
 		}
@@ -610,7 +624,7 @@ namespace cxxlens::sdk
 		[[nodiscard]] std::vector<std::byte> encode_snapshot(const snapshot_handle::data& value)
 		{
 			binary_writer writer;
-			writer.string("cxxlens.ng-snapshot-payload.v2");
+			writer.string("cxxlens.ng-snapshot-payload.v3");
 			const auto& manifest = value.semantic_manifest;
 			writer.string(manifest.schema);
 			writer.string(manifest.id);
@@ -697,9 +711,12 @@ namespace cxxlens::sdk
 			auto magic = reader.string();
 			if (!magic ||
 				(*magic != "cxxlens.ng-snapshot-payload.v1" &&
-				 *magic != "cxxlens.ng-snapshot-payload.v2"))
+				 *magic != "cxxlens.ng-snapshot-payload.v2" &&
+				 *magic != "cxxlens.ng-snapshot-payload.v3"))
 				return unexpected(store_error("store.corrupt", "payload", "format"));
-			const bool payload_v2 = *magic == "cxxlens.ng-snapshot-payload.v2";
+			const bool payload_has_annotations = *magic == "cxxlens.ng-snapshot-payload.v2" ||
+				*magic == "cxxlens.ng-snapshot-payload.v3";
+			const bool payload_has_producer = *magic == "cxxlens.ng-snapshot-payload.v3";
 			auto value = std::make_shared<snapshot_handle::data>();
 			auto& manifest = value->semantic_manifest;
 			auto schema = reader.string();
@@ -847,7 +864,7 @@ namespace cxxlens::sdk
 				unresolved.reason = std::move(*reason);
 				value->unresolved.push_back(std::move(unresolved));
 			}
-			if (payload_v2)
+			if (payload_has_annotations)
 			{
 				auto annotations_available = reader.boolean();
 				auto annotation_relation_count = reader.unsigned_value();
@@ -871,7 +888,8 @@ namespace cxxlens::sdk
 					for (std::uint64_t annotation = 0U; annotation < *annotation_count;
 						 ++annotation)
 					{
-						auto decoded = decode_annotation(reader, descriptor->second);
+						auto decoded =
+							decode_annotation(reader, descriptor->second, payload_has_producer);
 						if (!decoded || decoded->row.descriptor_id != *descriptor_id)
 							return unexpected(
 								store_error("store.corrupt", "claim-annotations", "value"));
@@ -1550,7 +1568,7 @@ namespace cxxlens::sdk
 
 	store_compatibility snapshot_store::compatibility() const
 	{
-		return {implementation_->backend, {2U, 0U, 0U}, true, false};
+		return {implementation_->backend, {2U, 2U, 0U}, true, false};
 	}
 
 	result<void> snapshot_store::compact()
@@ -1688,6 +1706,7 @@ namespace cxxlens::sdk
 																	value.semantic_key,
 																	value.assertion,
 																	value.content,
+																	value.producer,
 																	value.provenance_root,
 																	value.guarantee});
 				candidate->claim_contents.push_back(value.content);

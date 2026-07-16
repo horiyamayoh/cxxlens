@@ -319,6 +319,7 @@ namespace cxxlens::sdk::query
 		claim_condition presence;
 		std::string interpretation;
 		std::vector<std::string> claim_contributors;
+		std::vector<claim_producer> producer_contracts;
 		std::vector<std::string> provenance;
 		std::vector<claim_guarantee> contributor_guarantees;
 		[[nodiscard]] result<void> validate() const;
@@ -358,6 +359,9 @@ namespace cxxlens::sdk::query
 		[[nodiscard]] std::span<const std::string> closure_ids() const noexcept;
 		[[nodiscard]] std::span<const query_unresolved> unresolved_items() const noexcept;
 		[[nodiscard]] std::span<const claim_conflict> conflicts() const noexcept;
+		[[nodiscard]] std::span<const differential_disagreement>
+		differential_disagreements() const noexcept;
+		[[nodiscard]] std::span<const claim_producer> producer_contracts() const noexcept;
 		[[nodiscard]] const claim_guarantee& summary_guarantee() const noexcept;
 		[[nodiscard]] const query_explanation& explain_logical() const noexcept;
 		[[nodiscard]] const query_explanation& explain_physical() const noexcept;

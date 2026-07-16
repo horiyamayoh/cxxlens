@@ -22,10 +22,17 @@ ALLOWED_PUBLIC_HEADERS = {
     "include/cxxlens/sdk/relation.hpp",
     "include/cxxlens/sdk/store.hpp",
     "include/cxxlens/sdk/testing.hpp",
+    "include/cxxlens/relations/build_compile_unit.hpp",
+    "include/cxxlens/relations/build_project.hpp",
+    "include/cxxlens/relations/build_toolchain_context.hpp",
+    "include/cxxlens/relations/build_variant.hpp",
     "include/cxxlens/relations/cc_call_direct_target.hpp",
     "include/cxxlens/relations/cc_call_site.hpp",
     "include/cxxlens/relations/cc_entity.hpp",
+    "include/cxxlens/relations/cc_type.hpp",
     "include/cxxlens/relations/company_lock_acquire.hpp",
+    "include/cxxlens/relations/source_file.hpp",
+    "include/cxxlens/relations/source_span.hpp",
 }
 FORBIDDEN_PREFIXES = (
     "contracts/",

@@ -33,6 +33,7 @@ namespace cxxlens::sdk
 		source_span_id,
 		evidence_id,
 		closed_symbol,
+		set,
 	};
 
 	/** @brief Semantic role of a column in stable claim identity. */

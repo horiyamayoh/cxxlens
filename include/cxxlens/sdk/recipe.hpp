@@ -2,7 +2,9 @@
 
 /** @file recipe.hpp @brief High-level recipe lowering without hiding query partiality. */
 
+#include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <cxxlens/sdk/query.hpp>
@@ -34,3 +36,55 @@ namespace cxxlens::sdk
 		query::logical_query_ir query_;
 	};
 } // namespace cxxlens::sdk
+
+namespace cxxlens::recipes
+{
+	/** @brief Semantic classification that does not collapse empty or ambiguous call search. */
+	enum class call_search_state : std::uint8_t
+	{
+		matched,
+		empty_complete,
+		empty_incomplete,
+		ambiguous,
+	};
+
+	/** @brief Flagship call-search report owning both its exact plan and query result. */
+	class call_search_report
+	{
+	  public:
+		[[nodiscard]] const sdk::recipe_plan& plan() const noexcept;
+		[[nodiscard]] const sdk::query::query_result& result() const noexcept;
+		[[nodiscard]] sdk::query::result_row_cursor matches() const;
+		[[nodiscard]] call_search_state state() const;
+		[[nodiscard]] std::string canonical_form() const;
+
+	  private:
+		call_search_report(sdk::recipe_plan plan,
+						   sdk::query::query_result result,
+						   call_search_state state);
+		sdk::recipe_plan plan_;
+		sdk::query::query_result result_;
+		call_search_state state_{call_search_state::empty_incomplete};
+		friend class call_search_recipe;
+	};
+
+	/** @brief Versioned calls-to-function recipe lowered to the common Logical Query IR. */
+	class call_search_recipe
+	{
+	  public:
+		[[nodiscard]] const sdk::recipe_descriptor& descriptor() const noexcept;
+		[[nodiscard]] std::string_view qualified_name() const noexcept;
+		[[nodiscard]] sdk::result<sdk::recipe_plan> lower() const;
+		[[nodiscard]] sdk::result<call_search_report>
+		run(sdk::snapshot_handle snapshot, sdk::query::execution_request request = {}) const;
+
+	  private:
+		explicit call_search_recipe(std::string qualified_name);
+		std::string qualified_name_;
+		sdk::recipe_descriptor descriptor_;
+		friend sdk::result<call_search_recipe> calls_to_function(std::string);
+	};
+
+	/** @brief Create the NG0 flagship recipe for one exact qualified function name. */
+	[[nodiscard]] sdk::result<call_search_recipe> calls_to_function(std::string qualified_name);
+} // namespace cxxlens::recipes

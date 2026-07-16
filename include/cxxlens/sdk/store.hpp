@@ -172,6 +172,7 @@ namespace cxxlens::sdk
 		std::string semantic_key;
 		std::string assertion;
 		std::string content;
+		claim_producer producer;
 		std::string provenance_root;
 		claim_guarantee guarantee;
 	};

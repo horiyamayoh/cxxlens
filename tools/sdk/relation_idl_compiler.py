@@ -39,6 +39,7 @@ def parse_type(value: str) -> tuple[str, str, bool]:
         "source_span_id": "source_span_id",
         "evidence_id": "evidence_id",
         "closed_symbol": "closed_symbol",
+        "set": "set",
     }
     if value not in kinds:
         raise ValueError(f"unsupported generated SDK type: {value}")

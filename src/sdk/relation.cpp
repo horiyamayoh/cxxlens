@@ -83,6 +83,7 @@ namespace cxxlens::sdk
 				case scalar_kind::unsigned_integer:
 					return std::holds_alternative<std::uint64_t>(value);
 				case scalar_kind::bytes:
+				case scalar_kind::set:
 					return std::holds_alternative<std::vector<std::byte>>(value);
 				case scalar_kind::utf8_string:
 				case scalar_kind::digest:
@@ -163,7 +164,7 @@ namespace cxxlens::sdk
 
 	std::string value_type::canonical_name() const
 	{
-		static constexpr std::array<std::string_view, 13U> names{
+		static constexpr std::array<std::string_view, 14U> names{
 			"bool",
 			"int64",
 			"uint64",
@@ -177,6 +178,7 @@ namespace cxxlens::sdk
 			"source_span_id",
 			"evidence_id",
 			"closed_symbol",
+			"set",
 		};
 		std::string output{names.at(static_cast<std::size_t>(scalar))};
 		if (!parameter.empty())

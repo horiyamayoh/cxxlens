@@ -23,6 +23,8 @@ input:
       - semantic-key
       - assertion-contributor
       - claim-content
+      - producer-id
+      - producer-semantic-contract
       - provenance-root
       - guarantee
     annotationless_payload: reject-query-not-synthesize
@@ -125,6 +127,8 @@ result:
     - closure_ids
     - unresolved
     - conflicts
+    - differential_disagreements
+    - producer_contracts
     - summary_guarantee
     - logical_explanation
     - physical_explanation
@@ -142,6 +146,9 @@ qualification:
     - execution_status
     - input_coverage
     - unresolved
+    - conflicts
+    - differential_disagreements
+    - producer_contracts
     - summary_guarantee
   static_dynamic_digest_equal: required
   root_relocation: required

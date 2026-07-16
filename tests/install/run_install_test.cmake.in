@@ -55,3 +55,19 @@ foreach(consumer IN ITEMS consumer sdk_consumer clang22_sdk_consumer)
   execute_process(COMMAND "${build_dir}/cxxlens-${executable_suffix}"
                           COMMAND_ERROR_IS_FATAL ANY)
 endforeach()
+
+set(example_build_dir "${test_root}/examples-consumer-build")
+execute_process(
+  COMMAND
+    "@CMAKE_COMMAND@" -S "@CMAKE_CURRENT_SOURCE_DIR@/install/examples_consumer"
+    -B "${example_build_dir}" "-DCMAKE_PREFIX_PATH=${install_prefix}"
+    "-DCXXLENS_EXAMPLE_ROOT=${install_prefix}/share/doc/cxxlens/examples/sdk"
+    "-DCMAKE_CXX_COMPILER=@CMAKE_CXX_COMPILER@" "-DLLVM_DIR=@LLVM_DIR@"
+    "-DClang_DIR=@Clang_DIR@" COMMAND_ERROR_IS_FATAL ANY)
+execute_process(COMMAND "@CMAKE_COMMAND@" --build "${example_build_dir}"
+                        COMMAND_ERROR_IS_FATAL ANY)
+foreach(example IN ITEMS recipe typed_query dynamic_query portable_provider
+                         clang22-native)
+  execute_process(COMMAND "${example_build_dir}/cxxlens-installed-${example}"
+                          COMMAND_ERROR_IS_FATAL ANY)
+endforeach()

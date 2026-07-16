@@ -15,6 +15,8 @@ required:
   - closure_ids
   - unresolved
   - conflicts
+  - differential_disagreements
+  - producer_contracts
   - summary_guarantee
   - inputs_complete
   - closed
@@ -42,6 +44,13 @@ properties:
     type: array
     items: {$ref: '#/$defs/unresolved'}
   conflicts: {type: array}
+  differential_disagreements:
+    type: array
+    items: {$ref: '#/$defs/differential_disagreement'}
+  producer_contracts:
+    type: array
+    uniqueItems: true
+    items: {$ref: '#/$defs/producer_contract'}
   summary_guarantee: {$ref: '#/$defs/guarantee'}
   inputs_complete: {type: boolean}
   closed: {type: boolean}
@@ -66,6 +75,7 @@ $defs:
       - condition_fragments
       - interpretation
       - claim_contributors
+      - producer_contracts
       - provenance
     properties:
       values: {type: object}
@@ -74,6 +84,11 @@ $defs:
       condition_fragments: {$ref: '#/$defs/string_set'}
       interpretation: {type: string, minLength: 1}
       claim_contributors: {$ref: '#/$defs/string_set'}
+      producer_contracts:
+        type: array
+        uniqueItems: true
+        minItems: 1
+        items: {$ref: '#/$defs/producer_contract'}
       provenance: {$ref: '#/$defs/string_set'}
   coverage:
     type: object
@@ -93,6 +108,32 @@ $defs:
       code: {type: string, pattern: '^sdk\.query-[a-z0-9-]+$'}
       subject: {type: string}
       detail: {type: string}
+  producer_contract:
+    type: object
+    additionalProperties: false
+    required: [id, semantic_contract]
+    properties:
+      id: {type: string, minLength: 1}
+      semantic_contract: {$ref: '#/$defs/digest'}
+  differential_disagreement:
+    type: object
+    additionalProperties: false
+    required:
+      - relation
+      - semantic_key
+      - left_interpretation
+      - right_interpretation
+      - left_content
+      - right_content
+      - overlap_fragments
+    properties:
+      relation: {type: string, minLength: 1}
+      semantic_key: {type: string, minLength: 1}
+      left_interpretation: {type: string, minLength: 1}
+      right_interpretation: {type: string, minLength: 1}
+      left_content: {type: string, minLength: 1}
+      right_content: {type: string, minLength: 1}
+      overlap_fragments: {$ref: '#/$defs/string_set'}
   guarantee:
     type: object
     additionalProperties: false

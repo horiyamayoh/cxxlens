@@ -163,6 +163,43 @@ namespace cxxlens::sdk::query
 						 values.end());
 		}
 
+		[[nodiscard]] std::string producer_key(const claim_producer& value)
+		{
+			return value.id + "\n" + value.semantic_contract;
+		}
+
+		void canonical_producers(std::vector<claim_producer>& values)
+		{
+			std::ranges::sort(values,
+							  [](const claim_producer& left, const claim_producer& right)
+							  {
+								  return producer_key(left) < producer_key(right);
+							  });
+			values.erase(std::unique(values.begin(),
+									 values.end(),
+									 [](const claim_producer& left, const claim_producer& right)
+									 {
+										 return producer_key(left) == producer_key(right);
+									 }),
+						 values.end());
+		}
+
+		[[nodiscard]] bool producers_are_canonical(const std::vector<claim_producer>& values)
+		{
+			return std::ranges::is_sorted(
+					   values,
+					   [](const claim_producer& left, const claim_producer& right)
+					   {
+						   return producer_key(left) < producer_key(right);
+					   }) &&
+				std::ranges::adjacent_find(
+					values,
+					[](const claim_producer& left, const claim_producer& right)
+					{
+						return producer_key(left) == producer_key(right);
+					}) == values.end();
+		}
+
 		[[nodiscard]] detached_cell absent_cell(const value_type& type)
 		{
 			return detached_cell::absent(type);
@@ -211,6 +248,7 @@ namespace cxxlens::sdk::query
 					{"evidence_id", scalar_kind::evidence_id},
 					{"open_symbol", scalar_kind::open_symbol},
 					{"semantic_version", scalar_kind::semantic_version},
+					{"set", scalar_kind::set},
 					{"source_span_id", scalar_kind::source_span_id},
 					{"typed_id", scalar_kind::typed_id},
 					{"utf8_string", scalar_kind::utf8_string},
@@ -307,12 +345,16 @@ namespace cxxlens::sdk::query
 			output.claim_contributors.insert(output.claim_contributors.end(),
 											 right.claim_contributors.begin(),
 											 right.claim_contributors.end());
+			output.producer_contracts.insert(output.producer_contracts.end(),
+											 right.producer_contracts.begin(),
+											 right.producer_contracts.end());
 			output.provenance.insert(
 				output.provenance.end(), right.provenance.begin(), right.provenance.end());
 			output.contributor_guarantees.insert(output.contributor_guarantees.end(),
 												 right.contributor_guarantees.begin(),
 												 right.contributor_guarantees.end());
 			canonical_set(output.claim_contributors);
+			canonical_producers(output.producer_contracts);
 			canonical_set(output.provenance);
 			canonical_guarantees(output.contributor_guarantees);
 			return std::optional<annotated_row>{std::move(output)};
@@ -350,6 +392,9 @@ namespace cxxlens::sdk::query
 				current.claim_contributors.insert(current.claim_contributors.end(),
 												  row.claim_contributors.begin(),
 												  row.claim_contributors.end());
+				current.producer_contracts.insert(current.producer_contracts.end(),
+												  row.producer_contracts.begin(),
+												  row.producer_contracts.end());
 				current.provenance.insert(
 					current.provenance.end(), row.provenance.begin(), row.provenance.end());
 				current.contributor_guarantees.insert(current.contributor_guarantees.end(),
@@ -357,6 +402,7 @@ namespace cxxlens::sdk::query
 													  row.contributor_guarantees.end());
 				canonical_set(current.presence.fragments);
 				canonical_set(current.claim_contributors);
+				canonical_producers(current.producer_contracts);
 				canonical_set(current.provenance);
 				canonical_guarantees(current.contributor_guarantees);
 			}
@@ -367,6 +413,81 @@ namespace cxxlens::sdk::query
 				(void)key;
 				output.push_back(std::move(row));
 			}
+			return output;
+		}
+
+		[[nodiscard]] std::vector<differential_disagreement> disagreements_for(
+			const std::vector<snapshot_claim_annotation>& annotations,
+			const std::map<std::string, relation_descriptor, std::less<>>& descriptors)
+		{
+			std::map<std::string, std::vector<const snapshot_claim_annotation*>, std::less<>>
+				groups;
+			for (const auto& annotation : annotations)
+			{
+				const auto descriptor = descriptors.find(annotation.row.descriptor_id);
+				if (descriptor == descriptors.end())
+					continue;
+				groups[annotation.row.descriptor_id + "\n" + annotation.semantic_key].push_back(
+					&annotation);
+			}
+			std::vector<differential_disagreement> output;
+			for (const auto& [key, values] : groups)
+			{
+				(void)key;
+				for (std::size_t left = 0U; left < values.size(); ++left)
+					for (std::size_t right = left + 1U; right < values.size(); ++right)
+					{
+						if (values[left]->interpretation == values[right]->interpretation ||
+							values[left]->content == values[right]->content)
+							continue;
+						auto overlap = values[left]->presence.overlap(values[right]->presence);
+						if (!overlap || overlap->empty())
+							continue;
+						const auto* first = values[left];
+						const auto* second = values[right];
+						if (std::tie(second->interpretation, second->content) <
+							std::tie(first->interpretation, first->content))
+							std::swap(first, second);
+						output.push_back({first->row.descriptor_id,
+										  first->semantic_key,
+										  first->interpretation,
+										  second->interpretation,
+										  first->content,
+										  second->content,
+										  std::move(*overlap)});
+					}
+			}
+			std::ranges::sort(
+				output,
+				[](const differential_disagreement& left, const differential_disagreement& right)
+				{
+					return std::tie(left.relation,
+									left.semantic_key,
+									left.left_interpretation,
+									left.right_interpretation,
+									left.left_content,
+									left.right_content) < std::tie(right.relation,
+																   right.semantic_key,
+																   right.left_interpretation,
+																   right.right_interpretation,
+																   right.left_content,
+																   right.right_content);
+				});
+			output.erase(
+				std::unique(output.begin(),
+							output.end(),
+							[](const differential_disagreement& left,
+							   const differential_disagreement& right)
+							{
+								return left.relation == right.relation &&
+									left.semantic_key == right.semantic_key &&
+									left.left_interpretation == right.left_interpretation &&
+									left.right_interpretation == right.right_interpretation &&
+									left.left_content == right.left_content &&
+									left.right_content == right.right_content &&
+									left.overlap_fragments == right.overlap_fragments;
+							}),
+				output.end());
 			return output;
 		}
 
@@ -617,6 +738,8 @@ namespace cxxlens::sdk::query
 		std::vector<std::string> closures;
 		std::vector<query_unresolved> unresolved;
 		std::vector<claim_conflict> conflict_values;
+		std::vector<differential_disagreement> disagreement_values;
+		std::vector<claim_producer> producers;
 		claim_guarantee guarantee{"unknown", "query-empty", "assumptions:unknown", {}};
 		query_explanation logical;
 		query_explanation physical;
@@ -628,13 +751,22 @@ namespace cxxlens::sdk::query
 	result<void> annotated_row::validate() const
 	{
 		if (multiplicity == 0U || interpretation.empty() || claim_contributors.empty() ||
-			provenance.empty() || !sorted_unique(claim_contributors) || !sorted_unique(provenance))
+			producer_contracts.empty() || provenance.empty() ||
+			!sorted_unique(claim_contributors) || !producers_are_canonical(producer_contracts) ||
+			!sorted_unique(provenance))
 			return unexpected(query_error("sdk.query-row-invalid", "annotation"));
 		if (auto valid = presence.validate(); !valid)
 			return unexpected(std::move(valid.error()));
 		for (const auto& [column, cell] : values)
 			if (column.empty() || !cell.validate())
 				return unexpected(query_error("sdk.query-row-invalid", column));
+		if (std::ranges::any_of(producer_contracts,
+								[](const claim_producer& producer)
+								{
+									return producer.id.empty() ||
+										producer.semantic_contract.empty();
+								}))
+			return unexpected(query_error("sdk.query-row-invalid", "producer_contracts"));
 		for (const auto& guarantee : contributor_guarantees)
 			if (auto valid = guarantee.validate(); !valid)
 				return unexpected(std::move(valid.error()));
@@ -648,8 +780,16 @@ namespace cxxlens::sdk::query
 			   << ",\"condition_fragments\":" << strings_json(presence.fragments)
 			   << ",\"condition_universe\":" << json_string(presence.universe)
 			   << ",\"interpretation\":" << json_string(interpretation)
-			   << ",\"multiplicity\":" << multiplicity
-			   << ",\"provenance\":" << strings_json(provenance) << ",\"values\":{";
+			   << ",\"multiplicity\":" << multiplicity << ",\"producer_contracts\":[";
+		for (std::size_t producer = 0U; producer < producer_contracts.size(); ++producer)
+		{
+			if (producer != 0U)
+				output << ',';
+			output << "{\"id\":" << json_string(producer_contracts[producer].id)
+				   << ",\"semantic_contract\":"
+				   << json_string(producer_contracts[producer].semantic_contract) << '}';
+		}
+		output << ']' << ",\"provenance\":" << strings_json(provenance) << ",\"values\":{";
 		std::size_t index{};
 		for (const auto& [column, cell] : values)
 		{
@@ -720,6 +860,17 @@ namespace cxxlens::sdk::query
 		return data_->conflict_values;
 	}
 
+	std::span<const differential_disagreement>
+	query_result::differential_disagreements() const noexcept
+	{
+		return data_->disagreement_values;
+	}
+
+	std::span<const claim_producer> query_result::producer_contracts() const noexcept
+	{
+		return data_->producers;
+	}
+
 	const claim_guarantee& query_result::summary_guarantee() const noexcept
 	{
 		return data_->guarantee;
@@ -759,6 +910,20 @@ namespace cxxlens::sdk::query
 								  conflict.interpretation + "|" +
 								  strings_json(conflict.assertions));
 		}
+		output << "],\"differential_disagreements\":[";
+		for (std::size_t index = 0U; index < data_->disagreement_values.size(); ++index)
+		{
+			if (index != 0U)
+				output << ',';
+			const auto& disagreement = data_->disagreement_values[index];
+			output << "{\"left_content\":" << json_string(disagreement.left_content)
+				   << ",\"left_interpretation\":" << json_string(disagreement.left_interpretation)
+				   << ",\"overlap_fragments\":" << strings_json(disagreement.overlap_fragments)
+				   << ",\"relation\":" << json_string(disagreement.relation)
+				   << ",\"right_content\":" << json_string(disagreement.right_content)
+				   << ",\"right_interpretation\":" << json_string(disagreement.right_interpretation)
+				   << ",\"semantic_key\":" << json_string(disagreement.semantic_key) << '}';
+		}
 		output << "],\"input_coverage\":[";
 		for (std::size_t index = 0U; index < data_->coverage.size(); ++index)
 		{
@@ -777,8 +942,16 @@ namespace cxxlens::sdk::query
 			   << "},\"logical_ir_digest\":" << json_string(data_->ir_digest)
 			   << ",\"ordered\":" << (data_->ordered ? "true" : "false")
 			   << R"(,"physical_explanation":{"id":)" << json_string(data_->physical.id)
-			   << ",\"text\":" << json_string(data_->physical.text)
-			   << "},\"publication_id\":" << json_string(data_->publication) << ",\"rows\":[";
+			   << ",\"text\":" << json_string(data_->physical.text) << "},\"producer_contracts\":[";
+		for (std::size_t index = 0U; index < data_->producers.size(); ++index)
+		{
+			if (index != 0U)
+				output << ',';
+			output << "{\"id\":" << json_string(data_->producers[index].id)
+				   << ",\"semantic_contract\":"
+				   << json_string(data_->producers[index].semantic_contract) << '}';
+		}
+		output << "],\"publication_id\":" << json_string(data_->publication) << ",\"rows\":[";
 		for (std::size_t index = 0U; index < data_->row_values.size(); ++index)
 		{
 			if (index != 0U)
@@ -984,6 +1157,7 @@ namespace cxxlens::sdk::query
 					row.presence = annotation->presence;
 					row.interpretation = annotation->interpretation;
 					row.claim_contributors = {annotation->assertion};
+					row.producer_contracts = {annotation->producer};
 					row.provenance = {annotation->provenance_root};
 					row.contributor_guarantees = {annotation->guarantee};
 					output.rows.push_back(std::move(row));
@@ -1069,6 +1243,9 @@ namespace cxxlens::sdk::query
 						selected.claim_contributors.insert(selected.claim_contributors.end(),
 														   witness.claim_contributors.begin(),
 														   witness.claim_contributors.end());
+						selected.producer_contracts.insert(selected.producer_contracts.end(),
+														   witness.producer_contracts.begin(),
+														   witness.producer_contracts.end());
 						selected.provenance.insert(selected.provenance.end(),
 												   witness.provenance.begin(),
 												   witness.provenance.end());
@@ -1079,6 +1256,7 @@ namespace cxxlens::sdk::query
 					}
 					canonical_set(selected.presence.fragments);
 					canonical_set(selected.claim_contributors);
+					canonical_producers(selected.producer_contracts);
 					canonical_set(selected.provenance);
 					canonical_guarantees(selected.contributor_guarantees);
 					output.rows.push_back(std::move(selected));
@@ -1161,6 +1339,10 @@ namespace cxxlens::sdk::query
 
 		result_data->physical = {"cxxlens.reference-query-planner.v1", physical.str()};
 		result_data->conflict_values = conflicts_for(state.source_annotations, descriptors);
+		result_data->disagreement_values = disagreements_for(state.source_annotations, descriptors);
+		for (const auto& annotation : state.source_annotations)
+			result_data->producers.push_back(annotation.producer);
+		canonical_producers(result_data->producers);
 		if (state.failed())
 		{
 			result_data->status = execution_status::failed_before_result;

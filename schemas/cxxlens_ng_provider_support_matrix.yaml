@@ -42,4 +42,4 @@ entries:
     status: conformance-only
     qualification: schema-conformant
     evidence: sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
-    blocker_issue: '#73'
+    blocker_issue: null

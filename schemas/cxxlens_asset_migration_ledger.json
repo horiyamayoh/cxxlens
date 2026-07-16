@@ -1,5 +1,5 @@
 {
-  "asset_count": 243,
+  "asset_count": 252,
   "assets": [
     {
       "authority": "active",
@@ -703,6 +703,34 @@
     },
     {
       "authority": "active",
+      "path": "include/cxxlens/relations/build_compile_unit.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "include/cxxlens/relations/build_project.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "include/cxxlens/relations/build_toolchain_context.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "include/cxxlens/relations/build_variant.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "include/cxxlens/relations/cc_call_direct_target.hpp",
       "removal_issue": null,
       "replacement": null,
@@ -724,7 +752,28 @@
     },
     {
       "authority": "active",
+      "path": "include/cxxlens/relations/cc_type.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "include/cxxlens/relations/company_lock_acquire.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "include/cxxlens/relations/source_file.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "include/cxxlens/relations/source_span.hpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1403,6 +1452,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/install/examples_consumer/CMakeLists.txt",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/install/run_install_test.cmake.in",
       "removal_issue": null,
       "replacement": null,
@@ -1418,6 +1474,13 @@
     {
       "authority": "active",
       "path": "tests/install/sdk_consumer/main.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/integration/r2_vertical_slice_test.cpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1704,7 +1767,7 @@
     }
   ],
   "classifications": {
-    "active": 207,
+    "active": 216,
     "archived": 35,
     "generated": 1
   },

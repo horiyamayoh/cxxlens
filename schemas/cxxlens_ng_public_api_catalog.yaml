@@ -68,12 +68,12 @@ author_paths:
     negative_mode: compile-fail
     harness: tests/unit/sdk/sdk_test.cpp
   - id: high-level-recipe
-    entry: public.recipe-foundation
+    entry: public.recipe
     implementation: src/sdk/recipe.cpp
     positive_example: examples/sdk/recipe.cpp
     negative_example: examples/sdk/negative/invalid_recipe.cpp
     negative_mode: runtime-rejection
-    harness: tests/unit/sdk/sdk_test.cpp
+    harness: tests/integration/r2_vertical_slice_test.cpp
 
 entries:
   - id: public.common
@@ -121,7 +121,7 @@ entries:
     owner_issue: '#67'
     profile: NG0
     target: cxxlens::provider_sdk
-    headers: [include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/sdk/relation.hpp]
+    headers: [include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/sdk/relation.hpp]
     symbols:
       - name: query.from
         kind: template
@@ -213,7 +213,7 @@ entries:
     errors: [sdk.snapshot-unknown-relation, sdk.snapshot-relation-mismatch, sdk.snapshot-empty, sdk.row-descriptor-mismatch, sdk.row-view-expired, sdk.cursor-thread-violation, sdk.query-annotations-unavailable, sdk.claim-annotation-view-expired, sdk.claim-annotation-cursor-thread-violation, store.backend-unavailable, store.claim-invalid, store.closure-binding-mismatch, store.closure-duplicate, store.closure-invalid, store.closure-subject-missing, store.compact-validation-failed, store.condition-universe-mismatch, store.corrupt, store.coverage-duplicate, store.coverage-invalid, store.current-ambiguous, store.current-corrupt, store.current-not-found, store.derived-basis-not-prior, store.draft-authority-mismatch, store.format-incompatible, store.hash-collision, store.partial-partition-closure, store.partition-basis-mismatch, store.partition-claim-duplicate, store.partition-claim-mismatch, store.partition-duplicate, store.partition-invalid, store.partition-relation-unknown, store.publication-corrupt, store.publication-not-found, store.publish-stale-parent, store.registry-mismatch, store.selection-authority-incomplete, store.snapshot-not-found, store.sqlite-failure, store.sqlite-path-empty, store.transaction-state]
     lifetime: [snapshot-handle-pins-immutable-physical-generation, row-and-claim-annotation-views-expire-on-cursor-advance, owned-copy-outlives-cursor]
     threading: [snapshot-store-and-handles-concurrent-readable, writer-row-cursor-and-claim-annotation-cursor-thread-confined, publication-head-update-is-serialized]
-    versioning: [snapshot-identity-v1-excludes-publication-and-physical-format, sqlite-physical-format-v2.1-with-query-annotation-payload-v2, payload-v1-query-rejected-without-synthesis]
+    versioning: [snapshot-identity-v1-excludes-publication-and-physical-format, sqlite-physical-format-v2.2-with-producer-preserving-query-annotation-payload-v3, payload-v1-query-rejected-without-synthesis, payload-v2-read-with-explicit-legacy-unknown-producer]
     invariants: [exact-seven-field-series-selector, stage-validate-publish-order, staged-data-invisible, stale-parent-rejected, failed-publish-preserves-head, partial-partition-never-closed, memory-and-sqlite-semantic-parity, canonical-export-ordered, corruption-never-falls-back, compaction-defers-pinned-generation-reclamation]
     implementation_evidence: [src/sdk/store.cpp, examples/sdk/snapshot_store.cpp, tests/unit/sdk/store_test.cpp, schemas/cxxlens_ng_snapshot_manifest.schema.yaml, schemas/cxxlens_ng_sqlite_store_contract.yaml, docs/design/adr/0013-ng-sqlite-physical-store.md]
 
@@ -255,7 +255,7 @@ entries:
         signature: 'static result<reference_engine> bind(snapshot_handle); result<query_result> execute(const logical_query_ir&, execution_request = {}) const'
       - name: query.query_result
         kind: class
-        signature: 'rows; execution; ordered; inputs_complete; closed; input_coverage; closure_ids; unresolved_items; conflicts; summary_guarantee; explain_logical; explain_physical; canonical_form'
+        signature: 'rows; execution; ordered; inputs_complete; closed; input_coverage; closure_ids; unresolved_items; conflicts; differential_disagreements; producer_contracts; summary_guarantee; explain_logical; explain_physical; logical_ir_digest; snapshot_id; canonical_form'
       - name: query.result_row_cursor
         kind: class
         signature: 'result<optional<result_row_view>> next(); result<annotated_row> result_row_view::copy() const'
@@ -263,11 +263,11 @@ entries:
         kind: value
         signature: 'execution_budget; execution_request; execution_checkpoint; cancellation_probe; stop_token_cancellation'
     errors: [sdk.query-argument-invalid, sdk.query-scan-requirement-missing, sdk.query-join-present-equality-required, sdk.query-filter-join-predicate, sdk.query-column-not-in-input, sdk.query-output-schema-mismatch, sdk.query-limit-unordered, sdk.query-multiplicity-overflow, sdk.query-row-invalid, sdk.query-row-view-expired, sdk.query-cursor-thread-violation, sdk.query-snapshot-empty, sdk.query-snapshot-schema-mismatch, sdk.query-annotations-unavailable, sdk.query-input-unresolved, sdk.query-scan-budget, sdk.query-intermediate-budget, sdk.query-memory-budget, sdk.query-output-budget, sdk.query-cancelled]
-    lifetime: [reference-engine-owns-snapshot-pin, query-result-owns-rows-and-side-channels, result-row-view-expires-on-cursor-advance, cancellation-probe-is-synchronously-borrowed]
+    lifetime: [reference-engine-owns-snapshot-pin, query-result-owns-rows-producer-contracts-and-side-channels, result-row-view-expires-on-cursor-advance, cancellation-probe-is-synchronously-borrowed]
     threading: [reference-engine-and-query-result-are-concurrent-readable, execution-is-logically-immutable, result-row-cursor-is-thread-confined, cancellation-probe-must-be-noexcept]
     versioning: [query-runtime-result-v1-independent-from-logical-ir-v1, reference-physical-plan-is-internal, runtime-budget-and-cancellation-excluded-from-ir-digest]
-    invariants: [all-11-ng0-operators-use-accepted-annotated-multiset-algebra, memory-and-sqlite-semantic-parity, physical-scan-order-unobservable, sql-null-unknown-conflict-not-coerced, budget-and-cancellation-return-canonical-sealed-prefix-only, success-input-complete-and-closed-are-distinct, logical-explain-excludes-physical-authority]
-    implementation_evidence: [src/sdk/query_execution.cpp, src/sdk/query_ir_decoder.cpp, examples/sdk/query_execution.cpp, tests/unit/sdk/query_runtime_test.cpp, schemas/cxxlens_ng_query_runtime_contract.yaml, schemas/cxxlens_ng_query_execution_result.schema.yaml, docs/design/adr/0014-deterministic-reference-query-runtime.md]
+    invariants: [all-11-ng0-operators-use-accepted-annotated-multiset-algebra, memory-and-sqlite-semantic-parity, physical-scan-order-unobservable, sql-null-unknown-conflict-not-coerced, budget-and-cancellation-return-canonical-sealed-prefix-only, success-input-complete-and-closed-are-distinct, producer-contracts-conflicts-and-differential-disagreements-survive-query, logical-explain-excludes-physical-authority]
+    implementation_evidence: [src/sdk/query_execution.cpp, src/sdk/query_ir_decoder.cpp, examples/sdk/query_execution.cpp, tests/unit/sdk/query_runtime_test.cpp, tests/integration/r2_vertical_slice_test.cpp, schemas/cxxlens_ng_query_runtime_contract.yaml, schemas/cxxlens_ng_query_execution_result.schema.yaml, docs/design/adr/0014-deterministic-reference-query-runtime.md]
 
   - id: public.provider-sdk
     status: implemented
@@ -374,18 +374,24 @@ entries:
     implementation_evidence: [src/sdk/recipe.cpp, examples/sdk/recipe.cpp]
 
   - id: public.recipe
-    status: contract-pending
+    status: implemented
     owner_issue: '#73'
     profile: NG0
-    target: cxxlens::provider_sdk
+    target: cxxlens::recipes
     headers: [include/cxxlens/sdk/recipe.hpp]
     symbols:
-      - name: flagship-call-search
-        kind: function-family
-        signature: 'reserved for Issue #73 over recipe_plan and logical_query_ir'
+      - name: recipes.calls_to_function
+        kind: function
+        signature: 'result<call_search_recipe> calls_to_function(string qualified_name)'
+      - name: recipes.call_search_recipe
+        kind: class
+        signature: 'const recipe_descriptor& descriptor() const; string_view qualified_name() const; result<recipe_plan> lower() const; result<call_search_report> run(snapshot_handle, query::execution_request = {}) const'
+      - name: recipes.call_search_report
+        kind: class
+        signature: 'const recipe_plan& plan() const; const query_result& result() const; result_row_cursor matches() const; call_search_state state() const; string canonical_form() const'
     errors: [sdk.recipe-invalid]
-    lifetime: [must-own-lowered-query-and-result]
-    threading: [must-not-weaken-underlying-query-threading-contract]
-    versioning: [recipe-semantics-axis-independent]
-    invariants: [must-preserve-evidence-coverage-unresolved-guarantee]
-    implementation_evidence: [docs/design/cxxlens_next_generation_integrated_design_ja.md]
+    lifetime: [recipe-owns-qualified-name, report-owns-lowered-plan-query-result-and-snapshot-pin]
+    threading: [recipe-and-report-are-concurrent-readable, match-cursor-remains-thread-confined]
+    versioning: [recipe-semantics-axis-independent-at-cxxlens.recipes.calls_to_function-1.0.0]
+    invariants: [exact-qualified-name-only, lower-uses-cc-entity-call-direct-target-and-call-site, empty-complete-empty-incomplete-and-ambiguous-remain-distinct, evidence-coverage-closure-unresolved-conflict-differential-producer-guarantee-and-explanations-are-preserved]
+    implementation_evidence: [src/sdk/recipe.cpp, examples/sdk/recipe.cpp, tests/integration/r2_vertical_slice_test.cpp, tests/install/examples_consumer/CMakeLists.txt, docs/design/cxxlens_next_generation_integrated_design_ja.md]

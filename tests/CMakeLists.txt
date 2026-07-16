@@ -70,6 +70,20 @@ set_tests_properties(
   PROPERTIES LABELS
              "adapter;provider;clang22;process;protocol;sandbox;security")
 
+cxxlens_add_test_executable(cxxlens-r2-vertical-slice
+                            integration/r2_vertical_slice_test.cpp)
+target_link_libraries(cxxlens-r2-vertical-slice
+                      PRIVATE cxxlens::clang22_provider_sdk)
+target_include_directories(cxxlens-r2-vertical-slice
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME integration.r2-vertical-slice COMMAND cxxlens-r2-vertical-slice)
+set_tests_properties(
+  integration.r2-vertical-slice
+  PROPERTIES
+    LABELS
+    "integration;acceptance;r2;recipe;query;provider;clang22;store;determinism"
+    TIMEOUT 60)
+
 add_test(
   NAME link.provider-sdk-llvm-free
   COMMAND
@@ -174,6 +188,7 @@ add_dependencies(
   cxxlens-clang-worker-22
   cxxlens-clang22-provider-normalizer
   cxxlens-clang22-provider-worker-protocol
+  cxxlens-r2-vertical-slice
   cxxlens-provider-process-fixture
   cxxlens-public-header-cxxlens
   cxxlens-public-header-provider-clang22

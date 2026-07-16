@@ -11,7 +11,7 @@
 | Portable provider SDK/runtime | implemented |
 | Clang 22 native SDK/worker | implemented; exact adapter requires exact Clang 22 |
 | Recipe foundation | implemented |
-| Flagship end-to-end recipe | tracked by #73 |
+| Flagship `calls_to_function` end-to-end recipe | implemented with typed/dynamic/provider/store parity |
 | GCC/IR/object/binary providers | future provider entries |
 | Stable third-party C++ binary plugin ABI | unsupported |
 | Source mutation apply | outside NG0 scope |
