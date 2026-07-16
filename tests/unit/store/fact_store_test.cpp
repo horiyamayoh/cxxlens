@@ -22,6 +22,7 @@
 #include "runtime/hash_port.hpp"
 #include "store/binary_codec.hpp"
 #include "store/fact_store_access.hpp"
+#include "store/ng_legacy_fact_store_adapter.hpp"
 #include "store/sqlite/sqlite_api.hpp"
 #include "store/store_port.hpp"
 
@@ -566,6 +567,101 @@ namespace
 		require(digest.has_value(), "golden snapshot did not hash");
 		return digest.value().hexadecimal;
 	}
+
+	[[nodiscard]] sdk::relation_descriptor legacy_bridge_descriptor()
+	{
+		sdk::relation_descriptor value;
+		value.id = "migration.legacy_fact.v1";
+		value.name = "migration.legacy_fact";
+		value.version = {1U, 0U, 0U};
+		value.semantic_major = 1U;
+		value.semantics = "migration.legacy-fact/1";
+		value.owner_namespace = "cxxlens.migration";
+		value.columns = {
+			{"migration.legacy_fact.v1.fact",
+			 "fact",
+			 {sdk::scalar_kind::utf8_string, {}, false},
+			 true,
+			 sdk::column_role::claim_key},
+			{"migration.legacy_fact.v1.stable_key",
+			 "stable_key",
+			 {sdk::scalar_kind::utf8_string, {}, false},
+			 true,
+			 sdk::column_role::authoritative_payload},
+		};
+		value.key_columns = {value.columns.front().id};
+		value.descriptor_digest =
+			sdk::semantic_digest("cxxlens.relation-descriptor.v1", value.canonical_form());
+		return value;
+	}
+
+	class fixture_legacy_mapper final : public store::legacy_fact_mapper
+	{
+	  public:
+		explicit fixture_legacy_mapper(const sdk::relation_engine& engine) : engine_{engine} {}
+		[[nodiscard]] sdk::result<sdk::claim>
+		map(const facts::detached_fact_record& fact) const override
+		{
+			const auto descriptor = legacy_bridge_descriptor();
+			sdk::row_builder builder{descriptor};
+			if (auto added = builder.set(
+					{descriptor.id, descriptor.columns[0].id, descriptor.columns[0].type},
+					sdk::detached_cell::utf8(std::string{fact.id.value()}));
+				!added)
+				return sdk::unexpected(std::move(added.error()));
+			if (auto added = builder.set(
+					{descriptor.id, descriptor.columns[1].id, descriptor.columns[1].type},
+					sdk::detached_cell::utf8(fact.stable_key));
+				!added)
+				return sdk::unexpected(std::move(added.error()));
+			auto row = std::move(builder).finish();
+			if (!row)
+				return sdk::unexpected(std::move(row.error()));
+			return sdk::make_assertion(
+				engine_,
+				{std::move(*row),
+				 {"migration-universe", {"all"}},
+				 "migration.legacy-v1",
+				 {"migration.legacy-adapter",
+				  "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+				 {"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+				 "evidence:legacy-store",
+				 {"unknown", "legacy-fact-store", "migration-only", {"schema_validated"}}});
+		}
+
+	  private:
+		const sdk::relation_engine& engine_;
+	};
+
+	void check_ng_one_way_legacy_adapter()
+	{
+		sdk::relation_registry registry;
+		require(registry.add(legacy_bridge_descriptor()).has_value(),
+				"legacy bridge descriptor rejected");
+		auto engine = registry.build("legacy-migration-test");
+		require(engine.has_value(), "legacy bridge engine rejected");
+		auto reduction = fixture();
+		store::snapshot_data source{metadata(), reduction.facts, reduction.coverage};
+		fixture_legacy_mapper mapper{*engine};
+		store::legacy_migration_request request{
+			legacy_bridge_descriptor().id,
+			"legacy-workspace",
+			{"migration-universe", {"all"}},
+			"migration.legacy-v1",
+			"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			{},
+			"unknown",
+			"legacy-assumptions"};
+		const sdk::claim_input_basis direct{sdk::direct_claim_basis{
+			"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}};
+		auto basis = sdk::claim_input_basis_digest(direct);
+		require(basis.has_value(), "legacy bridge basis rejected");
+		request.producer_input_basis_digest = std::move(*basis);
+		auto adapted = store::adapt_legacy_fact_snapshot(source, request, mapper);
+		require(adapted && adapted->claims.size() == source.facts.size() &&
+					sdk::make_partition_manifest(*engine, *adapted).has_value(),
+				"legacy v1 facts did not traverse the NG partition validator");
+	}
 } // namespace
 
 int main(const int argument_count, const char* const* arguments)
@@ -580,5 +676,6 @@ int main(const int argument_count, const char* const* arguments)
 						 test_directory / "relocated-facts.sqlite");
 	check_corruption(test_directory / "corrupt-facts.sqlite",
 					 test_directory / "truncated-facts.sqlite");
+	check_ng_one_way_legacy_adapter();
 	return 0;
 }

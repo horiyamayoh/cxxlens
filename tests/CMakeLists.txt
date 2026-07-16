@@ -56,6 +56,15 @@ add_test(NAME unit.sdk COMMAND cxxlens-unit-sdk)
 set_tests_properties(
   unit.sdk PROPERTIES LABELS "unit;sdk;relation;query;provider;native")
 
+add_executable(cxxlens-unit-sdk-store unit/sdk/store_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-store PRIVATE cxxlens::provider_sdk)
+target_compile_features(cxxlens-unit-sdk-store PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-sdk-store)
+add_test(NAME unit.sdk-store COMMAND cxxlens-unit-sdk-store)
+set_tests_properties(
+  unit.sdk-store PROPERTIES LABELS
+                            "unit;sdk;store;sqlite;determinism;transaction")
+
 add_executable(cxxlens-public-header-sdk public_headers/sdk_header_test.cpp)
 target_link_libraries(cxxlens-public-header-sdk PRIVATE cxxlens::provider_sdk)
 target_compile_features(cxxlens-public-header-sdk PRIVATE cxx_std_23)
@@ -77,7 +86,7 @@ set_tests_properties(public-api.provider-clang22-header
                      PROPERTIES LABELS "public-api;native-sdk;clang22")
 
 foreach(example IN ITEMS typed_query dynamic_query portable_provider recipe
-                         relation_claim_batch)
+                         relation_claim_batch snapshot_store)
   set(target_name "cxxlens-sdk-example-${example}")
   add_executable(${target_name}
                  "${PROJECT_SOURCE_DIR}/examples/sdk/${example}.cpp")
@@ -123,12 +132,14 @@ add_dependencies(
   cxxlens-sdk-example-portable_provider
   cxxlens-sdk-example-recipe
   cxxlens-sdk-example-relation_claim_batch
+  cxxlens-sdk-example-snapshot_store
   cxxlens-sdk-example-typed_query
   cxxlens-sdk-negative-dynamic_literal_type_mismatch
   cxxlens-sdk-negative-invalid_recipe
   cxxlens-sdk-negative-provider_no_credit
   cxxlens-sdk-negative-unordered_limit
-  cxxlens-unit-sdk)
+  cxxlens-unit-sdk
+  cxxlens-unit-sdk-store)
 
 add_executable(cxxlens-unit-selectors unit/select/selector_test.cpp)
 target_link_libraries(cxxlens-unit-selectors PRIVATE cxxlens::cxxlens)
@@ -525,7 +536,8 @@ set_tests_properties(
     "unit;facts;reducer;identity;variant;coverage;determinism;conformance")
 
 add_executable(cxxlens-unit-fact-store unit/store/fact_store_test.cpp)
-target_link_libraries(cxxlens-unit-fact-store PRIVATE cxxlens::cxxlens)
+target_link_libraries(cxxlens-unit-fact-store PRIVATE cxxlens::cxxlens
+                                                      cxxlens::provider_sdk)
 target_include_directories(cxxlens-unit-fact-store
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 target_compile_definitions(

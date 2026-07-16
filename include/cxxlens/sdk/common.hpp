@@ -11,6 +11,7 @@
 #include <type_traits>
 #include <utility>
 #include <variant>
+#include <vector>
 
 namespace cxxlens::sdk
 {
@@ -118,6 +119,42 @@ namespace cxxlens::sdk
 		[[nodiscard]] auto operator<=>(const semantic_version&) const = default;
 		[[nodiscard]] std::string string() const;
 	};
+
+	/** @brief One value in the versioned cxxlens canonical tuple algebra. */
+	struct canonical_value
+	{
+		/** @brief Closed wire kind; values are encoded with an explicit one-byte tag. */
+		enum class kind : std::uint8_t
+		{
+			null_value,
+			boolean,
+			signed_integer,
+			bytes,
+			utf8_string,
+			ordered_tuple,
+		};
+
+		kind type{kind::null_value};
+		bool boolean{};
+		std::int64_t integer{};
+		std::vector<std::byte> byte_string;
+		std::string text;
+		std::vector<canonical_value> tuple;
+
+		[[nodiscard]] static canonical_value null();
+		[[nodiscard]] static canonical_value from_boolean(bool value);
+		[[nodiscard]] static canonical_value from_integer(std::int64_t value);
+		[[nodiscard]] static canonical_value from_bytes(std::vector<std::byte> value);
+		[[nodiscard]] static canonical_value from_string(std::string value);
+		[[nodiscard]] static canonical_value from_tuple(std::vector<canonical_value> value);
+		[[nodiscard]] bool operator==(const canonical_value&) const = default;
+	};
+
+	/** @brief Encode one value using cxxlens-canonical-tuple-v1. */
+	[[nodiscard]] std::vector<std::byte> canonical_binary(const canonical_value& value);
+	/** @brief Full typed SHA-256 identity using the exact cxxlens domain prefix. */
+	[[nodiscard]] std::string canonical_identity_digest(std::string_view identity_kind,
+														std::span<const canonical_value> fields);
 
 	/** @brief Full SHA-256 digest with a caller-supplied domain separator. */
 	[[nodiscard]] std::string semantic_digest(std::string_view domain, std::string_view bytes);

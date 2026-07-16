@@ -1,0 +1,1617 @@
+#include <algorithm>
+#include <array>
+#include <charconv>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <limits>
+#include <map>
+#include <mutex>
+#include <ranges>
+#include <set>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+#if defined(__unix__) || defined(__APPLE__)
+#include <dlfcn.h>
+#endif
+
+#include <cxxlens/sdk/store.hpp>
+
+namespace cxxlens::sdk
+{
+	namespace
+	{
+		[[nodiscard]] error
+		store_error(std::string code, std::string field, std::string detail = {})
+		{
+			return {std::move(code), std::move(field), std::move(detail)};
+		}
+
+		[[nodiscard]] bool digest(const std::string_view value)
+		{
+			if (value.size() != 71U || !value.starts_with("sha256:"))
+				return false;
+			return std::ranges::all_of(value.substr(7U),
+									   [](const char byte)
+									   {
+										   return (byte >= '0' && byte <= '9') ||
+											   (byte >= 'a' && byte <= 'f');
+									   });
+		}
+
+		[[nodiscard]] canonical_value text(std::string value)
+		{
+			return canonical_value::from_string(std::move(value));
+		}
+
+		[[nodiscard]] canonical_value texts(const std::vector<std::string>& values)
+		{
+			std::vector<canonical_value> output;
+			output.reserve(values.size());
+			for (const auto& value : values)
+				output.push_back(text(value));
+			return canonical_value::from_tuple(std::move(output));
+		}
+
+		[[nodiscard]] std::string partition_identity(const partition_draft& draft)
+		{
+			const std::array fields{
+				text(draft.relation_descriptor_id),
+				text(draft.scope),
+				text(draft.condition.canonical_form()),
+				text(draft.interpretation),
+				text(draft.producer_semantics),
+				text(draft.producer_input_basis_digest),
+				text(draft.precision_profile),
+				text(draft.assumption_set_id),
+			};
+			return canonical_identity_digest("partition", fields);
+		}
+
+		[[nodiscard]] std::vector<std::string> claim_content_ids(const partition_draft& draft)
+		{
+			std::vector<std::string> output;
+			output.reserve(draft.claims.size());
+			for (const auto& value : draft.claims)
+				output.push_back(value.content);
+			std::ranges::sort(output);
+			return output;
+		}
+
+		[[nodiscard]] std::vector<std::string> coverage_values(const partition_draft& draft)
+		{
+			std::vector<std::string> output;
+			output.reserve(draft.coverage.size());
+			for (const auto& value : draft.coverage)
+				output.push_back(value.canonical_form());
+			std::ranges::sort(output);
+			return output;
+		}
+
+		[[nodiscard]] bool partition_complete(const partition_draft& draft)
+		{
+			return !draft.coverage.empty() && draft.unresolved.empty() &&
+				std::ranges::all_of(draft.coverage,
+									[](const snapshot_coverage_unit& unit)
+									{
+										return unit.state == "covered";
+									});
+		}
+
+		[[nodiscard]] std::string closure_identity(const closure_candidate& value)
+		{
+			const std::array fields{
+				text(value.relation_descriptor_id),
+				text(value.subject_partition_id),
+				text(value.partition_content_digest),
+				text(value.coverage_digest),
+				text(value.key_domain_digest),
+				text(value.condition.canonical_form()),
+				text(value.interpretation),
+				text(value.assumption_set_id),
+				text(value.closure_kind),
+				text(value.producer_semantics),
+				text(value.evidence_digest),
+			};
+			return canonical_identity_digest("closure-certificate", fields);
+		}
+
+		[[nodiscard]] std::string snapshot_identity(const snapshot_manifest& value)
+		{
+			std::vector<canonical_value> partitions;
+			partitions.reserve(value.partitions.size());
+			for (const auto& partition : value.partitions)
+				partitions.push_back(
+					canonical_value::from_tuple({text(partition.partition_id),
+												 text(partition.content_digest),
+												 text(partition.coverage_digest)}));
+			std::ranges::sort(partitions,
+							  [](const canonical_value& left, const canonical_value& right)
+							  {
+								  return left.tuple.front().text < right.tuple.front().text;
+							  });
+			auto closures = value.closure_ids;
+			std::ranges::sort(closures);
+			const std::array fields{
+				text(value.snapshot_semantics_version.string()),
+				text(value.catalog_semantic_digest),
+				text(value.condition_universe_id),
+				text(value.relation_registry_digest),
+				text(value.interpretation_policy_digest),
+				canonical_value::from_tuple(std::move(partitions)),
+				texts(closures),
+			};
+			return canonical_identity_digest("snapshot", fields);
+		}
+
+		[[nodiscard]] std::string publication_identity(const publication_record& value)
+		{
+			const std::array fields{
+				text(value.series_id),
+				text(value.snapshot_id),
+				canonical_value::from_integer(static_cast<std::int64_t>(value.sequence)),
+				text(value.parent_publication.value_or("")),
+			};
+			return canonical_identity_digest("publication", fields);
+		}
+
+		[[nodiscard]] std::string canonical_export_of(const snapshot_handle::data& value);
+
+		class binary_writer
+		{
+		  public:
+			void unsigned_value(std::uint64_t value)
+			{
+				for (int shift = 56; shift >= 0; shift -= 8)
+					bytes_.push_back(static_cast<std::byte>((value >> shift) & 0xffU));
+			}
+			void boolean(const bool value)
+			{
+				bytes_.push_back(value ? std::byte{1} : std::byte{0});
+			}
+			void string(const std::string_view value)
+			{
+				unsigned_value(value.size());
+				for (const auto byte : value)
+					bytes_.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
+			}
+			void raw(const std::span<const std::byte> value)
+			{
+				unsigned_value(value.size());
+				bytes_.insert(bytes_.end(), value.begin(), value.end());
+			}
+			[[nodiscard]] std::vector<std::byte> finish() &&
+			{
+				return std::move(bytes_);
+			}
+
+		  private:
+			std::vector<std::byte> bytes_;
+		};
+
+		class binary_reader
+		{
+		  public:
+			explicit binary_reader(const std::span<const std::byte> bytes) : bytes_{bytes} {}
+			[[nodiscard]] result<std::uint64_t> unsigned_value()
+			{
+				if (bytes_.size() - offset_ < 8U)
+					return unexpected(store_error("store.corrupt", "payload", "truncated-u64"));
+				std::uint64_t output{};
+				for (std::size_t index = 0U; index < 8U; ++index)
+					output =
+						(output << 8U) | std::to_integer<unsigned char>(bytes_[offset_ + index]);
+				offset_ += 8U;
+				return output;
+			}
+			[[nodiscard]] result<bool> boolean()
+			{
+				if (offset_ >= bytes_.size() ||
+					std::to_integer<unsigned char>(bytes_[offset_]) > 1U)
+					return unexpected(store_error("store.corrupt", "payload", "invalid-bool"));
+				return std::to_integer<unsigned char>(bytes_[offset_++]) != 0U;
+			}
+			[[nodiscard]] result<std::string> string()
+			{
+				auto size = unsigned_value();
+				if (!size || *size > bytes_.size() - offset_)
+					return unexpected(store_error("store.corrupt", "payload", "truncated-string"));
+				std::string output;
+				output.reserve(static_cast<std::size_t>(*size));
+				for (std::uint64_t index = 0U; index < *size; ++index)
+					output.push_back(static_cast<char>(bytes_[offset_ + index]));
+				offset_ += static_cast<std::size_t>(*size);
+				return output;
+			}
+			[[nodiscard]] result<std::vector<std::byte>> raw()
+			{
+				auto size = unsigned_value();
+				if (!size || *size > bytes_.size() - offset_)
+					return unexpected(store_error("store.corrupt", "payload", "truncated-bytes"));
+				std::vector<std::byte> output(bytes_.begin() + static_cast<std::ptrdiff_t>(offset_),
+											  bytes_.begin() +
+												  static_cast<std::ptrdiff_t>(offset_ + *size));
+				offset_ += static_cast<std::size_t>(*size);
+				return output;
+			}
+			[[nodiscard]] bool finished() const noexcept
+			{
+				return offset_ == bytes_.size();
+			}
+
+		  private:
+			std::span<const std::byte> bytes_;
+			std::size_t offset_{};
+		};
+
+		void encode_cell(binary_writer& writer, const detached_cell& cell)
+		{
+			writer.unsigned_value(static_cast<std::uint8_t>(cell.type.scalar));
+			writer.string(cell.type.parameter);
+			writer.boolean(cell.type.optional);
+			writer.unsigned_value(static_cast<std::uint8_t>(cell.state));
+			writer.boolean(cell.value.has_value());
+			if (cell.value)
+				std::visit(
+					[&](const auto& value)
+					{
+						using type = std::decay_t<decltype(value)>;
+						if constexpr (std::is_same_v<type, bool>)
+						{
+							writer.unsigned_value(0U);
+							writer.boolean(value);
+						}
+						else if constexpr (std::is_same_v<type, std::int64_t>)
+						{
+							writer.unsigned_value(1U);
+							writer.unsigned_value(static_cast<std::uint64_t>(value));
+						}
+						else if constexpr (std::is_same_v<type, std::uint64_t>)
+						{
+							writer.unsigned_value(2U);
+							writer.unsigned_value(value);
+						}
+						else if constexpr (std::is_same_v<type, std::string>)
+						{
+							writer.unsigned_value(3U);
+							writer.string(value);
+						}
+						else
+						{
+							writer.unsigned_value(4U);
+							writer.raw(value);
+						}
+					},
+					*cell.value);
+			writer.boolean(cell.unknown_reason.has_value());
+			if (cell.unknown_reason)
+				writer.string(*cell.unknown_reason);
+		}
+
+		[[nodiscard]] result<detached_cell> decode_cell(binary_reader& reader)
+		{
+			auto scalar = reader.unsigned_value();
+			auto parameter = reader.string();
+			auto optional = reader.boolean();
+			auto state = reader.unsigned_value();
+			auto has_value = reader.boolean();
+			if (!scalar || !parameter || !optional || !state || !has_value ||
+				*scalar > static_cast<std::uint8_t>(scalar_kind::closed_symbol) ||
+				*state > static_cast<std::uint8_t>(cell_state::unknown))
+				return unexpected(store_error("store.corrupt", "cell", "invalid-header"));
+			detached_cell output;
+			output.type = {static_cast<scalar_kind>(*scalar), std::move(*parameter), *optional};
+			output.state = static_cast<cell_state>(*state);
+			if (*has_value)
+			{
+				auto tag = reader.unsigned_value();
+				if (!tag)
+					return unexpected(std::move(tag.error()));
+				switch (*tag)
+				{
+					case 0U:
+					{
+						auto value = reader.boolean();
+						if (!value)
+							return unexpected(std::move(value.error()));
+						output.value = scalar_value{*value};
+						break;
+					}
+					case 1U:
+					case 2U:
+					{
+						auto value = reader.unsigned_value();
+						if (!value)
+							return unexpected(std::move(value.error()));
+						output.value = *tag == 1U ? scalar_value{static_cast<std::int64_t>(*value)}
+												  : scalar_value{*value};
+						break;
+					}
+					case 3U:
+					{
+						auto value = reader.string();
+						if (!value)
+							return unexpected(std::move(value.error()));
+						output.value = scalar_value{std::move(*value)};
+						break;
+					}
+					case 4U:
+					{
+						auto value = reader.raw();
+						if (!value)
+							return unexpected(std::move(value.error()));
+						output.value = scalar_value{std::move(*value)};
+						break;
+					}
+					default:
+						return unexpected(
+							store_error("store.corrupt", "cell", "invalid-value-tag"));
+				}
+			}
+			auto has_reason = reader.boolean();
+			if (!has_reason)
+				return unexpected(std::move(has_reason.error()));
+			if (*has_reason)
+			{
+				auto reason = reader.string();
+				if (!reason)
+					return unexpected(std::move(reason.error()));
+				output.unknown_reason = std::move(*reason);
+			}
+			if (auto valid = output.validate(); !valid)
+				return unexpected(store_error("store.corrupt", "cell", valid.error().code));
+			return output;
+		}
+
+		void encode_row(binary_writer& writer, const detached_row& row)
+		{
+			writer.string(row.descriptor_id);
+			writer.unsigned_value(row.cells.size());
+			for (const auto& [column, cell] : row.cells)
+			{
+				writer.string(column);
+				encode_cell(writer, cell);
+			}
+		}
+
+		[[nodiscard]] result<detached_row> decode_row(binary_reader& reader)
+		{
+			auto descriptor = reader.string();
+			auto count = reader.unsigned_value();
+			if (!descriptor || !count || *count > 1'000'000U)
+				return unexpected(store_error("store.corrupt", "row", "invalid-header"));
+			detached_row output;
+			output.descriptor_id = std::move(*descriptor);
+			for (std::uint64_t index = 0U; index < *count; ++index)
+			{
+				auto column = reader.string();
+				auto cell = decode_cell(reader);
+				if (!column || !cell ||
+					!output.cells.emplace(std::move(*column), std::move(*cell)).second)
+					return unexpected(store_error("store.corrupt", "row", "duplicate-cell"));
+			}
+			return output;
+		}
+
+		[[nodiscard]] std::string bytes_hex(const std::span<const std::byte> bytes)
+		{
+			static constexpr std::string_view digits{"0123456789abcdef"};
+			std::string output;
+			output.reserve(bytes.size() * 2U);
+			for (const auto byte : bytes)
+			{
+				const auto value = std::to_integer<unsigned char>(byte);
+				output.push_back(digits[value >> 4U]);
+				output.push_back(digits[value & 0x0fU]);
+			}
+			return output;
+		}
+
+		[[nodiscard]] result<std::vector<std::byte>> hex_bytes(const std::string_view value)
+		{
+			if (value.size() % 2U != 0U)
+				return unexpected(store_error("store.corrupt", "sqlite", "odd-hex"));
+			std::vector<std::byte> output;
+			output.reserve(value.size() / 2U);
+			auto nibble = [](const char byte) -> int
+			{
+				if (byte >= '0' && byte <= '9')
+					return byte - '0';
+				if (byte >= 'A' && byte <= 'F')
+					return byte - 'A' + 10;
+				if (byte >= 'a' && byte <= 'f')
+					return byte - 'a' + 10;
+				return -1;
+			};
+			for (std::size_t index = 0U; index < value.size(); index += 2U)
+			{
+				const auto upper = nibble(value[index]);
+				const auto lower = nibble(value[index + 1U]);
+				if (upper < 0 || lower < 0)
+					return unexpected(store_error("store.corrupt", "sqlite", "invalid-hex"));
+				output.push_back(static_cast<std::byte>((upper << 4) | lower));
+			}
+			return output;
+		}
+
+		[[nodiscard]] std::string sql_quote(const std::string_view value)
+		{
+			std::string output{"'"};
+			for (const auto byte : value)
+			{
+				output.push_back(byte);
+				if (byte == '\'')
+					output.push_back('\'');
+			}
+			output.push_back('\'');
+			return output;
+		}
+	} // namespace
+
+	struct snapshot_handle::data
+	{
+		snapshot_manifest semantic_manifest;
+		publication_record publication_record_value;
+		std::map<std::string, relation_descriptor, std::less<>> descriptors;
+		std::map<std::string, std::vector<detached_row>, std::less<>> rows;
+		std::vector<std::string> claim_contents;
+		std::vector<unresolved_reference> unresolved;
+		std::shared_ptr<const std::uint64_t> generation_pin;
+	};
+
+	namespace
+	{
+		[[nodiscard]] std::string canonical_export_of(const snapshot_handle::data& value)
+		{
+			std::ostringstream output;
+			output << "schema=cxxlens.snapshot-export.v1\n";
+			output << "snapshot=" << value.semantic_manifest.id << '\n';
+			output << "semantics=" << value.semantic_manifest.snapshot_semantics_version.string()
+				   << '\n';
+			output << "catalog=" << value.semantic_manifest.catalog_semantic_digest << '\n';
+			output << "universe=" << value.semantic_manifest.condition_universe_id << '\n';
+			output << "registry=" << value.semantic_manifest.relation_registry_digest << '\n';
+			output << "interpretation-policy="
+				   << value.semantic_manifest.interpretation_policy_digest << '\n';
+			for (const auto& partition : value.semantic_manifest.partitions)
+				output << "partition=" << partition.partition_id << '|' << partition.content_digest
+					   << '|' << partition.coverage_digest << '|' << partition.claim_count << '|'
+					   << (partition.complete ? "complete" : "partial") << '\n';
+			for (const auto& closure : value.semantic_manifest.closure_ids)
+				output << "closure=" << closure << '\n';
+			for (const auto& claim : value.claim_contents)
+				output << "claim=" << claim << '\n';
+			for (const auto& [descriptor, rows] : value.rows)
+				for (const auto& row : rows)
+					output << "row=" << descriptor << '|' << row.canonical_form() << '\n';
+			for (const auto& unresolved : value.unresolved)
+				output << "unresolved=" << unresolved.source_assertion << '|'
+					   << unresolved.source_relation << '|' << unresolved.target_relation << '|'
+					   << unresolved.reason << '\n';
+			return output.str();
+		}
+
+		[[nodiscard]] std::vector<std::byte> encode_snapshot(const snapshot_handle::data& value)
+		{
+			binary_writer writer;
+			writer.string("cxxlens.ng-snapshot-payload.v1");
+			const auto& manifest = value.semantic_manifest;
+			writer.string(manifest.schema);
+			writer.string(manifest.id);
+			writer.unsigned_value(manifest.snapshot_semantics_version.major);
+			writer.unsigned_value(manifest.snapshot_semantics_version.minor);
+			writer.unsigned_value(manifest.snapshot_semantics_version.patch);
+			writer.string(manifest.catalog_semantic_digest);
+			writer.string(manifest.condition_universe_id);
+			writer.string(manifest.relation_registry_digest);
+			writer.string(manifest.interpretation_policy_digest);
+			writer.unsigned_value(manifest.partitions.size());
+			for (const auto& partition : manifest.partitions)
+			{
+				writer.string(partition.partition_id);
+				writer.string(partition.relation_descriptor_id);
+				writer.string(partition.input_basis_digest);
+				writer.string(partition.claim_set_digest);
+				writer.string(partition.coverage_digest);
+				writer.string(partition.content_digest);
+				writer.unsigned_value(partition.claim_count);
+				writer.boolean(partition.complete);
+			}
+			writer.unsigned_value(manifest.closure_ids.size());
+			for (const auto& closure : manifest.closure_ids)
+				writer.string(closure);
+			const auto& publication = value.publication_record_value;
+			writer.string(publication.publication_id);
+			writer.string(publication.series_id);
+			writer.string(publication.snapshot_id);
+			writer.unsigned_value(publication.sequence);
+			writer.unsigned_value(publication.physical_generation);
+			writer.boolean(publication.parent_publication.has_value());
+			if (publication.parent_publication)
+				writer.string(*publication.parent_publication);
+			writer.unsigned_value(static_cast<std::uint8_t>(publication.state));
+			writer.boolean(publication.corrupt);
+			writer.unsigned_value(value.rows.size());
+			for (const auto& [descriptor, rows] : value.rows)
+			{
+				writer.string(descriptor);
+				writer.unsigned_value(rows.size());
+				for (const auto& row : rows)
+					encode_row(writer, row);
+			}
+			writer.unsigned_value(value.claim_contents.size());
+			for (const auto& content : value.claim_contents)
+				writer.string(content);
+			writer.unsigned_value(value.unresolved.size());
+			for (const auto& unresolved : value.unresolved)
+			{
+				writer.string(unresolved.source_assertion);
+				writer.string(unresolved.source_relation);
+				writer.string(unresolved.target_relation);
+				writer.unsigned_value(unresolved.source_columns.size());
+				for (const auto& column : unresolved.source_columns)
+					writer.string(column);
+				writer.string(unresolved.reason);
+			}
+			return std::move(writer).finish();
+		}
+
+		[[nodiscard]] result<std::shared_ptr<snapshot_handle::data>>
+		decode_snapshot(const std::span<const std::byte> bytes, const relation_engine& engine)
+		{
+			binary_reader reader{bytes};
+			auto magic = reader.string();
+			if (!magic || *magic != "cxxlens.ng-snapshot-payload.v1")
+				return unexpected(store_error("store.corrupt", "payload", "format"));
+			auto value = std::make_shared<snapshot_handle::data>();
+			auto& manifest = value->semantic_manifest;
+			auto schema = reader.string();
+			auto id = reader.string();
+			auto major = reader.unsigned_value();
+			auto minor = reader.unsigned_value();
+			auto patch = reader.unsigned_value();
+			auto catalog = reader.string();
+			auto universe = reader.string();
+			auto registry = reader.string();
+			auto policy = reader.string();
+			auto partition_count = reader.unsigned_value();
+			if (!schema || !id || !major || !minor || !patch || !catalog || !universe ||
+				!registry || !policy || !partition_count || *partition_count > 1'000'000U)
+				return unexpected(store_error("store.corrupt", "manifest", "header"));
+			manifest.schema = std::move(*schema);
+			manifest.id = std::move(*id);
+			manifest.snapshot_semantics_version = {static_cast<std::uint32_t>(*major),
+												   static_cast<std::uint32_t>(*minor),
+												   static_cast<std::uint32_t>(*patch)};
+			manifest.catalog_semantic_digest = std::move(*catalog);
+			manifest.condition_universe_id = std::move(*universe);
+			manifest.relation_registry_digest = std::move(*registry);
+			manifest.interpretation_policy_digest = std::move(*policy);
+			for (std::uint64_t index = 0U; index < *partition_count; ++index)
+			{
+				partition_manifest partition;
+				auto partition_id = reader.string();
+				auto descriptor = reader.string();
+				auto basis = reader.string();
+				auto claims = reader.string();
+				auto coverage = reader.string();
+				auto content = reader.string();
+				auto count = reader.unsigned_value();
+				auto complete = reader.boolean();
+				if (!partition_id || !descriptor || !basis || !claims || !coverage || !content ||
+					!count || !complete)
+					return unexpected(store_error("store.corrupt", "partition", "header"));
+				partition = {std::move(*partition_id),
+							 std::move(*descriptor),
+							 std::move(*basis),
+							 std::move(*claims),
+							 std::move(*coverage),
+							 std::move(*content),
+							 *count,
+							 *complete};
+				manifest.partitions.push_back(std::move(partition));
+			}
+			auto closure_count = reader.unsigned_value();
+			if (!closure_count || *closure_count > 1'000'000U)
+				return unexpected(store_error("store.corrupt", "closures", "count"));
+			for (std::uint64_t index = 0U; index < *closure_count; ++index)
+			{
+				auto closure = reader.string();
+				if (!closure)
+					return unexpected(std::move(closure.error()));
+				manifest.closure_ids.push_back(std::move(*closure));
+			}
+			auto& publication = value->publication_record_value;
+			auto publication_id = reader.string();
+			auto series = reader.string();
+			auto snapshot = reader.string();
+			auto sequence = reader.unsigned_value();
+			auto generation = reader.unsigned_value();
+			auto has_parent = reader.boolean();
+			if (!publication_id || !series || !snapshot || !sequence || !generation || !has_parent)
+				return unexpected(store_error("store.corrupt", "publication", "header"));
+			publication.publication_id = std::move(*publication_id);
+			publication.series_id = std::move(*series);
+			publication.snapshot_id = std::move(*snapshot);
+			publication.sequence = *sequence;
+			publication.physical_generation = *generation;
+			if (*has_parent)
+			{
+				auto parent = reader.string();
+				if (!parent)
+					return unexpected(std::move(parent.error()));
+				publication.parent_publication = std::move(*parent);
+			}
+			auto state = reader.unsigned_value();
+			auto corrupt = reader.boolean();
+			if (!state || !corrupt ||
+				*state > static_cast<std::uint8_t>(publication_state::rolled_back))
+				return unexpected(store_error("store.corrupt", "publication", "state"));
+			publication.state = static_cast<publication_state>(*state);
+			publication.corrupt = *corrupt;
+			auto relation_count = reader.unsigned_value();
+			if (!relation_count || *relation_count > 1'000'000U)
+				return unexpected(store_error("store.corrupt", "rows", "relation-count"));
+			for (std::uint64_t index = 0U; index < *relation_count; ++index)
+			{
+				auto descriptor_id = reader.string();
+				auto row_count = reader.unsigned_value();
+				if (!descriptor_id || !row_count || *row_count > 10'000'000U)
+					return unexpected(store_error("store.corrupt", "rows", "header"));
+				auto relation = engine.require_id(*descriptor_id);
+				if (!relation)
+					return unexpected(store_error("store.registry-mismatch", *descriptor_id));
+				value->descriptors.emplace(*descriptor_id, relation->descriptor());
+				auto& rows = value->rows[*descriptor_id];
+				rows.reserve(static_cast<std::size_t>(*row_count));
+				for (std::uint64_t row_index = 0U; row_index < *row_count; ++row_index)
+				{
+					auto row = decode_row(reader);
+					if (!row || !validate_row(relation->descriptor(), *row))
+						return unexpected(store_error("store.corrupt", "row", "validation"));
+					rows.push_back(std::move(*row));
+				}
+			}
+			auto claim_count = reader.unsigned_value();
+			if (!claim_count || *claim_count > 10'000'000U)
+				return unexpected(store_error("store.corrupt", "claims", "count"));
+			for (std::uint64_t index = 0U; index < *claim_count; ++index)
+			{
+				auto claim = reader.string();
+				if (!claim)
+					return unexpected(std::move(claim.error()));
+				value->claim_contents.push_back(std::move(*claim));
+			}
+			auto unresolved_count = reader.unsigned_value();
+			if (!unresolved_count || *unresolved_count > 10'000'000U)
+				return unexpected(store_error("store.corrupt", "unresolved", "count"));
+			for (std::uint64_t index = 0U; index < *unresolved_count; ++index)
+			{
+				unresolved_reference unresolved;
+				auto assertion = reader.string();
+				auto source = reader.string();
+				auto target = reader.string();
+				auto columns = reader.unsigned_value();
+				if (!assertion || !source || !target || !columns || *columns > 1'000'000U)
+					return unexpected(store_error("store.corrupt", "unresolved", "header"));
+				unresolved.source_assertion = std::move(*assertion);
+				unresolved.source_relation = std::move(*source);
+				unresolved.target_relation = std::move(*target);
+				for (std::uint64_t column = 0U; column < *columns; ++column)
+				{
+					auto name = reader.string();
+					if (!name)
+						return unexpected(std::move(name.error()));
+					unresolved.source_columns.push_back(std::move(*name));
+				}
+				auto reason = reader.string();
+				if (!reason)
+					return unexpected(std::move(reason.error()));
+				unresolved.reason = std::move(*reason);
+				value->unresolved.push_back(std::move(unresolved));
+			}
+			if (!reader.finished() || manifest.schema != "cxxlens.snapshot-manifest.v1" ||
+				manifest.id != snapshot_identity(manifest) ||
+				publication.snapshot_id != manifest.id)
+				return unexpected(store_error("store.corrupt", "payload", "semantic-digest"));
+			return value;
+		}
+	} // namespace
+
+	result<void> snapshot_series_selector::validate() const
+	{
+		if (catalog_id.empty() || channel_id.empty() || engine_generation_id.empty() ||
+			condition_universe_id.empty() || !digest(relation_registry_digest) ||
+			!digest(interpretation_policy_digest) || !digest(trust_policy_digest))
+			return unexpected(store_error("store.selection-authority-incomplete", "selector"));
+		return {};
+	}
+
+	std::string snapshot_series_selector::id() const
+	{
+		if (!validate())
+			return {};
+		const std::array fields{text(catalog_id),
+								text(channel_id),
+								text(engine_generation_id),
+								text(condition_universe_id),
+								text(relation_registry_digest),
+								text(interpretation_policy_digest),
+								text(trust_policy_digest)};
+		return canonical_identity_digest("snapshot-series", fields);
+	}
+
+	result<void> snapshot_coverage_unit::validate() const
+	{
+		static const std::set<std::string, std::less<>> states{
+			"covered", "not_covered", "unknown", "unresolved"};
+		if (domain.empty() || key.empty() || !states.contains(state) ||
+			(state == "covered" && !reason.empty()) || (state != "covered" && reason.empty()))
+			return unexpected(store_error("store.coverage-invalid", "coverage", state));
+		return {};
+	}
+
+	std::string snapshot_coverage_unit::canonical_form() const
+	{
+		const std::array fields{text(domain), text(key), text(state), text(reason)};
+		return canonical_identity_digest("coverage-unit", fields);
+	}
+
+	result<partition_manifest> make_partition_manifest(const relation_engine& engine,
+													   const partition_draft& draft)
+	{
+		if (draft.relation_descriptor_id.empty() || draft.scope.empty() ||
+			draft.interpretation.empty() || !digest(draft.producer_semantics) ||
+			!digest(draft.producer_input_basis_digest) || draft.precision_profile.empty() ||
+			draft.assumption_set_id.empty())
+			return unexpected(store_error("store.partition-invalid", "identity"));
+		if (auto valid = draft.condition.validate(); !valid)
+			return unexpected(
+				store_error("store.partition-invalid", "condition", valid.error().code));
+		auto relation = engine.require_id(draft.relation_descriptor_id);
+		if (!relation)
+			return unexpected(
+				store_error("store.partition-relation-unknown", draft.relation_descriptor_id));
+		std::set<std::string, std::less<>> claim_ids;
+		for (const auto& value : draft.claims)
+		{
+			if (auto valid = validate_claim(engine, value); !valid)
+				return unexpected(
+					store_error("store.claim-invalid", value.content, valid.error().code));
+			if (value.descriptor != draft.relation_descriptor_id ||
+				value.presence != draft.condition || value.interpretation != draft.interpretation ||
+				value.producer.semantic_contract != draft.producer_semantics)
+				return unexpected(store_error("store.partition-claim-mismatch", value.content));
+			auto basis = claim_input_basis_digest(value.input_basis);
+			if (!basis || *basis != draft.producer_input_basis_digest)
+				return unexpected(store_error("store.partition-basis-mismatch", value.content));
+			if (!claim_ids.insert(value.content).second)
+				return unexpected(store_error("store.partition-claim-duplicate", value.content));
+		}
+		std::set<std::string, std::less<>> coverage_ids;
+		for (const auto& value : draft.coverage)
+		{
+			if (auto valid = value.validate(); !valid)
+				return unexpected(std::move(valid.error()));
+			if (!coverage_ids.insert(value.canonical_form()).second)
+				return unexpected(store_error("store.coverage-duplicate", value.key));
+		}
+		const auto claims = claim_content_ids(draft);
+		const auto coverage = coverage_values(draft);
+		const auto partition_id = partition_identity(draft);
+		const std::array claim_fields{texts(claims)};
+		const auto claim_set = canonical_identity_digest("claim-set", claim_fields.front().tuple);
+		const std::array coverage_fields{texts(coverage)};
+		const auto coverage_digest =
+			canonical_identity_digest("coverage", coverage_fields.front().tuple);
+		const std::array content_fields{text(partition_id), text(claim_set), text(coverage_digest)};
+		return partition_manifest{partition_id,
+								  draft.relation_descriptor_id,
+								  draft.producer_input_basis_digest,
+								  claim_set,
+								  coverage_digest,
+								  canonical_identity_digest("partition-content", content_fields),
+								  static_cast<std::uint64_t>(claims.size()),
+								  partition_complete(draft)};
+	}
+
+	result<closure_certificate> make_closure_certificate(const partition_manifest& partition,
+														 closure_candidate candidate)
+	{
+		if (!partition.complete)
+			return unexpected(
+				store_error("store.partial-partition-closure", partition.partition_id));
+		if (candidate.relation_descriptor_id != partition.relation_descriptor_id ||
+			candidate.subject_partition_id != partition.partition_id ||
+			candidate.partition_content_digest != partition.content_digest ||
+			candidate.coverage_digest != partition.coverage_digest)
+			return unexpected(
+				store_error("store.closure-binding-mismatch", partition.partition_id));
+		if (!digest(candidate.key_domain_digest) || !digest(candidate.producer_semantics) ||
+			!digest(candidate.evidence_digest) || candidate.interpretation.empty() ||
+			candidate.assumption_set_id.empty() || candidate.closure_kind.empty() ||
+			!candidate.condition.validate())
+			return unexpected(store_error("store.closure-invalid", partition.partition_id));
+		return closure_certificate{closure_identity(candidate), std::move(candidate)};
+	}
+
+	snapshot_handle::snapshot_handle(std::shared_ptr<const data> data) : data_{std::move(data)} {}
+	std::string_view snapshot_handle::id() const noexcept
+	{
+		return data_ ? std::string_view{data_->semantic_manifest.id} : std::string_view{};
+	}
+	const snapshot_manifest& snapshot_handle::manifest() const
+	{
+		return data_->semantic_manifest;
+	}
+	const publication_record& snapshot_handle::publication() const
+	{
+		return data_->publication_record_value;
+	}
+	result<row_cursor> snapshot_handle::open(const dynamic_relation& relation) const
+	{
+		if (!data_)
+			return unexpected(store_error("sdk.snapshot-empty", "snapshot"));
+		const auto descriptor = data_->descriptors.find(relation.descriptor().id);
+		if (descriptor == data_->descriptors.end() || descriptor->second != relation.descriptor())
+			return unexpected(
+				store_error("sdk.snapshot-relation-mismatch", relation.descriptor().id));
+		const auto rows = data_->rows.find(relation.descriptor().id);
+		static const std::vector<detached_row> empty_rows;
+		return row_cursor{data_, rows == data_->rows.end() ? &empty_rows : &rows->second};
+	}
+	bool snapshot_handle::empty() const noexcept
+	{
+		return !data_;
+	}
+
+	row_view::row_view(const detached_row* row,
+					   std::weak_ptr<const std::uint64_t> generation,
+					   const std::uint64_t expected)
+		: row_{row}, generation_{std::move(generation)}, expected_{expected}
+	{
+	}
+	result<detached_row> row_view::copy() const
+	{
+		const auto current = generation_.lock();
+		if (!current || *current != expected_ || row_ == nullptr)
+			return unexpected(store_error("sdk.row-view-expired", "row_view"));
+		return *row_;
+	}
+	row_cursor::row_cursor(std::shared_ptr<const snapshot_handle::data> snapshot,
+						   const std::vector<detached_row>* rows)
+		: snapshot_{std::move(snapshot)}, rows_{rows}, owner_{std::this_thread::get_id()},
+		  generation_{std::make_shared<std::uint64_t>(0U)}
+	{
+	}
+	result<std::optional<row_view>> row_cursor::next()
+	{
+		if (owner_ != std::this_thread::get_id())
+			return unexpected(store_error("sdk.cursor-thread-violation", "cursor"));
+		++*generation_;
+		if (rows_ == nullptr || index_ >= rows_->size())
+			return std::optional<row_view>{};
+		return std::optional<row_view>{row_view{&(*rows_)[index_++], generation_, *generation_}};
+	}
+} // namespace cxxlens::sdk
+
+namespace cxxlens::sdk
+{
+	namespace
+	{
+		struct sqlite_api
+		{
+			using open_fn = int (*)(const char*, void**, int, const char*);
+			using close_fn = int (*)(void*);
+			using errmsg_fn = const char* (*)(void*);
+			using exec_fn =
+				int (*)(void*, const char*, int (*)(void*, int, char**, char**), void*, char**);
+			using free_fn = void (*)(void*);
+			void* library{};
+			open_fn open{};
+			close_fn close{};
+			errmsg_fn errmsg{};
+			exec_fn exec{};
+			free_fn free_memory{};
+			~sqlite_api()
+			{
+#if defined(__unix__) || defined(__APPLE__)
+				if (library != nullptr)
+					dlclose(library);
+#endif
+			}
+		};
+
+		template <class Function>
+		[[nodiscard]] bool resolve_sqlite(void* library, const char* name, Function& output)
+		{
+#if defined(__unix__) || defined(__APPLE__)
+			void* symbol = dlsym(library, name);
+			if (symbol == nullptr)
+				return false;
+			output = reinterpret_cast<Function>(symbol);
+			return true;
+#else
+			(void)library;
+			(void)name;
+			(void)output;
+			return false;
+#endif
+		}
+
+		[[nodiscard]] result<std::shared_ptr<sqlite_api>> load_sqlite()
+		{
+#if defined(__unix__) || defined(__APPLE__)
+#if defined(__APPLE__)
+			constexpr std::array candidates{"libsqlite3.dylib", "/usr/lib/libsqlite3.dylib"};
+#else
+			constexpr std::array candidates{"libsqlite3.so.0", "libsqlite3.so"};
+#endif
+			void* library{};
+			for (const auto* candidate : candidates)
+			{
+				library = dlopen(candidate, RTLD_NOW | RTLD_LOCAL);
+				if (library != nullptr)
+					break;
+			}
+			if (library == nullptr)
+				return unexpected(store_error("store.backend-unavailable", "sqlite", "library"));
+			auto api = std::make_shared<sqlite_api>();
+			api->library = library;
+			if (!resolve_sqlite(library, "sqlite3_open_v2", api->open) ||
+				!resolve_sqlite(library, "sqlite3_close_v2", api->close) ||
+				!resolve_sqlite(library, "sqlite3_errmsg", api->errmsg) ||
+				!resolve_sqlite(library, "sqlite3_exec", api->exec) ||
+				!resolve_sqlite(library, "sqlite3_free", api->free_memory))
+				return unexpected(store_error("store.backend-unavailable", "sqlite", "symbols"));
+			return api;
+#else
+			return unexpected(store_error("store.backend-unavailable", "sqlite", "platform"));
+#endif
+		}
+
+		class sqlite_database
+		{
+		  public:
+			sqlite_database(std::shared_ptr<sqlite_api> api, void* database)
+				: api_{std::move(api)}, database_{database}
+			{
+			}
+			~sqlite_database()
+			{
+				if (database_ != nullptr)
+					api_->close(database_);
+			}
+			[[nodiscard]] result<void> execute(const std::string& sql) const
+			{
+				char* message{};
+				const auto code = api_->exec(database_, sql.c_str(), nullptr, nullptr, &message);
+				if (code == 0)
+					return {};
+				std::string detail = message != nullptr ? message : api_->errmsg(database_);
+				if (message != nullptr)
+					api_->free_memory(message);
+				return unexpected(
+					store_error("store.sqlite-failure", "database", std::move(detail)));
+			}
+			[[nodiscard]] result<std::vector<std::vector<std::string>>>
+			query(const std::string& sql) const
+			{
+				std::vector<std::vector<std::string>> rows;
+				auto callback = [](void* context, const int count, char** values, char**) -> int
+				{
+					auto& output = *static_cast<std::vector<std::vector<std::string>>*>(context);
+					auto& row = output.emplace_back();
+					for (int index = 0; index < count; ++index)
+						row.emplace_back(values[index] == nullptr ? "" : values[index]);
+					return 0;
+				};
+				char* message{};
+				const auto code = api_->exec(database_, sql.c_str(), callback, &rows, &message);
+				if (code == 0)
+					return rows;
+				std::string detail = message != nullptr ? message : api_->errmsg(database_);
+				if (message != nullptr)
+					api_->free_memory(message);
+				return unexpected(
+					store_error("store.sqlite-failure", "database", std::move(detail)));
+			}
+
+		  private:
+			std::shared_ptr<sqlite_api> api_;
+			void* database_{};
+		};
+
+		[[nodiscard]] result<std::unique_ptr<sqlite_database>>
+		open_database(const std::string& path)
+		{
+			auto api = load_sqlite();
+			if (!api)
+				return unexpected(std::move(api.error()));
+			void* database{};
+			constexpr int read_write = 0x00000002;
+			constexpr int create = 0x00000004;
+			constexpr int full_mutex = 0x00010000;
+			if ((*api)->open(path.c_str(), &database, read_write | create | full_mutex, nullptr) !=
+				0)
+			{
+				std::string detail = database != nullptr ? (*api)->errmsg(database) : "open";
+				if (database != nullptr)
+					(*api)->close(database);
+				return unexpected(store_error("store.sqlite-failure", "open", std::move(detail)));
+			}
+			auto output = std::make_unique<sqlite_database>(*api, database);
+			if (auto configured = output->execute(
+					"PRAGMA journal_mode=WAL;"
+					"PRAGMA synchronous=FULL;"
+					"CREATE TABLE IF NOT EXISTS cxxlens_ng_metadata("
+					"key TEXT PRIMARY KEY,value TEXT NOT NULL);"
+					"INSERT OR IGNORE INTO cxxlens_ng_metadata VALUES("
+					"'physical_format','cxxlens.sqlite-semantic-store.v2');"
+					"CREATE TABLE IF NOT EXISTS cxxlens_ng_publication("
+					"publication_id TEXT PRIMARY KEY,series_id TEXT NOT NULL,"
+					"snapshot_id TEXT NOT NULL,sequence INTEGER NOT NULL,"
+					"generation INTEGER NOT NULL,parent TEXT,state INTEGER NOT NULL,"
+					"checksum TEXT NOT NULL,payload BLOB NOT NULL);"
+					"CREATE INDEX IF NOT EXISTS cxxlens_ng_publication_series "
+					"ON cxxlens_ng_publication(series_id,sequence);");
+				!configured)
+				return unexpected(std::move(configured.error()));
+			auto format =
+				output->query("SELECT value FROM cxxlens_ng_metadata WHERE key='physical_format'");
+			if (!format || format->size() != 1U || format->front().size() != 1U ||
+				format->front().front() != "cxxlens.sqlite-semantic-store.v2")
+				return unexpected(store_error("store.format-incompatible", "sqlite"));
+			return output;
+		}
+
+		[[nodiscard]] result<std::uint64_t> parse_unsigned(const std::string_view value)
+		{
+			std::uint64_t output{};
+			const auto parsed = std::from_chars(value.data(), value.data() + value.size(), output);
+			if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size())
+				return unexpected(store_error("store.corrupt", "sqlite", "integer"));
+			return output;
+		}
+	} // namespace
+
+	struct snapshot_store::implementation
+	{
+		explicit implementation(relation_engine value, std::string backend_value)
+			: engine{std::move(value)}, backend{std::move(backend_value)}
+		{
+		}
+
+		relation_engine engine;
+		std::string backend;
+		mutable std::mutex mutex;
+		std::map<std::string, publication_record, std::less<>> records;
+		std::map<std::string, std::shared_ptr<snapshot_handle::data>, std::less<>> publications;
+		std::map<std::string, std::string, std::less<>> heads;
+		std::vector<std::weak_ptr<const std::uint64_t>> generation_tokens;
+		std::uint64_t generation{};
+		std::unique_ptr<sqlite_database> database;
+
+		[[nodiscard]] result<void> persist(const snapshot_handle::data& value) const
+		{
+			if (database == nullptr)
+				return {};
+			const auto payload = encode_snapshot(value);
+			const auto checksum = content_digest(payload);
+			const auto& record = value.publication_record_value;
+			std::ostringstream sql;
+			sql << "BEGIN IMMEDIATE;INSERT OR REPLACE INTO cxxlens_ng_publication VALUES("
+				<< sql_quote(record.publication_id) << ',' << sql_quote(record.series_id) << ','
+				<< sql_quote(record.snapshot_id) << ',' << record.sequence << ','
+				<< record.physical_generation << ','
+				<< (record.parent_publication ? sql_quote(*record.parent_publication) : "NULL")
+				<< ',' << static_cast<unsigned>(record.state) << ',' << sql_quote(checksum) << ",X'"
+				<< bytes_hex(payload) << "');COMMIT;";
+			auto persisted = database->execute(sql.str());
+			if (!persisted)
+				(void)database->execute("ROLLBACK;");
+			return persisted;
+		}
+
+		[[nodiscard]] result<void> load()
+		{
+			if (database == nullptr)
+				return {};
+			auto rows = database->query(
+				"SELECT publication_id,series_id,snapshot_id,sequence,generation,"
+				"COALESCE(parent,''),state,checksum,hex(payload) "
+				"FROM cxxlens_ng_publication ORDER BY series_id,sequence,publication_id");
+			if (!rows)
+				return unexpected(std::move(rows.error()));
+			for (const auto& row : *rows)
+			{
+				if (row.size() != 9U)
+					return unexpected(store_error("store.corrupt", "sqlite", "column-count"));
+				auto sequence = parse_unsigned(row[3]);
+				auto physical = parse_unsigned(row[4]);
+				auto state = parse_unsigned(row[6]);
+				auto payload = hex_bytes(row[8]);
+				if (!sequence || !physical || !state || !payload ||
+					*state > static_cast<std::uint8_t>(publication_state::rolled_back))
+					return unexpected(store_error("store.corrupt", "sqlite", "publication-row"));
+				publication_record record{row[0],
+										  row[1],
+										  row[2],
+										  *sequence,
+										  *physical,
+										  row[5].empty() ? std::optional<std::string>{}
+														 : std::optional<std::string>{row[5]},
+										  static_cast<publication_state>(*state),
+										  false};
+				generation = std::max(generation, *physical);
+				if (content_digest(*payload) != row[7])
+				{
+					record.corrupt = true;
+					records.emplace(record.publication_id, record);
+					continue;
+				}
+				auto decoded = decode_snapshot(*payload, engine);
+				if (!decoded || (*decoded)->publication_record_value != record)
+				{
+					record.corrupt = true;
+					records.emplace(record.publication_id, record);
+					continue;
+				}
+				auto token = std::make_shared<const std::uint64_t>(*physical);
+				(*decoded)->generation_pin = token;
+				const bool collision = std::ranges::any_of(
+					publications,
+					[&](const auto& existing)
+					{
+						return existing.second->semantic_manifest.id ==
+							(*decoded)->semantic_manifest.id &&
+							canonical_export_of(*existing.second) != canonical_export_of(**decoded);
+					});
+				if (collision)
+				{
+					record.corrupt = true;
+					records.emplace(record.publication_id, record);
+					continue;
+				}
+				generation_tokens.push_back(token);
+				records.emplace(record.publication_id, record);
+				publications.emplace(record.publication_id, std::move(*decoded));
+			}
+			for (const auto& [id, record] : records)
+			{
+				if (record.state != publication_state::committed)
+					continue;
+				const auto current = heads.find(record.series_id);
+				if (current == heads.end() ||
+					records.at(current->second).sequence < record.sequence)
+					heads[record.series_id] = id;
+				else if (records.at(current->second).sequence == record.sequence)
+					return unexpected(store_error("store.current-ambiguous", record.series_id));
+			}
+			return {};
+		}
+	};
+
+	struct snapshot_writer::data
+	{
+		std::shared_ptr<snapshot_store::implementation> store;
+		snapshot_draft draft;
+		publication_state current_state{publication_state::created};
+		std::vector<partition_draft> partitions;
+		std::vector<closure_candidate> closures;
+		std::shared_ptr<snapshot_handle::data> candidate;
+	};
+
+	snapshot_store::snapshot_store(std::shared_ptr<implementation> implementation)
+		: implementation_{std::move(implementation)}
+	{
+	}
+
+	result<snapshot_handle> snapshot_store::current(const snapshot_series_selector& selector) const
+	{
+		if (auto valid = selector.validate(); !valid)
+			return unexpected(std::move(valid.error()));
+		std::scoped_lock lock{implementation_->mutex};
+		const auto head = implementation_->heads.find(selector.id());
+		if (head == implementation_->heads.end())
+			return unexpected(store_error("store.current-not-found", selector.id()));
+		const auto& record = implementation_->records.at(head->second);
+		if (record.corrupt)
+			return unexpected(store_error("store.current-corrupt", record.publication_id));
+		const auto publication = implementation_->publications.find(record.publication_id);
+		if (publication == implementation_->publications.end())
+			return unexpected(store_error("store.current-corrupt", record.publication_id));
+		return snapshot_handle{publication->second};
+	}
+
+	result<snapshot_handle> snapshot_store::open(const std::string_view snapshot_id) const
+	{
+		std::scoped_lock lock{implementation_->mutex};
+		std::shared_ptr<snapshot_handle::data> selected;
+		for (const auto& [publication_id, value] : implementation_->publications)
+		{
+			(void)publication_id;
+			if (value->semantic_manifest.id == snapshot_id &&
+				(!selected ||
+				 selected->publication_record_value.physical_generation <
+					 value->publication_record_value.physical_generation))
+				selected = value;
+		}
+		if (!selected)
+			return unexpected(store_error("store.snapshot-not-found", std::string{snapshot_id}));
+		return snapshot_handle{std::move(selected)};
+	}
+
+	result<snapshot_handle>
+	snapshot_store::open_publication(const std::string_view publication_id) const
+	{
+		std::scoped_lock lock{implementation_->mutex};
+		const auto record = implementation_->records.find(publication_id);
+		if (record == implementation_->records.end() ||
+			record->second.state != publication_state::committed)
+			return unexpected(
+				store_error("store.publication-not-found", std::string{publication_id}));
+		if (record->second.corrupt)
+			return unexpected(
+				store_error("store.publication-corrupt", std::string{publication_id}));
+		return snapshot_handle{implementation_->publications.at(std::string{publication_id})};
+	}
+
+	result<snapshot_writer> snapshot_store::begin(snapshot_draft draft)
+	{
+		if (auto valid = draft.series.validate(); !valid)
+			return unexpected(std::move(valid.error()));
+		if (!digest(draft.catalog_semantic_digest) ||
+			draft.series.engine_generation_id != implementation_->engine.generation() ||
+			draft.series.relation_registry_digest != implementation_->engine.registry_digest())
+			return unexpected(store_error("store.draft-authority-mismatch", "snapshot"));
+		auto value = std::make_unique<snapshot_writer::data>();
+		value->store = implementation_;
+		value->draft = std::move(draft);
+		return snapshot_writer{std::move(value)};
+	}
+
+	store_compatibility snapshot_store::compatibility() const
+	{
+		return {implementation_->backend, {2U, 0U, 0U}, true, false};
+	}
+
+	result<void> snapshot_store::compact()
+	{
+		std::scoped_lock lock{implementation_->mutex};
+		std::vector<std::pair<std::string, std::shared_ptr<snapshot_handle::data>>> replacements;
+		const auto next_generation = implementation_->generation + 1U;
+		for (const auto& [id, current] : implementation_->publications)
+		{
+			if (current->semantic_manifest.id != snapshot_identity(current->semantic_manifest) ||
+				current->publication_record_value.corrupt)
+				return unexpected(store_error("store.compact-validation-failed", id));
+			auto replacement = std::make_shared<snapshot_handle::data>(*current);
+			replacement->publication_record_value.physical_generation = next_generation;
+			auto token = std::make_shared<const std::uint64_t>(next_generation);
+			replacement->generation_pin = token;
+			if (auto persisted = implementation_->persist(*replacement); !persisted)
+				return unexpected(std::move(persisted.error()));
+			implementation_->generation_tokens.push_back(token);
+			replacements.emplace_back(id, std::move(replacement));
+		}
+		for (auto& [id, replacement] : replacements)
+		{
+			implementation_->records[id] = replacement->publication_record_value;
+			implementation_->publications[id] = std::move(replacement);
+		}
+		implementation_->generation = next_generation;
+		return {};
+	}
+
+	result<std::string> snapshot_store::canonical_export(const std::string_view snapshot_id) const
+	{
+		auto opened = open(snapshot_id);
+		if (!opened)
+			return unexpected(std::move(opened.error()));
+		return canonical_export_of(*opened->data_);
+	}
+
+	std::size_t snapshot_store::retained_generation_count() const
+	{
+		std::scoped_lock lock{implementation_->mutex};
+		std::set<std::uint64_t> live;
+		for (const auto& weak : implementation_->generation_tokens)
+			if (const auto token = weak.lock())
+				live.insert(*token);
+		return live.size();
+	}
+
+	snapshot_writer::snapshot_writer(std::unique_ptr<data> data) : data_{std::move(data)} {}
+	snapshot_writer::~snapshot_writer()
+	{
+		if (data_ && data_->current_state != publication_state::committed &&
+			data_->current_state != publication_state::rolled_back)
+			cancel();
+	}
+	publication_state snapshot_writer::state() const noexcept
+	{
+		return data_ ? data_->current_state : publication_state::rolled_back;
+	}
+	result<void> snapshot_writer::stage(partition_draft partition)
+	{
+		if (!data_ ||
+			(data_->current_state != publication_state::created &&
+			 data_->current_state != publication_state::staged))
+			return unexpected(store_error("store.transaction-state", "stage"));
+		if (partition.condition.universe != data_->draft.series.condition_universe_id)
+			return unexpected(store_error("store.condition-universe-mismatch", "partition"));
+		if (auto manifest = make_partition_manifest(data_->store->engine, partition); !manifest)
+			return unexpected(std::move(manifest.error()));
+		data_->partitions.push_back(std::move(partition));
+		data_->current_state = publication_state::staged;
+		return {};
+	}
+	result<void> snapshot_writer::add_closure(closure_candidate closure)
+	{
+		if (!data_ || data_->current_state != publication_state::staged)
+			return unexpected(store_error("store.transaction-state", "closure"));
+		data_->closures.push_back(std::move(closure));
+		return {};
+	}
+	result<void> snapshot_writer::validate()
+	{
+		if (!data_ || data_->current_state != publication_state::staged ||
+			data_->partitions.empty())
+			return unexpected(store_error("store.transaction-state", "validate"));
+		auto candidate = std::make_shared<snapshot_handle::data>();
+		auto& manifest = candidate->semantic_manifest;
+		manifest.snapshot_semantics_version = data_->draft.snapshot_semantics_version;
+		manifest.catalog_semantic_digest = data_->draft.catalog_semantic_digest;
+		manifest.condition_universe_id = data_->draft.series.condition_universe_id;
+		manifest.relation_registry_digest = data_->draft.series.relation_registry_digest;
+		manifest.interpretation_policy_digest = data_->draft.series.interpretation_policy_digest;
+		std::map<std::string, const partition_draft*, std::less<>> drafts;
+		for (const auto& partition : data_->partitions)
+		{
+			auto built = make_partition_manifest(data_->store->engine, partition);
+			if (!built)
+				return unexpected(std::move(built.error()));
+			if (!drafts.emplace(built->partition_id, &partition).second)
+				return unexpected(store_error("store.partition-duplicate", built->partition_id));
+			manifest.partitions.push_back(*built);
+			for (const auto& value : partition.claims)
+			{
+				if (const auto* derived = std::get_if<derived_claim_basis>(&value.input_basis))
+				{
+					std::scoped_lock lock{data_->store->mutex};
+					const bool prior = std::ranges::any_of(
+						data_->store->publications,
+						[&](const auto& publication)
+						{
+							return publication.second->semantic_manifest.id ==
+								derived->input_snapshot &&
+								publication.second->publication_record_value.state ==
+								publication_state::committed;
+						});
+					if (!prior)
+						return unexpected(
+							store_error("store.derived-basis-not-prior", value.content));
+				}
+				candidate->rows[value.descriptor].push_back(value.row);
+				candidate->claim_contents.push_back(value.content);
+			}
+			candidate->unresolved.insert(candidate->unresolved.end(),
+										 partition.unresolved.begin(),
+										 partition.unresolved.end());
+		}
+		std::ranges::sort(manifest.partitions, {}, &partition_manifest::partition_id);
+		for (const auto& closure : data_->closures)
+		{
+			const auto subject = std::ranges::find(manifest.partitions,
+												   closure.subject_partition_id,
+												   &partition_manifest::partition_id);
+			if (subject == manifest.partitions.end())
+				return unexpected(
+					store_error("store.closure-subject-missing", closure.subject_partition_id));
+			const auto* draft = drafts.at(subject->partition_id);
+			if (closure.condition != draft->condition ||
+				closure.interpretation != draft->interpretation ||
+				closure.assumption_set_id != draft->assumption_set_id ||
+				closure.producer_semantics != draft->producer_semantics)
+				return unexpected(
+					store_error("store.closure-binding-mismatch", closure.subject_partition_id));
+			auto certificate = make_closure_certificate(*subject, closure);
+			if (!certificate)
+				return unexpected(std::move(certificate.error()));
+			manifest.closure_ids.push_back(certificate->id);
+		}
+		std::ranges::sort(manifest.closure_ids);
+		if (std::ranges::adjacent_find(manifest.closure_ids) != manifest.closure_ids.end())
+			return unexpected(store_error("store.closure-duplicate", "closures"));
+		std::ranges::sort(candidate->claim_contents);
+		std::ranges::sort(
+			candidate->unresolved,
+			[](const unresolved_reference& left, const unresolved_reference& right)
+			{
+				return std::tie(left.source_assertion, left.target_relation, left.reason) <
+					std::tie(right.source_assertion, right.target_relation, right.reason);
+			});
+		for (auto& [descriptor, rows] : candidate->rows)
+		{
+			auto relation = data_->store->engine.require_id(descriptor);
+			if (!relation)
+				return unexpected(std::move(relation.error()));
+			candidate->descriptors.emplace(descriptor, relation->descriptor());
+			std::ranges::sort(rows,
+							  [](const detached_row& left, const detached_row& right)
+							  {
+								  return left.canonical_form() < right.canonical_form();
+							  });
+		}
+		manifest.id = snapshot_identity(manifest);
+		data_->candidate = std::move(candidate);
+		data_->current_state = publication_state::validating;
+		return {};
+	}
+
+	result<snapshot_handle> snapshot_writer::publish()
+	{
+		if (!data_ || data_->current_state != publication_state::validating || !data_->candidate)
+			return unexpected(store_error("store.transaction-state", "publish"));
+		auto& store = *data_->store;
+		std::scoped_lock lock{store.mutex};
+		const auto series_id = data_->draft.series.id();
+		const auto head = store.heads.find(series_id);
+		const std::optional<std::string> current_parent = head == store.heads.end()
+			? std::optional<std::string>{}
+			: std::optional<std::string>{head->second};
+		if (current_parent != data_->draft.expected_parent_publication)
+		{
+			data_->current_state = publication_state::rejected;
+			return unexpected(store_error("store.publish-stale-parent", series_id));
+		}
+		const auto sequence =
+			head == store.heads.end() ? 1U : store.records.at(head->second).sequence + 1U;
+		const auto generation = store.generation + 1U;
+		publication_record record;
+		record.series_id = series_id;
+		record.snapshot_id = data_->candidate->semantic_manifest.id;
+		record.sequence = sequence;
+		record.physical_generation = generation;
+		record.parent_publication = current_parent;
+		record.state = publication_state::committed;
+		record.publication_id = publication_identity(record);
+		data_->candidate->publication_record_value = record;
+		const bool collision = std::ranges::any_of(
+			store.publications,
+			[&](const auto& existing)
+			{
+				return existing.second->semantic_manifest.id ==
+					data_->candidate->semantic_manifest.id &&
+					canonical_export_of(*existing.second) != canonical_export_of(*data_->candidate);
+			});
+		if (collision)
+		{
+			data_->current_state = publication_state::rejected;
+			return unexpected(store_error("store.hash-collision", record.snapshot_id));
+		}
+		auto token = std::make_shared<const std::uint64_t>(generation);
+		data_->candidate->generation_pin = token;
+		if (auto persisted = store.persist(*data_->candidate); !persisted)
+		{
+			data_->current_state = publication_state::rolled_back;
+			return unexpected(std::move(persisted.error()));
+		}
+		store.generation = generation;
+		store.generation_tokens.push_back(token);
+		store.records[record.publication_id] = record;
+		store.publications[record.publication_id] = data_->candidate;
+		store.heads[series_id] = record.publication_id;
+		data_->current_state = publication_state::committed;
+		return snapshot_handle{data_->candidate};
+	}
+	void snapshot_writer::cancel() noexcept
+	{
+		if (!data_)
+			return;
+		data_->candidate.reset();
+		data_->partitions.clear();
+		data_->closures.clear();
+		data_->current_state = publication_state::rolled_back;
+	}
+
+	result<snapshot_store> make_in_memory_snapshot_store(relation_engine engine)
+	{
+		return snapshot_store{
+			std::make_shared<snapshot_store::implementation>(std::move(engine), "memory")};
+	}
+
+	result<snapshot_store> open_sqlite_snapshot_store(const std::string& database_path,
+													  relation_engine engine)
+	{
+		if (database_path.empty())
+			return unexpected(store_error("store.sqlite-path-empty", "database_path"));
+		auto database = open_database(database_path);
+		if (!database)
+			return unexpected(std::move(database.error()));
+		auto implementation =
+			std::make_shared<snapshot_store::implementation>(std::move(engine), "sqlite");
+		implementation->database = std::move(*database);
+		if (auto loaded = implementation->load(); !loaded)
+			return unexpected(std::move(loaded.error()));
+		return snapshot_store{std::move(implementation)};
+	}
+
+	result<void> mark_publication_corrupt_for_testing(snapshot_store& store,
+													  const std::string_view publication_id)
+	{
+		std::scoped_lock lock{store.implementation_->mutex};
+		const auto found = store.implementation_->publications.find(publication_id);
+		if (found == store.implementation_->publications.end())
+			return unexpected(
+				store_error("store.publication-not-found", std::string{publication_id}));
+		auto corrupted = std::make_shared<snapshot_handle::data>(*found->second);
+		corrupted->publication_record_value.corrupt = true;
+		if (auto persisted = store.implementation_->persist(*corrupted); !persisted)
+			return unexpected(std::move(persisted.error()));
+		store.implementation_->records[std::string{publication_id}] =
+			corrupted->publication_record_value;
+		store.implementation_->publications[std::string{publication_id}] = std::move(corrupted);
+		return {};
+	}
+
+	snapshot_builder::snapshot_builder(relation_registry registry) : registry_{std::move(registry)}
+	{
+	}
+	result<void> snapshot_builder::add(detached_row row)
+	{
+		const auto descriptors = registry_.descriptors();
+		const auto descriptor =
+			std::ranges::find(descriptors, row.descriptor_id, &relation_descriptor::id);
+		if (descriptor == descriptors.end())
+			return unexpected(store_error("sdk.snapshot-unknown-relation", row.descriptor_id));
+		if (auto valid = validate_row(*descriptor, row); !valid)
+			return valid;
+		rows_[row.descriptor_id].push_back(std::move(row));
+		return {};
+	}
+	result<snapshot_handle> snapshot_builder::publish() &&
+	{
+		auto value = std::make_shared<snapshot_handle::data>();
+		std::vector<canonical_value> identity_rows;
+		for (const auto& descriptor : registry_.descriptors())
+			value->descriptors.emplace(descriptor.id, descriptor);
+		for (auto& [descriptor, rows] : rows_)
+		{
+			std::ranges::sort(rows,
+							  [](const detached_row& left, const detached_row& right)
+							  {
+								  return left.canonical_form() < right.canonical_form();
+							  });
+			for (const auto& row : rows)
+				identity_rows.push_back(text(row.canonical_form()));
+			value->rows.emplace(descriptor, std::move(rows));
+		}
+		const std::array fields{canonical_value::from_tuple(std::move(identity_rows))};
+		value->semantic_manifest.id = canonical_identity_digest("snapshot-compat", fields);
+		value->semantic_manifest.catalog_semantic_digest =
+			semantic_digest("compat.catalog", "legacy");
+		value->semantic_manifest.condition_universe_id = "compat-universe";
+		value->semantic_manifest.relation_registry_digest =
+			semantic_digest("compat.registry", "legacy");
+		value->semantic_manifest.interpretation_policy_digest =
+			semantic_digest("compat.policy", "legacy");
+		value->publication_record_value = {canonical_identity_digest("publication-compat", fields),
+										   "compat-series",
+										   value->semantic_manifest.id,
+										   1U,
+										   1U,
+										   std::nullopt,
+										   publication_state::committed,
+										   false};
+		value->generation_pin = std::make_shared<const std::uint64_t>(1U);
+		return snapshot_handle{std::move(value)};
+	}
+} // namespace cxxlens::sdk

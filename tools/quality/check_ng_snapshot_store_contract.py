@@ -351,7 +351,7 @@ def snapshot_digest_matrix(value: dict[str, Any]) -> tuple[str, int]:
     outputs: list[str] = []
     for backend in ("memory", "sqlite"):
         for root in ("root-a", "root-b"):
-            for jobs in (1, 8):
+            for jobs in (1, 2, 8):
                 for order in ("forward", "reverse", "seeded-shuffle"):
                     rows = copy.deepcopy(value["partitions"])
                     if order == "reverse":
@@ -636,7 +636,7 @@ def validate_all(
         if (vector["class"] == "positive") != (actual["decision"] == "accepted"):
             fail("store.vector-class-mismatch", vector["id"])
         results.append({"id": vector["id"], **actual, "matched": True})
-    if comparisons != 24:
+    if comparisons != 36:
         fail("store.perturbation-matrix-incomplete", str(comparisons))
     report = make_report(contract, results, comparisons)
     schema_validate(report, load_yaml(root / REPORT_SCHEMA), "store report")
@@ -653,7 +653,7 @@ def make_report(
         "perturbation_matrix": {
             "backends": ["memory", "sqlite"],
             "roots": ["root-a", "root-b"],
-            "jobs": [1, 8],
+            "jobs": [1, 2, 8],
             "orders": ["forward", "reverse", "seeded-shuffle"],
             "comparisons": comparisons,
             "all_equal": True,

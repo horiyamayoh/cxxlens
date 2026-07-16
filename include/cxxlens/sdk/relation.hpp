@@ -10,7 +10,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <variant>
 #include <vector>
 
@@ -294,70 +293,4 @@ namespace cxxlens::sdk
 		[[nodiscard]] result<void> validate() const;
 	};
 
-	class row_cursor;
-
-	/** @brief Immutable, concurrent-readable in-memory snapshot handle. */
-	class snapshot_handle
-	{
-	  public:
-		struct data;
-		[[nodiscard]] std::string_view id() const noexcept;
-		[[nodiscard]] result<row_cursor> open(const dynamic_relation& relation) const;
-		[[nodiscard]] bool empty() const noexcept;
-
-	  private:
-		explicit snapshot_handle(std::shared_ptr<const data> data);
-		std::shared_ptr<const data> data_;
-		friend class snapshot_builder;
-	};
-
-	/** @brief Cursor-scoped view invalidated by cursor advance. */
-	class row_view
-	{
-	  public:
-		[[nodiscard]] result<detached_row> copy() const;
-
-	  private:
-		row_view(const detached_row* row,
-				 std::weak_ptr<const std::uint64_t> generation,
-				 std::uint64_t expected);
-		const detached_row* row_{};
-		std::weak_ptr<const std::uint64_t> generation_;
-		std::uint64_t expected_{};
-		friend class row_cursor;
-	};
-
-	/** @brief Thread-affine bounded cursor over an immutable snapshot partition. */
-	class row_cursor
-	{
-	  public:
-		row_cursor(row_cursor&&) noexcept = default;
-		row_cursor& operator=(row_cursor&&) noexcept = default;
-		row_cursor(const row_cursor&) = delete;
-		row_cursor& operator=(const row_cursor&) = delete;
-		[[nodiscard]] result<std::optional<row_view>> next();
-
-	  private:
-		row_cursor(std::shared_ptr<const snapshot_handle::data> snapshot,
-				   const std::vector<detached_row>* rows);
-		std::shared_ptr<const snapshot_handle::data> snapshot_;
-		const std::vector<detached_row>* rows_{};
-		std::size_t index_{};
-		std::thread::id owner_;
-		std::shared_ptr<std::uint64_t> generation_;
-		friend class snapshot_handle;
-	};
-
-	/** @brief Draft builder that publishes one immutable snapshot atomically. */
-	class snapshot_builder
-	{
-	  public:
-		explicit snapshot_builder(relation_registry registry);
-		[[nodiscard]] result<void> add(detached_row row);
-		[[nodiscard]] result<snapshot_handle> publish() &&;
-
-	  private:
-		relation_registry registry_;
-		std::map<std::string, std::vector<detached_row>, std::less<>> rows_;
-	};
 } // namespace cxxlens::sdk

@@ -445,6 +445,8 @@ namespace
 			canonical_inputs,
 			observe(make_direct_target_row("entity:a")),
 			"snapshot:1",
+			{"partition-content:sha256:"
+			 "3333333333333333333333333333333333333333333333333333333333333333"},
 			"sha256:2222222222222222222222222222222222222222222222222222222222222222");
 		require(derived && derived->stage == cxxlens::sdk::claim_stage::derived_claim &&
 					cxxlens::sdk::validate_claim(*engine, *derived).has_value(),

@@ -4,7 +4,7 @@
     "conventions": "sha256:fa58fa2f23591eafac9f46eb91fcfab01063681e453065b62d34bdab3fca8af1",
     "ownership_registry": "sha256:797e6a52c4c941ed4225b761ee070f5f00af4c10661d2ebd519e874391eec342"
   },
-  "repository_paths_digest": "sha256:ce06c0c2f0c07e5bdd7eb948f66776d05807c014ec316b7fe24a67531aaca701",
+  "repository_paths_digest": "sha256:08ec630a643128083a0c2c24f313104b256e30ff1af075451d79165bd8782d1d",
   "reserved_paths": [
     {
       "access": "exclusive_write",
@@ -1192,7 +1192,7 @@
     }
   ],
   "schema": "cxxlens.agent-ownership.v1",
-  "semantic_digest": "sha256:0964443b92d73255a22270efb3e326046fd11806610dcf280a5d6cd0b131dde9",
+  "semantic_digest": "sha256:65cd16e19fd506dd7828bfcf93c006d8a045a1ecb3d0a6757af5bfa7818c26b1",
   "skeletons": [
     {
       "api_id": "API-CFG-001",
@@ -2942,7 +2942,7 @@
       "blocked": 0,
       "frozen": 124
     },
-    "tracked_path_count": 660,
+    "tracked_path_count": 669,
     "unit_count": 124
   },
   "task_packet_digest": "sha256:68bfa838af2de5910cfa1b4a0bf4dbc3a1d24eaa3f21fff1ec378dccff35176c",
@@ -3623,6 +3623,13 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.design",
+      "path": "docs/design/adr/0013-ng-sqlite-physical-store.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.ng-documentation",
       "path": "docs/design/adr/README.md"
     },
@@ -4100,6 +4107,13 @@
       "generated": false,
       "generator_role": null,
       "owner_role": "steward.repository",
+      "path": "examples/sdk/snapshot_store.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
       "path": "examples/sdk/typed_query.cpp"
     },
     {
@@ -4318,6 +4332,13 @@
       "generator_role": null,
       "owner_role": "steward.quality",
       "path": "include/cxxlens/sdk/relation.hpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.store",
+      "path": "include/cxxlens/sdk/store.hpp"
     },
     {
       "access": "exclusive_write",
@@ -5254,6 +5275,20 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.store",
+      "path": "schemas/cxxlens_ng_sqlite_store_contract.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.store",
+      "path": "schemas/cxxlens_ng_sqlite_store_contract.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.ng-store-contract",
       "path": "schemas/cxxlens_ng_store_conformance_report.schema.yaml"
     },
@@ -6073,6 +6108,13 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.store",
+      "path": "src/sdk/store.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.testing",
       "path": "src/sdk/testing.cpp"
     },
@@ -6159,6 +6201,20 @@
       "generator_role": null,
       "owner_role": "steward.store",
       "path": "src/store/in_memory/in_memory_store.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.store",
+      "path": "src/store/ng_legacy_fact_store_adapter.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.store",
+      "path": "src/store/ng_legacy_fact_store_adapter.hpp"
     },
     {
       "access": "exclusive_write",
@@ -7076,6 +7132,13 @@
       "generator_role": null,
       "owner_role": "steward.quality",
       "path": "tests/unit/sdk/sdk_test.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.store",
+      "path": "tests/unit/sdk/store_test.cpp"
     },
     {
       "access": "exclusive_write",

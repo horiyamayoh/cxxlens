@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <cxxlens/sdk/common.hpp>
@@ -13,6 +14,64 @@ namespace cxxlens::sdk
 {
 	namespace
 	{
+		void append_length(std::vector<std::byte>& output, const std::uint64_t value)
+		{
+			for (int shift = 56; shift >= 0; shift -= 8)
+				output.push_back(static_cast<std::byte>((value >> shift) & 0xffU));
+		}
+
+		void append_canonical(std::vector<std::byte>& output, const canonical_value& value)
+		{
+			using kind = canonical_value::kind;
+			switch (value.type)
+			{
+				case kind::null_value:
+					output.push_back(std::byte{0x00});
+					return;
+				case kind::boolean:
+					output.push_back(std::byte{0x01});
+					output.push_back(value.boolean ? std::byte{0x01} : std::byte{0x00});
+					return;
+				case kind::signed_integer:
+				{
+					output.push_back(std::byte{0x02});
+					output.push_back(value.integer < 0 ? std::byte{0x01} : std::byte{0x00});
+					const auto magnitude = value.integer < 0
+						? static_cast<std::uint64_t>(-(value.integer + 1)) + 1U
+						: static_cast<std::uint64_t>(value.integer);
+					std::size_t width = 1U;
+					for (auto remaining = magnitude; remaining > 0xffU; remaining >>= 8U)
+						++width;
+					append_length(output, width);
+					for (std::size_t index = width; index > 0U; --index)
+						output.push_back(
+							static_cast<std::byte>((magnitude >> ((index - 1U) * 8U)) & 0xffU));
+					return;
+				}
+				case kind::bytes:
+					output.push_back(std::byte{0x03});
+					append_length(output, value.byte_string.size());
+					output.insert(output.end(), value.byte_string.begin(), value.byte_string.end());
+					return;
+				case kind::utf8_string:
+					output.push_back(std::byte{0x04});
+					append_length(output, value.text.size());
+					for (const auto byte : value.text)
+						output.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
+					return;
+				case kind::ordered_tuple:
+					output.push_back(std::byte{0x05});
+					append_length(output, value.tuple.size());
+					for (const auto& item : value.tuple)
+					{
+						const auto encoded = canonical_binary(item);
+						append_length(output, encoded.size());
+						output.insert(output.end(), encoded.begin(), encoded.end());
+					}
+					return;
+			}
+		}
+
 		constexpr std::array<std::uint32_t, 64U> round_constants{
 			0x428a2f98U, 0x71374491U, 0xb5c0fbcfU, 0xe9b5dba5U, 0x3956c25bU, 0x59f111f1U,
 			0x923f82a4U, 0xab1c5ed5U, 0xd807aa98U, 0x12835b01U, 0x243185beU, 0x550c7dc3U,
@@ -102,6 +161,75 @@ namespace cxxlens::sdk
 	std::string semantic_version::string() const
 	{
 		return std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch);
+	}
+
+	canonical_value canonical_value::null()
+	{
+		return {};
+	}
+
+	canonical_value canonical_value::from_boolean(const bool value)
+	{
+		canonical_value output;
+		output.type = kind::boolean;
+		output.boolean = value;
+		return output;
+	}
+
+	canonical_value canonical_value::from_integer(const std::int64_t value)
+	{
+		canonical_value output;
+		output.type = kind::signed_integer;
+		output.integer = value;
+		return output;
+	}
+
+	canonical_value canonical_value::from_bytes(std::vector<std::byte> value)
+	{
+		canonical_value output;
+		output.type = kind::bytes;
+		output.byte_string = std::move(value);
+		return output;
+	}
+
+	canonical_value canonical_value::from_string(std::string value)
+	{
+		canonical_value output;
+		output.type = kind::utf8_string;
+		output.text = std::move(value);
+		return output;
+	}
+
+	canonical_value canonical_value::from_tuple(std::vector<canonical_value> value)
+	{
+		canonical_value output;
+		output.type = kind::ordered_tuple;
+		output.tuple = std::move(value);
+		return output;
+	}
+
+	std::vector<std::byte> canonical_binary(const canonical_value& value)
+	{
+		std::vector<std::byte> output;
+		append_canonical(output, value);
+		return output;
+	}
+
+	std::string canonical_identity_digest(const std::string_view identity_kind,
+										  const std::span<const canonical_value> fields)
+	{
+		std::string domain{"cxxlens"};
+		domain.push_back('\0');
+		domain.append(identity_kind);
+		domain.append("\0v1\0", 4U);
+		std::vector<canonical_value> values{fields.begin(), fields.end()};
+		const auto encoded = canonical_binary(canonical_value::from_tuple(std::move(values)));
+		std::vector<std::byte> bytes;
+		bytes.reserve(domain.size() + encoded.size());
+		for (const auto byte : domain)
+			bytes.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
+		bytes.insert(bytes.end(), encoded.begin(), encoded.end());
+		return std::string{identity_kind} + ':' + content_digest(bytes);
 	}
 
 	std::string semantic_digest(const std::string_view domain, const std::string_view bytes)

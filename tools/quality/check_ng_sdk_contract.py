@@ -131,7 +131,7 @@ def validate_catalog(root: pathlib.Path, catalog: dict[str, Any]) -> None:
     ]:
         emitted_codes.update(
             re.findall(
-                r'"((?:sdk|provider|native|recipe)\.[a-z0-9._-]+)"',
+                r'"((?:sdk|store|provider|native|recipe)\.[a-z0-9._-]+)"',
                 source.read_text(encoding="utf-8"),
             )
         )
@@ -424,6 +424,64 @@ def validate_cpp_provider_manifest(root: pathlib.Path, executable: str) -> None:
         fail(f"C++ provider manifest differs from the accepted authority: {error}")
 
 
+def validate_store_implementation(root: pathlib.Path) -> None:
+    header = (root / "include/cxxlens/sdk/store.hpp").read_text(encoding="utf-8")
+    source = (root / "src/sdk/store.cpp").read_text(encoding="utf-8")
+    claim = (root / "src/sdk/claim.cpp").read_text(encoding="utf-8")
+    cmake = (root / "CMakeLists.txt").read_text(encoding="utf-8")
+    for marker in (
+        "snapshot_series_selector",
+        "partition_manifest",
+        "closure_certificate",
+        "snapshot_writer",
+        "open_sqlite_snapshot_store",
+        "open_publication",
+        "canonical_export",
+    ):
+        if marker not in header:
+            fail(f"snapshot/store public marker is missing: {marker}")
+    for marker in (
+        'canonical_identity_digest("snapshot"',
+        'canonical_identity_digest("snapshot-series"',
+        'canonical_identity_digest("partition-content"',
+        'canonical_identity_digest("closure-certificate"',
+        '"store.publish-stale-parent"',
+        '"store.current-corrupt"',
+        '"store.hash-collision"',
+        '"BEGIN IMMEDIATE;',
+    ):
+        if marker not in source:
+            fail(f"snapshot/store implementation marker is missing: {marker}")
+    if 'canonical_identity_digest("claim-content"' not in claim or (
+        'typed_digest("content"' in claim
+    ):
+        fail("claim identity does not use the accepted claim-content canonical tuple")
+    for path in (
+        "src/sdk/store.cpp",
+        "src/store/ng_legacy_fact_store_adapter.cpp",
+        "schemas/cxxlens_ng_sqlite_store_contract.yaml",
+        "schemas/cxxlens_ng_sqlite_store_contract.schema.yaml",
+    ):
+        if path not in cmake:
+            fail(f"snapshot/store build or install evidence is missing: {path}")
+    schema_validate(
+        load_yaml(root / "schemas/cxxlens_ng_sqlite_store_contract.yaml"),
+        load_yaml(root / "schemas/cxxlens_ng_sqlite_store_contract.schema.yaml"),
+    )
+    test = (root / "tests/unit/sdk/store_test.cpp").read_text(encoding="utf-8")
+    for marker in (
+        "memory/SQLite snapshot IDs diverged",
+        "staged claims became visible",
+        "stale parent publish was accepted",
+        "partial partition received a closure certificate",
+        "compaction reclaimed a pinned generation",
+        "SQLite reopen changed semantic identity",
+        "corrupt current silently fell back",
+    ):
+        if marker not in test:
+            fail(f"snapshot/store acceptance marker is missing: {marker}")
+
+
 def validate(
     root: pathlib.Path, compiler: str, scaffold: str, doctor: str
 ) -> dict[str, Any]:
@@ -434,6 +492,7 @@ def validate(
     validate_scaffold(root, compiler, scaffold)
     validate_cpp_query_ir(root, doctor)
     validate_cpp_provider_manifest(root, doctor)
+    validate_store_implementation(root)
     return catalog
 
 

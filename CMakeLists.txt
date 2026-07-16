@@ -49,6 +49,7 @@ add_library(
   src/sdk/query.cpp
   src/sdk/recipe.cpp
   src/sdk/relation.cpp
+  src/sdk/store.cpp
   src/sdk/testing.cpp)
 add_library(cxxlens::provider_sdk ALIAS cxxlens_provider_sdk)
 target_compile_features(cxxlens_provider_sdk PUBLIC cxx_std_23)
@@ -64,6 +65,7 @@ set_target_properties(
              SOVERSION "${PROJECT_VERSION_MAJOR}")
 cxxlens_set_project_warnings(cxxlens_provider_sdk)
 cxxlens_enable_sanitizers(cxxlens_provider_sdk)
+target_link_libraries(cxxlens_provider_sdk PRIVATE "${CMAKE_DL_LIBS}")
 
 add_library(
   cxxlens
@@ -112,6 +114,7 @@ add_library(
   src/store/binary_codec.cpp
   src/store/fact_values.cpp
   src/store/in_memory/in_memory_store.cpp
+  src/store/ng_legacy_fact_store_adapter.cpp
   src/store/sqlite/sqlite_api.cpp
   src/store/sqlite/sqlite_store.cpp
   src/store/store_port.cpp
@@ -275,6 +278,8 @@ install(
         schemas/cxxlens_ng_store_conformance_vectors.yaml
         schemas/cxxlens_ng_store_conformance_vectors.schema.yaml
         schemas/cxxlens_ng_store_conformance_report.schema.yaml
+        schemas/cxxlens_ng_sqlite_store_contract.yaml
+        schemas/cxxlens_ng_sqlite_store_contract.schema.yaml
         schemas/cxxlens_ng_provider_protocol.yaml
         schemas/cxxlens_ng_provider_protocol.schema.yaml
         schemas/cxxlens_ng_provider_manifest.schema.yaml

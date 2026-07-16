@@ -26,8 +26,8 @@ properties:
     properties:
       backends: {const: [memory, sqlite]}
       roots: {const: [root-a, root-b]}
-      jobs: {const: [1, 8]}
+      jobs: {const: [1, 2, 8]}
       orders: {const: [forward, reverse, seeded-shuffle]}
-      comparisons: {type: integer, minimum: 24}
+      comparisons: {const: 36}
       all_equal: {const: true}
   status: {const: green}

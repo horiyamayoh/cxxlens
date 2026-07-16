@@ -274,6 +274,15 @@ overrides:
       authority: normative
       replacement: null
       removal_issue: null
+  - path: docs/design/adr/0013-ng-sqlite-physical-store.md
+    record:
+      disposition: inherit
+      status: active
+      owner: steward.ng-store-contract
+      profile: NG0
+      authority: normative
+      replacement: null
+      removal_issue: null
   - path: docs/design/SHA256SUMS
     record:
       disposition: inherit
@@ -453,6 +462,10 @@ overrides:
   - path: schemas/cxxlens_ng_store_conformance_vectors.schema.yaml
     record: *ng_store_contract
   - path: schemas/cxxlens_ng_store_conformance_report.schema.yaml
+    record: *ng_store_contract
+  - path: schemas/cxxlens_ng_sqlite_store_contract.yaml
+    record: *ng_store_contract
+  - path: schemas/cxxlens_ng_sqlite_store_contract.schema.yaml
     record: *ng_store_contract
   - path: schemas/cxxlens_ng_provider_protocol.yaml
     record: *ng_provider_contract
@@ -668,6 +681,10 @@ overrides:
     record: *ng_sdk_implementation
   - path: include/cxxlens/sdk/relation.hpp
     record: *ng_sdk_implementation
+  - path: include/cxxlens/sdk/claim.hpp
+    record: *ng_sdk_implementation
+  - path: include/cxxlens/sdk/store.hpp
+    record: *ng_sdk_implementation
   - path: include/cxxlens/sdk/query.hpp
     record: *ng_sdk_implementation
   - path: include/cxxlens/sdk/provider.hpp
@@ -678,11 +695,21 @@ overrides:
     record: *ng_sdk_implementation
   - path: include/cxxlens/relations/cc_call_site.hpp
     record: *ng_sdk_implementation
+  - path: include/cxxlens/relations/cc_entity.hpp
+    record: *ng_sdk_implementation
+  - path: include/cxxlens/relations/cc_call_direct_target.hpp
+    record: *ng_sdk_implementation
+  - path: include/cxxlens/relations/company_lock_acquire.hpp
+    record: *ng_sdk_implementation
   - path: include/cxxlens/provider/clang22.hpp
     record: *ng_sdk_implementation
   - path: src/sdk/common.cpp
     record: *ng_sdk_implementation
   - path: src/sdk/relation.cpp
+    record: *ng_sdk_implementation
+  - path: src/sdk/claim.cpp
+    record: *ng_sdk_implementation
+  - path: src/sdk/store.cpp
     record: *ng_sdk_implementation
   - path: src/sdk/query.cpp
     record: *ng_sdk_implementation
@@ -694,6 +721,17 @@ overrides:
     record: *ng_sdk_implementation
   - path: src/llvm/clang22/provider_sdk.cpp
     record: *ng_sdk_implementation
+  - path: src/store/ng_legacy_fact_store_adapter.hpp
+    record: &ng_legacy_bridge
+      disposition: migrate
+      status: planned
+      owner: steward.legacy-cleanup
+      profile: migration
+      authority: implementation
+      replacement: include/cxxlens/sdk/store.hpp
+      removal_issue: '#72'
+  - path: src/store/ng_legacy_fact_store_adapter.cpp
+    record: *ng_legacy_bridge
   - path: tools/sdk/relation_idl_compiler.py
     record: *ng_sdk_implementation
   - path: tools/sdk/provider_scaffold_main.cpp
@@ -710,6 +748,10 @@ overrides:
     record: *ng_sdk_implementation
   - path: examples/sdk/recipe.cpp
     record: *ng_sdk_implementation
+  - path: examples/sdk/relation_claim_batch.cpp
+    record: *ng_sdk_implementation
+  - path: examples/sdk/snapshot_store.cpp
+    record: *ng_sdk_implementation
   - path: examples/sdk/negative/generated_unknown_column.cpp
     record: *ng_sdk_implementation
   - path: examples/sdk/negative/dynamic_literal_type_mismatch.cpp
@@ -723,6 +765,8 @@ overrides:
   - path: examples/sdk/negative/provider_no_credit.cpp
     record: *ng_sdk_implementation
   - path: tests/unit/sdk/sdk_test.cpp
+    record: *ng_sdk_implementation
+  - path: tests/unit/sdk/store_test.cpp
     record: *ng_sdk_implementation
   - path: tests/public_headers/sdk_header_test.cpp
     record: *ng_sdk_implementation
@@ -754,6 +798,7 @@ drift:
     - docs/design/adr/0010-provider-wire-streaming-atomicity.md
     - docs/design/adr/0011-provider-trust-certification-discovery.md
     - docs/design/adr/0012-author-sdk-surface.md
+    - docs/design/adr/0013-ng-sqlite-physical-store.md
     - docs/design/adr/README.md
     - docs/design/catalogs/README.md
     - docs/design/cxxlens_next_generation_integrated_design_ja.md

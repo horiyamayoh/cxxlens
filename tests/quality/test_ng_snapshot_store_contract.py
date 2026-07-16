@@ -45,7 +45,7 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         contract, results, comparisons = validate_all(ROOT)
         self.assertEqual(contract["maturity"], "accepted")
         self.assertEqual(len(results), 31)
-        self.assertEqual(comparisons, 24)
+        self.assertEqual(comparisons, 36)
 
     def test_binary_encoding_separates_types_and_boundaries(self) -> None:
         values = [None, False, 0, b"0", "0", ["a", "bc"], ["ab", "c"]]
@@ -144,7 +144,7 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 }
             )
         _, comparisons = snapshot_digest_matrix(base)
-        self.assertEqual(comparisons, 24)
+        self.assertEqual(comparisons, 36)
 
     def test_series_selector_has_no_ambient_defaults(self) -> None:
         selector = {field: f"value-{field}" for field in SELECTOR_FIELDS}

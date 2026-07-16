@@ -22,6 +22,7 @@ namespace cxxlens::sdk
 		[[nodiscard]] std::string canonical_form() const;
 		[[nodiscard]] std::string id() const;
 		[[nodiscard]] result<std::vector<std::string>> overlap(const claim_condition& other) const;
+		[[nodiscard]] bool operator==(const claim_condition&) const = default;
 	};
 
 	/** @brief Claim processing stage; observation deliberately remains outside this enum. */
@@ -58,6 +59,8 @@ namespace cxxlens::sdk
 
 	/** @brief Tagged direct/derived input basis from claim-envelope v2. */
 	using claim_input_basis = std::variant<direct_claim_basis, derived_claim_basis>;
+	/** @brief Derive the exact producer-input basis digest used by partition identity. */
+	[[nodiscard]] result<std::string> claim_input_basis_digest(const claim_input_basis& basis);
 
 	/** @brief Machine-readable semantic guarantee that must survive ingestion. */
 	struct claim_guarantee
@@ -107,11 +110,13 @@ namespace cxxlens::sdk
 													 detached_row canonical_row,
 													 const std::string& transform_semantics);
 	/** @brief Validate and construct a derived claim from explicit immutable inputs. */
-	[[nodiscard]] result<claim> make_derived_claim(const relation_engine& engine,
-												   std::span<const claim> inputs,
-												   observation output,
-												   std::string input_snapshot,
-												   std::string transform_semantics);
+	[[nodiscard]] result<claim>
+	make_derived_claim(const relation_engine& engine,
+					   std::span<const claim> inputs,
+					   observation output,
+					   std::string input_snapshot,
+					   std::vector<std::string> consumed_partition_content_digests,
+					   std::string transform_semantics);
 	/** @brief Independently revalidate stage, row, basis, and all three identities. */
 	[[nodiscard]] result<void> validate_claim(const relation_engine& engine, const claim& value);
 

@@ -9,4 +9,5 @@
 #include <cxxlens/sdk/query.hpp>
 #include <cxxlens/sdk/recipe.hpp>
 #include <cxxlens/sdk/relation.hpp>
+#include <cxxlens/sdk/store.hpp>
 #include <cxxlens/sdk/testing.hpp>

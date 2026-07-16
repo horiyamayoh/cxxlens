@@ -66,3 +66,14 @@ external generated relation の typed builder と runtime descriptor を同じ i
 observation を assertion に変換して atomic batch へ投入します。hard reference は同じ batch staging space の既存
 claim で解決し、未 materialize の soft reference は row を捨てず `unresolved_reference` として返します。
 `make_canonical_claim` と `make_derived_claim` を使う場合も同じ identity encoder と独立 validator を通ります。
+
+## Immutable snapshot / store
+
+[snapshot_store.cpp](../../examples/sdk/snapshot_store.cpp) は同じ validated partition を in-memory と SQLite に
+publish し、backend に依存しない snapshot ID を確認します。`snapshot_series_selector` は catalog、channel、engine
+generation、condition universe、registry、interpretation policy、trust policy の全 field が必須です。writer は
+`stage` → `validate` → `publish` の順で使用し、staged claim は reader から見えません。`row_view` は cursor の次の
+`next()` までだけ有効で、長寿命化には `copy()` を使います。
+
+SQLite の path、publication sequence、physical generation は semantic ID に含まれません。current head の破損や
+stale parent は structured error となり、別 series や prior publication への暗黙 fallback は行いません。

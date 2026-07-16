@@ -1,5 +1,5 @@
 {
-  "asset_count": 676,
+  "asset_count": 685,
   "assets": [
     {
       "authority": "operational",
@@ -972,6 +972,16 @@
       "status": "active"
     },
     {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-store-contract",
+      "path": "docs/design/adr/0013-ng-sqlite-physical-store.md",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
       "authority": "informative",
       "disposition": "inherit",
       "owner": "steward.ng-docs",
@@ -1643,13 +1653,23 @@
     },
     {
       "authority": "implementation",
-      "disposition": "replace",
-      "owner": "steward.ng-recipes",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
       "path": "examples/sdk/relation_claim_batch.cpp",
-      "profile": "migration",
-      "removal_issue": "#72",
-      "replacement": "docs/tutorials/README.md",
-      "status": "planned"
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
+      "path": "examples/sdk/snapshot_store.cpp",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
     },
     {
       "authority": "implementation",
@@ -1833,13 +1853,13 @@
     },
     {
       "authority": "implementation",
-      "disposition": "replace",
-      "owner": "steward.ng-public-api",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
       "path": "include/cxxlens/relations/cc_call_direct_target.hpp",
-      "profile": "migration",
-      "removal_issue": "#72",
-      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
-      "status": "planned"
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
     },
     {
       "authority": "implementation",
@@ -1853,23 +1873,23 @@
     },
     {
       "authority": "implementation",
-      "disposition": "replace",
-      "owner": "steward.ng-public-api",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
       "path": "include/cxxlens/relations/cc_entity.hpp",
-      "profile": "migration",
-      "removal_issue": "#72",
-      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
-      "status": "planned"
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
     },
     {
       "authority": "implementation",
-      "disposition": "replace",
-      "owner": "steward.ng-public-api",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
       "path": "include/cxxlens/relations/company_lock_acquire.hpp",
-      "profile": "migration",
-      "removal_issue": "#72",
-      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
-      "status": "planned"
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
     },
     {
       "authority": "implementation",
@@ -1913,13 +1933,13 @@
     },
     {
       "authority": "implementation",
-      "disposition": "replace",
-      "owner": "steward.ng-public-api",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
       "path": "include/cxxlens/sdk/claim.hpp",
-      "profile": "migration",
-      "removal_issue": "#72",
-      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
-      "status": "planned"
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
     },
     {
       "authority": "implementation",
@@ -1966,6 +1986,16 @@
       "disposition": "inherit",
       "owner": "steward.ng-sdk",
       "path": "include/cxxlens/sdk/relation.hpp",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
+      "path": "include/cxxlens/sdk/store.hpp",
       "profile": "NG0",
       "removal_issue": null,
       "replacement": null,
@@ -3375,6 +3405,26 @@
       "authority": "normative",
       "disposition": "inherit",
       "owner": "steward.ng-store-contract",
+      "path": "schemas/cxxlens_ng_sqlite_store_contract.schema.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-store-contract",
+      "path": "schemas/cxxlens_ng_sqlite_store_contract.yaml",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "normative",
+      "disposition": "inherit",
+      "owner": "steward.ng-store-contract",
       "path": "schemas/cxxlens_ng_store_conformance_report.schema.yaml",
       "profile": "NG0",
       "removal_issue": null,
@@ -4483,13 +4533,13 @@
     },
     {
       "authority": "implementation",
-      "disposition": "migrate",
-      "owner": "steward.ng-kernel",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
       "path": "src/sdk/claim.cpp",
-      "profile": "migration",
-      "removal_issue": "#72",
+      "profile": "NG0",
+      "removal_issue": null,
       "replacement": null,
-      "status": "planned"
+      "status": "active"
     },
     {
       "authority": "implementation",
@@ -4536,6 +4586,16 @@
       "disposition": "inherit",
       "owner": "steward.ng-sdk",
       "path": "src/sdk/relation.cpp",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
+      "path": "src/sdk/store.cpp",
       "profile": "NG0",
       "removal_issue": null,
       "replacement": null,
@@ -4669,6 +4729,26 @@
       "profile": "migration",
       "removal_issue": "#72",
       "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.legacy-cleanup",
+      "path": "src/store/ng_legacy_fact_store_adapter.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "include/cxxlens/sdk/store.hpp",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.legacy-cleanup",
+      "path": "src/store/ng_legacy_fact_store_adapter.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "include/cxxlens/sdk/store.hpp",
       "status": "planned"
     },
     {
@@ -6023,6 +6103,16 @@
     },
     {
       "authority": "implementation",
+      "disposition": "inherit",
+      "owner": "steward.ng-sdk",
+      "path": "tests/unit/sdk/store_test.cpp",
+      "profile": "NG0",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "implementation",
       "disposition": "migrate",
       "owner": "steward.ng-acceptance",
       "path": "tests/unit/search/search_fixture.hpp",
@@ -6765,13 +6855,13 @@
   "classifications": {
     "archive": 37,
     "delete": 22,
-    "inherit": 157,
-    "migrate": 389,
-    "replace": 71
+    "inherit": 170,
+    "migrate": 390,
+    "replace": 66
   },
   "document_version": "1.0.0",
   "generated_by": "tools/quality/check_documentation_consistency.py",
   "schema": "cxxlens.asset-migration-ledger.v1",
   "source_policy": "schemas/cxxlens_asset_migration_policy.yaml",
-  "source_policy_digest": "sha256:81402f3f3cb963cc8912ad4913f6ee7fc4bd035490d5d82040af5d90d10559d2"
+  "source_policy_digest": "sha256:5078317124ce3b9a9be29d354e8ebb5d43af02d1a28e27a48a65e582eb0380e9"
 }

@@ -265,7 +265,7 @@ backend_authority:
   implementation: tools/quality/check_ng_snapshot_store_contract.py
   backends: [memory, sqlite]
   roots: [root-a, root-b]
-  jobs: [1, 8]
+  jobs: [1, 2, 8]
   orders: [forward, reverse, seeded-shuffle]
   equality: snapshot-semantic-id
   conformance_vectors: schemas/cxxlens_ng_store_conformance_vectors.yaml

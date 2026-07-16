@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.1.0
+document_version: 1.2.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -24,6 +24,7 @@ packages:
       - include/cxxlens/sdk/common.hpp
       - include/cxxlens/sdk/claim.hpp
       - include/cxxlens/sdk/relation.hpp
+      - include/cxxlens/sdk/store.hpp
       - include/cxxlens/sdk/query.hpp
       - include/cxxlens/sdk/provider.hpp
       - include/cxxlens/sdk/testing.hpp
@@ -88,12 +89,15 @@ entries:
       - name: semantic_digest
         kind: function-family
         signature: 'string semantic_digest(string_view domain, string_view bytes); string content_digest(span<const byte>)'
+      - name: canonical_identity_digest
+        kind: function-family
+        signature: 'canonical_value; vector<byte> canonical_binary(const canonical_value&); string canonical_identity_digest(string_view, span<const canonical_value>)'
     errors: []
     lifetime: [result-and-error-own-their-values]
     threading: [value-objects-follow-contained-value-threading]
-    versioning: [semantic-digest-requires-explicit-domain, source-api-axis-independent-from-standard-library-expected]
-    invariants: [success-and-error-are-disjoint, digest-is-full-lowercase-sha256]
-    implementation_evidence: [src/sdk/common.cpp, tests/unit/sdk/sdk_test.cpp]
+    versioning: [semantic-digest-requires-explicit-domain, canonical-identity-is-cxxlens-canonical-tuple-v1, source-api-axis-independent-from-standard-library-expected]
+    invariants: [success-and-error-are-disjoint, digest-is-full-lowercase-sha256, identity-domain-prefix-is-exact-and-versioned]
+    implementation_evidence: [src/sdk/common.cpp, tests/unit/sdk/sdk_test.cpp, tests/unit/sdk/store_test.cpp]
 
   - id: public.project-catalog
     status: implemented
@@ -173,7 +177,7 @@ entries:
         signature: 'struct observation; struct claim; claim_condition; claim_guarantee; direct_claim_basis; derived_claim_basis'
       - name: claim-stage-validator
         kind: function-family
-        signature: 'make_assertion; make_canonical_claim; make_derived_claim; validate_claim'
+        signature: 'make_assertion; make_canonical_claim; make_derived_claim(inputs, output, prior_snapshot, consumed_partition_content_digests, transform); validate_claim; claim_input_basis_digest'
       - name: claim_batch
         kind: class
         signature: 'result<void> add_observation(const relation_engine&, observation); result<void> add(claim); result<claim_batch_result> commit(const relation_engine&, span<const claim> existing = {}) &&'
@@ -181,28 +185,34 @@ entries:
     lifetime: [claims-own-detached-rows-and-envelope-values, batch-result-owns-unresolved-conflict-and-differential-records]
     threading: [claim-values-may-cross-threads, claim-batch-is-thread-confined]
     versioning: [claim-envelope-v2, semantic-key-assertion-and-content-use-independent-domain-separated-identities]
-    invariants: [observation-is-not-a-claim-stage, identities-ignore-arrival-jobs-root-and-engine-generation, hard-missing-rejects-atomic-batch, soft-missing-preserves-claim-and-unresolved, same-domain-functional-overlap-is-conflict, cross-domain-overlap-is-differential-disagreement, set-multiset-functional-assertion-and-keyed-union-are-explicit]
+    invariants: [observation-is-not-a-claim-stage, identities-ignore-arrival-jobs-root-and-engine-generation, derived-basis-names-strict-prior-snapshot-and-canonical-partition-content-digests, hard-missing-rejects-atomic-batch, soft-missing-preserves-claim-and-unresolved, same-domain-functional-overlap-is-conflict, cross-domain-overlap-is-differential-disagreement, set-multiset-functional-assertion-and-keyed-union-are-explicit]
     implementation_evidence: [src/sdk/claim.cpp, examples/sdk/relation_claim_batch.cpp, tests/unit/sdk/sdk_test.cpp, schemas/cxxlens_ng_claim_envelope.schema.yaml]
 
   - id: public.snapshot-store
     status: implemented
-    owner_issue: '#66'
+    owner_issue: '#68'
     profile: NG0
     target: cxxlens::provider_sdk
-    headers: [include/cxxlens/sdk/relation.hpp]
+    headers: [include/cxxlens/sdk/store.hpp]
     symbols:
-      - name: snapshot_builder
+      - name: snapshot_store
         kind: class
-        signature: 'result<void> add(detached_row); result<snapshot_handle> publish() &&'
+        signature: 'current(snapshot_series_selector); open(snapshot_id); open_publication(publication_id); begin(snapshot_draft); compatibility(); compact(); canonical_export(snapshot_id)'
+      - name: snapshot_writer
+        kind: class
+        signature: 'stage(partition_draft); add_closure(closure_candidate); validate(); publish(); cancel()'
+      - name: snapshot identity values
+        kind: value
+        signature: 'snapshot_series_selector; partition_draft; partition_manifest; closure_candidate; closure_certificate; snapshot_manifest; publication_record'
       - name: row_cursor
         kind: class
         signature: 'result<optional<row_view>> next()'
-    errors: [sdk.snapshot-unknown-relation, sdk.snapshot-relation-mismatch, sdk.snapshot-empty, sdk.row-descriptor-mismatch, sdk.row-view-expired, sdk.cursor-thread-violation]
-    lifetime: [snapshot-handle-owns-immutable-data, row-view-expires-on-cursor-advance]
-    threading: [snapshot-handles-concurrent-readable, row-cursor-thread-affine]
-    versioning: [snapshot-id-binds-descriptor-digests-and-canonical-rows]
-    invariants: [publish-atomically-after-independent-row-validation, empty-distinct-from-error]
-    implementation_evidence: [src/sdk/relation.cpp, tests/unit/sdk/sdk_test.cpp]
+    errors: [sdk.snapshot-unknown-relation, sdk.snapshot-relation-mismatch, sdk.snapshot-empty, sdk.row-descriptor-mismatch, sdk.row-view-expired, sdk.cursor-thread-violation, store.backend-unavailable, store.claim-invalid, store.closure-binding-mismatch, store.closure-duplicate, store.closure-invalid, store.closure-subject-missing, store.compact-validation-failed, store.condition-universe-mismatch, store.corrupt, store.coverage-duplicate, store.coverage-invalid, store.current-ambiguous, store.current-corrupt, store.current-not-found, store.derived-basis-not-prior, store.draft-authority-mismatch, store.format-incompatible, store.hash-collision, store.legacy-mapping-mismatch, store.legacy-request-invalid, store.legacy-source-invalid, store.partial-partition-closure, store.partition-basis-mismatch, store.partition-claim-duplicate, store.partition-claim-mismatch, store.partition-duplicate, store.partition-invalid, store.partition-relation-unknown, store.publication-corrupt, store.publication-not-found, store.publish-stale-parent, store.registry-mismatch, store.selection-authority-incomplete, store.snapshot-not-found, store.sqlite-failure, store.sqlite-path-empty, store.transaction-state]
+    lifetime: [snapshot-handle-pins-immutable-physical-generation, row-view-expires-on-cursor-advance, owned-copy-outlives-cursor, legacy-adapter-is-one-way-and-removed-by-issue-72]
+    threading: [snapshot-store-and-handles-concurrent-readable, writer-and-row-cursor-thread-confined, publication-head-update-is-serialized]
+    versioning: [snapshot-identity-v1-excludes-publication-and-physical-format, sqlite-physical-format-v2, legacy-fact-store-v1-source-only]
+    invariants: [exact-seven-field-series-selector, stage-validate-publish-order, staged-data-invisible, stale-parent-rejected, failed-publish-preserves-head, partial-partition-never-closed, memory-and-sqlite-semantic-parity, canonical-export-ordered, corruption-never-falls-back, compaction-defers-pinned-generation-reclamation]
+    implementation_evidence: [src/sdk/store.cpp, src/store/ng_legacy_fact_store_adapter.cpp, examples/sdk/snapshot_store.cpp, tests/unit/sdk/store_test.cpp, tests/unit/store/fact_store_test.cpp, schemas/cxxlens_ng_snapshot_manifest.schema.yaml, schemas/cxxlens_ng_sqlite_store_contract.yaml, docs/design/adr/0013-ng-sqlite-physical-store.md]
 
   - id: public.logical-query
     status: implemented

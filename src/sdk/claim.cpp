@@ -1,9 +1,11 @@
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <ranges>
 #include <set>
 #include <sstream>
 #include <tuple>
+#include <type_traits>
 
 #include <cxxlens/sdk/claim.hpp>
 
@@ -43,29 +45,57 @@ namespace cxxlens::sdk
 				sha256_digest(value.substr(separator + 1U));
 		}
 
-		[[nodiscard]] std::string
-		typed_digest(std::string_view type, std::string_view domain, std::string_view bytes)
+		[[nodiscard]] bool partition_content_digest(const std::string_view value)
 		{
-			return std::string{type} + ':' + semantic_digest(domain, bytes);
+			return value.starts_with("partition-content:") && typed_sha256_digest(value);
 		}
 
-		[[nodiscard]] result<std::string> row_tuple(const detached_row& row,
-													std::span<const std::string> columns)
+		[[nodiscard]] canonical_value cell_value(const detached_cell& cell)
 		{
-			std::ostringstream output;
+			if (cell.state == cell_state::absent)
+				return canonical_value::null();
+			if (cell.state == cell_state::unknown)
+				return canonical_value::from_tuple(
+					{canonical_value::from_string("unknown"),
+					 canonical_value::from_string(cell.unknown_reason.value_or("unspecified"))});
+			if (!cell.value)
+				return canonical_value::null();
+			return std::visit(
+				[](const auto& value) -> canonical_value
+				{
+					using value_type = std::decay_t<decltype(value)>;
+					if constexpr (std::is_same_v<value_type, bool>)
+						return canonical_value::from_boolean(value);
+					else if constexpr (std::is_same_v<value_type, std::int64_t>)
+						return canonical_value::from_integer(value);
+					else if constexpr (std::is_same_v<value_type, std::uint64_t>)
+						return canonical_value::from_tuple(
+							{canonical_value::from_string("unsigned"),
+							 canonical_value::from_string(std::to_string(value))});
+					else if constexpr (std::is_same_v<value_type, std::string>)
+						return canonical_value::from_string(value);
+					else
+						return canonical_value::from_bytes(value);
+				},
+				*cell.value);
+		}
+
+		[[nodiscard]] result<canonical_value> row_tuple(const detached_row& row,
+														std::span<const std::string> columns)
+		{
+			std::vector<canonical_value> output;
+			output.reserve(columns.size());
 			for (const auto& column : columns)
 			{
 				const auto found = row.cells.find(column);
 				if (found == row.cells.end())
 				{
-					output << column.size() << ':' << column << "=7:omitted;";
+					output.push_back(canonical_value::null());
 					continue;
 				}
-				const auto cell = found->second.canonical_form();
-				output << column.size() << ':' << column << '=' << cell.size() << ':' << cell
-					   << ';';
+				output.push_back(cell_value(found->second));
 			}
-			return output.str();
+			return canonical_value::from_tuple(std::move(output));
 		}
 
 		[[nodiscard]] result<std::string> conflict_payload(const relation_descriptor& descriptor,
@@ -74,7 +104,8 @@ namespace cxxlens::sdk
 			auto tuple = row_tuple(row, descriptor.conflict_columns);
 			if (!tuple)
 				return unexpected(std::move(tuple.error()));
-			return semantic_digest("cxxlens.conflict-payload.v1", *tuple);
+			const std::array fields{*tuple};
+			return canonical_identity_digest("conflict-payload", fields);
 		}
 
 		[[nodiscard]] result<void> validate_basis(const claim_input_basis& basis,
@@ -91,7 +122,7 @@ namespace cxxlens::sdk
 				derived.consumed_partition_content_digests.empty() ||
 				!sorted_unique(derived.consumed_partition_content_digests) ||
 				!std::ranges::all_of(derived.consumed_partition_content_digests,
-									 typed_sha256_digest) ||
+									 partition_content_digest) ||
 				!sha256_digest(derived.transform_semantics))
 				return unexpected(claim_error("sdk.claim-basis-invalid", "derived"));
 			return {};
@@ -134,15 +165,25 @@ namespace cxxlens::sdk
 			claim output;
 			output.row = std::move(row);
 			output.descriptor = descriptor.id;
-			output.semantic_key = typed_digest(
-				"semantic-key", "cxxlens.semantic-key.v1", descriptor.id + "\n" + *key_tuple);
-			output.assertion = typed_digest("assertion",
-											"cxxlens.assertion.v1",
-											output.semantic_key + "\n" + presence.universe + "\n" +
-												presence.canonical_form() + "\n" + interpretation +
-												"\n" + producer.semantic_contract);
-			output.content = typed_digest(
-				"content", "cxxlens.claim-content.v1", output.assertion + "\n" + *payload_tuple);
+			const std::array key_fields{
+				canonical_value::from_string(descriptor.id),
+				canonical_value::from_integer(descriptor.semantic_major),
+				*key_tuple,
+			};
+			output.semantic_key = canonical_identity_digest("semantic-key", key_fields);
+			const std::array assertion_fields{
+				canonical_value::from_string(output.semantic_key),
+				canonical_value::from_string(presence.universe),
+				canonical_value::from_string(presence.canonical_form()),
+				canonical_value::from_string(interpretation),
+				canonical_value::from_string(producer.semantic_contract),
+			};
+			output.assertion = canonical_identity_digest("assertion", assertion_fields);
+			const std::array content_fields{
+				canonical_value::from_string(output.assertion),
+				*payload_tuple,
+			};
+			output.content = canonical_identity_digest("claim-content", content_fields);
 			output.presence = std::move(presence);
 			output.interpretation = std::move(interpretation);
 			output.stage = stage;
@@ -228,7 +269,8 @@ namespace cxxlens::sdk
 
 	std::string claim_condition::id() const
 	{
-		return typed_digest("condition", "cxxlens.condition.v1", canonical_form());
+		const std::array fields{canonical_value::from_string(canonical_form())};
+		return canonical_identity_digest("condition", fields);
 	}
 
 	result<std::vector<std::string>> claim_condition::overlap(const claim_condition& other) const
@@ -249,6 +291,36 @@ namespace cxxlens::sdk
 			!sorted_unique(verification_modalities))
 			return unexpected(claim_error("sdk.claim-guarantee-invalid", "guarantee"));
 		return {};
+	}
+
+	result<std::string> claim_input_basis_digest(const claim_input_basis& basis)
+	{
+		if (const auto* direct = std::get_if<direct_claim_basis>(&basis))
+		{
+			if (!sha256_digest(direct->basis_digest))
+				return unexpected(claim_error("sdk.claim-basis-invalid", "direct"));
+			const std::array fields{canonical_value::from_string(direct->basis_digest)};
+			const auto typed = canonical_identity_digest("producer-input-direct", fields);
+			return typed.substr(typed.find(':') + 1U);
+		}
+		const auto& derived = std::get<derived_claim_basis>(basis);
+		if (derived.input_snapshot.empty() || derived.consumed_partition_content_digests.empty() ||
+			!sorted_unique(derived.consumed_partition_content_digests) ||
+			!std::ranges::all_of(derived.consumed_partition_content_digests,
+								 partition_content_digest) ||
+			!sha256_digest(derived.transform_semantics))
+			return unexpected(claim_error("sdk.claim-basis-invalid", "derived"));
+		std::vector<canonical_value> consumed;
+		consumed.reserve(derived.consumed_partition_content_digests.size());
+		for (const auto& value : derived.consumed_partition_content_digests)
+			consumed.push_back(canonical_value::from_string(value));
+		const std::array fields{
+			canonical_value::from_string(derived.input_snapshot),
+			canonical_value::from_tuple(std::move(consumed)),
+			canonical_value::from_string(derived.transform_semantics),
+		};
+		const auto typed = canonical_identity_digest("producer-input-derived", fields);
+		return typed.substr(typed.find(':') + 1U);
 	}
 
 	result<claim> make_assertion(const relation_engine& engine, observation value)
@@ -296,25 +368,27 @@ namespace cxxlens::sdk
 									 std::span<const claim> inputs,
 									 observation output,
 									 std::string input_snapshot,
+									 std::vector<std::string> consumed_partition_content_digests,
 									 std::string transform_semantics)
 	{
 		if (inputs.empty())
 			return unexpected(claim_error("sdk.claim-basis-invalid", "inputs"));
-		std::vector<std::string> contents;
-		contents.reserve(inputs.size());
 		for (const auto& input : inputs)
 		{
 			if (auto valid = validate_claim(engine, input); !valid)
 				return unexpected(std::move(valid.error()));
-			contents.push_back(input.content);
 		}
-		std::ranges::sort(contents);
-		contents.erase(std::unique(contents.begin(), contents.end()), contents.end());
+		std::ranges::sort(consumed_partition_content_digests);
+		consumed_partition_content_digests.erase(
+			std::unique(consumed_partition_content_digests.begin(),
+						consumed_partition_content_digests.end()),
+			consumed_partition_content_digests.end());
 		auto relation = engine.require_id(output.row.descriptor_id);
 		if (!relation)
 			return unexpected(std::move(relation.error()));
-		derived_claim_basis basis{
-			std::move(input_snapshot), std::move(contents), std::move(transform_semantics)};
+		derived_claim_basis basis{std::move(input_snapshot),
+								  std::move(consumed_partition_content_digests),
+								  std::move(transform_semantics)};
 		return encode_claim(relation->descriptor(),
 							std::move(output.row),
 							std::move(output.presence),
