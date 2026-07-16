@@ -23,6 +23,7 @@
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/RecursiveASTVisitor.h>
+#include <clang/Basic/SourceManager.h>
 #include <clang/Index/USRGeneration.h>
 #include <llvm/ADT/SmallString.h>
 #endif
@@ -431,7 +432,7 @@ namespace cxxlens::detail::clang22
 		[[nodiscard]] std::string declaration_key(const clang::NamedDecl& declaration)
 		{
 			llvm::SmallString<256> storage;
-			const auto* canonical = declaration.getCanonicalDecl();
+			const auto* canonical = llvm::cast<clang::NamedDecl>(declaration.getCanonicalDecl());
 			if (!clang::index::generateUSRForDecl(canonical, storage) && !storage.empty())
 				return "clang-usr:" + storage.str().str();
 			return sdk::semantic_digest("clang22.declaration-fallback.v1",

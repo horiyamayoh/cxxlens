@@ -173,16 +173,15 @@ namespace cxxlens::provider::clang22
 		if (begin_location.isInvalid() || end_location.isInvalid() ||
 			!source_manager.isWrittenInSameFile(begin_location, end_location))
 			return sdk::unexpected(native_error("native.source-span-invalid", "range"));
-		const auto* entry =
-			source_manager.getFileEntryForID(source_manager.getFileID(begin_location));
-		if (entry == nullptr)
+		const auto filename = source_manager.getFilename(begin_location);
+		if (filename.empty())
 			return sdk::unexpected(native_error("native.source-span-invalid", "file"));
 		const auto begin = source_manager.getFileOffset(begin_location);
 		const auto end = source_manager.getFileOffset(end_location);
 		if (end < begin)
 			return sdk::unexpected(native_error("native.source-span-invalid", "offset"));
 		detached_source_span output;
-		output.logical_path = entry->getName().str();
+		output.logical_path = filename.str();
 		output.begin = begin;
 		output.end = end;
 		output.read_only = begin_location.isMacroID() || range.getBegin().isMacroID();
