@@ -37,6 +37,7 @@ EXPECTED_IMPLEMENTED_ENTRIES = {
     "public.claim-kernel",
     "public.snapshot-store",
     "public.logical-query",
+    "public.query-runtime",
     "public.provider-sdk",
     "public.native-provider-sdk",
     "public.recipe-foundation",
@@ -482,6 +483,67 @@ def validate_store_implementation(root: pathlib.Path) -> None:
             fail(f"snapshot/store acceptance marker is missing: {marker}")
 
 
+def validate_query_runtime_implementation(root: pathlib.Path) -> None:
+    header = (root / "include/cxxlens/sdk/query.hpp").read_text(encoding="utf-8")
+    source = (root / "src/sdk/query_execution.cpp").read_text(encoding="utf-8")
+    decoder = (root / "src/sdk/query_ir_decoder.cpp").read_text(encoding="utf-8")
+    cmake = (root / "CMakeLists.txt").read_text(encoding="utf-8")
+    test_cmake = (root / "tests/CMakeLists.txt").read_text(encoding="utf-8")
+    for marker in (
+        "decode_arguments",
+        "execution_budget",
+        "cancellation_probe",
+        "annotated_row",
+        "query_result",
+        "result_row_cursor",
+        "reference_engine",
+    ):
+        if marker not in header:
+            fail(f"query runtime public marker is missing: {marker}")
+    for marker in (
+        "cxxlens.reference-query-planner.v1",
+        "query.inner_join.v1",
+        "query.semi_join.v1",
+        "query.distinct.v1",
+        "sdk.query-output-budget",
+        "sdk.query-cancelled",
+        "inputs_complete",
+        "explain_physical",
+    ):
+        if marker not in source:
+            fail(f"query runtime implementation marker is missing: {marker}")
+    for marker in (
+        "duplicate-key",
+        "absent_if_schema_missing",
+        "sdk.query-argument-invalid",
+        "query.order_by.v1",
+    ):
+        if marker not in decoder:
+            fail(f"query IR decoder marker is missing: {marker}")
+    for path in ("src/sdk/query_execution.cpp", "src/sdk/query_ir_decoder.cpp"):
+        if path not in cmake:
+            fail(f"query runtime build evidence is missing: {path}")
+    if "query_execution" not in test_cmake:
+        fail("query runtime example build evidence is missing: query_execution")
+    schema_validate(
+        load_yaml(root / "schemas/cxxlens_ng_query_runtime_contract.yaml"),
+        load_yaml(root / "schemas/cxxlens_ng_query_runtime_contract.schema.yaml"),
+    )
+    jsonschema.Draft202012Validator.check_schema(
+        load_yaml(root / "schemas/cxxlens_ng_query_execution_result.schema.yaml")
+    )
+    test = (root / "tests/unit/sdk/query_runtime_test.cpp").read_text(encoding="utf-8")
+    for marker in (
+        "memory/SQLite semantic rows diverged",
+        "condition/interpretation-aware inner join diverged",
+        "physical index leaked into logical IR",
+        "cancellation did not return deterministic sealed partial result",
+        "successful execution was confused with complete/closed input",
+    ):
+        if marker not in test:
+            fail(f"query runtime acceptance marker is missing: {marker}")
+
+
 def validate(
     root: pathlib.Path, compiler: str, scaffold: str, doctor: str
 ) -> dict[str, Any]:
@@ -493,6 +555,7 @@ def validate(
     validate_cpp_query_ir(root, doctor)
     validate_cpp_provider_manifest(root, doctor)
     validate_store_implementation(root)
+    validate_query_runtime_implementation(root)
     return catalog
 
 

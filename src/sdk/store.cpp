@@ -399,6 +399,112 @@ namespace cxxlens::sdk
 			return output;
 		}
 
+		void encode_strings(binary_writer& writer, const std::span<const std::string> values)
+		{
+			writer.unsigned_value(values.size());
+			for (const auto& value : values)
+				writer.string(value);
+		}
+
+		[[nodiscard]] result<std::vector<std::string>> decode_strings(binary_reader& reader,
+																	  const std::string_view field)
+		{
+			auto count = reader.unsigned_value();
+			if (!count || *count > 1'000'000U)
+				return unexpected(store_error("store.corrupt", std::string{field}, "count"));
+			std::vector<std::string> output;
+			output.reserve(static_cast<std::size_t>(*count));
+			for (std::uint64_t index = 0U; index < *count; ++index)
+			{
+				auto value = reader.string();
+				if (!value)
+					return unexpected(std::move(value.error()));
+				output.push_back(std::move(*value));
+			}
+			return output;
+		}
+
+		void encode_condition(binary_writer& writer, const claim_condition& condition)
+		{
+			writer.string(condition.universe);
+			encode_strings(writer, condition.fragments);
+		}
+
+		[[nodiscard]] result<claim_condition> decode_condition(binary_reader& reader)
+		{
+			auto universe = reader.string();
+			auto fragments = decode_strings(reader, "condition-fragments");
+			if (!universe || !fragments)
+				return unexpected(store_error("store.corrupt", "condition", "payload"));
+			claim_condition output{std::move(*universe), std::move(*fragments)};
+			if (auto valid = output.validate(); !valid)
+				return unexpected(store_error("store.corrupt", "condition", valid.error().code));
+			return output;
+		}
+
+		void encode_guarantee(binary_writer& writer, const claim_guarantee& guarantee)
+		{
+			writer.string(guarantee.approximation);
+			writer.string(guarantee.scope);
+			writer.string(guarantee.assumptions);
+			encode_strings(writer, guarantee.verification_modalities);
+		}
+
+		[[nodiscard]] result<claim_guarantee> decode_guarantee(binary_reader& reader)
+		{
+			auto approximation = reader.string();
+			auto scope = reader.string();
+			auto assumptions = reader.string();
+			auto modalities = decode_strings(reader, "guarantee-modalities");
+			if (!approximation || !scope || !assumptions || !modalities)
+				return unexpected(store_error("store.corrupt", "guarantee", "payload"));
+			claim_guarantee output{std::move(*approximation),
+								   std::move(*scope),
+								   std::move(*assumptions),
+								   std::move(*modalities)};
+			if (auto valid = output.validate(); !valid)
+				return unexpected(store_error("store.corrupt", "guarantee", valid.error().code));
+			return output;
+		}
+
+		void encode_annotation(binary_writer& writer, const snapshot_claim_annotation& value)
+		{
+			encode_row(writer, value.row);
+			encode_condition(writer, value.presence);
+			writer.string(value.interpretation);
+			writer.string(value.semantic_key);
+			writer.string(value.assertion);
+			writer.string(value.content);
+			writer.string(value.provenance_root);
+			encode_guarantee(writer, value.guarantee);
+		}
+
+		[[nodiscard]] result<snapshot_claim_annotation>
+		decode_annotation(binary_reader& reader, const relation_descriptor& descriptor)
+		{
+			auto row = decode_row(reader);
+			auto condition = decode_condition(reader);
+			auto interpretation = reader.string();
+			auto semantic_key = reader.string();
+			auto assertion = reader.string();
+			auto content = reader.string();
+			auto provenance = reader.string();
+			auto guarantee = decode_guarantee(reader);
+			if (!row || !condition || !interpretation || !semantic_key || !assertion || !content ||
+				!provenance || !guarantee || !validate_row(descriptor, *row) ||
+				interpretation->empty() || semantic_key->empty() || assertion->empty() ||
+				content->empty() || provenance->empty())
+				return unexpected(store_error("store.corrupt", "claim-annotation", "validation"));
+			return snapshot_claim_annotation{std::move(*row),
+											 std::move(*condition),
+											 std::move(*interpretation),
+											 std::move(*semantic_key),
+											 std::move(*assertion),
+											 std::move(*content),
+											 std::move(*provenance),
+											 std::move(*guarantee)};
+		}
+
 		[[nodiscard]] std::string bytes_hex(const std::span<const std::byte> bytes)
 		{
 			static constexpr std::string_view digits{"0123456789abcdef"};
@@ -460,8 +566,12 @@ namespace cxxlens::sdk
 		publication_record publication_record_value;
 		std::map<std::string, relation_descriptor, std::less<>> descriptors;
 		std::map<std::string, std::vector<detached_row>, std::less<>> rows;
+		std::map<std::string, std::vector<snapshot_claim_annotation>, std::less<>> annotations;
+		std::vector<snapshot_query_coverage> coverage;
 		std::vector<std::string> claim_contents;
 		std::vector<unresolved_reference> unresolved;
+		std::string physical_backend;
+		bool query_annotations_available{};
 		std::shared_ptr<const std::uint64_t> generation_pin;
 	};
 
@@ -500,7 +610,7 @@ namespace cxxlens::sdk
 		[[nodiscard]] std::vector<std::byte> encode_snapshot(const snapshot_handle::data& value)
 		{
 			binary_writer writer;
-			writer.string("cxxlens.ng-snapshot-payload.v1");
+			writer.string("cxxlens.ng-snapshot-payload.v2");
 			const auto& manifest = value.semantic_manifest;
 			writer.string(manifest.schema);
 			writer.string(manifest.id);
@@ -559,6 +669,24 @@ namespace cxxlens::sdk
 					writer.string(column);
 				writer.string(unresolved.reason);
 			}
+			writer.boolean(value.query_annotations_available);
+			writer.unsigned_value(value.annotations.size());
+			for (const auto& [descriptor, annotations] : value.annotations)
+			{
+				writer.string(descriptor);
+				writer.unsigned_value(annotations.size());
+				for (const auto& annotation : annotations)
+					encode_annotation(writer, annotation);
+			}
+			writer.unsigned_value(value.coverage.size());
+			for (const auto& coverage : value.coverage)
+			{
+				writer.string(coverage.relation_descriptor_id);
+				writer.string(coverage.unit.domain);
+				writer.string(coverage.unit.key);
+				writer.string(coverage.unit.state);
+				writer.string(coverage.unit.reason);
+			}
 			return std::move(writer).finish();
 		}
 
@@ -567,8 +695,11 @@ namespace cxxlens::sdk
 		{
 			binary_reader reader{bytes};
 			auto magic = reader.string();
-			if (!magic || *magic != "cxxlens.ng-snapshot-payload.v1")
+			if (!magic ||
+				(*magic != "cxxlens.ng-snapshot-payload.v1" &&
+				 *magic != "cxxlens.ng-snapshot-payload.v2"))
 				return unexpected(store_error("store.corrupt", "payload", "format"));
+			const bool payload_v2 = *magic == "cxxlens.ng-snapshot-payload.v2";
 			auto value = std::make_shared<snapshot_handle::data>();
 			auto& manifest = value->semantic_manifest;
 			auto schema = reader.string();
@@ -715,6 +846,68 @@ namespace cxxlens::sdk
 					return unexpected(std::move(reason.error()));
 				unresolved.reason = std::move(*reason);
 				value->unresolved.push_back(std::move(unresolved));
+			}
+			if (payload_v2)
+			{
+				auto annotations_available = reader.boolean();
+				auto annotation_relation_count = reader.unsigned_value();
+				if (!annotations_available || !annotation_relation_count ||
+					*annotation_relation_count > 1'000'000U)
+					return unexpected(store_error("store.corrupt", "claim-annotations", "header"));
+				value->query_annotations_available = *annotations_available;
+				std::vector<std::string> annotation_contents;
+				for (std::uint64_t index = 0U; index < *annotation_relation_count; ++index)
+				{
+					auto descriptor_id = reader.string();
+					auto annotation_count = reader.unsigned_value();
+					if (!descriptor_id || !annotation_count || *annotation_count > 10'000'000U)
+						return unexpected(
+							store_error("store.corrupt", "claim-annotations", "relation"));
+					const auto descriptor = value->descriptors.find(*descriptor_id);
+					if (descriptor == value->descriptors.end())
+						return unexpected(store_error("store.registry-mismatch", *descriptor_id));
+					auto& annotations = value->annotations[*descriptor_id];
+					annotations.reserve(static_cast<std::size_t>(*annotation_count));
+					for (std::uint64_t annotation = 0U; annotation < *annotation_count;
+						 ++annotation)
+					{
+						auto decoded = decode_annotation(reader, descriptor->second);
+						if (!decoded || decoded->row.descriptor_id != *descriptor_id)
+							return unexpected(
+								store_error("store.corrupt", "claim-annotations", "value"));
+						annotation_contents.push_back(decoded->content);
+						annotations.push_back(std::move(*decoded));
+					}
+				}
+				auto coverage_count = reader.unsigned_value();
+				if (!coverage_count || *coverage_count > 10'000'000U)
+					return unexpected(store_error("store.corrupt", "coverage", "count"));
+				for (std::uint64_t index = 0U; index < *coverage_count; ++index)
+				{
+					auto descriptor = reader.string();
+					auto domain = reader.string();
+					auto key = reader.string();
+					auto state_value = reader.string();
+					auto reason = reader.string();
+					if (!descriptor || !domain || !key || !state_value || !reason ||
+						!value->descriptors.contains(*descriptor))
+						return unexpected(store_error("store.corrupt", "coverage", "value"));
+					snapshot_query_coverage coverage{std::move(*descriptor),
+													 {std::move(*domain),
+													  std::move(*key),
+													  std::move(*state_value),
+													  std::move(*reason)}};
+					if (auto valid = coverage.unit.validate(); !valid)
+						return unexpected(
+							store_error("store.corrupt", "coverage", valid.error().code));
+					value->coverage.push_back(std::move(coverage));
+				}
+				std::ranges::sort(annotation_contents);
+				if ((!value->query_annotations_available && !annotation_contents.empty()) ||
+					(value->query_annotations_available &&
+					 annotation_contents != value->claim_contents))
+					return unexpected(
+						store_error("store.corrupt", "claim-annotations", "content-set"));
 			}
 			if (!reader.finished() || manifest.schema != "cxxlens.snapshot-manifest.v1" ||
 				manifest.id != snapshot_identity(manifest) ||
@@ -866,6 +1059,51 @@ namespace cxxlens::sdk
 		static const std::vector<detached_row> empty_rows;
 		return row_cursor{data_, rows == data_->rows.end() ? &empty_rows : &rows->second};
 	}
+	result<claim_annotation_cursor>
+	snapshot_handle::open_claims(const std::string_view relation_descriptor_id) const
+	{
+		if (!data_)
+			return unexpected(store_error("sdk.snapshot-empty", "snapshot"));
+		if (!data_->query_annotations_available)
+			return unexpected(store_error("sdk.query-annotations-unavailable",
+										  std::string{relation_descriptor_id}));
+		if (!data_->descriptors.contains(relation_descriptor_id))
+			return unexpected(
+				store_error("sdk.snapshot-relation-mismatch", std::string{relation_descriptor_id}));
+		const auto found = data_->annotations.find(relation_descriptor_id);
+		static const std::vector<snapshot_claim_annotation> empty_annotations;
+		return claim_annotation_cursor{
+			data_, found == data_->annotations.end() ? &empty_annotations : &found->second};
+	}
+	result<relation_descriptor>
+	snapshot_handle::descriptor(const std::string_view relation_descriptor_id) const
+	{
+		if (!data_)
+			return unexpected(store_error("sdk.snapshot-empty", "snapshot"));
+		const auto found = data_->descriptors.find(relation_descriptor_id);
+		if (found == data_->descriptors.end())
+			return unexpected(
+				store_error("sdk.snapshot-relation-mismatch", std::string{relation_descriptor_id}));
+		return found->second;
+	}
+	std::span<const snapshot_query_coverage> snapshot_handle::input_coverage() const noexcept
+	{
+		return data_ ? std::span<const snapshot_query_coverage>{data_->coverage}
+					 : std::span<const snapshot_query_coverage>{};
+	}
+	std::span<const unresolved_reference> snapshot_handle::unresolved_items() const noexcept
+	{
+		return data_ ? std::span<const unresolved_reference>{data_->unresolved}
+					 : std::span<const unresolved_reference>{};
+	}
+	std::string_view snapshot_handle::physical_backend() const noexcept
+	{
+		return data_ ? std::string_view{data_->physical_backend} : std::string_view{};
+	}
+	bool snapshot_handle::query_annotations_available() const noexcept
+	{
+		return data_ && data_->query_annotations_available;
+	}
 	bool snapshot_handle::empty() const noexcept
 	{
 		return !data_;
@@ -898,6 +1136,38 @@ namespace cxxlens::sdk
 		if (rows_ == nullptr || index_ >= rows_->size())
 			return std::optional<row_view>{};
 		return std::optional<row_view>{row_view{&(*rows_)[index_++], generation_, *generation_}};
+	}
+
+	claim_annotation_view::claim_annotation_view(const snapshot_claim_annotation* value,
+												 std::weak_ptr<const std::uint64_t> generation,
+												 const std::uint64_t expected)
+		: value_{value}, generation_{std::move(generation)}, expected_{expected}
+	{
+	}
+	result<snapshot_claim_annotation> claim_annotation_view::copy() const
+	{
+		const auto current = generation_.lock();
+		if (!current || *current != expected_ || value_ == nullptr)
+			return unexpected(store_error("sdk.claim-annotation-view-expired", "claim_view"));
+		return *value_;
+	}
+	claim_annotation_cursor::claim_annotation_cursor(
+		std::shared_ptr<const snapshot_handle::data> snapshot,
+		const std::vector<snapshot_claim_annotation>* values)
+		: snapshot_{std::move(snapshot)}, values_{values}, owner_{std::this_thread::get_id()},
+		  generation_{std::make_shared<std::uint64_t>(0U)}
+	{
+	}
+	result<std::optional<claim_annotation_view>> claim_annotation_cursor::next()
+	{
+		if (owner_ != std::this_thread::get_id())
+			return unexpected(
+				store_error("sdk.claim-annotation-cursor-thread-violation", "cursor"));
+		++*generation_;
+		if (values_ == nullptr || index_ >= values_->size())
+			return std::optional<claim_annotation_view>{};
+		return std::optional<claim_annotation_view>{
+			claim_annotation_view{&(*values_)[index_++], generation_, *generation_}};
 	}
 } // namespace cxxlens::sdk
 
@@ -1165,6 +1435,7 @@ namespace cxxlens::sdk
 				}
 				auto token = std::make_shared<const std::uint64_t>(*physical);
 				(*decoded)->generation_pin = token;
+				(*decoded)->physical_backend = backend;
 				const bool collision = std::ranges::any_of(
 					publications,
 					[&](const auto& existing)
@@ -1366,6 +1637,8 @@ namespace cxxlens::sdk
 			data_->partitions.empty())
 			return unexpected(store_error("store.transaction-state", "validate"));
 		auto candidate = std::make_shared<snapshot_handle::data>();
+		candidate->physical_backend = data_->store->backend;
+		candidate->query_annotations_available = true;
 		auto& manifest = candidate->semantic_manifest;
 		manifest.snapshot_semantics_version = data_->draft.snapshot_semantics_version;
 		manifest.catalog_semantic_digest = data_->draft.catalog_semantic_digest;
@@ -1381,6 +1654,15 @@ namespace cxxlens::sdk
 			if (!drafts.emplace(built->partition_id, &partition).second)
 				return unexpected(store_error("store.partition-duplicate", built->partition_id));
 			manifest.partitions.push_back(*built);
+			auto relation = data_->store->engine.require_id(partition.relation_descriptor_id);
+			if (!relation)
+				return unexpected(std::move(relation.error()));
+			candidate->descriptors.emplace(partition.relation_descriptor_id,
+										   relation->descriptor());
+			candidate->rows.try_emplace(partition.relation_descriptor_id);
+			candidate->annotations.try_emplace(partition.relation_descriptor_id);
+			for (const auto& coverage : partition.coverage)
+				candidate->coverage.push_back({partition.relation_descriptor_id, coverage});
 			for (const auto& value : partition.claims)
 			{
 				if (const auto* derived = std::get_if<derived_claim_basis>(&value.input_basis))
@@ -1400,6 +1682,14 @@ namespace cxxlens::sdk
 							store_error("store.derived-basis-not-prior", value.content));
 				}
 				candidate->rows[value.descriptor].push_back(value.row);
+				candidate->annotations[value.descriptor].push_back({value.row,
+																	value.presence,
+																	value.interpretation,
+																	value.semantic_key,
+																	value.assertion,
+																	value.content,
+																	value.provenance_root,
+																	value.guarantee});
 				candidate->claim_contents.push_back(value.content);
 			}
 			candidate->unresolved.insert(candidate->unresolved.end(),
@@ -1432,6 +1722,20 @@ namespace cxxlens::sdk
 			return unexpected(store_error("store.closure-duplicate", "closures"));
 		std::ranges::sort(candidate->claim_contents);
 		std::ranges::sort(
+			candidate->coverage,
+			[](const snapshot_query_coverage& left, const snapshot_query_coverage& right)
+			{
+				return std::tie(left.relation_descriptor_id,
+								left.unit.domain,
+								left.unit.key,
+								left.unit.state,
+								left.unit.reason) < std::tie(right.relation_descriptor_id,
+															 right.unit.domain,
+															 right.unit.key,
+															 right.unit.state,
+															 right.unit.reason);
+			});
+		std::ranges::sort(
 			candidate->unresolved,
 			[](const unresolved_reference& left, const unresolved_reference& right)
 			{
@@ -1449,6 +1753,14 @@ namespace cxxlens::sdk
 							  {
 								  return left.canonical_form() < right.canonical_form();
 							  });
+			auto& annotations = candidate->annotations[descriptor];
+			std::ranges::sort(
+				annotations,
+				[](const snapshot_claim_annotation& left, const snapshot_claim_annotation& right)
+				{
+					return std::tie(left.content, left.assertion, left.provenance_root) <
+						std::tie(right.content, right.assertion, right.provenance_root);
+				});
 		}
 		manifest.id = snapshot_identity(manifest);
 		data_->candidate = std::move(candidate);

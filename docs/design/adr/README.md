@@ -15,6 +15,7 @@
 | [0011](0011-provider-trust-certification-discovery.md) | Accepted | provider trust, namespace, certification, discovery and sandbox contract | #65 |
 | [0012](0012-author-sdk-surface.md) | Accepted | typed/dynamic query と portable/native provider 作者向け SDK surface | #66 |
 | [0013](0013-ng-sqlite-physical-store.md) | Accepted | NG SQLite publication journal、canonical payload、v1 migration boundary | #68 |
+| [0014](0014-deterministic-reference-query-runtime.md) | Accepted | annotation-aware deterministic Logical Query runtime | #69 |
 
 identity、condition、truth/closure、protocol major、snapshot format、native lifetime、sandbox、determinism、
 license を変更する場合は新しい ADR が必要です。履歴文書は ADR の代わりになりません。

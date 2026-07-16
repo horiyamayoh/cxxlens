@@ -23,6 +23,7 @@ foreach(
     "${install_prefix}/include/cxxlens/interop/clang.hpp"
     "${install_prefix}/include/cxxlens/sdk.hpp"
     "${install_prefix}/include/cxxlens/sdk/provider.hpp"
+    "${install_prefix}/include/cxxlens/sdk/query.hpp"
     "${install_prefix}/include/cxxlens/sdk/store.hpp"
     "${install_prefix}/include/cxxlens/provider/clang22.hpp"
     "${install_prefix}/include/cxxlens/relations/cc_call_site.hpp"
@@ -36,6 +37,9 @@ foreach(
     "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_public_api_catalog.schema.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_sqlite_store_contract.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_sqlite_store_contract.schema.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_query_runtime_contract.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_query_runtime_contract.schema.yaml"
+    "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_query_execution_result.schema.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_phase_b_contract_integration.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_phase_b_contract_integration.schema.yaml"
     "${install_prefix}/share/cxxlens/schemas/cxxlens.agent-task-packet-corpus.v1.json"
@@ -71,6 +75,7 @@ foreach(
     "${install_prefix}/share/doc/cxxlens/examples/packages/interop.cpp"
     "${install_prefix}/share/doc/cxxlens/examples/sdk/typed_query.cpp"
     "${install_prefix}/share/doc/cxxlens/examples/sdk/snapshot_store.cpp"
+    "${install_prefix}/share/doc/cxxlens/examples/sdk/query_execution.cpp"
     "${install_prefix}/share/doc/cxxlens/README.md"
     "${install_prefix}/share/doc/cxxlens/SECURITY.md")
   if(NOT EXISTS "${required}")

@@ -4,7 +4,7 @@
     "conventions": "sha256:fa58fa2f23591eafac9f46eb91fcfab01063681e453065b62d34bdab3fca8af1",
     "ownership_registry": "sha256:797e6a52c4c941ed4225b761ee070f5f00af4c10661d2ebd519e874391eec342"
   },
-  "repository_paths_digest": "sha256:08ec630a643128083a0c2c24f313104b256e30ff1af075451d79165bd8782d1d",
+  "repository_paths_digest": "sha256:9eef3015bea47aecf33a8605be9fbe329a9ae05bda7473c15b32e65421819b8b",
   "reserved_paths": [
     {
       "access": "exclusive_write",
@@ -1192,7 +1192,7 @@
     }
   ],
   "schema": "cxxlens.agent-ownership.v1",
-  "semantic_digest": "sha256:65cd16e19fd506dd7828bfcf93c006d8a045a1ecb3d0a6757af5bfa7818c26b1",
+  "semantic_digest": "sha256:5b1e887e580f6910238735540c2d8c783f38d9fc3e5ec392216d66848caae9c5",
   "skeletons": [
     {
       "api_id": "API-CFG-001",
@@ -2942,7 +2942,7 @@
       "blocked": 0,
       "frozen": 124
     },
-    "tracked_path_count": 669,
+    "tracked_path_count": 677,
     "unit_count": 124
   },
   "task_packet_digest": "sha256:68bfa838af2de5910cfa1b4a0bf4dbc3a1d24eaa3f21fff1ec378dccff35176c",
@@ -3630,6 +3630,13 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.design",
+      "path": "docs/design/adr/0014-deterministic-reference-query-runtime.md"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.ng-documentation",
       "path": "docs/design/adr/README.md"
     },
@@ -4087,6 +4094,13 @@
       "generator_role": null,
       "owner_role": "steward.repository",
       "path": "examples/sdk/portable_provider.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
+      "path": "examples/sdk/query_execution.cpp"
     },
     {
       "access": "exclusive_write",
@@ -5128,6 +5142,27 @@
       "access": "exclusive_write",
       "generated": false,
       "generator_role": null,
+      "owner_role": "steward.query",
+      "path": "schemas/cxxlens_ng_query_execution_result.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.query",
+      "path": "schemas/cxxlens_ng_query_runtime_contract.schema.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.query",
+      "path": "schemas/cxxlens_ng_query_runtime_contract.yaml"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
       "owner_role": "steward.ng-relations",
       "path": "schemas/cxxlens_ng_relation_conformance_report.schema.yaml"
     },
@@ -6089,6 +6124,20 @@
       "generator_role": null,
       "owner_role": "steward.query",
       "path": "src/sdk/query.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.query",
+      "path": "src/sdk/query_execution.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.query",
+      "path": "src/sdk/query_ir_decoder.cpp"
     },
     {
       "access": "exclusive_write",
@@ -7125,6 +7174,13 @@
       "generator_role": null,
       "owner_role": "steward.runtime",
       "path": "tests/unit/runtime/runtime_ports_test.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.query",
+      "path": "tests/unit/sdk/query_runtime_test.cpp"
     },
     {
       "access": "exclusive_write",

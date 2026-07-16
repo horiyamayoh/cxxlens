@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.2.0
+document_version: 1.3.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -207,10 +207,13 @@ entries:
       - name: row_cursor
         kind: class
         signature: 'result<optional<row_view>> next()'
-    errors: [sdk.snapshot-unknown-relation, sdk.snapshot-relation-mismatch, sdk.snapshot-empty, sdk.row-descriptor-mismatch, sdk.row-view-expired, sdk.cursor-thread-violation, store.backend-unavailable, store.claim-invalid, store.closure-binding-mismatch, store.closure-duplicate, store.closure-invalid, store.closure-subject-missing, store.compact-validation-failed, store.condition-universe-mismatch, store.corrupt, store.coverage-duplicate, store.coverage-invalid, store.current-ambiguous, store.current-corrupt, store.current-not-found, store.derived-basis-not-prior, store.draft-authority-mismatch, store.format-incompatible, store.hash-collision, store.legacy-mapping-mismatch, store.legacy-request-invalid, store.legacy-source-invalid, store.partial-partition-closure, store.partition-basis-mismatch, store.partition-claim-duplicate, store.partition-claim-mismatch, store.partition-duplicate, store.partition-invalid, store.partition-relation-unknown, store.publication-corrupt, store.publication-not-found, store.publish-stale-parent, store.registry-mismatch, store.selection-authority-incomplete, store.snapshot-not-found, store.sqlite-failure, store.sqlite-path-empty, store.transaction-state]
-    lifetime: [snapshot-handle-pins-immutable-physical-generation, row-view-expires-on-cursor-advance, owned-copy-outlives-cursor, legacy-adapter-is-one-way-and-removed-by-issue-72]
-    threading: [snapshot-store-and-handles-concurrent-readable, writer-and-row-cursor-thread-confined, publication-head-update-is-serialized]
-    versioning: [snapshot-identity-v1-excludes-publication-and-physical-format, sqlite-physical-format-v2, legacy-fact-store-v1-source-only]
+      - name: claim_annotation_cursor
+        kind: class
+        signature: 'snapshot_handle::open_claims(relation_descriptor_id); result<optional<claim_annotation_view>> next(); copy()'
+    errors: [sdk.snapshot-unknown-relation, sdk.snapshot-relation-mismatch, sdk.snapshot-empty, sdk.row-descriptor-mismatch, sdk.row-view-expired, sdk.cursor-thread-violation, sdk.query-annotations-unavailable, sdk.claim-annotation-view-expired, sdk.claim-annotation-cursor-thread-violation, store.backend-unavailable, store.claim-invalid, store.closure-binding-mismatch, store.closure-duplicate, store.closure-invalid, store.closure-subject-missing, store.compact-validation-failed, store.condition-universe-mismatch, store.corrupt, store.coverage-duplicate, store.coverage-invalid, store.current-ambiguous, store.current-corrupt, store.current-not-found, store.derived-basis-not-prior, store.draft-authority-mismatch, store.format-incompatible, store.hash-collision, store.legacy-mapping-mismatch, store.legacy-request-invalid, store.legacy-source-invalid, store.partial-partition-closure, store.partition-basis-mismatch, store.partition-claim-duplicate, store.partition-claim-mismatch, store.partition-duplicate, store.partition-invalid, store.partition-relation-unknown, store.publication-corrupt, store.publication-not-found, store.publish-stale-parent, store.registry-mismatch, store.selection-authority-incomplete, store.snapshot-not-found, store.sqlite-failure, store.sqlite-path-empty, store.transaction-state]
+    lifetime: [snapshot-handle-pins-immutable-physical-generation, row-and-claim-annotation-views-expire-on-cursor-advance, owned-copy-outlives-cursor, legacy-adapter-is-one-way-and-removed-by-issue-72]
+    threading: [snapshot-store-and-handles-concurrent-readable, writer-row-cursor-and-claim-annotation-cursor-thread-confined, publication-head-update-is-serialized]
+    versioning: [snapshot-identity-v1-excludes-publication-and-physical-format, sqlite-physical-format-v2.1-with-query-annotation-payload-v2, payload-v1-query-rejected-without-synthesis, legacy-fact-store-v1-source-only]
     invariants: [exact-seven-field-series-selector, stage-validate-publish-order, staged-data-invisible, stale-parent-rejected, failed-publish-preserves-head, partial-partition-never-closed, memory-and-sqlite-semantic-parity, canonical-export-ordered, corruption-never-falls-back, compaction-defers-pinned-generation-reclamation]
     implementation_evidence: [src/sdk/store.cpp, src/store/ng_legacy_fact_store_adapter.cpp, examples/sdk/snapshot_store.cpp, tests/unit/sdk/store_test.cpp, tests/unit/store/fact_store_test.cpp, schemas/cxxlens_ng_snapshot_manifest.schema.yaml, schemas/cxxlens_ng_sqlite_store_contract.yaml, docs/design/adr/0013-ng-sqlite-physical-store.md]
 
@@ -235,7 +238,36 @@ entries:
     threading: [builders-are-thread-confined, completed-ir-is-value-owned]
     versioning: [logical-query-ir-version-is-independent, operator-ids-are-versioned]
     invariants: [typed-and-dynamic-paths-normalize-to-identical-ir, no-implicit-literal-coercion, limit-requires-total-order]
-    implementation_evidence: [src/sdk/query.cpp, examples/sdk/typed_query.cpp, examples/sdk/dynamic_query.cpp, tests/unit/sdk/sdk_test.cpp]
+    implementation_evidence: [src/sdk/query.cpp, src/sdk/query_ir_decoder.cpp, examples/sdk/typed_query.cpp, examples/sdk/dynamic_query.cpp, tests/unit/sdk/sdk_test.cpp]
+
+  - id: public.query-runtime
+    status: implemented
+    owner_issue: '#69'
+    profile: NG0
+    target: cxxlens::provider_sdk
+    headers: [include/cxxlens/sdk/query.hpp, include/cxxlens/sdk/store.hpp]
+    symbols:
+      - name: query.decode_arguments
+        kind: function
+        signature: 'result<operator_arguments> decode_arguments(const ir_node&)'
+      - name: query.reference_engine
+        kind: class
+        signature: 'static result<reference_engine> bind(snapshot_handle); result<query_result> execute(const logical_query_ir&, execution_request = {}) const'
+      - name: query.query_result
+        kind: class
+        signature: 'rows; execution; ordered; inputs_complete; closed; input_coverage; closure_ids; unresolved_items; conflicts; summary_guarantee; explain_logical; explain_physical; canonical_form'
+      - name: query.result_row_cursor
+        kind: class
+        signature: 'result<optional<result_row_view>> next(); result<annotated_row> result_row_view::copy() const'
+      - name: query.execution_controls
+        kind: value
+        signature: 'execution_budget; execution_request; execution_checkpoint; cancellation_probe; stop_token_cancellation'
+    errors: [sdk.query-argument-invalid, sdk.query-scan-requirement-missing, sdk.query-join-present-equality-required, sdk.query-filter-join-predicate, sdk.query-column-not-in-input, sdk.query-output-schema-mismatch, sdk.query-limit-unordered, sdk.query-multiplicity-overflow, sdk.query-row-invalid, sdk.query-row-view-expired, sdk.query-cursor-thread-violation, sdk.query-snapshot-empty, sdk.query-snapshot-schema-mismatch, sdk.query-annotations-unavailable, sdk.query-input-unresolved, sdk.query-scan-budget, sdk.query-intermediate-budget, sdk.query-memory-budget, sdk.query-output-budget, sdk.query-cancelled]
+    lifetime: [reference-engine-owns-snapshot-pin, query-result-owns-rows-and-side-channels, result-row-view-expires-on-cursor-advance, cancellation-probe-is-synchronously-borrowed]
+    threading: [reference-engine-and-query-result-are-concurrent-readable, execution-is-logically-immutable, result-row-cursor-is-thread-confined, cancellation-probe-must-be-noexcept]
+    versioning: [query-runtime-result-v1-independent-from-logical-ir-v1, reference-physical-plan-is-internal, runtime-budget-and-cancellation-excluded-from-ir-digest]
+    invariants: [all-11-ng0-operators-use-accepted-annotated-multiset-algebra, memory-and-sqlite-semantic-parity, physical-scan-order-unobservable, sql-null-unknown-conflict-not-coerced, budget-and-cancellation-return-canonical-sealed-prefix-only, success-input-complete-and-closed-are-distinct, logical-explain-excludes-physical-authority]
+    implementation_evidence: [src/sdk/query_execution.cpp, src/sdk/query_ir_decoder.cpp, examples/sdk/query_execution.cpp, tests/unit/sdk/query_runtime_test.cpp, schemas/cxxlens_ng_query_runtime_contract.yaml, schemas/cxxlens_ng_query_execution_result.schema.yaml, docs/design/adr/0014-deterministic-reference-query-runtime.md]
 
   - id: public.provider-sdk
     status: implemented

@@ -1,0 +1,104 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.query-runtime-contract.v1
+title: cxxlens deterministic query runtime contract
+type: object
+additionalProperties: false
+required:
+  - schema
+  - document_version
+  - maturity
+  - authority
+  - compatibility
+  - input
+  - planner
+  - execution
+  - budget
+  - cancellation
+  - result
+  - qualification
+properties:
+  schema: {const: cxxlens.query-runtime-contract.v1}
+  document_version: {const: 1.0.0}
+  maturity: {const: implemented}
+  authority: {$ref: '#/$defs/nonempty_object'}
+  compatibility: {$ref: '#/$defs/nonempty_object'}
+  input: {$ref: '#/$defs/nonempty_object'}
+  planner:
+    type: object
+    additionalProperties: false
+    required:
+      - id
+      - deterministic
+      - public_authority
+      - scan
+      - join
+      - distinct
+      - order
+      - physical_explain
+    properties:
+      id: {const: cxxlens.reference-query-planner.v1}
+      deterministic: {const: true}
+      public_authority: {const: false}
+      scan: {const: canonical-claim-content-order}
+      join: {const: bounded-reference-nested-loop}
+      distinct: {const: canonical-key-reduction}
+      order: {const: explicit-keys-plus-canonical-row-tie-break}
+      physical_explain: {$ref: '#/$defs/nonempty_object'}
+  execution:
+    type: object
+    additionalProperties: false
+    required:
+      - operators
+      - source_backends
+      - physical_arrival_order_observable
+      - cell_policy
+      - condition
+      - interpretation
+      - evidence
+      - guarantees
+    properties:
+      operators:
+        type: array
+        minItems: 11
+        maxItems: 11
+        uniqueItems: true
+        items: {type: string, pattern: '^query\.[a-z_]+\.v1$'}
+      source_backends:
+        const: [memory, sqlite]
+      physical_arrival_order_observable: {const: false}
+      cell_policy: {$ref: '#/$defs/nonempty_object'}
+      condition: {$ref: '#/$defs/nonempty_object'}
+      interpretation: {$ref: '#/$defs/nonempty_object'}
+      evidence: {$ref: '#/$defs/nonempty_object'}
+      guarantees: {$ref: '#/$defs/nonempty_object'}
+  budget: {$ref: '#/$defs/nonempty_object'}
+  cancellation: {$ref: '#/$defs/nonempty_object'}
+  result:
+    type: object
+    additionalProperties: false
+    required:
+      - schema
+      - row_cursor
+      - execution_statuses
+      - required_side_channels
+      - success_implies_input_complete
+      - success_implies_closed
+      - canonical_order
+    properties:
+      schema: {const: schemas/cxxlens_ng_query_execution_result.schema.yaml}
+      row_cursor: {$ref: '#/$defs/nonempty_object'}
+      execution_statuses:
+        const: [complete, truncated, cancelled_with_partial, failed_before_result]
+      required_side_channels:
+        type: array
+        minItems: 7
+        uniqueItems: true
+        items: {type: string, minLength: 1}
+      success_implies_input_complete: {const: false}
+      success_implies_closed: {const: false}
+      canonical_order: {$ref: '#/$defs/nonempty_object'}
+  qualification: {$ref: '#/$defs/nonempty_object'}
+$defs:
+  nonempty_object:
+    type: object
+    minProperties: 1

@@ -185,13 +185,23 @@ namespace cxxlens::sdk::query
 			if (found == nodes.end())
 				return "{}";
 			const auto& node = *found->second;
+			std::vector<std::string> inputs;
+			inputs.reserve(node.inputs.size());
+			for (const auto& input : node.inputs)
+				inputs.push_back(nested_node_json(input, nodes));
+			if (node.operator_id == "query.union.v1")
+				std::ranges::sort(inputs,
+								  [](const std::string& left, const std::string& right)
+								  {
+									  return plain_digest(left) < plain_digest(right);
+								  });
 			std::ostringstream output;
 			output << "{\"arguments\":" << node.arguments << ",\"inputs\":[";
-			for (std::size_t index = 0U; index < node.inputs.size(); ++index)
+			for (std::size_t index = 0U; index < inputs.size(); ++index)
 			{
 				if (index != 0U)
 					output << ',';
-				output << nested_node_json(node.inputs[index], nodes);
+				output << inputs[index];
 			}
 			output << "],\"operator\":" << json_string(node.operator_id) << '}';
 			return output.str();
@@ -200,6 +210,15 @@ namespace cxxlens::sdk::query
 		[[nodiscard]] bool compatible_literal(const value_type& column, const value_type& value)
 		{
 			return column.scalar == value.scalar && column.parameter == value.parameter;
+		}
+
+		[[nodiscard]] std::string literal_comparison_type(const value_type& column)
+		{
+			auto canonical = column.canonical_name();
+			constexpr std::string_view prefix = "optional<";
+			if (canonical.starts_with(prefix) && canonical.ends_with('>'))
+				return canonical.substr(prefix.size(), canonical.size() - prefix.size() - 1U);
+			return canonical;
 		}
 
 		void merge_requirements(std::vector<relation_descriptor>& destination,
@@ -212,6 +231,26 @@ namespace cxxlens::sdk::query
 					destination.push_back(descriptor);
 			}
 			std::ranges::sort(destination, {}, &relation_descriptor::id);
+		}
+
+		struct node_shape
+		{
+			std::set<std::string, std::less<>> columns;
+			bool ordered{};
+			std::vector<std::string> order_keys;
+		};
+
+		void collect_columns(const decoded_predicate& predicate,
+							 std::vector<ir_column_ref>& columns)
+		{
+			if (predicate.column)
+				columns.push_back(*predicate.column);
+			if (predicate.left)
+				columns.push_back(*predicate.left);
+			if (predicate.right)
+				columns.push_back(*predicate.right);
+			for (const auto& operand : predicate.operands)
+				collect_columns(operand, columns);
 		}
 	} // namespace
 
@@ -339,6 +378,11 @@ namespace cxxlens::sdk::query
 					query_error("sdk.query-duplicate-relation", descriptor.id));
 		}
 		std::set<std::string> node_ids;
+		std::map<std::string, node_shape, std::less<>> shapes;
+		std::map<std::string, column_descriptor, std::less<>> columns;
+		for (const auto& descriptor : relation_requirements)
+			for (const auto& column : descriptor.columns)
+				columns.emplace(column.id, column);
 		static const std::map<std::string, std::size_t, std::less<>> arities{
 			{"query.scan.v1", 0U},
 			{"query.filter.v1", 1U},
@@ -363,6 +407,128 @@ namespace cxxlens::sdk::query
 				node.arguments.size() < 2U || node.arguments.front() != '{' ||
 				node.arguments.back() != '}' || !node_ids.insert(node.id).second)
 				return cxxlens::sdk::unexpected(query_error("sdk.query-node-invalid", node.id));
+			auto arguments = decode_arguments(node);
+			if (!arguments)
+				return cxxlens::sdk::unexpected(std::move(arguments.error()));
+			std::vector<node_shape> inputs;
+			inputs.reserve(node.inputs.size());
+			for (const auto& input : node.inputs)
+				inputs.push_back(shapes.at(input));
+			node_shape shape;
+			if (node.operator_id == "query.scan.v1")
+			{
+				const auto& scan = std::get<scan_arguments>(*arguments);
+				const auto descriptor = std::ranges::find(
+					relation_requirements, scan.descriptor_id, &relation_descriptor::id);
+				if (descriptor == relation_requirements.end())
+					return cxxlens::sdk::unexpected(
+						query_error("sdk.query-scan-requirement-missing", scan.descriptor_id));
+				for (const auto& column : descriptor->columns)
+					shape.columns.insert(column.id);
+			}
+			else
+			{
+				shape = inputs.front();
+				if (const auto* predicate = std::get_if<predicate_arguments>(&*arguments))
+				{
+					if ((node.operator_id == "query.inner_join.v1" ||
+						 node.operator_id == "query.semi_join.v1") &&
+						predicate->predicate.kind != predicate_kind::column_equals_present)
+						return cxxlens::sdk::unexpected(
+							query_error("sdk.query-join-present-equality-required", node.id));
+					if (node.operator_id == "query.filter.v1" &&
+						predicate->predicate.kind == predicate_kind::column_equals_present)
+						return cxxlens::sdk::unexpected(
+							query_error("sdk.query-filter-join-predicate", node.id));
+					std::vector<ir_column_ref> references;
+					collect_columns(predicate->predicate, references);
+					std::set<std::string, std::less<>> available = inputs.front().columns;
+					if (inputs.size() == 2U)
+						available.insert(inputs[1].columns.begin(), inputs[1].columns.end());
+					for (const auto& reference : references)
+						if (!available.contains(reference.column_id) &&
+							reference.availability == column_availability::require)
+							return cxxlens::sdk::unexpected(
+								query_error("sdk.query-column-not-in-input", reference.column_id));
+					if (predicate->predicate.literal_value && predicate->predicate.column)
+					{
+						const auto found = columns.find(predicate->predicate.column->column_id);
+						if (found == columns.end() ||
+							literal_comparison_type(found->second.type) !=
+								predicate->predicate.literal_value->type)
+							return cxxlens::sdk::unexpected(
+								query_error("sdk.query-literal-type-mismatch",
+											predicate->predicate.column->column_id));
+					}
+				}
+				if (node.operator_id == "query.inner_join.v1" ||
+					node.operator_id == "query.semi_join.v1")
+				{
+					if (node.operator_id == "query.inner_join.v1")
+						shape.columns.insert(inputs[1].columns.begin(), inputs[1].columns.end());
+					shape.ordered =
+						node.operator_id == "query.semi_join.v1" && inputs.front().ordered;
+					if (shape.ordered)
+						shape.order_keys = inputs.front().order_keys;
+					else
+						shape.order_keys.clear();
+				}
+				else if (node.operator_id == "query.union.v1")
+				{
+					if (inputs.front().columns != inputs[1].columns)
+						return cxxlens::sdk::unexpected(
+							query_error("sdk.query-union-schema-mismatch", node.id));
+					shape.ordered = false;
+					shape.order_keys.clear();
+				}
+				else if (node.operator_id == "query.distinct.v1")
+				{
+					shape.ordered = false;
+					shape.order_keys.clear();
+				}
+				else if (node.operator_id == "query.project.v1")
+				{
+					const auto& project = std::get<project_arguments>(*arguments);
+					node_shape projected;
+					std::map<std::string, std::string, std::less<>> mapping;
+					for (const auto& item : project.columns)
+					{
+						if (!inputs.front().columns.contains(item.column.column_id) &&
+							item.column.availability == column_availability::require)
+							return cxxlens::sdk::unexpected(query_error(
+								"sdk.query-column-not-in-input", item.column.column_id));
+						projected.columns.insert(item.output);
+						mapping.emplace(item.column.column_id, item.output);
+					}
+					projected.ordered = inputs.front().ordered &&
+						std::ranges::all_of(inputs.front().order_keys,
+											[&](const std::string& key)
+											{
+												return mapping.contains(key);
+											});
+					if (projected.ordered)
+						for (const auto& key : inputs.front().order_keys)
+							projected.order_keys.push_back(mapping.at(key));
+					shape = std::move(projected);
+				}
+				else if (node.operator_id == "query.order_by.v1")
+				{
+					const auto& order = std::get<order_arguments>(*arguments);
+					shape.ordered = true;
+					shape.order_keys.clear();
+					for (const auto& key : order.keys)
+					{
+						if (!shape.columns.contains(key.column.column_id))
+							return cxxlens::sdk::unexpected(
+								query_error("sdk.query-column-not-in-input", key.column.column_id));
+						shape.order_keys.push_back(key.column.column_id);
+					}
+				}
+				else if (node.operator_id == "query.limit.v1" && !inputs.front().ordered)
+					return cxxlens::sdk::unexpected(
+						query_error("sdk.query-limit-unordered", node.id));
+			}
+			shapes.emplace(node.id, std::move(shape));
 		}
 		if (!node_ids.contains(root))
 			return cxxlens::sdk::unexpected(query_error("sdk.query-root-missing", root));
@@ -370,6 +536,21 @@ namespace cxxlens::sdk::query
 			if (!descriptors.contains(column.descriptor_id))
 				return cxxlens::sdk::unexpected(
 					query_error("sdk.query-output-column-foreign", column.column_id));
+		const bool projected =
+			std::ranges::any_of(nodes,
+								[](const ir_node& node)
+								{
+									return node.operator_id == "query.project.v1";
+								});
+		std::set<std::string, std::less<>> expected;
+		if (projected)
+			for (const auto& alias : output_aliases(output_schema))
+				expected.insert("output." + alias);
+		else
+			for (const auto& column : output_schema)
+				expected.insert(column.column_id);
+		if (shapes.at(root).columns != expected)
+			return cxxlens::sdk::unexpected(query_error("sdk.query-output-schema-mismatch", root));
 		return {};
 	}
 

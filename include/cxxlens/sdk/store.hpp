@@ -6,6 +6,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -162,7 +163,29 @@ namespace cxxlens::sdk
 		bool migration_required{};
 	};
 
+	/** @brief Query-visible claim projection preserving semantics beyond the detached row. */
+	struct snapshot_claim_annotation
+	{
+		detached_row row;
+		claim_condition presence;
+		std::string interpretation;
+		std::string semantic_key;
+		std::string assertion;
+		std::string content;
+		std::string provenance_root;
+		claim_guarantee guarantee;
+	};
+
+	/** @brief Coverage unit paired with the relation partition that produced it. */
+	struct snapshot_query_coverage
+	{
+		std::string relation_descriptor_id;
+		snapshot_coverage_unit unit;
+		[[nodiscard]] bool operator==(const snapshot_query_coverage&) const = default;
+	};
+
 	class row_cursor;
+	class claim_annotation_cursor;
 	class snapshot_writer;
 
 	/** @brief Immutable concurrent-readable snapshot pinning one physical generation. */
@@ -174,6 +197,21 @@ namespace cxxlens::sdk
 		[[nodiscard]] const snapshot_manifest& manifest() const;
 		[[nodiscard]] const publication_record& publication() const;
 		[[nodiscard]] result<row_cursor> open(const dynamic_relation& relation) const;
+		/** @brief Open deterministic query annotations for one exact relation descriptor. */
+		[[nodiscard]] result<claim_annotation_cursor>
+		open_claims(std::string_view relation_descriptor_id) const;
+		/** @brief Return the exact descriptor embedded in this immutable snapshot. */
+		[[nodiscard]] result<relation_descriptor>
+		descriptor(std::string_view relation_descriptor_id) const;
+		/** @brief Publication-scoped coverage retained independently from semantic identity. */
+		[[nodiscard]] std::span<const snapshot_query_coverage> input_coverage() const noexcept;
+		/** @brief Publication-scoped unresolved inputs; never synthesized as empty coverage. */
+		[[nodiscard]] std::span<const unresolved_reference> unresolved_items() const noexcept;
+		/** @brief Physical backend label for non-authoritative physical explanation only. */
+		[[nodiscard]] std::string_view physical_backend() const noexcept;
+		/** @brief Whether this payload contains exact query annotations rather than legacy rows
+		 * only. */
+		[[nodiscard]] bool query_annotations_available() const noexcept;
 		[[nodiscard]] bool empty() const noexcept;
 
 	  private:
@@ -182,6 +220,43 @@ namespace cxxlens::sdk
 		friend class snapshot_store;
 		friend class snapshot_builder;
 		friend class snapshot_writer;
+	};
+
+	/** @brief Cursor-scoped claim annotation invalidated by cursor advance. */
+	class claim_annotation_view
+	{
+	  public:
+		[[nodiscard]] result<snapshot_claim_annotation> copy() const;
+
+	  private:
+		claim_annotation_view(const snapshot_claim_annotation* value,
+							  std::weak_ptr<const std::uint64_t> generation,
+							  std::uint64_t expected);
+		const snapshot_claim_annotation* value_{};
+		std::weak_ptr<const std::uint64_t> generation_;
+		std::uint64_t expected_{};
+		friend class claim_annotation_cursor;
+	};
+
+	/** @brief Thread-affine cursor over deterministic claim-content order. */
+	class claim_annotation_cursor
+	{
+	  public:
+		claim_annotation_cursor(claim_annotation_cursor&&) noexcept = default;
+		claim_annotation_cursor& operator=(claim_annotation_cursor&&) noexcept = default;
+		claim_annotation_cursor(const claim_annotation_cursor&) = delete;
+		claim_annotation_cursor& operator=(const claim_annotation_cursor&) = delete;
+		[[nodiscard]] result<std::optional<claim_annotation_view>> next();
+
+	  private:
+		claim_annotation_cursor(std::shared_ptr<const snapshot_handle::data> snapshot,
+								const std::vector<snapshot_claim_annotation>* values);
+		std::shared_ptr<const snapshot_handle::data> snapshot_;
+		const std::vector<snapshot_claim_annotation>* values_{};
+		std::size_t index_{};
+		std::thread::id owner_;
+		std::shared_ptr<std::uint64_t> generation_;
+		friend class snapshot_handle;
 	};
 
 	/** @brief Cursor-scoped row view invalidated by cursor advance. */

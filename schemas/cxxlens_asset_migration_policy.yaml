@@ -283,6 +283,15 @@ overrides:
       authority: normative
       replacement: null
       removal_issue: null
+  - path: docs/design/adr/0014-deterministic-reference-query-runtime.md
+    record:
+      disposition: inherit
+      status: active
+      owner: steward.ng-query
+      profile: NG0
+      authority: normative
+      replacement: null
+      removal_issue: null
   - path: docs/design/SHA256SUMS
     record:
       disposition: inherit
@@ -424,6 +433,12 @@ overrides:
   - path: schemas/cxxlens_ng_query_conformance_vectors.schema.yaml
     record: *ng_query_contract
   - path: schemas/cxxlens_ng_query_conformance_report.schema.yaml
+    record: *ng_query_contract
+  - path: schemas/cxxlens_ng_query_runtime_contract.yaml
+    record: *ng_query_contract
+  - path: schemas/cxxlens_ng_query_runtime_contract.schema.yaml
+    record: *ng_query_contract
+  - path: schemas/cxxlens_ng_query_execution_result.schema.yaml
     record: *ng_query_contract
   - path: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
     record: &ng_semantic_contract
@@ -713,6 +728,10 @@ overrides:
     record: *ng_sdk_implementation
   - path: src/sdk/query.cpp
     record: *ng_sdk_implementation
+  - path: src/sdk/query_execution.cpp
+    record: *ng_sdk_implementation
+  - path: src/sdk/query_ir_decoder.cpp
+    record: *ng_sdk_implementation
   - path: src/sdk/provider.cpp
     record: *ng_sdk_implementation
   - path: src/sdk/testing.cpp
@@ -752,6 +771,8 @@ overrides:
     record: *ng_sdk_implementation
   - path: examples/sdk/snapshot_store.cpp
     record: *ng_sdk_implementation
+  - path: examples/sdk/query_execution.cpp
+    record: *ng_sdk_implementation
   - path: examples/sdk/negative/generated_unknown_column.cpp
     record: *ng_sdk_implementation
   - path: examples/sdk/negative/dynamic_literal_type_mismatch.cpp
@@ -767,6 +788,8 @@ overrides:
   - path: tests/unit/sdk/sdk_test.cpp
     record: *ng_sdk_implementation
   - path: tests/unit/sdk/store_test.cpp
+    record: *ng_sdk_implementation
+  - path: tests/unit/sdk/query_runtime_test.cpp
     record: *ng_sdk_implementation
   - path: tests/public_headers/sdk_header_test.cpp
     record: *ng_sdk_implementation
@@ -799,6 +822,7 @@ drift:
     - docs/design/adr/0011-provider-trust-certification-discovery.md
     - docs/design/adr/0012-author-sdk-surface.md
     - docs/design/adr/0013-ng-sqlite-physical-store.md
+    - docs/design/adr/0014-deterministic-reference-query-runtime.md
     - docs/design/adr/README.md
     - docs/design/catalogs/README.md
     - docs/design/cxxlens_next_generation_integrated_design_ja.md

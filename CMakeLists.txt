@@ -47,6 +47,8 @@ add_library(
   src/sdk/common.cpp
   src/sdk/provider.cpp
   src/sdk/query.cpp
+  src/sdk/query_execution.cpp
+  src/sdk/query_ir_decoder.cpp
   src/sdk/recipe.cpp
   src/sdk/relation.cpp
   src/sdk/store.cpp
@@ -266,6 +268,9 @@ install(
         schemas/cxxlens_ng_query_conformance_vectors.yaml
         schemas/cxxlens_ng_query_conformance_vectors.schema.yaml
         schemas/cxxlens_ng_query_conformance_report.schema.yaml
+        schemas/cxxlens_ng_query_runtime_contract.yaml
+        schemas/cxxlens_ng_query_runtime_contract.schema.yaml
+        schemas/cxxlens_ng_query_execution_result.schema.yaml
         schemas/cxxlens_ng_semantic_guarantee_contract.yaml
         schemas/cxxlens_ng_semantic_guarantee_contract.schema.yaml
         schemas/cxxlens_ng_semantic_metadata.schema.yaml

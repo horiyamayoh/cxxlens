@@ -15,14 +15,16 @@ NG semantic contract の authority が再び混在する。
 
 ## Decision
 
-NG SQLite format は `cxxlens.sqlite-semantic-store.v2` とし、次の hybrid を採用する。
+NG SQLite format は `cxxlens.sqlite-semantic-store.v2` とし、次の hybrid を採用する。Issue #69 で physical
+minor を 2.1.0 へ進め、payload v2 に query annotation projection を追加した。
 
 - `cxxlens_ng_metadata` は physical format version を保持する。
 - `cxxlens_ng_publication` は publication ID、exact series ID、semantic snapshot ID、monotonic sequence、physical
   generation、parent、state、checksum、versioned canonical payload を保持する。
 - series/sequence index は exact head lookup のためだけに使い、scan/page order を semantic order にしない。
-- payload は pointer-free detached rows と manifest projection を length-prefixed binary で格納し、open 時に full
-  SHA-256 checksum と semantic snapshot digest を再計算する。
+- payload は pointer-free detached rows、manifest projection、query 用 claim annotation を length-prefixed binary
+  で格納し、open 時に full SHA-256 checksum と semantic snapshot digest を再計算する。payload v1 は row read の
+  ために読めるが、condition/interpretation/provenance/guarantee を推測せず query execution を拒否する。
 - publication は WAL、`synchronous=FULL`、`BEGIN IMMEDIATE` により atomic に書く。memory head は database commit
   成功後だけ更新する。
 - compaction は payload を新 physical generation へ copy-on-write し、既存 handle が pin する generation は

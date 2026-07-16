@@ -7,6 +7,7 @@ exact-contract issue が個別の versioned schema、validator、positive/negati
 |---|---|---|---|
 | Relation Registry | `schemas/cxxlens_ng_relation_registry.yaml` | #60 | accepted exact contract |
 | Logical Query Contract | `schemas/cxxlens_ng_logical_query_contract.yaml` | #61 | accepted exact contract |
+| Query Runtime Contract | `schemas/cxxlens_ng_query_runtime_contract.yaml` | #69 | implemented reference runtime |
 | Semantic Guarantee Contract | `schemas/cxxlens_ng_semantic_guarantee_contract.yaml` | #62 | accepted exact contract |
 | Snapshot / Store Contract | `schemas/cxxlens_ng_snapshot_store_contract.yaml` | #63 | accepted exact contract |
 | NG SQLite Physical Store | `schemas/cxxlens_ng_sqlite_store_contract.yaml` | #68 | implemented physical contract |
@@ -70,6 +71,11 @@ Issue #68 は同 catalog を 1.2.0 へ進め、canonical tuple identity、immuta
 publication series、in-memory/SQLite backend、CAS publication、reader generation pin、copy-on-write compaction、
 corrupt-current fail-closed recovery、旧 v1 fact store の一方向 mapper boundary を実装しました。SQLite の物理 schema
 は ADR 0013 に隔離され、path、backend、page/order、publication sequence は semantic snapshot ID に入りません。
+
+Issue #69 は同 catalog を 1.3.0 へ進め、exact IR argument decoder、snapshot claim annotation cursor、
+deterministic reference planner/executor、annotated query result cursor、budget/cancellation、coverage/unresolved/
+conflict/guarantee と logical/physical explain を production SDK に追加しました。memory/SQLite は同じ Logical
+Query IR と semantic rows を返し、physical backend 情報は logical authority へ入りません。
 
 残る `maturity: bootstrap` catalog は acceptance manifest であり、名前空間、version axis、owner issue、依存関係の入口だけを固定します。
 entry の `status: contract-pending` は実装、stable API、release support を意味しません。各 owner issue が exact

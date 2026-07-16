@@ -1,0 +1,112 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.query-execution-result.v1
+title: cxxlens deterministic query execution result
+type: object
+additionalProperties: false
+required:
+  - schema
+  - logical_ir_digest
+  - snapshot_id
+  - publication_id
+  - status
+  - ordered
+  - rows
+  - input_coverage
+  - closure_ids
+  - unresolved
+  - conflicts
+  - summary_guarantee
+  - inputs_complete
+  - closed
+  - logical_explanation
+  - physical_explanation
+properties:
+  schema: {const: cxxlens.query-execution-result.v1}
+  logical_ir_digest: {$ref: '#/$defs/digest'}
+  snapshot_id: {$ref: '#/$defs/typed_digest'}
+  publication_id: {$ref: '#/$defs/typed_digest'}
+  status:
+    enum: [complete, truncated, cancelled_with_partial, failed_before_result]
+  ordered: {type: boolean}
+  rows:
+    type: array
+    items: {$ref: '#/$defs/row'}
+  input_coverage:
+    type: array
+    items: {$ref: '#/$defs/coverage'}
+  closure_ids:
+    type: array
+    uniqueItems: true
+    items: {$ref: '#/$defs/typed_digest'}
+  unresolved:
+    type: array
+    items: {$ref: '#/$defs/unresolved'}
+  conflicts: {type: array}
+  summary_guarantee: {$ref: '#/$defs/guarantee'}
+  inputs_complete: {type: boolean}
+  closed: {type: boolean}
+  logical_explanation: {$ref: '#/$defs/explanation'}
+  physical_explanation: {$ref: '#/$defs/explanation'}
+$defs:
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  typed_digest:
+    type: string
+    pattern: '^[a-z][a-z0-9_.-]*:sha256:[0-9a-f]{64}$'
+  string_set:
+    type: array
+    uniqueItems: true
+    items: {type: string, minLength: 1}
+  row:
+    type: object
+    additionalProperties: false
+    required:
+      - values
+      - multiplicity
+      - condition_universe
+      - condition_fragments
+      - interpretation
+      - claim_contributors
+      - provenance
+    properties:
+      values: {type: object}
+      multiplicity: {type: integer, minimum: 1}
+      condition_universe: {type: string, minLength: 1}
+      condition_fragments: {$ref: '#/$defs/string_set'}
+      interpretation: {type: string, minLength: 1}
+      claim_contributors: {$ref: '#/$defs/string_set'}
+      provenance: {$ref: '#/$defs/string_set'}
+  coverage:
+    type: object
+    additionalProperties: false
+    required: [relation, domain, key, state, reason]
+    properties:
+      relation: {type: string, minLength: 1}
+      domain: {type: string, minLength: 1}
+      key: {type: string, minLength: 1}
+      state: {type: string, minLength: 1}
+      reason: {type: string}
+  unresolved:
+    type: object
+    additionalProperties: false
+    required: [code, subject, detail]
+    properties:
+      code: {type: string, pattern: '^sdk\.query-[a-z0-9-]+$'}
+      subject: {type: string}
+      detail: {type: string}
+  guarantee:
+    type: object
+    additionalProperties: false
+    required: [approximation, scope, assumptions, verification_modalities]
+    properties:
+      approximation:
+        enum: [unknown, under_approximation, over_approximation, exact]
+      scope: {type: string, minLength: 1}
+      assumptions: {type: string, minLength: 1}
+      verification_modalities: {$ref: '#/$defs/string_set'}
+  explanation:
+    type: object
+    additionalProperties: false
+    required: [id, text]
+    properties:
+      id: {type: string, minLength: 1}
+      text: {type: string, minLength: 1}

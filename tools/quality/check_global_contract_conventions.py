@@ -35,6 +35,8 @@ LEGACY_OWNERSHIP_SCHEMA_EXCLUSIONS = {
     "cxxlens_ng_logical_query_ir.schema.yaml",
     "cxxlens_ng_query_conformance_report.schema.yaml",
     "cxxlens_ng_query_conformance_vectors.schema.yaml",
+    "cxxlens_ng_query_execution_result.schema.yaml",
+    "cxxlens_ng_query_runtime_contract.schema.yaml",
     "cxxlens_ng_provider_conformance_report.schema.yaml",
     "cxxlens_ng_provider_conformance_vectors.schema.yaml",
     "cxxlens_ng_provider_fuzz_corpus.schema.yaml",

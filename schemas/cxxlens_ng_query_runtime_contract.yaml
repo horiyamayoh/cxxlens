@@ -1,0 +1,148 @@
+schema: cxxlens.query-runtime-contract.v1
+document_version: 1.0.0
+maturity: implemented
+authority:
+  logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
+  guarantee_contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
+  snapshot_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
+  decision_adr: docs/design/adr/0014-deterministic-reference-query-runtime.md
+  owner_issue: '#69'
+  owner: steward.ng-query-runtime
+compatibility:
+  version_axis: query-runtime-result
+  current: 1.0.0
+  logical_ir_axis_independent: true
+  physical_plan_stability: internal-only
+input:
+  snapshot:
+    kind: immutable-published-snapshot-handle
+    required_projection:
+      - detached-row
+      - condition
+      - interpretation
+      - semantic-key
+      - assertion-contributor
+      - claim-content
+      - provenance-root
+      - guarantee
+    legacy_payload_without_annotations: reject-query-not-synthesize
+  logical_ir:
+    version: 1.0.0
+    validation: exact-operator-arguments-column-shape-and-order
+    argument_decoder: typed-fail-closed
+  runtime_request:
+    excluded_from_logical_digest: true
+    fields:
+      - max_rows_scanned
+      - max_rows_output
+      - max_intermediate_rows
+      - max_memory_bytes
+      - cancellation
+planner:
+  id: cxxlens.reference-query-planner.v1
+  deterministic: true
+  public_authority: false
+  scan: canonical-claim-content-order
+  join: bounded-reference-nested-loop
+  distinct: canonical-key-reduction
+  order: explicit-keys-plus-canonical-row-tie-break
+  physical_explain:
+    observable: true
+    semantic_identity: false
+    forbidden_in_logical_ir:
+      - backend
+      - index
+      - join_algorithm
+      - spill
+      - page_order
+execution:
+  operators:
+    - query.scan.v1
+    - query.filter.v1
+    - query.project.v1
+    - query.inner_join.v1
+    - query.semi_join.v1
+    - query.union.v1
+    - query.distinct.v1
+    - query.order_by.v1
+    - query.limit.v1
+    - query.condition_restrict.v1
+    - query.interpretation_restrict.v1
+  source_backends: [memory, sqlite]
+  physical_arrival_order_observable: false
+  cell_policy:
+    states: [present, absent, unknown]
+    sql_null_coercion: forbidden
+    unknown_to_false: forbidden
+    conflict_to_boolean: forbidden
+  condition:
+    join: exact-universe-intersection
+    distinct: union-within-values-universe-interpretation-key
+  interpretation:
+    join: exact-id-only
+  evidence:
+    join: canonical-set-union
+    semi_join: left-plus-all-compatible-witnesses
+    distinct: canonical-set-union
+  guarantees:
+    composition: conservative-componentwise-meet
+    incomplete_or_partial_exact_upgrade: forbidden
+budget:
+  zero_is_valid_empty_budget: true
+  scan_or_intermediate_exhaustion:
+    rows: []
+    status: failed_before_result
+    unresolved: required
+  output_exhaustion:
+    ordered: total-order-prefix
+    unordered: canonical-semantic-prefix
+    status: truncated
+    unresolved: required
+cancellation:
+  probe_lifetime: synchronous-borrowed
+  checkpoints: [before-execution, before-publish-row]
+  before_execution:
+    rows: []
+    status: failed_before_result
+  after_logical_completion:
+    zero_published_rows: failed_before_result
+    positive_sealed_prefix: cancelled_with_partial
+  unresolved: required
+  physical_schedule_independent: true
+result:
+  schema: schemas/cxxlens_ng_query_execution_result.schema.yaml
+  row_cursor:
+    thread_affine: true
+    view_lifetime: until-next-advance
+    owned_copy: detached
+  execution_statuses:
+    - complete
+    - truncated
+    - cancelled_with_partial
+    - failed_before_result
+  required_side_channels:
+    - input_coverage
+    - closure_ids
+    - unresolved
+    - conflicts
+    - summary_guarantee
+    - logical_explanation
+    - physical_explanation
+  success_implies_input_complete: false
+  success_implies_closed: false
+  canonical_order:
+    ordered_query: declared-total-order
+    unordered_query: canonical-annotated-row-order
+qualification:
+  backends: [memory, sqlite]
+  input_orders: [forward, reverse, seeded-shuffle]
+  comparisons:
+    - logical_ir_digest
+    - canonical_semantic_rows
+    - execution_status
+    - input_coverage
+    - unresolved
+    - summary_guarantee
+  static_dynamic_digest_equal: required
+  root_relocation: required
+  installed_consumers: [static, shared]

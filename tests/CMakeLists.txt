@@ -65,6 +65,17 @@ set_tests_properties(
   unit.sdk-store PROPERTIES LABELS
                             "unit;sdk;store;sqlite;determinism;transaction")
 
+add_executable(cxxlens-unit-sdk-query-runtime unit/sdk/query_runtime_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-query-runtime
+                      PRIVATE cxxlens::provider_sdk)
+target_compile_features(cxxlens-unit-sdk-query-runtime PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens-unit-sdk-query-runtime)
+add_test(NAME unit.sdk-query-runtime COMMAND cxxlens-unit-sdk-query-runtime)
+set_tests_properties(
+  unit.sdk-query-runtime
+  PROPERTIES LABELS
+             "unit;sdk;query;store;sqlite;determinism;budget;cancellation")
+
 add_executable(cxxlens-public-header-sdk public_headers/sdk_header_test.cpp)
 target_link_libraries(cxxlens-public-header-sdk PRIVATE cxxlens::provider_sdk)
 target_compile_features(cxxlens-public-header-sdk PRIVATE cxx_std_23)
@@ -85,8 +96,15 @@ add_test(NAME public-api.provider-clang22-header
 set_tests_properties(public-api.provider-clang22-header
                      PROPERTIES LABELS "public-api;native-sdk;clang22")
 
-foreach(example IN ITEMS typed_query dynamic_query portable_provider recipe
-                         relation_claim_batch snapshot_store)
+foreach(
+  example IN
+  ITEMS typed_query
+        dynamic_query
+        portable_provider
+        recipe
+        relation_claim_batch
+        snapshot_store
+        query_execution)
   set(target_name "cxxlens-sdk-example-${example}")
   add_executable(${target_name}
                  "${PROJECT_SOURCE_DIR}/examples/sdk/${example}.cpp")
@@ -127,12 +145,14 @@ add_dependencies(
   cxxlens-sdk-test-binaries
   cxxlens-public-header-provider-clang22
   cxxlens-public-header-sdk
+  cxxlens-unit-sdk-query-runtime
   cxxlens-sdk-example-clang22-native
   cxxlens-sdk-example-dynamic_query
   cxxlens-sdk-example-portable_provider
   cxxlens-sdk-example-recipe
   cxxlens-sdk-example-relation_claim_batch
   cxxlens-sdk-example-snapshot_store
+  cxxlens-sdk-example-query_execution
   cxxlens-sdk-example-typed_query
   cxxlens-sdk-negative-dynamic_literal_type_mismatch
   cxxlens-sdk-negative-invalid_recipe

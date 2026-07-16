@@ -77,3 +77,10 @@ generation、condition universe、registry、interpretation policy、trust polic
 
 SQLite の path、publication sequence、physical generation は semantic ID に含まれません。current head の破損や
 stale parent は structured error となり、別 series や prior publication への暗黙 fallback は行いません。
+
+## Deterministic query execution
+
+[query_execution.cpp](../../examples/sdk/query_execution.cpp) は typed Logical Query IR を immutable snapshot に bind
+し、memory/SQLite の両 backend で同じ annotated semantic rows を得る reference runtime の最小例です。query
+result は execution success と input completeness/closure を分離し、coverage、unresolved、guarantee、logical/
+physical explain を保持します。
