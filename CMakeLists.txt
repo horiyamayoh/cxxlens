@@ -43,6 +43,7 @@ endif()
 add_library(
   cxxlens_provider_sdk
   ${CXXLENS_LIBRARY_TYPE}
+  src/sdk/claim.cpp
   src/sdk/common.cpp
   src/sdk/provider.cpp
   src/sdk/query.cpp

@@ -3,6 +3,7 @@
 /** @file sdk.hpp @brief LLVM-free umbrella for relation, query, provider, recipe, and test authors.
  */
 
+#include <cxxlens/sdk/claim.hpp>
 #include <cxxlens/sdk/common.hpp>
 #include <cxxlens/sdk/provider.hpp>
 #include <cxxlens/sdk/query.hpp>

@@ -1,5 +1,5 @@
 {
-  "asset_count": 670,
+  "asset_count": 676,
   "assets": [
     {
       "authority": "operational",
@@ -1643,6 +1643,16 @@
     },
     {
       "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-recipes",
+      "path": "examples/sdk/relation_claim_batch.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "docs/tutorials/README.md",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
       "disposition": "inherit",
       "owner": "steward.ng-sdk",
       "path": "examples/sdk/typed_query.cpp",
@@ -1823,6 +1833,16 @@
     },
     {
       "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/relations/cc_call_direct_target.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
       "disposition": "inherit",
       "owner": "steward.ng-sdk",
       "path": "include/cxxlens/relations/cc_call_site.hpp",
@@ -1830,6 +1850,26 @@
       "removal_issue": null,
       "replacement": null,
       "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/relations/cc_entity.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/relations/company_lock_acquire.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
     },
     {
       "authority": "implementation",
@@ -1870,6 +1910,16 @@
       "removal_issue": null,
       "replacement": null,
       "status": "active"
+    },
+    {
+      "authority": "implementation",
+      "disposition": "replace",
+      "owner": "steward.ng-public-api",
+      "path": "include/cxxlens/sdk/claim.hpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": "schemas/cxxlens_ng_public_api_catalog.yaml",
+      "status": "planned"
     },
     {
       "authority": "implementation",
@@ -4433,6 +4483,16 @@
     },
     {
       "authority": "implementation",
+      "disposition": "migrate",
+      "owner": "steward.ng-kernel",
+      "path": "src/sdk/claim.cpp",
+      "profile": "migration",
+      "removal_issue": "#72",
+      "replacement": null,
+      "status": "planned"
+    },
+    {
+      "authority": "implementation",
       "disposition": "inherit",
       "owner": "steward.ng-sdk",
       "path": "src/sdk/common.cpp",
@@ -6706,8 +6766,8 @@
     "archive": 37,
     "delete": 22,
     "inherit": 157,
-    "migrate": 388,
-    "replace": 66
+    "migrate": 389,
+    "replace": 71
   },
   "document_version": "1.0.0",
   "generated_by": "tools/quality/check_documentation_consistency.py",

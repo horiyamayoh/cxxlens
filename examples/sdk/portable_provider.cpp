@@ -7,20 +7,27 @@ namespace
 	[[nodiscard]] cxxlens::sdk::relation_descriptor descriptor()
 	{
 		cxxlens::sdk::relation_descriptor value;
-		value.id = "company.lock.acquire.v1";
-		value.name = "company.lock.acquire";
+		value.id = "company.example.lock_observation.v1";
+		value.name = "company.example.lock_observation";
 		value.version = {1U, 0U, 0U};
 		value.semantic_major = 1U;
+		value.semantics = "company.example.lock-observation/1";
+		value.owner_namespace = "company.example";
 		value.columns = {
-			{"company.lock.acquire.v1.lock",
+			{"company.example.lock_observation.v1.lock",
 			 "lock",
 			 {cxxlens::sdk::scalar_kind::typed_id, "lock_id", false},
-			 true},
-			{"company.lock.acquire.v1.mode",
+			 true,
+			 cxxlens::sdk::column_role::claim_key},
+			{"company.example.lock_observation.v1.mode",
 			 "mode",
 			 {cxxlens::sdk::scalar_kind::utf8_string, {}, false},
-			 true},
+			 true,
+			 cxxlens::sdk::column_role::authoritative_payload},
 		};
+		value.key_columns = {"company.example.lock_observation.v1.lock"};
+		value.merge = cxxlens::sdk::merge_mode::functional_assertion;
+		value.conflict_columns = {"company.example.lock_observation.v1.mode"};
 		value.descriptor_digest =
 			cxxlens::sdk::semantic_digest("cxxlens.relation-descriptor.v1", value.canonical_form());
 		return value;
@@ -45,13 +52,13 @@ namespace
 				return begun;
 			cxxlens::sdk::row_builder builder{descriptor()};
 			if (auto set = builder.set({descriptor().id,
-										"company.lock.acquire.v1.lock",
+										"company.example.lock_observation.v1.lock",
 										{cxxlens::sdk::scalar_kind::typed_id, "lock_id", false}},
 									   cxxlens::sdk::detached_cell::typed("lock_id", "lock:main"));
 				!set)
 				return set;
 			if (auto set = builder.set({descriptor().id,
-										"company.lock.acquire.v1.mode",
+										"company.example.lock_observation.v1.mode",
 										{cxxlens::sdk::scalar_kind::utf8_string, {}, false}},
 									   cxxlens::sdk::detached_cell::utf8("exclusive"));
 				!set)

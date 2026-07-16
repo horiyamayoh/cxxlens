@@ -7,7 +7,10 @@
 #include <vector>
 
 #include <cxxlens/provider/clang22.hpp>
+#include <cxxlens/relations/cc_call_direct_target.hpp>
 #include <cxxlens/relations/cc_call_site.hpp>
+#include <cxxlens/relations/cc_entity.hpp>
+#include <cxxlens/relations/company_lock_acquire.hpp>
 #include <cxxlens/sdk.hpp>
 
 namespace
@@ -93,6 +96,121 @@ namespace
 		return std::move(*row);
 	}
 
+	[[nodiscard]] cxxlens::sdk::relation_descriptor
+	make_merge_descriptor(std::string name, const cxxlens::sdk::merge_mode mode)
+	{
+		cxxlens::sdk::relation_descriptor descriptor;
+		descriptor.id = name + ".v1";
+		descriptor.name = std::move(name);
+		descriptor.version = {1U, 0U, 0U};
+		descriptor.semantic_major = 1U;
+		descriptor.semantics = descriptor.name + "/1";
+		descriptor.owner_namespace = "company.test";
+		descriptor.columns = {
+			{descriptor.id + ".key",
+			 "key",
+			 {cxxlens::sdk::scalar_kind::typed_id, "company_test_id", false},
+			 true,
+			 cxxlens::sdk::column_role::claim_key},
+			{descriptor.id + ".value",
+			 "value",
+			 {cxxlens::sdk::scalar_kind::utf8_string, {}, false},
+			 true,
+			 cxxlens::sdk::column_role::authoritative_payload},
+		};
+		descriptor.key_columns = {descriptor.id + ".key"};
+		descriptor.merge = mode;
+		descriptor.conflict_columns = {descriptor.id + ".value"};
+		descriptor.descriptor_digest = cxxlens::sdk::semantic_digest(
+			"cxxlens.relation-descriptor.v1", descriptor.canonical_form());
+		return descriptor;
+	}
+
+	[[nodiscard]] cxxlens::sdk::relation_descriptor
+	make_target_descriptor(std::string name, std::string column_name, std::string type)
+	{
+		cxxlens::sdk::relation_descriptor descriptor;
+		descriptor.id = name + ".v1";
+		descriptor.name = std::move(name);
+		descriptor.version = {1U, 0U, 0U};
+		descriptor.semantic_major = 1U;
+		descriptor.semantics = descriptor.name + "/1";
+		descriptor.owner_namespace = "cxxlens.standard";
+		const auto column_id = descriptor.id + '.' + column_name;
+		descriptor.columns = {{column_id,
+							   std::move(column_name),
+							   {cxxlens::sdk::scalar_kind::typed_id, std::move(type), false},
+							   true,
+							   cxxlens::sdk::column_role::claim_key}};
+		descriptor.key_columns = {column_id};
+		descriptor.merge = cxxlens::sdk::merge_mode::set;
+		descriptor.descriptor_digest = cxxlens::sdk::semantic_digest(
+			"cxxlens.relation-descriptor.v1", descriptor.canonical_form());
+		return descriptor;
+	}
+
+	[[nodiscard]] cxxlens::sdk::detached_row make_merge_row(
+		const cxxlens::sdk::relation_descriptor& descriptor, std::string key, std::string value)
+	{
+		cxxlens::sdk::row_builder builder{descriptor};
+		require(builder
+					.set({descriptor.id,
+						  descriptor.id + ".key",
+						  {cxxlens::sdk::scalar_kind::typed_id, "company_test_id", false}},
+						 cxxlens::sdk::detached_cell::typed("company_test_id", std::move(key)))
+					.has_value(),
+				"merge key rejected");
+		require(builder
+					.set({descriptor.id,
+						  descriptor.id + ".value",
+						  {cxxlens::sdk::scalar_kind::utf8_string, {}, false}},
+						 cxxlens::sdk::detached_cell::utf8(std::move(value)))
+					.has_value(),
+				"merge value rejected");
+		auto row = std::move(builder).finish();
+		require(row.has_value(), "merge row did not finish");
+		return std::move(*row);
+	}
+
+	[[nodiscard]] cxxlens::sdk::observation
+	observe(cxxlens::sdk::detached_row row,
+			std::vector<std::string> fragments = {"all"},
+			std::string interpretation = "company.test.domain")
+	{
+		return {std::move(row),
+				{"build.universe", std::move(fragments)},
+				std::move(interpretation),
+				{"company.test.provider", "company.test.provider-semantics.v1"},
+				{"sha256:0000000000000000000000000000000000000000000000000000000000000000"},
+				"evidence:root",
+				{"exact", "project", "assumptions:none", {"schema_validated"}}};
+	}
+
+	[[nodiscard]] cxxlens::sdk::detached_row make_direct_target_row(std::string target)
+	{
+		using relation = cxxlens::cc::relations::call_direct_target;
+		relation::builder builder;
+		require(
+			builder.set<relation::call>(cxxlens::sdk::detached_cell::typed("cc_call_id", "call:1"))
+				.has_value(),
+			"direct target call rejected");
+		require(builder
+					.set<relation::target>(
+						cxxlens::sdk::detached_cell::typed("cc_entity_id", std::move(target)))
+					.has_value(),
+				"direct target entity rejected");
+		require(builder
+					.set<relation::resolution>(string_cell({cxxlens::sdk::scalar_kind::open_symbol,
+															"cc.direct-target-resolution/1",
+															false},
+														   "syntactic"))
+					.has_value(),
+				"direct target resolution rejected");
+		auto row = std::move(builder).finish();
+		require(row.has_value(), "direct target row did not finish");
+		return std::move(*row);
+	}
+
 	void check_digest()
 	{
 		const std::vector<std::byte> empty;
@@ -106,6 +224,14 @@ namespace
 		using relation = cxxlens::cc::relations::call_site;
 		auto typed = cxxlens::sdk::query::from<relation>();
 		cxxlens::sdk::relation_registry registry;
+		require(registry
+					.add(make_target_descriptor(
+						"build.compile_unit", "compile_unit", "compile_unit_id"))
+					.has_value(),
+				"compile-unit descriptor rejected");
+		require(registry.add(make_target_descriptor("source.span", "span", "source_span_id"))
+					.has_value(),
+				"source-span descriptor rejected");
 		require(registry.add(relation::descriptor()).has_value(), "descriptor registration failed");
 		auto dynamic_relation = registry.require("cc.call_site", 1U);
 		require(dynamic_relation.has_value(), "dynamic relation missing");
@@ -230,6 +356,205 @@ namespace
 					cancelled->reason_code == "provider.cancelled",
 				"provider harness fault matrix diverged");
 	}
+
+	void check_relation_engine_and_claim_kernel()
+	{
+		using cxxlens::sdk::merge_mode;
+		cxxlens::sdk::relation_registry registry;
+		require(registry
+					.add(make_target_descriptor(
+						"build.compile_unit", "compile_unit", "compile_unit_id"))
+					.has_value(),
+				"compile-unit descriptor rejected");
+		require(registry.add(make_target_descriptor("source.span", "span", "source_span_id"))
+					.has_value(),
+				"source-span descriptor rejected");
+		require(registry.add(cxxlens::cc::relations::entity::descriptor()).has_value(),
+				"entity descriptor rejected");
+		require(registry.add(cxxlens::cc::relations::call_site::descriptor()).has_value(),
+				"call-site descriptor rejected");
+		require(registry.add(cxxlens::cc::relations::call_direct_target::descriptor()).has_value(),
+				"direct-target descriptor rejected");
+		require(registry.add(cxxlens::company::relations::lock_acquire::descriptor()).has_value(),
+				"external descriptor rejected");
+		std::array descriptors{
+			make_merge_descriptor("company.test.set", merge_mode::set),
+			make_merge_descriptor("company.test.multiset", merge_mode::multiset),
+			make_merge_descriptor("company.test.functional", merge_mode::functional_assertion),
+			make_merge_descriptor("company.test.keyed_union", merge_mode::keyed_union),
+		};
+		for (const auto& descriptor : descriptors)
+			require(registry.add(descriptor).has_value(), "merge descriptor rejected");
+
+		auto registry_copy = registry;
+		auto engine = registry.build("engine-generation-1");
+		require(engine && !engine->registry_digest().empty() && registry.frozen(),
+				"registry did not publish an immutable engine");
+		auto late = registry.add(make_merge_descriptor("company.test.late", merge_mode::set));
+		require(!late && late.error().code == "sdk.registry-frozen",
+				"registry mutation after engine build was accepted");
+		auto late_copy =
+			registry_copy.add(make_merge_descriptor("company.test.late-copy", merge_mode::set));
+		require(!late_copy && late_copy.error().code == "sdk.registry-frozen",
+				"a registry copy escaped engine-build freezing");
+		auto dynamic = engine->require("cc.call_site", 1U);
+		require(dynamic &&
+					dynamic->descriptor().descriptor_digest ==
+						cxxlens::cc::relations::call_site::descriptor().descriptor_digest,
+				"static/dynamic descriptor digest diverged");
+		auto universe_mismatch = cxxlens::sdk::claim_condition{"universe:a", {"all"}}.overlap(
+			cxxlens::sdk::claim_condition{"universe:b", {"all"}});
+		require(!universe_mismatch &&
+					universe_mismatch.error().code == "sdk.condition-universe-mismatch",
+				"different condition universes were silently compared");
+
+		auto first =
+			cxxlens::sdk::make_assertion(*engine, observe(make_direct_target_row("entity:a")));
+		auto repeated =
+			cxxlens::sdk::make_assertion(*engine, observe(make_direct_target_row("entity:a")));
+		require(first && repeated && first->semantic_key == repeated->semantic_key &&
+					first->assertion == repeated->assertion && first->content == repeated->content,
+				"claim identity depended on arrival, jobs, or runtime root");
+		auto malformed_observation = observe(make_direct_target_row("entity:a"));
+		malformed_observation.input_basis.basis_digest = "sha256:not-a-digest";
+		auto malformed = cxxlens::sdk::make_assertion(*engine, std::move(malformed_observation));
+		require(!malformed && malformed.error().code == "sdk.claim-basis-invalid",
+				"malformed direct claim basis was accepted");
+		auto tampered = *first;
+		tampered.content.back() = tampered.content.back() == '0' ? '1' : '0';
+		auto tampered_result = cxxlens::sdk::validate_claim(*engine, tampered);
+		require(!tampered_result && tampered_result.error().code == "sdk.claim-identity-mismatch",
+				"tampered claim identity was accepted");
+		const auto call_row_for_view = make_call_row();
+		cxxlens::cc::relations::call_site::view typed_view{call_row_for_view};
+		auto absent_caller = typed_view.get<cxxlens::cc::relations::call_site::caller>();
+		require(absent_caller && absent_caller->state == cxxlens::sdk::cell_state::absent,
+				"typed view collapsed an optional absent cell into failure");
+		auto canonical = cxxlens::sdk::make_canonical_claim(
+			*engine,
+			*first,
+			{"company.test.canonicalizer", "company.test.canonicalizer.v1"},
+			make_direct_target_row("entity:a"),
+			"sha256:1111111111111111111111111111111111111111111111111111111111111111");
+		require(canonical && canonical->stage == cxxlens::sdk::claim_stage::canonical_claim &&
+					cxxlens::sdk::validate_claim(*engine, *canonical).has_value(),
+				"canonical claim stage failed independent validation");
+		const std::array canonical_inputs{*canonical};
+		auto derived = cxxlens::sdk::make_derived_claim(
+			*engine,
+			canonical_inputs,
+			observe(make_direct_target_row("entity:a")),
+			"snapshot:1",
+			"sha256:2222222222222222222222222222222222222222222222222222222222222222");
+		require(derived && derived->stage == cxxlens::sdk::claim_stage::derived_claim &&
+					cxxlens::sdk::validate_claim(*engine, *derived).has_value(),
+				"derived claim stage failed independent validation");
+
+		auto call = cxxlens::sdk::make_assertion(
+			*engine, observe(make_call_row(), {"all", "asan", "debug", "release"}));
+		require(call.has_value(), "call-site assertion rejected");
+		cxxlens::sdk::claim_batch hard_missing;
+		require(hard_missing.add(*first).has_value(), "hard-reference candidate rejected");
+		auto rejected = std::move(hard_missing).commit(*engine);
+		require(!rejected && rejected.error().code == "sdk.hard-reference-missing",
+				"hard missing reference did not reject the batch");
+
+		cxxlens::sdk::claim_batch soft_missing;
+		require(soft_missing.add(*first).has_value(), "soft-reference candidate rejected");
+		const std::array existing_call{*call};
+		auto accepted = std::move(soft_missing).commit(*engine, existing_call);
+		require(accepted && accepted->claims.size() == 1U && accepted->unresolved.size() == 1U &&
+					accepted->unresolved.front().target_relation == "cc.entity",
+				"soft missing reference did not preserve row and unresolved evidence");
+
+		auto overlap_a = cxxlens::sdk::make_assertion(
+			*engine, observe(make_direct_target_row("entity:a"), {"debug", "release"}));
+		auto overlap_b = cxxlens::sdk::make_assertion(
+			*engine, observe(make_direct_target_row("entity:b"), {"release"}));
+		auto same_payload = cxxlens::sdk::make_assertion(
+			*engine, observe(make_direct_target_row("entity:a"), {"release"}));
+		auto disjoint = cxxlens::sdk::make_assertion(
+			*engine, observe(make_direct_target_row("entity:c"), {"asan"}));
+		auto other_domain = cxxlens::sdk::make_assertion(
+			*engine,
+			observe(make_direct_target_row("entity:d"), {"release"}, "company.other.domain"));
+		auto other_call = cxxlens::sdk::make_assertion(
+			*engine,
+			observe(make_call_row(), {"all", "asan", "debug", "release"}, "company.other.domain"));
+		require(overlap_a && overlap_b && same_payload && disjoint && other_domain && other_call,
+				"functional claims could not be constructed");
+		cxxlens::sdk::claim_batch matching_payload;
+		require(matching_payload.add(*overlap_a) && matching_payload.add(*same_payload),
+				"matching payload claims were rejected");
+		auto matching = std::move(matching_payload).commit(*engine, existing_call);
+		require(matching && matching->conflicts.empty(),
+				"condition-dependent content IDs caused a false payload conflict");
+		cxxlens::sdk::claim_batch comparisons;
+		for (const auto* value : {&*overlap_a, &*overlap_b, &*disjoint, &*other_domain})
+			require(comparisons.add(*value).has_value(), "comparison claim rejected");
+		const std::array comparison_targets{*call, *other_call};
+		auto compared = std::move(comparisons).commit(*engine, comparison_targets);
+		require(compared && compared->conflicts.size() == 1U &&
+					compared->conflicts.front().overlap_fragments ==
+						std::vector<std::string>{"release"} &&
+					compared->differential_disagreements.size() == 2U,
+				"condition overlap or interpretation-domain disagreement was misclassified: "
+				"conflicts=" +
+					std::to_string(compared ? compared->conflicts.size() : 999U) +
+					", differential=" +
+					std::to_string(compared ? compared->differential_disagreements.size() : 999U));
+
+		for (const auto& descriptor : descriptors)
+		{
+			auto left = cxxlens::sdk::make_assertion(
+				*engine, observe(make_merge_row(descriptor, "key:1", "value")));
+			auto right = cxxlens::sdk::make_assertion(
+				*engine, observe(make_merge_row(descriptor, "key:1", "value")));
+			require(left && right, "merge-mode assertions rejected");
+			cxxlens::sdk::claim_batch batch;
+			require(batch.add(*left).has_value() && batch.add(*right).has_value(),
+					"merge-mode batch rejected");
+			auto result = std::move(batch).commit(*engine);
+			const auto expected = descriptor.merge == merge_mode::multiset ? 2U : 1U;
+			require(result && result->claims.size() == expected, "merge law was not applied");
+		}
+
+		auto native = make_merge_descriptor("company.test.native", merge_mode::set);
+		native.columns.back().type = {cxxlens::sdk::scalar_kind::typed_id, "native_pointer", false};
+		native.descriptor_digest = cxxlens::sdk::semantic_digest("cxxlens.relation-descriptor.v1",
+																 native.canonical_form());
+		cxxlens::sdk::relation_registry native_registry;
+		auto native_rejected = native_registry.add(std::move(native));
+		require(!native_rejected && native_rejected.error().code == "sdk.native-address-payload",
+				"native pointer/address payload type was accepted");
+
+		auto cycle_a = make_merge_descriptor("company.test.cycle_a", merge_mode::set);
+		auto cycle_b = make_merge_descriptor("company.test.cycle_b", merge_mode::set);
+		cycle_a.references = {{{cycle_a.id + ".key"},
+							   cycle_b.name,
+							   {cycle_b.id + ".key"},
+							   cxxlens::sdk::reference_strength::hard}};
+		cycle_b.references = {{{cycle_b.id + ".key"},
+							   cycle_a.name,
+							   {cycle_a.id + ".key"},
+							   cxxlens::sdk::reference_strength::hard}};
+		for (auto* descriptor : {&cycle_a, &cycle_b})
+			descriptor->descriptor_digest = cxxlens::sdk::semantic_digest(
+				"cxxlens.relation-descriptor.v1", descriptor->canonical_form());
+		cxxlens::sdk::relation_registry cycle_registry;
+		require(cycle_registry.add(cycle_a) && cycle_registry.add(cycle_b),
+				"hard-cycle descriptors were rejected before engine validation");
+		auto cycle = cycle_registry.build("cycle-generation");
+		require(!cycle && cycle.error().code == "sdk.hard-reference-cycle",
+				"hard reference cycle was accepted");
+
+		cxxlens::sdk::relation_registry missing_target_registry;
+		require(missing_target_registry.add(cycle_a).has_value(),
+				"missing-target descriptor rejected early");
+		auto missing_target = missing_target_registry.build("missing-target-generation");
+		require(!missing_target && missing_target.error().code == "sdk.registry-reference-missing",
+				"missing hard target descriptor was accepted");
+	}
 } // namespace
 
 int main()
@@ -239,5 +564,6 @@ int main()
 	check_snapshot_lifetime();
 	check_frame_and_native_escape();
 	check_provider_tooling_and_faults();
+	check_relation_engine_and_claim_kernel();
 	return 0;
 }

@@ -4,7 +4,7 @@
     "conventions": "sha256:fa58fa2f23591eafac9f46eb91fcfab01063681e453065b62d34bdab3fca8af1",
     "ownership_registry": "sha256:797e6a52c4c941ed4225b761ee070f5f00af4c10661d2ebd519e874391eec342"
   },
-  "repository_paths_digest": "sha256:ffa76a0b73264c3cf2733c3e8bd7fd545a1be1c36e183044109f75c4eb0b5311",
+  "repository_paths_digest": "sha256:ce06c0c2f0c07e5bdd7eb948f66776d05807c014ec316b7fe24a67531aaca701",
   "reserved_paths": [
     {
       "access": "exclusive_write",
@@ -1192,7 +1192,7 @@
     }
   ],
   "schema": "cxxlens.agent-ownership.v1",
-  "semantic_digest": "sha256:42305f3ee7ac1fcb8f51271b1f2daad446c3dd11f4e2cee8e2bb19d7e2bb2914",
+  "semantic_digest": "sha256:0964443b92d73255a22270efb3e326046fd11806610dcf280a5d6cd0b131dde9",
   "skeletons": [
     {
       "api_id": "API-CFG-001",
@@ -2942,7 +2942,7 @@
       "blocked": 0,
       "frozen": 124
     },
-    "tracked_path_count": 654,
+    "tracked_path_count": 660,
     "unit_count": 124
   },
   "task_packet_digest": "sha256:68bfa838af2de5910cfa1b4a0bf4dbc3a1d24eaa3f21fff1ec378dccff35176c",
@@ -4093,6 +4093,13 @@
       "generated": false,
       "generator_role": null,
       "owner_role": "steward.repository",
+      "path": "examples/sdk/relation_claim_batch.cpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.repository",
       "path": "examples/sdk/typed_query.cpp"
     },
     {
@@ -4219,7 +4226,28 @@
       "generated": false,
       "generator_role": null,
       "owner_role": "steward.quality",
+      "path": "include/cxxlens/relations/cc_call_direct_target.hpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.quality",
       "path": "include/cxxlens/relations/cc_call_site.hpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.quality",
+      "path": "include/cxxlens/relations/cc_entity.hpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.quality",
+      "path": "include/cxxlens/relations/company_lock_acquire.hpp"
     },
     {
       "access": "exclusive_write",
@@ -4248,6 +4276,13 @@
       "generator_role": null,
       "owner_role": "integration.global",
       "path": "include/cxxlens/sdk.hpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.quality",
+      "path": "include/cxxlens/sdk/claim.hpp"
     },
     {
       "access": "exclusive_write",
@@ -5991,6 +6026,13 @@
       "generator_role": null,
       "owner_role": "steward.runtime",
       "path": "src/runtime/time_port.hpp"
+    },
+    {
+      "access": "exclusive_write",
+      "generated": false,
+      "generator_role": null,
+      "owner_role": "steward.quality",
+      "path": "src/sdk/claim.cpp"
     },
     {
       "access": "exclusive_write",

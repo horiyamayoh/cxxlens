@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cctype>
+#include <functional>
 #include <iomanip>
 #include <limits>
 #include <ranges>
@@ -91,6 +92,7 @@ namespace cxxlens::sdk
 				case scalar_kind::condition_ref:
 				case scalar_kind::source_span_id:
 				case scalar_kind::evidence_id:
+				case scalar_kind::closed_symbol:
 					return std::holds_alternative<std::string>(value);
 			}
 			return false;
@@ -120,11 +122,48 @@ namespace cxxlens::sdk
 				},
 				value);
 		}
+
+		[[nodiscard]] std::string_view role_name(const column_role role)
+		{
+			switch (role)
+			{
+				case column_role::claim_key:
+					return "claim_key";
+				case column_role::authoritative_payload:
+					return "authoritative_payload";
+				case column_role::display:
+					return "display";
+				case column_role::auxiliary:
+					return "auxiliary";
+			}
+			return "invalid";
+		}
+
+		[[nodiscard]] std::string_view merge_name(const merge_mode mode)
+		{
+			switch (mode)
+			{
+				case merge_mode::set:
+					return "set";
+				case merge_mode::multiset:
+					return "multiset";
+				case merge_mode::functional_assertion:
+					return "functional_assertion";
+				case merge_mode::keyed_union:
+					return "keyed_union";
+			}
+			return "invalid";
+		}
+
+		[[nodiscard]] std::string_view reference_name(const reference_strength strength)
+		{
+			return strength == reference_strength::hard ? "hard" : "soft_semantic";
+		}
 	} // namespace
 
 	std::string value_type::canonical_name() const
 	{
-		static constexpr std::array<std::string_view, 12U> names{
+		static constexpr std::array<std::string_view, 13U> names{
 			"bool",
 			"int64",
 			"uint64",
@@ -137,6 +176,7 @@ namespace cxxlens::sdk
 			"condition_ref",
 			"source_span_id",
 			"evidence_id",
+			"closed_symbol",
 		};
 		std::string output{names.at(static_cast<std::size_t>(scalar))};
 		if (!parameter.empty())
@@ -160,6 +200,9 @@ namespace cxxlens::sdk
 		if (columns.empty())
 			return cxxlens::sdk::unexpected(
 				relation_error("sdk.relation-invalid", "columns", "empty"));
+		if (semantics.empty() || owner_namespace.empty() || key_columns.empty())
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.relation-invalid", "semantics", "claim-contract"));
 		std::vector<std::string> ids;
 		std::vector<std::string> names;
 		for (const auto& value : columns)
@@ -170,6 +213,10 @@ namespace cxxlens::sdk
 			if (!value.required && !value.type.optional)
 				return cxxlens::sdk::unexpected(
 					relation_error("sdk.column-invalid", value.id, "optional-contract"));
+			if (value.type.parameter == "native_pointer" ||
+				value.type.parameter == "native_address")
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.native-address-payload", value.id, value.type.parameter));
 			ids.push_back(value.id);
 			names.push_back(value.name);
 		}
@@ -178,7 +225,32 @@ namespace cxxlens::sdk
 		if (std::ranges::adjacent_find(ids) != ids.end() ||
 			std::ranges::adjacent_find(names) != names.end())
 			return cxxlens::sdk::unexpected(relation_error("sdk.duplicate-column", "columns"));
-		const auto expected = semantic_digest("cxxlens.relation-descriptor.v1", canonical_form());
+		for (const auto& key : key_columns)
+		{
+			auto found = column(key);
+			if (!found || found->role != column_role::claim_key || !found->required)
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.relation-invalid", key, "claim-key"));
+		}
+		for (const auto& conflict : conflict_columns)
+			if (!column(conflict))
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.relation-invalid", conflict, "conflict-column"));
+		for (const auto& reference : references)
+		{
+			if (reference.source_columns.empty() ||
+				reference.source_columns.size() != reference.target_columns.size() ||
+				reference.target_relation.empty())
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.reference-invalid", name, "shape"));
+			for (const auto& source : reference.source_columns)
+				if (!column(source))
+					return cxxlens::sdk::unexpected(
+						relation_error("sdk.reference-invalid", source, "source-column"));
+		}
+		const auto expected = contract_canonical.empty()
+			? semantic_digest("cxxlens.relation-descriptor.v1", canonical_form())
+			: content_digest(std::as_bytes(std::span{contract_canonical}));
 		if (descriptor_digest != expected)
 			return cxxlens::sdk::unexpected(
 				relation_error("sdk.descriptor-digest-mismatch", "descriptor_digest"));
@@ -212,11 +284,57 @@ namespace cxxlens::sdk
 			const auto& item = ordered[index];
 			output << R"({"id":")" << escape(item.id) << R"(","name":")" << escape(item.name)
 				   << R"(","required":)" << (item.required ? "true" : "false") << R"(,"type":")"
-				   << escape(item.type.canonical_name()) << "\"}";
+				   << escape(item.type.canonical_name()) << R"(","role":")" << role_name(item.role)
+				   << "\"}";
 		}
-		output << R"(],"id":")" << escape(id) << R"(","name":")" << escape(name)
-			   << R"(","semantic_major":)" << semantic_major << R"(,"version":")"
-			   << version.string() << "\"}";
+		output << R"(],"conflict_columns":[)";
+		for (std::size_t index = 0U; index < conflict_columns.size(); ++index)
+		{
+			if (index != 0U)
+				output << ',';
+			output << '"' << escape(conflict_columns[index]) << '"';
+		}
+		output << R"(],"id":")" << escape(id) << R"(","key_columns":[)";
+		for (std::size_t index = 0U; index < key_columns.size(); ++index)
+		{
+			if (index != 0U)
+				output << ',';
+			output << '"' << escape(key_columns[index]) << '"';
+		}
+		output << R"(],"merge":")" << merge_name(merge) << R"(","name":")" << escape(name)
+			   << R"(","owner_namespace":")" << escape(owner_namespace) << R"(","references":[)";
+		auto ordered_references = references;
+		std::ranges::sort(ordered_references,
+						  [](const auto& left, const auto& right)
+						  {
+							  return std::tie(left.target_relation, left.source_columns) <
+								  std::tie(right.target_relation, right.source_columns);
+						  });
+		for (std::size_t index = 0U; index < ordered_references.size(); ++index)
+		{
+			if (index != 0U)
+				output << ',';
+			const auto& reference = ordered_references[index];
+			output << R"({"source":[)";
+			for (std::size_t column = 0U; column < reference.source_columns.size(); ++column)
+			{
+				if (column != 0U)
+					output << ',';
+				output << '"' << escape(reference.source_columns[column]) << '"';
+			}
+			output << R"(],"strength":")" << reference_name(reference.strength)
+				   << R"(","target_relation":")" << escape(reference.target_relation)
+				   << R"(","target":[)";
+			for (std::size_t column = 0U; column < reference.target_columns.size(); ++column)
+			{
+				if (column != 0U)
+					output << ',';
+				output << '"' << escape(reference.target_columns[column]) << '"';
+			}
+			output << "]}";
+		}
+		output << R"(],"semantic_major":)" << semantic_major << R"(,"semantics":")"
+			   << escape(semantics) << R"(","version":")" << version.string() << "\"}";
 		return output.str();
 	}
 
@@ -240,6 +358,8 @@ namespace cxxlens::sdk
 
 	result<void> relation_registry::add(relation_descriptor descriptor)
 	{
+		if (!frozen_ || *frozen_)
+			return cxxlens::sdk::unexpected(relation_error("sdk.registry-frozen", descriptor.name));
 		if (descriptor.descriptor_digest.empty())
 			descriptor.descriptor_digest =
 				semantic_digest("cxxlens.relation-descriptor.v1", descriptor.canonical_form());
@@ -284,6 +404,145 @@ namespace cxxlens::sdk
 			output.push_back(*descriptor);
 		}
 		return output;
+	}
+
+	result<relation_engine> relation_registry::build(std::string generation)
+	{
+		if (!frozen_ || *frozen_)
+			return cxxlens::sdk::unexpected(relation_error("sdk.registry-frozen", "registry"));
+		if (generation.empty())
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.engine-generation-invalid", "generation"));
+		if (descriptors_.empty())
+			return cxxlens::sdk::unexpected(relation_error("sdk.registry-empty", "registry"));
+		for (const auto& [name, descriptor] : descriptors_)
+			for (const auto& reference : descriptor->references)
+			{
+				const auto target = descriptors_.find(reference.target_relation);
+				if (target == descriptors_.end())
+				{
+					if (reference.strength == reference_strength::hard)
+						return cxxlens::sdk::unexpected(relation_error(
+							"sdk.registry-reference-missing", name, reference.target_relation));
+					continue;
+				}
+				for (std::size_t index = 0U; index < reference.source_columns.size(); ++index)
+				{
+					auto source_column = descriptor->column(reference.source_columns[index]);
+					auto target_column = target->second->column(reference.target_columns[index]);
+					if (!source_column || !target_column ||
+						source_column->type.scalar != target_column->type.scalar ||
+						source_column->type.parameter != target_column->type.parameter)
+						return cxxlens::sdk::unexpected(relation_error(
+							"sdk.reference-invalid", name, reference.target_relation));
+				}
+			}
+		enum class visit_state : std::uint8_t
+		{
+			unvisited,
+			visiting,
+			visited,
+		};
+		std::map<std::string, visit_state, std::less<>> states;
+		for (const auto& [name, descriptor] : descriptors_)
+		{
+			(void)descriptor;
+			states.emplace(name, visit_state::unvisited);
+		}
+		std::function<result<void>(const std::string&)> visit = [&](const std::string& name)
+		{
+			if (states[name] == visit_state::visiting)
+				return result<void>{relation_error("sdk.hard-reference-cycle", name)};
+			if (states[name] == visit_state::visited)
+				return result<void>{};
+			states[name] = visit_state::visiting;
+			for (const auto& reference : descriptors_.at(name)->references)
+				if (reference.strength == reference_strength::hard &&
+					descriptors_.contains(reference.target_relation))
+					if (auto valid = visit(reference.target_relation); !valid)
+						return valid;
+			states[name] = visit_state::visited;
+			return result<void>{};
+		};
+		for (const auto& [name, descriptor] : descriptors_)
+		{
+			(void)descriptor;
+			if (auto valid = visit(name); !valid)
+				return cxxlens::sdk::unexpected(std::move(valid.error()));
+		}
+		std::string canonical;
+		for (const auto& [name, descriptor] : descriptors_)
+		{
+			canonical += name;
+			canonical += '=';
+			canonical += descriptor->descriptor_digest;
+			canonical.push_back('\n');
+		}
+		*frozen_ = true;
+		return relation_engine{descriptors_,
+							   semantic_digest("cxxlens.relation-registry.v1", canonical),
+							   std::move(generation)};
+	}
+
+	bool relation_registry::frozen() const noexcept
+	{
+		return !frozen_ || *frozen_;
+	}
+
+	relation_engine::relation_engine(
+		std::map<std::string, std::shared_ptr<const relation_descriptor>, std::less<>> descriptors,
+		std::string digest,
+		std::string generation)
+		: descriptors_{std::move(descriptors)}, registry_digest_{std::move(digest)},
+		  generation_{std::move(generation)}
+	{
+	}
+
+	result<dynamic_relation> relation_engine::require(const std::string_view name,
+													  const std::uint32_t semantic_major) const
+	{
+		const auto found = descriptors_.find(name);
+		if (found == descriptors_.end())
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.relation-not-found", std::string{name}));
+		if (found->second->semantic_major != semantic_major)
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.relation-major-mismatch", std::string{name}));
+		return dynamic_relation{found->second};
+	}
+
+	result<dynamic_relation> relation_engine::require_id(const std::string_view descriptor_id) const
+	{
+		for (const auto& [name, descriptor] : descriptors_)
+		{
+			(void)name;
+			if (descriptor->id == descriptor_id)
+				return dynamic_relation{descriptor};
+		}
+		return cxxlens::sdk::unexpected(
+			relation_error("sdk.relation-not-found", std::string{descriptor_id}));
+	}
+
+	std::vector<relation_descriptor> relation_engine::descriptors() const
+	{
+		std::vector<relation_descriptor> output;
+		output.reserve(descriptors_.size());
+		for (const auto& [name, descriptor] : descriptors_)
+		{
+			(void)name;
+			output.push_back(*descriptor);
+		}
+		return output;
+	}
+
+	std::string_view relation_engine::registry_digest() const noexcept
+	{
+		return registry_digest_;
+	}
+
+	std::string_view relation_engine::generation() const noexcept
+	{
+		return generation_;
 	}
 
 	detached_cell detached_cell::boolean(const bool value)

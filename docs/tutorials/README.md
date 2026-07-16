@@ -58,3 +58,11 @@ partiality を `explain()` で保持します。flagship `calls_to_function` と
 所有し、generic foundation の成功を flagship completion と解釈しません。
 
 SDK 契約全体は `cxxlens-ng-sdk-contract-check`、公開 install consumer は `install.consumer` test で検証されます。
+
+## Relation/claim kernel
+
+[relation_claim_batch.cpp](../../examples/sdk/relation_claim_batch.cpp) は Issue #67 の walking skeleton です。
+external generated relation の typed builder と runtime descriptor を同じ immutable engine へ登録し、fake provider
+observation を assertion に変換して atomic batch へ投入します。hard reference は同じ batch staging space の既存
+claim で解決し、未 materialize の soft reference は row を捨てず `unresolved_reference` として返します。
+`make_canonical_claim` と `make_derived_claim` を使う場合も同じ identity encoder と独立 validator を通ります。

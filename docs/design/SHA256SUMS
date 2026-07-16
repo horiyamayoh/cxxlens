@@ -1,19 +1,19 @@
 182909edb0688085fceba3116cf8b2e21e061367a26c383316c732085458073f  README.md
-92f82b3e4c833eac34e9c2ac4d2df0c6b51cab77880a2173160dc42f484a3d0a  cxxlens_next_generation_integrated_design_ja.md
+c4bae8b28966d9a6c9af709cdab496f734463fba8de71690176aaa9e8f344d25  cxxlens_next_generation_integrated_design_ja.md
 c21795fc3db946b74751d0ae4817cc337e76e92e6c96d2f21a57b936be571a36  adr/README.md
 c4f1c95540d7c809b9e50a3d1edbade0681dcc781c69ce9e5b7bb5850b67e86b  adr/0001-frontend-worker-isolation.md
 d24534d4936debcc3bad96a6acdec1056c3c437fa7b526c76bb3f13c8b7c5423  adr/0002-semantic-relation-platform.md
 04172ac98fa6b9743cc283d8da063243e95632a9d4df0418df4e7af1d49096b9  adr/0003-versioned-relation-kernel.md
 226ee7a3ff3abb29ed9cfde95ae406edea43b0b25f17c22e9f65a08120636c42  adr/0004-legacy-contract-reset.md
 7504c5feb1e8b71f54a8995d325badfa3a7bcb3f5aa2d45c4e9341cd8aebc7b3  adr/0005-product-boundary-release-compatibility.md
-9c3e6eb19df0f7eadb00f417a2c054e535f82814f6f2a39210e87963ed5748e7  adr/0006-ng0-relation-and-claim-envelope.md
+a2c1c702ba3678aec16252f10b84e54736626c01f599462c5503c1cbc7701419  adr/0006-ng0-relation-and-claim-envelope.md
 4bea9d84df2883de69957d9d7c2aaf4913417459e053d8e0c84dc3b72dd01007  adr/0007-logical-query-algebra.md
 7eb76ebeea10892780670eed14330dd7b79f84f576518a126b9d99088d80aea9  adr/0008-truth-guarantee-provenance-algebra.md
 5304ac624fb22081521ac6529838dce73d371b23ed200096428d150c84e92e6a  adr/0009-snapshot-identity-publication-series.md
 d5f28b72b07ffc318b6497e8ef5cef59dba597e3fc95df23fdb9535929266bd5  adr/0010-provider-wire-streaming-atomicity.md
 0c9e5becb0710daebc595808852aa18457e214fee970d798e189f2e3f1f46cd8  adr/0011-provider-trust-certification-discovery.md
 068838d2fdb52491ae2e5523ddcc5af4f0dcbbb4d217a5822bbf4f01d2595262  adr/0012-author-sdk-surface.md
-9954f2dbe53c19b4da59d0b46fc1712990f0c69074563f6e54298f4e9fa08040  catalogs/README.md
+4a6098556933a440ab369ed98f0cbc6bade8dff40ab6faa414e3f3a3508ab61a  catalogs/README.md
 11b05a3be63197f87d9c56be83de8690a9628cad598efc8e5d1a875d8084a5cb  ../../schemas/cxxlens_ng_authority_transition.yaml
 0d124076e37fd3162f9bfc863c78322d118ebd42ed4a2b3d0c9c49fd48b17cc4  ../../schemas/cxxlens_ng_claim_envelope.schema.yaml
 273855bce29e3d2c7b26fe92c2968ddcdd3665e2b46af80454171fb889fa5a5e  ../../schemas/cxxlens_ng_relation_registry.yaml
@@ -48,7 +48,7 @@ b09bcf83383df929345ca0ad3b65722e642f1d1e21aad2efd8aa8c1f72042a99  ../../schemas/
 e7a3392e2d489e7746dabf80ee8c08c986bb096dcd43c9cc8da601d123867636  ../../schemas/cxxlens_ng_provider_conformance_report.schema.yaml
 49cc8f4ddf61a916385e53ee41460627a3f4959ebf7228e9ee18dcffa8d0b52b  ../../schemas/cxxlens_ng_provider_fuzz_corpus.yaml
 8edcaa0832ce6a74dbf94ac931f7e4dcb46e2c85b1bc5b5d2218823daec91c98  ../../schemas/cxxlens_ng_provider_fuzz_corpus.schema.yaml
-08505745d700274c870c0590d17f24b17c7f91c5cf4d601d70b28ff8c15adfb6  ../../schemas/cxxlens_ng_public_api_catalog.yaml
+ec3b9342ba4ec5fb3495a2a20ce1a50790623a46a60da8de2beb5f3e5f005dfb  ../../schemas/cxxlens_ng_public_api_catalog.yaml
 a0599e26cfea7572064308e6ac413fc237c4d8562a155354c10717b708613ece  ../../schemas/cxxlens_ng_public_api_catalog.schema.yaml
 a5960008ceaadaee3a957f269889fa69a852d3445672ff72674ca37e7b1f06e8  ../../schemas/cxxlens_ng_acceptance_manifest.yaml
 94632cc37a9e48201841044e61834aa0199f00807400c2023eb1dcf913a3b309  ../../schemas/cxxlens_ng_security_profile.yaml
@@ -67,4 +67,4 @@ b62e705aa4fb4a7296b9e2690cbb944fe273e08a2d1b94f983c3e95275e9c132  ../../schemas/
 0f710f1973b5eb195df7d41fe79bd2f85bd59f983c4dee77a760cfcb2ce6ef06  ../../schemas/cxxlens_ng_compatibility_request.schema.yaml
 b5e5a4b2af63453d2fe9ef63fd000cbb8cfb725d2364fa2fdc3940c21fc44ed2  ../../schemas/cxxlens_ng_compatibility_report.schema.yaml
 81402f3f3cb963cc8912ad4913f6ee7fc4bd035490d5d82040af5d90d10559d2  ../../schemas/cxxlens_asset_migration_policy.yaml
-9237479805d86b024eb8eb491b491e195a6d2201799ff2cc4e671384ed87594e  ../../schemas/cxxlens_asset_migration_ledger.json
+941829c203bb63edaedf8c9c6377e61d73ac7912dc4e3659c9d70119cfef8066  ../../schemas/cxxlens_asset_migration_ledger.json

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import pathlib
 import re
@@ -33,6 +34,7 @@ EXPECTED_IMPLEMENTED_ENTRIES = {
     "public.project-catalog",
     "public.relation-static",
     "public.relation-dynamic",
+    "public.claim-kernel",
     "public.snapshot-store",
     "public.logical-query",
     "public.provider-sdk",
@@ -198,38 +200,135 @@ def run(command: list[str], *, expect_success: bool, label: str) -> None:
 def validate_generation_and_negatives(root: pathlib.Path, compiler: str) -> None:
     with tempfile.TemporaryDirectory(prefix="cxxlens-sdk-contract-") as directory:
         temporary = pathlib.Path(directory)
-        generated = temporary / "cc_call_site.hpp"
+        registry = load_yaml(root / "schemas/cxxlens_ng_relation_registry.yaml")
+        generated_relations = {
+            "cc.entity": "cc_entity.hpp",
+            "cc.call_site": "cc_call_site.hpp",
+            "cc.call_direct_target": "cc_call_direct_target.hpp",
+            "company.lock.acquire": "company_lock_acquire.hpp",
+        }
+        for name, filename in generated_relations.items():
+            generated = temporary / filename
+            run(
+                [
+                    sys.executable,
+                    str(root / "tools/sdk/relation_idl_compiler.py"),
+                    "--registry",
+                    str(root / "schemas/cxxlens_ng_relation_registry.yaml"),
+                    "--relation",
+                    name,
+                    "--output",
+                    str(generated),
+                ],
+                expect_success=True,
+                label=f"relation IDL generation {name}",
+            )
+            committed = root / "include/cxxlens/relations" / filename
+            if generated.read_bytes() != committed.read_bytes():
+                fail(f"committed generated relation is stale: {committed.relative_to(root)}")
+            relation = next(row for row in registry["relations"] if row["name"] == name)
+            generated_text = generated.read_text(encoding="utf-8")
+            for marker in [
+                relation["descriptor_id"],
+                relation["semantics"],
+                relation["owner_namespace"],
+                *(row["id"] for row in relation["columns"]),
+            ]:
+                if marker not in generated_text:
+                    fail(f"generated relation tag omitted registry identity: {marker}")
+            relation_canonical = json.dumps(
+                relation, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+            )
+            relation_digest = "sha256:" + hashlib.sha256(
+                relation_canonical.encode("utf-8")
+            ).hexdigest()
+            if relation_digest not in generated_text:
+                fail(f"generated relation tag omitted exact authority digest: {name}")
+
+        source = temporary / "generated_test.cpp"
+        source.write_text(
+            '#include "cc_entity.hpp"\n'
+            '#include "cc_call_site.hpp"\n'
+            '#include "cc_call_direct_target.hpp"\n'
+            '#include "company_lock_acquire.hpp"\n'
+            "int main(){return cxxlens::cc::relations::call_site::descriptor().validate()?0:1;}\n",
+            encoding="utf-8",
+        )
+        run(
+            [
+                compiler,
+                "-std=c++23",
+                "-fsyntax-only",
+                f"-I{root / 'include'}",
+                f"-I{temporary}",
+                str(source),
+            ],
+            expect_success=True,
+            label="generated relation tags syntax check",
+        )
+
+        core_sources = {
+            path: path.read_bytes()
+            for base in (root / "src", root / "include/cxxlens/sdk")
+            for path in sorted(base.rglob("*"))
+            if path.is_file()
+        }
+        external_registry = json.loads(json.dumps(registry))
+        external = json.loads(
+            json.dumps(
+                next(
+                    row
+                    for row in external_registry["relations"]
+                    if row["name"] == "company.lock.acquire"
+                )
+            )
+        )
+        replacements = {
+            "company.lock.acquire": "company.audit.acquire",
+            "company_lock_acquire_id": "company_audit_acquire_id",
+            "company_lock_id": "company_audit_lock_id",
+            "company.lock-mode/1": "company.audit-mode/1",
+            "company.lock/1": "company.audit/1",
+            "company.lock-extraction.compile-unit": "company.audit-extraction.compile-unit",
+            "cxxlens::company::relations::lock_acquire": "cxxlens::company::relations::audit_acquire",
+        }
+
+        def replace_strings(value: Any) -> Any:
+            if isinstance(value, str):
+                for old, new in replacements.items():
+                    value = value.replace(old, new)
+                return value
+            if isinstance(value, list):
+                return [replace_strings(item) for item in value]
+            if isinstance(value, dict):
+                return {key: replace_strings(item) for key, item in value.items()}
+            return value
+
+        external = replace_strings(external)
+        external_registry["relations"].append(external)
+        external_path = temporary / "external_registry.yaml"
+        external_path.write_text(
+            yaml.safe_dump(external_registry, sort_keys=False), encoding="utf-8"
+        )
+        external_header = temporary / "company_audit_acquire.hpp"
         run(
             [
                 sys.executable,
                 str(root / "tools/sdk/relation_idl_compiler.py"),
                 "--registry",
-                str(root / "schemas/cxxlens_ng_relation_registry.yaml"),
+                str(external_path),
                 "--relation",
-                "cc.call_site",
+                "company.audit.acquire",
                 "--output",
-                str(generated),
+                str(external_header),
             ],
             expect_success=True,
-            label="relation IDL generation",
+            label="external relation IDL generation",
         )
-        generated_text = generated.read_text(encoding="utf-8")
-        registry = load_yaml(root / "schemas/cxxlens_ng_relation_registry.yaml")
-        relation = next(row for row in registry["relations"] if row["name"] == "cc.call_site")
-        for marker in [relation["descriptor_id"], *(row["id"] for row in relation["columns"])]:
-            if marker not in generated_text:
-                fail(f"generated relation tag omitted registry identity: {marker}")
-        source = temporary / "generated_test.cpp"
-        source.write_text(
-            '#include "cc_call_site.hpp"\n'
-            "int main(){return cxxlens::cc::relations::call_site::descriptor().validate()?0:1;}\n",
-            encoding="utf-8",
-        )
-        run(
-            [compiler, "-std=c++23", "-fsyntax-only", f"-I{root / 'include'}", str(source)],
-            expect_success=True,
-            label="generated relation tag syntax check",
-        )
+        if not external_header.is_file() or any(
+            path.read_bytes() != before for path, before in core_sources.items()
+        ):
+            fail("external relation generation changed core SDK source")
 
         for relative in (
             "examples/sdk/negative/generated_unknown_column.cpp",

@@ -3590,6 +3590,12 @@ Exit:
 
 ### 27.3 R1 — Relation kernel vertical slice
 
+Issue #67 では、この slice のうち relation/claim walking skeleton を production SDK へ実装した。accepted
+registry を検証する IDL compiler、生成済み standard/external tag、immutable `relation_engine`、static/dynamic
+row API、claim-envelope v2 の段階別 validator、hard/soft reference staging、4 merge law、same-domain conflict と
+cross-domain differential の分離が利用可能である。memory/SQLite publication、query executor、v1 importer を
+含む R1 全体の exit は後続 issue の担当であり、この記述は R1 全体の完了宣言ではない。
+
 Implement:
 
 - IDs/encoding
@@ -4002,35 +4008,35 @@ NG1 default:
 ### Identity/condition
 
 - [ ] absolute root を identity へ含めない
-- [ ] full digest と contract version を保持
-- [ ] semantic key/assertion/content digest が独立
+- [x] full digest と contract version を保持
+- [x] semantic key/assertion/content digest が独立
 - [ ] provider ID は build variant に入らない
-- [ ] condition は universe なしに作れない
-- [ ] different universe comparison は structured error
+- [x] condition は universe なしに作れない
+- [x] different universe comparison は structured error
 - [ ] root relocationで同じ semantic IDs
 
 ### Relation/schema
 
 - [ ] central `fact_kind` が v2 path にない
-- [ ] external relation registration に core source diffなし
-- [ ] static generated relation と dynamic relation が同じ descriptor
-- [ ] open symbol unknown preservation
-- [ ] hard reference missing は batch rejection
-- [ ] soft reference missing は unresolved
-- [ ] functional payload mismatch は conflict
-- [ ] arbitrary custom reducer callbackなし
+- [x] external relation registration に core source diffなし
+- [x] static generated relation と dynamic relation が同じ descriptor
+- [x] open symbol unknown preservation
+- [x] hard reference missing は batch rejection
+- [x] soft reference missing は unresolved
+- [x] functional payload mismatch は conflict
+- [x] arbitrary custom reducer callbackなし
 - [ ] schema compatibility negative vectors
 
 ### Claims/provenance
 
-- [ ] native pointer/address payload rejection
-- [ ] observation/assertion/canonical relation separation
-- [ ] producer input basis が direct/derived tagged model で記録される
-- [ ] containing snapshot なしで claim/certificate を検証できる
+- [x] native pointer/address payload rejection
+- [x] observation/assertion/canonical relation separation
+- [x] producer input basis が direct/derived tagged model で記録される
+- [x] containing snapshot なしで claim/certificate を検証できる
 - [ ] multiple contributor evidence
-- [ ] same-domain conflict condition fragment
-- [ ] cross-domain差は differential disagreement
-- [ ] arrival order不変
+- [x] same-domain conflict condition fragment
+- [x] cross-domain差は differential disagreement
+- [x] arrival order不変
 
 ### Store
 

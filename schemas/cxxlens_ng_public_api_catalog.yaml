@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.0.0
+document_version: 1.1.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -22,6 +22,7 @@ packages:
     headers:
       - include/cxxlens/sdk.hpp
       - include/cxxlens/sdk/common.hpp
+      - include/cxxlens/sdk/claim.hpp
       - include/cxxlens/sdk/relation.hpp
       - include/cxxlens/sdk/query.hpp
       - include/cxxlens/sdk/provider.hpp
@@ -113,10 +114,10 @@ entries:
 
   - id: public.relation-static
     status: implemented
-    owner_issue: '#66'
+    owner_issue: '#67'
     profile: NG0
     target: cxxlens::provider_sdk
-    headers: [include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/sdk/relation.hpp]
+    headers: [include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/sdk/relation.hpp]
     symbols:
       - name: query.from
         kind: template
@@ -127,32 +128,61 @@ entries:
       - name: row_builder
         kind: class
         signature: 'row_builder(relation_descriptor); result<void> set(column_ref, detached_cell); result<detached_row> finish() &&'
-    errors: [sdk.relation-invalid, sdk.column-invalid, sdk.duplicate-column, sdk.descriptor-digest-mismatch, sdk.cell-invalid, sdk.foreign-column, sdk.duplicate-cell, sdk.cell-type-mismatch, sdk.required-cell-missing, sdk.unknown-cell]
+      - name: static_row_builder
+        kind: template
+        signature: 'template<class Relation> static_row_builder; set<Column>(detached_cell); finish() &&; template<class Relation> static_row_view; get<Column>() const'
+    errors: [sdk.relation-invalid, sdk.column-invalid, sdk.duplicate-column, sdk.reference-invalid, sdk.descriptor-digest-mismatch, sdk.native-address-payload, sdk.cell-invalid, sdk.foreign-column, sdk.duplicate-cell, sdk.cell-type-mismatch, sdk.required-cell-missing, sdk.unknown-cell]
     lifetime: [generated-tags-are-static-metadata, rows-are-value-owned-and-detached]
     threading: [generated-descriptor-is-immutable, builders-are-thread-confined]
     versioning: [tag-binds-exact-descriptor-id-and-semantic-major]
-    invariants: [generated-from-accepted-relation-registry, native-pointers-not-representable]
+    invariants: [generated-from-accepted-relation-registry, committed-generated-source-is-reproducible, external-idl-requires-zero-core-source-diff, native-pointers-not-representable]
     implementation_evidence: [tools/sdk/relation_idl_compiler.py, src/sdk/relation.cpp, examples/sdk/typed_query.cpp]
 
   - id: public.relation-dynamic
     status: implemented
-    owner_issue: '#66'
+    owner_issue: '#67'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
     symbols:
       - name: relation_registry
         kind: class
-        signature: 'result<void> add(relation_descriptor); result<dynamic_relation> require(string_view name, uint32_t semantic_major) const'
+        signature: 'result<void> add(relation_descriptor); result<dynamic_relation> require(string_view name, uint32_t semantic_major) const; result<relation_engine> build(string generation)'
+      - name: relation_engine
+        kind: class
+        signature: 'require(name, major) const; require_id(descriptor_id) const; registry_digest() const; generation() const'
       - name: dynamic_query.from
         kind: function
         signature: 'static result<query::builder> dynamic_query::from(const dynamic_relation&, string_view alias = {})'
-    errors: [sdk.relation-invalid, sdk.descriptor-digest-mismatch, sdk.duplicate-descriptor, sdk.descriptor-conflict, sdk.relation-not-found, sdk.relation-major-mismatch, sdk.column-not-found]
+    errors: [sdk.relation-invalid, sdk.descriptor-digest-mismatch, sdk.duplicate-descriptor, sdk.descriptor-conflict, sdk.relation-not-found, sdk.relation-major-mismatch, sdk.column-not-found, sdk.registry-frozen, sdk.registry-empty, sdk.engine-generation-invalid, sdk.registry-reference-missing, sdk.hard-reference-cycle]
     lifetime: [dynamic-relation-shares-immutable-descriptor-ownership]
-    threading: [published-dynamic-relations-are-immutable]
-    versioning: [lookup-requires-explicit-semantic-major, no-adjacent-version-fallback]
-    invariants: [duplicate-and-conflict-reject, same-descriptor-model-as-generated-tags]
+    threading: [published-dynamic-relations-and-engines-are-immutable]
+    versioning: [lookup-requires-explicit-semantic-major, registry-digest-binds-exact-descriptors, engine-generation-is-explicit, no-adjacent-version-fallback]
+    invariants: [duplicate-and-conflict-reject, registry-mutation-after-engine-build-rejects, same-descriptor-model-as-generated-tags]
     implementation_evidence: [src/sdk/relation.cpp, examples/sdk/dynamic_query.cpp, tests/unit/sdk/sdk_test.cpp]
+
+  - id: public.claim-kernel
+    status: implemented
+    owner_issue: '#67'
+    profile: NG0
+    target: cxxlens::provider_sdk
+    headers: [include/cxxlens/sdk/claim.hpp, include/cxxlens/sdk/relation.hpp]
+    symbols:
+      - name: claim
+        kind: value
+        signature: 'struct observation; struct claim; claim_condition; claim_guarantee; direct_claim_basis; derived_claim_basis'
+      - name: claim-stage-validator
+        kind: function-family
+        signature: 'make_assertion; make_canonical_claim; make_derived_claim; validate_claim'
+      - name: claim_batch
+        kind: class
+        signature: 'result<void> add_observation(const relation_engine&, observation); result<void> add(claim); result<claim_batch_result> commit(const relation_engine&, span<const claim> existing = {}) &&'
+    errors: [sdk.claim-condition-invalid, sdk.condition-universe-mismatch, sdk.claim-guarantee-invalid, sdk.claim-envelope-invalid, sdk.claim-basis-invalid, sdk.claim-stage-invalid, sdk.claim-identity-mismatch, sdk.hard-reference-missing]
+    lifetime: [claims-own-detached-rows-and-envelope-values, batch-result-owns-unresolved-conflict-and-differential-records]
+    threading: [claim-values-may-cross-threads, claim-batch-is-thread-confined]
+    versioning: [claim-envelope-v2, semantic-key-assertion-and-content-use-independent-domain-separated-identities]
+    invariants: [observation-is-not-a-claim-stage, identities-ignore-arrival-jobs-root-and-engine-generation, hard-missing-rejects-atomic-batch, soft-missing-preserves-claim-and-unresolved, same-domain-functional-overlap-is-conflict, cross-domain-overlap-is-differential-disagreement, set-multiset-functional-assertion-and-keyed-union-are-explicit]
+    implementation_evidence: [src/sdk/claim.cpp, examples/sdk/relation_claim_batch.cpp, tests/unit/sdk/sdk_test.cpp, schemas/cxxlens_ng_claim_envelope.schema.yaml]
 
   - id: public.snapshot-store
     status: implemented

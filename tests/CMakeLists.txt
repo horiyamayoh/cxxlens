@@ -76,7 +76,8 @@ add_test(NAME public-api.provider-clang22-header
 set_tests_properties(public-api.provider-clang22-header
                      PROPERTIES LABELS "public-api;native-sdk;clang22")
 
-foreach(example IN ITEMS typed_query dynamic_query portable_provider recipe)
+foreach(example IN ITEMS typed_query dynamic_query portable_provider recipe
+                         relation_claim_batch)
   set(target_name "cxxlens-sdk-example-${example}")
   add_executable(${target_name}
                  "${PROJECT_SOURCE_DIR}/examples/sdk/${example}.cpp")
@@ -121,6 +122,7 @@ add_dependencies(
   cxxlens-sdk-example-dynamic_query
   cxxlens-sdk-example-portable_provider
   cxxlens-sdk-example-recipe
+  cxxlens-sdk-example-relation_claim_batch
   cxxlens-sdk-example-typed_query
   cxxlens-sdk-negative-dynamic_literal_type_mismatch
   cxxlens-sdk-negative-invalid_recipe
