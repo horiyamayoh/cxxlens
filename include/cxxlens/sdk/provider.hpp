@@ -371,6 +371,30 @@ namespace cxxlens::sdk::provider
 		[[nodiscard]] bool operator==(const close_metadata&) const = default;
 	};
 
+	/** @brief Independent authority expected in a host-to-provider task transcript. */
+	struct host_transcript_expectation
+	{
+		std::string provider_manifest;
+		open_task_metadata task;
+		protocol_limits limits;
+	};
+
+	/** @brief Complete host-to-provider transcript input owned by the encoder. */
+	struct host_transcript_request
+	{
+		host_transcript_expectation expectation;
+		protocol_credit credit;
+		std::vector<std::byte> payload;
+	};
+
+	/** @brief Validated task, credit, and payload returned to a provider worker. */
+	struct validated_host_transcript
+	{
+		open_task_metadata task;
+		protocol_credit credit;
+		std::vector<std::byte> payload;
+	};
+
 	/** @brief Encode/decode exact deterministic CBOR metadata for task_accepted. */
 	[[nodiscard]] result<std::vector<std::byte>>
 	encode_task_accepted_metadata(const task_accepted_metadata& value);
@@ -445,6 +469,14 @@ namespace cxxlens::sdk::provider
 	[[nodiscard]] result<std::vector<std::byte>> encode_close_metadata(const close_metadata& value);
 	/** @brief Decode and validate exact close CBOR metadata. */
 	[[nodiscard]] result<close_metadata> decode_close_metadata(std::span<const std::byte> control);
+
+	/** @brief Encode the canonical five-frame host task transcript. */
+	[[nodiscard]] result<std::vector<std::byte>>
+	encode_host_transcript(const host_transcript_request& request);
+	/** @brief Validate exact host direction, state, sequence, bindings, and payload digest. */
+	[[nodiscard]] result<validated_host_transcript>
+	validate_host_transcript(std::span<const frame> frames,
+							 const host_transcript_expectation& expectation);
 
 	/** @brief Exact provider identity, relation offer, interpretation, and stage authority. */
 	struct provider_session

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstdlib>
 #include <limits>
 #include <map>
@@ -1457,40 +1458,57 @@ namespace cxxlens::detail::clang22
 
 	int run_provider_worker(const std::span<const std::byte> input, std::ostream& output)
 	{
-		auto frames = sdk::provider::decode_frame_stream(input);
-		if (!frames || frames->size() != 5U || frames->at(0U).type != message_type::hello_ack ||
-			frames->at(1U).type != message_type::schema_negotiate ||
-			frames->at(2U).type != message_type::open_task ||
-			frames->at(3U).type != message_type::credit ||
-			frames->at(4U).type != message_type::close)
+		const auto environment = [](const char* name) -> std::optional<std::string>
+		{
+			const auto* value = std::getenv(name);
+			return value == nullptr ? std::nullopt : std::optional<std::string>{value};
+		};
+		auto expected_manifest = environment("CXXLENS_PROVIDER_MANIFEST");
+		auto expected_task_id = environment("CXXLENS_PROVIDER_TASK_ID");
+		auto expected_task_digest = environment("CXXLENS_PROVIDER_TASK_INPUT_DIGEST");
+		auto expected_invocation = environment("CXXLENS_PROVIDER_NORMALIZED_INVOCATION_DIGEST");
+		auto expected_toolchain = environment("CXXLENS_PROVIDER_TOOLCHAIN_DIGEST");
+		auto expected_environment = environment("CXXLENS_PROVIDER_ENVIRONMENT_DIGEST");
+		auto expected_major = environment("CXXLENS_PROVIDER_PROTOCOL_MAJOR");
+		auto expected_minor = environment("CXXLENS_PROVIDER_PROTOCOL_MINOR");
+		if (!expected_manifest || !expected_task_id || !expected_task_digest ||
+			!expected_invocation || !expected_toolchain || !expected_environment ||
+			!expected_major || !expected_minor)
 			return EXIT_FAILURE;
-		auto hello = sdk::provider::decode_control_text(frames->at(0U).control);
-		auto schema = sdk::provider::decode_schema_negotiate_metadata(frames->at(1U).control);
-		auto task_control = sdk::provider::decode_open_task_metadata(frames->at(2U).control);
-		auto credit = sdk::provider::decode_credit_metadata(frames->at(3U).control);
-		auto close = sdk::provider::decode_close_metadata(frames->at(4U).control);
-		if (!hello || !schema || !task_control || !credit || !close ||
-			schema->protocol_schema != "cxxlens.provider-protocol.v1" ||
-			schema->protocol_minor != frames->at(1U).protocol_minor || credit->bytes == 0U ||
-			credit->frames == 0U || close->task_id != task_control->task_id)
+		sdk::provider::protocol_limits input_limits;
+		const auto parse_version = [](const std::string_view text, std::uint16_t& output)
+		{
+			const auto [end, error] =
+				std::from_chars(text.data(), text.data() + text.size(), output);
+			return error == std::errc{} && end == text.data() + text.size();
+		};
+		if (!parse_version(*expected_major, input_limits.protocol_major) ||
+			!parse_version(*expected_minor, input_limits.maximum_minor))
 			return EXIT_FAILURE;
-		if (!std::string_view{*hello}.contains(std::string{R"("provider_id":")"} +
-											   std::string{provider_id} + "\"") ||
-			!std::string_view{*hello}.contains(R"("provider_version":"1.0.0")"))
+		input_limits.minimum_minor = input_limits.maximum_minor;
+		auto frames = sdk::provider::decode_frame_stream(input, input_limits);
+		if (!frames)
+			return EXIT_FAILURE;
+		auto validated = sdk::provider::validate_host_transcript(*frames,
+																 {*expected_manifest,
+																  {*expected_task_id,
+																   *expected_task_digest,
+																   *expected_invocation,
+																   *expected_toolchain,
+																   *expected_environment},
+																  input_limits});
+		if (!validated)
 			return EXIT_FAILURE;
 
 		stream_sink sink{output};
 		sdk::provider::protocol_writer writer{sink};
-		writer.grant_credit({credit->bytes, credit->frames});
+		writer.grant_credit(validated->credit);
 		if (!writer.send(message_type::hello, frames->at(0U).control))
 			return EXIT_FAILURE;
 		if (!writer.send(message_type::schema_negotiate, frames->at(1U).control))
 			return EXIT_FAILURE;
-		if (task_control->task_id.empty() || task_control->task_input_digest.empty() ||
-			task_control->normalized_invocation_digest.empty() ||
-			task_control->toolchain_digest.empty() || task_control->environment_digest.empty())
-			return EXIT_FAILURE;
-		const std::string task_id{task_control->task_id};
+		const auto& task_control = validated->task;
+		const std::string task_id{task_control.task_id};
 		const auto send_frontend_failure = [&](const std::string_view field)
 		{
 			auto control = sdk::provider::encode_task_failed_metadata(
@@ -1499,24 +1517,19 @@ namespace cxxlens::detail::clang22
 				(void)writer.send(message_type::task_failed, *control);
 		};
 
-		auto request = decode_task_input(frames->at(2U).payload);
+		auto request = decode_task_input(validated->payload);
 		if (!request)
 		{
 			send_frontend_failure("payload");
 			return EXIT_SUCCESS;
 		}
-		if (sdk::content_digest(frames->at(2U).payload) != task_control->task_input_digest)
-		{
-			send_frontend_failure("digest");
-			return EXIT_SUCCESS;
-		}
-		const std::string toolchain_digest{task_control->toolchain_digest};
-		const std::string environment_digest{task_control->environment_digest};
+		const std::string toolchain_digest{task_control.toolchain_digest};
+		const std::string environment_digest{task_control.environment_digest};
 		const auto source_digest = sdk::content_digest(std::as_bytes(std::span{request->source}));
 		auto catalog = sdk::project_catalog::make(".",
 												  environment_digest,
 												  {{request->compile_unit,
-													task_control->normalized_invocation_digest,
+													task_control.normalized_invocation_digest,
 													source_digest,
 													environment_digest}});
 		if (!catalog)

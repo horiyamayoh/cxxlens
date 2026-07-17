@@ -154,10 +154,9 @@ def validate(root: pathlib.Path) -> None:
             "decode_evidence_metadata",
             "decode_task_complete_metadata",
             "decode_task_failed_metadata",
-            "encode_schema_negotiate_metadata",
-            "encode_open_task_metadata",
-            "encode_credit_metadata",
-            "encode_close_metadata",
+            "encode_host_transcript",
+            "CXXLENS_PROVIDER_MANIFEST",
+            "CXXLENS_PROVIDER_TASK_INPUT_DIGEST",
         ),
         "src/sdk/provider_validation_internal.hpp": (
             "transcript_validation_request",
@@ -179,6 +178,8 @@ def validate(root: pathlib.Path) -> None:
             "decode_open_task_metadata",
             "decode_credit_metadata",
             "decode_close_metadata",
+            "validate_host_transcript",
+            "provider.host-transcript-invalid",
             "value.summary",
             "encode_column_chunk",
             "decode_columnar_batch_end",
@@ -217,10 +218,17 @@ def validate(root: pathlib.Path) -> None:
             "symbol.identity_confidence",
             "call.direct_callee_identity_confidence",
             "provider.declaration-identity-unresolved",
+            "validate_host_transcript",
+            "CXXLENS_PROVIDER_PROTOCOL_MINOR",
         ),
         "CMakeLists.txt": (
             "cxxlens-clang-worker-22",
             "cxxlens_ng_provider_runtime_contract.yaml",
+        ),
+        "tests/fixtures/provider_process_fixture.cpp": (
+            "validate_host_transcript",
+            "CXXLENS_PROVIDER_MANIFEST",
+            "CXXLENS_PROVIDER_PROTOCOL_MINOR",
         ),
     }
     for relative, markers in required.items():
@@ -235,8 +243,8 @@ def validate(root: pathlib.Path) -> None:
     catalog = load(root / "schemas/cxxlens_ng_public_api_catalog.yaml")
     entries = {entry["id"]: entry for entry in catalog["entries"]}
     runtime = entries.get("public.provider-runtime")
-    if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#138":
-        raise ContractError("public.provider-runtime is not an implemented Issue #138 entry")
+    if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#140":
+        raise ContractError("public.provider-runtime is not an implemented Issue #140 entry")
     native = entries.get("public.native-provider-sdk")
     if native is None or native["status"] != "implemented" or native["owner_issue"] != "#139":
         raise ContractError("public.native-provider-sdk is not an implemented Issue #139 entry")

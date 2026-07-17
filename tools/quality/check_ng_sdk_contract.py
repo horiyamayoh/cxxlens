@@ -146,8 +146,8 @@ def validate_provider_task_contract(
     contract = load_yaml(root / PROVIDER_TASK_CONTRACT)
     schema_validate(contract, load_yaml(root / PROVIDER_TASK_SCHEMA))
     public_entry = entries.get("public.provider-sdk", {})
-    if public_entry.get("owner_issue") != "#138":
-        fail("portable provider SDK ownership must remain with Issue #138")
+    if public_entry.get("owner_issue") != "#140":
+        fail("portable provider SDK ownership must remain with Issue #140")
     signatures = "\n".join(
         symbol.get("signature", "") for symbol in public_entry.get("symbols", [])
     )
@@ -157,6 +157,8 @@ def validate_provider_task_contract(
         "task::make",
         "canonical_projection",
         "dependency_groups",
+        "encode_host_transcript",
+        "validate_host_transcript",
     ):
         if marker not in signatures:
             fail(f"portable provider task public marker is missing: {marker}")

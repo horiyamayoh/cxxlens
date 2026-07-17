@@ -1,5 +1,6 @@
 #include <array>
 #include <cerrno>
+#include <charconv>
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
@@ -95,23 +96,46 @@ int main(const int argument_count, const char* const* arguments)
 	bytes.reserve(input.size());
 	for (const auto byte : input)
 		bytes.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
+	const auto environment = [](const char* name) -> std::optional<std::string>
+	{
+		const auto* value = std::getenv(name);
+		return value == nullptr ? std::nullopt : std::optional<std::string>{value};
+	};
+	auto expected_manifest = environment("CXXLENS_PROVIDER_MANIFEST");
+	auto expected_task_id = environment("CXXLENS_PROVIDER_TASK_ID");
+	auto expected_task_digest = environment("CXXLENS_PROVIDER_TASK_INPUT_DIGEST");
+	auto expected_invocation = environment("CXXLENS_PROVIDER_NORMALIZED_INVOCATION_DIGEST");
+	auto expected_toolchain = environment("CXXLENS_PROVIDER_TOOLCHAIN_DIGEST");
+	auto expected_environment = environment("CXXLENS_PROVIDER_ENVIRONMENT_DIGEST");
+	auto expected_major = environment("CXXLENS_PROVIDER_PROTOCOL_MAJOR");
+	auto expected_minor = environment("CXXLENS_PROVIDER_PROTOCOL_MINOR");
+	if (!expected_manifest || !expected_task_id || !expected_task_digest || !expected_invocation ||
+		!expected_toolchain || !expected_environment || !expected_major || !expected_minor)
+		return EXIT_FAILURE;
 	protocol_limits input_limits;
-	input_limits.maximum_minor = std::numeric_limits<std::uint16_t>::max();
+	const auto parse_version = [](const std::string_view text, std::uint16_t& output)
+	{
+		const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), output);
+		return error == std::errc{} && end == text.data() + text.size();
+	};
+	if (!parse_version(*expected_major, input_limits.protocol_major) ||
+		!parse_version(*expected_minor, input_limits.maximum_minor))
+		return EXIT_FAILURE;
+	input_limits.minimum_minor = input_limits.maximum_minor;
 	auto frames = decode_frame_stream(bytes, input_limits);
-	if (!frames || frames->size() != 5U || frames->at(0U).type != message_type::hello_ack ||
-		frames->at(1U).type != message_type::schema_negotiate ||
-		frames->at(2U).type != message_type::open_task ||
-		frames->at(3U).type != message_type::credit || frames->at(4U).type != message_type::close)
+	if (!frames)
 		return EXIT_FAILURE;
-	auto schema_control = decode_schema_negotiate_metadata(frames->at(1U).control);
-	auto task_control = decode_open_task_metadata(frames->at(2U).control);
-	auto credit_control = decode_credit_metadata(frames->at(3U).control);
-	auto close_control = decode_close_metadata(frames->at(4U).control);
-	if (!schema_control || !task_control || !credit_control || !close_control ||
-		schema_control->protocol_schema.empty() || credit_control->bytes == 0U ||
-		credit_control->frames == 0U || close_control->task_id != task_control->task_id)
+	auto validated = validate_host_transcript(*frames,
+											  {*expected_manifest,
+											   {*expected_task_id,
+												*expected_task_digest,
+												*expected_invocation,
+												*expected_toolchain,
+												*expected_environment},
+											   input_limits});
+	if (!validated)
 		return EXIT_FAILURE;
-	const std::string task_id{task_control->task_id};
+	const std::string task_id{validated->task.task_id};
 
 	if (mode == "crash")
 		(void)::raise(SIGSEGV);
@@ -135,7 +159,7 @@ int main(const int argument_count, const char* const* arguments)
 	output_limits.maximum_minor = frames->front().protocol_minor;
 	protocol_writer writer{sink, output_limits};
 	writer.grant_credit({64U * 1024U * 1024U, 65536U});
-	auto identity = decode_control_text(frames->at(0U).control).value();
+	auto identity = *expected_manifest;
 	if (mode == "wrong-identity")
 		identity.replace(identity.find(provider_id), provider_id.size(), "company.test.other");
 	const auto hello_flags =

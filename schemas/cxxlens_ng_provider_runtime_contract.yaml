@@ -1,10 +1,10 @@
 schema: cxxlens.provider-runtime-contract.v1
-document_version: 1.12.0
+document_version: 1.13.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#17-provider-model
-  decision_adr: docs/design/adr/0069-structured-provider-control-metadata.md
-  owner_issue: '#138'
+  decision_adr: docs/design/adr/0071-host-to-provider-transcript-validation.md
+  owner_issue: '#140'
   owner: steward.ng-provider-runtime
 dependencies:
   - schemas/cxxlens_ng_provider_protocol.yaml
@@ -151,6 +151,10 @@ protocol_session:
     control_text: strict-utf8-scalar-byte-preserving
     typed_control_text: schema-allowed-pipe-lf-cr-nul-and-multibyte-preserved
     evidence_summary: required-wire-field-bound-by-transcript-control-digest
+    host_transcript_encoder: shared-public-exact-five-frame
+    host_transcript_validator: exact-direction-type-order-stream-sequence-flags-control-payload-and-binding
+    host_transcript_authority: launcher-manifest-task-digests-and-negotiated-version
+    host_transcript_invalid: fail-before-payload-decode-without-output
     validator_bypass: forbidden
     harness_acceptance: complete-success-terminal-only
     callback_failure_cleanup: task-failed-terminal-for-provider-and-side-channel-finalization-errors
@@ -254,4 +258,5 @@ acceptance:
   - protocol-version-flags-and-extension-semantics-fail-closed
   - control-text-strict-utf8-and-typed-nul-policy
   - structured-control-metadata-lossless-and-delimiter-independent
+  - host-to-provider-shared-state-validator-and-runtime-worker-fixture-parity
   - immutable-selection-token-revalidated-before-process-effect

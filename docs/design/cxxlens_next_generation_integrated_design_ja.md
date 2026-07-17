@@ -2464,6 +2464,12 @@ grammar は decode 後に検証する。evidence は summary を含む4 fieldを
 execution report identity から落としてはならない。portable worker、process fixture、testing harness、shared host validator は同じ
 typed encoder/decoder を使用する。
 
+Issue #140 / ADR 0071 により逆方向の host-to-provider handshake も共有 state validator を迂回しない。accepted transcript は
+stream 1、sequence 0..4、flags 0 の `hello_ack, schema_negotiate, open_task, credit, close` exact 5 frameだけである。canonical
+manifest、negotiated schema/minor、task ID、task input/invocation/toolchain/environment digest、payload content digest、credit、close bindingを
+独立 launcher authority と照合する。process runtime は共有 encoderを使用し、Clang worker/fixtureはpayload decode前に共有 validatorを
+通す。invalid host transcriptはoutputなしでfail closedとし、frontend failure terminalは長いtask IDでも共有typed encoderを使用する。
+
 ADR 0040 により、decoder は major/minor/flags を public frame に保持し、session negotiation で選んだ exact
 major/minor と全 frame を照合する。reserved bit と unknown required extension は reject し、codec 未交渉の
 compressed payload を上位へ渡さない。unknown optional message は length/checksum/sequence/byte-and-frame credit を

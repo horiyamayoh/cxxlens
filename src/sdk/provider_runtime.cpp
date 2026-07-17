@@ -485,41 +485,15 @@ namespace cxxlens::sdk::provider
 		host_transcript(const process_task_request& request, const protocol_limits session_limits)
 		{
 			const auto& manifest = request.selection.selected_candidate().description;
-			auto hello = encode_control_text(manifest.canonical_json());
-			auto schema = encode_schema_negotiate_metadata(
-				{"cxxlens.provider-protocol.v1", session_limits.maximum_minor});
-			auto open = encode_open_task_metadata({request.task_id,
-												   request.task_input_digest,
-												   request.normalized_invocation_digest,
-												   request.toolchain_digest,
-												   request.environment_digest});
-			auto credit =
-				encode_credit_metadata({request.output_credit.bytes, request.output_credit.frames});
-			auto close = encode_close_metadata({request.task_id});
-			if (!hello || !schema || !open || !credit || !close)
-				return cxxlens::sdk::unexpected(runtime_error(
-					"provider.process-request-invalid", request.task_id, "control-utf8"));
-			std::array values{
-				frame{message_type::hello_ack, 1U, 0U, std::move(*hello), {}},
-				frame{message_type::schema_negotiate, 1U, 1U, std::move(*schema), {}},
-				frame{message_type::open_task, 1U, 2U, std::move(*open), request.payload},
-				frame{message_type::credit, 1U, 3U, std::move(*credit), {}},
-				frame{message_type::close, 1U, 4U, std::move(*close), {}},
-			};
-			for (auto& value : values)
-			{
-				value.protocol_major = session_limits.protocol_major;
-				value.protocol_minor = session_limits.maximum_minor;
-			}
-			std::vector<std::byte> output;
-			for (const auto& value : values)
-			{
-				auto encoded = encode_frame(value, session_limits);
-				if (!encoded)
-					return cxxlens::sdk::unexpected(std::move(encoded.error()));
-				output.insert(output.end(), encoded->begin(), encoded->end());
-			}
-			return output;
+			return encode_host_transcript({{manifest.canonical_json(),
+											{request.task_id,
+											 request.task_input_digest,
+											 request.normalized_invocation_digest,
+											 request.toolchain_digest,
+											 request.environment_digest},
+											session_limits},
+										   request.output_credit,
+										   request.payload});
 		}
 
 		[[nodiscard]] std::string transcript_projection(const std::span<const frame> frames)
@@ -753,11 +727,19 @@ namespace cxxlens::sdk::provider
 		invocation.standard_input = std::move(*transcript);
 		invocation.environment = {
 			{"CXXLENS_PROVIDER_ID", request.selection.selected_candidate().description.provider_id},
+			{"CXXLENS_PROVIDER_MANIFEST",
+			 request.selection.selected_candidate().description.canonical_json()},
 			{"CXXLENS_PROVIDER_BINARY_DIGEST",
 			 request.selection.selected_candidate().description.provider_binary_digest},
 			{"CXXLENS_PROVIDER_SEMANTIC_CONTRACT_DIGEST",
 			 request.selection.selected_candidate().description.provider_semantic_contract_digest},
 			{"CXXLENS_PROVIDER_TASK_ID", request.task_id},
+			{"CXXLENS_PROVIDER_TASK_INPUT_DIGEST", request.task_input_digest},
+			{"CXXLENS_PROVIDER_NORMALIZED_INVOCATION_DIGEST", request.normalized_invocation_digest},
+			{"CXXLENS_PROVIDER_TOOLCHAIN_DIGEST", request.toolchain_digest},
+			{"CXXLENS_PROVIDER_ENVIRONMENT_DIGEST", request.environment_digest},
+			{"CXXLENS_PROVIDER_PROTOCOL_MAJOR", std::to_string(session_limits->protocol_major)},
+			{"CXXLENS_PROVIDER_PROTOCOL_MINOR", std::to_string(session_limits->maximum_minor)},
 		};
 		invocation.budget = request.budget;
 		invocation.sandbox = *sandbox;

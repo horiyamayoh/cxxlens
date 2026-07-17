@@ -127,7 +127,7 @@ int main(const int argument_count, const char* const* arguments)
 		cxxlens::cc::relations::call_site::descriptor(),
 		cxxlens::cc::relations::call_direct_target::descriptor(),
 	};
-	request.task_id = "clang22-malformed-input";
+	request.task_id = "clang22-malformed-input-" + std::string(300U, 'x');
 	request.payload = {std::byte{0x01}, std::byte{0x02}};
 	request.task_input_digest = content_digest(request.payload);
 	request.normalized_invocation_digest =
@@ -148,8 +148,12 @@ int main(const int argument_count, const char* const* arguments)
 	require(processes != nullptr, "system process provider is unavailable");
 	process_provider_runtime runtime{*processes};
 	auto report = runtime.execute(request);
+	auto failure = report && !report->frames.empty()
+		? decode_task_failed_metadata(report->frames.back().control)
+		: result<task_failed_metadata>{unexpected(error{"sdk.test-setup", "terminal", {}})};
 	require(report && report->terminal == "provider.frontend-request-invalid" &&
 				report->frames.front().type == message_type::hello &&
-				report->frames.back().type == message_type::task_failed,
+				report->frames.back().type == message_type::task_failed && failure &&
+				failure->task_id == request.task_id && failure->error_field == "payload",
 			"Clang 22 worker did not use the validated provider protocol");
 }

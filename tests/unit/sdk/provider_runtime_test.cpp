@@ -604,6 +604,103 @@ namespace
 				"valid sandbox assurance failed evidence binding");
 	}
 
+	void check_host_transcript_validator(const std::string& executable)
+	{
+		auto process_request = task(select(executable, "success"));
+		const auto& description = process_request.selection.selected_candidate().description;
+		host_transcript_request host{{description.canonical_json(),
+									  {process_request.task_id,
+									   process_request.task_input_digest,
+									   process_request.normalized_invocation_digest,
+									   process_request.toolchain_digest,
+									   process_request.environment_digest},
+									  process_request.limits},
+									 process_request.output_credit,
+									 process_request.payload};
+		auto encoded = encode_host_transcript(host);
+		auto frames = encoded ? decode_frame_stream(*encoded, process_request.limits)
+							  : result<std::vector<frame>>{unexpected(encoded.error())};
+		auto validated = frames ? validate_host_transcript(*frames, host.expectation)
+								: result<validated_host_transcript>{unexpected(frames.error())};
+		require(validated && validated->task == host.expectation.task &&
+					validated->credit.bytes == host.credit.bytes &&
+					validated->credit.frames == host.credit.frames &&
+					validated->payload == host.payload,
+				"runtime-generated host transcript failed the shared worker validator");
+		const auto rejects = [&](std::vector<frame> values)
+		{
+			return !validate_host_transcript(values, host.expectation);
+		};
+		for (std::size_t index = 0U; index < frames->size(); ++index)
+		{
+			auto wrong_type = *frames;
+			wrong_type[index].type = index == 4U ? message_type::credit : message_type::close;
+			auto wrong_sequence = *frames;
+			wrong_sequence[index].sequence ^= 1U;
+			auto wrong_stream = *frames;
+			wrong_stream[index].stream_id = 2U;
+			auto wrong_flags = *frames;
+			wrong_flags[index].flags = static_cast<std::uint16_t>(frame_flag::required_extension);
+			auto empty_control = *frames;
+			empty_control[index].control.clear();
+			require(rejects(std::move(wrong_type)) && rejects(std::move(wrong_sequence)) &&
+						rejects(std::move(wrong_stream)) && rejects(std::move(wrong_flags)) &&
+						rejects(std::move(empty_control)),
+					"host transcript accepted a type/sequence/stream/flags/control mutation");
+		}
+		auto wrong_order = *frames;
+		std::swap(wrong_order[1U], wrong_order[3U]);
+		auto missing_close = *frames;
+		missing_close.pop_back();
+		auto duplicate_close = *frames;
+		duplicate_close.push_back(duplicate_close.back());
+		auto forbidden_payload = *frames;
+		forbidden_payload[1U].payload.push_back(std::byte{1U});
+		require(rejects(std::move(wrong_order)) && rejects(std::move(missing_close)) &&
+					rejects(std::move(duplicate_close)) && rejects(std::move(forbidden_payload)),
+				"host transcript accepted ordering/count/payload state mutation");
+
+		for (std::size_t field = 0U; field < 5U; ++field)
+		{
+			auto wrong_open = *frames;
+			auto metadata = host.expectation.task;
+			std::array<std::string*, 5U> values{&metadata.task_id,
+												&metadata.task_input_digest,
+												&metadata.normalized_invocation_digest,
+												&metadata.toolchain_digest,
+												&metadata.environment_digest};
+			*values[field] += "-mismatch";
+			wrong_open[2U].control = *encode_open_task_metadata(metadata);
+			require(rejects(std::move(wrong_open)), "host transcript accepted open_task mismatch");
+		}
+		auto wrong_payload = *frames;
+		wrong_payload[2U].payload.push_back(std::byte{2U});
+		auto wrong_close = *frames;
+		wrong_close[4U].control = *encode_close_metadata({"other-task"});
+		auto wrong_schema = *frames;
+		wrong_schema[1U].control =
+			*encode_schema_negotiate_metadata({"cxxlens.provider-protocol.v1", 1U});
+		auto wrong_manifest = host.expectation;
+		wrong_manifest.provider_manifest += " ";
+		require(rejects(std::move(wrong_payload)) && rejects(std::move(wrong_close)) &&
+					rejects(std::move(wrong_schema)) &&
+					!validate_host_transcript(*frames, wrong_manifest),
+				"host transcript accepted payload/close/schema/manifest binding mismatch");
+
+		auto maximum_credit = *frames;
+		maximum_credit[3U].control = *encode_credit_metadata(
+			{std::numeric_limits<std::uint64_t>::max(), std::numeric_limits<std::uint64_t>::max()});
+		auto maximum = validate_host_transcript(maximum_credit, host.expectation);
+		auto decimal_overflow = *frames;
+		decimal_overflow[3U].control = *encode_control_text("18446744073709551616|10");
+		auto extreme_decimal = *frames;
+		extreme_decimal[3U].control = *encode_control_text(std::string(4096U, '9') + "|10");
+		require(maximum && maximum->credit.bytes == std::numeric_limits<std::uint64_t>::max() &&
+					maximum->credit.frames == std::numeric_limits<std::uint64_t>::max() &&
+					rejects(std::move(decimal_overflow)) && rejects(std::move(extreme_decimal)),
+				"host credit boundary did not reject decimal overflow or preserve uint64 max");
+	}
+
 	void check_process_faults(const std::string& executable)
 	{
 		auto processes = make_system_provider_process_port();
@@ -974,6 +1071,7 @@ int main(const int argument_count, const char* const* arguments)
 	const std::string executable{arguments[1]};
 	check_selection(executable);
 	check_sandbox_closed_enum(executable);
+	check_host_transcript_validator(executable);
 	check_process_faults(executable);
 	check_prior_snapshot_preserved(executable);
 }

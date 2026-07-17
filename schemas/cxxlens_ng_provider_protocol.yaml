@@ -1,11 +1,11 @@
 schema: cxxlens.provider-protocol.v1
-document_version: 1.8.0
+document_version: 1.9.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#18-provider-protocol
   index: docs/design/catalogs/README.md
-  decision_adr: docs/design/adr/0069-structured-provider-control-metadata.md
-  owner_issue: '#138'
+  decision_adr: docs/design/adr/0071-host-to-provider-transcript-validation.md
+  owner_issue: '#140'
   owner: steward.ng-provider-protocol
 compatibility:
   version_axis: provider-protocol
@@ -159,6 +159,18 @@ state_machine_validation:
     - provider.batch-state-invalid
     - provider.relation-incompatible
     - provider.coverage-incomplete
+host_to_provider_state_machine:
+  implementation: shared-public-encoder-and-validator
+  consumers: [process-runtime, clang22-worker, process-fixture, testing-reference]
+  exact_frames: [hello_ack, schema_negotiate, open_task, credit, close]
+  stream_id: 1
+  sequence: [0, 1, 2, 3, 4]
+  flags: zero
+  payload_policy: open-task-only
+  control_policy: typed-canonical-cbor-nonempty
+  exact_authority: [canonical-manifest, protocol-major-minor, task-id, task-input-digest, normalized-invocation-digest, toolchain-digest, environment-digest, payload-content-digest, close-task-id]
+  credit: [cbor-uint64, bytes-nonzero, frames-nonzero, overflow-reject]
+  invalid_action: fail-before-payload-decode-without-output
 structured_control_metadata:
   encoding: deterministic-typed-cbor-map
   delimiter_parsing: forbidden
