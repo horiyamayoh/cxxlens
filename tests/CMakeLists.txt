@@ -18,6 +18,7 @@ set(cxxlens_sdk_cases
     snapshot-lifetime
     frame-native-escape
     columnar-wire-codec
+    relation-sink-batch-state
     project-catalog-identity
     provider-tooling-faults
     relation-engine-claim-kernel)

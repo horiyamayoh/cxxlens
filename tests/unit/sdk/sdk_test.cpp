@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <ranges>
 #include <set>
 #include <string>
@@ -1022,6 +1023,133 @@ namespace
 				"column lengths/order/digests did not survive batch-end roundtrip");
 	}
 
+	void check_relation_sink_batch_state()
+	{
+		using namespace cxxlens::sdk;
+		using namespace cxxlens::sdk::provider;
+		class fault_sink final : public frame_sink
+		{
+		  public:
+			result<void> write(const std::span<const std::byte> bytes) override
+			{
+				const auto attempt = write_attempts++;
+				if (fail_at && attempt == *fail_at)
+					return cxxlens::sdk::unexpected(
+						cxxlens::sdk::error{"provider.backpressure", "test-sink", {}});
+				transcript.insert(transcript.end(), bytes.begin(), bytes.end());
+				return {};
+			}
+
+			std::optional<std::size_t> fail_at;
+			std::size_t write_attempts{};
+			std::vector<std::byte> transcript;
+		};
+
+		const auto descriptor = cxxlens::cc::relations::call_site::descriptor();
+		const std::array outputs{descriptor};
+		const std::array dependencies{std::string{"dependency-1"}};
+		fault_sink sink;
+		protocol_writer writer{sink};
+		writer.grant_credit({64U * 1024U * 1024U, 65536U});
+		execution_context execution;
+		execution.budget.rows = 2U;
+		context provider_context{writer, execution, "task:batch-reset", outputs, dependencies};
+		auto output = provider_context.relation(descriptor);
+
+		auto empty_begin = output.begin("dependency-1", "atomic-1", "empty-batch");
+		require(empty_begin.has_value(),
+				"empty first batch did not begin: " +
+					(empty_begin ? std::string{} : empty_begin.error().code));
+		require(output.row_count() == 0U, "empty first batch began with a nonzero row count");
+		auto empty_end = output.end();
+		require(empty_end.has_value(),
+				"empty first batch did not end: " +
+					(empty_end ? std::string{}
+							   : empty_end.error().code + "/" + empty_end.error().detail));
+		for (const auto* batch : {"batch-1", "batch-2"})
+		{
+			require(output.begin("dependency-1", "atomic-1", batch).has_value() &&
+						output.row_count() == 0U,
+					"begin did not reset the batch-local row count");
+			require(output.push(make_call_row()).has_value() && output.row_count() == 1U &&
+						output.end().has_value() && output.row_count() == 1U,
+					"nonempty batch did not retain its own row count");
+		}
+		require(output.begin("dependency-1", "atomic-1", "budget-batch").has_value() &&
+					output.row_count() == 0U,
+				"third begin did not reset batch-local state");
+		auto exhausted = output.push(make_call_row());
+		require(!exhausted && exhausted.error().code == "provider.output-limit" &&
+					output.row_count() == 0U,
+				"task-global row budget was reset with batch-local state");
+
+		auto frames = decode_frame_stream(sink.transcript);
+		require(frames.has_value(), "multi-batch transcript did not decode");
+		std::size_t empty_terminals{};
+		std::size_t first_terminals{};
+		std::size_t second_terminals{};
+		std::size_t second_chunks{};
+		for (const auto& frame : *frames)
+		{
+			if (frame.type == message_type::column_chunk)
+			{
+				auto chunk = decode_column_chunk(frame.control, frame.payload, descriptor);
+				require(chunk.has_value(), "multi-batch column chunk did not decode");
+				if (chunk->batch_id == "batch-2")
+				{
+					++second_chunks;
+					require(chunk->row_offset == 0U && chunk->row_count == 1U &&
+								chunk->chunk_index == 0U,
+							"second batch inherited row offset or chunk index");
+				}
+			}
+			if (frame.type == message_type::batch_end)
+			{
+				auto terminal = decode_columnar_batch_end(frame.control, frame.payload);
+				require(terminal.has_value(), "multi-batch terminal digest did not validate");
+				if (terminal->batch_id == "empty-batch")
+					empty_terminals += terminal->row_count == 0U ? 1U : 100U;
+				else if (terminal->batch_id == "batch-1")
+					first_terminals += terminal->row_count == 1U ? 1U : 100U;
+				else if (terminal->batch_id == "batch-2")
+					second_terminals += terminal->row_count == 1U ? 1U : 100U;
+			}
+		}
+		require(empty_terminals == 1U && first_terminals == 1U && second_terminals == 1U &&
+					second_chunks == descriptor.columns.size(),
+				"multi-batch row counts, column coverage, or batch digests diverged");
+
+		fault_sink failing_sink;
+		failing_sink.fail_at = 2U;
+		protocol_writer failing_writer{failing_sink};
+		failing_writer.grant_credit({64U * 1024U * 1024U, 65536U});
+		execution_context failing_execution;
+		failing_execution.budget.rows = 10U;
+		context failing_context{
+			failing_writer, failing_execution, "task:partial-send", outputs, dependencies};
+		auto failing_output = failing_context.relation(descriptor);
+		require(failing_output.begin("dependency-1", "atomic-1", "partial-batch").has_value() &&
+					failing_output.push(make_call_row()).has_value(),
+				"partial-send fixture setup failed");
+		auto partial = failing_output.end();
+		require(!partial && partial.error().code == "provider.backpressure",
+				"injected later-column send failure was not observed");
+		const auto attempts_after_failure = failing_sink.write_attempts;
+		for (auto rejected : {failing_output.push(make_call_row()),
+							  failing_output.end(),
+							  failing_output.begin("dependency-1", "atomic-2", "retry-batch")})
+			require(!rejected && rejected.error().code == "provider.batch-state-invalid",
+					"poisoned relation sink permitted a retry after partial column output");
+		require(failing_sink.write_attempts == attempts_after_failure &&
+					failing_output.row_count() == 1U,
+				"poisoned sink emitted duplicate output or lost failed-batch accounting");
+		auto failed_prefix = decode_frame_stream(failing_sink.transcript);
+		require(failed_prefix && failed_prefix->size() == 2U &&
+					failed_prefix->front().type == message_type::batch_begin &&
+					failed_prefix->back().type == message_type::column_chunk,
+				"partial send did not leave one sealed, non-retried transcript prefix");
+	}
+
 	void check_project_catalog_identity()
 	{
 		using cxxlens::sdk::canonical_value;
@@ -1637,6 +1765,7 @@ int main(const int argc, const char* const argv[])
 		test_case{"snapshot-lifetime", check_snapshot_lifetime},
 		test_case{"frame-native-escape", check_frame_and_native_escape},
 		test_case{"columnar-wire-codec", check_columnar_wire_codec},
+		test_case{"relation-sink-batch-state", check_relation_sink_batch_state},
 		test_case{"project-catalog-identity", check_project_catalog_identity},
 		test_case{"provider-tooling-faults", check_provider_tooling_and_faults},
 		test_case{"relation-engine-claim-kernel", check_relation_engine_and_claim_kernel},

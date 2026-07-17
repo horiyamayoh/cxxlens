@@ -374,6 +374,7 @@ namespace cxxlens::sdk::provider
 		begin(std::string dependency_group, std::string atomic_output_group, std::string batch_id);
 		[[nodiscard]] result<void> push(const detached_row& row);
 		[[nodiscard]] result<void> end();
+		/** @brief Row count of the active batch, or the most recently ended/failed batch. */
 		[[nodiscard]] std::uint64_t row_count() const noexcept;
 
 	  private:
@@ -403,6 +404,7 @@ namespace cxxlens::sdk::provider
 		std::optional<error>* relation_violation_{};
 		bool authorized_{};
 		bool open_{};
+		bool poisoned_{};
 		friend class context;
 	};
 

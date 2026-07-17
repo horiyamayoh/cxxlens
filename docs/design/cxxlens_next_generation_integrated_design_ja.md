@@ -2184,6 +2184,12 @@ descriptor ID/digest、column、row offset/count、chunk index、encoding、payl
 bind する。optional absence と semantic unknown は validity/unknown bitset と unknown reason により区別し、
 host と logical validation は同じ native-independent decoder を使う。
 
+Issue #125 により `relation_sink` の row count、row offset、column chunk index/summary、ordered chunk digest は
+batch-local state とし、成功した `batch_begin` ごとに初期化する。task row budget だけは context で累積する。
+複数 column の送信途中または terminal send が失敗した sink は poisoned terminal とし、同じ sink の
+`push` / `end` / 次 batch `begin` は `provider.batch-state-invalid` で fail closed する。partial column prefix を
+retry して duplicate offset/index を生成してはならない。
+
 Issue #101 / ADR 0044 により、`provider_harness`、process runtime、public transcript reference は
 `provider_validation_internal.hpp` の単一 typed transcript validator を共有する。process mode は hello/schema
 handshake から、logical harness mode は task acceptance から開始するが、その後の direction/order、descriptor whitelist、

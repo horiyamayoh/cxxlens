@@ -1284,10 +1284,11 @@ namespace cxxlens::sdk::provider
 
 	result<encoded_columnar_batch_end> encode_columnar_batch_end(const columnar_batch_end& value)
 	{
+		const bool empty_batch = value.row_count == 0U;
 		if (value.task_id.empty() || value.dependency_group_id.empty() ||
 			value.atomic_output_group_id.empty() || value.batch_id.empty() ||
 			value.descriptor_id.empty() || !canonical_digest(value.descriptor_digest) ||
-			value.columns.empty() || value.ordered_chunk_digests.empty() ||
+			value.columns.empty() || empty_batch != value.ordered_chunk_digests.empty() ||
 			value.batch_digest != batch_digest(value))
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.columnar-invalid", value.batch_id, "batch-end"));
@@ -1306,7 +1307,9 @@ namespace cxxlens::sdk::provider
 		{
 			if (column.column_id.empty() ||
 				column.column_id.size() > std::numeric_limits<std::uint16_t>::max() ||
-				!cxxlens::sdk::detail::valid_utf8(column.column_id) || column.chunk_count == 0U ||
+				!cxxlens::sdk::detail::valid_utf8(column.column_id) ||
+				empty_batch != (column.chunk_count == 0U) ||
+				(empty_batch && column.payload_bytes != 0U) ||
 				!column_ids.insert(column.column_id).second ||
 				column.chunk_count > std::numeric_limits<std::uint64_t>::max() - summarized_chunks)
 				return cxxlens::sdk::unexpected(
@@ -1375,7 +1378,7 @@ namespace cxxlens::sdk::provider
 		const auto* chunk_count = number("chunk_count");
 		const auto* row_count = number("row_count");
 		if (column_count == nullptr || chunk_count == nullptr || row_count == nullptr ||
-			*column_count == 0U || *chunk_count == 0U)
+			*column_count == 0U || (*row_count == 0U) != (*chunk_count == 0U))
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.columnar-invalid", "batch-end", "counts"));
 		columnar_batch_end output;
@@ -1419,8 +1422,8 @@ namespace cxxlens::sdk::provider
 			offset += 8U;
 			const auto chunks = read_little_endian<std::uint64_t>(payload, offset);
 			offset += 8U;
-			if (!cxxlens::sdk::detail::valid_utf8(id) || chunks == 0U ||
-				!column_ids.insert(id).second ||
+			if (!cxxlens::sdk::detail::valid_utf8(id) || (*row_count == 0U) != (chunks == 0U) ||
+				(*row_count == 0U && payload_bytes != 0U) || !column_ids.insert(id).second ||
 				chunks > std::numeric_limits<std::uint64_t>::max() - summarized_chunks)
 				return cxxlens::sdk::unexpected(
 					provider_error("provider.columnar-invalid", output.batch_id, "column-summary"));
@@ -1749,6 +1752,9 @@ namespace cxxlens::sdk::provider
 									  std::string atomic_output_group,
 									  std::string batch_id)
 	{
+		if (poisoned_)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.batch-state-invalid", "poisoned"));
 		if (!authorized_ || !std::ranges::binary_search(dependency_groups_, dependency_group))
 		{
 			auto failure = provider_error(
@@ -1763,19 +1769,28 @@ namespace cxxlens::sdk::provider
 				provider_error("provider.batch-state-invalid", "begin"));
 		if (auto valid = descriptor_.validate(); !valid)
 			return cxxlens::sdk::unexpected(std::move(valid.error()));
-		dependency_group_ = std::move(dependency_group);
-		atomic_output_group_ = std::move(atomic_output_group);
-		batch_id_ = std::move(batch_id);
-		if (column_summaries_.empty())
-			for (const auto& column : descriptor_.columns)
-				column_summaries_.push_back({column.id, 0U, 0U});
+		std::vector<batch_column_summary> fresh_summaries;
+		fresh_summaries.reserve(descriptor_.columns.size());
+		for (const auto& column : descriptor_.columns)
+			fresh_summaries.push_back({column.id, 0U, 0U});
 		auto control = encode_control_text(task_id_ + "|" + descriptor_.id + "|" +
-										   descriptor_.descriptor_digest + "|" + dependency_group_ +
-										   "|" + atomic_output_group_ + "|" + batch_id_);
+										   descriptor_.descriptor_digest + "|" + dependency_group +
+										   "|" + atomic_output_group + "|" + batch_id);
 		if (!control)
 			return cxxlens::sdk::unexpected(std::move(control.error()));
 		if (auto sent = writer_->send(message_type::batch_begin, *control); !sent)
+		{
+			poisoned_ = true;
 			return sent;
+		}
+		dependency_group_ = std::move(dependency_group);
+		atomic_output_group_ = std::move(atomic_output_group);
+		batch_id_ = std::move(batch_id);
+		pending_rows_.clear();
+		column_summaries_ = std::move(fresh_summaries);
+		ordered_chunk_digests_.clear();
+		row_count_ = 0U;
+		emitted_rows_ = 0U;
 		open_ = true;
 		return {};
 	}
@@ -1784,15 +1799,20 @@ namespace cxxlens::sdk::provider
 	{
 		if (pending_rows_.empty())
 			return {};
+		if (poisoned_)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.batch-state-invalid", "poisoned"));
 		if (!open_ || writer_ == nullptr || pending_rows_.size() > 256U ||
 			column_summaries_.size() != descriptor_.columns.size())
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.columnar-invalid", batch_id_, "flush-state"));
+		std::vector<encoded_column_chunk> encoded_chunks;
+		encoded_chunks.reserve(descriptor_.columns.size());
 		for (std::size_t column_index = 0U; column_index < descriptor_.columns.size();
 			 ++column_index)
 		{
 			const auto& column = descriptor_.columns[column_index];
-			auto& summary = column_summaries_[column_index];
+			const auto& summary = column_summaries_[column_index];
 			column_chunk_record chunk{task_id_,
 									  dependency_group_,
 									  atomic_output_group_,
@@ -1826,13 +1846,22 @@ namespace cxxlens::sdk::provider
 			auto validated = decode_column_chunk(encoded->control, encoded->payload, column);
 			if (!validated)
 				return cxxlens::sdk::unexpected(std::move(validated.error()));
+			encoded_chunks.push_back(std::move(*encoded));
+		}
+		for (std::size_t column_index = 0U; column_index < encoded_chunks.size(); ++column_index)
+		{
+			auto& encoded = encoded_chunks[column_index];
 			if (auto sent =
-					writer_->send(message_type::column_chunk, encoded->control, encoded->payload);
+					writer_->send(message_type::column_chunk, encoded.control, encoded.payload);
 				!sent)
+			{
+				poisoned_ = true;
 				return sent;
-			summary.payload_bytes += encoded->payload.size();
+			}
+			auto& summary = column_summaries_[column_index];
+			summary.payload_bytes += encoded.payload.size();
 			++summary.chunk_count;
-			ordered_chunk_digests_.push_back(std::move(encoded->chunk_digest));
+			ordered_chunk_digests_.push_back(std::move(encoded.chunk_digest));
 		}
 		emitted_rows_ += pending_rows_.size();
 		pending_rows_.clear();
@@ -1841,6 +1870,9 @@ namespace cxxlens::sdk::provider
 
 	result<void> relation_sink::push(const detached_row& row)
 	{
+		if (poisoned_)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.batch-state-invalid", "poisoned"));
 		if (!open_)
 			return cxxlens::sdk::unexpected(provider_error("provider.batch-state-invalid", "push"));
 		if (total_rows_ == nullptr || *total_rows_ >= maximum_rows_)
@@ -1857,6 +1889,9 @@ namespace cxxlens::sdk::provider
 
 	result<void> relation_sink::end()
 	{
+		if (poisoned_)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.batch-state-invalid", "poisoned"));
 		if (!open_)
 			return cxxlens::sdk::unexpected(provider_error("provider.batch-state-invalid", "end"));
 		if (auto flushed = flush_chunk(); !flushed)
@@ -1880,7 +1915,10 @@ namespace cxxlens::sdk::provider
 			return cxxlens::sdk::unexpected(std::move(validated.error()));
 		if (auto sent = writer_->send(message_type::batch_end, encoded->control, encoded->payload);
 			!sent)
+		{
+			poisoned_ = true;
 			return sent;
+		}
 		open_ = false;
 		return {};
 	}

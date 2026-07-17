@@ -239,6 +239,7 @@ columnar_chunks:
     payload_magic: CXBE
     payload_version: 1
     payload_order: [descriptor-order-column-id-payload-bytes-chunk-count, ordered-chunk-digests]
+    empty_batch: [zero-row-count, zero-payload-bytes-per-column, zero-chunks-per-column, empty-ordered-chunk-digests]
     host_validation: exact-length-order-offset-index-digest-recomputation-before-seal
 flow_control:
   model: host-granted-byte-and-frame-credit
