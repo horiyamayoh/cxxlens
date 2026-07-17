@@ -25,6 +25,7 @@ namespace cxxlens::cc::relations
 				output.semantics = "cc.type/1";
 				output.owner_namespace = "cxxlens.standard.cc";
 				output.contract_canonical = R"cxxlens({"claim":{"cardinality":"functional_assertion","condition_policy":"claim-envelope-required","domain_identity":{"contract":"canonical-binary-tuple-v1","projection":["cc.type.v1.constructor","cc.type.v1.nominal_entity","cc.type.v1.component_signature_digest","cc.type.v1.qualifiers","cc.type.v1.dependent"],"result_column":"cc.type.v1.type"},"interpretation_required":true,"key":["cc.type.v1.type"]},"closure":{"supported_kinds":["relation-key-enumeration"]},"columns":[{"id":"cc.type.v1.type","identity_role":"claim_key","name":"type","required":true,"type":"typed_id<cc_type_id>"},{"id":"cc.type.v1.constructor","identity_role":"authoritative_payload","name":"constructor","required":true,"type":"open_symbol<cc.type-constructor/1>"},{"id":"cc.type.v1.nominal_entity","identity_role":"authoritative_payload","name":"nominal_entity","required":false,"type":"optional<typed_id<cc_entity_id>>"},{"id":"cc.type.v1.component_signature_digest","identity_role":"authoritative_payload","name":"component_signature_digest","required":true,"type":"digest"},{"id":"cc.type.v1.qualifiers","identity_role":"authoritative_payload","name":"qualifiers","required":true,"type":"set<open_symbol<cc.type-qualifier/1>>"},{"id":"cc.type.v1.dependent","identity_role":"authoritative_payload","name":"dependent","required":true,"type":"bool"},{"id":"cc.type.v1.spelling","identity_role":"display","name":"spelling","required":false,"type":"optional<utf8_string>"}],"coverage":{"execution_domain":"cc.type.compile-unit"},"descriptor_id":"cc.type.v1","evolution_policy":"ng0.additive.v1","generated_cpp_tag":"cxxlens::cc::relations::type","indexes":[["cc.type.v1.constructor"],["cc.type.v1.nominal_entity"]],"merge":{"conflict_columns":["cc.type.v1.constructor","cc.type.v1.nominal_entity","cc.type.v1.component_signature_digest","cc.type.v1.qualifiers","cc.type.v1.dependent"],"mode":"functional_assertion"},"name":"cc.type","owner_namespace":"cxxlens.standard.cc","partition":{"condition_fragment":"envelope","interpretation_domain":"envelope","suggested_keys":["cc.type.v1.type"]},"profile":"NG0","provenance":{"minimum":"canonicalization"},"references":[{"on_missing":"unresolved","source_columns":["cc.type.v1.nominal_entity"],"strength":"soft_semantic","target_columns":["cc.entity.v1.entity"],"target_relation":"cc.entity"}],"semantic_major":1,"semantics":"cc.type/1","stability":"versioned","summary":"Structural type identity with nominal entities breaking recursive cycles.","version":"1.0.0"})cxxlens";
+				output.contract_digest = "sha256:14e97256affb91bc4dfd6a13436372113181ee584ca9942c219e4740652eb338";
 				output.columns = {
 					{"cc.type.v1.type", "type", {sdk::scalar_kind::typed_id, "cc_type_id", false}, true, sdk::column_role::claim_key},
 					{"cc.type.v1.constructor", "constructor", {sdk::scalar_kind::open_symbol, "cc.type-constructor/1", false}, true, sdk::column_role::authoritative_payload},
@@ -48,7 +49,9 @@ namespace cxxlens::cc::relations
 					"cc.type.v1.qualifiers",
 					"cc.type.v1.dependent",
 				};
-				output.descriptor_digest = "sha256:14e97256affb91bc4dfd6a13436372113181ee584ca9942c219e4740652eb338";
+				output.descriptor_digest = *sdk::semantic_digest(
+					"cxxlens.relation-descriptor-binding.v2",
+					output.contract_digest + "\n" + output.canonical_form());
 				return output;
 			}();
 			return value;

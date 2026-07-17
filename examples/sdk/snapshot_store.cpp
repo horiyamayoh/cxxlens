@@ -28,7 +28,8 @@ namespace
 		};
 		value.key_columns = {value.columns.front().id};
 		auto digest =
-			cxxlens::sdk::semantic_digest("cxxlens.relation-descriptor.v1", value.canonical_form());
+			cxxlens::sdk::semantic_digest("cxxlens.relation-descriptor-binding.v2",
+										  value.contract_digest + "\n" + value.canonical_form());
 		if (!digest)
 			return cxxlens::sdk::unexpected(std::move(digest.error()));
 		value.descriptor_digest = std::move(*digest);

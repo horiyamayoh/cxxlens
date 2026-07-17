@@ -160,6 +160,12 @@ namespace cxxlens::sdk
 		{
 			return strength == reference_strength::hard ? "hard" : "soft_semantic";
 		}
+
+		[[nodiscard]] result<std::string> descriptor_binding(const relation_descriptor& descriptor)
+		{
+			return semantic_digest("cxxlens.relation-descriptor-binding.v2",
+								   descriptor.contract_digest + "\n" + descriptor.canonical_form());
+		}
 	} // namespace
 
 	std::string value_type::canonical_name() const
@@ -250,10 +256,15 @@ namespace cxxlens::sdk
 					return cxxlens::sdk::unexpected(
 						relation_error("sdk.reference-invalid", source, "source-column"));
 		}
-		const auto expected = contract_canonical.empty()
-			? *semantic_digest("cxxlens.relation-descriptor.v1", canonical_form())
-			: content_digest(std::as_bytes(std::span{contract_canonical}));
-		if (descriptor_digest != expected)
+		if (contract_canonical.empty() != contract_digest.empty())
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.descriptor-digest-mismatch", "contract_digest"));
+		if (!contract_canonical.empty() &&
+			contract_digest != content_digest(std::as_bytes(std::span{contract_canonical})))
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.descriptor-digest-mismatch", "contract_digest"));
+		auto expected = descriptor_binding(*this);
+		if (!expected || descriptor_digest != *expected)
 			return cxxlens::sdk::unexpected(
 				relation_error("sdk.descriptor-digest-mismatch", "descriptor_digest"));
 		return {};
@@ -363,8 +374,12 @@ namespace cxxlens::sdk
 		if (!frozen_ || *frozen_)
 			return cxxlens::sdk::unexpected(relation_error("sdk.registry-frozen", descriptor.name));
 		if (descriptor.descriptor_digest.empty())
-			descriptor.descriptor_digest =
-				*semantic_digest("cxxlens.relation-descriptor.v1", descriptor.canonical_form());
+		{
+			if (!descriptor.contract_canonical.empty())
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.descriptor-digest-mismatch", "descriptor_digest"));
+			descriptor.descriptor_digest = *descriptor_binding(descriptor);
+		}
 		if (auto valid = descriptor.validate(); !valid)
 			return valid;
 		if (const auto found = descriptors_.find(descriptor.name); found != descriptors_.end())

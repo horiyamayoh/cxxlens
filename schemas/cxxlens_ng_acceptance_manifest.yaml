@@ -33,6 +33,7 @@ entries:
       - schemas/cxxlens_ng_relation_registry.yaml
       - tools/quality/check_ng_relation_contract.py
       - tools/quality/check_ng_sdk_contract.py
+      - docs/design/adr/0017-relation-descriptor-binding.md
     summary: Relation extension, IDL evolution, references, and static/dynamic parity.
   - id: gate.g2
     status: implemented

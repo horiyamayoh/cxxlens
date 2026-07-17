@@ -1195,6 +1195,11 @@ operand とする。descriptor digest は exact descriptor の canonical project
 minor optional column は保持し、unknown closed symbol、minor required column、key/cardinality/condition/identity の
 変更は fail closed または semantic major change とする。
 
+Issue #74 / ADR 0017 により descriptor identity は authority contract digest と runtime が実際に使用する
+`canonical_form()` の双方を `cxxlens.relation-descriptor-binding.v2` で bind する。generated descriptor の
+authority digestを保持したまま column/key/reference/merge/conflict/semanticsを改変した場合は
+`sdk.descriptor-digest-mismatch` で拒否し、registry digest はこの bound descriptor digest 集合から構成する。
+
 registry の build-time generation は descriptor document または installation manifest を探索する。external
 relation の追加に中央 enum、switch、source list の変更を要求してはならない。hard reference は staged/base
 snapshot で解決できなければ batch reject、soft semantic reference は row と `core.unresolved` をともに保持する。

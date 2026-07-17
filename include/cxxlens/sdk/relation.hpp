@@ -102,6 +102,7 @@ namespace cxxlens::sdk
 		std::string semantics;
 		std::string owner_namespace;
 		std::string contract_canonical;
+		std::string contract_digest;
 		std::string descriptor_digest;
 		std::vector<column_descriptor> columns;
 		std::vector<std::string> key_columns;

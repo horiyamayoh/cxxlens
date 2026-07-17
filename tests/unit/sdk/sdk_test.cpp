@@ -123,7 +123,8 @@ namespace
 		descriptor.merge = mode;
 		descriptor.conflict_columns = {descriptor.id + ".value"};
 		descriptor.descriptor_digest = *cxxlens::sdk::semantic_digest(
-			"cxxlens.relation-descriptor.v1", descriptor.canonical_form());
+			"cxxlens.relation-descriptor-binding.v2",
+			descriptor.contract_digest + "\n" + descriptor.canonical_form());
 		return descriptor;
 	}
 
@@ -146,7 +147,8 @@ namespace
 		descriptor.key_columns = {column_id};
 		descriptor.merge = cxxlens::sdk::merge_mode::set;
 		descriptor.descriptor_digest = *cxxlens::sdk::semantic_digest(
-			"cxxlens.relation-descriptor.v1", descriptor.canonical_form());
+			"cxxlens.relation-descriptor-binding.v2",
+			descriptor.contract_digest + "\n" + descriptor.canonical_form());
 		return descriptor;
 	}
 
@@ -245,6 +247,64 @@ namespace
 			require(!rejected && rejected.error().code == "sdk.semantic-domain-invalid",
 					"invalid semantic domain was accepted");
 		}
+	}
+
+	void check_descriptor_binding()
+	{
+		using cxxlens::sdk::column_role;
+		using cxxlens::sdk::merge_mode;
+		using cxxlens::sdk::reference_strength;
+		using cxxlens::sdk::scalar_kind;
+		const auto trusted = cxxlens::cc::relations::call_site::descriptor();
+		require(trusted.validate().has_value(), "generated descriptor binding rejected authority");
+		const auto rejects_stale_binding =
+			[](cxxlens::sdk::relation_descriptor candidate, const std::string_view subject)
+		{
+			auto valid = candidate.validate();
+			require(!valid && valid.error().code == "sdk.descriptor-digest-mismatch",
+					"generated descriptor mutation retained its trusted digest: " +
+						std::string{subject});
+		};
+
+		auto merge = trusted;
+		merge.merge = merge_mode::set;
+		rejects_stale_binding(std::move(merge), "merge");
+
+		auto key = trusted;
+		key.columns[0].role = column_role::authoritative_payload;
+		key.columns[1].role = column_role::claim_key;
+		key.key_columns = {key.columns[1].id};
+		rejects_stale_binding(std::move(key), "key");
+
+		auto column_type = trusted;
+		column_type.columns.back().type.scalar = scalar_kind::signed_integer;
+		rejects_stale_binding(std::move(column_type), "column type");
+
+		auto reference = trusted;
+		reference.references.front().strength = reference_strength::soft_semantic;
+		rejects_stale_binding(std::move(reference), "reference");
+
+		auto semantics = trusted;
+		semantics.semantics += ".forged";
+		rejects_stale_binding(std::move(semantics), "semantics");
+
+		auto conflicts = trusted;
+		conflicts.conflict_columns.pop_back();
+		rejects_stale_binding(std::move(conflicts), "conflict columns");
+
+		auto set_descriptor = make_merge_descriptor("company.test.binding", merge_mode::set);
+		auto multiset_descriptor =
+			make_merge_descriptor("company.test.binding", merge_mode::multiset);
+		cxxlens::sdk::relation_registry set_registry;
+		cxxlens::sdk::relation_registry multiset_registry;
+		require(set_registry.add(std::move(set_descriptor)) &&
+					multiset_registry.add(std::move(multiset_descriptor)),
+				"dynamic descriptor binding setup failed");
+		auto set_engine = set_registry.build("binding-generation");
+		auto multiset_engine = multiset_registry.build("binding-generation");
+		require(set_engine && multiset_engine &&
+					set_engine->registry_digest() != multiset_engine->registry_digest(),
+				"different runtime descriptors produced the same registry digest");
 	}
 
 	void check_static_dynamic_query()
@@ -551,8 +611,9 @@ namespace
 
 		auto native = make_merge_descriptor("company.test.native", merge_mode::set);
 		native.columns.back().type = {cxxlens::sdk::scalar_kind::typed_id, "native_pointer", false};
-		native.descriptor_digest = *cxxlens::sdk::semantic_digest("cxxlens.relation-descriptor.v1",
-																  native.canonical_form());
+		native.descriptor_digest =
+			*cxxlens::sdk::semantic_digest("cxxlens.relation-descriptor-binding.v2",
+										   native.contract_digest + "\n" + native.canonical_form());
 		cxxlens::sdk::relation_registry native_registry;
 		auto native_rejected = native_registry.add(std::move(native));
 		require(!native_rejected && native_rejected.error().code == "sdk.native-address-payload",
@@ -570,7 +631,8 @@ namespace
 							   cxxlens::sdk::reference_strength::hard}};
 		for (auto* descriptor : {&cycle_a, &cycle_b})
 			descriptor->descriptor_digest = *cxxlens::sdk::semantic_digest(
-				"cxxlens.relation-descriptor.v1", descriptor->canonical_form());
+				"cxxlens.relation-descriptor-binding.v2",
+				descriptor->contract_digest + "\n" + descriptor->canonical_form());
 		cxxlens::sdk::relation_registry cycle_registry;
 		require(cycle_registry.add(cycle_a) && cycle_registry.add(cycle_b),
 				"hard-cycle descriptors were rejected before engine validation");
@@ -590,6 +652,7 @@ namespace
 int main()
 {
 	check_digest();
+	check_descriptor_binding();
 	check_static_dynamic_query();
 	check_snapshot_lifetime();
 	check_frame_and_native_escape();

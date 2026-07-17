@@ -232,15 +232,20 @@ namespace cxxlens::sdk
 		return std::string{identity_kind} + ':' + content_digest(bytes);
 	}
 
+	// The public order is part of the v2 contract and both views have intentionally distinct roles.
+	// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 	result<std::string> semantic_digest(const std::string_view domain, const std::string_view bytes)
 	{
 		if (domain.empty() || domain.front() < 'a' || domain.front() > 'z')
 			return unexpected(error{"sdk.semantic-domain-invalid", "domain", std::string{domain}});
 		for (const auto byte : domain)
-			if (!((byte >= 'a' && byte <= 'z') || (byte >= '0' && byte <= '9') || byte == '.' ||
-				  byte == '_' || byte == '-'))
+		{
+			const bool valid = (byte >= 'a' && byte <= 'z') || (byte >= '0' && byte <= '9') ||
+				byte == '.' || byte == '_' || byte == '-';
+			if (!valid)
 				return unexpected(
 					error{"sdk.semantic-domain-invalid", "domain", std::string{domain}});
+		}
 
 		std::vector<std::byte> payload;
 		payload.reserve(bytes.size());

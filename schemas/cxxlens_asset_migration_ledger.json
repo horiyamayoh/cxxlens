@@ -1,5 +1,5 @@
 {
-  "asset_count": 259,
+  "asset_count": 260,
   "assets": [
     {
       "authority": "active",
@@ -515,6 +515,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0015-process-provider-runtime-clang22-normalizer.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0016-semantic-digest-v2.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1816,7 +1823,7 @@
     }
   ],
   "classifications": {
-    "active": 223,
+    "active": 224,
     "archived": 35,
     "generated": 1
   },

@@ -153,8 +153,9 @@ namespace cxxlens::detail::clang22
 				prefix + "exact_equivalence",
 				prefix + "limitation",
 			};
-			descriptor.descriptor_digest = *sdk::semantic_digest("cxxlens.relation-descriptor.v1",
-																 descriptor.canonical_form());
+			descriptor.descriptor_digest = *sdk::semantic_digest(
+				"cxxlens.relation-descriptor-binding.v2",
+				descriptor.contract_digest + "\n" + descriptor.canonical_form());
 			return descriptor;
 		}
 

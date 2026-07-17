@@ -24,8 +24,9 @@ namespace
 							   cxxlens::sdk::column_role::claim_key}};
 		descriptor.key_columns = {"source.span.v1.span"};
 		descriptor.merge = cxxlens::sdk::merge_mode::set;
-		auto digest = cxxlens::sdk::semantic_digest("cxxlens.relation-descriptor.v1",
-													descriptor.canonical_form());
+		auto digest = cxxlens::sdk::semantic_digest("cxxlens.relation-descriptor-binding.v2",
+													descriptor.contract_digest + "\n" +
+														descriptor.canonical_form());
 		if (!digest)
 			return cxxlens::sdk::unexpected(std::move(digest.error()));
 		descriptor.descriptor_digest = std::move(*digest);

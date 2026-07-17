@@ -21,8 +21,9 @@ namespace
 						  true,
 						  cxxlens::sdk::column_role::claim_key}};
 		value.key_columns = {value.columns.front().id};
-		value.descriptor_digest = *cxxlens::sdk::semantic_digest("cxxlens.relation-descriptor.v1",
-																 value.canonical_form());
+		value.descriptor_digest =
+			*cxxlens::sdk::semantic_digest("cxxlens.relation-descriptor-binding.v2",
+										   value.contract_digest + "\n" + value.canonical_form());
 		return value;
 	}
 

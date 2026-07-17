@@ -107,6 +107,7 @@ def render(relation: dict[str, object]) -> str:
             f'\t\t\t\toutput.semantics = "{string(str(relation["semantics"]))}";',
             f'\t\t\t\toutput.owner_namespace = "{string(str(relation["owner_namespace"]))}";',
             f'\t\t\t\toutput.contract_canonical = R"cxxlens({contract_canonical})cxxlens";',
+            f'\t\t\t\toutput.contract_digest = "{contract_digest}";',
             "\t\t\t\toutput.columns = {",
         ]
     )
@@ -153,7 +154,9 @@ def render(relation: dict[str, object]) -> str:
             "\t\t\t\toutput.conflict_columns = {",
             *[f'\t\t\t\t\t"{string(str(value))}",' for value in conflict_columns],
             "\t\t\t\t};",
-            f'\t\t\t\toutput.descriptor_digest = "{contract_digest}";',
+            "\t\t\t\toutput.descriptor_digest = *sdk::semantic_digest(",
+            '\t\t\t\t\t"cxxlens.relation-descriptor-binding.v2",',
+            "\t\t\t\t\toutput.contract_digest + \"\\n\" + output.canonical_form());",
             "\t\t\t\treturn output;",
             "\t\t\t}();",
             "\t\t\treturn value;",
