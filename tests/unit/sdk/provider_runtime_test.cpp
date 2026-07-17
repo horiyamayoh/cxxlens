@@ -28,9 +28,6 @@ namespace
 		"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 	constexpr std::string_view semantic_contract_digest =
 		"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-	constexpr std::string_view policy_digest =
-		"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
-
 	void require(const bool condition, const std::string& message)
 	{
 		if (!condition)
@@ -38,6 +35,14 @@ namespace
 			std::cerr << message << '\n';
 			std::exit(1);
 		}
+	}
+
+	[[nodiscard]] sandbox_policy baseline_policy()
+	{
+		auto policies = builtin_sandbox_policies();
+		require(policies.size() == 2U && policies.front().validate().has_value(),
+				"built-in sandbox policy registry is invalid");
+		return std::move(policies.front());
 	}
 
 	[[nodiscard]] detached_row protocol_test_row()
@@ -216,10 +221,21 @@ namespace
 
 	[[nodiscard]] sandbox_report make_sandbox(const sandbox_assurance achieved)
 	{
+		auto policy = baseline_policy();
 		return {"linux-glibc",
-				{"no-shell-argv-exec"},
+				policy.mechanisms,
 				achieved,
-				std::string{policy_digest},
+				policy.policy_digest(),
+				"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"};
+	}
+
+	[[nodiscard]] sandbox_report make_sandbox(const sandbox_policy& policy,
+											  const sandbox_assurance achieved)
+	{
+		return {"linux-glibc",
+				policy.mechanisms,
+				achieved,
+				policy.policy_digest(),
 				"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"};
 	}
 
@@ -246,7 +262,7 @@ namespace
 				{1U, 0U, 0U},
 				executable_digest(executable),
 				std::string{semantic_contract_digest},
-				{sandbox_assurance::enforced, std::string{policy_digest}},
+				{sandbox_assurance::enforced, baseline_policy().policy_digest()},
 				true,
 				std::nullopt};
 	}
@@ -284,7 +300,7 @@ namespace
 			"sha256:2222222222222222222222222222222222222222222222222222222222222222";
 		request.environment_digest =
 			"sha256:3333333333333333333333333333333333333333333333333333333333333333";
-		request.sandbox = {sandbox_assurance::enforced, std::string{policy_digest}};
+		request.sandbox = {sandbox_assurance::enforced, baseline_policy().policy_digest()};
 		request.budget.wall_ms = 2000U;
 		request.budget.cpu_ms = 2000U;
 		request.budget.rss_bytes = 256U * 1024U * 1024U;
@@ -304,12 +320,39 @@ namespace
 
 	void check_selection(const std::string& executable)
 	{
+		auto policies = builtin_sandbox_policies();
+		require(policies.size() == 2U && policies[0U].id < policies[1U].id &&
+					policies[0U].policy_digest() ==
+						"semantic-v2:sha256:"
+						"1c24322ee6d275a7ac6b5d3665686ba578d3ec9fab2cb9444da14fd752310274" &&
+					policies[1U].policy_digest() ==
+						"semantic-v2:sha256:"
+						"505490c1785329eb263f7f873f8dc4924976f53f891e0e9b3f67666dba614315" &&
+					policies[0U].policy_digest() != policies[1U].policy_digest() &&
+					policies[0U].mechanisms != policies[1U].mechanisms,
+				"built-in sandbox policies are not distinct canonical plans");
+		auto changed_policy = policies.front();
+		changed_policy.id.back() = 'f';
+		require(changed_policy.validate().has_value() &&
+					changed_policy.policy_digest() != policies.front().policy_digest() &&
+					!resolve_sandbox_policy(changed_policy.policy_digest()) &&
+					resolve_sandbox_policy(changed_policy.policy_digest()).error().code ==
+						"security.sandbox-policy-mismatch",
+				"one-byte sandbox policy mutation retained built-in authority");
+
 		auto exact = candidate(executable, "success");
 		auto selected = select_provider(selection_request(executable), std::span{&exact, 1U});
 		require(selected && !selected->fallback_used() &&
 					selected->decisions().front().reason == "selected-exact" &&
 					selected->validate().has_value(),
 				"exact selection was not explained");
+		auto unknown_policy_request = selection_request(executable);
+		unknown_policy_request.sandbox.policy_digest =
+			"sha256:9999999999999999999999999999999999999999999999999999999999999999";
+		auto unknown_policy = select_provider(unknown_policy_request, std::span{&exact, 1U});
+		require(!unknown_policy &&
+					unknown_policy.error().code == "security.sandbox-policy-mismatch",
+				"unknown well-formed sandbox policy reached selection authority");
 
 		auto adjacent = exact;
 		adjacent.description.provider_version = {1U, 1U, 0U};
@@ -472,6 +515,9 @@ namespace
 				: cxxlens::sdk::result<cxxlens::sdk::testing::conformance_report>{
 					  cxxlens::sdk::unexpected(
 						  cxxlens::sdk::error{"sdk.test-setup", "process-report", {}})};
+			auto applied_policy = report
+				? resolve_sandbox_policy(report->sandbox.policy_digest)
+				: result<sandbox_policy>{unexpected(error{"sdk.test-setup", "sandbox", {}})};
 			require(report && report->succeeded() &&
 						report->frames.front().type == message_type::hello &&
 						report->frames.size() == 15U &&
@@ -482,11 +528,44 @@ namespace
 						report->frames.at(11U).type == message_type::coverage_chunk &&
 						report->frames.back().type == message_type::task_complete &&
 						report->sandbox.achieved == sandbox_assurance::enforced &&
+						report->sandbox.policy_digest ==
+							request.selection.authority_request().sandbox.policy_digest &&
+						applied_policy &&
+						report->sandbox.mechanisms == applied_policy->mechanisms &&
+						report->sandbox.evidence_digest ==
+							sandbox_evidence_digest(*applied_policy,
+													request.budget,
+													report->sandbox.achieved,
+													report->sandbox.mechanisms) &&
 						report->canonical_form().contains("cxxlens.provider-execution-report.v1") &&
 						reference && reference->accepted,
 					std::string{"successful process provider failed: "} + mode +
 						" terminal=" + (report ? report->terminal : report.error().code));
 		}
+
+		auto policies = builtin_sandbox_policies();
+		const auto& strict_policy = policies.back();
+		auto strict_candidate = candidate(executable, "success");
+		strict_candidate.sandbox = make_sandbox(strict_policy, sandbox_assurance::enforced);
+		auto strict_authority = selection_request(executable);
+		strict_authority.sandbox.policy_digest = strict_policy.policy_digest();
+		auto strict_selection = select_provider(strict_authority, std::span{&strict_candidate, 1U});
+		require(strict_selection.has_value(), "strict sandbox policy selection failed");
+		auto strict_request = task(std::move(*strict_selection));
+		strict_request.sandbox.policy_digest = strict_policy.policy_digest();
+		auto strict_report = runtime.execute(strict_request);
+		require(strict_report && strict_report->succeeded() &&
+					strict_report->sandbox.mechanisms == strict_policy.mechanisms &&
+					strict_report->sandbox.mechanisms != baseline_policy().mechanisms,
+				"distinct built-in sandbox policies applied the same mechanism plan");
+
+		auto install_failure_request = task(select(executable, "success"));
+		install_failure_request.budget.open_files = std::numeric_limits<std::uint64_t>::max();
+		auto install_failure = runtime.execute(install_failure_request);
+		require(install_failure && install_failure->terminal == "security.sandbox-insufficient" &&
+					install_failure->sandbox.achieved == sandbox_assurance::none &&
+					!install_failure->succeeded(),
+				"failed sandbox mechanism installation reported enforced assurance");
 
 		auto manifest_minimum_candidate = candidate(executable, "success");
 		auto weaker_authority = selection_request(executable);

@@ -434,6 +434,32 @@ namespace cxxlens::sdk::provider
 		certified,
 	};
 
+	/** @brief Immutable built-in sandbox policy projected into an exact semantic digest. */
+	struct sandbox_policy
+	{
+		std::string id;
+		std::vector<std::string> mechanisms;
+		bool deny_network{};
+		bool zero_core_dump{};
+		bool zero_locked_memory{};
+		[[nodiscard]] result<void> validate() const;
+		[[nodiscard]] std::string canonical_form() const;
+		[[nodiscard]] std::string policy_digest() const;
+	};
+
+	/** @brief Return value-owned built-in policies in canonical policy-ID order. */
+	[[nodiscard]] std::vector<sandbox_policy> builtin_sandbox_policies();
+
+	/** @brief Resolve one exact built-in policy digest or fail closed. */
+	[[nodiscard]] result<sandbox_policy> resolve_sandbox_policy(std::string_view policy_digest);
+
+	/** @brief Recompute evidence identity from the resolved policy, applied plan, and result. */
+	[[nodiscard]] std::string
+	sandbox_evidence_digest(const sandbox_policy& policy,
+							const execution_budget& budget,
+							sandbox_assurance achieved,
+							std::span<const std::string> applied_mechanisms);
+
 	/** @brief Effective sandbox minimum and its versioned policy identity. */
 	struct sandbox_requirement
 	{

@@ -120,6 +120,7 @@ namespace cxxlens::sdk::provider
 			std::string_view{"provider.unsupported-compression"},
 			std::string_view{"provider.frontend-request-invalid"},
 			std::string_view{"security.sandbox-insufficient"},
+			std::string_view{"security.sandbox-policy-mismatch"},
 		};
 
 		[[nodiscard]] bool stable_terminal_reason(const std::string_view reason)
@@ -753,16 +754,36 @@ namespace cxxlens::sdk::provider
 		if (auto valid = output.sandbox.validate(); !valid)
 			return transport_failure_report(
 				request, std::move(output), "provider.runtime-unavailable");
-		if (output.sandbox.policy_digest != sandbox->policy_digest ||
-			!sandbox_satisfies(output.sandbox.achieved, sandbox->minimum))
+		if (output.sandbox.policy_digest != sandbox->policy_digest)
 			return transport_failure_report(
-				request, std::move(output), "security.sandbox-insufficient");
+				request, std::move(output), "security.sandbox-policy-mismatch");
+		auto applied_policy = resolve_sandbox_policy(output.sandbox.policy_digest);
+		if (!applied_policy ||
+			output.sandbox.evidence_digest !=
+				sandbox_evidence_digest(*applied_policy,
+										request.budget,
+										output.sandbox.achieved,
+										output.sandbox.mechanisms))
+			return transport_failure_report(
+				request, std::move(output), "security.sandbox-policy-mismatch");
+		if (static_cast<std::uint8_t>(output.sandbox.achieved) >=
+			static_cast<std::uint8_t>(sandbox_assurance::enforced))
+		{
+			auto actual_mechanisms = output.sandbox.mechanisms;
+			std::ranges::sort(actual_mechanisms);
+			if (actual_mechanisms != applied_policy->mechanisms)
+				return transport_failure_report(
+					request, std::move(output), "security.sandbox-policy-mismatch");
+		}
 		if (output.status != process_status::exited)
 		{
 			const auto terminal = output.failure_code.empty() ? terminal_for_status(output.status)
 															  : output.failure_code;
 			return transport_failure_report(request, std::move(output), terminal);
 		}
+		if (!sandbox_satisfies(output.sandbox.achieved, sandbox->minimum))
+			return transport_failure_report(
+				request, std::move(output), "security.sandbox-insufficient");
 		if (output.exit_code != 0)
 			return transport_failure_report(request, std::move(output), "provider.crash");
 

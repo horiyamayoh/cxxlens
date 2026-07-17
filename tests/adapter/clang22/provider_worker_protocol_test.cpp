@@ -17,9 +17,6 @@ namespace
 
 	constexpr std::string_view semantic_contract_digest =
 		"sha256:1212121212121212121212121212121212121212121212121212121212121212";
-	constexpr std::string_view sandbox_policy_digest =
-		"sha256:3434343434343434343434343434343434343434343434343434343434343434";
-
 	void require(const bool condition, const std::string& message)
 	{
 		if (!condition)
@@ -27,6 +24,14 @@ namespace
 			std::cerr << message << '\n';
 			std::exit(1);
 		}
+	}
+
+	[[nodiscard]] sandbox_policy baseline_policy()
+	{
+		auto policies = builtin_sandbox_policies();
+		require(policies.size() == 2U && policies.front().validate().has_value(),
+				"built-in sandbox policy registry is invalid");
+		return std::move(policies.front());
 	}
 
 	[[nodiscard]] std::string executable_digest(const std::string& executable)
@@ -76,11 +81,12 @@ int main(const int argument_count, const char* const* arguments)
 		"canonical-semantic-qualified", "sandbox-qualified", "schema-conformant"};
 	require(description.validate().has_value(), "Clang worker manifest is invalid");
 
+	auto sandbox_policy = baseline_policy();
 	sandbox_report discovered_sandbox{
 		"linux-glibc",
-		{"no-shell-argv-exec"},
+		sandbox_policy.mechanisms,
 		sandbox_assurance::enforced,
-		std::string{sandbox_policy_digest},
+		sandbox_policy.policy_digest(),
 		"sha256:9090909090909090909090909090909090909090909090909090909090909090",
 	};
 	provider_candidate candidate{
@@ -99,7 +105,7 @@ int main(const int argument_count, const char* const* arguments)
 		description.provider_version,
 		description.provider_binary_digest,
 		description.provider_semantic_contract_digest,
-		{sandbox_assurance::enforced, std::string{sandbox_policy_digest}},
+		{sandbox_assurance::enforced, sandbox_policy.policy_digest()},
 		true,
 		std::nullopt,
 	};
@@ -121,7 +127,7 @@ int main(const int argument_count, const char* const* arguments)
 		"sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd";
 	request.environment_digest =
 		"sha256:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef";
-	request.sandbox = {sandbox_assurance::enforced, std::string{sandbox_policy_digest}};
+	request.sandbox = {sandbox_assurance::enforced, sandbox_policy.policy_digest()};
 	request.budget.wall_ms = 2000U;
 	request.budget.cpu_ms = 2000U;
 	request.budget.rss_bytes = 512U * 1024U * 1024U;

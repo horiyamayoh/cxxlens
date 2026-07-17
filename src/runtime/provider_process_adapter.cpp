@@ -61,36 +61,17 @@ namespace cxxlens::sdk::provider
 			return cxxlens::sdk::content_digest(std::as_bytes(std::span{bytes}));
 		}
 
-		[[nodiscard]] std::vector<std::string> mechanisms()
+		[[nodiscard]] sandbox_report sandbox_evidence(const sandbox_policy& policy,
+													  const execution_budget& budget,
+													  const sandbox_assurance achieved,
+													  const bool installed)
 		{
-			return {
-				"address-space-limit",
-				"anonymous-readonly-input",
-				"cpu-limit",
-				"explicit-environment",
-				"network-syscall-deny",
-				"no-new-privileges",
-				"no-shell-argv-exec",
-				"open-file-limit",
-				"output-file-size-limit",
-				"process-group-cleanup",
-				"subprocess-limit",
-			};
-		}
-
-		[[nodiscard]] sandbox_report sandbox_evidence(const sandbox_requirement& requirement,
-													  const sandbox_assurance achieved)
-		{
-			auto applied = mechanisms();
-			std::string evidence = requirement.policy_digest;
-			for (const auto& mechanism : applied)
-				evidence += "\n" + mechanism;
-			return {
-				"linux-glibc",
-				std::move(applied),
-				achieved,
-				requirement.policy_digest,
-				*cxxlens::sdk::semantic_digest("cxxlens.provider-sandbox-evidence.v1", evidence)};
+			auto applied = installed ? policy.mechanisms : std::vector<std::string>{};
+			return {"linux-glibc",
+					applied,
+					achieved,
+					policy.policy_digest(),
+					sandbox_evidence_digest(policy, budget, achieved, applied)};
 		}
 
 #if defined(__linux__) && defined(__GLIBC__)
@@ -240,16 +221,20 @@ namespace cxxlens::sdk::provider
 				::prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &program) == 0;
 		}
 
-		[[nodiscard]] bool configure_child(const process_invocation& invocation) noexcept
+		[[nodiscard]] bool configure_child(const process_invocation& invocation,
+										   const sandbox_policy& policy) noexcept
 		{
 			const auto cpu_seconds =
 				std::max<std::uint64_t>(1U, (invocation.budget.cpu_ms + 999U) / 1000U);
-			return set_limit({RLIMIT_CPU, cpu_seconds}) &&
+			const bool baseline = set_limit({RLIMIT_CPU, cpu_seconds}) &&
 				set_limit({RLIMIT_AS, invocation.budget.rss_bytes}) &&
 				set_limit({RLIMIT_FSIZE, invocation.budget.output_bytes}) &&
 				set_limit({RLIMIT_NOFILE, invocation.budget.open_files}) &&
-				set_limit({RLIMIT_NPROC, invocation.budget.subprocesses}) &&
-				install_network_filter();
+				set_limit({RLIMIT_NPROC, invocation.budget.subprocesses});
+			if (!baseline || (policy.zero_core_dump && !set_limit({RLIMIT_CORE, 0U})) ||
+				(policy.zero_locked_memory && !set_limit({RLIMIT_MEMLOCK, 0U})))
+				return false;
+			return !policy.deny_network || install_network_filter();
 		}
 
 		[[nodiscard]] std::vector<char*> pointers(std::vector<std::string>& values)
@@ -320,6 +305,9 @@ namespace cxxlens::sdk::provider
 						process_error("provider.process-request-invalid", "invocation"));
 				if (auto valid = invocation.sandbox.validate(); !valid)
 					return cxxlens::sdk::unexpected(std::move(valid.error()));
+				auto policy = resolve_sandbox_policy(invocation.sandbox.policy_digest);
+				if (!policy)
+					return cxxlens::sdk::unexpected(std::move(policy.error()));
 				auto actual_binary_digest = executable_digest(invocation.argv.front());
 				if (!actual_binary_digest)
 					return cxxlens::sdk::unexpected(std::move(actual_binary_digest.error()));
@@ -331,7 +319,8 @@ namespace cxxlens::sdk::provider
 						0,
 						{},
 						"selected provider executable digest does not match its manifest",
-						sandbox_evidence(invocation.sandbox, sandbox_assurance::none),
+						sandbox_evidence(
+							*policy, invocation.budget, sandbox_assurance::none, false),
 						"provider.binary-identity-mismatch"};
 				if (cancellation.stop_requested())
 					return process_output{
@@ -340,7 +329,8 @@ namespace cxxlens::sdk::provider
 						0,
 						{},
 						{},
-						sandbox_evidence(invocation.sandbox, sandbox_assurance::enforced),
+						sandbox_evidence(
+							*policy, invocation.budget, sandbox_assurance::none, false),
 						{}};
 
 				auto input = make_input(invocation.standard_input);
@@ -380,7 +370,8 @@ namespace cxxlens::sdk::provider
 						0,
 						{},
 						std::strerror(errno),
-						sandbox_evidence(invocation.sandbox, sandbox_assurance::none),
+						sandbox_evidence(
+							*policy, invocation.budget, sandbox_assurance::none, false),
 						"provider.runtime-unavailable"};
 				if (child == 0)
 				{
@@ -391,7 +382,7 @@ namespace cxxlens::sdk::provider
 					if (!invocation.working_directory.empty() &&
 						::chdir(invocation.working_directory.c_str()) != 0)
 						::_exit(125);
-					if (!configure_child(invocation))
+					if (!configure_child(invocation, *policy))
 						::_exit(126);
 					::execve(
 						arguments_storage.front().c_str(), arguments.data(), environment.data());
@@ -406,7 +397,8 @@ namespace cxxlens::sdk::provider
 				const auto deadline =
 					started + std::chrono::milliseconds{invocation.budget.wall_ms};
 				process_output output;
-				output.sandbox = sandbox_evidence(invocation.sandbox, sandbox_assurance::enforced);
+				output.sandbox =
+					sandbox_evidence(*policy, invocation.budget, sandbox_assurance::enforced, true);
 				std::size_t total{};
 				bool stdout_ended{};
 				bool stderr_ended{};
@@ -487,8 +479,15 @@ namespace cxxlens::sdk::provider
 				}
 				else if (output.status == process_status::launch_failed && WIFEXITED(wait_status))
 				{
-					output.status = process_status::exited;
 					output.exit_code = WEXITSTATUS(wait_status);
+					if (output.exit_code == 126)
+					{
+						output.failure_code = "security.sandbox-insufficient";
+						output.sandbox = sandbox_evidence(
+							*policy, invocation.budget, sandbox_assurance::none, false);
+					}
+					else
+						output.status = process_status::exited;
 				}
 				return output;
 			}
@@ -500,18 +499,23 @@ namespace cxxlens::sdk::provider
 			result<process_output> run(const process_invocation& invocation,
 									   std::stop_token) const override
 			{
-				return process_output{process_status::unavailable,
-									  0,
-									  0,
-									  {},
-									  "linux-glibc-required",
-									  {"unsupported",
-									   {},
-									   sandbox_assurance::none,
-									   invocation.sandbox.policy_digest,
-									   *cxxlens::sdk::semantic_digest(
-										   "cxxlens.provider-sandbox-evidence.v1", "unsupported")},
-									  "provider.runtime-unavailable"};
+				auto policy = resolve_sandbox_policy(invocation.sandbox.policy_digest);
+				if (!policy)
+					return cxxlens::sdk::unexpected(std::move(policy.error()));
+				const std::vector<std::string> applied;
+				return process_output{
+					process_status::unavailable,
+					0,
+					0,
+					{},
+					"linux-glibc-required",
+					{"unsupported",
+					 {},
+					 sandbox_assurance::none,
+					 policy->policy_digest(),
+					 sandbox_evidence_digest(
+						 *policy, invocation.budget, sandbox_assurance::none, applied)},
+					"provider.runtime-unavailable"};
 			}
 		};
 #endif

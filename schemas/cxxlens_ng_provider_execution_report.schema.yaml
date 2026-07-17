@@ -40,6 +40,7 @@ properties:
       - provider.unsupported-compression
       - provider.frontend-request-invalid
       - security.sandbox-insufficient
+      - security.sandbox-policy-mismatch
   provider:
     type: object
     additionalProperties: false

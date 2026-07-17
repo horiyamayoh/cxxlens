@@ -510,23 +510,56 @@ def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any
     ]
     for value, schema_path, label in documents:
         schema_validate(value, load_yaml(root / schema_path), label)
+    policies = profile["sandbox"]["policy_registry"]["policies"]
+    policy_ids = [policy["id"] for policy in policies]
+    policy_digests = [policy["digest"] for policy in policies]
+    mechanism_sets = [tuple(policy["mechanisms"]) for policy in policies]
+    if (
+        len(policies) != 2
+        or policy_ids != sorted(policy_ids)
+        or len(set(policy_ids)) != len(policy_ids)
+        or len(set(policy_digests)) != len(policy_digests)
+        or len(set(mechanism_sets)) != len(mechanism_sets)
+        or not all(digest.startswith("semantic-v2:sha256:") for digest in policy_digests)
+    ):
+        fail("security.sandbox-policy-mismatch", "built-in policy registry is not canonical")
+    runtime_test = (root / "tests/unit/sdk/provider_runtime_test.cpp").read_text(
+        encoding="utf-8"
+    )
+    if any(digest.removeprefix("semantic-v2:sha256:") not in runtime_test for digest in policy_digests):
+        fail(
+            "security.sandbox-policy-mismatch",
+            "runtime policy vectors do not bind every authority digest",
+        )
     runtime_evidence = {
         "include/cxxlens/sdk/provider.hpp": (
             "class provider_selection",
             "selected_candidate() const",
             "authority_request() const",
             "result<void> validate() const",
+            "struct sandbox_policy",
+            "resolve_sandbox_policy",
+            "sandbox_evidence_digest",
         ),
         "src/sdk/provider.cpp": (
             "provider_selection::validate() const",
             "selection-token",
             "decision-binding",
             "authority-revalidation",
+            "builtin_sandbox_policies",
+            "unknown-policy",
         ),
         "src/sdk/provider_runtime.cpp": (
             "request.selection.validate()",
             "effective_sandbox",
             "security.sandbox-policy-mismatch",
+            "sandbox_evidence_digest",
+            "actual_mechanisms",
+        ),
+        "src/runtime/provider_process_adapter.cpp": (
+            "resolve_sandbox_policy",
+            "configure_child(invocation, *policy)",
+            "security.sandbox-insufficient",
         ),
     }
     for relative, markers in runtime_evidence.items():

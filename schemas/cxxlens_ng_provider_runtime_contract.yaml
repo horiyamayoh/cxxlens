@@ -1,10 +1,10 @@
 schema: cxxlens.provider-runtime-contract.v1
-document_version: 1.8.0
+document_version: 1.9.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#17-provider-model
-  decision_adr: docs/design/adr/0045-typed-provider-terminal-verdict.md
-  owner_issue: '#102'
+  decision_adr: docs/design/adr/0046-resolved-sandbox-policy-enforcement.md
+  owner_issue: '#103'
   owner: steward.ng-provider-runtime
 dependencies:
   - schemas/cxxlens_ng_provider_protocol.yaml
@@ -30,6 +30,12 @@ runtime:
     effective_minimum: max(manifest, request, security-profile)
     insufficient: security.sandbox-insufficient
     report_fields: [platform, mechanisms, achieved, policy_digest, evidence_digest]
+    policy_resolution: exact-built-in-registry-before-selection-and-process-effect
+    unknown_policy_digest: security.sandbox-policy-mismatch
+    policy_digest_source: recomputed-applied-canonical-policy-not-request-echo
+    evidence_digest_v2: [resolved-policy-canonical-form, recomputed-policy-digest, achieved-assurance, invocation-budget-limits, exact-applied-mechanisms]
+    report_validation: runtime-recompute-evidence-and-exact-enforced-mechanism-set
+    mechanism_install_failure: achieved-none-and-security.sandbox-insufficient
     linux_enforced_mechanisms:
       - no-shell-argv-exec
       - explicit-environment
@@ -42,6 +48,7 @@ runtime:
       - subprocess-limit
       - no-new-privileges
       - network-syscall-deny
+    linux_strict_additional_mechanisms: [core-dump-limit, locked-memory-limit]
   identity_binding:
     required:
       - provider_id
@@ -171,6 +178,7 @@ terminal:
     - provider.unsupported-compression
     - provider.frontend-request-invalid
     - security.sandbox-insufficient
+    - security.sandbox-policy-mismatch
   prior_published_snapshot: immutable
   unsealed_output: discarded
 clang22:

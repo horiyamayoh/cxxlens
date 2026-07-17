@@ -1,12 +1,12 @@
 schema: cxxlens.security-profile.v1
 kind: security-profile
-document_version: 1.2.0
+document_version: 1.3.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
   index: docs/design/catalogs/README.md
-  decision_adr: docs/design/adr/0042-immutable-provider-selection-authority.md
-  owner_issue: '#99'
+  decision_adr: docs/design/adr/0046-resolved-sandbox-policy-enforcement.md
+  owner_issue: '#103'
   owner: steward.ng-security
 registries:
   namespace: schemas/cxxlens_ng_namespace_registry.yaml
@@ -81,6 +81,28 @@ sandbox:
   effective_minimum: max-of-manifest-request-security-profile
   insufficient: provider-unavailable-no-degradation
   evidence_required: [platform, mechanism, achieved, policy_digest, evidence_digest]
+  policy_registry:
+    schema: cxxlens.provider-sandbox-policy.v1
+    digest_domain: cxxlens.provider-sandbox-policy.v1
+    ordering: canonical-policy-id
+    unknown_digest: security.sandbox-policy-mismatch
+    selection_resolution: before-selection-token-construction
+    execution_resolution: before-process-effect
+    policies:
+      - id: cxxlens.sandbox.linux-provider-baseline
+        digest: semantic-v2:sha256:1c24322ee6d275a7ac6b5d3665686ba578d3ec9fab2cb9444da14fd752310274
+        mechanisms: [address-space-limit, anonymous-readonly-input, cpu-limit, explicit-environment, network-syscall-deny, no-new-privileges, no-shell-argv-exec, open-file-limit, output-file-size-limit, process-group-cleanup, subprocess-limit]
+        controls: {deny_network: true, zero_core_dump: false, zero_locked_memory: false}
+      - id: cxxlens.sandbox.linux-provider-strict
+        digest: semantic-v2:sha256:505490c1785329eb263f7f873f8dc4924976f53f891e0e9b3f67666dba614315
+        mechanisms: [address-space-limit, anonymous-readonly-input, core-dump-limit, cpu-limit, explicit-environment, locked-memory-limit, network-syscall-deny, no-new-privileges, no-shell-argv-exec, open-file-limit, output-file-size-limit, process-group-cleanup, subprocess-limit]
+        controls: {deny_network: true, zero_core_dump: true, zero_locked_memory: true}
+  applied_evidence:
+    digest_domain: cxxlens.provider-sandbox-evidence.v2
+    binds: [resolved-policy-canonical-form, recomputed-policy-digest, achieved-assurance, invocation-budget-limits, exact-applied-mechanisms]
+    runtime_recompute: required-before-report-adoption
+    request_digest_echo: forbidden
+    mechanism_install_failure: achieved-none-and-security.sandbox-insufficient
   profiles:
     - id: trust.kernel-in-process
       minimum: certified
@@ -137,6 +159,7 @@ reason_codes:
   - security.provider-selected
   - security.provider-shadowing
   - security.sandbox-insufficient
+  - security.sandbox-policy-mismatch
   - security.sandbox-qualified
   - security.signature-mismatch
   - security.signature-missing

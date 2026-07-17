@@ -1802,6 +1802,91 @@ namespace cxxlens::sdk::provider
 		return {};
 	}
 
+	result<void> sandbox_policy::validate() const
+	{
+		const auto has_mechanism = [&](const std::string_view mechanism)
+		{
+			return std::ranges::find(mechanisms, mechanism) != mechanisms.end();
+		};
+		if (!namespaced(id) || !unique_nonempty(mechanisms, true) ||
+			deny_network != has_mechanism("network-syscall-deny") ||
+			zero_core_dump != has_mechanism("core-dump-limit") ||
+			zero_locked_memory != has_mechanism("locked-memory-limit"))
+			return cxxlens::sdk::unexpected(
+				provider_error("security.sandbox-policy-mismatch", "policy"));
+		return {};
+	}
+
+	std::string sandbox_policy::canonical_form() const
+	{
+		return std::string{R"({"deny_network":)"} + (deny_network ? "true" : "false") +
+			R"(,"id":)" + json_string(id) + R"(,"mechanisms":)" + canonical_array(mechanisms) +
+			R"(,"schema":"cxxlens.provider-sandbox-policy.v1","zero_core_dump":)" +
+			(zero_core_dump ? "true" : "false") + R"(,"zero_locked_memory":)" +
+			(zero_locked_memory ? "true" : "false") + "}";
+	}
+
+	std::string sandbox_policy::policy_digest() const
+	{
+		return *cxxlens::sdk::semantic_digest("cxxlens.provider-sandbox-policy.v1",
+											  canonical_form());
+	}
+
+	std::vector<sandbox_policy> builtin_sandbox_policies()
+	{
+		const std::vector<std::string> baseline{
+			"address-space-limit",
+			"anonymous-readonly-input",
+			"cpu-limit",
+			"explicit-environment",
+			"network-syscall-deny",
+			"no-new-privileges",
+			"no-shell-argv-exec",
+			"open-file-limit",
+			"output-file-size-limit",
+			"process-group-cleanup",
+			"subprocess-limit",
+		};
+		auto strict = baseline;
+		strict.emplace_back("core-dump-limit");
+		strict.emplace_back("locked-memory-limit");
+		std::ranges::sort(strict);
+		return {
+			{"cxxlens.sandbox.linux-provider-baseline", baseline, true, false, false},
+			{"cxxlens.sandbox.linux-provider-strict", std::move(strict), true, true, true},
+		};
+	}
+
+	result<sandbox_policy> resolve_sandbox_policy(const std::string_view policy_digest)
+	{
+		if (!canonical_digest(policy_digest))
+			return cxxlens::sdk::unexpected(
+				provider_error("security.sandbox-policy-mismatch", "policy-digest"));
+		for (auto policy : builtin_sandbox_policies())
+			if (policy.policy_digest() == policy_digest)
+				return policy;
+		return cxxlens::sdk::unexpected(
+			provider_error("security.sandbox-policy-mismatch", "unknown-policy"));
+	}
+
+	std::string sandbox_evidence_digest(const sandbox_policy& policy,
+										const execution_budget& budget,
+										const sandbox_assurance achieved,
+										const std::span<const std::string> applied_mechanisms)
+	{
+		std::vector<std::string> mechanisms{applied_mechanisms.begin(), applied_mechanisms.end()};
+		std::ostringstream projection;
+		projection << policy.canonical_form() << "\npolicy-digest=" << policy.policy_digest()
+				   << "\nachieved=" << sandbox_name(achieved) << "\nwall-ms=" << budget.wall_ms
+				   << "\ncpu-ms=" << budget.cpu_ms << "\nrss-bytes=" << budget.rss_bytes
+				   << "\noutput-bytes=" << budget.output_bytes
+				   << "\nopen-files=" << budget.open_files
+				   << "\nsubprocesses=" << budget.subprocesses
+				   << "\nmechanisms=" << canonical_array(std::move(mechanisms));
+		return *cxxlens::sdk::semantic_digest("cxxlens.provider-sandbox-evidence.v2",
+											  projection.str());
+	}
+
 	result<void> sandbox_report::validate() const
 	{
 		if (platform.empty() || !unique_nonempty(mechanisms) || !canonical_digest(policy_digest) ||
@@ -2014,6 +2099,8 @@ namespace cxxlens::sdk::provider
 				provider_error("provider.selection-invalid", "identity"));
 		if (auto valid = request.sandbox.validate(); !valid)
 			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		if (auto policy = resolve_sandbox_policy(request.sandbox.policy_digest); !policy)
+			return cxxlens::sdk::unexpected(std::move(policy.error()));
 		if (request.fallback_policy)
 			if (auto valid = request.fallback_policy->validate(request.provider_version); !valid)
 				return cxxlens::sdk::unexpected(std::move(valid.error()));

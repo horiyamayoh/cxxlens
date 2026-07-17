@@ -35,6 +35,7 @@ def main() -> int:
     process = (source_root / "runtime/provider_process_adapter.cpp").read_text(
         encoding="utf-8"
     )
+    provider_policy = (source_root / "sdk/provider.cpp").read_text(encoding="utf-8")
     provider_header = (
         source_root.parent / "include/cxxlens/sdk/provider.hpp"
     ).read_text(encoding="utf-8")
@@ -50,13 +51,16 @@ def main() -> int:
         if marker not in provider_header:
             failures.append(f"provider process port marker missing: {marker}")
     for marker in (
-        "no-shell-argv-exec",
-        "network-syscall-deny",
         "(void)::kill(-child",
         "provider.binary-identity-mismatch",
+        "resolve_sandbox_policy",
+        "configure_child(invocation, *policy)",
     ):
         if marker not in process:
             failures.append(f"provider process adapter marker missing: {marker}")
+    for marker in ("no-shell-argv-exec", "network-syscall-deny"):
+        if marker not in provider_policy:
+            failures.append(f"provider sandbox policy marker missing: {marker}")
     for fixture in (
         "timeout",
         "cancel",
