@@ -2477,6 +2477,12 @@ normalized IR は次の canonical projection で digest 化する。
 
 static/dynamic query は同じ normalized IR digest を生成しなければならない。
 
+Issue #83 / ADR 0026 により Logical Query IR は一つの root を持つ root-closed DAG に限定する。root から input edge を
+逆向きに辿った node 集合は `nodes` 全集合と一致しなければならず、非到達 component は
+`sdk.query-unreachable-node` とする。全 relation requirement も reachable scan から参照されなければならず、未使用
+descriptor は `sdk.query-unused-relation-requirement` とする。canonical root traversal と executor evaluation は常に同じ
+node 集合を扱う。
+
 ### 20.3 Collection and cell algebra
 
 Logical Query IR v1 の既定 collection は annotated multiset である。一 occurrence は次を持つ。

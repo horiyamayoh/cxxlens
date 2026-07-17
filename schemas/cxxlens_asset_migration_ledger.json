@@ -1,5 +1,5 @@
 {
-  "asset_count": 271,
+  "asset_count": 272,
   "assets": [
     {
       "authority": "active",
@@ -585,6 +585,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0025-query-preallocation-budget-accounting.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0026-query-rooted-dag-closure.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1900,7 +1907,7 @@
     }
   ],
   "classifications": {
-    "active": 235,
+    "active": 236,
     "archived": 35,
     "generated": 1
   },

@@ -63,6 +63,19 @@ namespace
 		return value;
 	}
 
+	[[nodiscard]] std::size_t occurrences(const std::string_view text,
+										  const std::string_view needle)
+	{
+		std::size_t count{};
+		std::size_t offset{};
+		while ((offset = text.find(needle, offset)) != std::string_view::npos)
+		{
+			++count;
+			offset += needle.size();
+		}
+		return count;
+	}
+
 	[[nodiscard]] relation_descriptor right_relation()
 	{
 		relation_descriptor value;
@@ -583,6 +596,54 @@ namespace
 		require(!physical && physical.error().code == "sdk.query-argument-invalid",
 				"physical index leaked into logical IR");
 
+		auto unreachable_scan = valid;
+		unreachable_scan.nodes.push_back(
+			{"n1", "query.scan.v1", {}, valid.nodes.front().arguments});
+		require(unreachable_scan.digest() == valid.digest(),
+				"unreachable scan unexpectedly changed rooted canonical identity");
+		auto rejected_scan = unreachable_scan.validate();
+		require(!rejected_scan && rejected_scan.error().code == "sdk.query-unreachable-node",
+				"root-unreachable scan was accepted");
+
+		auto hidden_filter_source = query::builder::from(data.left);
+		require(hidden_filter_source.has_value(), "unreachable filter source failed");
+		auto hidden_filter =
+			std::move(*hidden_filter_source).where(query::is_present(valid.output_schema.front()));
+		require(hidden_filter.has_value(), "unreachable filter construction failed");
+		auto unreachable_filter = std::move(*hidden_filter).finish();
+		unreachable_filter.root = "n0";
+		auto rejected_filter = unreachable_filter.validate();
+		require(!rejected_filter && rejected_filter.error().code == "sdk.query-unreachable-node",
+				"root-unreachable filter was accepted");
+
+		auto hidden_project_source = query::builder::from(data.left);
+		require(hidden_project_source.has_value(), "unreachable project source failed");
+		const std::array one_column{valid.output_schema.front()};
+		auto hidden_project = std::move(*hidden_project_source).project(one_column);
+		require(hidden_project.has_value(), "unreachable project construction failed");
+		auto unreachable_project = std::move(*hidden_project).finish();
+		unreachable_project.root = "n0";
+		auto rejected_project = unreachable_project.validate();
+		require(!rejected_project && rejected_project.error().code == "sdk.query-unreachable-node",
+				"root-unreachable project was accepted");
+
+		auto disconnected = unreachable_scan;
+		auto disconnected_filter = unreachable_filter.nodes.back();
+		disconnected_filter.id = "n2";
+		disconnected_filter.inputs = {"n1"};
+		disconnected.nodes.push_back(std::move(disconnected_filter));
+		auto rejected_component = disconnected.validate();
+		require(!rejected_component &&
+					rejected_component.error().code == "sdk.query-unreachable-node",
+				"disconnected logical query component was accepted");
+
+		auto unused_requirement = valid;
+		unused_requirement.relation_requirements.push_back(data.right);
+		auto rejected_requirement = unused_requirement.validate();
+		require(!rejected_requirement &&
+					rejected_requirement.error().code == "sdk.query-unused-relation-requirement",
+				"unused relation requirement was accepted");
+
 		const auto key =
 			column_ref{data.left.id, data.left.columns[0].id, data.left.columns[0].type};
 		auto a = query::builder::from(data.left);
@@ -813,6 +874,8 @@ namespace
 							memory->explain_logical().text.contains("\"id\":\"" + column + "\""),
 						"runtime row key diverged from logical output schema");
 				}
+			require(occurrences(memory->explain_physical().text, ";node=") == logical.nodes.size(),
+					"executor evaluation set diverged from validated rooted node set");
 		}
 
 		auto implicit_scan = memory_engine->execute(queries.front());

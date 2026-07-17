@@ -25,6 +25,7 @@
 | [0023](0023-query-terminal-projection-parity.md) | canonical implicit terminal projection parity |
 | [0024](0024-query-snapshot-schema-compatibility.md) | query snapshot schema compatibility bind |
 | [0025](0025-query-preallocation-budget-accounting.md) | pre-allocation query budget accounting |
+| [0026](0026-query-rooted-dag-closure.md) | Logical Query IR rooted DAG closure |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

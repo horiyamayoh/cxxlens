@@ -67,6 +67,7 @@ properties:
     - digest_domain
     - digest_projection
     - physical_fields_forbidden
+    - rooted_graph
     properties:
       schema_id:
         const: cxxlens.logical-query-ir.v1
@@ -87,6 +88,25 @@ properties:
             $ref: '#/$defs/nonempty_strings'
       physical_fields_forbidden:
         $ref: '#/$defs/nonempty_strings'
+      rooted_graph:
+        type: object
+        additionalProperties: false
+        required:
+        - root_count
+        - reachability
+        - unreachable_node
+        - traversal
+        - relation_requirements
+        - unused_relation_requirement
+        - canonical_and_execution_node_sets
+        properties:
+          root_count: {const: 1}
+          reachability: {const: every-node-reachable-from-root-by-input-edges}
+          unreachable_node: {const: sdk.query-unreachable-node}
+          traversal: {const: iterative}
+          relation_requirements: {const: exactly-referenced-by-reachable-scan-set}
+          unused_relation_requirement: {const: sdk.query-unused-relation-requirement}
+          canonical_and_execution_node_sets: {const: exact-match}
   collection_model:
     type: object
     required: [kind, occurrence, cell_states, null_policy, duplicate_policy]

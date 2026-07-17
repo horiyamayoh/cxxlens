@@ -65,6 +65,7 @@ entries:
       - docs/design/adr/0023-query-terminal-projection-parity.md
       - docs/design/adr/0024-query-snapshot-schema-compatibility.md
       - docs/design/adr/0025-query-preallocation-budget-accounting.md
+      - docs/design/adr/0026-query-rooted-dag-closure.md
     summary: Logical query, standard/custom join, budgets, explicit partiality, and flagship recipe.
   - id: gate.g4
     status: implemented
