@@ -203,7 +203,7 @@ def validate_package_qualification(bundle: dict[str, Any], root: pathlib.Path) -
     for marker in (
         'shared: ["OFF", "ON"]',
         "-DCXXLENS_BUILD_SHARED=${{ matrix.shared }}",
-        "build/install-check/install-consumer/relocated-prefix",
+        "build/install-check/tests/install-consumer/relocated-prefix",
         "cxxlens-install-${{ matrix.shared",
     ):
         if marker not in workflow:

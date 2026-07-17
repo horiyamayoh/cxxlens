@@ -68,7 +68,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cxxlens-install-${{ matrix.shared == 'ON' && 'shared' || 'static' }}-${{ github.sha }}
-          path: build/install-check/install-consumer/relocated-prefix
+          path: build/install-check/tests/install-consumer/relocated-prefix
           if-no-files-found: error
           retention-days: 30
 
