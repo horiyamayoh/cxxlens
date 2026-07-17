@@ -1839,12 +1839,14 @@ namespace cxxlens::sdk::provider
 			"anonymous-readonly-input",
 			"cpu-limit",
 			"explicit-environment",
+			"inherited-fd-close-range",
 			"network-syscall-deny",
 			"no-new-privileges",
 			"no-shell-argv-exec",
 			"open-file-limit",
 			"output-file-size-limit",
 			"process-group-cleanup",
+			"seccomp-audit-arch",
 			"subprocess-limit",
 		};
 		auto strict = baseline;

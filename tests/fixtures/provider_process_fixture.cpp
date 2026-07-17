@@ -1,4 +1,5 @@
 #include <array>
+#include <cerrno>
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
@@ -12,6 +13,7 @@
 
 #include <cxxlens/relations/company_lock_acquire.hpp>
 #include <cxxlens/sdk/provider.hpp>
+#include <fcntl.h>
 #include <sys/socket.h>
 
 namespace
@@ -194,6 +196,13 @@ int main(const int argument_count, const char* const* arguments)
 		if (descriptor >= 0)
 			return EXIT_FAILURE;
 	}
+	if (mode == "fd-clean")
+		for (int descriptor = 3; descriptor < 1024; ++descriptor)
+		{
+			errno = 0;
+			if (::fcntl(descriptor, F_GETFD) >= 0 || errno != EBADF)
+				return EXIT_FAILURE;
+		}
 
 	const auto& schema = cxxlens::company::relations::lock_acquire::descriptor();
 	const auto descriptor =

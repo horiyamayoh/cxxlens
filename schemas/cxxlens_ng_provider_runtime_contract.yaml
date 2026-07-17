@@ -40,6 +40,7 @@ runtime:
       - no-shell-argv-exec
       - explicit-environment
       - anonymous-readonly-input
+      - inherited-fd-close-range
       - process-group-cleanup
       - address-space-limit
       - cpu-limit
@@ -48,6 +49,7 @@ runtime:
       - subprocess-limit
       - no-new-privileges
       - network-syscall-deny
+      - seccomp-audit-arch
     linux_strict_additional_mechanisms: [core-dump-limit, locked-memory-limit]
   identity_binding:
     required:

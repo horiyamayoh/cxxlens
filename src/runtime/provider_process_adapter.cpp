@@ -18,6 +18,8 @@
 
 #if defined(__linux__) && defined(__GLIBC__)
 #include <fcntl.h>
+#include <linux/audit.h>
+#include <linux/close_range.h>
 #include <linux/filter.h>
 #include <linux/seccomp.h>
 #include <poll.h>
@@ -185,6 +187,13 @@ namespace cxxlens::sdk::provider
 
 		[[nodiscard]] bool install_network_filter() noexcept
 		{
+#if defined(__x86_64__)
+			constexpr std::uint32_t audit_architecture = AUDIT_ARCH_X86_64;
+#elif defined(__aarch64__)
+			constexpr std::uint32_t audit_architecture = AUDIT_ARCH_AARCH64;
+#else
+			return false;
+#endif
 			const auto statement = [](const std::uint16_t code, const std::uint32_t value)
 			{
 				return sock_filter{code, 0U, 0U, value};
@@ -196,7 +205,11 @@ namespace cxxlens::sdk::provider
 			{
 				return sock_filter{code, yes, no, value};
 			};
-			const std::array<sock_filter, 16U> filter{
+			const std::array<sock_filter, 19U> filter{
+				statement(BPF_LD | BPF_W | BPF_ABS,
+						  static_cast<std::uint32_t>(offsetof(seccomp_data, arch))),
+				jump(BPF_JMP | BPF_JEQ | BPF_K, audit_architecture, 1U, 0U),
+				statement(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS),
 				statement(BPF_LD | BPF_W | BPF_ABS,
 						  static_cast<std::uint32_t>(offsetof(seccomp_data, nr))),
 				jump(BPF_JMP | BPF_JEQ | BPF_K, __NR_socket, 0U, 1U),
@@ -219,6 +232,18 @@ namespace cxxlens::sdk::provider
 									 const_cast<sock_filter*>(filter.data())};
 			return ::prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0 &&
 				::prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &program) == 0;
+		}
+
+		[[nodiscard]] bool close_inherited_descriptors() noexcept
+		{
+#if defined(SYS_close_range)
+			return ::syscall(SYS_close_range,
+							 3U,
+							 std::numeric_limits<unsigned int>::max(),
+							 CLOSE_RANGE_UNSHARE) == 0;
+#else
+			return false;
+#endif
 		}
 
 		[[nodiscard]] bool configure_child(const process_invocation& invocation,
@@ -376,9 +401,11 @@ namespace cxxlens::sdk::provider
 				if (child == 0)
 				{
 					(void)::setpgid(0, 0);
-					(void)::dup2(input->get(), STDIN_FILENO);
-					(void)::dup2(output_pipe->write.get(), STDOUT_FILENO);
-					(void)::dup2(error_pipe->write.get(), STDERR_FILENO);
+					if (::dup2(input->get(), STDIN_FILENO) < 0 ||
+						::dup2(output_pipe->write.get(), STDOUT_FILENO) < 0 ||
+						::dup2(error_pipe->write.get(), STDERR_FILENO) < 0 ||
+						!close_inherited_descriptors())
+						::_exit(126);
 					if (!invocation.working_directory.empty() &&
 						::chdir(invocation.working_directory.c_str()) != 0)
 						::_exit(125);

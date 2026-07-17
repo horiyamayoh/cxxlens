@@ -83,9 +83,9 @@ entries:
     summary: Logical query, standard/custom join, budgets, explicit partiality, and flagship recipe states bound to complete execution.
   - id: gate.g4
     status: implemented
-    owner_issue: '#111'
+    owner_issue: '#112'
     profile: NG0
-    contract_issue: '#111'
+    contract_issue: '#112'
     depends_on: [gate.g1]
     evidence:
       - tests/unit/sdk/provider_runtime_test.cpp
@@ -107,13 +107,14 @@ entries:
       - docs/design/adr/0052-clang-call-kind-and-target-consistency.md
       - docs/design/adr/0053-macro-expansion-source-occurrence.md
       - docs/design/adr/0054-source-local-call-ordinal.md
+      - docs/design/adr/0055-provider-child-fd-and-audit-architecture.md
       - src/sdk/provider_validation_internal.hpp
       - src/runtime/provider_process_adapter.cpp
       - schemas/cxxlens_ng_provider_protocol.yaml
       - schemas/cxxlens_ng_provider_runtime_contract.yaml
       - schemas/cxxlens_ng_provider_execution_report.schema.yaml
       - schemas/cxxlens_ng_security_profile.yaml
-    summary: Provider runtime and Clang worker with AST-consistent calls, expansion-authoritative macros, and source-local stable call IDs.
+    summary: Provider runtime with fail-closed child FD/ABI isolation plus AST-consistent, source-stable Clang output.
   - id: gate.g5
     status: deferred
     owner_issue: '#69'

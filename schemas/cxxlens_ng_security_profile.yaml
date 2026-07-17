@@ -90,12 +90,12 @@ sandbox:
     execution_resolution: before-process-effect
     policies:
       - id: cxxlens.sandbox.linux-provider-baseline
-        digest: semantic-v2:sha256:1c24322ee6d275a7ac6b5d3665686ba578d3ec9fab2cb9444da14fd752310274
-        mechanisms: [address-space-limit, anonymous-readonly-input, cpu-limit, explicit-environment, network-syscall-deny, no-new-privileges, no-shell-argv-exec, open-file-limit, output-file-size-limit, process-group-cleanup, subprocess-limit]
+        digest: semantic-v2:sha256:b4e95d8c88cf660fff40c4d9e7e4ae07bcb078013b5370c6b1abb80b0d75d375
+        mechanisms: [address-space-limit, anonymous-readonly-input, cpu-limit, explicit-environment, inherited-fd-close-range, network-syscall-deny, no-new-privileges, no-shell-argv-exec, open-file-limit, output-file-size-limit, process-group-cleanup, seccomp-audit-arch, subprocess-limit]
         controls: {deny_network: true, zero_core_dump: false, zero_locked_memory: false}
       - id: cxxlens.sandbox.linux-provider-strict
-        digest: semantic-v2:sha256:505490c1785329eb263f7f873f8dc4924976f53f891e0e9b3f67666dba614315
-        mechanisms: [address-space-limit, anonymous-readonly-input, core-dump-limit, cpu-limit, explicit-environment, locked-memory-limit, network-syscall-deny, no-new-privileges, no-shell-argv-exec, open-file-limit, output-file-size-limit, process-group-cleanup, subprocess-limit]
+        digest: semantic-v2:sha256:6fb3327ee0028e358de90a7ca9f6c1f4d42ac156c06282579579bd0a6d1bbb44
+        mechanisms: [address-space-limit, anonymous-readonly-input, core-dump-limit, cpu-limit, explicit-environment, inherited-fd-close-range, locked-memory-limit, network-syscall-deny, no-new-privileges, no-shell-argv-exec, open-file-limit, output-file-size-limit, process-group-cleanup, seccomp-audit-arch, subprocess-limit]
         controls: {deny_network: true, zero_core_dump: true, zero_locked_memory: true}
   applied_evidence:
     digest_domain: cxxlens.provider-sandbox-evidence.v2

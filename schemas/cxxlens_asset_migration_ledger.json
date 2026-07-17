@@ -1,5 +1,5 @@
 {
-  "asset_count": 302,
+  "asset_count": 303,
   "assets": [
     {
       "authority": "active",
@@ -788,6 +788,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0054-source-local-call-ordinal.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0055-provider-child-fd-and-audit-architecture.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2117,7 +2124,7 @@
     }
   ],
   "classifications": {
-    "active": 266,
+    "active": 267,
     "archived": 35,
     "generated": 1
   },

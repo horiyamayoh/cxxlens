@@ -15,6 +15,8 @@
 
 #include <cxxlens/relations/company_lock_acquire.hpp>
 #include <cxxlens/sdk.hpp>
+#include <sys/socket.h>
+#include <unistd.h>
 
 namespace
 {
@@ -324,10 +326,10 @@ namespace
 		require(policies.size() == 2U && policies[0U].id < policies[1U].id &&
 					policies[0U].policy_digest() ==
 						"semantic-v2:sha256:"
-						"1c24322ee6d275a7ac6b5d3665686ba578d3ec9fab2cb9444da14fd752310274" &&
+						"b4e95d8c88cf660fff40c4d9e7e4ae07bcb078013b5370c6b1abb80b0d75d375" &&
 					policies[1U].policy_digest() ==
 						"semantic-v2:sha256:"
-						"505490c1785329eb263f7f873f8dc4924976f53f891e0e9b3f67666dba614315" &&
+						"6fb3327ee0028e358de90a7ca9f6c1f4d42ac156c06282579579bd0a6d1bbb44" &&
 					policies[0U].policy_digest() != policies[1U].policy_digest() &&
 					policies[0U].mechanisms != policies[1U].mechanisms,
 				"built-in sandbox policies are not distinct canonical plans");
@@ -500,7 +502,10 @@ namespace
 		require(!forged && forged.error().code == "provider.selection-invalid",
 				"default/forged selection token reached process launch");
 
-		for (const auto mode : {"success", "network-check"})
+		std::array<int, 2U> inherited_descriptors{-1, -1};
+		require(::socketpair(AF_UNIX, SOCK_STREAM, 0, inherited_descriptors.data()) == 0,
+				"parent non-CLOEXEC socket fixture failed");
+		for (const auto mode : {"success", "network-check", "fd-clean"})
 		{
 			auto request = task(select(executable, mode));
 			auto report = runtime.execute(request);
@@ -542,6 +547,8 @@ namespace
 					std::string{"successful process provider failed: "} + mode +
 						" terminal=" + (report ? report->terminal : report.error().code));
 		}
+		(void)::close(inherited_descriptors[0]);
+		(void)::close(inherited_descriptors[1]);
 
 		auto policies = builtin_sandbox_policies();
 		const auto& strict_policy = policies.back();

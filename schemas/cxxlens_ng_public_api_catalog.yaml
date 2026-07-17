@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.41.0
+document_version: 1.42.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -78,7 +78,7 @@ author_paths:
 entries:
   - id: public.common
     status: implemented
-    owner_issue: '#106'
+    owner_issue: '#112'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/sdk/common.hpp]

@@ -105,6 +105,10 @@ def validate(root: pathlib.Path) -> None:
             "resolve_sandbox_policy",
             "sandbox_evidence_digest",
             "security.sandbox-insufficient",
+            "CLOSE_RANGE_UNSHARE",
+            "AUDIT_ARCH_X86_64",
+            "SECCOMP_RET_KILL_PROCESS",
+            "close_inherited_descriptors",
         ),
         "src/sdk/provider_runtime.cpp": (
             "provider.timeout",
@@ -139,6 +143,8 @@ def validate(root: pathlib.Path) -> None:
             "control-utf8",
             "no-shell-argv-exec",
             "network-syscall-deny",
+            "inherited-fd-close-range",
+            "seccomp-audit-arch",
         ),
         "src/llvm/clang22/provider_sdk.cpp": (
             "getExpansionRange",
