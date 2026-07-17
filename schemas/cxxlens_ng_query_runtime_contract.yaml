@@ -1,12 +1,12 @@
 schema: cxxlens.query-runtime-contract.v1
-document_version: 1.6.0
+document_version: 1.7.0
 maturity: implemented
 authority:
   logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
   guarantee_contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
   snapshot_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
-  decision_adr: docs/design/adr/0028-query-canonical-union-execution-order.md
-  owner_issue: '#85'
+  decision_adr: docs/design/adr/0029-query-conflict-canonical-projection.md
+  owner_issue: '#86'
   owner: steward.ng-query-runtime
 compatibility:
   version_axis: query-runtime-result
@@ -205,6 +205,13 @@ result:
   canonical_order:
     ordered_query: declared-total-order
     unordered_query: canonical-annotated-row-order
+    conflict_projection:
+      shape: structured-exact-object
+      fields: [assertions, contents, interpretation, overlap_fragments, relation, semantic_key]
+      collection_fields: [overlap_fragments, assertions, contents]
+      collection_order: lexical-sort-deduplicate
+      shared_with_claim_kernel: true
+      lossless_against_public_api: true
 qualification:
   backends: [memory, sqlite]
   input_orders: [forward, reverse, seeded-shuffle]

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <iomanip>
 #include <ranges>
 #include <set>
 #include <sstream>
@@ -25,6 +26,58 @@ namespace cxxlens::sdk
 		{
 			return std::ranges::is_sorted(values) &&
 				std::ranges::adjacent_find(values) == values.end();
+		}
+
+		[[nodiscard]] std::string escape_json(const std::string_view input)
+		{
+			std::ostringstream output;
+			for (const auto byte : input)
+			{
+				switch (byte)
+				{
+					case '\\':
+						output << "\\\\";
+						break;
+					case '"':
+						output << "\\\"";
+						break;
+					case '\n':
+						output << "\\n";
+						break;
+					case '\r':
+						output << "\\r";
+						break;
+					case '\t':
+						output << "\\t";
+						break;
+					default:
+						if (static_cast<unsigned char>(byte) < 0x20U)
+							output << "\\u" << std::hex << std::setw(4) << std::setfill('0')
+								   << static_cast<unsigned int>(static_cast<unsigned char>(byte));
+						else
+							output << byte;
+				}
+			}
+			return output.str();
+		}
+
+		[[nodiscard]] std::string json_string(const std::string_view value)
+		{
+			return "\"" + escape_json(value) + "\"";
+		}
+
+		[[nodiscard]] std::string strings_json(const std::vector<std::string>& values)
+		{
+			std::ostringstream output;
+			output << '[';
+			for (std::size_t index = 0U; index < values.size(); ++index)
+			{
+				if (index != 0U)
+					output << ',';
+				output << json_string(values[index]);
+			}
+			output << ']';
+			return output.str();
 		}
 
 		[[nodiscard]] bool sha256_digest(const std::string_view value)
@@ -256,6 +309,63 @@ namespace cxxlens::sdk
 				return unexpected(std::move(tuple.error()));
 			const std::array fields{*tuple};
 			return canonical_identity_digest("conflict-payload", fields);
+		}
+
+		void canonicalize_claim_conflicts(std::vector<claim_conflict>& values)
+		{
+			for (auto& value : values)
+			{
+				std::ranges::sort(value.overlap_fragments);
+				value.overlap_fragments.erase(std::ranges::unique(value.overlap_fragments).begin(),
+											  value.overlap_fragments.end());
+				std::ranges::sort(value.assertions);
+				value.assertions.erase(std::ranges::unique(value.assertions).begin(),
+									   value.assertions.end());
+				std::ranges::sort(value.contents);
+				value.contents.erase(std::ranges::unique(value.contents).begin(),
+									 value.contents.end());
+			}
+			std::ranges::sort(values,
+							  [](const claim_conflict& left, const claim_conflict& right)
+							  {
+								  return std::tie(left.relation,
+												  left.semantic_key,
+												  left.interpretation,
+												  left.overlap_fragments,
+												  left.assertions,
+												  left.contents) < std::tie(right.relation,
+																			right.semantic_key,
+																			right.interpretation,
+																			right.overlap_fragments,
+																			right.assertions,
+																			right.contents);
+							  });
+			values.erase(
+				std::ranges::unique(values,
+									[](const claim_conflict& left, const claim_conflict& right)
+									{
+										return left.relation == right.relation &&
+											left.semantic_key == right.semantic_key &&
+											left.interpretation == right.interpretation &&
+											left.overlap_fragments == right.overlap_fragments &&
+											left.assertions == right.assertions &&
+											left.contents == right.contents;
+									})
+					.begin(),
+				values.end());
+		}
+
+		std::string canonical_claim_conflict_json(const claim_conflict& value)
+		{
+			std::vector canonical{value};
+			canonicalize_claim_conflicts(canonical);
+			const auto& normalized = canonical.front();
+			return "{\"assertions\":" + strings_json(normalized.assertions) +
+				",\"contents\":" + strings_json(normalized.contents) +
+				",\"interpretation\":" + json_string(normalized.interpretation) +
+				",\"overlap_fragments\":" + strings_json(normalized.overlap_fragments) +
+				",\"relation\":" + json_string(normalized.relation) +
+				",\"semantic_key\":" + json_string(normalized.semantic_key) + "}";
 		}
 	} // namespace detail
 
@@ -578,34 +688,7 @@ namespace cxxlens::sdk
 				if (auto classified = classify_pair(added, *prior); !classified)
 					return unexpected(std::move(classified.error()));
 
-		std::ranges::sort(output.conflicts,
-						  [](const claim_conflict& left, const claim_conflict& right)
-						  {
-							  return std::tie(left.relation,
-											  left.semantic_key,
-											  left.interpretation,
-											  left.overlap_fragments,
-											  left.assertions,
-											  left.contents) < std::tie(right.relation,
-																		right.semantic_key,
-																		right.interpretation,
-																		right.overlap_fragments,
-																		right.assertions,
-																		right.contents);
-						  });
-		output.conflicts.erase(
-			std::unique(output.conflicts.begin(),
-						output.conflicts.end(),
-						[](const claim_conflict& left, const claim_conflict& right)
-						{
-							return left.relation == right.relation &&
-								left.semantic_key == right.semantic_key &&
-								left.interpretation == right.interpretation &&
-								left.overlap_fragments == right.overlap_fragments &&
-								left.assertions == right.assertions &&
-								left.contents == right.contents;
-						}),
-			output.conflicts.end());
+		detail::canonicalize_claim_conflicts(output.conflicts);
 		std::ranges::sort(
 			output.differential_disagreements,
 			[](const differential_disagreement& left, const differential_disagreement& right)

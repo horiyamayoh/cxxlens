@@ -14,6 +14,8 @@
 
 #include <cxxlens/sdk.hpp>
 
+#include "../../../src/sdk/claim_internal.hpp"
+
 namespace
 {
 	using namespace cxxlens::sdk;
@@ -1184,6 +1186,30 @@ namespace
 
 	void check_side_channel_parity(const fixture& data)
 	{
+		claim_conflict base{"company.query.left",
+							"key:conflict",
+							"company.query.domain",
+							{"debug", "release"},
+							{"assertion:a", "assertion:b"},
+							{"content:a", "content:b"}};
+		auto reordered = base;
+		std::ranges::reverse(reordered.overlap_fragments);
+		std::ranges::reverse(reordered.assertions);
+		std::ranges::reverse(reordered.contents);
+		require(cxxlens::sdk::detail::canonical_claim_conflict_json(base) ==
+					cxxlens::sdk::detail::canonical_claim_conflict_json(reordered),
+				"conflict insertion order changed canonical JSON");
+		auto changed_contents = base;
+		changed_contents.contents.back() = "content:c";
+		require(cxxlens::sdk::detail::canonical_claim_conflict_json(base) !=
+					cxxlens::sdk::detail::canonical_claim_conflict_json(changed_contents),
+				"conflict contents were omitted from canonical JSON");
+		auto changed_overlap = base;
+		changed_overlap.overlap_fragments.back() = "testing";
+		require(cxxlens::sdk::detail::canonical_claim_conflict_json(base) !=
+					cxxlens::sdk::detail::canonical_claim_conflict_json(changed_overlap),
+				"conflict overlap was omitted from canonical JSON");
+
 		auto store = make_in_memory_snapshot_store(data.engine);
 		require(store.has_value(), "side-channel query store failed");
 		auto snapshot = publish(*store, data, false, false);
@@ -1211,6 +1237,21 @@ namespace
 					query_conflict.assertions == kernel_conflict.assertions &&
 					query_conflict.contents == kernel_conflict.contents,
 				"claim kernel and query conflict classification diverged");
+		const auto canonical_result = queried->canonical_form();
+		require(canonical_result.contains("\"conflicts\":[{") &&
+					canonical_result.contains("\"overlap_fragments\":[") &&
+					canonical_result.contains("\"assertions\":[") &&
+					canonical_result.contains("\"contents\":["),
+				"canonical query result did not encode structured conflict fields");
+		for (const auto& value : query_conflict.overlap_fragments)
+			require(canonical_result.contains(value),
+					"canonical query result lost a conflict overlap fragment");
+		for (const auto& value : query_conflict.assertions)
+			require(canonical_result.contains(value),
+					"canonical query result lost a conflict assertion");
+		for (const auto& value : query_conflict.contents)
+			require(canonical_result.contains(value),
+					"canonical query result lost a conflict content identity");
 
 		const auto& query_differential = queried->differential_disagreements().front();
 		const auto& kernel_differential = committed->differential_disagreements.front();

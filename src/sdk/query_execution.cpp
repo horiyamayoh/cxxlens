@@ -918,33 +918,7 @@ namespace cxxlens::sdk::query
 						output.push_back(std::move(conflict));
 					}
 			}
-			std::ranges::sort(output,
-							  [](const claim_conflict& left, const claim_conflict& right)
-							  {
-								  return std::tie(left.relation,
-												  left.semantic_key,
-												  left.interpretation,
-												  left.overlap_fragments,
-												  left.assertions,
-												  left.contents) < std::tie(right.relation,
-																			right.semantic_key,
-																			right.interpretation,
-																			right.overlap_fragments,
-																			right.assertions,
-																			right.contents);
-							  });
-			output.erase(std::unique(output.begin(),
-									 output.end(),
-									 [](const claim_conflict& left, const claim_conflict& right)
-									 {
-										 return left.relation == right.relation &&
-											 left.semantic_key == right.semantic_key &&
-											 left.interpretation == right.interpretation &&
-											 left.overlap_fragments == right.overlap_fragments &&
-											 left.assertions == right.assertions &&
-											 left.contents == right.contents;
-									 }),
-						 output.end());
+			cxxlens::sdk::detail::canonicalize_claim_conflicts(output);
 			return output;
 		}
 
@@ -1334,10 +1308,8 @@ namespace cxxlens::sdk::query
 		{
 			if (index != 0U)
 				output << ',';
-			const auto& conflict = data_->conflict_values[index];
-			output << json_string(conflict.relation + "|" + conflict.semantic_key + "|" +
-								  conflict.interpretation + "|" +
-								  strings_json(conflict.assertions));
+			output << cxxlens::sdk::detail::canonical_claim_conflict_json(
+				data_->conflict_values[index]);
 		}
 		output << "],\"differential_disagreements\":[";
 		for (std::size_t index = 0U; index < data_->disagreement_values.size(); ++index)

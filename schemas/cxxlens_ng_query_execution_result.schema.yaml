@@ -44,7 +44,10 @@ properties:
   unresolved:
     type: array
     items: {$ref: '#/$defs/unresolved'}
-  conflicts: {type: array}
+  conflicts:
+    type: array
+    uniqueItems: true
+    items: {$ref: '#/$defs/claim_conflict'}
   differential_disagreements:
     type: array
     items: {$ref: '#/$defs/differential_disagreement'}
@@ -68,6 +71,11 @@ $defs:
     pattern: '^[a-z][a-z0-9_.-]*:sha256:[0-9a-f]{64}$'
   string_set:
     type: array
+    uniqueItems: true
+    items: {type: string, minLength: 1}
+  nonempty_string_set:
+    type: array
+    minItems: 1
     uniqueItems: true
     items: {type: string, minLength: 1}
   row:
@@ -120,6 +128,23 @@ $defs:
     properties:
       id: {type: string, minLength: 1}
       semantic_contract: {$ref: '#/$defs/digest'}
+  claim_conflict:
+    type: object
+    additionalProperties: false
+    required:
+      - relation
+      - semantic_key
+      - interpretation
+      - overlap_fragments
+      - assertions
+      - contents
+    properties:
+      relation: {type: string, minLength: 1}
+      semantic_key: {type: string, minLength: 1}
+      interpretation: {type: string, minLength: 1}
+      overlap_fragments: {$ref: '#/$defs/nonempty_string_set'}
+      assertions: {$ref: '#/$defs/nonempty_string_set'}
+      contents: {$ref: '#/$defs/nonempty_string_set'}
   differential_disagreement:
     type: object
     additionalProperties: false
