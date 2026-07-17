@@ -18,6 +18,7 @@ from check_ng_foundation_completion import (  # noqa: E402
     CompletionError,
     build_report,
     load_document,
+    run_audit_checker,
     validate_audit_report,
     validate_documents,
 )
@@ -38,6 +39,9 @@ class NgFoundationCompletionTest(unittest.TestCase):
             "branch": "main",
             "clean": True,
         }
+        cls.audit_entries = run_audit_checker(
+            ROOT, cls.manifest, cls.git_state, cls.closed
+        )
 
     def report(self, **changes: object) -> dict:
         arguments = {
@@ -47,6 +51,7 @@ class NgFoundationCompletionTest(unittest.TestCase):
             "run_url": "https://github.com/horiyamayoh/cxxlens/actions/runs/1",
             "ci_jobs": self.manifest["evidence"]["required_ci_jobs"],
             "generated_at": "2026-07-16T00:00:00Z",
+            "audit_entries": copy.deepcopy(self.audit_entries),
         }
         arguments.update(changes)
         return build_report(ROOT, self.manifest, **arguments)

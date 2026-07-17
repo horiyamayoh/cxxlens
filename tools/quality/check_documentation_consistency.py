@@ -50,7 +50,16 @@ def validate_schema(document: Any, schema: dict[str, Any], label: str) -> None:
 
 def repository_assets(root: pathlib.Path) -> list[str]:
     completed = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-z"],
+        [
+            "git",
+            "-C",
+            str(root),
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "-z",
+        ],
         check=False,
         capture_output=True,
         text=True,

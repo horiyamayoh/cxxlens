@@ -7,9 +7,14 @@ python3 -m pip install --requirement tools/quality/requirements.txt
 npm install --global markdownlint-cli2@0.18.1
 CXX=clang++ cmake --preset dev-clang
 cmake --build --preset dev-clang
-ctest --preset dev-clang
+ctest --preset dev-clang --parallel "$(nproc)"
 cmake --build --preset dev-clang --target cxxlens-quality
 ```
+
+通常の反復には `python3 tools/quality/run_gate.py fast|check --preset dev-clang --report <path>` を使います。Ready PR と
+main の最終 SHA は static/shared、quality、installed consumer、GCC public header を含む `full`、nightly は sanitizer と
+clean no-cache を含む `stress` が必須です。cache や changed-file selection は final correctness evidence ではありません。
+品質 evidence の owner と fail-closed fallback は `schemas/cxxlens_ng_quality_ownership.yaml` を参照してください。
 
 変更は out-of-source build で検証し、生成物を source tree に追加しないでください。
 

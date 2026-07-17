@@ -44,8 +44,6 @@ foreach(
       "${Python3_EXECUTABLE}"
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_${contract}.py" check
       --root "${CMAKE_CURRENT_SOURCE_DIR}"
-    COMMAND "${Python3_EXECUTABLE}"
-            "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_ng_${contract}.py"
     VERBATIM)
 endforeach()
 
@@ -57,8 +55,6 @@ add_custom_target(
     --root "${CMAKE_CURRENT_SOURCE_DIR}" --compiler "${CMAKE_CXX_COMPILER}"
     --scaffold "$<TARGET_FILE:cxxlens-provider-scaffold>" --doctor
     "$<TARGET_FILE:cxxlens-sdk-doctor>"
-  COMMAND "${Python3_EXECUTABLE}"
-          "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_ng_sdk_contract.py"
   DEPENDS cxxlens-provider-scaffold cxxlens-sdk-doctor
   VERBATIM)
 
@@ -68,9 +64,6 @@ add_custom_target(
     "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_migration_completion.py"
     check --root "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND
-    "${Python3_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_ng_migration_completion.py"
   VERBATIM)
 
 add_custom_target(
@@ -79,9 +72,6 @@ add_custom_target(
     "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_foundation_completion.py"
     check --root "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND
-    "${Python3_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_ng_foundation_completion.py"
   VERBATIM)
 
 add_custom_target(
@@ -90,8 +80,6 @@ add_custom_target(
     "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_sanitizer_coverage.py"
     contract --root "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMAND "${Python3_EXECUTABLE}"
-          "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_sanitizer_coverage.py"
   COMMAND
     "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_sanitizer_coverage.py"
@@ -113,6 +101,14 @@ add_custom_target(
     "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_runtime_port_usage.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
+  VERBATIM)
+
+add_custom_target(
+  cxxlens-quality-ownership-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_quality_ownership.py" check
+    --root "${CMAKE_CURRENT_SOURCE_DIR}"
   VERBATIM)
 
 add_custom_target(
@@ -141,7 +137,6 @@ add_dependencies(
   cxxlens-quality
   cxxlens-design-package-check
   cxxlens-documentation-consistency-check
-  cxxlens-ng-foundation-completion-check
   cxxlens-ng-provider-protocol-check
   cxxlens-ng-provider-runtime-check
   cxxlens-ng-migration-completion-check
@@ -153,16 +148,13 @@ add_dependencies(
   cxxlens-ng-semantic-guarantee-check
   cxxlens-ng-snapshot-store-contract-check
   cxxlens-public-boundary-check
+  cxxlens-quality-ownership-check
   cxxlens-runtime-port-check
   cxxlens-sanitizer-coverage-check
   cxxlens-text-lint)
 if(TARGET cxxlens-format-check)
   add_dependencies(cxxlens-quality cxxlens-format-check)
 endif()
-if(TARGET cxxlens-clang-tidy)
-  add_dependencies(cxxlens-quality cxxlens-clang-tidy)
-endif()
-
 if(CXXLENS_BUILD_DOCS)
   find_package(Doxygen 1.9.8 REQUIRED)
   configure_file("${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in"

@@ -9,9 +9,32 @@ endfunction()
 
 cxxlens_add_test_executable(cxxlens-unit-sdk unit/sdk/sdk_test.cpp)
 target_link_libraries(cxxlens-unit-sdk PRIVATE cxxlens::clang22_provider_sdk)
-add_test(NAME unit.sdk COMMAND cxxlens-unit-sdk)
-set_tests_properties(unit.sdk PROPERTIES LABELS
-                                         "unit;sdk;relation;query;provider")
+set(cxxlens_sdk_cases
+    scalar-value-validation
+    digest
+    descriptor-binding
+    relation-schema-parity
+    static-dynamic-query
+    snapshot-lifetime
+    frame-native-escape
+    columnar-wire-codec
+    project-catalog-identity
+    provider-tooling-faults
+    relation-engine-claim-kernel)
+foreach(case IN LISTS cxxlens_sdk_cases)
+  add_test(NAME "unit.sdk.${case}" COMMAND cxxlens-unit-sdk "${case}")
+  set_tests_properties(
+    "unit.sdk.${case}" PROPERTIES LABELS "unit;sdk;relation;query;provider"
+                                  PROCESSORS 1)
+endforeach()
+add_test(
+  NAME unit.sdk.registration
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/unit/sdk/check_case_registration.py"
+    "$<TARGET_FILE:cxxlens-unit-sdk>" ${cxxlens_sdk_cases})
+set_tests_properties(unit.sdk.registration PROPERTIES LABELS
+                                                      "unit;sdk;registration")
 
 cxxlens_add_test_executable(cxxlens-unit-sdk-store unit/sdk/store_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-store PRIVATE cxxlens::kernel)
@@ -41,8 +64,10 @@ add_test(NAME unit.sdk-provider-runtime
                  "$<TARGET_FILE:cxxlens-provider-process-fixture>")
 set_tests_properties(
   unit.sdk-provider-runtime
-  PROPERTIES LABELS
-             "unit;sdk;provider;process;sandbox;security;budget;cancellation")
+  PROPERTIES
+    LABELS
+    "unit;sdk;provider;process;sandbox;security;budget;cancellation;slow"
+    PROCESSORS 2)
 
 cxxlens_add_test_executable(cxxlens-clang22-provider-normalizer
                             adapter/clang22/provider_normalizer_test.cpp)
@@ -83,7 +108,7 @@ set_tests_properties(
   PROPERTIES
     LABELS
     "integration;acceptance;r2;recipe;query;provider;clang22;store;determinism"
-    TIMEOUT 60)
+    PROCESSORS 2 TIMEOUT 60)
 
 add_test(
   NAME link.provider-sdk-llvm-free
@@ -216,13 +241,43 @@ foreach(
                        PROPERTIES LABELS "quality;ng;contract")
 endforeach()
 
+add_test(
+  NAME quality.ownership
+  COMMAND "${Python3_EXECUTABLE}"
+          "${PROJECT_SOURCE_DIR}/tests/quality/test_quality_ownership.py")
+set_tests_properties(quality.ownership PROPERTIES LABELS
+                                                  "quality;ng;contract;ci")
+
 configure_file(install/run_install_test.cmake.in
                "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake" @ONLY)
-add_test(NAME install.consumer
-         COMMAND "${CMAKE_COMMAND}" -P
-                 "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake")
-set_tests_properties(install.consumer PROPERTIES LABELS
-                                                 "install;package;acceptance")
+set(cxxlens_install_script "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake")
+add_test(NAME install.prepare COMMAND "${CMAKE_COMMAND}" -DPHASE=prepare -P
+                                      "${cxxlens_install_script}")
+set_tests_properties(
+  install.prepare PROPERTIES LABELS "install;package;fixture" FIXTURES_SETUP
+                             installed_staging PROCESSORS 2)
+add_test(NAME install.relocation COMMAND "${CMAKE_COMMAND}" -DPHASE=relocation
+                                         -P "${cxxlens_install_script}")
+set_tests_properties(
+  install.relocation
+  PROPERTIES LABELS
+             "install;package;fixture;acceptance"
+             FIXTURES_REQUIRED
+             installed_staging
+             FIXTURES_SETUP
+             installed_prefix
+             PROCESSORS
+             2)
+foreach(phase IN ITEMS core-consumer sdk-consumer clang22-sdk-consumer
+                       examples-consumer shared-runtime-layout legacy-zero)
+  add_test(NAME "install.${phase}"
+           COMMAND "${CMAKE_COMMAND}" "-DPHASE=${phase}" -P
+                   "${cxxlens_install_script}")
+  set_tests_properties(
+    "install.${phase}"
+    PROPERTIES LABELS "install;package;acceptance;consumer" FIXTURES_REQUIRED
+               installed_prefix PROCESSORS 2)
+endforeach()
 
 cxxlens_configure_sanitizer_tests()
 

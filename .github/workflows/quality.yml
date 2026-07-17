@@ -9,8 +9,14 @@ permissions:
   contents: read
   issues: read
 
+concurrency:
+  group: quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CMAKE_GENERATOR: Ninja
+  CMAKE_BUILD_PARALLEL_LEVEL: ${{ vars.CXXLENS_BUILD_JOBS || 4 }}
+  CTEST_PARALLEL_LEVEL: ${{ vars.CXXLENS_TEST_JOBS || 4 }}
 
 jobs:
   build-test:
@@ -20,76 +26,229 @@ jobs:
       matrix:
         shared: ["OFF", "ON"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        if: github.event_name != 'pull_request' || !github.event.pull_request.draft || matrix.shared == 'OFF'
       - name: Install exact Clang 22 toolchain
+        if: github.event_name != 'pull_request' || !github.event.pull_request.draft || matrix.shared == 'OFF'
         run: |
           wget --quiet https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 22
           sudo apt-get install --yes libclang-22-dev llvm-22-dev ninja-build
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        if: github.event_name != 'pull_request' || !github.event.pull_request.draft || matrix.shared == 'OFF'
         with:
           python-version: "3.12"
-      - run: python -m pip install --requirement tools/quality/requirements.txt
+      - if: github.event_name != 'pull_request' || !github.event.pull_request.draft || matrix.shared == 'OFF'
+        run: python -m pip install --requirement tools/quality/requirements.txt
       - name: Configure, build, and test
+        if: github.event_name != 'pull_request' || !github.event.pull_request.draft || matrix.shared == 'OFF'
         env:
           CXX: clang++-22
         run: |
           cmake --preset ci-quick -DCXXLENS_CLANG_ADAPTER=ON \
             -DCXXLENS_BUILD_SHARED=${{ matrix.shared }}
           cmake --build --preset ci-quick
-          ctest --preset ci-quick
-      - name: Contract and migration gates
-        run: cmake --build --preset ci-quick --target cxxlens-quality
+          ctest --preset ci-quick --parallel "${CTEST_PARALLEL_LEVEL}" \
+            --label-exclude 'quality|install' \
+            --output-junit "build/ci-quick/ctest-build-${{ matrix.shared }}.xml"
+          python tools/quality/collect_toolchain_provenance.py \
+            --compiler clang++-22 --configuration "ci-quick;shared=${{ matrix.shared }}" \
+            --output "build/ci-quick/toolchain-build-${{ matrix.shared }}.json"
+          python tools/quality/check_quality_ownership.py evidence \
+            --check-id cpp.runtime-tests \
+            --configuration "${{ matrix.shared == 'ON' && 'shared-clang22' || 'static-clang22' }}" \
+            --toolchain-provenance "build/ci-quick/toolchain-build-${{ matrix.shared }}.json" \
+            --checker tests/CMakeLists.txt \
+            --output "build/ci-quick/ctest-build-${{ matrix.shared }}.xml" \
+            --output build/ci-quick/.ninja_log \
+            --evidence-output "build/ci-quick/build-test-${{ matrix.shared }}.evidence.json"
+      - name: Preserve build/test timing evidence
+        if: success() && (github.event_name != 'pull_request' || !github.event.pull_request.draft || matrix.shared == 'OFF')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-build-test-${{ matrix.shared }}-${{ github.sha }}
+          path: |
+            build/ci-quick/ctest-build-${{ matrix.shared }}.xml
+            build/ci-quick/.ninja_log
+            build/ci-quick/toolchain-build-${{ matrix.shared }}.json
+            build/ci-quick/build-test-${{ matrix.shared }}.evidence.json
+          if-no-files-found: error
+
+  quality-contracts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - name: Install exact Clang 22 toolchain
+        run: |
+          wget --quiet https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install --yes libclang-22-dev llvm-22-dev ninja-build
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --requirement tools/quality/requirements.txt
+      - name: Generate linkage-independent quality evidence once
+        env:
+          CXX: clang++-22
+        run: |
+          cmake --preset ci-quick -DCXXLENS_CLANG_ADAPTER=ON
+          ctest --preset ci-quick --parallel "${CTEST_PARALLEL_LEVEL}" \
+            --label-regex quality \
+            --output-junit build/ci-quick/ctest-quality.xml
+          cmake --build --preset ci-quick --target cxxlens-quality \
+            2>&1 | tee build/ci-quick/quality-production.log
+          python tools/quality/collect_toolchain_provenance.py \
+            --compiler clang++-22 --configuration "ci-quick;quality-contracts" \
+            --output build/ci-quick/toolchain-quality.json
+          python tools/quality/check_quality_ownership.py evidence \
+            --check-id quality.unit-contracts \
+            --configuration linkage-independent \
+            --toolchain-provenance build/ci-quick/toolchain-quality.json \
+            --checker tests/CMakeLists.txt \
+            --output build/ci-quick/ctest-quality.xml \
+            --evidence-output build/ci-quick/quality-unit.evidence.json
+          python tools/quality/check_quality_ownership.py evidence \
+            --check-id quality.production-contracts \
+            --configuration linkage-independent \
+            --toolchain-provenance build/ci-quick/toolchain-quality.json \
+            --checker cmake/CxxlensDeveloperTools.cmake \
+            --output build/ci-quick/quality-production.log \
+            --evidence-output build/ci-quick/quality-production.evidence.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-quality-${{ github.sha }}
+          path: |
+            build/ci-quick/ctest-quality.xml
+            build/ci-quick/.ninja_log
+            schemas/cxxlens_ng_quality_ownership.yaml
+            build/ci-quick/toolchain-quality.json
+            build/ci-quick/quality-production.log
+            build/ci-quick/quality-unit.evidence.json
+            build/ci-quick/quality-production.evidence.json
+          if-no-files-found: error
 
   install-consumer:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         shared: ["OFF", "ON"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
       - name: Install Clang 22 and Ninja
         run: |
           wget --quiet https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 22
           sudo apt-get install --yes libclang-22-dev llvm-22-dev ninja-build
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --requirement tools/quality/requirements.txt
       - name: Verify installed packages
         env:
           CXX: clang++-22
         run: |
           cmake --preset install-check -DCXXLENS_CLANG_ADAPTER=ON \
             -DCXXLENS_BUILD_SHARED=${{ matrix.shared }}
-          cmake --build --preset install-check
-          ctest --preset install-check --label-regex install
+          cmake --build --preset install-check --target \
+            cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22
+          ctest --preset install-check --parallel "${CTEST_PARALLEL_LEVEL}" \
+            --label-regex install \
+            --output-junit "build/install-check/ctest-install-${{ matrix.shared }}.xml"
+          python tools/quality/collect_toolchain_provenance.py \
+            --compiler clang++-22 --configuration "install-check;shared=${{ matrix.shared }}" \
+            --output "build/install-check/toolchain-install-${{ matrix.shared }}.json"
+          python tools/quality/check_quality_ownership.py evidence \
+            --check-id package.installed-consumers \
+            --configuration "${{ matrix.shared == 'ON' && 'shared-clang22' || 'static-clang22' }}" \
+            --toolchain-provenance "build/install-check/toolchain-install-${{ matrix.shared }}.json" \
+            --checker tests/install/run_install_test.cmake.in \
+            --output "build/install-check/ctest-install-${{ matrix.shared }}.xml" \
+            --output build/install-check/tests/install-consumer/relocated-prefix \
+            --output build/install-check/tests/install-consumer/install-artifact-manifest.json \
+            --evidence-output "build/install-check/install-${{ matrix.shared }}.evidence.json"
       - name: Preserve the qualified release-layout artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: cxxlens-install-${{ matrix.shared == 'ON' && 'shared' || 'static' }}-${{ github.sha }}
-          path: build/install-check/tests/install-consumer/relocated-prefix
+          path: |
+            build/install-check/tests/install-consumer/relocated-prefix
+            build/install-check/tests/install-consumer/install-artifact-manifest.json
+            build/install-check/ctest-install-${{ matrix.shared }}.xml
+            build/install-check/.ninja_log
+            build/install-check/toolchain-install-${{ matrix.shared }}.json
+            build/install-check/install-${{ matrix.shared }}.evidence.json
           if-no-files-found: error
           retention-days: 30
 
   gcc-public-headers:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --requirement tools/quality/requirements.txt
       - name: Compile LLVM-independent public headers
         run: |
+          mkdir -p build/gcc-public-headers
           g++ -std=c++23 -Wall -Wextra -Wpedantic -Werror -Iinclude \
             -fsyntax-only tests/public_headers/cxxlens_header_test.cpp
           g++ -std=c++23 -Wall -Wextra -Wpedantic -Werror -Iinclude \
             -fsyntax-only tests/public_headers/sdk_header_test.cpp
+          python tools/quality/collect_toolchain_provenance.py \
+            --compiler g++ --configuration gcc-public-headers \
+            --output build/gcc-public-headers/toolchain.json
+          python tools/quality/check_quality_ownership.py evidence \
+            --check-id public-headers.gcc --configuration gcc \
+            --toolchain-provenance build/gcc-public-headers/toolchain.json \
+            --checker tests/public_headers/cxxlens_header_test.cpp \
+            --checker tests/public_headers/sdk_header_test.cpp \
+            --evidence-output build/gcc-public-headers/gcc.evidence.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-gcc-public-headers-${{ github.sha }}
+          path: |
+            build/gcc-public-headers/toolchain.json
+            build/gcc-public-headers/gcc.evidence.json
+          if-no-files-found: error
+
+  quality-evidence:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: [build-test, quality-contracts, install-consumer, gcc-public-headers]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --requirement tools/quality/requirements.txt
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8
+        with:
+          pattern: cxxlens-*-${{ github.sha }}
+          path: build/quality-evidence-input
+      - name: Reject missing, duplicate, or mismatched evidence
+        run: |
+          python tools/quality/check_quality_ownership.py aggregate \
+            --mode full --evidence-dir build/quality-evidence-input \
+            --report build/quality-evidence-set.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-quality-evidence-${{ github.sha }}
+          path: build/quality-evidence-set.json
+          if-no-files-found: error
 
   foundation-completion:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [build-test, install-consumer, gcc-public-headers]
+    needs: [build-test, quality-contracts, install-consumer, gcc-public-headers, quality-evidence]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.12"
       - run: python -m pip install --requirement tools/quality/requirements.txt
@@ -105,9 +264,11 @@ jobs:
             --expected-revision "${GITHUB_SHA}" \
             --branch main \
             --ci-job build-test \
+            --ci-job quality-contracts \
             --ci-job install-consumer \
-            --ci-job gcc-public-headers
-      - uses: actions/upload-artifact@v4
+            --ci-job gcc-public-headers \
+            --ci-job quality-evidence
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: cxxlens-ng-foundation-completion-${{ github.sha }}
           path: ${{ runner.temp }}/cxxlens-ng-foundation-completion-report.json

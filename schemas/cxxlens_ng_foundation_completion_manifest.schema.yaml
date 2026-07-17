@@ -17,7 +17,7 @@ required:
   - handoff_documents
 properties:
   schema: {const: cxxlens.ng-foundation-completion-manifest.v1}
-  document_version: {const: 1.1.0}
+  document_version: {const: 1.2.0}
   maturity: {const: implemented}
   authority:
     type: object

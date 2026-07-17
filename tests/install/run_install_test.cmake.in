@@ -1,6 +1,14 @@
 set(test_root "@CMAKE_CURRENT_BINARY_DIR@/install-consumer")
-set(install_prefix "${test_root}/prefix")
+set(install_prefix "${test_root}/relocated-prefix")
 set(install_libdir "@CMAKE_INSTALL_LIBDIR@")
+set(artifact_manifest "${test_root}/install-artifact-manifest.json")
+set(artifact_configuration
+    "shared=@CXXLENS_BUILD_SHARED@,build_type=@CMAKE_BUILD_TYPE@,asan=@CXXLENS_ENABLE_ASAN@,ubsan=@CXXLENS_ENABLE_UBSAN@,tsan=@CXXLENS_ENABLE_TSAN@"
+)
+
+if(NOT DEFINED PHASE)
+  message(FATAL_ERROR "install test requires an explicit PHASE")
+endif()
 
 function(run_clean expected_result)
   execute_process(
@@ -27,39 +35,75 @@ function(run_installed_tools label)
             company.install.relation)
 endfunction()
 
-file(REMOVE_RECURSE "${test_root}")
-execute_process(COMMAND "@CMAKE_COMMAND@" --install "@CMAKE_BINARY_DIR@"
-                        --prefix "${install_prefix}" COMMAND_ERROR_IS_FATAL ANY)
+if(PHASE STREQUAL "prepare")
+  file(REMOVE_RECURSE "${test_root}")
+  set(staging_prefix "${test_root}/prefix")
+  set(install_prefix "${staging_prefix}")
+  execute_process(
+    COMMAND "@CMAKE_COMMAND@" --install "@CMAKE_BINARY_DIR@" --prefix
+            "${install_prefix}" COMMAND_ERROR_IS_FATAL ANY)
 
-foreach(
-  required IN
-  ITEMS
-    "${install_prefix}/include/cxxlens/cxxlens.hpp"
-    "${install_prefix}/include/cxxlens/sdk.hpp"
-    "${install_prefix}/include/cxxlens/sdk/query.hpp"
-    "${install_prefix}/include/cxxlens/provider/clang22.hpp"
-    "${install_prefix}/include/cxxlens/relations/cc_call_site.hpp"
-    "${install_prefix}/${install_libdir}/cmake/cxxlens/cxxlensConfig.cmake"
-    "${install_prefix}/${install_libdir}/cmake/cxxlensProviderSDK/cxxlensProviderSDKConfig.cmake"
-    "${install_prefix}/${install_libdir}/cmake/cxxlensClang22ProviderSDK/cxxlensClang22ProviderSDKConfig.cmake"
-    "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_public_api_catalog.yaml"
-    "${install_prefix}/bin/cxxlens-provider-scaffold"
-    "${install_prefix}/bin/cxxlens-sdk-doctor"
-    "${install_prefix}/bin/cxxlens-clang-worker-22")
-  if(NOT EXISTS "${required}")
-    message(
-      FATAL_ERROR "installed next-generation artifact is missing: ${required}")
+  foreach(
+    required IN
+    ITEMS
+      "${install_prefix}/include/cxxlens/cxxlens.hpp"
+      "${install_prefix}/include/cxxlens/sdk.hpp"
+      "${install_prefix}/include/cxxlens/sdk/query.hpp"
+      "${install_prefix}/include/cxxlens/provider/clang22.hpp"
+      "${install_prefix}/include/cxxlens/relations/cc_call_site.hpp"
+      "${install_prefix}/${install_libdir}/cmake/cxxlens/cxxlensConfig.cmake"
+      "${install_prefix}/${install_libdir}/cmake/cxxlensProviderSDK/cxxlensProviderSDKConfig.cmake"
+      "${install_prefix}/${install_libdir}/cmake/cxxlensClang22ProviderSDK/cxxlensClang22ProviderSDKConfig.cmake"
+      "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_public_api_catalog.yaml"
+      "${install_prefix}/bin/cxxlens-provider-scaffold"
+      "${install_prefix}/bin/cxxlens-sdk-doctor"
+      "${install_prefix}/bin/cxxlens-clang-worker-22")
+    if(NOT EXISTS "${required}")
+      message(
+        FATAL_ERROR "installed next-generation artifact is missing: ${required}"
+      )
+    endif()
+  endforeach()
+
+  run_installed_tools(original)
+
+  return()
+endif()
+
+if(PHASE STREQUAL "relocation")
+  file(RENAME "${test_root}/prefix" "${install_prefix}")
+  run_installed_tools(relocated)
+  execute_process(
+    COMMAND
+      "@Python3_EXECUTABLE@"
+      "@CMAKE_CURRENT_SOURCE_DIR@/../tools/quality/install_artifact_manifest.py"
+      create --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --prefix
+      "${install_prefix}" --compiler "@CMAKE_CXX_COMPILER@" --configuration
+      "${artifact_configuration}" --manifest "${artifact_manifest}"
+      COMMAND_ERROR_IS_FATAL ANY)
+  return()
+endif()
+
+execute_process(
+  COMMAND
+    "@Python3_EXECUTABLE@"
+    "@CMAKE_CURRENT_SOURCE_DIR@/../tools/quality/install_artifact_manifest.py"
+    verify --root "@CMAKE_CURRENT_SOURCE_DIR@/.." --prefix "${install_prefix}"
+    --compiler "@CMAKE_CXX_COMPILER@" --configuration
+    "${artifact_configuration}" --manifest "${artifact_manifest}"
+    COMMAND_ERROR_IS_FATAL ANY)
+
+if(PHASE STREQUAL "shared-runtime-layout")
+  if(NOT "@CXXLENS_BUILD_SHARED@" STREQUAL "ON")
+    return()
   endif()
-endforeach()
+  set(layout_prefix "${test_root}/layout-prefix")
+  file(REMOVE_RECURSE "${layout_prefix}")
+  file(COPY "${install_prefix}/" DESTINATION "${layout_prefix}")
+  set(install_prefix "${layout_prefix}")
+endif()
 
-run_installed_tools(original)
-
-set(relocated_prefix "${test_root}/relocated-prefix")
-file(RENAME "${install_prefix}" "${relocated_prefix}")
-set(install_prefix "${relocated_prefix}")
-run_installed_tools(relocated)
-
-if("@CXXLENS_BUILD_SHARED@" STREQUAL "ON"
+if(PHASE STREQUAL "shared-runtime-layout"
    AND UNIX
    AND NOT APPLE)
   find_program(CXXLENS_READELF NAMES readelf llvm-readelf REQUIRED)
@@ -120,23 +164,38 @@ if("@CXXLENS_BUILD_SHARED@" STREQUAL "ON"
   endif()
 endif()
 
-foreach(
-  forbidden IN
-  ITEMS
-    "${install_prefix}/include/cxxlens/facts.hpp"
-    "${install_prefix}/include/cxxlens/select.hpp"
-    "${install_prefix}/include/cxxlens/workspace.hpp"
-    "${install_prefix}/include/cxxlens/interop/clang.hpp"
-    "${install_prefix}/bin/cxxlens-frontend-worker"
-    "${install_prefix}/share/cxxlens/schemas/cxxlens_public_api_contract.yaml"
-    "${install_prefix}/share/cxxlens/schemas/cxxlens_m2_completion.yaml")
-  if(EXISTS "${forbidden}")
-    message(FATAL_ERROR "legacy artifact was installed: ${forbidden}")
-  endif()
-endforeach()
+if(PHASE STREQUAL "shared-runtime-layout")
+  return()
+endif()
 
-foreach(consumer IN ITEMS consumer sdk_consumer clang22_sdk_consumer)
+if(PHASE STREQUAL "legacy-zero")
+  foreach(
+    forbidden IN
+    ITEMS
+      "${install_prefix}/include/cxxlens/facts.hpp"
+      "${install_prefix}/include/cxxlens/select.hpp"
+      "${install_prefix}/include/cxxlens/workspace.hpp"
+      "${install_prefix}/include/cxxlens/interop/clang.hpp"
+      "${install_prefix}/bin/cxxlens-frontend-worker"
+      "${install_prefix}/share/cxxlens/schemas/cxxlens_public_api_contract.yaml"
+      "${install_prefix}/share/cxxlens/schemas/cxxlens_m2_completion.yaml")
+    if(EXISTS "${forbidden}")
+      message(FATAL_ERROR "legacy artifact was installed: ${forbidden}")
+    endif()
+  endforeach()
+  return()
+endif()
+
+if(PHASE MATCHES "^(core|sdk|clang22-sdk)-consumer$")
+  if(PHASE STREQUAL "core-consumer")
+    set(consumer consumer)
+  elseif(PHASE STREQUAL "sdk-consumer")
+    set(consumer sdk_consumer)
+  else()
+    set(consumer clang22_sdk_consumer)
+  endif()
   set(build_dir "${test_root}/${consumer}-build")
+  file(REMOVE_RECURSE "${build_dir}")
   execute_process(
     COMMAND
       "@CMAKE_COMMAND@" -S "@CMAKE_CURRENT_SOURCE_DIR@/install/${consumer}" -B
@@ -154,26 +213,35 @@ foreach(consumer IN ITEMS consumer sdk_consumer clang22_sdk_consumer)
   execute_process(COMMAND "@CMAKE_COMMAND@" --install "${build_dir}" --prefix
                           "${consumer_prefix}" COMMAND_ERROR_IS_FATAL ANY)
   run_clean(0 "${consumer_prefix}/bin/cxxlens-${executable_suffix}")
-endforeach()
+  return()
+endif()
 
-set(example_build_dir "${test_root}/examples-consumer-build")
-execute_process(
-  COMMAND
-    "@CMAKE_COMMAND@" -S "@CMAKE_CURRENT_SOURCE_DIR@/install/examples_consumer"
-    -B "${example_build_dir}" "-DCMAKE_PREFIX_PATH=${install_prefix}"
-    "-DCXXLENS_EXAMPLE_ROOT=${install_prefix}/share/doc/cxxlens/examples/sdk"
-    "-DCMAKE_CXX_COMPILER=@CMAKE_CXX_COMPILER@" "-DLLVM_DIR=@LLVM_DIR@"
-    "-DClang_DIR=@Clang_DIR@" "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
-    "-DCXXLENS_ENABLE_ASAN=@CXXLENS_ENABLE_ASAN@"
-    "-DCXXLENS_ENABLE_UBSAN=@CXXLENS_ENABLE_UBSAN@"
-    "-DCXXLENS_ENABLE_TSAN=@CXXLENS_ENABLE_TSAN@" COMMAND_ERROR_IS_FATAL ANY)
-execute_process(COMMAND "@CMAKE_COMMAND@" --build "${example_build_dir}"
-                        COMMAND_ERROR_IS_FATAL ANY)
-set(example_prefix "${test_root}/examples-consumer-prefix")
-execute_process(COMMAND "@CMAKE_COMMAND@" --install "${example_build_dir}"
-                        --prefix "${example_prefix}" COMMAND_ERROR_IS_FATAL ANY)
-foreach(example IN ITEMS recipe typed_query dynamic_query portable_provider
-                         clang22-native)
-  run_clean(0 "${example_build_dir}/cxxlens-installed-${example}")
-  run_clean(0 "${example_prefix}/bin/cxxlens-installed-${example}")
-endforeach()
+if(PHASE STREQUAL "examples-consumer")
+  set(example_build_dir "${test_root}/examples-consumer-build")
+  file(REMOVE_RECURSE "${example_build_dir}")
+  execute_process(
+    COMMAND
+      "@CMAKE_COMMAND@" -S
+      "@CMAKE_CURRENT_SOURCE_DIR@/install/examples_consumer" -B
+      "${example_build_dir}" "-DCMAKE_PREFIX_PATH=${install_prefix}"
+      "-DCXXLENS_EXAMPLE_ROOT=${install_prefix}/share/doc/cxxlens/examples/sdk"
+      "-DCMAKE_CXX_COMPILER=@CMAKE_CXX_COMPILER@" "-DLLVM_DIR=@LLVM_DIR@"
+      "-DClang_DIR=@Clang_DIR@" "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+      "-DCXXLENS_ENABLE_ASAN=@CXXLENS_ENABLE_ASAN@"
+      "-DCXXLENS_ENABLE_UBSAN=@CXXLENS_ENABLE_UBSAN@"
+      "-DCXXLENS_ENABLE_TSAN=@CXXLENS_ENABLE_TSAN@" COMMAND_ERROR_IS_FATAL ANY)
+  execute_process(COMMAND "@CMAKE_COMMAND@" --build "${example_build_dir}"
+                          COMMAND_ERROR_IS_FATAL ANY)
+  set(example_prefix "${test_root}/examples-consumer-prefix")
+  execute_process(
+    COMMAND "@CMAKE_COMMAND@" --install "${example_build_dir}" --prefix
+            "${example_prefix}" COMMAND_ERROR_IS_FATAL ANY)
+  foreach(example IN ITEMS recipe typed_query dynamic_query portable_provider
+                           clang22-native)
+    run_clean(0 "${example_build_dir}/cxxlens-installed-${example}")
+    run_clean(0 "${example_prefix}/bin/cxxlens-installed-${example}")
+  endforeach()
+  return()
+endif()
+
+message(FATAL_ERROR "unknown install test PHASE: ${PHASE}")

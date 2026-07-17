@@ -1,0 +1,88 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-quality-ownership.v1
+title: cxxlens quality and evidence ownership
+type: object
+additionalProperties: false
+required: [schema, document_version, maturity, authority, evidence_binding, checks, modes, selection]
+properties:
+  schema: {const: cxxlens.ng-quality-ownership.v1}
+  document_version: {$ref: '#/$defs/semver'}
+  maturity: {const: implemented}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, issue, owner]
+    properties:
+      design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
+      issue: {const: '#156'}
+      owner: {const: steward.quality-evidence}
+  evidence_binding:
+    type: object
+    additionalProperties: false
+    required: [contract, fields, cache_is_evidence]
+    properties:
+      contract: {const: cxxlens.quality-evidence.v1}
+      fields:
+        const: [logical_check_id, check_version, revision, tree, toolchain_digest, configuration_digest, checker_digest, input_digest, output_digest]
+      cache_is_evidence: {const: false}
+  checks:
+    type: array
+    minItems: 8
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, version, owner, command, inputs, dimensions, configurations]
+      properties:
+        id: {type: string, pattern: '^[a-z][a-z0-9.-]+$'}
+        version: {type: integer, minimum: 1}
+        owner: {enum: [ctest, quality-target, build-test, install-job, gcc-header-job, nightly]}
+        command: {type: string, minLength: 1}
+        inputs:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {type: string, minLength: 1}
+        dimensions:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {enum: [linkage-independent, static, shared, asan-ubsan, tsan, gcc, clang22]}
+        configurations:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {type: string, pattern: '^[a-z][a-z0-9.-]+$'}
+  modes:
+    type: object
+    additionalProperties: false
+    required: [fast, check, full, stress]
+    properties:
+      fast: {$ref: '#/$defs/mode'}
+      check: {$ref: '#/$defs/mode'}
+      full: {$ref: '#/$defs/mode'}
+      stress: {$ref: '#/$defs/mode'}
+  selection:
+    type: object
+    additionalProperties: false
+    required: [unknown, graph_failure, public_header, schema, cmake, workflow, selector]
+    properties:
+      unknown: {const: full}
+      graph_failure: {const: full}
+      public_header: {const: full}
+      schema: {const: full}
+      cmake: {const: full}
+      workflow: {const: full}
+      selector: {const: full}
+$defs:
+  semver: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+  mode:
+    type: object
+    additionalProperties: false
+    required: [owners, final_sha]
+    properties:
+      owners:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {enum: [ctest, quality-target, build-test, install-job, gcc-header-job, nightly]}
+      final_sha: {type: boolean}

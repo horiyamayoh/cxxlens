@@ -1623,18 +1623,44 @@ namespace
 	}
 } // namespace
 
-int main()
+int main(const int argc, const char* const argv[])
 {
-	check_scalar_value_validation();
-	check_digest();
-	check_descriptor_binding();
-	check_relation_schema_parity();
-	check_static_dynamic_query();
-	check_snapshot_lifetime();
-	check_frame_and_native_escape();
-	check_columnar_wire_codec();
-	check_project_catalog_identity();
-	check_provider_tooling_and_faults();
-	check_relation_engine_and_claim_kernel();
+	using test_case = std::pair<std::string_view, void (*)()>;
+	const std::array cases{
+		test_case{"scalar-value-validation", check_scalar_value_validation},
+		test_case{"digest", check_digest},
+		test_case{"descriptor-binding", check_descriptor_binding},
+		test_case{"relation-schema-parity", check_relation_schema_parity},
+		test_case{"static-dynamic-query", check_static_dynamic_query},
+		test_case{"snapshot-lifetime", check_snapshot_lifetime},
+		test_case{"frame-native-escape", check_frame_and_native_escape},
+		test_case{"columnar-wire-codec", check_columnar_wire_codec},
+		test_case{"project-catalog-identity", check_project_catalog_identity},
+		test_case{"provider-tooling-faults", check_provider_tooling_and_faults},
+		test_case{"relation-engine-claim-kernel", check_relation_engine_and_claim_kernel},
+	};
+
+	if (argc == 2 && std::string_view{argv[1]} == "--list")
+	{
+		for (const auto& [name, unused] : cases)
+		{
+			(void)unused;
+			std::cout << name << '\n';
+		}
+		return 0;
+	}
+	if (argc != 2)
+	{
+		std::cerr << "usage: cxxlens-unit-sdk <case>|--list\n";
+		return 2;
+	}
+	const auto selected = std::string_view{argv[1]};
+	const auto found = std::ranges::find(cases, selected, &test_case::first);
+	if (found == cases.end())
+	{
+		std::cerr << "unknown SDK test case: " << selected << '\n';
+		return 2;
+	}
+	found->second();
 	return 0;
 }

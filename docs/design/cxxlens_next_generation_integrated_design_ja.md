@@ -3914,6 +3914,17 @@ group-level table だけで complete を宣言しない。
 - docs/support matrix
 - license/notice
 
+Issue #156 は gate の logical evidence ownership を
+`schemas/cxxlens_ng_quality_ownership.yaml` に固定する。linkage 非依存の quality unit test は CTest、production
+checker は `cxxlens-quality`、installed consumer は install job、instrumented execution は nightly が所有し、同じ
+workflow 内で同じ logical evidence ID を二度生成してはならない。evidence ID は check/version、revision/tree、toolchain、
+configuration、checker、normalized input set、output digest の exact tuple に bind し、cache hit は correctness evidence に
+含めない。workflow aggregation は required `(logical check, configuration)` set の欠落、余分、重複と revision/tree 不一致を
+fail closed にする。installed prefix は revision/tree、toolchain、configuration と全 file digest を持つ独立 manifest を各 consumer
+の effect 前に再検証する。`fast` / `check` は反復用であり、main/Ready の最終 SHA は selection を使わない `full`、nightly は clean
+no-cache を含む `stress` を通す。unknown file、dependency graph failure、public header、schema、CMake、workflow、selection
+rule 自身の変更は full へ fail closed する。
+
 ### 26.4 Test classes
 
 - unit

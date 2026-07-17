@@ -1,5 +1,5 @@
 schema: cxxlens.ng-foundation-completion-manifest.v1
-document_version: 1.1.0
+document_version: 1.2.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -15,7 +15,7 @@ binding:
   tree: git-head-tree
   clean_worktree: required
   branch: main
-required_closed_issues: [57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 72, 73]
+required_closed_issues: [57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 72, 73, 156]
 version_contracts:
   relation_registry: 1.2.0
   claim_envelope: cxxlens.claim-envelope.v2
@@ -61,8 +61,9 @@ authority_documents:
   - schemas/cxxlens_ng_acceptance_manifest.yaml
   - schemas/cxxlens_ng_release_bundle.yaml
   - schemas/cxxlens_ng_sanitizer_coverage.yaml
+  - schemas/cxxlens_ng_quality_ownership.yaml
 evidence:
-  required_ci_jobs: [build-test, install-consumer, gcc-public-headers]
+  required_ci_jobs: [build-test, quality-contracts, install-consumer, gcc-public-headers, quality-evidence]
   required_paths:
     - tests/unit/sdk/sdk_test.cpp
     - tests/unit/sdk/store_test.cpp
@@ -80,6 +81,12 @@ evidence:
     - tools/quality/check_ng_migration_completion.py
     - tools/quality/check_ng_foundation_audits.py
     - tools/quality/check_sanitizer_coverage.py
+    - tools/quality/check_quality_ownership.py
+    - tools/quality/run_gate.py
+    - tools/quality/collect_toolchain_provenance.py
+    - schemas/cxxlens_ng_quality_evidence.schema.yaml
+    - schemas/cxxlens_ng_install_artifact_manifest.schema.yaml
+    - tools/quality/install_artifact_manifest.py
   claims:
     standard_custom_relation:
       - schemas/cxxlens_ng_relation_conformance_vectors.yaml
