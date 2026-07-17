@@ -1,5 +1,5 @@
 {
-  "asset_count": 261,
+  "asset_count": 262,
   "assets": [
     {
       "authority": "active",
@@ -529,6 +529,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0017-relation-descriptor-binding.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0018-runtime-relation-schema-parity.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1830,7 +1837,7 @@
     }
   ],
   "classifications": {
-    "active": 225,
+    "active": 226,
     "archived": 35,
     "generated": 1
   },

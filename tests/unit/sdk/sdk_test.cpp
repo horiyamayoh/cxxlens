@@ -708,6 +708,67 @@ namespace
 					", differential=" +
 					std::to_string(compared ? compared->differential_disagreements.size() : 999U));
 
+		const std::array existing_functional{*overlap_a, *call, *other_call};
+		cxxlens::sdk::claim_batch incremental_conflict;
+		require(incremental_conflict.add(*overlap_b).has_value(),
+				"incremental conflict claim rejected");
+		auto incremental = std::move(incremental_conflict).commit(*engine, existing_functional);
+		require(incremental && incremental->conflicts.size() == 1U &&
+					incremental->conflicts.front().overlap_fragments ==
+						std::vector<std::string>{"release"},
+				"new-vs-existing functional conflict was not classified");
+
+		cxxlens::sdk::claim_batch incremental_same_payload;
+		require(incremental_same_payload.add(*same_payload).has_value(),
+				"incremental same-payload claim rejected");
+		auto no_payload_conflict =
+			std::move(incremental_same_payload).commit(*engine, existing_functional);
+		require(no_payload_conflict && no_payload_conflict->conflicts.empty(),
+				"new-vs-existing matching payload produced a false conflict");
+
+		cxxlens::sdk::claim_batch incremental_disjoint;
+		require(incremental_disjoint.add(*disjoint).has_value(),
+				"incremental disjoint claim rejected");
+		auto no_condition_conflict =
+			std::move(incremental_disjoint).commit(*engine, existing_functional);
+		require(no_condition_conflict && no_condition_conflict->conflicts.empty(),
+				"new-vs-existing disjoint conditions produced a false conflict");
+
+		cxxlens::sdk::claim_batch incremental_differential;
+		require(incremental_differential.add(*other_domain).has_value(),
+				"incremental differential claim rejected");
+		auto differential =
+			std::move(incremental_differential).commit(*engine, existing_functional);
+		require(differential && differential->conflicts.empty() &&
+					differential->differential_disagreements.size() == 1U &&
+					differential->differential_disagreements.front().overlap_fragments ==
+						std::vector<std::string>{"release"},
+				"new-vs-existing cross-domain disagreement was not classified");
+
+		cxxlens::sdk::claim_batch one_shot_batch;
+		require(one_shot_batch.add(*overlap_a) && one_shot_batch.add(*overlap_b),
+				"one-shot comparison claims rejected");
+		auto one_shot = std::move(one_shot_batch).commit(*engine, existing_call);
+		require(one_shot && one_shot->conflicts.size() == 1U && incremental,
+				"one-shot comparison did not produce one conflict");
+		const auto& one_shot_conflict = one_shot->conflicts.front();
+		const auto& incremental_record = incremental->conflicts.front();
+		require(one_shot_conflict.relation == incremental_record.relation &&
+					one_shot_conflict.semantic_key == incremental_record.semantic_key &&
+					one_shot_conflict.interpretation == incremental_record.interpretation &&
+					one_shot_conflict.overlap_fragments == incremental_record.overlap_fragments &&
+					one_shot_conflict.assertions == incremental_record.assertions &&
+					one_shot_conflict.contents == incremental_record.contents,
+				"one-shot and split-publication conflict classification diverged");
+
+		const std::array duplicate_existing{*overlap_a, *overlap_a, *call};
+		cxxlens::sdk::claim_batch duplicate_prior_batch;
+		require(duplicate_prior_batch.add(*overlap_b).has_value(),
+				"duplicate-prior claim rejected");
+		auto duplicate_prior = std::move(duplicate_prior_batch).commit(*engine, duplicate_existing);
+		require(duplicate_prior && duplicate_prior->conflicts.size() == 1U,
+				"duplicate existing claims duplicated incremental conflict records");
+
 		for (const auto& descriptor : descriptors)
 		{
 			auto left = cxxlens::sdk::make_assertion(

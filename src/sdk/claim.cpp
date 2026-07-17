@@ -500,45 +500,140 @@ namespace cxxlens::sdk
 				output.claims.push_back(value);
 		}
 
+		const auto classify_pair = [&](const claim& left, const claim& right) -> result<void>
+		{
+			const claim* first = &left;
+			const claim* second = &right;
+			if (claim_order(*second, *first))
+				std::swap(first, second);
+			if (first->content == second->content || first->descriptor != second->descriptor ||
+				first->semantic_key != second->semantic_key)
+				return {};
+			auto descriptor = descriptor_for(engine, *first);
+			if (!descriptor)
+				return unexpected(std::move(descriptor.error()));
+			if (descriptor->merge != merge_mode::functional_assertion)
+				return {};
+			auto first_payload = conflict_payload(*descriptor, first->row);
+			auto second_payload = conflict_payload(*descriptor, second->row);
+			if (!first_payload || !second_payload)
+				return unexpected(!first_payload ? std::move(first_payload.error())
+												 : std::move(second_payload.error()));
+			if (*first_payload == *second_payload)
+				return {};
+			auto overlap = first->presence.overlap(second->presence);
+			if (!overlap)
+				return unexpected(std::move(overlap.error()));
+			if (overlap->empty())
+				return {};
+			if (first->interpretation == second->interpretation)
+				output.conflicts.push_back({descriptor->name,
+											first->semantic_key,
+											first->interpretation,
+											std::move(*overlap),
+											{first->assertion, second->assertion},
+											{first->content, second->content}});
+			else
+				output.differential_disagreements.push_back({descriptor->name,
+															 first->semantic_key,
+															 first->interpretation,
+															 second->interpretation,
+															 first->content,
+															 second->content,
+															 std::move(*overlap)});
+			return {};
+		};
+
 		for (std::size_t left = 0U; left < output.claims.size(); ++left)
 			for (std::size_t right = left + 1U; right < output.claims.size(); ++right)
 			{
-				const auto& first = output.claims[left];
-				const auto& second = output.claims[right];
-				if (first.descriptor != second.descriptor ||
-					first.semantic_key != second.semantic_key)
-					continue;
-				auto descriptor = descriptor_for(engine, first);
-				if (!descriptor || descriptor->merge != merge_mode::functional_assertion)
-					continue;
-				auto first_payload = conflict_payload(*descriptor, first.row);
-				auto second_payload = conflict_payload(*descriptor, second.row);
-				if (!first_payload || !second_payload)
-					return unexpected(!first_payload ? std::move(first_payload.error())
-													 : std::move(second_payload.error()));
-				if (*first_payload == *second_payload)
-					continue;
-				auto overlap = first.presence.overlap(second.presence);
-				if (!overlap)
-					return unexpected(std::move(overlap.error()));
-				if (overlap->empty())
-					continue;
-				if (first.interpretation == second.interpretation)
-					output.conflicts.push_back({descriptor->name,
-												first.semantic_key,
-												first.interpretation,
-												std::move(*overlap),
-												{first.assertion, second.assertion},
-												{first.content, second.content}});
-				else
-					output.differential_disagreements.push_back({descriptor->name,
-																 first.semantic_key,
-																 first.interpretation,
-																 second.interpretation,
-																 first.content,
-																 second.content,
-																 std::move(*overlap)});
+				if (auto classified = classify_pair(output.claims[left], output.claims[right]);
+					!classified)
+					return unexpected(std::move(classified.error()));
 			}
+
+		std::vector<const claim*> ordered_existing;
+		ordered_existing.reserve(existing.size());
+		for (const auto& value : existing)
+			ordered_existing.push_back(&value);
+		std::ranges::sort(ordered_existing,
+						  [](const claim* left, const claim* right)
+						  {
+							  return claim_order(*left, *right);
+						  });
+		ordered_existing.erase(std::unique(ordered_existing.begin(),
+										   ordered_existing.end(),
+										   [](const claim* left, const claim* right)
+										   {
+											   return left->content == right->content;
+										   }),
+							   ordered_existing.end());
+		for (const auto& added : output.claims)
+			for (const auto* prior : ordered_existing)
+				if (auto classified = classify_pair(added, *prior); !classified)
+					return unexpected(std::move(classified.error()));
+
+		std::ranges::sort(output.conflicts,
+						  [](const claim_conflict& left, const claim_conflict& right)
+						  {
+							  return std::tie(left.relation,
+											  left.semantic_key,
+											  left.interpretation,
+											  left.overlap_fragments,
+											  left.assertions,
+											  left.contents) < std::tie(right.relation,
+																		right.semantic_key,
+																		right.interpretation,
+																		right.overlap_fragments,
+																		right.assertions,
+																		right.contents);
+						  });
+		output.conflicts.erase(
+			std::unique(output.conflicts.begin(),
+						output.conflicts.end(),
+						[](const claim_conflict& left, const claim_conflict& right)
+						{
+							return left.relation == right.relation &&
+								left.semantic_key == right.semantic_key &&
+								left.interpretation == right.interpretation &&
+								left.overlap_fragments == right.overlap_fragments &&
+								left.assertions == right.assertions &&
+								left.contents == right.contents;
+						}),
+			output.conflicts.end());
+		std::ranges::sort(
+			output.differential_disagreements,
+			[](const differential_disagreement& left, const differential_disagreement& right)
+			{
+				return std::tie(left.relation,
+								left.semantic_key,
+								left.left_interpretation,
+								left.right_interpretation,
+								left.left_content,
+								left.right_content,
+								left.overlap_fragments) < std::tie(right.relation,
+																   right.semantic_key,
+																   right.left_interpretation,
+																   right.right_interpretation,
+																   right.left_content,
+																   right.right_content,
+																   right.overlap_fragments);
+			});
+		output.differential_disagreements.erase(
+			std::unique(
+				output.differential_disagreements.begin(),
+				output.differential_disagreements.end(),
+				[](const differential_disagreement& left, const differential_disagreement& right)
+				{
+					return left.relation == right.relation &&
+						left.semantic_key == right.semantic_key &&
+						left.left_interpretation == right.left_interpretation &&
+						left.right_interpretation == right.right_interpretation &&
+						left.left_content == right.left_content &&
+						left.right_content == right.right_content &&
+						left.overlap_fragments == right.overlap_fragments;
+				}),
+			output.differential_disagreements.end());
 
 		std::ranges::sort(
 			output.unresolved,

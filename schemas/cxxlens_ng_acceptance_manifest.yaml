@@ -35,6 +35,7 @@ entries:
       - tools/quality/check_ng_sdk_contract.py
       - docs/design/adr/0017-relation-descriptor-binding.md
       - docs/design/adr/0018-runtime-relation-schema-parity.md
+      - docs/design/adr/0019-incremental-claim-conflict-classification.md
     summary: Relation extension, IDL evolution, references, and static/dynamic parity.
   - id: gate.g2
     status: implemented

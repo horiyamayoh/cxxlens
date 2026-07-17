@@ -172,7 +172,10 @@ namespace cxxlens::sdk
 												   observation value);
 		/** @brief Add an already validated or derived claim for independent commit validation. */
 		[[nodiscard]] result<void> add(claim value);
-		/** @brief Validate references/merge laws and atomically produce the deterministic batch. */
+		/**
+		 * @brief Validate references/merge laws against new and existing claims and produce the
+		 * batch.
+		 */
 		[[nodiscard]] result<claim_batch_result> commit(const relation_engine& engine,
 														std::span<const claim> existing = {}) &&;
 
