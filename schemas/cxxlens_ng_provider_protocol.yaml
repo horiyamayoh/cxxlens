@@ -121,6 +121,7 @@ state_machine_validation:
   modes:
     process: full-hello-schema-task-handshake
     logical: task-accepted-onward-same-state-machine
+  logical_author_state: [context-shared-sink-registry, move-stable-open-batch, unique-task-batch-id, single-active-batch, abandon-is-failure]
   fault_injection: mutate-encoded-frame-or-credit-then-shared-decode-and-validate
   reason_parity: same-transcript-same-stable-reason
   terminal_verdict:
@@ -152,8 +153,10 @@ state_machine_validation:
     - provider.unsupported-compression
     - provider.protocol-state-invalid
     - provider.credit-exceeded
+    - provider.backpressure
     - provider.task-binding-mismatch
     - provider.batch-invalid
+    - provider.batch-state-invalid
     - provider.relation-incompatible
     - provider.coverage-incomplete
 handshake:
@@ -321,8 +324,10 @@ failures:
     - provider.coverage-incomplete
     - provider.protocol-state-invalid
     - provider.credit-exceeded
+    - provider.backpressure
     - provider.task-binding-mismatch
     - provider.batch-invalid
+    - provider.batch-state-invalid
     - provider.relation-incompatible
   current_dependency_group: rollback
   unsealed_groups: rollback

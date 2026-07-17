@@ -16,6 +16,24 @@
 
 namespace cxxlens::sdk::provider
 {
+	namespace detail
+	{
+		struct relation_sink_registry
+		{
+			struct active_batch_state
+			{
+				std::uint64_t sink_id;
+				std::string dependency_group_id;
+				std::string atomic_output_group_id;
+				std::string batch_id;
+			};
+			std::set<std::string, std::less<>> seen_batch_ids;
+			std::optional<active_batch_state> active_batch;
+			std::optional<error> violation;
+			std::uint64_t next_sink_id{1U};
+		};
+	} // namespace detail
+
 	namespace
 	{
 		constexpr std::size_t header_size = 104U;
@@ -1740,33 +1758,46 @@ namespace cxxlens::sdk::provider
 								 const std::uint64_t maximum_rows,
 								 const bool authorized,
 								 const std::span<const std::string> dependency_groups,
-								 std::optional<error>& relation_violation)
+								 std::shared_ptr<detail::relation_sink_registry> registry,
+								 const std::uint64_t sink_id)
 		: writer_{&writer}, descriptor_{std::move(descriptor)}, task_id_{std::move(task_id)},
 		  total_rows_{&total_rows}, maximum_rows_{maximum_rows},
 		  dependency_groups_{dependency_groups.begin(), dependency_groups.end()},
-		  relation_violation_{&relation_violation}, authorized_{authorized}
+		  registry_{std::move(registry)}, sink_id_{sink_id}, authorized_{authorized}
 	{
+	}
+
+	relation_sink::~relation_sink()
+	{
+		if (registry_ && (open_ || poisoned_) && registry_->active_batch &&
+			registry_->active_batch->sink_id == sink_id_ && !registry_->violation)
+			registry_->violation = provider_error(
+				"provider.batch-state-invalid", registry_->active_batch->batch_id, "abandoned");
 	}
 
 	result<void> relation_sink::begin(std::string dependency_group,
 									  std::string atomic_output_group,
 									  std::string batch_id)
 	{
-		if (poisoned_)
+		if (!registry_ || poisoned_)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.batch-state-invalid", "poisoned"));
 		if (!authorized_ || !std::ranges::binary_search(dependency_groups_, dependency_group))
 		{
 			auto failure = provider_error(
 				"provider.relation-incompatible", descriptor_.id, "task-output-or-dependency");
-			if (relation_violation_ != nullptr && !*relation_violation_)
-				*relation_violation_ = failure;
+			if (!registry_->violation)
+				registry_->violation = failure;
 			return cxxlens::sdk::unexpected(std::move(failure));
 		}
 		if (open_ || task_id_.empty() || dependency_group.empty() || atomic_output_group.empty() ||
 			batch_id.empty())
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.batch-state-invalid", "begin"));
+		{
+			auto failure = provider_error("provider.batch-state-invalid", "begin");
+			if (!registry_->violation)
+				registry_->violation = failure;
+			return cxxlens::sdk::unexpected(std::move(failure));
+		}
 		if (auto valid = descriptor_.validate(); !valid)
 			return cxxlens::sdk::unexpected(std::move(valid.error()));
 		std::vector<batch_column_summary> fresh_summaries;
@@ -1778,6 +1809,16 @@ namespace cxxlens::sdk::provider
 										   "|" + atomic_output_group + "|" + batch_id);
 		if (!control)
 			return cxxlens::sdk::unexpected(std::move(control.error()));
+		if (registry_->active_batch || registry_->seen_batch_ids.contains(batch_id))
+		{
+			auto failure = provider_error(
+				"provider.batch-state-invalid", batch_id, "duplicate-or-interleaved");
+			if (!registry_->violation)
+				registry_->violation = failure;
+			return cxxlens::sdk::unexpected(std::move(failure));
+		}
+		registry_->seen_batch_ids.insert(batch_id);
+		registry_->active_batch.emplace(sink_id_, dependency_group, atomic_output_group, batch_id);
 		if (auto sent = writer_->send(message_type::batch_begin, *control); !sent)
 		{
 			poisoned_ = true;
@@ -1799,7 +1840,8 @@ namespace cxxlens::sdk::provider
 	{
 		if (pending_rows_.empty())
 			return {};
-		if (poisoned_)
+		if (!registry_ || poisoned_ || !registry_->active_batch ||
+			registry_->active_batch->sink_id != sink_id_)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.batch-state-invalid", "poisoned"));
 		if (!open_ || writer_ == nullptr || pending_rows_.size() > 256U ||
@@ -1870,11 +1912,21 @@ namespace cxxlens::sdk::provider
 
 	result<void> relation_sink::push(const detached_row& row)
 	{
-		if (poisoned_)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.batch-state-invalid", "poisoned"));
+		if (!registry_ || poisoned_ || !registry_->active_batch ||
+			registry_->active_batch->sink_id != sink_id_)
+		{
+			auto failure = provider_error("provider.batch-state-invalid", "poisoned");
+			if (registry_ && !registry_->violation)
+				registry_->violation = failure;
+			return cxxlens::sdk::unexpected(std::move(failure));
+		}
 		if (!open_)
-			return cxxlens::sdk::unexpected(provider_error("provider.batch-state-invalid", "push"));
+		{
+			auto failure = provider_error("provider.batch-state-invalid", "push");
+			if (!registry_->violation)
+				registry_->violation = failure;
+			return cxxlens::sdk::unexpected(std::move(failure));
+		}
 		if (total_rows_ == nullptr || *total_rows_ >= maximum_rows_)
 			return cxxlens::sdk::unexpected(provider_error("provider.output-limit", "rows"));
 		if (auto valid = validate_row(descriptor_, row); !valid)
@@ -1889,11 +1941,21 @@ namespace cxxlens::sdk::provider
 
 	result<void> relation_sink::end()
 	{
-		if (poisoned_)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.batch-state-invalid", "poisoned"));
+		if (!registry_ || poisoned_ || !registry_->active_batch ||
+			registry_->active_batch->sink_id != sink_id_)
+		{
+			auto failure = provider_error("provider.batch-state-invalid", "poisoned");
+			if (registry_ && !registry_->violation)
+				registry_->violation = failure;
+			return cxxlens::sdk::unexpected(std::move(failure));
+		}
 		if (!open_)
-			return cxxlens::sdk::unexpected(provider_error("provider.batch-state-invalid", "end"));
+		{
+			auto failure = provider_error("provider.batch-state-invalid", "end");
+			if (!registry_->violation)
+				registry_->violation = failure;
+			return cxxlens::sdk::unexpected(std::move(failure));
+		}
 		if (auto flushed = flush_chunk(); !flushed)
 			return flushed;
 		columnar_batch_end terminal{task_id_,
@@ -1920,6 +1982,7 @@ namespace cxxlens::sdk::provider
 			return sent;
 		}
 		open_ = false;
+		registry_->active_batch.reset();
 		return {};
 	}
 
@@ -1935,7 +1998,8 @@ namespace cxxlens::sdk::provider
 					 const std::span<const std::string> dependency_groups)
 		: writer_{&writer}, execution_{std::move(execution)}, task_id_{std::move(task_id)},
 		  outputs_{outputs.begin(), outputs.end()},
-		  dependency_groups_{dependency_groups.begin(), dependency_groups.end()}
+		  dependency_groups_{dependency_groups.begin(), dependency_groups.end()},
+		  sink_registry_{std::make_shared<detail::relation_sink_registry>()}
 	{
 	}
 
@@ -1945,9 +2009,10 @@ namespace cxxlens::sdk::provider
 		const bool authorized = requested != outputs_.end() &&
 			requested->descriptor_digest == descriptor.descriptor_digest &&
 			requested->canonical_form() == descriptor.canonical_form();
-		if (!authorized && !relation_violation_)
-			relation_violation_ = provider_error(
+		if (!authorized && !sink_registry_->violation)
+			sink_registry_->violation = provider_error(
 				"provider.relation-incompatible", descriptor.id, "task-output-whitelist");
+		const auto sink_id = sink_registry_->next_sink_id++;
 		return relation_sink{*writer_,
 							 std::move(descriptor),
 							 task_id_,
@@ -1955,7 +2020,8 @@ namespace cxxlens::sdk::provider
 							 execution_.budget.rows,
 							 authorized,
 							 dependency_groups_,
-							 relation_violation_};
+							 sink_registry_,
+							 sink_id};
 	}
 	coverage_builder& context::coverage() noexcept
 	{
@@ -1976,8 +2042,11 @@ namespace cxxlens::sdk::provider
 
 	result<void> context::validate() const
 	{
-		if (relation_violation_)
-			return cxxlens::sdk::unexpected(*relation_violation_);
+		if (sink_registry_->violation)
+			return cxxlens::sdk::unexpected(*sink_registry_->violation);
+		if (sink_registry_->active_batch)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.batch-state-invalid", "open-batch"));
 		return {};
 	}
 

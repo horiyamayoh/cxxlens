@@ -8,6 +8,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -21,6 +22,10 @@
 
 namespace
 {
+	static_assert(!std::is_copy_constructible_v<cxxlens::sdk::provider::relation_sink>);
+	static_assert(std::is_nothrow_move_constructible_v<cxxlens::sdk::provider::relation_sink>);
+	static_assert(!std::is_move_assignable_v<cxxlens::sdk::provider::relation_sink>);
+
 	constexpr std::string_view provider_contract_digest{
 		"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"};
 
@@ -199,11 +204,87 @@ namespace
 			auto output = context.relation(cxxlens::cc::relations::call_site::descriptor());
 			if (auto begun = output.begin("dependency-1", "atomic-1", "batch-unsealed"); !begun)
 				return begun;
-			if (auto pushed = output.push(make_call_row()); !pushed)
+			auto moved_output = std::move(output);
+			if (auto pushed = moved_output.push(make_call_row()); !pushed)
 				return pushed;
 			context.coverage().request("task", task.task_id);
 			return context.coverage().classify({"task", task.task_id, "covered", {}});
 		}
+	};
+
+	enum class batch_lifecycle_scenario : std::uint8_t
+	{
+		begin_only,
+		partially_unsealed,
+		duplicate_batch,
+		interleaved_sink,
+		complete,
+	};
+
+	class batch_lifecycle_provider final : public cxxlens::sdk::provider::portable_provider
+	{
+	  public:
+		batch_lifecycle_provider(std::string provider_id, const batch_lifecycle_scenario scenario)
+			: provider_id_{std::move(provider_id)}, scenario_{scenario}
+		{
+		}
+		[[nodiscard]] std::string_view id() const noexcept override
+		{
+			return provider_id_;
+		}
+		[[nodiscard]] cxxlens::sdk::semantic_version version() const noexcept override
+		{
+			return {1U, 0U, 0U};
+		}
+		std::string_view semantic_contract_digest() const noexcept override
+		{
+			return provider_contract_digest;
+		}
+		cxxlens::sdk::result<void> run(const cxxlens::sdk::provider::task& task,
+									   cxxlens::sdk::provider::context& context) override
+		{
+			const auto descriptor = cxxlens::cc::relations::call_site::descriptor();
+			auto first = context.relation(descriptor);
+			if (auto begun = first.begin("dependency-1", "atomic-1", "batch-shared"); !begun)
+				return begun;
+			if (scenario_ == batch_lifecycle_scenario::begin_only)
+				return cover(task, context);
+			if (auto pushed = first.push(make_call_row()); !pushed)
+				return pushed;
+			if (scenario_ == batch_lifecycle_scenario::interleaved_sink)
+			{
+				auto second = context.relation(descriptor);
+				return second.begin("dependency-1", "atomic-2", "batch-interleaved");
+			}
+			if (auto ended = first.end(); !ended)
+				return ended;
+			if (scenario_ == batch_lifecycle_scenario::duplicate_batch)
+			{
+				auto second = context.relation(descriptor);
+				return second.begin("dependency-1", "atomic-2", "batch-shared");
+			}
+			auto second = context.relation(descriptor);
+			if (auto begun = second.begin("dependency-1", "atomic-2", "batch-second"); !begun)
+				return begun;
+			if (auto pushed = second.push(make_call_row()); !pushed)
+				return pushed;
+			if (scenario_ == batch_lifecycle_scenario::partially_unsealed)
+				return cover(task, context);
+			if (auto ended = second.end(); !ended)
+				return ended;
+			return cover(task, context);
+		}
+
+	  private:
+		static cxxlens::sdk::result<void> cover(const cxxlens::sdk::provider::task& task,
+												cxxlens::sdk::provider::context& context)
+		{
+			context.coverage().request("task", task.task_id);
+			return context.coverage().classify({"task", task.task_id, "covered", {}});
+		}
+
+		std::string provider_id_;
+		batch_lifecycle_scenario scenario_;
 	};
 
 	class unrequested_descriptor_provider final : public cxxlens::sdk::provider::portable_provider
@@ -1358,6 +1439,16 @@ namespace
 				"provider harness fault matrix diverged");
 
 		unsealed_provider unsealed_implementation;
+		batch_lifecycle_provider begin_only_implementation{"company.test.begin-only-provider",
+														   batch_lifecycle_scenario::begin_only};
+		batch_lifecycle_provider partial_implementation{
+			"company.test.partial-provider", batch_lifecycle_scenario::partially_unsealed};
+		batch_lifecycle_provider duplicate_implementation{
+			"company.test.duplicate-provider", batch_lifecycle_scenario::duplicate_batch};
+		batch_lifecycle_provider interleaved_implementation{
+			"company.test.interleaved-provider", batch_lifecycle_scenario::interleaved_sink};
+		batch_lifecycle_provider complete_implementation{"company.test.complete-provider",
+														 batch_lifecycle_scenario::complete};
 		unrequested_descriptor_provider unrequested_implementation;
 		incomplete_coverage_provider incomplete_implementation;
 		auto unsealed_task = make_provider_task(unsealed_implementation,
@@ -1372,13 +1463,96 @@ namespace
 							   task.project,
 							   {cxxlens::cc::relations::call_site::descriptor()});
 		auto unsealed = harness.run(unsealed_implementation, unsealed_task);
+		const auto run_lifecycle = [&](batch_lifecycle_provider& provider)
+		{
+			auto provider_task = make_provider_task(
+				provider, task.project, {cxxlens::cc::relations::call_site::descriptor()});
+			return harness.run(provider, provider_task);
+		};
+		auto begin_only = run_lifecycle(begin_only_implementation);
+		auto partial = run_lifecycle(partial_implementation);
+		auto duplicate = run_lifecycle(duplicate_implementation);
+		auto interleaved = run_lifecycle(interleaved_implementation);
+		auto complete_task = make_provider_task(complete_implementation,
+												task.project,
+												{cxxlens::cc::relations::call_site::descriptor()});
+		auto complete = harness.run(complete_implementation, complete_task);
 		auto unrequested = harness.run(unrequested_implementation, unrequested_task);
 		auto incomplete_coverage = harness.run(incomplete_implementation, incomplete_task);
-		require(unsealed && !unsealed->accepted && unrequested && !unrequested->accepted &&
+		const auto batch_state_rejected = [](const auto& report)
+		{
+			return report && !report->accepted &&
+				report->reason_code == "provider.batch-state-invalid" &&
+				std::ranges::none_of(report->frames,
+									 [](const auto& frame)
+									 {
+										 return frame.type ==
+											 cxxlens::sdk::provider::message_type::task_complete;
+									 });
+		};
+		const auto report_reason = [](const auto& report)
+		{
+			return report ? report->reason_code : report.error().code;
+		};
+		require(batch_state_rejected(unsealed) && batch_state_rejected(begin_only) &&
+					batch_state_rejected(partial) && batch_state_rejected(duplicate) &&
+					batch_state_rejected(interleaved) && complete && complete->accepted &&
+					unrequested && !unrequested->accepted &&
 					unrequested->reason_code == "provider.relation-incompatible" &&
 					incomplete_coverage && !incomplete_coverage->accepted &&
 					incomplete_coverage->reason_code == "provider.coverage-incomplete",
-				"provider harness accepted unsealed, unrequested, or incomplete output");
+				"provider harness lifecycle, relation, or coverage state diverged: " +
+					report_reason(unsealed) + "," + report_reason(begin_only) + "," +
+					report_reason(partial) + "," + report_reason(duplicate) + "," +
+					report_reason(interleaved) + "," + report_reason(complete) + "," +
+					report_reason(unrequested) + "," + report_reason(incomplete_coverage));
+
+		class fail_once_sink final : public cxxlens::sdk::provider::frame_sink
+		{
+		  public:
+			cxxlens::sdk::result<void> write(const std::span<const std::byte> bytes) override
+			{
+				const auto attempt = attempts++;
+				if (attempt == 3U)
+					return cxxlens::sdk::unexpected(
+						cxxlens::sdk::error{"provider.backpressure", "injected-end", {}});
+				transcript.insert(transcript.end(), bytes.begin(), bytes.end());
+				return {};
+			}
+			std::size_t attempts{};
+			std::vector<std::byte> transcript;
+		};
+		fail_once_sink failing_sink;
+		cxxlens::sdk::provider::protocol_writer failing_writer{failing_sink};
+		failing_writer.grant_credit({std::numeric_limits<std::uint64_t>::max(), 4096U});
+		auto end_failure = cxxlens::sdk::provider::run_worker(
+			complete_implementation, complete_task, failing_writer);
+		auto end_failure_frames =
+			cxxlens::sdk::provider::decode_frame_stream(failing_sink.transcript);
+		auto end_failure_verdict = end_failure_frames
+			? cxxlens::sdk::testing::validate_logical_transcript(
+				  complete_task,
+				  complete_implementation.id(),
+				  complete_implementation.version(),
+				  *end_failure_frames,
+				  {std::numeric_limits<std::uint64_t>::max(), 4096U})
+			: cxxlens::sdk::result<cxxlens::sdk::testing::conformance_report>{
+				  cxxlens::sdk::unexpected(
+					  cxxlens::sdk::error{"sdk.test-setup", "end-failure", {}})};
+		require(
+			!end_failure && end_failure.error().code == "provider.backpressure" &&
+				end_failure_frames && !end_failure_frames->empty() && end_failure_verdict &&
+				!end_failure_verdict->accepted &&
+				end_failure_verdict->reason_code == "provider.backpressure" &&
+				end_failure_frames->back().type ==
+					cxxlens::sdk::provider::message_type::task_failed &&
+				std::ranges::none_of(*end_failure_frames,
+									 [](const auto& frame)
+									 {
+										 return frame.type ==
+											 cxxlens::sdk::provider::message_type::task_complete;
+									 }),
+			"end send failure emitted success or omitted task failure");
 	}
 
 	void check_relation_engine_and_claim_kernel()

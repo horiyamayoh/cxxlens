@@ -346,8 +346,10 @@ properties:
         - provider.coverage-incomplete
         - provider.protocol-state-invalid
         - provider.credit-exceeded
+        - provider.backpressure
         - provider.task-binding-mismatch
         - provider.batch-invalid
+        - provider.batch-state-invalid
         - provider.relation-incompatible
       current_dependency_group: rollback
       unsealed_groups: rollback

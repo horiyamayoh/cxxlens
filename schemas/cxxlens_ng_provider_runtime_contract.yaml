@@ -173,8 +173,10 @@ terminal:
     - provider.binary-identity-mismatch
     - provider.protocol-state-invalid
     - provider.credit-exceeded
+    - provider.backpressure
     - provider.task-binding-mismatch
     - provider.batch-invalid
+    - provider.batch-state-invalid
     - provider.relation-incompatible
     - provider.required-feature-missing
     - provider.protocol-minor-mismatch

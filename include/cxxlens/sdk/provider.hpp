@@ -19,6 +19,11 @@
 
 namespace cxxlens::sdk::provider
 {
+	namespace detail
+	{
+		struct relation_sink_registry;
+	} // namespace detail
+
 	/** @brief Exact protocol v1 message types. */
 	// The uint16 wire domain must retain unknown optional message IDs for accounting.
 	enum class message_type : std::uint16_t // NOLINT(performance-enum-size)
@@ -366,10 +371,19 @@ namespace cxxlens::sdk::provider
 
 	class context;
 
-	/** @brief High-level relation stream; providers never construct protocol frames. */
+	/**
+	 * @brief Move-only high-level relation stream; providers never construct protocol frames.
+	 * @details Open state is registered with the callback context. Destruction never seals a batch;
+	 * an abandoned, duplicate, interleaved, or send-failed batch makes context validation fail.
+	 */
 	class relation_sink
 	{
 	  public:
+		relation_sink(const relation_sink&) = delete;
+		relation_sink& operator=(const relation_sink&) = delete;
+		relation_sink(relation_sink&&) noexcept = default;
+		relation_sink& operator=(relation_sink&&) = delete;
+		~relation_sink();
 		[[nodiscard]] result<void>
 		begin(std::string dependency_group, std::string atomic_output_group, std::string batch_id);
 		[[nodiscard]] result<void> push(const detached_row& row);
@@ -385,7 +399,8 @@ namespace cxxlens::sdk::provider
 					  std::uint64_t maximum_rows,
 					  bool authorized,
 					  std::span<const std::string> dependency_groups,
-					  std::optional<error>& relation_violation);
+					  std::shared_ptr<detail::relation_sink_registry> registry,
+					  std::uint64_t sink_id);
 		[[nodiscard]] result<void> flush_chunk();
 		protocol_writer* writer_{};
 		relation_descriptor descriptor_;
@@ -401,7 +416,8 @@ namespace cxxlens::sdk::provider
 		std::uint64_t* total_rows_{};
 		std::uint64_t maximum_rows_{};
 		std::vector<std::string> dependency_groups_;
-		std::optional<error>* relation_violation_{};
+		std::shared_ptr<detail::relation_sink_registry> registry_;
+		std::uint64_t sink_id_{};
 		bool authorized_{};
 		bool open_{};
 		bool poisoned_{};
@@ -422,7 +438,7 @@ namespace cxxlens::sdk::provider
 		[[nodiscard]] unresolved_builder& unresolved() noexcept;
 		[[nodiscard]] evidence_builder& evidence() noexcept;
 		[[nodiscard]] bool stop_requested() const noexcept;
-		/** @brief Reject any attempted relation outside the exact task output whitelist. */
+		/** @brief Reject unauthorized output and any open, abandoned, or invalid batch state. */
 		[[nodiscard]] result<void> validate() const;
 
 	  private:
@@ -431,7 +447,7 @@ namespace cxxlens::sdk::provider
 		std::string task_id_;
 		std::vector<relation_descriptor> outputs_;
 		std::vector<std::string> dependency_groups_;
-		std::optional<error> relation_violation_;
+		std::shared_ptr<detail::relation_sink_registry> sink_registry_;
 		coverage_builder coverage_;
 		unresolved_builder unresolved_;
 		evidence_builder evidence_;
