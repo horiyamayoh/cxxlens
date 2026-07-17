@@ -2,6 +2,7 @@
 #include <array>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <ranges>
 #include <set>
 #include <string>
@@ -34,9 +35,9 @@ namespace
 		cxxlens::sdk::result<void> run(const cxxlens::sdk::provider::task& task,
 									   cxxlens::sdk::provider::context& context) override
 		{
-			context.coverage().request("project", task.project.catalog_id);
-			if (auto classified = context.coverage().classify(
-					{"project", task.project.catalog_id, "covered", {}});
+			context.coverage().request("task", task.task_id);
+			if (auto classified =
+					context.coverage().classify({"task", task.task_id, "covered", {}});
 				!classified)
 				return classified;
 			context.evidence().add(
@@ -98,6 +99,96 @@ namespace
 		require(row.has_value(), "row did not finish");
 		return std::move(*row);
 	}
+
+	[[nodiscard]] cxxlens::sdk::detached_row make_lock_row()
+	{
+		using relation = cxxlens::company::relations::lock_acquire;
+		relation::builder builder;
+		require(
+			builder.set<relation::acquire>(
+				cxxlens::sdk::detached_cell::typed("company_lock_acquire_id", "acquire:1")) &&
+				builder.set<relation::lock>(
+					cxxlens::sdk::detached_cell::typed("company_lock_id", "lock:1")) &&
+				builder.set<relation::source>(
+					cxxlens::sdk::detached_cell::typed("source_span_id", "span:1")) &&
+				builder.set<relation::mode>(string_cell(
+					{cxxlens::sdk::scalar_kind::open_symbol, "company.lock-mode/1", false},
+					"exclusive")) &&
+				builder.set<relation::ordinal>(cxxlens::sdk::detached_cell::unsigned_integer(0U)),
+			"lock row setup failed");
+		auto row = std::move(builder).finish();
+		require(row.has_value(), "lock row did not finish");
+		return std::move(*row);
+	}
+
+	class unsealed_provider final : public cxxlens::sdk::provider::portable_provider
+	{
+	  public:
+		[[nodiscard]] std::string_view id() const noexcept override
+		{
+			return "company.test.unsealed-provider";
+		}
+		[[nodiscard]] cxxlens::sdk::semantic_version version() const noexcept override
+		{
+			return {1U, 0U, 0U};
+		}
+		cxxlens::sdk::result<void> run(const cxxlens::sdk::provider::task& task,
+									   cxxlens::sdk::provider::context& context) override
+		{
+			auto output = context.relation(cxxlens::cc::relations::call_site::descriptor());
+			if (auto begun = output.begin("dependency-1", "atomic-1", "batch-unsealed"); !begun)
+				return begun;
+			if (auto pushed = output.push(make_call_row()); !pushed)
+				return pushed;
+			context.coverage().request("task", task.task_id);
+			return context.coverage().classify({"task", task.task_id, "covered", {}});
+		}
+	};
+
+	class unrequested_descriptor_provider final : public cxxlens::sdk::provider::portable_provider
+	{
+	  public:
+		[[nodiscard]] std::string_view id() const noexcept override
+		{
+			return "company.test.unrequested-provider";
+		}
+		[[nodiscard]] cxxlens::sdk::semantic_version version() const noexcept override
+		{
+			return {1U, 0U, 0U};
+		}
+		cxxlens::sdk::result<void> run(const cxxlens::sdk::provider::task& task,
+									   cxxlens::sdk::provider::context& context) override
+		{
+			auto output = context.relation(cxxlens::company::relations::lock_acquire::descriptor());
+			if (auto begun = output.begin("dependency-1", "atomic-1", "batch-unrequested"); !begun)
+				return begun;
+			if (auto pushed = output.push(make_lock_row()); !pushed)
+				return pushed;
+			if (auto ended = output.end(); !ended)
+				return ended;
+			context.coverage().request("task", task.task_id);
+			return context.coverage().classify({"task", task.task_id, "covered", {}});
+		}
+	};
+
+	class incomplete_coverage_provider final : public cxxlens::sdk::provider::portable_provider
+	{
+	  public:
+		[[nodiscard]] std::string_view id() const noexcept override
+		{
+			return "company.test.incomplete-coverage-provider";
+		}
+		[[nodiscard]] cxxlens::sdk::semantic_version version() const noexcept override
+		{
+			return {1U, 0U, 0U};
+		}
+		cxxlens::sdk::result<void> run(const cxxlens::sdk::provider::task& task,
+									   cxxlens::sdk::provider::context& context) override
+		{
+			context.coverage().request("task", task.task_id);
+			return {};
+		}
+	};
 
 	[[nodiscard]] cxxlens::sdk::relation_descriptor
 	make_merge_descriptor(std::string name, const cxxlens::sdk::merge_mode mode)
@@ -768,12 +859,56 @@ namespace
 			implementation, task, cxxlens::sdk::testing::provider_fault::truncate_last_frame);
 		auto cancelled = harness.run(
 			implementation, task, cxxlens::sdk::testing::provider_fault::cancel_before_run);
+		auto wrong_direction = harness.run(
+			implementation, task, cxxlens::sdk::testing::provider_fault::wrong_direction);
+		auto missing_terminal =
+			harness.run(implementation, task, cxxlens::sdk::testing::provider_fault::drop_terminal);
+		auto wrong_terminal = harness.run(
+			implementation, task, cxxlens::sdk::testing::provider_fault::wrong_terminal_task);
+		auto credit_exceeded = harness.run(
+			implementation, task, cxxlens::sdk::testing::provider_fault::credit_exceeded);
+		auto reference = accepted
+			? cxxlens::sdk::testing::validate_logical_transcript(
+				  task,
+				  implementation.id(),
+				  implementation.version(),
+				  accepted->frames,
+				  {std::numeric_limits<std::uint64_t>::max(), 4096U})
+			: cxxlens::sdk::result<cxxlens::sdk::testing::conformance_report>{
+				  cxxlens::sdk::unexpected(cxxlens::sdk::error{"sdk.test-setup", "accepted", {}})};
+		auto invalid_reference = wrong_direction
+			? cxxlens::sdk::testing::validate_logical_transcript(
+				  task,
+				  implementation.id(),
+				  implementation.version(),
+				  wrong_direction->frames,
+				  {std::numeric_limits<std::uint64_t>::max(), 4096U})
+			: reference;
 		require(accepted && accepted->accepted && corrupt && !corrupt->accepted &&
 					corrupt->reason_code == "provider.checksum-mismatch" && truncated &&
 					!truncated->accepted && truncated->reason_code == "provider.truncated-stream" &&
 					cancelled && !cancelled->accepted &&
-					cancelled->reason_code == "provider.cancelled",
+					cancelled->reason_code == "provider.cancelled" && wrong_direction &&
+					!wrong_direction->accepted &&
+					wrong_direction->reason_code == "provider.protocol-state-invalid" &&
+					missing_terminal && !missing_terminal->accepted && wrong_terminal &&
+					!wrong_terminal->accepted && credit_exceeded && !credit_exceeded->accepted &&
+					credit_exceeded->reason_code == "provider.credit-exceeded" && reference &&
+					reference->accepted && invalid_reference && !invalid_reference->accepted &&
+					invalid_reference->reason_code == wrong_direction->reason_code,
 				"provider harness fault matrix diverged");
+
+		unsealed_provider unsealed_implementation;
+		unrequested_descriptor_provider unrequested_implementation;
+		incomplete_coverage_provider incomplete_implementation;
+		auto unsealed = harness.run(unsealed_implementation, task);
+		auto unrequested = harness.run(unrequested_implementation, task);
+		auto incomplete_coverage = harness.run(incomplete_implementation, task);
+		require(unsealed && !unsealed->accepted && unrequested && !unrequested->accepted &&
+					unrequested->reason_code == "provider.relation-incompatible" &&
+					incomplete_coverage && !incomplete_coverage->accepted &&
+					incomplete_coverage->reason_code == "provider.coverage-incomplete",
+				"provider harness accepted unsealed, unrequested, or incomplete output");
 	}
 
 	void check_relation_engine_and_claim_kernel()

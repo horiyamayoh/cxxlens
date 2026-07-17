@@ -2297,27 +2297,30 @@ namespace cxxlens::sdk::provider
 		if (auto sent = writer.send(message_type::task_accepted, *accepted); !sent)
 			return sent;
 		context callback_context{writer, std::move(execution), task_value.task_id};
-		if (callback_context.stop_requested())
-			return cxxlens::sdk::unexpected(provider_error("provider.cancelled", "task"));
-		auto outcome = provider.run(task_value, callback_context);
-		if (!outcome)
+		const auto send_failed = [&](error failure) -> result<void>
 		{
-			auto failed = encode_control_text(outcome.error().code + "|" + outcome.error().field);
+			auto failed =
+				encode_control_text(failure.code + "|" + task_value.task_id + "|" + failure.field);
 			if (!failed)
 				return cxxlens::sdk::unexpected(std::move(failed.error()));
 			if (auto sent = writer.send(message_type::task_failed, *failed); !sent)
 				return sent;
-			return cxxlens::sdk::unexpected(std::move(outcome.error()));
-		}
+			return cxxlens::sdk::unexpected(std::move(failure));
+		};
+		if (callback_context.stop_requested())
+			return send_failed(provider_error("provider.cancelled", "task"));
+		auto outcome = provider.run(task_value, callback_context);
+		if (!outcome)
+			return send_failed(std::move(outcome.error()));
 		auto coverage = std::move(callback_context.coverage()).finish();
 		auto unresolved = std::move(callback_context.unresolved()).finish();
 		auto evidence = std::move(callback_context.evidence()).finish();
 		if (!coverage)
-			return cxxlens::sdk::unexpected(std::move(coverage.error()));
+			return send_failed(std::move(coverage.error()));
 		if (!unresolved)
-			return cxxlens::sdk::unexpected(std::move(unresolved.error()));
+			return send_failed(std::move(unresolved.error()));
 		if (!evidence)
-			return cxxlens::sdk::unexpected(std::move(evidence.error()));
+			return send_failed(std::move(evidence.error()));
 		std::vector<std::string> coverage_lines;
 		for (const auto& item : *coverage)
 			coverage_lines.push_back(item.kind + "|" + item.id + "|" + item.state + "|" +

@@ -969,22 +969,22 @@ namespace cxxlens::detail::clang22
 			return EXIT_FAILURE;
 		if (!writer.send(message_type::schema_negotiate, frames->at(1U).control))
 			return EXIT_FAILURE;
+		const auto control_parts = std::string_view{*task_control};
+		const auto separator = control_parts.find('|');
+		if (separator == std::string_view::npos)
+			return EXIT_FAILURE;
+		const std::string task_id{control_parts.substr(0U, separator)};
 
 		auto request = decode_task_input(frames->at(2U).payload);
 		if (!request)
 		{
-			const auto failed = bytes("provider.task-input-invalid|payload");
+			const auto failed = bytes("provider.task-input-invalid|" + task_id + "|payload");
 			std::vector<std::byte> control{static_cast<std::byte>(0x78U),
 										   static_cast<std::byte>(failed.size())};
 			control.insert(control.end(), failed.begin(), failed.end());
 			(void)writer.send(message_type::task_failed, control);
 			return EXIT_SUCCESS;
 		}
-		const auto control_parts = std::string_view{*task_control};
-		const auto separator = control_parts.find('|');
-		if (separator == std::string_view::npos)
-			return EXIT_FAILURE;
-		const std::string task_id{control_parts.substr(0U, separator)};
 		sdk::provider::task task{
 			task_id,
 			{request->compile_unit,

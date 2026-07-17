@@ -137,7 +137,8 @@ int main(const int argument_count, const char* const* arguments)
 	if (!writer.send(message_type::schema_negotiate, frames->at(1U).control))
 		return EXIT_FAILURE;
 	if (mode == "failed")
-		return writer.send(message_type::task_failed, control("provider.schema-invalid|fixture"))
+		return writer.send(message_type::task_failed,
+						   control("provider.schema-invalid|task-1|fixture"))
 			? EXIT_SUCCESS
 			: EXIT_FAILURE;
 	if (mode == "invalid-utf8")
@@ -145,7 +146,8 @@ int main(const int argument_count, const char* const* arguments)
 		const std::array invalid_control{std::byte{0x61}, std::byte{0x80}};
 		if (!writer.send(message_type::task_accepted, invalid_control))
 			return EXIT_FAILURE;
-		return writer.send(message_type::task_failed, control("provider.schema-invalid|fixture"))
+		return writer.send(message_type::task_failed,
+						   control("provider.schema-invalid|task-1|fixture"))
 			? EXIT_SUCCESS
 			: EXIT_FAILURE;
 	}
@@ -158,10 +160,13 @@ int main(const int argument_count, const char* const* arguments)
 		return writer.send(message_type::task_complete, control("task-1|complete")) ? EXIT_SUCCESS
 																					: EXIT_FAILURE;
 	if (mode == "nul-control")
+	{
+		constexpr char nul_failed[]{"provider.schema-invalid\0|task-1|fixture"};
 		return writer.send(message_type::task_failed,
-						   control(std::string_view{"provider.schema-invalid\0|fixture", 32U}))
+						   control(std::string_view{nul_failed, sizeof(nul_failed) - 1U}))
 			? EXIT_SUCCESS
 			: EXIT_FAILURE;
+	}
 	if (mode == "provider-credit" || mode == "provider-open-task" || mode == "provider-batch-ack")
 	{
 		const auto type = mode == "provider-credit"

@@ -1,5 +1,5 @@
 {
-  "asset_count": 290,
+  "asset_count": 291,
   "assets": [
     {
       "authority": "active",
@@ -711,6 +711,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0043-provider-columnar-wire-batches.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0044-shared-provider-transcript-validation.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2033,7 +2040,7 @@
     }
   ],
   "classifications": {
-    "active": 254,
+    "active": 255,
     "archived": 35,
     "generated": 1
   },

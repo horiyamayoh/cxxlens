@@ -461,6 +461,17 @@ namespace
 		{
 			auto request = task(select(executable, mode));
 			auto report = runtime.execute(request);
+			const cxxlens::sdk::provider::task reference_task{
+				request.task_id, {}, request.output_descriptors, {}, {}};
+			auto reference = report
+				? cxxlens::sdk::testing::validate_process_transcript(reference_task,
+																	 report->provider,
+																	 report->frames,
+																	 request.output_credit,
+																	 request.limits)
+				: cxxlens::sdk::result<cxxlens::sdk::testing::conformance_report>{
+					  cxxlens::sdk::unexpected(
+						  cxxlens::sdk::error{"sdk.test-setup", "process-report", {}})};
 			require(report && report->succeeded() &&
 						report->frames.front().type == message_type::hello &&
 						report->frames.size() == 15U &&
@@ -471,7 +482,8 @@ namespace
 						report->frames.at(11U).type == message_type::coverage_chunk &&
 						report->frames.back().type == message_type::task_complete &&
 						report->sandbox.achieved == sandbox_assurance::enforced &&
-						report->canonical_form().contains("cxxlens.provider-execution-report.v1"),
+						report->canonical_form().contains("cxxlens.provider-execution-report.v1") &&
+						reference && reference->accepted,
 					std::string{"successful process provider failed: "} + mode +
 						" terminal=" + (report ? report->terminal : report.error().code));
 		}
@@ -595,9 +607,24 @@ namespace
 				 std::pair{"nul-control", "provider.protocol-state-invalid"},
 			 })
 		{
-			auto rejected = runtime.execute(task(select(executable, mode)));
+			auto invalid_request = task(select(executable, mode));
+			auto rejected = runtime.execute(invalid_request);
 			require(rejected && rejected->terminal == terminal && !rejected->succeeded(),
 					std::string{"invalid provider transcript was accepted: "} + mode);
+			if (std::string_view{mode} == "bad-column")
+			{
+				const cxxlens::sdk::provider::task reference_task{
+					invalid_request.task_id, {}, invalid_request.output_descriptors, {}, {}};
+				auto reference = cxxlens::sdk::testing::validate_process_transcript(
+					reference_task,
+					rejected->provider,
+					rejected->frames,
+					invalid_request.output_credit,
+					invalid_request.limits);
+				require(reference && !reference->accepted &&
+							reference->reason_code == rejected->terminal,
+						"process runtime and public reference validator reason diverged");
+			}
 		}
 
 		auto credit_request = task(select(executable, "success"));

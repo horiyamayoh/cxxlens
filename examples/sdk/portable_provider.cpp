@@ -65,9 +65,9 @@ namespace
 				return pushed;
 			if (auto ended = output.end(); !ended)
 				return ended;
-			context.coverage().request("project", task.project.catalog_id);
-			if (auto classified = context.coverage().classify(
-					{"project", task.project.catalog_id, "covered", {}});
+			context.coverage().request("task", task.task_id);
+			if (auto classified =
+					context.coverage().classify({"task", task.task_id, "covered", {}});
 				!classified)
 				return classified;
 			context.evidence().add(

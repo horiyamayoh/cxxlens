@@ -1,10 +1,10 @@
 schema: cxxlens.provider-runtime-contract.v1
-document_version: 1.6.0
+document_version: 1.7.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#17-provider-model
-  decision_adr: docs/design/adr/0043-provider-columnar-wire-batches.md
-  owner_issue: '#100'
+  decision_adr: docs/design/adr/0044-shared-provider-transcript-validation.md
+  owner_issue: '#101'
   owner: steward.ng-provider-runtime
 dependencies:
   - schemas/cxxlens_ng_provider_protocol.yaml
@@ -109,6 +109,10 @@ protocol_session:
     - task_complete
     - task_failed
   typed_validation:
+    implementation: single-shared-provider-transcript-validator
+    consumers: [process-runtime, provider-harness, logical-reference, process-reference]
+    mode_difference: handshake-prefix-only
+    same-transcript_reason: exact
     handshake: exact-identity-schema-feature-order
     task_acceptance: exact-provider-version-task-id-binding
     direction: reject-host-only-provider-output
@@ -121,7 +125,7 @@ protocol_session:
     batch_end: exact-every-column-length-count-order-and-ordered-chunk-digest-recomputation
     side_channels: coverage-unresolved-progress-complete
     closure: empty-or-independently-validated
-    terminal: task-bound-and-all-groups-sealed
+    terminal: task-complete-and-task-failed-exact-task-id-bound-and-all-groups-sealed
     unknown_optional_extension: checksum-length-and-credit-accounted-then-state-skipped
     unknown_required_extension: reject
     compressed_payload_without_negotiated_codec: reject
@@ -129,6 +133,8 @@ protocol_session:
     control_text: strict-utf8-scalar-byte-preserving-before-typed-parse
     typed_control_nul: reject-before-identity-digest-or-report
     validator_bypass: forbidden
+    harness_acceptance: complete-success-terminal-only
+    callback_failure_cleanup: task-failed-terminal-for-provider-and-side-channel-finalization-errors
   sequence: contiguous-from-zero
   terminal_last: required
   output_after_terminal: reject

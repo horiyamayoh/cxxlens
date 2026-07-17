@@ -2141,6 +2141,13 @@ descriptor ID/digest、column、row offset/count、chunk index、encoding、payl
 bind する。optional absence と semantic unknown は validity/unknown bitset と unknown reason により区別し、
 host と logical validation は同じ native-independent decoder を使う。
 
+Issue #101 / ADR 0044 により、`provider_harness`、process runtime、public transcript reference は
+`provider_validation_internal.hpp` の単一 typed transcript validator を共有する。process mode は hello/schema
+handshake から、logical harness mode は task acceptance から開始するが、その後の direction/order、descriptor whitelist、
+columnar batch seal、credit、coverage/unresolved、task-bound terminal は同じ state transition と stable reason code で判定する。
+harness は encoded frame set または validation credit を変更してから共有 validator へ渡し、decode/sequence だけで conformance
+accepted にしてはならない。callback または side-channel finalization failure は task-bound `task_failed` を送って cleanup する。
+
 closure candidate は engine/schema-specific validator を通るまで authority ではない。
 
 ### 17.6 Batch atomicity
@@ -2366,6 +2373,12 @@ unknown 以外の reason storage は zero/zero-width でなければならない
 `batch_end` control は 10-key typed CBOR map、payload は `CXBE` v1 の descriptor-order column summary と
 ordered chunk digest 列である。C++ codec と `check_ng_provider_protocol.py` の独立 reference vector は同じ bool
 payload bytes を照合し、portable SDK と別実装の wire parity を gate する。
+
+ADR 0044 の typed logical stream validation は wire decode 後の production authority である。harness と process runtime は
+別々の簡略 state machine を持たず、handshake prefix の有無だけを request parameter として同じ validator を呼ぶ。
+`validate_logical_transcript()` と `validate_process_transcript()` は同じ decoded frames を再検証し、production の acceptance と
+failure reason をそのまま返す。この reference parity により、unsealed batch、wrong direction/order、missing/wrong terminal、
+unrequested descriptor、incomplete coverage、credit exhaustion は consumer に依存せず fail closed となる。
 
 ### 18.5 Input transfer
 

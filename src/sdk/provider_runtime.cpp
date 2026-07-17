@@ -11,6 +11,7 @@
 #include <cxxlens/sdk/provider.hpp>
 
 #include "json_internal.hpp"
+#include "provider_validation_internal.hpp"
 
 namespace cxxlens::sdk::provider
 {
@@ -87,11 +88,11 @@ namespace cxxlens::sdk::provider
 		}
 
 		[[nodiscard]] const relation_descriptor*
-		output_descriptor(const process_task_request& request, const std::string_view id)
+		output_descriptor(const std::span<const relation_descriptor> descriptors,
+						  const std::string_view id)
 		{
-			const auto found =
-				std::ranges::find(request.output_descriptors, id, &relation_descriptor::id);
-			return found == request.output_descriptors.end() ? nullptr : &*found;
+			const auto found = std::ranges::find(descriptors, id, &relation_descriptor::id);
+			return found == descriptors.end() ? nullptr : &*found;
 		}
 
 		[[nodiscard]] result<protocol_limits> negotiated_limits(const process_task_request& request)
@@ -110,9 +111,12 @@ namespace cxxlens::sdk::provider
 			output.maximum_minor = static_cast<std::uint16_t>(maximum);
 			return output;
 		}
+	} // namespace
 
-		[[nodiscard]] result<std::string>
-		validate_provider_transcript(const process_task_request& request,
+	namespace detail
+	{
+		result<std::string>
+		validate_provider_transcript(const transcript_validation_request& request,
 									 const std::span<const frame> frames,
 									 const protocol_limits session_limits)
 		{
@@ -134,8 +138,8 @@ namespace cxxlens::sdk::provider
 				return fail("provider.credit-exceeded", request.task_id, "frames");
 
 			std::uint64_t expected_sequence{};
-			bool hello_seen{};
-			bool schema_seen{};
+			bool hello_seen{!request.require_handshake};
+			bool schema_seen{!request.require_handshake};
 			bool accepted{};
 			bool coverage_seen{};
 			bool unresolved_seen{};
@@ -155,12 +159,13 @@ namespace cxxlens::sdk::provider
 				std::map<std::string, std::uint64_t, std::less<>> next_chunk_indexes;
 			};
 			std::optional<open_batch> batch;
-			const auto& provider = request.selection.selected_candidate().description;
-			const auto expected_hello = provider.canonical_json();
+			const auto expected_hello = request.provider_manifest == nullptr
+				? std::string{}
+				: request.provider_manifest->canonical_json();
 			const auto expected_schema = std::string{"cxxlens.provider-protocol.v1|minor="} +
 				std::to_string(session_limits.maximum_minor);
-			const auto expected_accepted = provider.provider_id + "|" +
-				provider.provider_version.string() + "|" + request.task_id;
+			const auto expected_accepted = request.provider_id + "|" +
+				request.provider_version.string() + "|" + request.task_id;
 
 			for (std::size_t index = 0U; index < frames.size(); ++index)
 			{
@@ -200,8 +205,8 @@ namespace cxxlens::sdk::provider
 				switch (value.type)
 				{
 					case message_type::hello:
-						if (index != 0U || hello_seen || *control != expected_hello ||
-							!value.payload.empty())
+						if (!request.require_handshake || index != 0U || hello_seen ||
+							*control != expected_hello || !value.payload.empty())
 							return fail(
 								"provider.binary-identity-mismatch", request.task_id, "hello");
 						hello_seen = true;
@@ -232,10 +237,12 @@ namespace cxxlens::sdk::provider
 							!protocol_digest(fields[1U]) || !value.payload.empty() ||
 							!batches.insert(std::string{fields[4U]}).second)
 							return fail("provider.batch-invalid", request.task_id, "begin");
-						if (!offered_relation(provider, fields[0U]))
+						if (request.provider_manifest != nullptr &&
+							!offered_relation(*request.provider_manifest, fields[0U]))
 							return fail(
 								"provider.relation-incompatible", std::string{fields[0U]}, "offer");
-						const auto* descriptor = output_descriptor(request, fields[0U]);
+						const auto* descriptor =
+							output_descriptor(request.output_descriptors, fields[0U]);
 						if (descriptor == nullptr || descriptor->descriptor_digest != fields[1U])
 							return fail("provider.relation-incompatible",
 										std::string{fields[0U]},
@@ -332,6 +339,8 @@ namespace cxxlens::sdk::provider
 						std::set<std::pair<std::string, std::string>> seen;
 						for (const auto line : split_fields(*control, '\n'))
 						{
+							if (line.empty())
+								continue;
 							const auto fields = split_fields(line, '|');
 							static const std::set<std::string_view> states{
 								"covered", "excluded", "failed", "not_applicable", "unresolved"};
@@ -360,6 +369,8 @@ namespace cxxlens::sdk::provider
 						if (!control->empty())
 							for (const auto line : split_fields(*control, '\n'))
 							{
+								if (line.empty())
+									continue;
 								const auto fields = split_fields(line, '|');
 								if (fields.size() != 3U || !namespaced(fields[0U]) ||
 									fields[1U].empty())
@@ -381,10 +392,11 @@ namespace cxxlens::sdk::provider
 					case message_type::task_failed:
 					{
 						const auto fields = split_fields(*control, '|');
-						if (!schema_seen || fields.size() < 2U || !namespaced(fields[0U]) ||
+						if (!schema_seen || fields.size() < 3U || !namespaced(fields[0U]) ||
+							fields[1U] != request.task_id || fields[2U].empty() ||
 							!value.payload.empty())
 							return fail(
-								"provider.protocol-state-invalid", request.task_id, "failed");
+								"provider.task-binding-mismatch", request.task_id, "failed");
 						terminal = std::string{fields[0U]};
 						terminal_seen = true;
 						break;
@@ -410,6 +422,10 @@ namespace cxxlens::sdk::provider
 				return fail("provider.truncated-stream", request.task_id, "state");
 			return terminal;
 		}
+	} // namespace detail
+
+	namespace
+	{
 
 		[[nodiscard]] result<std::vector<std::byte>>
 		host_transcript(const process_task_request& request, const protocol_limits session_limits)
@@ -713,7 +729,17 @@ namespace cxxlens::sdk::provider
 				{frames.error().code, request.task_id, frames.error().field});
 			return report;
 		}
-		auto terminal = validate_provider_transcript(request, *frames, *session_limits);
+		const auto& selected_manifest = request.selection.selected_candidate().description;
+		const detail::transcript_validation_request validation{
+			request.task_id,
+			selected_manifest.provider_id,
+			selected_manifest.provider_version,
+			&selected_manifest,
+			request.output_descriptors,
+			request.output_credit,
+			true,
+		};
+		auto terminal = detail::validate_provider_transcript(validation, *frames, *session_limits);
 		if (!terminal)
 		{
 			auto validation_error = std::move(terminal.error());
@@ -724,7 +750,7 @@ namespace cxxlens::sdk::provider
 				{validation_error.code, validation_error.field, validation_error.detail});
 			return report;
 		}
-		const auto& manifest = request.selection.selected_candidate().description;
+		const auto& manifest = selected_manifest;
 
 		process_execution_report report;
 		report.terminal = std::move(*terminal);

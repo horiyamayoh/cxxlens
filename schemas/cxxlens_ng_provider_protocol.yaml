@@ -1,11 +1,11 @@
 schema: cxxlens.provider-protocol.v1
-document_version: 1.4.0
+document_version: 1.5.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#18-provider-protocol
   index: docs/design/catalogs/README.md
-  decision_adr: docs/design/adr/0043-provider-columnar-wire-batches.md
-  owner_issue: '#100'
+  decision_adr: docs/design/adr/0044-shared-provider-transcript-validation.md
+  owner_issue: '#101'
   owner: steward.ng-provider-protocol
 compatibility:
   version_axis: provider-protocol
@@ -116,6 +116,13 @@ message_types:
   unknown_optional: skip-and-account
 state_machine_validation:
   validator_bypass: forbidden
+  implementation: single-shared-typed-validator
+  consumers: [process-runtime, provider-harness, public-logical-reference, public-process-reference]
+  modes:
+    process: full-hello-schema-task-handshake
+    logical: task-accepted-onward-same-state-machine
+  fault_injection: mutate-encoded-frame-or-credit-then-shared-decode-and-validate
+  reason_parity: same-transcript-same-stable-reason
   initial_order: [hello, schema_negotiate, task_accepted]
   exact_bindings:
     hello: [canonical-provider-manifest-v1]
@@ -124,6 +131,7 @@ state_machine_validation:
     column_chunk: [task-id, dependency-group-id, atomic-output-group-id, batch-id, relation-descriptor-id, relation-descriptor-digest, column-id, row-offset, row-count, chunk-index, encoding, payload-digest, chunk-digest]
     batch_end: [task-id, dependency-group-id, atomic-output-group-id, batch-id, relation-descriptor-id, relation-descriptor-digest, declared-row-count, every-column-length, canonical-column-order, ordered-chunk-digests, batch-digest]
     task_complete: [task-id, complete]
+    task_failed: [error-code, task-id, error-field]
   success_preconditions:
     - all-output-within-host-credit
     - all-message-directions-valid

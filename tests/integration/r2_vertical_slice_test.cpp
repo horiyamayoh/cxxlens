@@ -181,6 +181,10 @@ namespace
 					{"compile-unit", task.project.compile_units.front(), "covered", {}});
 				!covered)
 				return covered;
+			context.coverage().request("task", task.task_id);
+			if (auto covered = context.coverage().classify({"task", task.task_id, "covered", {}});
+				!covered)
+				return covered;
 			context.evidence().add(
 				{"provider.observation", "lock:global", std::string{id()}, "lock acquire"});
 			return {};
