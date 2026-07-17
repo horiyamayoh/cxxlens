@@ -66,6 +66,17 @@ namespace cxxlens::provider::clang22
 	[[nodiscard]] sdk::result<void> with_translation_unit(const translation_unit_input& input,
 														  translation_unit_callback callback);
 
+	/** @brief One ordered macro spelling/origin layer; logical_path is evidence, not identity. */
+	struct detached_source_origin
+	{
+		std::string kind;
+		std::string logical_path;
+		std::uint64_t begin{};
+		std::uint64_t end{};
+		bool read_only{true};
+		[[nodiscard]] sdk::result<void> validate() const;
+	};
+
 	/** @brief Detached half-open source location independent from Clang object lifetime. */
 	struct detached_source_span
 	{
@@ -77,6 +88,7 @@ namespace cxxlens::provider::clang22
 		std::uint64_t end{};
 		bool read_only{};
 		std::string id;
+		std::vector<detached_source_origin> origin_chain;
 		[[nodiscard]] sdk::result<void> validate() const;
 	};
 

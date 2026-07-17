@@ -2565,6 +2565,13 @@ virtual member の `cc.call_direct_target` は static target であり dynamic d
 indirect/dependent call は target を捏造せず unsupported resolution を unresolved に残す。既知の direct kind と target 欠落、
 または既知の non-direct kind と direct target の組合せは `provider.call-kind-target-inconsistent` として non-exact にする。
 
+macro 内 AST range の primary occurrence は ultimate spelling location ではなく expansion range とする。caller task の exact
+source snapshot/file と expansion half-open offsets が `source.span` / call identity authority であり、macro spelling は ordered
+provider-owned origin chain に分離する。chain は immediate expansion を外側へ辿り、各 layer の spelling logical path、offset、
+read-only state を保持する。origin logical path は evidence/display であり standard span/call ID に混ぜない。macro primary span と
+origin は read-only とし macro expansion range への直接 edit を認可しない。header origin に authoritative snapshot/file binding が
+ない場合は standard `source.origin` を捏造せず provider observation に lossless evidence を保持する。
+
 ---
 
 ## 20. Logical Query

@@ -1,5 +1,5 @@
 {
-  "asset_count": 300,
+  "asset_count": 301,
   "assets": [
     {
       "authority": "active",
@@ -774,6 +774,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0052-clang-call-kind-and-target-consistency.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0053-macro-expansion-source-occurrence.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2103,7 +2110,7 @@
     }
   ],
   "classifications": {
-    "active": 264,
+    "active": 265,
     "archived": 35,
     "generated": 1
   },

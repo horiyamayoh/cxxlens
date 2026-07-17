@@ -140,6 +140,11 @@ def validate(root: pathlib.Path) -> None:
             "no-shell-argv-exec",
             "network-syscall-deny",
         ),
+        "src/llvm/clang22/provider_sdk.cpp": (
+            "getExpansionRange",
+            "getImmediateExpansionRange",
+            "native.source-origin-invalid",
+        ),
         "src/llvm/clang22/provider_worker.cpp": (
             "frontend.clang22.entity_observation",
             "cc.call_site",
@@ -152,6 +157,7 @@ def validate(root: pathlib.Path) -> None:
             "indirect_member_pointer",
             "virtual_member",
             "provider.call-kind-target-inconsistent",
+            "source_origin_chain",
             "cxxlens.clang22.task.v2",
             "source_snapshot",
         ),

@@ -169,12 +169,21 @@ int main()
 								  10U,
 								  18U,
 								  false,
-								  *span};
+								  *span,
+								  {}};
+	original.origin_chain = {
+		{"macro-spelling", "/checkout/include/macros.hpp", 40U, 48U, true},
+		{"macro-spelling", "include/wrapper.hpp", 12U, 20U, true},
+	};
 	auto relocated = original;
 	relocated.logical_path = "relocated/src/a.cpp";
+	relocated.origin_chain.front().logical_path = "/other-root/include/macros.hpp";
 	require(original.validate().has_value() && relocated.validate().has_value() &&
 				original.id == relocated.id,
 			"logical root relocation changed source.span identity");
+	auto editable_origin = original;
+	editable_origin.origin_chain.front().read_only = false;
+	require(!editable_origin.validate(), "macro spelling origin was not forced read-only");
 	using source_span = cxxlens::source::relations::span;
 	source_span::builder source_builder;
 	for (auto result : {
@@ -436,6 +445,42 @@ int main()
 				string_cell(cross_tu_result->direct_targets.front(),
 							"cc.call_direct_target.v1.target") == same_tu_target,
 			"header/external/other-TU direct callee depended on a local entity row");
+	auto macro_calls = cross_tu;
+	macro_calls.observations.front().source_origin_chain = {
+		"macro-spelling:/checkout/include/macros.hpp:10:18",
+		"macro-spelling:include/wrapper.hpp:20:28",
+	};
+	auto second_expansion = macro_calls.observations.front();
+	second_expansion.semantic_key = "call:macro-expansion:two";
+	second_expansion.source_span_id =
+		*sdk::source_span_identity("source-snapshot:one", "file:stable", 30U, 42U, "expression");
+	macro_calls.observations.push_back(std::move(second_expansion));
+	auto macro_result = canonicalize_provider_batch(
+		macro_calls,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(macro_result && macro_result->call_sites.size() == 2U &&
+				macro_result->direct_targets.size() == 2U &&
+				macro_result->call_observations.size() == 2U &&
+				!bytes_cell(macro_result->call_observations.front(),
+							"frontend.clang22.call_observation.v1.source_origin_chain")
+					 .empty() &&
+				string_cell(macro_result->call_sites.front(), "cc.call_site.v1.call") !=
+					string_cell(macro_result->call_sites.back(), "cc.call_site.v1.call"),
+			"distinct macro expansion offsets were deduplicated or lost their origin chain");
+	auto relocated_macro = macro_calls;
+	for (auto& call : relocated_macro.observations)
+		call.source_origin_chain.front() = "macro-spelling:/relocated/include/macros.hpp:10:18";
+	auto relocated_macro_result = canonicalize_provider_batch(
+		relocated_macro,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(relocated_macro_result && relocated_macro_result->call_sites.size() == 2U &&
+				string_cell(relocated_macro_result->call_sites.front(), "cc.call_site.v1.call") ==
+					string_cell(macro_result->call_sites.front(), "cc.call_site.v1.call") &&
+				string_cell(relocated_macro_result->call_sites.back(), "cc.call_site.v1.call") ==
+					string_cell(macro_result->call_sites.back(), "cc.call_site.v1.call"),
+			"macro origin root relocation changed semantic call identities");
 
 	auto reordered = batch();
 	std::ranges::reverse(reordered.observations);

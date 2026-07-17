@@ -162,6 +162,17 @@ namespace cxxlens::provider::clang22
 		auto expected = sdk::source_span_identity(source_snapshot, file, begin, end, role);
 		if (!expected || *expected != id)
 			return sdk::unexpected(native_error("native.source-span-invalid", "identity"));
+		for (const auto& origin : origin_chain)
+			if (auto valid = origin.validate(); !valid)
+				return valid;
+		return {};
+	}
+
+	sdk::result<void> detached_source_origin::validate() const
+	{
+		if (kind.empty() || logical_path.empty() || end < begin || !read_only ||
+			kind.find('\0') != std::string::npos || logical_path.find('\0') != std::string::npos)
+			return sdk::unexpected(native_error("native.source-origin-invalid", "origin"));
 		return {};
 	}
 
@@ -181,12 +192,12 @@ namespace cxxlens::provider::clang22
 			return sdk::unexpected(std::move(valid.error()));
 #if CXXLENS_HAS_CLANG22
 		auto& source_manager = unit.source_manager();
-		const auto begin_location = source_manager.getSpellingLoc(range.getBegin());
-		const auto end_location =
-			clang::Lexer::getLocForEndOfToken(source_manager.getSpellingLoc(range.getEnd()),
-											  0U,
-											  source_manager,
-											  unit.ast().getLangOpts());
+		const auto expansion = source_manager.getExpansionRange(range);
+		const auto begin_location = source_manager.getExpansionLoc(expansion.getBegin());
+		auto end_location = source_manager.getExpansionLoc(expansion.getEnd());
+		if (expansion.isTokenRange())
+			end_location = clang::Lexer::getLocForEndOfToken(
+				end_location, 0U, source_manager, unit.ast().getLangOpts());
 		if (begin_location.isInvalid() || end_location.isInvalid() ||
 			!source_manager.isWrittenInSameFile(begin_location, end_location))
 			return sdk::unexpected(native_error("native.source-span-invalid", "range"));
@@ -204,7 +215,68 @@ namespace cxxlens::provider::clang22
 		output.logical_path = filename.str();
 		output.begin = begin;
 		output.end = end;
-		output.read_only = begin_location.isMacroID() || range.getBegin().isMacroID();
+		output.read_only = range.getBegin().isMacroID() || range.getEnd().isMacroID();
+		auto origin_begin = range.getBegin();
+		auto origin_end = range.getEnd();
+		for (std::size_t depth = 0U;
+			 depth < 128U && (origin_begin.isMacroID() || origin_end.isMacroID());
+			 ++depth)
+		{
+			const auto spelling_begin = source_manager.getSpellingLoc(origin_begin);
+			const auto spelling_end_token = source_manager.getSpellingLoc(origin_end);
+			const auto spelling_end = clang::Lexer::getLocForEndOfToken(
+				spelling_end_token, 0U, source_manager, unit.ast().getLangOpts());
+			if (spelling_begin.isInvalid() || spelling_end.isInvalid())
+				return sdk::unexpected(native_error("native.source-origin-invalid", "range"));
+			if (source_manager.isWrittenInSameFile(spelling_begin, spelling_end))
+			{
+				const auto origin_filename = source_manager.getFilename(spelling_begin);
+				if (origin_filename.empty())
+					return sdk::unexpected(native_error("native.source-origin-invalid", "file"));
+				output.origin_chain.push_back({
+					"macro-spelling",
+					origin_filename.str(),
+					source_manager.getFileOffset(spelling_begin),
+					source_manager.getFileOffset(spelling_end),
+					true,
+				});
+			}
+			else
+			{
+				const auto begin_filename = source_manager.getFilename(spelling_begin);
+				const auto end_filename = source_manager.getFilename(spelling_end_token);
+				const auto begin_token_end = clang::Lexer::getLocForEndOfToken(
+					spelling_begin, 0U, source_manager, unit.ast().getLangOpts());
+				if (begin_filename.empty() || end_filename.empty() || begin_token_end.isInvalid())
+					return sdk::unexpected(native_error("native.source-origin-invalid", "file"));
+				output.origin_chain.push_back({
+					"macro-spelling-begin",
+					begin_filename.str(),
+					source_manager.getFileOffset(spelling_begin),
+					source_manager.getFileOffset(begin_token_end),
+					true,
+				});
+				output.origin_chain.push_back({
+					"macro-spelling-end",
+					end_filename.str(),
+					source_manager.getFileOffset(spelling_end_token),
+					source_manager.getFileOffset(spelling_end),
+					true,
+				});
+			}
+			const auto next_begin = origin_begin.isMacroID()
+				? source_manager.getImmediateExpansionRange(origin_begin).getBegin()
+				: origin_begin;
+			const auto next_end = origin_end.isMacroID()
+				? source_manager.getImmediateExpansionRange(origin_end).getEnd()
+				: origin_end;
+			if (next_begin == origin_begin && next_end == origin_end)
+				break;
+			origin_begin = next_begin;
+			origin_end = next_end;
+		}
+		if (origin_begin.isMacroID() || origin_end.isMacroID())
+			return sdk::unexpected(native_error("native.source-origin-invalid", "depth"));
 		auto id = sdk::source_span_identity(
 			identity.source_snapshot, identity.file, output.begin, output.end, identity.role);
 		if (!id)

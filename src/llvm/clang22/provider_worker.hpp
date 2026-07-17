@@ -27,6 +27,7 @@ namespace cxxlens::detail::clang22
 		std::string semantic_key;
 		std::map<std::string, std::string, std::less<>> payload;
 		std::optional<std::string> source_span_id;
+		std::vector<std::string> source_origin_chain;
 
 		[[nodiscard]] sdk::result<void> validate() const;
 		[[nodiscard]] std::string canonical_form() const;

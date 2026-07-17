@@ -97,6 +97,24 @@ namespace cxxlens::detail::clang22
 			return output.str();
 		}
 
+		[[nodiscard, maybe_unused]] std::string
+		origin_canonical(const provider::clang22::detached_source_origin& origin)
+		{
+			std::ostringstream output;
+			output << origin.kind.size() << ':' << origin.kind << origin.logical_path.size() << ':'
+				   << origin.logical_path << ':' << origin.begin << ':' << origin.end << ':'
+				   << (origin.read_only ? '1' : '0');
+			return output.str();
+		}
+
+		[[nodiscard]] std::string origin_chain_canonical(const std::vector<std::string>& origins)
+		{
+			std::ostringstream output;
+			for (const auto& origin : origins)
+				output << origin.size() << ':' << origin;
+			return output.str();
+		}
+
 		[[nodiscard]] sdk::relation_descriptor observation_descriptor(const std::string& name)
 		{
 			sdk::relation_descriptor descriptor;
@@ -133,6 +151,11 @@ namespace cxxlens::detail::clang22
 				 {sdk::scalar_kind::typed_id, "source_span_id", true},
 				 false,
 				 sdk::column_role::authoritative_payload},
+				{prefix + "source_origin_chain",
+				 "source_origin_chain",
+				 {sdk::scalar_kind::bytes, {}, true},
+				 false,
+				 sdk::column_role::authoritative_payload},
 				{prefix + "exact_equivalence",
 				 "exact_equivalence",
 				 {sdk::scalar_kind::boolean, {}, false},
@@ -151,6 +174,7 @@ namespace cxxlens::detail::clang22
 				prefix + "semantic_key",
 				prefix + "payload_digest",
 				prefix + "source",
+				prefix + "source_origin_chain",
 				prefix + "exact_equivalence",
 				prefix + "limitation",
 			};
@@ -206,6 +230,16 @@ namespace cxxlens::detail::clang22
 								 prefix + "source",
 								 {sdk::scalar_kind::typed_id, "source_span_id", true}},
 								optional_typed("source_span_id", *observation.source_span_id));
+				if (!result)
+					return sdk::unexpected(std::move(result.error()));
+			}
+			if (!observation.source_origin_chain.empty())
+			{
+				auto result = builder.set(
+					{descriptor.id,
+					 prefix + "source_origin_chain",
+					 {sdk::scalar_kind::bytes, {}, true}},
+					optional_bytes(bytes(origin_chain_canonical(observation.source_origin_chain))));
 				if (!result)
 					return sdk::unexpected(std::move(result.error()));
 			}
@@ -620,7 +654,11 @@ namespace cxxlens::detail::clang22
 														declaration->getSourceRange(),
 														{source_snapshot_, file_, "declaration"});
 				if (source)
+				{
 					entity.source_span_id = std::move(source->id);
+					for (const auto& origin : source->origin_chain)
+						entity.source_origin_chain.push_back(origin_canonical(origin));
+				}
 				insert(std::move(entity));
 
 				detached_observation type;
@@ -687,6 +725,8 @@ namespace cxxlens::detail::clang22
 					return true;
 				}
 				call.source_span_id = std::move(source->id);
+				for (const auto& origin : source->origin_chain)
+					call.source_origin_chain.push_back(origin_canonical(origin));
 				call.semantic_key =
 					*sdk::semantic_digest("clang22.call.v1",
 										  current_function_ + "\n" + *call.source_span_id + "\n" +
@@ -863,6 +903,10 @@ namespace cxxlens::detail::clang22
 		if (source_span_id && source_span_id->empty())
 			return sdk::unexpected(
 				provider_error("provider.observation-invalid", "source_span_id"));
+		for (const auto& origin : source_origin_chain)
+			if (origin.empty() || origin.find('\0') != std::string::npos)
+				return sdk::unexpected(
+					provider_error("provider.observation-invalid", "source_origin_chain"));
 		for (const auto& [key, value] : payload)
 			if (key.empty() || key.find('\0') != std::string::npos ||
 				value.find('\0') != std::string::npos)
@@ -878,7 +922,9 @@ namespace cxxlens::detail::clang22
 			   << semantic_key << '\n';
 		for (const auto& [key, value] : payload)
 			output << key.size() << ':' << key << value.size() << ':' << value;
-		output << '\n' << source_span_id.value_or(std::string{});
+		output << '\n'
+			   << source_span_id.value_or(std::string{}) << '\n'
+			   << origin_chain_canonical(source_origin_chain);
 		return output.str();
 	}
 
