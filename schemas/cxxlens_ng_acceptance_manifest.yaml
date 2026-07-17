@@ -83,9 +83,9 @@ entries:
     summary: Logical query, standard/custom join, budgets, explicit partiality, and flagship recipe states bound to complete execution.
   - id: gate.g4
     status: implemented
-    owner_issue: '#107'
+    owner_issue: '#108'
     profile: NG0
-    contract_issue: '#107'
+    contract_issue: '#108'
     depends_on: [gate.g1]
     evidence:
       - tests/unit/sdk/provider_runtime_test.cpp
@@ -103,13 +103,14 @@ entries:
       - docs/design/adr/0048-cross-tu-direct-target-identity.md
       - docs/design/adr/0049-shared-source-span-identity.md
       - docs/design/adr/0050-relation-domain-identity-runtime.md
+      - docs/design/adr/0051-clang-redeclaration-canonicalization.md
       - src/sdk/provider_validation_internal.hpp
       - src/runtime/provider_process_adapter.cpp
       - schemas/cxxlens_ng_provider_protocol.yaml
       - schemas/cxxlens_ng_provider_runtime_contract.yaml
       - schemas/cxxlens_ng_provider_execution_report.schema.yaml
       - schemas/cxxlens_ng_security_profile.yaml
-    summary: Provider runtime and Clang worker with resolved sandbox, cross-TU targets, and descriptor-derived standard row identities.
+    summary: Provider runtime and Clang worker with descriptor-derived IDs, cross-TU targets, and conflict-free redeclaration canonicalization.
   - id: gate.g5
     status: deferred
     owner_issue: '#69'

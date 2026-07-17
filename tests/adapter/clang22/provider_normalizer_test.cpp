@@ -103,6 +103,23 @@ namespace
 		return value;
 	}
 
+	[[nodiscard]] detached_observation redeclaration(std::string semantic_key,
+													 std::string signature,
+													 const std::uint64_t begin,
+													 const bool definition,
+													 const bool canonical)
+	{
+		auto value = observation(observation_kind::entity, std::move(semantic_key));
+		value.source_span_id = *sdk::source_span_identity(
+			"source-snapshot:one", "file:stable", begin, begin + 8U, "declaration");
+		value.payload.emplace("symbol.kind", "function");
+		value.payload.emplace("symbol.qualified_name", "ns::redeclared");
+		value.payload.emplace("symbol.signature", std::move(signature));
+		value.payload.emplace("symbol.is_definition", definition ? "true" : "false");
+		value.payload.emplace("symbol.is_canonical_declaration", canonical ? "true" : "false");
+		return value;
+	}
+
 	[[nodiscard]] std::string string_cell(const sdk::detached_row& row, const std::string& column)
 	{
 		const auto found = row.cells.find(column);
@@ -320,6 +337,80 @@ int main()
 				string_cell(hidden_result->entities.front(), "cc.entity.v1.entity") == entity_id &&
 				string_cell(hidden_result->call_sites.front(), "cc.call_site.v1.call") == call_id,
 			"hidden batch variant changed a standard relation ID");
+
+	observation_batch redeclaration_batch;
+	redeclaration_batch.unit = "cu-" + std::string(64U, 'a');
+	redeclaration_batch.variant = "variant-" + std::string(64U, 'b');
+	redeclaration_batch.observations = {
+		redeclaration("clang-usr:redeclared", "void ()", 10U, false, true),
+		redeclaration("clang-usr:redeclared", "void ()", 40U, true, false),
+	};
+	auto canonical_redeclaration = canonicalize_provider_batch(
+		redeclaration_batch,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	const auto definition_anchor = *redeclaration_batch.observations.back().source_span_id;
+	require(canonical_redeclaration && canonical_redeclaration->exact_equivalence &&
+				canonical_redeclaration->entities.size() == 1U &&
+				canonical_redeclaration->entity_observations.size() == 2U &&
+				canonical_redeclaration->unresolved.empty() &&
+				string_cell(canonical_redeclaration->entities.front(), "cc.entity.v1.anchor") ==
+					definition_anchor,
+			"forward declaration and definition did not select one definition entity");
+	auto reversed_redeclarations = redeclaration_batch;
+	std::ranges::reverse(reversed_redeclarations.observations);
+	auto reversed_canonical = canonicalize_provider_batch(
+		reversed_redeclarations,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(reversed_canonical && reversed_canonical->entities.size() == 1U &&
+				reversed_canonical->entities.front().canonical_form() ==
+					canonical_redeclaration->entities.front().canonical_form(),
+			"redeclaration arrival order changed canonical entity payload");
+	auto declarations_only = redeclaration_batch;
+	declarations_only.observations.back() =
+		redeclaration("clang-usr:redeclared", "void ()", 40U, false, false);
+	auto declaration_result = canonicalize_provider_batch(
+		declarations_only,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(declaration_result && declaration_result->entities.size() == 1U &&
+				string_cell(declaration_result->entities.front(), "cc.entity.v1.anchor") ==
+					*declarations_only.observations.front().source_span_id,
+			"declaration-only chain did not select the canonical declaration");
+	auto moved_anchor = declarations_only;
+	moved_anchor.observations = {
+		redeclaration("clang-usr:redeclared", "void ()", 80U, false, true)};
+	auto moved_result = canonicalize_provider_batch(
+		moved_anchor,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(moved_result &&
+				string_cell(moved_result->entities.front(),
+							"cc.entity.v1.structural_signature_digest") ==
+					string_cell(declaration_result->entities.front(),
+								"cc.entity.v1.structural_signature_digest"),
+			"source anchor movement changed structural signature identity");
+	auto overloads = declarations_only;
+	overloads.observations.push_back(
+		redeclaration("clang-usr:redeclared-overload", "void (int)", 100U, true, true));
+	auto overload_result = canonicalize_provider_batch(
+		overloads, "sha256:1111111111111111111111111111111111111111111111111111111111111111", true);
+	require(overload_result && overload_result->entities.size() == 2U,
+			"distinct overload semantic keys were collapsed");
+	auto incompatible = declarations_only;
+	incompatible.observations.back() =
+		redeclaration("clang-usr:redeclared", "int ()", 40U, true, false);
+	auto incompatible_result = canonicalize_provider_batch(
+		incompatible,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(incompatible_result && !incompatible_result->exact_equivalence &&
+				incompatible_result->entities.size() == 1U &&
+				incompatible_result->unresolved.size() == 1U &&
+				incompatible_result->unresolved.front().code ==
+					"provider.entity-redeclaration-incompatible",
+			"incompatible redeclarations were not explicitly accounted");
 	const auto same_tu_target =
 		string_cell(exact->direct_targets.front(), "cc.call_direct_target.v1.target");
 

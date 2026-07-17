@@ -2540,15 +2540,23 @@ standard `cc.*` への canonicalization は normalizer provider が行う。
 
 NG0 reference path は `cxxlens-clang-worker-22` 内で既存 Clang 22 extractor の detached observation を受け、
 provider protocol で上記 observation と `cc.entity`、`cc.call_site`、`cc.call_direct_target` を同時に出力する。
-identity は structural observation、normalized source、compile unit、variant、toolchain から導出し、legacy symbol
-ID は batch 内対応付けにのみ使う。source がない call や direct target を対応付けられない call は observation を
+standard result identity は各 relation descriptor の ordered domain projection から導出し、legacy symbol
+ID や hidden variant は宣言済み column を介さず直接混ぜない。source がない call や direct target を対応付けられない call は observation を
 保持したまま unresolved とし、standard row を捏造しない。
 
 Clang が `getDirectCallee()` を返した call は、callee declaration が header、別 translation unit、未publication
-partition のいずれにあるかに関係なく、callee semantic key、toolchain、variant を entity row と共有する identity
-projection へ入力して `cc.call_direct_target.target` を導出する。同一 observation batch 内の entity row 存在を
+partition のいずれにあるかに関係なく、definition、なければ canonical declaration の kind/signature/anchor と
+provider-local key/toolchain を entity row と共有する descriptor projection へ入力して
+`cc.call_direct_target.target` を導出する。同一 observation batch 内の entity row 存在を
 directness または target identity の条件にしてはならない。未publication entity は relation registry の
-`soft_semantic` / `on_missing: unresolved` policy で会計し、direct callee がない call だけを provider unresolved とする。
+`soft_semantic` / `on_missing: unresolved` policy で会計する。direct callee または exact callee projection がない call は
+provider unresolved とし、独自 target ID を捏造しない。
+
+同じ canonical declaration key の entity observation は provider-owned occurrence rowとして保持しつつ、standard
+`cc.entity` は definition、canonical declaration、canonical observation form の優先順で一件へ正規化する。
+structural signature digest は canonical type/signature だけに bindし、source anchor、compile
+unit、arrival orderを含めない。kind/signature が不整合な redeclaration は
+`provider.entity-redeclaration-incompatible` として unresolved/equivalence limitation に会計し exact を主張しない。
 
 ---
 

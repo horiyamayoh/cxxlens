@@ -385,6 +385,29 @@ namespace cxxlens::detail::clang22
 			return output;
 		}
 
+		[[nodiscard]] std::string_view entity_field(const detached_observation& observation,
+													const std::string_view field)
+		{
+			const auto found = observation.payload.find(field);
+			return found == observation.payload.end() ? std::string_view{} : found->second;
+		}
+
+		[[nodiscard]] unsigned entity_preference(const detached_observation& observation)
+		{
+			if (entity_field(observation, "symbol.is_definition") == "true")
+				return 0U;
+			if (entity_field(observation, "symbol.is_canonical_declaration") == "true")
+				return 1U;
+			return 2U;
+		}
+
+		[[nodiscard]] bool compatible_redeclaration(const detached_observation& left,
+													const detached_observation& right)
+		{
+			return entity_field(left, "symbol.kind") == entity_field(right, "symbol.kind") &&
+				entity_field(left, "symbol.signature") == entity_field(right, "symbol.signature");
+		}
+
 		class binary_writer
 		{
 		  public:
@@ -552,6 +575,12 @@ namespace cxxlens::detail::clang22
 									   declaration->getQualifiedNameAsString());
 				entity.payload.emplace("symbol.signature",
 									   declaration->getType().getCanonicalType().getAsString());
+				entity.payload.emplace("symbol.is_definition",
+									   declaration->isThisDeclarationADefinition() ? "true"
+																				   : "false");
+				entity.payload.emplace("symbol.is_canonical_declaration",
+									   declaration == declaration->getCanonicalDecl() ? "true"
+																					  : "false");
 				auto source =
 					provider::clang22::normalize_source(*unit_,
 														declaration->getSourceRange(),
@@ -584,17 +613,23 @@ namespace cxxlens::detail::clang22
 					call.payload.emplace("call.caller", current_function_);
 				if (const auto* callee = expression->getDirectCallee(); callee != nullptr)
 				{
+					const auto* identity_declaration = callee->getDefinition();
+					if (identity_declaration == nullptr)
+						identity_declaration = callee->getCanonicalDecl();
 					call.payload.emplace("call.direct_callee", declaration_key(*callee));
-					call.payload.emplace("call.direct_callee_kind", declaration_kind(*callee));
-					call.payload.emplace("call.direct_callee_signature",
-										 callee->getType().getCanonicalType().getAsString());
+					call.payload.emplace("call.direct_callee_kind",
+										 declaration_kind(*identity_declaration));
+					call.payload.emplace(
+						"call.direct_callee_signature",
+						identity_declaration->getType().getCanonicalType().getAsString());
 					call.payload.emplace("call.direct_callee_qualified_name",
-										 callee->getQualifiedNameAsString());
-					if (unit_->source_manager().isWrittenInMainFile(callee->getLocation()))
+										 identity_declaration->getQualifiedNameAsString());
+					if (unit_->source_manager().isWrittenInMainFile(
+							identity_declaration->getLocation()))
 					{
 						auto callee_source = provider::clang22::normalize_source(
 							*unit_,
-							callee->getSourceRange(),
+							identity_declaration->getSourceRange(),
 							{source_snapshot_, file_, "declaration"});
 						if (callee_source)
 							call.payload.emplace("call.direct_callee_anchor",
@@ -945,11 +980,44 @@ namespace cxxlens::detail::clang22
 									 invocation_limitations.end());
 
 		canonicalized_provider_batch output;
-		output.exact_equivalence =
-			invocation_exact && invocation_limitations.empty() && batch.failed_count == 0U;
 		output.equivalence_limitations = std::move(invocation_limitations);
-		const auto limitation = limitation_text(output.equivalence_limitations);
 		const auto toolchain = *sdk::semantic_digest("toolchain-context", toolchain_digest);
+		std::map<std::string, std::vector<const detached_observation*>, std::less<>> entity_groups;
+		for (const auto& observation : batch.observations)
+			if (observation.kind == observation_kind::entity)
+				entity_groups[observation.semantic_key].push_back(&observation);
+		std::vector<const detached_observation*> selected_entities;
+		selected_entities.reserve(entity_groups.size());
+		for (auto& [semantic_key, group] : entity_groups)
+		{
+			std::ranges::sort(
+				group,
+				[](const detached_observation* left, const detached_observation* right)
+				{
+					return std::tuple{entity_preference(*left), left->canonical_form()} <
+						std::tuple{entity_preference(*right), right->canonical_form()};
+				});
+			const auto* selected = group.front();
+			selected_entities.push_back(selected);
+			if (std::ranges::any_of(group,
+									[&](const detached_observation* candidate)
+									{
+										return !compatible_redeclaration(*selected, *candidate);
+									}))
+			{
+				output.equivalence_limitations.push_back("incompatible-redeclaration:" +
+														 semantic_key);
+				output.unresolved.push_back(
+					{"provider.entity-redeclaration-incompatible", semantic_key, "cc.entity"});
+			}
+		}
+		std::ranges::sort(output.equivalence_limitations);
+		output.equivalence_limitations.erase(
+			std::ranges::unique(output.equivalence_limitations).begin(),
+			output.equivalence_limitations.end());
+		output.exact_equivalence =
+			invocation_exact && output.equivalence_limitations.empty() && batch.failed_count == 0U;
+		const auto limitation = limitation_text(output.equivalence_limitations);
 
 		std::map<std::string, std::string, std::less<>> entity_ids;
 		for (const auto& observation : batch.observations)
@@ -959,18 +1027,21 @@ namespace cxxlens::detail::clang22
 											 observation,
 											 output.exact_equivalence,
 											 limitation);
-				auto canonical = entity_row(observation, toolchain, output.exact_equivalence);
 				if (!local)
 					return sdk::unexpected(std::move(local.error()));
-				if (!canonical)
-					return sdk::unexpected(std::move(canonical.error()));
-				auto entity = row_string(*canonical, "cc.entity.v1.entity");
-				if (!entity)
-					return sdk::unexpected(std::move(entity.error()));
-				entity_ids.emplace(observation.semantic_key, std::move(*entity));
 				output.entity_observations.push_back(std::move(*local));
-				output.entities.push_back(std::move(*canonical));
 			}
+		for (const auto* observation : selected_entities)
+		{
+			auto canonical = entity_row(*observation, toolchain, output.exact_equivalence);
+			if (!canonical)
+				return sdk::unexpected(std::move(canonical.error()));
+			auto entity = row_string(*canonical, "cc.entity.v1.entity");
+			if (!entity)
+				return sdk::unexpected(std::move(entity.error()));
+			entity_ids.emplace(observation->semantic_key, std::move(*entity));
+			output.entities.push_back(std::move(*canonical));
+		}
 
 		std::uint64_t call_ordinal{};
 		for (const auto& observation : batch.observations)

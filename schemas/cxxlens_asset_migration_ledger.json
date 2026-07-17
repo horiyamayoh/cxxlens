@@ -1,5 +1,5 @@
 {
-  "asset_count": 298,
+  "asset_count": 299,
   "assets": [
     {
       "authority": "active",
@@ -760,6 +760,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0050-relation-domain-identity-runtime.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0051-clang-redeclaration-canonicalization.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2089,7 +2096,7 @@
     }
   ],
   "classifications": {
-    "active": 262,
+    "active": 263,
     "archived": 35,
     "generated": 1
   },
