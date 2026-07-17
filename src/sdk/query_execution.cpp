@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <limits>
 #include <map>
+#include <new>
 #include <optional>
 #include <ranges>
 #include <set>
@@ -450,52 +451,6 @@ namespace cxxlens::sdk::query
 			return output.str();
 		}
 
-		[[nodiscard]] std::vector<annotated_row>
-		distinct_rows(const std::vector<annotated_row>& rows)
-		{
-			std::map<std::string, annotated_row, std::less<>> groups;
-			for (const auto& row : rows)
-			{
-				const auto key = distinct_key(row);
-				const auto found = groups.find(key);
-				if (found == groups.end())
-				{
-					auto inserted = row;
-					inserted.multiplicity = 1U;
-					groups.emplace(key, std::move(inserted));
-					continue;
-				}
-				auto& current = found->second;
-				current.presence.fragments.insert(current.presence.fragments.end(),
-												  row.presence.fragments.begin(),
-												  row.presence.fragments.end());
-				current.claim_contributors.insert(current.claim_contributors.end(),
-												  row.claim_contributors.begin(),
-												  row.claim_contributors.end());
-				current.producer_contracts.insert(current.producer_contracts.end(),
-												  row.producer_contracts.begin(),
-												  row.producer_contracts.end());
-				current.provenance.insert(
-					current.provenance.end(), row.provenance.begin(), row.provenance.end());
-				current.contributor_guarantees.insert(current.contributor_guarantees.end(),
-													  row.contributor_guarantees.begin(),
-													  row.contributor_guarantees.end());
-				canonical_set(current.presence.fragments);
-				canonical_set(current.claim_contributors);
-				canonical_producers(current.producer_contracts);
-				canonical_set(current.provenance);
-				canonical_guarantees(current.contributor_guarantees);
-			}
-			std::vector<annotated_row> output;
-			output.reserve(groups.size());
-			for (auto& [key, row] : groups)
-			{
-				(void)key;
-				output.push_back(std::move(row));
-			}
-			return output;
-		}
-
 		[[nodiscard]] bool annotation_order(const snapshot_claim_annotation* left,
 											const snapshot_claim_annotation* right)
 		{
@@ -627,36 +582,34 @@ namespace cxxlens::sdk::query
 		struct evaluation
 		{
 			std::vector<annotated_row> rows;
+			std::uint64_t memory_bytes{};
 			bool ordered{};
 			std::vector<order_key> order_keys;
 			bool limited{};
 		};
 
-		void apply_implicit_terminal_projection(
-			evaluation& value,
-			const std::span<const column_ref> output_schema,
-			const std::map<std::string, value_type, std::less<>>& column_types)
+		[[nodiscard]] annotated_row
+		project_terminal_row(const annotated_row& source,
+							 const std::span<const column_ref> output_schema,
+							 const std::map<std::string, value_type, std::less<>>& column_types)
 		{
 			const auto aliases = detail::output_aliases(output_schema);
-			std::map<std::string, std::string, std::less<>> mapping;
+			auto output = source;
+			output.values.clear();
 			for (std::size_t index = 0U; index < output_schema.size(); ++index)
-				mapping.emplace(output_schema[index].column_id, "output." + aliases[index]);
-			for (auto& row : value.rows)
-			{
-				std::map<std::string, detached_cell, std::less<>> projected;
-				for (std::size_t index = 0U; index < output_schema.size(); ++index)
-					projected.emplace("output." + aliases[index],
-									  cell_for(row, output_schema[index].column_id, column_types));
-				row.values = std::move(projected);
-			}
-			for (auto& key : value.order_keys)
-				key.column.column_id = mapping.at(key.column.column_id);
+				output.values.emplace(
+					"output." + aliases[index],
+					cell_for(source, output_schema[index].column_id, column_types));
+			return output;
 		}
 
 		struct runtime_state
 		{
 			execution_budget budget;
 			std::uint64_t scanned{};
+			std::uint64_t retained_memory_bytes{};
+			std::uint64_t peak_memory_bytes{};
+			std::uint64_t peak_intermediate_rows{};
 			std::string failure_code;
 			std::string failure_subject;
 			std::vector<snapshot_claim_annotation> source_annotations;
@@ -665,36 +618,181 @@ namespace cxxlens::sdk::query
 			{
 				return !failure_code.empty();
 			}
+
+			[[nodiscard]] bool reserve_memory(const std::string_view subject,
+											  const std::uint64_t bytes)
+			{
+				if (bytes > std::numeric_limits<std::uint64_t>::max() - retained_memory_bytes ||
+					retained_memory_bytes + bytes > budget.max_memory_bytes)
+				{
+					failure_code = "sdk.query-memory-budget";
+					failure_subject = std::string{subject};
+					return false;
+				}
+				retained_memory_bytes += bytes;
+				peak_memory_bytes = std::max(peak_memory_bytes, retained_memory_bytes);
+				return true;
+			}
 		};
 
-		void check_intermediate(runtime_state& state,
-								const std::string_view subject,
-								const std::vector<annotated_row>& rows)
+		[[nodiscard]] std::optional<std::uint64_t>
+		row_accounting_bytes(const annotated_row& row) noexcept
 		{
-			if (rows.size() > state.budget.max_intermediate_rows)
+			try
+			{
+				const auto size = row.canonical_form().size();
+				if constexpr (sizeof(std::size_t) > sizeof(std::uint64_t))
+					if (size > std::numeric_limits<std::uint64_t>::max())
+						return std::nullopt;
+				return static_cast<std::uint64_t>(size);
+			}
+			catch (const std::bad_alloc&)
+			{
+				return std::nullopt;
+			}
+		}
+
+		[[nodiscard]] bool append_row(runtime_state& state,
+									  const std::string_view subject,
+									  evaluation& output,
+									  annotated_row row)
+		{
+			if (output.rows.size() >= state.budget.max_intermediate_rows)
 			{
 				state.failure_code = "sdk.query-intermediate-budget";
 				state.failure_subject = std::string{subject};
-				return;
+				return false;
 			}
-			std::uint64_t bytes{};
-			for (const auto& row : rows)
+			const auto bytes = row_accounting_bytes(row);
+			if (!bytes)
 			{
-				const auto size = row.canonical_form().size();
-				if (size > std::numeric_limits<std::uint64_t>::max() - bytes)
-				{
-					state.failure_code = "sdk.query-memory-budget";
-					state.failure_subject = std::string{subject};
-					return;
-				}
-				bytes += size;
-				if (bytes > state.budget.max_memory_bytes)
-				{
-					state.failure_code = "sdk.query-memory-budget";
-					state.failure_subject = std::string{subject};
-					return;
-				}
+				state.failure_code = "sdk.query-memory-budget";
+				state.failure_subject = std::string{subject};
+				return false;
 			}
+			if (!state.reserve_memory(subject, *bytes))
+				return false;
+			try
+			{
+				output.rows.push_back(std::move(row));
+			}
+			catch (const std::bad_alloc&)
+			{
+				state.retained_memory_bytes -= *bytes;
+				state.failure_code = "sdk.query-memory-budget";
+				state.failure_subject = std::string{subject};
+				return false;
+			}
+			output.memory_bytes += *bytes;
+			state.peak_intermediate_rows =
+				std::max<std::uint64_t>(state.peak_intermediate_rows, output.rows.size());
+			return true;
+		}
+
+		[[nodiscard]] bool replace_row(runtime_state& state,
+									   const std::string_view subject,
+									   evaluation& output,
+									   const std::size_t index,
+									   annotated_row row)
+		{
+			const auto previous = row_accounting_bytes(output.rows[index]);
+			const auto replacement = row_accounting_bytes(row);
+			if (!previous || !replacement)
+			{
+				state.failure_code = "sdk.query-memory-budget";
+				state.failure_subject = std::string{subject};
+				return false;
+			}
+			if (*replacement > *previous &&
+				!state.reserve_memory(subject,
+									  static_cast<std::uint64_t>(*replacement - *previous)))
+				return false;
+			if (*previous > *replacement)
+				state.retained_memory_bytes -= static_cast<std::uint64_t>(*previous - *replacement);
+			output.memory_bytes = output.memory_bytes - *previous + *replacement;
+			output.rows[index] = std::move(row);
+			return true;
+		}
+
+		[[nodiscard]] bool candidate_fits_memory(runtime_state& state,
+												 const std::string_view subject,
+												 const annotated_row& row)
+		{
+			const auto bytes = row_accounting_bytes(row);
+			if (!bytes ||
+				*bytes > std::numeric_limits<std::uint64_t>::max() - state.retained_memory_bytes ||
+				state.retained_memory_bytes + *bytes > state.budget.max_memory_bytes)
+			{
+				state.failure_code = "sdk.query-memory-budget";
+				state.failure_subject = std::string{subject};
+				return false;
+			}
+			return true;
+		}
+
+		[[nodiscard]] std::optional<std::uint64_t>
+		annotation_accounting_bytes(const snapshot_claim_annotation& annotation) noexcept
+		{
+			try
+			{
+				std::uint64_t bytes{};
+				auto add = [&](const std::size_t size)
+				{
+					if (size > std::numeric_limits<std::uint64_t>::max() - bytes)
+						return false;
+					bytes += static_cast<std::uint64_t>(size);
+					return true;
+				};
+				if (!add(annotation.row.canonical_form().size()) ||
+					!add(annotation.assertion.size()) || !add(annotation.semantic_key.size()) ||
+					!add(annotation.interpretation.size()) || !add(annotation.producer.id.size()) ||
+					!add(annotation.producer.semantic_contract.size()) ||
+					!add(annotation.content.size()) || !add(annotation.provenance_root.size()) ||
+					!add(annotation.presence.universe.size()) ||
+					!add(annotation.guarantee.approximation.size()) ||
+					!add(annotation.guarantee.scope.size()) ||
+					!add(annotation.guarantee.assumptions.size()))
+					return std::nullopt;
+				for (const auto& fragment : annotation.presence.fragments)
+					if (!add(fragment.size()))
+						return std::nullopt;
+				for (const auto& modality : annotation.guarantee.verification_modalities)
+					if (!add(modality.size()))
+						return std::nullopt;
+				return bytes;
+			}
+			catch (const std::bad_alloc&)
+			{
+				return std::nullopt;
+			}
+		}
+
+		[[nodiscard]] bool append_source_annotation(runtime_state& state,
+													const std::string_view subject,
+													const snapshot_claim_annotation& annotation)
+		{
+			const auto bytes = annotation_accounting_bytes(annotation);
+			if (!bytes || !state.reserve_memory(subject, bytes.value_or(0U)))
+			{
+				if (!bytes)
+				{
+					state.failure_code = "sdk.query-memory-budget";
+					state.failure_subject = std::string{subject};
+				}
+				return false;
+			}
+			try
+			{
+				state.source_annotations.push_back(annotation);
+			}
+			catch (const std::bad_alloc&)
+			{
+				state.retained_memory_bytes -= *bytes;
+				state.failure_code = "sdk.query-memory-budget";
+				state.failure_subject = std::string{subject};
+				return false;
+			}
+			return true;
 		}
 
 		[[nodiscard]] std::string operator_strategy(const std::string_view operator_id)
@@ -1417,7 +1515,8 @@ namespace cxxlens::sdk::query
 			return query_result{std::move(result_data)};
 		}
 
-		runtime_state state{request.budget, 0U, {}, {}, {}};
+		runtime_state state;
+		state.budget = request.budget;
 		std::map<std::string, evaluation, std::less<>> evaluations;
 		std::ostringstream physical;
 		physical << "backend=" << snapshot_.physical_backend();
@@ -1448,6 +1547,18 @@ namespace cxxlens::sdk::query
 						return unexpected(std::move(next.error()));
 					if (!*next)
 						break;
+					if (output.rows.size() >= state.budget.max_intermediate_rows)
+					{
+						state.failure_code = "sdk.query-intermediate-budget";
+						state.failure_subject = node.id;
+						break;
+					}
+					if (state.retained_memory_bytes >= state.budget.max_memory_bytes)
+					{
+						state.failure_code = "sdk.query-memory-budget";
+						state.failure_subject = node.id;
+						break;
+					}
 					if (state.scanned == state.budget.max_rows_scanned)
 					{
 						state.failure_code = "sdk.query-scan-budget";
@@ -1458,7 +1569,6 @@ namespace cxxlens::sdk::query
 					if (!annotation)
 						return unexpected(std::move(annotation.error()));
 					++state.scanned;
-					state.source_annotations.push_back(*annotation);
 					annotated_row row;
 					row.values = annotation->row.cells;
 					row.presence = annotation->presence;
@@ -1467,7 +1577,9 @@ namespace cxxlens::sdk::query
 					row.producer_contracts = {annotation->producer};
 					row.provenance = {annotation->provenance_root};
 					row.contributor_guarantees = {annotation->guarantee};
-					output.rows.push_back(std::move(row));
+					if (!append_row(state, node.id, output, std::move(row)) ||
+						!append_source_annotation(state, node.id, *annotation))
+						break;
 				}
 			}
 			else if (node.operator_id == "query.filter.v1")
@@ -1475,7 +1587,8 @@ namespace cxxlens::sdk::query
 				const auto& predicate = std::get<predicate_arguments>(*arguments).predicate;
 				for (const auto& row : inputs.front()->rows)
 					if (evaluate_predicate(row, predicate, column_types))
-						output.rows.push_back(row);
+						if (!append_row(state, node.id, output, row))
+							break;
 				output.ordered = inputs.front()->ordered;
 				output.order_keys = inputs.front()->order_keys;
 				output.limited = inputs.front()->limited;
@@ -1493,7 +1606,8 @@ namespace cxxlens::sdk::query
 					for (const auto& item : project.columns)
 						projected.values.emplace(
 							item.output, cell_for(row, item.column.column_id, column_types));
-					output.rows.push_back(std::move(projected));
+					if (!append_row(state, node.id, output, std::move(projected)))
+						break;
 				}
 				output.ordered = inputs.front()->ordered &&
 					std::ranges::all_of(inputs.front()->order_keys,
@@ -1514,14 +1628,19 @@ namespace cxxlens::sdk::query
 			{
 				const auto& predicate = std::get<predicate_arguments>(*arguments).predicate;
 				for (const auto& left : inputs[0]->rows)
+				{
 					for (const auto& right : inputs[1]->rows)
 					{
 						auto combined = combine(left, right);
 						if (!combined)
 							return unexpected(std::move(combined.error()));
 						if (*combined && evaluate_predicate(**combined, predicate, column_types))
-							output.rows.push_back(std::move(**combined));
+							if (!append_row(state, node.id, output, std::move(**combined)))
+								break;
 					}
+					if (state.failed())
+						break;
+				}
 				output.limited = inputs[0]->limited || inputs[1]->limited;
 			}
 			else if (node.operator_id == "query.semi_join.v1")
@@ -1529,44 +1648,61 @@ namespace cxxlens::sdk::query
 				const auto& predicate = std::get<predicate_arguments>(*arguments).predicate;
 				for (const auto& left : inputs[0]->rows)
 				{
-					std::vector<annotated_row> witnesses;
+					std::optional<annotated_row> selected;
 					for (const auto& right : inputs[1]->rows)
 					{
 						auto combined = combine(left, right);
 						if (!combined)
 							return unexpected(std::move(combined.error()));
-						if (*combined && evaluate_predicate(**combined, predicate, column_types))
-							witnesses.push_back(std::move(**combined));
-					}
-					if (witnesses.empty())
-						continue;
-					auto selected = left;
-					selected.presence.fragments.clear();
-					for (const auto& witness : witnesses)
-					{
-						selected.presence.fragments.insert(selected.presence.fragments.end(),
-														   witness.presence.fragments.begin(),
-														   witness.presence.fragments.end());
-						selected.claim_contributors.insert(selected.claim_contributors.end(),
-														   witness.claim_contributors.begin(),
-														   witness.claim_contributors.end());
-						selected.producer_contracts.insert(selected.producer_contracts.end(),
-														   witness.producer_contracts.begin(),
-														   witness.producer_contracts.end());
-						selected.provenance.insert(selected.provenance.end(),
-												   witness.provenance.begin(),
-												   witness.provenance.end());
-						selected.contributor_guarantees.insert(
-							selected.contributor_guarantees.end(),
+						if (!*combined || !evaluate_predicate(**combined, predicate, column_types))
+							continue;
+						if (!selected)
+						{
+							if (output.rows.size() >= state.budget.max_intermediate_rows)
+							{
+								state.failure_code = "sdk.query-intermediate-budget";
+								state.failure_subject = node.id;
+								break;
+							}
+							selected = left;
+							selected->presence.fragments.clear();
+						}
+						const auto& witness = **combined;
+						selected->presence.fragments.insert(selected->presence.fragments.end(),
+															witness.presence.fragments.begin(),
+															witness.presence.fragments.end());
+						selected->claim_contributors.insert(selected->claim_contributors.end(),
+															witness.claim_contributors.begin(),
+															witness.claim_contributors.end());
+						selected->producer_contracts.insert(selected->producer_contracts.end(),
+															witness.producer_contracts.begin(),
+															witness.producer_contracts.end());
+						selected->provenance.insert(selected->provenance.end(),
+													witness.provenance.begin(),
+													witness.provenance.end());
+						selected->contributor_guarantees.insert(
+							selected->contributor_guarantees.end(),
 							witness.contributor_guarantees.begin(),
 							witness.contributor_guarantees.end());
+						canonical_set(selected->presence.fragments);
+						canonical_set(selected->claim_contributors);
+						canonical_producers(selected->producer_contracts);
+						canonical_set(selected->provenance);
+						canonical_guarantees(selected->contributor_guarantees);
+						if (!candidate_fits_memory(state, node.id, *selected))
+							break;
 					}
-					canonical_set(selected.presence.fragments);
-					canonical_set(selected.claim_contributors);
-					canonical_producers(selected.producer_contracts);
-					canonical_set(selected.provenance);
-					canonical_guarantees(selected.contributor_guarantees);
-					output.rows.push_back(std::move(selected));
+					if (state.failed())
+						break;
+					if (!selected)
+						continue;
+					canonical_set(selected->presence.fragments);
+					canonical_set(selected->claim_contributors);
+					canonical_producers(selected->producer_contracts);
+					canonical_set(selected->provenance);
+					canonical_guarantees(selected->contributor_guarantees);
+					if (!append_row(state, node.id, output, std::move(*selected)))
+						break;
 				}
 				output.ordered = inputs[0]->ordered;
 				output.order_keys = inputs[0]->order_keys;
@@ -1574,38 +1710,119 @@ namespace cxxlens::sdk::query
 			}
 			else if (node.operator_id == "query.union.v1")
 			{
-				output.rows = inputs[0]->rows;
-				output.rows.insert(
-					output.rows.end(), inputs[1]->rows.begin(), inputs[1]->rows.end());
+				for (const auto* input : inputs)
+				{
+					for (const auto& row : input->rows)
+						if (!append_row(state, node.id, output, row))
+							break;
+					if (state.failed())
+						break;
+				}
 				output.limited = inputs[0]->limited || inputs[1]->limited;
 			}
 			else if (node.operator_id == "query.distinct.v1")
 			{
-				output.rows = distinct_rows(inputs.front()->rows);
+				std::map<std::string, std::size_t, std::less<>> groups;
+				std::uint64_t scratch_bytes{};
+				for (const auto& row : inputs.front()->rows)
+				{
+					std::string key;
+					try
+					{
+						key = distinct_key(row);
+					}
+					catch (const std::bad_alloc&)
+					{
+						state.failure_code = "sdk.query-memory-budget";
+						state.failure_subject = node.id;
+						break;
+					}
+					const auto found = groups.find(key);
+					if (found == groups.end())
+					{
+						auto inserted = row;
+						inserted.multiplicity = 1U;
+						if (!append_row(state, node.id, output, std::move(inserted)))
+							break;
+						const auto key_bytes = static_cast<std::uint64_t>(key.size());
+						if (!state.reserve_memory(node.id, key_bytes))
+							break;
+						try
+						{
+							groups.emplace(std::move(key), output.rows.size() - 1U);
+						}
+						catch (const std::bad_alloc&)
+						{
+							state.retained_memory_bytes -= key_bytes;
+							state.failure_code = "sdk.query-memory-budget";
+							state.failure_subject = node.id;
+							break;
+						}
+						scratch_bytes += key_bytes;
+						continue;
+					}
+					auto& current = output.rows[found->second];
+					auto merged = current;
+					merged.presence.fragments.insert(merged.presence.fragments.end(),
+													 row.presence.fragments.begin(),
+													 row.presence.fragments.end());
+					merged.claim_contributors.insert(merged.claim_contributors.end(),
+													 row.claim_contributors.begin(),
+													 row.claim_contributors.end());
+					merged.producer_contracts.insert(merged.producer_contracts.end(),
+													 row.producer_contracts.begin(),
+													 row.producer_contracts.end());
+					merged.provenance.insert(
+						merged.provenance.end(), row.provenance.begin(), row.provenance.end());
+					merged.contributor_guarantees.insert(merged.contributor_guarantees.end(),
+														 row.contributor_guarantees.begin(),
+														 row.contributor_guarantees.end());
+					canonical_set(merged.presence.fragments);
+					canonical_set(merged.claim_contributors);
+					canonical_producers(merged.producer_contracts);
+					canonical_set(merged.provenance);
+					canonical_guarantees(merged.contributor_guarantees);
+					if (!replace_row(state, node.id, output, found->second, std::move(merged)))
+						break;
+				}
+				state.retained_memory_bytes -= scratch_bytes;
 				output.limited = inputs.front()->limited;
 			}
 			else if (node.operator_id == "query.order_by.v1")
 			{
-				output.rows = inputs.front()->rows;
+				for (const auto& row : inputs.front()->rows)
+					if (!append_row(state, node.id, output, row))
+						break;
 				output.order_keys = std::get<order_arguments>(*arguments).keys;
-				std::ranges::sort(output.rows,
-								  [&](const annotated_row& left, const annotated_row& right)
-								  {
-									  return compare_rows(
-												 left, right, output.order_keys, column_types) < 0;
-								  });
+				if (!state.failed())
+					try
+					{
+						std::ranges::sort(
+							output.rows,
+							[&](const annotated_row& left, const annotated_row& right)
+							{
+								return compare_rows(left, right, output.order_keys, column_types) <
+									0;
+							});
+					}
+					catch (const std::bad_alloc&)
+					{
+						state.failure_code = "sdk.query-memory-budget";
+						state.failure_subject = node.id;
+					}
 				output.ordered = true;
 				output.limited = inputs.front()->limited;
 			}
 			else if (node.operator_id == "query.limit.v1")
 			{
-				output = *inputs.front();
 				const auto count = std::get<limit_arguments>(*arguments).count;
-				if (output.rows.size() > count)
-				{
-					output.rows.resize(static_cast<std::size_t>(count));
-					output.limited = true;
-				}
+				const auto retained = std::min<std::uint64_t>(inputs.front()->rows.size(), count);
+				for (std::size_t index = 0U; index < retained; ++index)
+					if (!append_row(state, node.id, output, inputs.front()->rows[index]))
+						break;
+				output.ordered = inputs.front()->ordered;
+				output.order_keys = inputs.front()->order_keys;
+				output.limited = inputs.front()->limited || inputs.front()->rows.size() > count;
 			}
 			else if (node.operator_id == "query.condition_restrict.v1")
 			{
@@ -1620,7 +1837,8 @@ namespace cxxlens::sdk::query
 					{
 						auto restricted = row;
 						restricted.presence = std::move(**presence);
-						output.rows.push_back(std::move(restricted));
+						if (!append_row(state, node.id, output, std::move(restricted)))
+							break;
 					}
 				}
 				output.ordered = inputs.front()->ordered;
@@ -1633,18 +1851,32 @@ namespace cxxlens::sdk::query
 					std::get<interpretation_arguments>(*arguments).interpretation;
 				for (const auto& row : inputs.front()->rows)
 					if (row.interpretation == interpretation)
-						output.rows.push_back(row);
+						if (!append_row(state, node.id, output, row))
+							break;
 				output.ordered = inputs.front()->ordered;
 				output.order_keys = inputs.front()->order_keys;
 				output.limited = inputs.front()->limited;
 			}
-			check_intermediate(state, node.id, output.rows);
 			evaluations.emplace(node.id, std::move(output));
+			physical << ",rows=" << evaluations.at(node.id).rows.size()
+					 << ",retained-bytes=" << state.retained_memory_bytes;
 			if (state.failed())
 				break;
 		}
 
-		result_data->physical = {"cxxlens.reference-query-planner.v1", physical.str()};
+		if (state.failed())
+		{
+			physical << ";peak-logical-bytes=" << state.peak_memory_bytes
+					 << ";peak-intermediate-rows=" << state.peak_intermediate_rows;
+			result_data->physical = {"cxxlens.reference-query-planner.v1", physical.str()};
+			result_data->status = execution_status::failed_before_result;
+			result_data->unresolved.push_back(
+				{state.failure_code, state.failure_subject, "no sealed rows"});
+			result_data->guarantee = summarize_guarantee(
+				state.source_annotations, result_data->input_complete, false, false);
+			return query_result{std::move(result_data)};
+		}
+
 		auto conflicts = conflicts_for(state.source_annotations, descriptors);
 		if (!conflicts)
 			return unexpected(std::move(conflicts.error()));
@@ -1656,6 +1888,28 @@ namespace cxxlens::sdk::query
 		for (const auto& annotation : state.source_annotations)
 			result_data->producers.push_back(annotation.producer);
 		canonical_producers(result_data->producers);
+		auto evaluated = std::move(evaluations.at(query.root));
+		if (implicit_terminal_projection)
+		{
+			const auto aliases = detail::output_aliases(query.output_schema);
+			std::map<std::string, std::string, std::less<>> mapping;
+			for (std::size_t index = 0U; index < query.output_schema.size(); ++index)
+				mapping.emplace(query.output_schema[index].column_id, "output." + aliases[index]);
+			for (std::size_t index = 0U; index < evaluated.rows.size(); ++index)
+				if (!replace_row(state,
+								 "implicit-terminal-project",
+								 evaluated,
+								 index,
+								 project_terminal_row(
+									 evaluated.rows[index], query.output_schema, column_types)))
+					break;
+			if (!state.failed())
+				for (auto& key : evaluated.order_keys)
+					key.column.column_id = mapping.at(key.column.column_id);
+		}
+		physical << ";peak-logical-bytes=" << state.peak_memory_bytes
+				 << ";peak-intermediate-rows=" << state.peak_intermediate_rows;
+		result_data->physical = {"cxxlens.reference-query-planner.v1", physical.str()};
 		if (state.failed())
 		{
 			result_data->status = execution_status::failed_before_result;
@@ -1665,16 +1919,24 @@ namespace cxxlens::sdk::query
 				state.source_annotations, result_data->input_complete, false, false);
 			return query_result{std::move(result_data)};
 		}
-
-		auto evaluated = evaluations.at(query.root);
-		if (implicit_terminal_projection)
-			apply_implicit_terminal_projection(evaluated, query.output_schema, column_types);
 		if (!evaluated.ordered)
-			std::ranges::sort(evaluated.rows,
-							  [](const annotated_row& left, const annotated_row& right)
-							  {
-								  return left.canonical_form() < right.canonical_form();
-							  });
+			try
+			{
+				std::ranges::sort(evaluated.rows,
+								  [](const annotated_row& left, const annotated_row& right)
+								  {
+									  return left.canonical_form() < right.canonical_form();
+								  });
+			}
+			catch (const std::bad_alloc&)
+			{
+				result_data->status = execution_status::failed_before_result;
+				result_data->unresolved.push_back(
+					{"sdk.query-memory-budget", "canonical-output-order", "no sealed rows"});
+				result_data->guarantee = summarize_guarantee(
+					state.source_annotations, result_data->input_complete, false, false);
+				return query_result{std::move(result_data)};
+			}
 		result_data->ordered = evaluated.ordered;
 		result_data->status = execution_status::complete;
 		if (evaluated.rows.size() > request.budget.max_rows_output)

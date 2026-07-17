@@ -1,12 +1,12 @@
 schema: cxxlens.query-runtime-contract.v1
-document_version: 1.4.0
+document_version: 1.5.0
 maturity: implemented
 authority:
   logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
   guarantee_contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
   snapshot_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
-  decision_adr: docs/design/adr/0024-query-snapshot-schema-compatibility.md
-  owner_issue: '#81'
+  decision_adr: docs/design/adr/0025-query-preallocation-budget-accounting.md
+  owner_issue: '#82'
   owner: steward.ng-query-runtime
 compatibility:
   version_axis: query-runtime-result
@@ -108,6 +108,30 @@ execution:
     preserves: [multiplicity, condition, interpretation, evidence, guarantee]
 budget:
   zero_is_valid_empty_budget: true
+  intermediate_accounting:
+    enforcement: reserve-before-vector-retention
+    row_scope: per-operator-output-collection
+    checked_arithmetic: true
+    stop_candidate_loop_immediately: true
+    semi_join_witness_vector: forbidden
+  memory_accounting:
+    unit: deterministic-canonical-logical-payload-byte
+    scope: execution-wide-retained
+    includes:
+      - operator-annotated-rows
+      - scan-source-annotation-payload
+      - distinct-key-scratch
+      - semi-join-selected-candidate
+      - implicit-terminal-projection-growth
+    excludes:
+      - decoded-ir-argument-metadata
+      - order-key-metadata
+      - container-allocator-overhead
+      - in-place-sort-control-stack
+      - completed-result-side-channel-payload
+    process_rss_quota: false
+    observed_bad_alloc: sdk.query-memory-budget
+  physical_metrics: [peak-logical-bytes, peak-intermediate-rows]
   scan_or_intermediate_exhaustion:
     rows: []
     status: failed_before_result

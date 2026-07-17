@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -280,6 +281,28 @@ namespace
 		return {std::move(left), std::move(right), std::move(*engine), std::move(claims)};
 	}
 
+	[[nodiscard]] fixture make_budget_fixture()
+	{
+		auto left = left_relation();
+		auto right = right_relation();
+		relation_registry registry;
+		require(registry.add(left).has_value(), "budget left relation rejected");
+		require(registry.add(right).has_value(), "budget right relation rejected");
+		auto engine = registry.build("query-budget-generation");
+		require(engine.has_value(), "budget relation engine failed");
+		std::vector<claim> claims;
+		for (std::int64_t index = 0; index < 8; ++index)
+		{
+			claims.push_back(
+				assertion(*engine, left_row(left, "key:budget", index, false), {"release"}));
+			claims.push_back(
+				assertion(*engine,
+						  right_row(right, "key:budget", "label:" + std::to_string(index)),
+						  {"release"}));
+		}
+		return {std::move(left), std::move(right), std::move(*engine), std::move(claims)};
+	}
+
 	[[nodiscard]] snapshot_draft draft(const relation_engine& engine)
 	{
 		return {{"catalog:query-runtime",
@@ -436,6 +459,22 @@ namespace
 			output.insert(column);
 		}
 		return output;
+	}
+
+	[[nodiscard]] std::uint64_t physical_metric(const std::string_view physical,
+												const std::string_view anchor,
+												const std::string_view metric)
+	{
+		const auto anchor_position = physical.find(anchor);
+		require(anchor_position != std::string_view::npos, "physical metric anchor missing");
+		const auto metric_position = physical.find(metric, anchor_position);
+		require(metric_position != std::string_view::npos, "physical metric missing");
+		const auto begin = metric_position + metric.size();
+		std::uint64_t value{};
+		const auto parsed =
+			std::from_chars(physical.data() + begin, physical.data() + physical.size(), value);
+		require(parsed.ec == std::errc{}, "physical metric was not numeric");
+		return value;
 	}
 
 	[[nodiscard]] query::logical_query_ir scan_query(const relation_descriptor& descriptor)
@@ -852,6 +891,122 @@ namespace
 				"advanced query cursor left prior row view live");
 	}
 
+	void check_bounded_intermediate_budgets(const fixture& data)
+	{
+		auto store = make_in_memory_snapshot_store(data.engine);
+		require(store.has_value(), "budget query store failed");
+		auto snapshot = publish(*store, data, false, false);
+		auto engine = query::reference_engine::bind(snapshot);
+		require(engine.has_value(), "budget query engine bind failed");
+		const auto left_key =
+			column_ref{data.left.id, data.left.columns[0].id, data.left.columns[0].type};
+		const auto right_key =
+			column_ref{data.right.id, data.right.columns[0].id, data.right.columns[0].type};
+		auto join_left = query::builder::from(data.left);
+		auto join_right = query::builder::from(data.right);
+		auto predicate = query::equals_present(left_key, right_key);
+		require(join_left && join_right && predicate, "budget join setup failed");
+		auto joined =
+			std::move(*join_left).inner_join(std::move(*join_right), std::move(*predicate));
+		require(joined.has_value(), "budget join construction failed");
+		const auto join_query = std::move(*joined).finish();
+
+		auto baseline = engine->execute(join_query);
+		require(baseline && rows(*baseline).size() == 64U,
+				"budget join fixture did not produce a 64-row product");
+		const auto peak_bytes = physical_metric(
+			baseline->explain_physical().text, "peak-logical-bytes=", "peak-logical-bytes=");
+		require(peak_bytes > 1U, "budget accounting did not observe retained bytes");
+
+		query::execution_request zero_rows;
+		zero_rows.budget.max_intermediate_rows = 0U;
+		auto zero = engine->execute(scan_query(data.left), zero_rows);
+		require(zero && zero->execution() == query::execution_status::failed_before_result &&
+					!zero->unresolved_items().empty() &&
+					zero->unresolved_items().front().code == "sdk.query-intermediate-budget" &&
+					physical_metric(zero->explain_physical().text,
+									"peak-intermediate-rows=",
+									"peak-intermediate-rows=") == 0U,
+				"zero intermediate budget retained a row");
+		query::execution_request zero_memory;
+		zero_memory.budget.max_memory_bytes = 0U;
+		auto no_memory = engine->execute(scan_query(data.left), zero_memory);
+		require(no_memory &&
+					no_memory->execution() == query::execution_status::failed_before_result &&
+					!no_memory->unresolved_items().empty() &&
+					no_memory->unresolved_items().front().code == "sdk.query-memory-budget" &&
+					physical_metric(no_memory->explain_physical().text,
+									"peak-logical-bytes=",
+									"peak-logical-bytes=") == 0U,
+				"zero memory budget retained logical payload");
+
+		query::execution_request eight_rows;
+		eight_rows.budget.max_intermediate_rows = 8U;
+		auto bounded_join = engine->execute(join_query, eight_rows);
+		require(bounded_join &&
+					bounded_join->execution() == query::execution_status::failed_before_result &&
+					!bounded_join->unresolved_items().empty() &&
+					bounded_join->unresolved_items().front().code ==
+						"sdk.query-intermediate-budget" &&
+					bounded_join->unresolved_items().front().subject == join_query.root &&
+					physical_metric(bounded_join->explain_physical().text,
+									"peak-intermediate-rows=",
+									"peak-intermediate-rows=") == 8U,
+				"join materialized its 64-row product beyond an eight-row budget");
+		auto reverse_store = make_in_memory_snapshot_store(data.engine);
+		require(reverse_store.has_value(), "reverse budget query store failed");
+		auto reverse_snapshot = publish(*reverse_store, data, true, false);
+		auto reverse_engine = query::reference_engine::bind(reverse_snapshot);
+		require(reverse_engine.has_value(), "reverse budget query engine bind failed");
+		auto reverse_bounded = reverse_engine->execute(join_query, eight_rows);
+		require(reverse_bounded && reverse_bounded->execution() == bounded_join->execution() &&
+					reverse_bounded->unresolved_items().front().code ==
+						bounded_join->unresolved_items().front().code &&
+					reverse_bounded->unresolved_items().front().subject ==
+						bounded_join->unresolved_items().front().subject,
+				"input order changed budget exhaustion status or reason");
+
+		query::execution_request exact_memory;
+		exact_memory.budget.max_memory_bytes = peak_bytes;
+		auto exact = engine->execute(join_query, exact_memory);
+		require(exact && exact->execution() == query::execution_status::complete,
+				"exact logical memory boundary was rejected");
+		exact_memory.budget.max_memory_bytes = peak_bytes + 1U;
+		auto below_limit = engine->execute(join_query, exact_memory);
+		require(below_limit && below_limit->execution() == query::execution_status::complete,
+				"logical memory usage below the limit was rejected");
+		exact_memory.budget.max_memory_bytes = peak_bytes - 1U;
+		auto over_limit = engine->execute(join_query, exact_memory);
+		require(over_limit &&
+					over_limit->execution() == query::execution_status::failed_before_result &&
+					!over_limit->unresolved_items().empty() &&
+					over_limit->unresolved_items().front().code == "sdk.query-memory-budget",
+				"one byte beyond the logical memory budget was accepted");
+
+		auto semi_left = query::builder::from(data.left);
+		auto semi_right = query::builder::from(data.right);
+		predicate = query::equals_present(left_key, right_key);
+		require(semi_left && semi_right && predicate, "budget semi-join setup failed");
+		auto semi = std::move(*semi_left).semi_join(std::move(*semi_right), std::move(*predicate));
+		require(semi.has_value(), "budget semi-join construction failed");
+		const auto semi_query = std::move(*semi).finish();
+		auto semi_baseline = engine->execute(semi_query);
+		require(semi_baseline && rows(*semi_baseline).size() == 8U,
+				"budget semi-join fixture did not reduce witnesses");
+		const auto retained_after_scans = physical_metric(
+			semi_baseline->explain_physical().text, ";node=n1:", ",retained-bytes=");
+		query::execution_request witness_budget;
+		witness_budget.budget.max_memory_bytes = retained_after_scans;
+		auto bounded_witnesses = engine->execute(semi_query, witness_budget);
+		require(
+			bounded_witnesses &&
+				bounded_witnesses->execution() == query::execution_status::failed_before_result &&
+				!bounded_witnesses->unresolved_items().empty() &&
+				bounded_witnesses->unresolved_items().front().code == "sdk.query-memory-budget" &&
+				bounded_witnesses->unresolved_items().front().subject == semi_query.root,
+			"semi-join witness accumulation escaped the memory budget");
+	}
+
 	void check_side_channel_parity(const fixture& data)
 	{
 		auto store = make_in_memory_snapshot_store(data.engine);
@@ -1042,6 +1197,7 @@ int main()
 	check_snapshot_schema_compatibility();
 	check_runtime_matrix(data, memory_snapshot, *sqlite_snapshot);
 	check_partiality(data, memory_snapshot);
+	check_bounded_intermediate_budgets(make_budget_fixture());
 	check_side_channel_parity(make_side_channel_fixture());
 	check_closure_applicability(data);
 

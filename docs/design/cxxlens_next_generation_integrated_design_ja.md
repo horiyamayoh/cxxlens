@@ -2732,11 +2732,18 @@ max refinements (NG2)
 
 budget超過時:
 
-- unsafe intermediate stateをpublishしない
-- execution statusをtruncated
+- unsafe intermediate stateをpublishしない。intermediate/scan/memory exhaustion は空 row の
+  `failed_before_result`、logically complete な output cap だけは sealed canonical prefix の `truncated` とする
 - closureを生成しない
 - absenceを確定しない
 - continuationは上記 seal / total-order / binding 条件を満たす場合のみ
+
+Issue #82 / ADR 0025 により operator output は共通 collector が row count と canonical accounting bytes を checked
+arithmetic で予約した後にだけ保持する。memory は retained operator rows、scan source annotations、distinct key scratch を
+execution 全体で数える。semi-join は witness vector を廃止して逐次 evidence union を行い、union/order/limit、distinct
+growth、implicit terminal project も保持前に検査する。decoded IR metadata、allocator overhead、in-place sort control、
+completion 後の result side channel は logical accounting 外であり、process RSS quota とは区別する。physical explain は
+`peak-logical-bytes` と `peak-intermediate-rows` を返す。
 
 ### 20.13 Physical planning and executable conformance
 

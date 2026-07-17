@@ -1,5 +1,5 @@
 {
-  "asset_count": 270,
+  "asset_count": 271,
   "assets": [
     {
       "authority": "active",
@@ -578,6 +578,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0024-query-snapshot-schema-compatibility.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0025-query-preallocation-budget-accounting.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1893,7 +1900,7 @@
     }
   ],
   "classifications": {
-    "active": 234,
+    "active": 235,
     "archived": 35,
     "generated": 1
   },
