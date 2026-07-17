@@ -39,6 +39,7 @@
 | [0037](0037-lossless-claim-evidence-occurrences.md) | lossless claim evidence occurrences |
 | [0038](0038-provider-runtime-protocol-state-validation.md) | typed process-provider protocol state validation |
 | [0039](0039-exact-provider-fallback-policy.md) | exact provider fallback policy |
+| [0040](0040-provider-frame-version-and-flags.md) | provider frame version and flag semantics |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

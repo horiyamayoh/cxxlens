@@ -66,12 +66,44 @@ class NgProviderProtocolTest(unittest.TestCase):
         self.assertEqual(decoded["control"], {"task": "t1"})
         self.assertEqual(decoded["payload_hex"], b"payload".hex())
         self.assertEqual(decoded["sequence"], 3)
+        self.assertEqual(decoded["protocol_minor"], 0)
+        self.assertEqual(decoded["flags"], 0)
 
-    def test_wire_major_and_unknown_message_classification_fail_closed(self) -> None:
+    def test_wire_version_and_unknown_message_classification_fail_closed(self) -> None:
         with self.assertRaisesRegex(ProviderContractError, "protocol-major-mismatch"):
             decode_frame(self.contract, encode_frame({}, protocol_major=2))
-        with self.assertRaisesRegex(ProviderContractError, "unclassified unknown"):
+        with self.assertRaisesRegex(ProviderContractError, "protocol-minor-mismatch"):
+            decode_frame(self.contract, encode_frame({}, protocol_minor=1))
+        accepted = decode_frame(
+            self.contract,
+            encode_frame({}, protocol_minor=1),
+            negotiated_minor=1,
+        )
+        self.assertEqual(accepted["protocol_minor"], 1)
+        with self.assertRaisesRegex(ProviderContractError, "unknown-message-type"):
             decode_frame(self.contract, encode_frame({}, message_type=65000))
+
+    def test_frame_flags_are_fail_closed_and_optional_extensions_are_accounted(self) -> None:
+        flags = self.contract["wire"]["flags"]
+        optional = decode_frame(
+            self.contract,
+            encode_frame({}, message_type=65000, flags=flags["optional_extension"]),
+        )
+        self.assertTrue(optional["skipped_optional"])
+        self.assertEqual(optional["message_type"], 65000)
+        self.assertGreater(optional["accounted_bytes"], FRAME.size)
+        with self.assertRaisesRegex(ProviderContractError, "unknown-required-extension"):
+            decode_frame(
+                self.contract,
+                encode_frame({}, message_type=65000, flags=flags["required_extension"]),
+            )
+        with self.assertRaisesRegex(ProviderContractError, "unsupported-compression"):
+            decode_frame(
+                self.contract,
+                encode_frame({}, flags=flags["compressed_payload"]),
+            )
+        with self.assertRaisesRegex(ProviderContractError, "invalid-frame-flags"):
+            decode_frame(self.contract, encode_frame({}, flags=16))
 
     def test_unhashable_cbor_map_key_is_stable_rejection(self) -> None:
         with self.assertRaisesRegex(ProviderContractError, "unhashable CBOR map key"):

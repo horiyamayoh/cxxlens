@@ -104,6 +104,23 @@ namespace cxxlens::sdk::provider
 			return found == request.output_descriptors.end() ? nullptr : &*found;
 		}
 
+		[[nodiscard]] result<protocol_limits> negotiated_limits(const process_task_request& request)
+		{
+			const auto& offered = request.selection.candidate.description.protocol;
+			const auto minimum =
+				std::max<std::uint32_t>(request.limits.minimum_minor, offered.minimum_minor);
+			const auto maximum =
+				std::min<std::uint32_t>(request.limits.maximum_minor, offered.maximum_minor);
+			if (request.limits.protocol_major != offered.major || minimum > maximum ||
+				maximum > std::numeric_limits<std::uint16_t>::max())
+				return cxxlens::sdk::unexpected(
+					runtime_error("provider.protocol-minor-mismatch", "negotiation"));
+			auto output = request.limits;
+			output.minimum_minor = static_cast<std::uint16_t>(maximum);
+			output.maximum_minor = static_cast<std::uint16_t>(maximum);
+			return output;
+		}
+
 		[[nodiscard]] bool canonical_row_shape(const relation_descriptor& descriptor,
 											   const std::string_view payload)
 		{
@@ -196,7 +213,8 @@ namespace cxxlens::sdk::provider
 
 		[[nodiscard]] result<std::string>
 		validate_provider_transcript(const process_task_request& request,
-									 const std::span<const frame> frames)
+									 const std::span<const frame> frames,
+									 const protocol_limits session_limits)
 		{
 			const auto fail = [](std::string code, std::string field, std::string detail = {})
 			{
@@ -206,7 +224,7 @@ namespace cxxlens::sdk::provider
 			std::uint64_t consumed_bytes{};
 			for (const auto& value : frames)
 			{
-				auto encoded = encode_frame(value, request.limits);
+				auto encoded = encode_frame(value, session_limits);
 				if (!encoded || consumed_bytes > request.output_credit.bytes ||
 					encoded->size() > request.output_credit.bytes - consumed_bytes)
 					return fail("provider.credit-exceeded", request.task_id, "bytes");
@@ -235,7 +253,8 @@ namespace cxxlens::sdk::provider
 			std::optional<open_batch> batch;
 			const auto& provider = request.selection.candidate.description;
 			const auto expected_hello = provider.canonical_json();
-			const auto expected_schema = std::string{"cxxlens.provider-protocol.v1|minor=0"};
+			const auto expected_schema = std::string{"cxxlens.provider-protocol.v1|minor="} +
+				std::to_string(session_limits.maximum_minor);
 			const auto expected_accepted = provider.provider_id + "|" +
 				provider.provider_version.string() + "|" + request.task_id;
 
@@ -244,11 +263,24 @@ namespace cxxlens::sdk::provider
 				const auto& value = frames[index];
 				if (value.stream_id != 1U || value.sequence != expected_sequence++)
 					return fail("provider.protocol-state-invalid", request.task_id, "sequence");
+				const auto optional_extension =
+					(value.flags & static_cast<std::uint16_t>(frame_flag::optional_extension)) !=
+					0U;
+				const auto end_of_stream =
+					(value.flags & static_cast<std::uint16_t>(frame_flag::end_of_stream)) != 0U;
+				if (end_of_stream &&
+					(index + 1U != frames.size() ||
+					 (value.type != message_type::task_complete &&
+					  value.type != message_type::task_failed)))
+					return fail(
+						"provider.protocol-state-invalid", request.task_id, "end-of-stream");
 				if (terminal_seen ||
 					(index + 1U == frames.size() && value.type != message_type::task_complete &&
 					 value.type != message_type::task_failed))
 					return fail(
 						"provider.protocol-state-invalid", request.task_id, "terminal-order");
+				if (optional_extension)
+					continue;
 				auto control = decode_control_text(value.control);
 				if (!control)
 					return fail("provider.protocol-state-invalid", request.task_id, "control");
@@ -457,15 +489,16 @@ namespace cxxlens::sdk::provider
 		}
 
 		[[nodiscard]] result<std::vector<std::byte>>
-		host_transcript(const process_task_request& request)
+		host_transcript(const process_task_request& request, const protocol_limits session_limits)
 		{
 			const auto& manifest = request.selection.candidate.description;
-			const std::array values{
+			std::array values{
 				frame{message_type::hello_ack, 1U, 0U, cbor_text(manifest.canonical_json()), {}},
 				frame{message_type::schema_negotiate,
 					  1U,
 					  1U,
-					  cbor_text("cxxlens.provider-protocol.v1|minor=0"),
+					  cbor_text(std::string{"cxxlens.provider-protocol.v1|minor="} +
+								std::to_string(session_limits.maximum_minor)),
 					  {}},
 				frame{message_type::open_task,
 					  1U,
@@ -482,10 +515,15 @@ namespace cxxlens::sdk::provider
 					  {}},
 				frame{message_type::close, 1U, 4U, cbor_text(request.task_id), {}},
 			};
+			for (auto& value : values)
+			{
+				value.protocol_major = session_limits.protocol_major;
+				value.protocol_minor = session_limits.maximum_minor;
+			}
 			std::vector<std::byte> output;
 			for (const auto& value : values)
 			{
-				auto encoded = encode_frame(value, request.limits);
+				auto encoded = encode_frame(value, session_limits);
 				if (!encoded)
 					return cxxlens::sdk::unexpected(std::move(encoded.error()));
 				output.insert(output.end(), encoded->begin(), encoded->end());
@@ -497,8 +535,9 @@ namespace cxxlens::sdk::provider
 		{
 			std::ostringstream output;
 			for (const auto& value : frames)
-				output << static_cast<std::uint16_t>(value.type) << '|' << value.stream_id << '|'
-					   << value.sequence << '|' << content_digest(value.control) << '|'
+				output << value.protocol_major << '|' << value.protocol_minor << '|' << value.flags
+					   << '|' << static_cast<std::uint16_t>(value.type) << '|' << value.stream_id
+					   << '|' << value.sequence << '|' << content_digest(value.control) << '|'
 					   << content_digest(value.payload) << '\n';
 			return output.str();
 		}
@@ -631,8 +670,7 @@ namespace cxxlens::sdk::provider
 			return cxxlens::sdk::unexpected(std::move(valid.error()));
 		static const std::set<std::string, std::less<>> supported_features{"credit-backpressure"};
 		const auto& protocol = request.selection.candidate.description.protocol;
-		if (protocol.minimum_minor > 0U ||
-			std::ranges::any_of(protocol.required_features,
+		if (std::ranges::any_of(protocol.required_features,
 								[&](const std::string& feature)
 								{
 									return !supported_features.contains(feature);
@@ -662,7 +700,10 @@ namespace cxxlens::sdk::provider
 			request.output_credit.frames == 0U)
 			return cxxlens::sdk::unexpected(runtime_error("provider.task-invalid", "budget"));
 
-		auto transcript = host_transcript(request);
+		auto session_limits = negotiated_limits(request);
+		if (!session_limits)
+			return cxxlens::sdk::unexpected(std::move(session_limits.error()));
+		auto transcript = host_transcript(request, *session_limits);
 		if (!transcript)
 			return cxxlens::sdk::unexpected(std::move(transcript.error()));
 		process_invocation invocation;
@@ -700,7 +741,7 @@ namespace cxxlens::sdk::provider
 		if (output.exit_code != 0)
 			return transport_failure_report(request, std::move(output), "provider.crash");
 
-		auto frames = decode_frame_stream(output.standard_output, request.limits);
+		auto frames = decode_frame_stream(output.standard_output, *session_limits);
 		if (!frames)
 		{
 			auto report = transport_failure_report(request, std::move(output), frames.error().code);
@@ -708,7 +749,7 @@ namespace cxxlens::sdk::provider
 				{frames.error().code, request.task_id, frames.error().field});
 			return report;
 		}
-		auto terminal = validate_provider_transcript(request, *frames);
+		auto terminal = validate_provider_transcript(request, *frames, *session_limits);
 		if (!terminal)
 		{
 			auto validation_error = std::move(terminal.error());

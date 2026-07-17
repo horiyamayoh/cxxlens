@@ -437,6 +437,44 @@ namespace
 						" terminal=" + (report ? report->terminal : report.error().code));
 		}
 
+		auto optional = runtime.execute(task(select(executable, "optional-extension")));
+		require(optional && optional->succeeded() && optional->frames.size() == 11U &&
+					optional->frames.at(3U).flags ==
+						static_cast<std::uint16_t>(frame_flag::optional_extension) &&
+					static_cast<std::uint16_t>(optional->frames.at(3U).type) == 65000U,
+				"unknown optional extension was not skipped with accounting evidence");
+		auto optional_credit_request = task(select(executable, "optional-extension"));
+		optional_credit_request.output_credit.frames = 10U;
+		auto optional_credit = runtime.execute(optional_credit_request);
+		require(optional_credit && optional_credit->terminal == "provider.credit-exceeded",
+				"skipped optional extension was omitted from frame credit accounting");
+
+		auto minor_request = task(select(executable, "success"));
+		minor_request.selection.candidate.description.protocol.maximum_minor = 1U;
+		minor_request.limits.maximum_minor = 1U;
+		auto negotiated_minor = runtime.execute(minor_request);
+		require(
+			negotiated_minor && negotiated_minor->succeeded() &&
+				std::ranges::all_of(negotiated_minor->frames,
+									[](const frame& value)
+									{
+										return value.protocol_minor == 1U;
+									}),
+			std::string{"session did not bind frames to the negotiated protocol minor: "} +
+				(negotiated_minor ? negotiated_minor->terminal : negotiated_minor.error().code) +
+				(negotiated_minor && !negotiated_minor->diagnostics.empty()
+					 ? ":" + negotiated_minor->diagnostics.back().detail
+					 : std::string{}));
+
+		auto plain_transcript = runtime.execute(task(select(executable, "success")));
+		auto eos_transcript = runtime.execute(task(select(executable, "success-eos")));
+		require(plain_transcript && eos_transcript && plain_transcript->succeeded() &&
+					eos_transcript->succeeded() &&
+					eos_transcript->frames.back().flags ==
+						static_cast<std::uint16_t>(frame_flag::end_of_stream) &&
+					plain_transcript->semantic_digest() != eos_transcript->semantic_digest(),
+				"frame flags were omitted from semantic transcript identity");
+
 		auto failed = runtime.execute(task(select(executable, "failed")));
 		require(failed && failed->terminal == "provider.schema-invalid",
 				"provider task failure lost its structured terminal");
@@ -486,6 +524,7 @@ namespace
 				 std::pair{"bad-column", "provider.batch-invalid"},
 				 std::pair{"unknown-descriptor", "provider.relation-incompatible"},
 				 std::pair{"incomplete-coverage", "provider.coverage-incomplete"},
+				 std::pair{"bad-eos", "provider.protocol-state-invalid"},
 			 })
 		{
 			auto rejected = runtime.execute(task(select(executable, mode)));

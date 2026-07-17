@@ -24,8 +24,9 @@ namespace cxxlens::sdk::testing
 		{
 			std::ostringstream output;
 			for (const auto& frame : frames)
-				output << static_cast<std::uint16_t>(frame.type) << '|' << frame.stream_id << '|'
-					   << frame.sequence << '|' << content_digest(frame.control) << '|'
+				output << frame.protocol_major << '|' << frame.protocol_minor << '|' << frame.flags
+					   << '|' << static_cast<std::uint16_t>(frame.type) << '|' << frame.stream_id
+					   << '|' << frame.sequence << '|' << content_digest(frame.control) << '|'
 					   << content_digest(frame.payload) << '\n';
 			return output.str();
 		}

@@ -18,6 +18,21 @@ namespace cxxlens::sdk::provider
 	namespace
 	{
 		constexpr std::size_t header_size = 104U;
+		constexpr std::uint16_t required_extension_flag =
+			static_cast<std::uint16_t>(frame_flag::required_extension);
+		constexpr std::uint16_t optional_extension_flag =
+			static_cast<std::uint16_t>(frame_flag::optional_extension);
+		constexpr std::uint16_t compressed_payload_flag =
+			static_cast<std::uint16_t>(frame_flag::compressed_payload);
+		constexpr std::uint16_t end_of_stream_flag =
+			static_cast<std::uint16_t>(frame_flag::end_of_stream);
+		constexpr std::uint16_t known_flag_mask = required_extension_flag |
+			optional_extension_flag | compressed_payload_flag | end_of_stream_flag;
+
+		[[nodiscard]] bool has_flag(const std::uint16_t flags, const frame_flag flag) noexcept
+		{
+			return (flags & static_cast<std::uint16_t>(flag)) != 0U;
+		}
 
 		[[nodiscard]] error
 		provider_error(std::string code, std::string field, std::string detail = {})
@@ -241,7 +256,32 @@ namespace cxxlens::sdk::provider
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.oversized-payload", "payload"));
 		const auto type = static_cast<std::uint16_t>(value.type);
-		if (type == 0U || type > static_cast<std::uint16_t>(message_type::close))
+		const bool optional_extension = has_flag(value.flags, frame_flag::optional_extension);
+		if (value.protocol_major != limits.protocol_major)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.protocol-major-mismatch", "major"));
+		if (value.protocol_minor < limits.minimum_minor ||
+			value.protocol_minor > limits.maximum_minor)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.protocol-minor-mismatch", "minor"));
+		if ((value.flags & ~known_flag_mask) != 0U ||
+			(has_flag(value.flags, frame_flag::required_extension) && optional_extension) ||
+			(optional_extension && has_flag(value.flags, frame_flag::end_of_stream)) ||
+			(optional_extension && type <= static_cast<std::uint16_t>(message_type::close)))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.invalid-frame-flags", "flags"));
+		if (has_flag(value.flags, frame_flag::required_extension))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.unknown-required-extension", "flags"));
+		if (has_flag(value.flags, frame_flag::compressed_payload))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.unsupported-compression", "flags"));
+		if (has_flag(value.flags, frame_flag::end_of_stream) &&
+			(limits.supported_flags & end_of_stream_flag) == 0U)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.invalid-frame-flags", "end-of-stream"));
+		if (type == 0U ||
+			(type > static_cast<std::uint16_t>(message_type::close) && !optional_extension))
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.unknown-message-type", "type"));
 
@@ -249,10 +289,10 @@ namespace cxxlens::sdk::provider
 		output.reserve(header_size + value.control.size() + value.payload.size());
 		for (const auto byte : std::string_view{"CXXP"})
 			output.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
-		append_big_endian(output, static_cast<std::uint16_t>(1U));
-		append_big_endian(output, static_cast<std::uint16_t>(0U));
+		append_big_endian(output, value.protocol_major);
+		append_big_endian(output, value.protocol_minor);
 		append_big_endian(output, type);
-		append_big_endian(output, static_cast<std::uint16_t>(0U));
+		append_big_endian(output, value.flags);
 		append_big_endian(output, value.stream_id);
 		append_big_endian(output, value.sequence);
 		append_big_endian(output, static_cast<std::uint32_t>(value.control.size()));
@@ -273,13 +313,10 @@ namespace cxxlens::sdk::provider
 		if (std::to_integer<char>(input[0]) != 'C' || std::to_integer<char>(input[1]) != 'X' ||
 			std::to_integer<char>(input[2]) != 'X' || std::to_integer<char>(input[3]) != 'P')
 			return cxxlens::sdk::unexpected(provider_error("provider.malformed-frame", "magic"));
-		if (read_big_endian<std::uint16_t>(input, 4U) != 1U)
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.protocol-major-mismatch", "major"));
+		const auto protocol_major = read_big_endian<std::uint16_t>(input, 4U);
+		const auto protocol_minor = read_big_endian<std::uint16_t>(input, 6U);
 		const auto type = read_big_endian<std::uint16_t>(input, 8U);
-		if (type == 0U || type > static_cast<std::uint16_t>(message_type::close))
-			return cxxlens::sdk::unexpected(
-				provider_error("provider.unknown-message-type", "type"));
+		const auto flags = read_big_endian<std::uint16_t>(input, 10U);
 		const auto control_length = read_big_endian<std::uint32_t>(input, 28U);
 		const auto payload_length = read_big_endian<std::uint64_t>(input, 32U);
 		if (control_length > limits.max_control_bytes || payload_length > limits.max_payload_bytes)
@@ -298,11 +335,52 @@ namespace cxxlens::sdk::provider
 								  static_cast<std::ptrdiff_t>(header_size + control_length));
 		output.payload.assign(
 			input.begin() + static_cast<std::ptrdiff_t>(header_size + control_length), input.end());
+		output.protocol_major = protocol_major;
+		output.protocol_minor = protocol_minor;
+		output.flags = flags;
 		const auto control_digest = digest_bytes(content_digest(output.control));
 		const auto payload_digest = digest_bytes(content_digest(output.payload));
 		if (!std::ranges::equal(control_digest, input.subspan(40U, 32U)) ||
 			!std::ranges::equal(payload_digest, input.subspan(72U, 32U)))
 			return cxxlens::sdk::unexpected(provider_error("provider.checksum-mismatch", "digest"));
+		if (protocol_major != limits.protocol_major)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.protocol-major-mismatch", "major"));
+		if (protocol_minor < limits.minimum_minor || protocol_minor > limits.maximum_minor)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.protocol-minor-mismatch", "minor"));
+		if ((flags & ~known_flag_mask) != 0U)
+			return cxxlens::sdk::unexpected(
+				provider_error(has_flag(flags, frame_flag::required_extension)
+								   ? "provider.unknown-required-extension"
+								   : "provider.invalid-frame-flags",
+							   "flags"));
+		const bool required_extension = has_flag(flags, frame_flag::required_extension);
+		const bool optional_extension = has_flag(flags, frame_flag::optional_extension);
+		if ((required_extension && optional_extension) ||
+			(optional_extension && has_flag(flags, frame_flag::end_of_stream)))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.invalid-frame-flags", "flags"));
+		if (has_flag(flags, frame_flag::compressed_payload))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.unsupported-compression", "flags"));
+		if (has_flag(flags, frame_flag::end_of_stream) &&
+			(limits.supported_flags & end_of_stream_flag) == 0U)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.invalid-frame-flags", "end-of-stream"));
+		if (type == 0U)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.unknown-message-type", "type"));
+		const bool known_type = type <= static_cast<std::uint16_t>(message_type::close);
+		if (optional_extension && known_type)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.invalid-frame-flags", "optional-known-type"));
+		if (required_extension)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.unknown-required-extension", "type"));
+		if (!known_type && !optional_extension)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.unknown-message-type", "type"));
 		return output;
 	}
 
@@ -426,13 +504,17 @@ namespace cxxlens::sdk::provider
 
 	result<void> protocol_writer::send(const message_type type,
 									   const std::span<const std::byte> control,
-									   const std::span<const std::byte> payload)
+									   const std::span<const std::byte> payload,
+									   const std::uint16_t flags)
 	{
 		frame value{type,
 					stream_id_,
 					sequence_,
 					{control.begin(), control.end()},
-					{payload.begin(), payload.end()}};
+					{payload.begin(), payload.end()},
+					limits_.protocol_major,
+					limits_.maximum_minor,
+					flags};
 		auto encoded = encode_frame(value, limits_);
 		if (!encoded)
 			return cxxlens::sdk::unexpected(std::move(encoded.error()));

@@ -15,4 +15,4 @@ cases:
   - {id: noncanonical-cbor-integer, mutation: noncanonical-cbor-integer, expected_reason: provider.malformed-frame}
   - {id: duplicate-cbor-key, mutation: duplicate-cbor-key, expected_reason: provider.malformed-frame}
   - {id: indefinite-cbor, mutation: indefinite-cbor, expected_reason: provider.malformed-frame}
-  - {id: unknown-required-message, mutation: unknown-required-message, expected_reason: provider.required-feature-missing}
+  - {id: unknown-required-message, mutation: unknown-required-message, expected_reason: provider.unknown-required-extension}

@@ -89,10 +89,14 @@ def validate(root: pathlib.Path) -> None:
             "provider.credit-exceeded",
             "provider.batch-invalid",
             "provider.required-feature-missing",
+            "provider.protocol-minor-mismatch",
         ),
         "src/sdk/provider.cpp": (
             "provider.fallback-policy-mismatch",
             "cxxlens.provider-fallback-policy.v1",
+            "provider.unknown-required-extension",
+            "provider.invalid-frame-flags",
+            "provider.unsupported-compression",
         ),
         "src/llvm/clang22/provider_worker.cpp": (
             "frontend.clang22.entity_observation",
@@ -116,8 +120,8 @@ def validate(root: pathlib.Path) -> None:
     catalog = load(root / "schemas/cxxlens_ng_public_api_catalog.yaml")
     entries = {entry["id"]: entry for entry in catalog["entries"]}
     runtime = entries.get("public.provider-runtime")
-    if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#96":
-        raise ContractError("public.provider-runtime is not an implemented Issue #96 entry")
+    if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#97":
+        raise ContractError("public.provider-runtime is not an implemented Issue #97 entry")
 
     namespaces = load(root / "schemas/cxxlens_ng_namespace_registry.yaml")
     if not any(

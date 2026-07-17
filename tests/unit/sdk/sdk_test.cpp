@@ -494,7 +494,46 @@ namespace
 		auto encoded = cxxlens::sdk::provider::encode_frame(frame);
 		require(encoded && encoded->size() == 105U, "protocol header size is not 104 bytes");
 		auto decoded = cxxlens::sdk::provider::decode_frame(*encoded);
-		require(decoded && decoded->type == frame.type, "protocol frame did not round-trip");
+		require(decoded && decoded->type == frame.type && decoded->protocol_major == 1U &&
+					decoded->protocol_minor == 0U && decoded->flags == 0U,
+				"protocol frame header did not round-trip");
+		auto future_minor = *encoded;
+		future_minor.at(7U) = std::byte{0x01};
+		auto unsupported_minor = cxxlens::sdk::provider::decode_frame(future_minor);
+		require(!unsupported_minor &&
+					unsupported_minor.error().code == "provider.protocol-minor-mismatch",
+				"unsupported protocol minor was accepted");
+		cxxlens::sdk::provider::protocol_limits compatible_minor;
+		compatible_minor.maximum_minor = 1U;
+		auto negotiated_minor =
+			cxxlens::sdk::provider::decode_frame(future_minor, compatible_minor);
+		require(negotiated_minor && negotiated_minor->protocol_minor == 1U,
+				"negotiated compatible protocol minor was rejected");
+		auto required_extension = *encoded;
+		required_extension.at(11U) = std::byte{0x11};
+		auto unknown_required = cxxlens::sdk::provider::decode_frame(required_extension);
+		require(!unknown_required &&
+					unknown_required.error().code == "provider.unknown-required-extension",
+				"unknown required extension flag was accepted");
+		auto optional_extension = *encoded;
+		optional_extension.at(8U) = std::byte{0xfd};
+		optional_extension.at(9U) = std::byte{0xe8};
+		optional_extension.at(11U) = std::byte{0x02};
+		auto unknown_optional = cxxlens::sdk::provider::decode_frame(optional_extension);
+		require(unknown_optional && unknown_optional->flags == 2U &&
+					static_cast<std::uint16_t>(unknown_optional->type) == 65000U,
+				"unknown optional extension was not preserved for skip accounting");
+		auto compressed = *encoded;
+		compressed.at(11U) = std::byte{0x04};
+		auto unsupported_compression = cxxlens::sdk::provider::decode_frame(compressed);
+		require(!unsupported_compression &&
+					unsupported_compression.error().code == "provider.unsupported-compression",
+				"compressed payload without a negotiated codec was accepted");
+		auto reserved = *encoded;
+		reserved.at(11U) = std::byte{0x10};
+		auto unknown_flags = cxxlens::sdk::provider::decode_frame(reserved);
+		require(!unknown_flags && unknown_flags.error().code == "provider.invalid-frame-flags",
+				"reserved frame flag was accepted");
 		encoded->at(40U) ^= std::byte{0x01};
 		auto corrupt = cxxlens::sdk::provider::decode_frame(*encoded);
 		require(!corrupt && corrupt.error().code == "provider.checksum-mismatch",

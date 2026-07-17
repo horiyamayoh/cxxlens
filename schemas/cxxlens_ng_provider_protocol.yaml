@@ -1,11 +1,11 @@
 schema: cxxlens.provider-protocol.v1
-document_version: 1.1.0
+document_version: 1.2.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#18-provider-protocol
   index: docs/design/catalogs/README.md
-  decision_adr: docs/design/adr/0038-provider-runtime-protocol-state-validation.md
-  owner_issue: '#95'
+  decision_adr: docs/design/adr/0040-provider-frame-version-and-flags.md
+  owner_issue: '#97'
   owner: steward.ng-provider-protocol
 compatibility:
   version_axis: provider-protocol
@@ -73,6 +73,15 @@ wire:
     optional_extension: 2
     compressed_payload: 4
     end_of_stream: 8
+  header_validation:
+    protocol_major: exact-session-major
+    protocol_minor: exact-negotiated-session-minor
+    reserved_flag_bits: reject
+    unknown_required_extension: reject
+    unknown_optional_extension: checksum-length-credit-account-then-skip
+    compressed_payload_without_negotiated_codec: reject
+    end_of_stream: final-task-complete-or-task-failed-only
+    transcript_identity: [protocol_major, protocol_minor, flags, message_type, stream_id, sequence, control_digest, payload_digest]
 message_types:
   registry:
     - {id: 1, name: hello, direction: provider-to-host, profile: NG0}
@@ -117,6 +126,10 @@ state_machine_validation:
     - closure-empty-or-independently-validated
     - no-output-after-terminal
   deterministic_rejections:
+    - provider.protocol-minor-mismatch
+    - provider.unknown-required-extension
+    - provider.invalid-frame-flags
+    - provider.unsupported-compression
     - provider.protocol-state-invalid
     - provider.credit-exceeded
     - provider.task-binding-mismatch
@@ -240,6 +253,10 @@ failures:
     - provider.malformed-frame
     - provider.checksum-mismatch
     - provider.truncated-stream
+    - provider.protocol-minor-mismatch
+    - provider.unknown-required-extension
+    - provider.invalid-frame-flags
+    - provider.unsupported-compression
     - provider.schema-invalid
     - provider.hard-reference-missing
     - provider.coverage-incomplete

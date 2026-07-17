@@ -20,7 +20,8 @@
 namespace cxxlens::sdk::provider
 {
 	/** @brief Exact protocol v1 message types. */
-	enum class message_type : std::uint8_t
+	// The uint16 wire domain must retain unknown optional message IDs for accounting.
+	enum class message_type : std::uint16_t // NOLINT(performance-enum-size)
 	{
 		hello = 1,
 		hello_ack = 2,
@@ -46,14 +47,27 @@ namespace cxxlens::sdk::provider
 		close = 22,
 	};
 
-	/** @brief Negotiated protocol frame limits. */
+	/** @brief Closed provider frame flag bits from the protocol v1 header. */
+	enum class frame_flag : std::uint8_t
+	{
+		required_extension = 1U,
+		optional_extension = 2U,
+		compressed_payload = 4U,
+		end_of_stream = 8U,
+	};
+
+	/** @brief Exact negotiated protocol version, supported flags, and frame limits. */
 	struct protocol_limits
 	{
 		std::uint32_t max_control_bytes{65536U};
 		std::uint64_t max_payload_bytes{16777216U};
+		std::uint16_t protocol_major{1U};
+		std::uint16_t minimum_minor{};
+		std::uint16_t maximum_minor{};
+		std::uint16_t supported_flags{static_cast<std::uint16_t>(frame_flag::end_of_stream)};
 	};
 
-	/** @brief Decoded and checksum-validated protocol frame. */
+	/** @brief Decoded frame retaining all semantic header fields after validation. */
 	struct frame
 	{
 		message_type type{message_type::hello};
@@ -61,12 +75,19 @@ namespace cxxlens::sdk::provider
 		std::uint64_t sequence{};
 		std::vector<std::byte> control;
 		std::vector<std::byte> payload;
+		std::uint16_t protocol_major{1U};
+		std::uint16_t protocol_minor{};
+		std::uint16_t flags{};
 	};
 
 	/** @brief Encode one 104-byte-header protocol frame with independent SHA-256 checksums. */
 	[[nodiscard]] result<std::vector<std::byte>> encode_frame(const frame& value,
 															  protocol_limits limits = {});
-	/** @brief Decode, bound-check, and verify exactly one protocol frame. */
+	/**
+	 * @brief Decode, bound-check, and verify exactly one protocol frame.
+	 * @details The negotiated minor range and flags fail closed. Unknown optional message types are
+	 * retained for byte/frame accounting and must be skipped by the session state validator.
+	 */
 	[[nodiscard]] result<frame> decode_frame(std::span<const std::byte> input,
 											 protocol_limits limits = {});
 	/** @brief Decode a bounded concatenated transcript without accepting trailing fragments. */
@@ -100,7 +121,8 @@ namespace cxxlens::sdk::provider
 		void grant_credit(protocol_credit amount) noexcept;
 		[[nodiscard]] result<void> send(message_type type,
 										std::span<const std::byte> control = {},
-										std::span<const std::byte> payload = {});
+										std::span<const std::byte> payload = {},
+										std::uint16_t flags = 0U);
 		[[nodiscard]] std::uint64_t remaining_bytes() const noexcept;
 		[[nodiscard]] std::uint64_t remaining_frames() const noexcept;
 

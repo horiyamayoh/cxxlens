@@ -98,7 +98,9 @@ int main(const int argument_count, const char* const* arguments)
 	bytes.reserve(input.size());
 	for (const auto byte : input)
 		bytes.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
-	auto frames = decode_frame_stream(bytes);
+	protocol_limits input_limits;
+	input_limits.maximum_minor = std::numeric_limits<std::uint16_t>::max();
+	auto frames = decode_frame_stream(bytes, input_limits);
 	if (!frames || frames->size() != 5U || frames->at(0U).type != message_type::hello_ack ||
 		frames->at(1U).type != message_type::schema_negotiate ||
 		frames->at(2U).type != message_type::open_task ||
@@ -121,12 +123,18 @@ int main(const int argument_count, const char* const* arguments)
 	}
 
 	stdout_sink sink;
-	protocol_writer writer{sink};
+	protocol_limits output_limits;
+	output_limits.protocol_major = frames->front().protocol_major;
+	output_limits.minimum_minor = frames->front().protocol_minor;
+	output_limits.maximum_minor = frames->front().protocol_minor;
+	protocol_writer writer{sink, output_limits};
 	writer.grant_credit({64U * 1024U * 1024U, 65536U});
 	auto identity = decode_control_text(frames->at(0U).control).value();
 	if (mode == "wrong-identity")
 		identity.replace(identity.find(provider_id), provider_id.size(), "company.test.other");
-	if (!writer.send(message_type::hello, control(identity)))
+	const auto hello_flags =
+		mode == "bad-eos" ? static_cast<std::uint16_t>(frame_flag::end_of_stream) : std::uint16_t{};
+	if (!writer.send(message_type::hello, control(identity), {}, hello_flags))
 		return EXIT_FAILURE;
 	if (mode == "minimal")
 		return writer.send(message_type::task_complete, control("task-1|complete")) ? EXIT_SUCCESS
@@ -155,6 +163,12 @@ int main(const int argument_count, const char* const* arguments)
 		return writer.send(message_type::task_complete, control("task-1|complete")) ? EXIT_SUCCESS
 																					: EXIT_FAILURE;
 	}
+	if (mode == "optional-extension" &&
+		!writer.send(static_cast<message_type>(65000U),
+					 control("company.optional-extension"),
+					 {},
+					 static_cast<std::uint16_t>(frame_flag::optional_extension)))
+		return EXIT_FAILURE;
 	if (mode == "network-check")
 	{
 		const auto descriptor = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -191,10 +205,13 @@ int main(const int argument_count, const char* const* arguments)
 		return EXIT_FAILURE;
 	const auto coverage =
 		mode == "incomplete-coverage" ? "project|catalog|covered|" : "task|task-1|covered|";
+	const auto terminal_flags = mode == "success-eos"
+		? static_cast<std::uint16_t>(frame_flag::end_of_stream)
+		: std::uint16_t{};
 	if (!writer.send(message_type::coverage_chunk, control(coverage)) ||
 		!writer.send(message_type::unresolved_chunk, control("")) ||
 		!writer.send(message_type::progress, control("")) ||
-		!writer.send(message_type::task_complete, control("task-1|complete")))
+		!writer.send(message_type::task_complete, control("task-1|complete"), {}, terminal_flags))
 		return EXIT_FAILURE;
 	return EXIT_SUCCESS;
 }

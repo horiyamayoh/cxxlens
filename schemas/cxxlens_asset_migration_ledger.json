@@ -1,5 +1,5 @@
 {
-  "asset_count": 286,
+  "asset_count": 287,
   "assets": [
     {
       "authority": "active",
@@ -683,6 +683,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0039-exact-provider-fallback-policy.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0040-provider-frame-version-and-flags.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2005,7 +2012,7 @@
     }
   ],
   "classifications": {
-    "active": 250,
+    "active": 251,
     "archived": 35,
     "generated": 1
   },

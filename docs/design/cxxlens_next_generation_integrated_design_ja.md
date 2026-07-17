@@ -2317,6 +2317,15 @@ Issue #64 / ADR 0010 で exact wire を確定した。machine-readable authority
 - bulk data は validity bitset、fixed-width、offset、dictionary index、blob reference の binary column chunk
 - native struct layout、pointer、ABI-dependent payload は禁止
 
+ADR 0040 により、decoder は major/minor/flags を public frame に保持し、session negotiation で選んだ exact
+major/minor と全 frame を照合する。reserved bit と unknown required extension は reject し、codec 未交渉の
+compressed payload を上位へ渡さない。unknown optional message は length/checksum/sequence/byte-and-frame credit を
+account した decoded frame として report に保持してから typed state transition だけを skip する。
+
+`end_of_stream` は最終 `TASK_COMPLETE` または `TASK_FAILED` にだけ許可し、terminal より前、optional extension、
+terminal 後の frame は reject する。semantic transcript projection は protocol major/minor、flags、message type、
+stream、sequence、control/payload digest を含み、header semantics の差を identity から落としてはならない。
+
 control と payload の checksum は独立し、logical message semantics は encoding implementation に依存させない。
 protocol 仕様は mandatory runtime library を追加しない。外部 CBOR implementation の採用には license review、
 canonical conformance vector、fuzz corpus 通過を必須とする。

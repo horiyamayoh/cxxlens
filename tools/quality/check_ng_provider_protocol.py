@@ -241,7 +241,12 @@ def _known_message_ids(contract: dict[str, Any]) -> set[int]:
     return {row["id"] for row in contract["message_types"]["registry"]}
 
 
-def decode_frame(contract: dict[str, Any], data: bytes) -> dict[str, Any]:
+def decode_frame(
+    contract: dict[str, Any],
+    data: bytes,
+    *,
+    negotiated_minor: int = 0,
+) -> dict[str, Any]:
     if len(data) < FRAME.size:
         fail("provider.truncated-stream", "fixed header")
     fields = FRAME.unpack(data[: FRAME.size])
@@ -252,11 +257,15 @@ def decode_frame(contract: dict[str, Any], data: bytes) -> dict[str, Any]:
     expected_major = int(contract["compatibility"]["current"].split(".", 1)[0])
     if major != expected_major:
         fail("provider.protocol-major-mismatch", str(major))
+    if minor != negotiated_minor:
+        fail("provider.protocol-minor-mismatch", str(minor))
     known_flags = 0
     for flag in contract["wire"]["flags"].values():
         known_flags |= flag
     if flags & ~known_flags:
-        fail("provider.malformed-frame", "unknown frame flag")
+        if flags & contract["wire"]["flags"]["required_extension"]:
+            fail("provider.unknown-required-extension", str(flags))
+        fail("provider.invalid-frame-flags", str(flags))
     if control_length > MAX_CONTROL or payload_length > MAX_PAYLOAD:
         fail("provider.output-limit", "declared frame length")
     total = FRAME.size + control_length + payload_length
@@ -269,17 +278,24 @@ def decode_frame(contract: dict[str, Any], data: bytes) -> dict[str, Any]:
     if hashlib.sha256(payload).digest() != payload_hash:
         fail("provider.checksum-mismatch", "payload")
     decoded = cbor_decode(control)
-    if message_type not in _known_message_ids(contract):
-        required = flags & contract["wire"]["flags"]["required_extension"]
-        optional = flags & contract["wire"]["flags"]["optional_extension"]
-        if required and optional:
-            fail("provider.malformed-frame", "conflicting extension flags")
-        if required:
-            fail("provider.required-feature-missing", str(message_type))
-        if not optional:
-            fail("provider.malformed-frame", "unclassified unknown message")
-        return {"skipped_optional": True}
-    return {
+    required = flags & contract["wire"]["flags"]["required_extension"]
+    optional = flags & contract["wire"]["flags"]["optional_extension"]
+    compressed = flags & contract["wire"]["flags"]["compressed_payload"]
+    eos = flags & contract["wire"]["flags"]["end_of_stream"]
+    if required and optional:
+        fail("provider.invalid-frame-flags", "conflicting extension flags")
+    if compressed:
+        fail("provider.unsupported-compression", "no negotiated codec")
+    if required:
+        fail("provider.unknown-required-extension", str(message_type))
+    known_message = message_type in _known_message_ids(contract)
+    if not known_message and not optional:
+        fail("provider.unknown-message-type", str(message_type))
+    if known_message and optional:
+        fail("provider.invalid-frame-flags", "optional flag on base message")
+    if optional and eos:
+        fail("provider.invalid-frame-flags", "optional extension cannot terminate")
+    result = {
         "protocol_major": major,
         "protocol_minor": minor,
         "message_type": message_type,
@@ -289,6 +305,10 @@ def decode_frame(contract: dict[str, Any], data: bytes) -> dict[str, Any]:
         "control": decoded,
         "payload_hex": payload.hex(),
     }
+    if not known_message:
+        result["skipped_optional"] = True
+        result["accounted_bytes"] = len(data)
+    return result
 
 
 def _replace_frame_lengths(

@@ -44,12 +44,22 @@ vectors:
     expected:
       decision: accepted
       reason_code: provider.wire-valid
-      value: {skipped_optional: true}
+      value:
+        protocol_major: 1
+        protocol_minor: 0
+        message_type: 65000
+        flags: 2
+        stream_id: 0
+        sequence: 0
+        control: {}
+        payload_hex: ''
+        skipped_optional: true
+        accounted_bytes: 105
   - id: wire-unknown-required
     class: negative
     operation: wire
     input: {action: unknown_message, message_type: 65000, flags: 1}
-    expected: {decision: rejected, reason_code: provider.required-feature-missing}
+    expected: {decision: rejected, reason_code: provider.unknown-required-extension}
   - id: negotiate-exact
     class: positive
     operation: negotiate

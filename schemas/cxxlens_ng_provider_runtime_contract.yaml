@@ -1,10 +1,10 @@
 schema: cxxlens.provider-runtime-contract.v1
-document_version: 1.2.0
+document_version: 1.3.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#17-provider-model
-  decision_adr: docs/design/adr/0039-exact-provider-fallback-policy.md
-  owner_issue: '#96'
+  decision_adr: docs/design/adr/0040-provider-frame-version-and-flags.md
+  owner_issue: '#97'
   owner: steward.ng-provider-runtime
 dependencies:
   - schemas/cxxlens_ng_provider_protocol.yaml
@@ -74,6 +74,11 @@ selection:
     all_candidates: required
     fields: [source, exact_identity, selected, reason, fallback_used]
 protocol_session:
+  negotiated_header:
+    protocol_major: exact
+    protocol_minor: highest-compatible-then-exact-per-frame
+    flags: retained-and-validated
+    semantic_transcript_projection: [protocol-major, protocol-minor, flags, message-type, stream-id, sequence, control-digest, payload-digest]
   host_input:
     - hello_ack
     - schema_negotiate
@@ -102,6 +107,10 @@ protocol_session:
     side_channels: coverage-unresolved-progress-complete
     closure: empty-or-independently-validated
     terminal: task-bound-and-all-groups-sealed
+    unknown_optional_extension: checksum-length-and-credit-accounted-then-state-skipped
+    unknown_required_extension: reject
+    compressed_payload_without_negotiated_codec: reject
+    end_of_stream: final-terminal-frame-only
     validator_bypass: forbidden
   sequence: contiguous-from-zero
   terminal_last: required
@@ -127,6 +136,10 @@ terminal:
     - provider.batch-invalid
     - provider.relation-incompatible
     - provider.required-feature-missing
+    - provider.protocol-minor-mismatch
+    - provider.unknown-required-extension
+    - provider.invalid-frame-flags
+    - provider.unsupported-compression
     - provider.frontend-request-invalid
     - security.sandbox-insufficient
   prior_published_snapshot: immutable
@@ -190,3 +203,4 @@ acceptance:
   - insufficient-enforced-sandbox-is-unavailable
   - worker-native-sdk-provider-package-install-conformance
   - process-transcript-typed-state-machine-and-logical-wire-parity
+  - protocol-version-flags-and-extension-semantics-fail-closed
