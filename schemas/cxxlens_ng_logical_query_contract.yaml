@@ -1,5 +1,5 @@
 schema: cxxlens.logical-query-contract.v1
-document_version: 1.5.0
+document_version: 1.6.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#20-logical-query
@@ -174,6 +174,16 @@ canonicalization:
   static_dynamic_surface_removed: true
   operator_arguments: typed-decode-then-canonical-json-reencode
   noncanonical_json_input: accept-and-normalize-if-exact-typed-shape
+  json_lexical_profile:
+    standard: RFC-8259
+    integer: zero-or-nonzero-leading-digits-no-leading-zero
+    whitespace: [space, tab, lf, cr]
+    raw_string: strict-utf8
+    bmp_escape: accept-non-surrogate
+    surrogate_pair: combine-high-plus-low
+    isolated_surrogate: reject
+    duplicate_object_key: reject
+    bounds: [four-mebibyte-input, depth-64]
   relation_requirements_sort: descriptor-id
   object_members_sort: utf8-code-unit
   set_members_sort: canonical-json

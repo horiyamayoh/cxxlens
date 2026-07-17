@@ -653,6 +653,55 @@ namespace
 		auto valid = scan_query(data.left);
 		require(valid.validate().has_value(), "builder scan IR did not validate");
 
+		const auto decode_limit = [](std::string arguments)
+		{
+			return query::decode_arguments(
+				{"limit", "query.limit.v1", {"input"}, std::move(arguments)});
+		};
+		require(decode_limit(R"({"count":0})") && decode_limit(R"({"count":10})"),
+				"valid JSON integer was rejected");
+		for (const auto* invalid : {R"({"count":00})", R"({"count":01})", R"({"count":-01})"})
+			require(!decode_limit(invalid), "leading-zero JSON integer was accepted");
+
+		auto unicode_source = query::builder::from(data.left);
+		require(unicode_source.has_value(), "Unicode query source failed");
+		auto unicode_builder = std::move(*unicode_source).interpretation_restrict("domain-😀-雪");
+		require(unicode_builder.has_value(), "Unicode query construction failed");
+		auto canonical_unicode = std::move(*unicode_builder).finish();
+		auto escaped_unicode = canonical_unicode;
+		escaped_unicode.nodes.back().arguments =
+			R"({"interpretation":"domain-\uD83D\uDE00-\u96ea"})";
+		require(escaped_unicode.validate().has_value() &&
+					escaped_unicode.digest() == canonical_unicode.digest(),
+				"valid surrogate pair/BMP escape did not normalize to UTF-8 identity");
+		for (const auto* invalid : {R"({"interpretation":"domain-\uD83D"})",
+									R"({"interpretation":"domain-\uDE00"})",
+									R"({"interpretation":"domain-\uD83D\u0041"})"})
+		{
+			query::ir_node node{"unicode", "query.interpretation_restrict.v1", {"input"}, invalid};
+			require(!query::decode_arguments(node), "isolated or malformed surrogate was accepted");
+		}
+		for (const auto& invalid_utf8 : {std::string{"\xc0\xaf", 2U},
+										 std::string{"\x80", 1U},
+										 std::string{"\xe2\x82", 2U},
+										 std::string{"\xed\xa0\x80", 3U},
+										 std::string{"\xf4\x90\x80\x80", 4U}})
+		{
+			query::ir_node node{"utf8",
+								"query.interpretation_restrict.v1",
+								{"input"},
+								"{\"interpretation\":\"domain-" + invalid_utf8 + "\"}"};
+			require(!query::decode_arguments(node), "invalid raw UTF-8 JSON string was accepted");
+		}
+		for (const auto invalid_space : {'\v', '\f'})
+		{
+			query::ir_node node{"space",
+								"query.limit.v1",
+								{"input"},
+								std::string{"{\"count\":"} + invalid_space + "0}"};
+			require(!query::decode_arguments(node), "non-JSON whitespace was accepted");
+		}
+
 		auto canonical_scan_source = query::builder::from(data.left, "items");
 		require(canonical_scan_source.has_value(), "canonical scan source failed");
 		auto canonical_scan = std::move(*canonical_scan_source).finish();

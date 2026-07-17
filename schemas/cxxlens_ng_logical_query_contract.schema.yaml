@@ -168,6 +168,7 @@ properties:
     - static_dynamic_surface_removed
     - operator_arguments
     - noncanonical_json_input
+    - json_lexical_profile
     - relation_requirements_sort
     - object_members_sort
     - set_members_sort

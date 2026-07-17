@@ -1,5 +1,5 @@
 {
-  "asset_count": 276,
+  "asset_count": 278,
   "assets": [
     {
       "authority": "active",
@@ -620,6 +620,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0030-shared-canonical-json-and-utf8-validation.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0031-query-json-lexical-and-unicode-validation.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1480,6 +1487,13 @@
     },
     {
       "authority": "active",
+      "path": "src/sdk/json_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/sdk/provider.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -1935,7 +1949,7 @@
     }
   ],
   "classifications": {
-    "active": 240,
+    "active": 242,
     "archived": 35,
     "generated": 1
   },

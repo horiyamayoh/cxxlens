@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
@@ -15,6 +14,8 @@
 #include <vector>
 
 #include <cxxlens/sdk/query.hpp>
+
+#include "json_internal.hpp"
 
 namespace cxxlens::sdk::query
 {
@@ -170,7 +171,11 @@ namespace cxxlens::sdk::query
 				{
 					const auto byte = static_cast<unsigned char>(input_[position_++]);
 					if (byte == '"')
+					{
+						if (!cxxlens::sdk::detail::valid_utf8(output))
+							return unexpected(decode_error("arguments", "invalid-utf8"));
 						return output;
+					}
 					if (byte < 0x20U)
 						return unexpected(decode_error("arguments", "control-character"));
 					if (byte != '\\')
@@ -205,8 +210,22 @@ namespace cxxlens::sdk::query
 						case 'u':
 						{
 							auto code_point = hexadecimal_quad();
-							if (!code_point || (*code_point >= 0xd800U && *code_point <= 0xdfffU))
+							if (!code_point)
 								return unexpected(decode_error("arguments", "unicode-escape"));
+							if (*code_point >= 0xd800U && *code_point <= 0xdbffU)
+							{
+								if (position_ + 2U > input_.size() || input_[position_] != '\\' ||
+									input_[position_ + 1U] != 'u')
+									return unexpected(decode_error("arguments", "surrogate-pair"));
+								position_ += 2U;
+								auto low = hexadecimal_quad();
+								if (!low || *low < 0xdc00U || *low > 0xdfffU)
+									return unexpected(decode_error("arguments", "surrogate-pair"));
+								*code_point =
+									0x10000U + ((*code_point - 0xd800U) << 10U) + (*low - 0xdc00U);
+							}
+							else if (*code_point >= 0xdc00U && *code_point <= 0xdfffU)
+								return unexpected(decode_error("arguments", "surrogate-pair"));
 							append_utf8(output, *code_point);
 							break;
 						}
@@ -243,10 +262,12 @@ namespace cxxlens::sdk::query
 				const auto begin = position_;
 				if (position_ < input_.size() && input_[position_] == '-')
 					++position_;
+				const auto digits_begin = position_;
 				while (position_ < input_.size() && input_[position_] >= '0' &&
 					   input_[position_] <= '9')
 					++position_;
-				if (begin == position_ || (position_ == begin + 1U && input_[begin] == '-') ||
+				if (digits_begin == position_ ||
+					(position_ - digits_begin > 1U && input_[digits_begin] == '0') ||
 					(position_ < input_.size() &&
 					 std::string_view{".eE+"}.contains(input_[position_])))
 					return unexpected(decode_error("arguments", "integer-expected"));
@@ -280,7 +301,8 @@ namespace cxxlens::sdk::query
 			void space()
 			{
 				while (position_ < input_.size() &&
-					   std::isspace(static_cast<unsigned char>(input_[position_])) != 0)
+					   (input_[position_] == ' ' || input_[position_] == '\t' ||
+						input_[position_] == '\n' || input_[position_] == '\r'))
 					++position_;
 			}
 

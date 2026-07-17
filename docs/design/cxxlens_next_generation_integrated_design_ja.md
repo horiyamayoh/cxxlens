@@ -2489,6 +2489,11 @@ JSON へ再 encode する。noncanonical whitespace/member order/equivalent esca
 `and` / `or` operand は canonical sort/dedup する。typed value が同じなら surface/serializer に依存せず digest は同じで
 なければならない。
 
+Issue #88 / ADR 0031 により argument JSON decoder は RFC 8259 lexical/Unicode rules を bounded fail-closed parser として
+適用する。integer leading zero、invalid raw UTF-8、isolated surrogate、vertical tab/form feed whitespace を拒否し、valid
+high+low surrogate pair は non-BMP code point に合成する。raw UTF-8、BMP escape、surrogate pair が同じ Unicode scalar sequence
+を表す場合、typed decode 後の canonical JSON と digest は一致しなければならない。
+
 ### 20.3 Collection and cell algebra
 
 Logical Query IR v1 の既定 collection は annotated multiset である。一 occurrence は次を持つ。
