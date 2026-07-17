@@ -35,7 +35,7 @@ namespace cxxlens::detail::clang22
 		using sdk::provider::message_type;
 
 		constexpr std::string_view provider_id = "cxxlens.clang22.reference";
-		constexpr std::string_view task_magic = "cxxlens.clang22.task.v1";
+		constexpr std::string_view task_magic = "cxxlens.clang22.task.v2";
 		const sdk::semantic_version provider_version{1U, 0U, 0U};
 		constexpr std::uint32_t maximum_string_bytes = 64U * 1024U * 1024U;
 		constexpr std::uint32_t maximum_arguments = 1024U;
@@ -467,8 +467,11 @@ namespace cxxlens::detail::clang22
 		{
 		  public:
 			observation_visitor(provider::clang22::borrowed_translation_unit& unit,
-								observation_batch& output)
-				: unit_{&unit}, output_{&output}
+								observation_batch& output,
+								std::string source_snapshot,
+								std::string file)
+				: unit_{&unit}, output_{&output}, source_snapshot_{std::move(source_snapshot)},
+				  file_{std::move(file)}
 			{
 			}
 
@@ -500,7 +503,9 @@ namespace cxxlens::detail::clang22
 				entity.payload.emplace("symbol.signature",
 									   declaration->getType().getCanonicalType().getAsString());
 				auto source =
-					provider::clang22::normalize_source(*unit_, declaration->getSourceRange());
+					provider::clang22::normalize_source(*unit_,
+														declaration->getSourceRange(),
+														{source_snapshot_, file_, "declaration"});
 				if (source)
 					entity.source_span_id = std::move(source->id);
 				insert(std::move(entity));
@@ -531,8 +536,8 @@ namespace cxxlens::detail::clang22
 					call.payload.emplace("call.direct_callee", declaration_key(*callee));
 				else
 					call.payload.emplace("call.unresolved_reason", "no-direct-callee");
-				auto source =
-					provider::clang22::normalize_source(*unit_, expression->getSourceRange());
+				auto source = provider::clang22::normalize_source(
+					*unit_, expression->getSourceRange(), {source_snapshot_, file_, "expression"});
 				if (!source)
 				{
 					++output_->failed_count;
@@ -560,6 +565,8 @@ namespace cxxlens::detail::clang22
 
 			provider::clang22::borrowed_translation_unit* unit_;
 			observation_batch* output_;
+			std::string source_snapshot_;
+			std::string file_;
 			std::string current_function_;
 			std::map<std::string, std::size_t, std::less<>> seen_;
 		};
@@ -570,20 +577,25 @@ namespace cxxlens::detail::clang22
 			observation_batch output;
 			output.unit = input.compile_unit;
 			output.variant = input.variant;
-			provider::clang22::translation_unit_input native_input{
-				input.logical_path, input.source, input.arguments};
+			provider::clang22::translation_unit_input native_input{input.source_snapshot,
+																   input.file,
+																   input.logical_path,
+																   input.source,
+																   input.arguments};
 			auto outcome = provider::clang22::with_translation_unit(
 				native_input,
-				[&output](provider::clang22::borrowed_translation_unit& unit) -> sdk::result<void>
+				[&output,
+				 &input](provider::clang22::borrowed_translation_unit& unit) -> sdk::result<void>
 				{
 #if CXXLENS_HAS_CLANG22
-					observation_visitor visitor{unit, output};
+					observation_visitor visitor{unit, output, input.source_snapshot, input.file};
 					if (!visitor.TraverseDecl(unit.ast().getTranslationUnitDecl()))
 						return sdk::unexpected(
 							provider_error("provider.native-traversal-failed", output.unit));
 					return {};
 #else
 					(void)unit;
+					(void)input;
 					return sdk::unexpected(provider_error(
 						"native.unsupported-clang-major", output.unit, "clang-major-22"));
 #endif
@@ -749,7 +761,8 @@ namespace cxxlens::detail::clang22
 	{
 		if (compile_unit.empty() || variant.empty())
 			return sdk::unexpected(provider_error("provider.frontend-request-invalid", "identity"));
-		return provider::clang22::translation_unit_input{logical_path, source, arguments}
+		return provider::clang22::translation_unit_input{
+			source_snapshot, file, logical_path, source, arguments}
 			.validate();
 	}
 
@@ -764,6 +777,8 @@ namespace cxxlens::detail::clang22
 		writer.string(task_magic);
 		writer.string(input.compile_unit);
 		writer.string(input.variant);
+		writer.string(input.source_snapshot);
+		writer.string(input.file);
 		writer.string(input.logical_path);
 		writer.string(input.source);
 		writer.integer(static_cast<std::uint32_t>(input.arguments.size()));
@@ -778,15 +793,19 @@ namespace cxxlens::detail::clang22
 		auto magic = reader.string();
 		auto compile_unit = reader.string();
 		auto variant = reader.string();
+		auto source_snapshot = reader.string();
+		auto file = reader.string();
 		auto logical_path = reader.string();
 		auto source = reader.string();
 		auto count = reader.integer();
-		if (!magic || !compile_unit || !variant || !logical_path || !source || !count ||
-			*magic != task_magic || *count > maximum_arguments)
+		if (!magic || !compile_unit || !variant || !source_snapshot || !file || !logical_path ||
+			!source || !count || *magic != task_magic || *count > maximum_arguments)
 			return sdk::unexpected(provider_error("provider.frontend-request-invalid", "payload"));
 		clang22_task_input output{
 			std::move(*compile_unit),
 			std::move(*variant),
+			std::move(*source_snapshot),
+			std::move(*file),
 			std::move(*logical_path),
 			std::move(*source),
 			{},

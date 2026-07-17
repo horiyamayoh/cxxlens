@@ -47,6 +47,8 @@ namespace cxxlens::detail::clang22
 	{
 		std::string compile_unit;
 		std::string variant;
+		std::string source_snapshot;
+		std::string file;
 		std::string logical_path;
 		std::string source;
 		std::vector<std::string> arguments;

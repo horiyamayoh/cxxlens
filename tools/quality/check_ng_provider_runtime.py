@@ -146,6 +146,8 @@ def validate(root: pathlib.Path) -> None:
             "ignored-or-gcc-specific-option",
             "entity_identity",
             "call.direct_callee",
+            "cxxlens.clang22.task.v2",
+            "source_snapshot",
         ),
         "CMakeLists.txt": (
             "cxxlens-clang-worker-22",
@@ -164,8 +166,8 @@ def validate(root: pathlib.Path) -> None:
     catalog = load(root / "schemas/cxxlens_ng_public_api_catalog.yaml")
     entries = {entry["id"]: entry for entry in catalog["entries"]}
     runtime = entries.get("public.provider-runtime")
-    if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#105":
-        raise ContractError("public.provider-runtime is not an implemented Issue #105 entry")
+    if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#106":
+        raise ContractError("public.provider-runtime is not an implemented Issue #106 entry")
 
     namespaces = load(root / "schemas/cxxlens_ng_namespace_registry.yaml")
     if not any(

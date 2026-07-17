@@ -29,6 +29,8 @@ namespace cxxlens::provider::clang22
 	/** @brief One in-memory Clang translation-unit request with explicit arguments. */
 	struct translation_unit_input
 	{
+		std::string source_snapshot;
+		std::string file;
 		std::string logical_path;
 		std::string source;
 		std::vector<std::string> arguments;
@@ -67,6 +69,9 @@ namespace cxxlens::provider::clang22
 	/** @brief Detached half-open source location independent from Clang object lifetime. */
 	struct detached_source_span
 	{
+		std::string source_snapshot;
+		std::string file;
+		std::string role;
 		std::string logical_path;
 		std::uint64_t begin{};
 		std::uint64_t end{};
@@ -75,9 +80,20 @@ namespace cxxlens::provider::clang22
 		[[nodiscard]] sdk::result<void> validate() const;
 	};
 
+	/** @brief Exact snapshot, file, and semantic range role used by source.span identity. */
+	struct source_range_identity
+	{
+		std::string source_snapshot;
+		std::string file;
+		std::string role;
+		[[nodiscard]] sdk::result<void> validate() const;
+	};
+
 	/** @brief Normalize a native source range to a detached half-open source value. */
 	[[nodiscard]] sdk::result<detached_source_span>
-	normalize_source(borrowed_translation_unit& unit, const clang::SourceRange& range);
+	normalize_source(borrowed_translation_unit& unit,
+					 const clang::SourceRange& range,
+					 const source_range_identity& identity);
 
 	/** @brief Validate that a detached row contains no native pointer/address marker. */
 	[[nodiscard]] sdk::result<void> detect_native_escape(const sdk::detached_row& row);

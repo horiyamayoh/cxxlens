@@ -97,6 +97,8 @@ namespace cxxlens::provider::clang22
 
 	sdk::result<void> translation_unit_input::validate() const
 	{
+		if (source_snapshot.empty() || file.empty())
+			return sdk::unexpected(native_error("native.input-invalid", "source-identity"));
 		if (logical_path.empty() || logical_path.front() == '/' ||
 			logical_path.find("..") != std::string::npos)
 			return sdk::unexpected(
@@ -154,14 +156,29 @@ namespace cxxlens::provider::clang22
 
 	sdk::result<void> detached_source_span::validate() const
 	{
-		if (logical_path.empty() || logical_path.front() == '/' || end < begin || id.empty())
+		if (source_snapshot.empty() || file.empty() || role.empty() || logical_path.empty() ||
+			logical_path.front() == '/' || end < begin || id.empty())
 			return sdk::unexpected(native_error("native.source-span-invalid", "source"));
+		auto expected = sdk::source_span_identity(source_snapshot, file, begin, end, role);
+		if (!expected || *expected != id)
+			return sdk::unexpected(native_error("native.source-span-invalid", "identity"));
+		return {};
+	}
+
+	sdk::result<void> source_range_identity::validate() const
+	{
+		if (source_snapshot.empty() || file.empty() || role.empty() ||
+			role.find('\0') != std::string::npos)
+			return sdk::unexpected(native_error("native.source-span-invalid", "identity-input"));
 		return {};
 	}
 
 	sdk::result<detached_source_span> normalize_source(borrowed_translation_unit& unit,
-													   const clang::SourceRange& range)
+													   const clang::SourceRange& range,
+													   const source_range_identity& identity)
 	{
+		if (auto valid = identity.validate(); !valid)
+			return sdk::unexpected(std::move(valid.error()));
 #if CXXLENS_HAS_CLANG22
 		auto& source_manager = unit.source_manager();
 		const auto begin_location = source_manager.getSpellingLoc(range.getBegin());
@@ -181,23 +198,25 @@ namespace cxxlens::provider::clang22
 		if (end < begin)
 			return sdk::unexpected(native_error("native.source-span-invalid", "offset"));
 		detached_source_span output;
+		output.source_snapshot = identity.source_snapshot;
+		output.file = identity.file;
+		output.role = identity.role;
 		output.logical_path = filename.str();
 		output.begin = begin;
 		output.end = end;
 		output.read_only = begin_location.isMacroID() || range.getBegin().isMacroID();
-		output.id = sdk::canonical_identity_digest(
-			"source-span",
-			std::array{
-				sdk::canonical_value::from_string(output.logical_path),
-				sdk::canonical_value::from_integer(static_cast<std::int64_t>(output.begin)),
-				sdk::canonical_value::from_integer(static_cast<std::int64_t>(output.end)),
-			});
+		auto id = sdk::source_span_identity(
+			identity.source_snapshot, identity.file, output.begin, output.end, identity.role);
+		if (!id)
+			return sdk::unexpected(std::move(id.error()));
+		output.id = std::move(*id);
 		if (auto valid = output.validate(); !valid)
 			return sdk::unexpected(std::move(valid.error()));
 		return output;
 #else
 		(void)unit;
 		(void)range;
+		(void)identity;
 		return sdk::unexpected(native_error("native.unsupported-clang-major", "clang", "22"));
 #endif
 	}

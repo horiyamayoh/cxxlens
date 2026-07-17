@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -230,6 +231,28 @@ namespace cxxlens::sdk
 			bytes.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
 		bytes.insert(bytes.end(), encoded.begin(), encoded.end());
 		return std::string{identity_kind} + ':' + content_digest(bytes);
+	}
+
+	result<std::string> source_span_identity(const std::string_view source_snapshot,
+											 const std::string_view file,
+											 const std::uint64_t begin,
+											 const std::uint64_t end,
+											 const std::string_view role)
+	{
+		if (source_snapshot.empty() || file.empty() || role.empty() ||
+			role.find('\0') != std::string_view::npos || end < begin ||
+			begin > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
+			end > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+			return unexpected(error{"sdk.source-span-identity-invalid", "projection", {}});
+		return canonical_identity_digest(
+			"source-span",
+			std::array{
+				canonical_value::from_string(std::string{source_snapshot}),
+				canonical_value::from_string(std::string{file}),
+				canonical_value::from_integer(static_cast<std::int64_t>(begin)),
+				canonical_value::from_integer(static_cast<std::int64_t>(end)),
+				canonical_value::from_string(std::string{role}),
+			});
 	}
 
 	// The public order is part of the v2 contract and both views have intentionally distinct roles.

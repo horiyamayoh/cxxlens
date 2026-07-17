@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.35.0
+document_version: 1.36.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -78,7 +78,7 @@ author_paths:
 entries:
   - id: public.common
     status: implemented
-    owner_issue: '#120'
+    owner_issue: '#106'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/sdk/common.hpp]
@@ -92,12 +92,15 @@ entries:
       - name: canonical_identity_digest
         kind: function-family
         signature: 'canonical_value; vector<byte> canonical_binary(const canonical_value&); string canonical_identity_digest(string_view, span<const canonical_value>)'
-    errors: [sdk.semantic-domain-invalid]
+      - name: source_span_identity
+        kind: function
+        signature: 'result<string> source_span_identity(string_view snapshot, string_view file, uint64_t begin, uint64_t end, string_view role)'
+    errors: [sdk.semantic-domain-invalid, sdk.source-span-identity-invalid]
     lifetime: [result-and-error-own-their-values]
     threading: [value-objects-follow-contained-value-threading]
     versioning: [semantic-digest-is-v2-typed-length-prefixed-and-not-legacy-sha256, canonical-identity-is-cxxlens-canonical-tuple-v1, source-api-axis-independent-from-standard-library-expected]
-    invariants: [success-and-error-are-disjoint, digest-is-full-lowercase-sha256, semantic-domain-is-nonempty-lowercase-identifier, identity-domain-prefix-is-exact-and-versioned]
-    implementation_evidence: [src/sdk/common.cpp, tests/unit/sdk/sdk_test.cpp, tests/unit/sdk/store_test.cpp]
+    invariants: [success-and-error-are-disjoint, digest-is-full-lowercase-sha256, semantic-domain-is-nonempty-lowercase-identifier, identity-domain-prefix-is-exact-and-versioned, source-span-identity-binds-snapshot-file-half-open-range-and-role, source-span-identity-excludes-logical-path-and-checkout-root]
+    implementation_evidence: [src/sdk/common.cpp, tests/unit/sdk/sdk_test.cpp, tests/unit/sdk/store_test.cpp, tests/adapter/clang22/provider_normalizer_test.cpp, docs/design/adr/0049-shared-source-span-identity.md]
 
   - id: public.project-catalog
     status: implemented
@@ -321,7 +324,7 @@ entries:
 
   - id: public.provider-runtime
     status: implemented
-    owner_issue: '#105'
+    owner_issue: '#106'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/sdk/provider.hpp]
@@ -356,7 +359,7 @@ entries:
 
   - id: public.native-provider-sdk
     status: implemented
-    owner_issue: '#105'
+    owner_issue: '#106'
     profile: NG0
     target: cxxlens::clang22_provider_sdk
     headers: [include/cxxlens/provider/clang22.hpp]
@@ -366,7 +369,7 @@ entries:
         signature: 'result<void> with_translation_unit(const translation_unit_input&, translation_unit_callback)'
       - name: normalize_source
         kind: function
-        signature: 'result<detached_source_span> normalize_source(borrowed_translation_unit&, const clang::SourceRange&)'
+        signature: 'source_range_identity{snapshot,file,role}; result<detached_source_span> normalize_source(borrowed_translation_unit&, const clang::SourceRange&, const source_range_identity&)'
       - name: detach_scalar
         kind: template
         signature: 'template<detachable_scalar T> sdk::result<sdk::detached_cell> detach_scalar(T&&)'
@@ -374,8 +377,8 @@ entries:
     lifetime: [translation-unit-and-ast-objects-are-borrowed-callback-only, outputs-must-be-detached-before-return]
     threading: [borrowed-translation-unit-is-not-copyable-or-transferable, callback-is-synchronous]
     versioning: [clang-major-is-explicit-in-package-target-header-and-namespace]
-    invariants: [pointer-types-rejected-at-compile-time, source-range-normalized-to-half-open-detached-source-span, clang-direct-target-identity-does-not-require-same-batch-entity-row, missing-soft-target-entity-is-accounted-by-relation-reference-policy, no-silent-clang-major-fallback]
-    implementation_evidence: [src/llvm/clang22/provider_sdk.cpp, src/llvm/clang22/provider_worker.cpp, examples/sdk/clang22_native_provider.cpp, tests/public_headers/provider_clang22_header_test.cpp, tests/adapter/clang22/provider_normalizer_test.cpp, tests/integration/r2_vertical_slice_test.cpp, tests/install/clang22_sdk_consumer/main.cpp, docs/design/adr/0048-cross-tu-direct-target-identity.md]
+    invariants: [pointer-types-rejected-at-compile-time, source-range-normalized-to-half-open-detached-source-span, native-task-carries-exact-source-snapshot-and-file, range-role-is-explicit-per-normalization, logical-path-is-not-span-identity-authority, missing-source-authority-fails-closed, clang-direct-target-identity-does-not-require-same-batch-entity-row, missing-soft-target-entity-is-accounted-by-relation-reference-policy, no-silent-clang-major-fallback]
+    implementation_evidence: [src/llvm/clang22/provider_sdk.cpp, src/llvm/clang22/provider_worker.cpp, examples/sdk/clang22_native_provider.cpp, tests/public_headers/provider_clang22_header_test.cpp, tests/adapter/clang22/provider_normalizer_test.cpp, tests/integration/r2_vertical_slice_test.cpp, tests/install/clang22_sdk_consumer/main.cpp, docs/design/adr/0048-cross-tu-direct-target-identity.md, docs/design/adr/0049-shared-source-span-identity.md]
 
   - id: public.recipe-foundation
     status: implemented

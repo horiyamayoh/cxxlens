@@ -13,7 +13,11 @@ int main()
 		return 1;
 	bool visited = false;
 	auto parsed = cxxlens::provider::clang22::with_translation_unit(
-		{"input.cpp", "int target(); int main(){ return target(); }", {"-std=c++23"}},
+		{"source-snapshot:example",
+		 "file:input.cpp",
+		 "input.cpp",
+		 "int target(); int main(){ return target(); }",
+		 {"-std=c++23"}},
 		[&](cxxlens::provider::clang22::borrowed_translation_unit&) -> cxxlens::sdk::result<void>
 		{
 			visited = true;

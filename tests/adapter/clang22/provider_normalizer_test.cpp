@@ -5,6 +5,9 @@
 #include <string>
 #include <vector>
 
+#include <cxxlens/provider/clang22.hpp>
+#include <cxxlens/relations/source_span.hpp>
+
 #include "llvm/clang22/provider_worker.hpp"
 
 namespace
@@ -39,6 +42,8 @@ namespace
 		value.variant = "variant-" + std::string(64U, 'b');
 
 		auto entity = observation(observation_kind::entity, "clang-usr:target");
+		entity.source_span_id = *sdk::source_span_identity(
+			"source-snapshot:one", "file:stable", 10U, 18U, "declaration");
 		entity.payload.emplace("symbol.kind", "function");
 		entity.payload.emplace("symbol.qualified_name", "ns::target");
 		entity.payload.emplace("symbol.signature", "int ()");
@@ -47,6 +52,8 @@ namespace
 		type.payload.emplace("type.canonical", "int");
 
 		auto call = observation(observation_kind::call, "call:main:12");
+		call.source_span_id = *sdk::source_span_identity(
+			"source-snapshot:one", "file:stable", 10U, 18U, "expression");
 		call.payload.emplace("call.kind", "direct_function");
 		call.payload.emplace("call.direct_callee", "clang-usr:target");
 		value.observations = {std::move(entity), std::move(type), std::move(call)};
@@ -68,6 +75,57 @@ namespace
 int main()
 {
 	using namespace cxxlens::detail::clang22;
+	using cxxlens::provider::clang22::detached_source_span;
+	using cxxlens::provider::clang22::source_range_identity;
+
+	const source_range_identity source_identity{"source-snapshot:one", "file:stable", "expression"};
+	auto span = sdk::source_span_identity(
+		source_identity.source_snapshot, source_identity.file, 10U, 18U, source_identity.role);
+	auto changed_snapshot = sdk::source_span_identity(
+		"source-snapshot:two", source_identity.file, 10U, 18U, source_identity.role);
+	auto changed_file = sdk::source_span_identity(
+		source_identity.source_snapshot, "file:other", 10U, 18U, source_identity.role);
+	auto changed_role = sdk::source_span_identity(
+		source_identity.source_snapshot, source_identity.file, 10U, 18U, "declaration");
+	require(
+		span && changed_snapshot && changed_file && changed_role && *span != *changed_snapshot &&
+			*span != *changed_file && *span != *changed_role &&
+			!sdk::source_span_identity({}, source_identity.file, 10U, 18U, source_identity.role),
+		"source.span identity is not bound to snapshot/file/range role");
+	detached_source_span original{source_identity.source_snapshot,
+								  source_identity.file,
+								  source_identity.role,
+								  "src/a.cpp",
+								  10U,
+								  18U,
+								  false,
+								  *span};
+	auto relocated = original;
+	relocated.logical_path = "relocated/src/a.cpp";
+	require(original.validate().has_value() && relocated.validate().has_value() &&
+				original.id == relocated.id,
+			"logical root relocation changed source.span identity");
+	using source_span = cxxlens::source::relations::span;
+	source_span::builder source_builder;
+	for (auto result : {
+			 source_builder.set<source_span::span_column>(
+				 sdk::detached_cell::typed("source_span_id", *span)),
+			 source_builder.set<source_span::snapshot>(
+				 sdk::detached_cell::typed("source_snapshot_id", source_identity.source_snapshot)),
+			 source_builder.set<source_span::file>(
+				 sdk::detached_cell::typed("file_id", source_identity.file)),
+			 source_builder.set<source_span::begin>(sdk::detached_cell::unsigned_integer(10U)),
+			 source_builder.set<source_span::end>(sdk::detached_cell::unsigned_integer(18U)),
+			 source_builder.set<source_span::role>(
+				 {{sdk::scalar_kind::open_symbol, "source.range-role/1", false},
+				  sdk::cell_state::present,
+				  sdk::scalar_value{source_identity.role},
+				  std::nullopt}),
+			 source_builder.set<source_span::read_only>(sdk::detached_cell::boolean(false)),
+		 })
+		require(result.has_value(), "source.span authority row rejected shared identity");
+	require(std::move(source_builder).finish().has_value(),
+			"source.span builder did not accept shared native identity");
 
 	require(entity_observation_descriptor().validate().has_value(),
 			"entity observation descriptor is invalid");
@@ -79,6 +137,8 @@ int main()
 	clang22_task_input task{
 		"cu-" + std::string(64U, 'a'),
 		"variant-" + std::string(64U, 'b'),
+		"source-snapshot-" + std::string(64U, 'c'),
+		"file-" + std::string(64U, 'd'),
 		"input.cpp",
 		"int target(); int main(){ return target(); }",
 		{"-std=c++23"},
@@ -86,8 +146,14 @@ int main()
 	auto encoded = encode_task_input(task);
 	require(encoded.has_value(), "task input encoding failed");
 	auto decoded = decode_task_input(*encoded);
-	require(decoded && decoded->source == task.source && decoded->arguments == task.arguments,
+	require(decoded && decoded->source_snapshot == task.source_snapshot &&
+				decoded->file == task.file && decoded->source == task.source &&
+				decoded->arguments == task.arguments,
 			"task input did not round trip");
+	auto missing_source_authority = task;
+	missing_source_authority.source_snapshot.clear();
+	require(!encode_task_input(missing_source_authority),
+			"worker task fabricated a span identity without source authority");
 
 	auto exact = canonicalize_provider_batch(
 		batch(), "sha256:1111111111111111111111111111111111111111111111111111111111111111", true);
@@ -96,6 +162,8 @@ int main()
 				exact->entities.size() == 1U && exact->call_sites.size() == 1U &&
 				exact->direct_targets.size() == 1U && exact->unresolved.empty(),
 			"exact Clang observation canonicalization failed");
+	require(string_cell(exact->call_sites.front(), "cc.call_site.v1.source") == *span,
+			"worker call-site hard reference differs from base source.span identity");
 	const auto same_tu_target =
 		string_cell(exact->direct_targets.front(), "cc.call_direct_target.v1.target");
 

@@ -748,6 +748,12 @@ struct source_span_ref {
 };
 ```
 
+`source.span.v1.span` は `sdk::source_span_identity(snapshot, file, begin, end, role)` を共有 authority とし、
+`canonical_identity_digest("source-span", [snapshot,file,begin,end,role])` で導出する。logical path、checkout root、
+provider-local path は identity projection に含めない。source snapshot、file、role のいずれかが欠ける場合は span ID を
+捏造せず fail closed とする。Clang native input と worker task wire は exact snapshot/file を運び、range role は
+normalization call ごとに明示する。
+
 - range は `[begin,end)`
 - line/column は projection
 - invalid span は fabricated default に置き換えない

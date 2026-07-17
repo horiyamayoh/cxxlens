@@ -1,5 +1,5 @@
 {
-  "asset_count": 296,
+  "asset_count": 297,
   "assets": [
     {
       "authority": "active",
@@ -746,6 +746,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0048-cross-tu-direct-target-identity.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0049-shared-source-span-identity.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2075,7 +2082,7 @@
     }
   ],
   "classifications": {
-    "active": 260,
+    "active": 261,
     "archived": 35,
     "generated": 1
   },

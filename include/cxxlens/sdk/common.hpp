@@ -155,6 +155,12 @@ namespace cxxlens::sdk
 	/** @brief Full typed SHA-256 identity using the exact cxxlens domain prefix. */
 	[[nodiscard]] std::string canonical_identity_digest(std::string_view identity_kind,
 														std::span<const canonical_value> fields);
+	/** @brief Derive the accepted source.span snapshot/file/range/role domain identity. */
+	[[nodiscard]] result<std::string> source_span_identity(std::string_view source_snapshot,
+														   std::string_view file,
+														   std::uint64_t begin,
+														   std::uint64_t end,
+														   std::string_view role);
 
 	/**
 	 * @brief Full v2 semantic SHA-256 digest over a typed, length-prefixed domain/payload tuple.
