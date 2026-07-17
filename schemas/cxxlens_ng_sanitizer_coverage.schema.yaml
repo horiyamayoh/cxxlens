@@ -1,0 +1,83 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-sanitizer-coverage.v1
+title: cxxlens first-party sanitizer coverage contract
+type: object
+additionalProperties: false
+required: [schema, document_version, maturity, authority, scope, configurations, runtime, canaries, ci]
+properties:
+  schema: {const: cxxlens.ng-sanitizer-coverage.v1}
+  document_version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+  maturity: {const: implemented}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, adr, owner_issue]
+    properties:
+      design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
+      adr: {const: docs/design/adr/0062-first-party-sanitizer-closure.md}
+      owner_issue: {const: '#119'}
+  scope:
+    type: object
+    additionalProperties: false
+    required: [first_party_objects, noninstrumented_external_allowlist, installed_consumers]
+    properties:
+      first_party_objects: {const: all-compile-database-entries}
+      noninstrumented_external_allowlist: {const: []}
+      installed_consumers: {const: [core, provider-sdk, clang22-provider-sdk, examples]}
+  configurations:
+    type: object
+    additionalProperties: false
+    required: [normal, asan-ubsan, tsan]
+    properties:
+      normal: {$ref: '#/$defs/configuration'}
+      asan-ubsan: {$ref: '#/$defs/configuration'}
+      tsan: {$ref: '#/$defs/configuration'}
+  runtime:
+    type: object
+    additionalProperties: false
+    required: [failure_exit_code, asan_options, ubsan_options, tsan_options, symbolizer]
+    properties:
+      failure_exit_code: {const: 86}
+      asan_options: {const: 'detect_leaks=1:halt_on_error=1:exitcode=86:handle_segv=0:symbolize=1'}
+      ubsan_options: {const: 'halt_on_error=1:exitcode=86:print_stacktrace=1:symbolize=1'}
+      tsan_options: {const: 'halt_on_error=1:exitcode=86:handle_segv=0:second_deadlock_stack=1:symbolize=1'}
+      symbolizer: {const: llvm-symbolizer}
+  canaries:
+    type: array
+    minItems: 3
+    maxItems: 3
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, roles, expected_sanitizer]
+      properties:
+        id: {enum: [address, undefined, thread]}
+        roles:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {enum: [test-fixture, test, provider]}
+        expected_sanitizer: {enum: [address, undefined, thread]}
+  ci:
+    type: object
+    additionalProperties: false
+    required: [workflow, coverage_checker, check_after_ctest]
+    properties:
+      workflow: {const: .github/workflows/nightly.yml}
+      coverage_checker: {const: tools/quality/check_sanitizer_coverage.py}
+      check_after_ctest: {const: true}
+$defs:
+  configuration:
+    type: object
+    additionalProperties: false
+    required: [required_sanitizers, forbidden_sanitizers]
+    properties:
+      required_sanitizers:
+        type: array
+        uniqueItems: true
+        items: {enum: [address, undefined, thread]}
+      forbidden_sanitizers:
+        type: array
+        uniqueItems: true
+        items: {enum: [address, undefined, thread]}

@@ -85,6 +85,21 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-sanitizer-coverage-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_sanitizer_coverage.py"
+    contract --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMAND "${Python3_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tests/quality/test_sanitizer_coverage.py"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_sanitizer_coverage.py"
+    check --root "${CMAKE_CURRENT_SOURCE_DIR}" --build-dir "${CMAKE_BINARY_DIR}"
+    --expected "${CXXLENS_SANITIZER_EXPECTED}"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-public-boundary-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -139,6 +154,7 @@ add_dependencies(
   cxxlens-ng-snapshot-store-contract-check
   cxxlens-public-boundary-check
   cxxlens-runtime-port-check
+  cxxlens-sanitizer-coverage-check
   cxxlens-text-lint)
 if(TARGET cxxlens-format-check)
   add_dependencies(cxxlens-quality cxxlens-format-check)

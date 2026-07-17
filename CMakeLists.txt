@@ -33,6 +33,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CxxlensWarnings)
 include(CxxlensSanitizers)
 include(CxxlensClangTargets)
+cxxlens_validate_sanitizer_configuration()
 
 if(CXXLENS_BUILD_SHARED)
   set(CXXLENS_LIBRARY_TYPE SHARED)

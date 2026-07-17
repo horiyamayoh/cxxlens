@@ -1,5 +1,5 @@
 {
-  "asset_count": 310,
+  "asset_count": 311,
   "assets": [
     {
       "authority": "active",
@@ -830,6 +830,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0060-query-summary-guarantee-fragment-algebra.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0061-relocatable-static-shared-install-package.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2173,7 +2180,7 @@
     }
   ],
   "classifications": {
-    "active": 274,
+    "active": 275,
     "archived": 35,
     "generated": 1
   },

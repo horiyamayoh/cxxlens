@@ -4,6 +4,7 @@ function(cxxlens_add_test_executable target source)
   add_executable(${target} ${source})
   target_compile_features(${target} PRIVATE cxx_std_23)
   cxxlens_set_project_warnings(${target})
+  cxxlens_enable_sanitizers(${target})
 endfunction()
 
 cxxlens_add_test_executable(cxxlens-unit-sdk unit/sdk/sdk_test.cpp)
@@ -155,6 +156,46 @@ foreach(example IN ITEMS dynamic_literal_type_mismatch unordered_limit
                        PROPERTIES LABELS "sdk;negative;acceptance")
 endforeach()
 
+if(CXXLENS_ENABLE_ASAN OR CXXLENS_ENABLE_UBSAN)
+  cxxlens_add_test_executable(cxxlens-sanitizer-canary
+                              canary/sanitizer_canary.cpp)
+  if(CXXLENS_ENABLE_ASAN)
+    add_test(
+      NAME sanitizer.canary-address
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${PROJECT_SOURCE_DIR}/tests/canary/expect_failure.py"
+        "$<TARGET_FILE:cxxlens-sanitizer-canary>" address)
+    set_tests_properties(sanitizer.canary-address
+                         PROPERTIES LABELS "sanitizer;canary;asan")
+  endif()
+  if(CXXLENS_ENABLE_UBSAN)
+    add_test(
+      NAME sanitizer.canary-undefined
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${PROJECT_SOURCE_DIR}/tests/canary/expect_failure.py"
+        "$<TARGET_FILE:cxxlens-sanitizer-canary>" undefined)
+    set_tests_properties(sanitizer.canary-undefined
+                         PROPERTIES LABELS "sanitizer;canary;ubsan")
+  endif()
+endif()
+
+if(CXXLENS_ENABLE_TSAN)
+  foreach(role IN ITEMS test provider)
+    set(target_name "cxxlens-tsan-${role}-canary")
+    cxxlens_add_test_executable(${target_name} canary/sanitizer_canary.cpp)
+    add_test(
+      NAME "sanitizer.canary-thread-${role}"
+      COMMAND
+        "${Python3_EXECUTABLE}"
+        "${PROJECT_SOURCE_DIR}/tests/canary/expect_failure.py"
+        "$<TARGET_FILE:${target_name}>" thread)
+    set_tests_properties("sanitizer.canary-thread-${role}"
+                         PROPERTIES LABELS "sanitizer;canary;tsan;${role}")
+  endforeach()
+endif()
+
 foreach(
   contract IN
   ITEMS relation_contract
@@ -182,6 +223,8 @@ add_test(NAME install.consumer
                  "${CMAKE_CURRENT_BINARY_DIR}/run_install_test.cmake")
 set_tests_properties(install.consumer PROPERTIES LABELS
                                                  "install;package;acceptance")
+
+cxxlens_configure_sanitizer_tests()
 
 add_custom_target(cxxlens-ng-test-binaries)
 add_dependencies(

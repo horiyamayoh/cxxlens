@@ -142,7 +142,10 @@ foreach(consumer IN ITEMS consumer sdk_consumer clang22_sdk_consumer)
       "@CMAKE_COMMAND@" -S "@CMAKE_CURRENT_SOURCE_DIR@/install/${consumer}" -B
       "${build_dir}" "-DCMAKE_PREFIX_PATH=${install_prefix}"
       "-DCMAKE_CXX_COMPILER=@CMAKE_CXX_COMPILER@" "-DLLVM_DIR=@LLVM_DIR@"
-      "-DClang_DIR=@Clang_DIR@" COMMAND_ERROR_IS_FATAL ANY)
+      "-DClang_DIR=@Clang_DIR@" "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+      "-DCXXLENS_ENABLE_ASAN=@CXXLENS_ENABLE_ASAN@"
+      "-DCXXLENS_ENABLE_UBSAN=@CXXLENS_ENABLE_UBSAN@"
+      "-DCXXLENS_ENABLE_TSAN=@CXXLENS_ENABLE_TSAN@" COMMAND_ERROR_IS_FATAL ANY)
   execute_process(COMMAND "@CMAKE_COMMAND@" --build "${build_dir}"
                           COMMAND_ERROR_IS_FATAL ANY)
   string(REPLACE "_" "-" executable_suffix "${consumer}")
@@ -160,7 +163,10 @@ execute_process(
     -B "${example_build_dir}" "-DCMAKE_PREFIX_PATH=${install_prefix}"
     "-DCXXLENS_EXAMPLE_ROOT=${install_prefix}/share/doc/cxxlens/examples/sdk"
     "-DCMAKE_CXX_COMPILER=@CMAKE_CXX_COMPILER@" "-DLLVM_DIR=@LLVM_DIR@"
-    "-DClang_DIR=@Clang_DIR@" COMMAND_ERROR_IS_FATAL ANY)
+    "-DClang_DIR=@Clang_DIR@" "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+    "-DCXXLENS_ENABLE_ASAN=@CXXLENS_ENABLE_ASAN@"
+    "-DCXXLENS_ENABLE_UBSAN=@CXXLENS_ENABLE_UBSAN@"
+    "-DCXXLENS_ENABLE_TSAN=@CXXLENS_ENABLE_TSAN@" COMMAND_ERROR_IS_FATAL ANY)
 execute_process(COMMAND "@CMAKE_COMMAND@" --build "${example_build_dir}"
                         COMMAND_ERROR_IS_FATAL ANY)
 set(example_prefix "${test_root}/examples-consumer-prefix")

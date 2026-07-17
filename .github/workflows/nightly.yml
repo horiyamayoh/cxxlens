@@ -18,14 +18,24 @@ jobs:
           wget --quiet https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 22
-          sudo apt-get install --yes ninja-build
+          sudo apt-get install --yes llvm-22 ninja-build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --requirement tools/quality/requirements.txt
       - name: ASan and UBSan
         env:
           CXX: clang++-22
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:exitcode=86:handle_segv=0:symbolize=1
+          UBSAN_OPTIONS: halt_on_error=1:exitcode=86:print_stacktrace=1:symbolize=1
         run: |
+          export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer-22)"
           cmake --preset asan-ubsan
           cmake --build --preset asan-ubsan
           ctest --preset asan-ubsan
+          python3 tools/quality/check_sanitizer_coverage.py check --root . \
+            --build-dir build/asan-ubsan --expected address,undefined \
+            --require-install-consumers
 
   thread-sanitizer:
     runs-on: ubuntu-24.04
@@ -36,14 +46,22 @@ jobs:
           wget --quiet https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 22
-          sudo apt-get install --yes ninja-build
+          sudo apt-get install --yes llvm-22 ninja-build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --requirement tools/quality/requirements.txt
       - name: TSan
         env:
           CXX: clang++-22
+          TSAN_OPTIONS: halt_on_error=1:exitcode=86:handle_segv=0:second_deadlock_stack=1:symbolize=1
         run: |
           cmake --preset tsan
           cmake --build --preset tsan
           ctest --preset tsan
+          python3 tools/quality/check_sanitizer_coverage.py check --root . \
+            --build-dir build/tsan --expected thread \
+            --require-install-consumers
 
   static-analysis:
     runs-on: ubuntu-24.04

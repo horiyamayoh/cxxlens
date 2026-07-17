@@ -30,6 +30,13 @@ namespace
 		"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 	constexpr std::string_view semantic_contract_digest =
 		"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+#if defined(CXXLENS_SANITIZER_INSTRUMENTED)
+	constexpr std::uint64_t provider_rss_budget = std::numeric_limits<std::uint64_t>::max();
+	constexpr std::uint64_t provider_subprocess_budget = 1024U;
+#else
+	constexpr std::uint64_t provider_rss_budget = 256U * 1024U * 1024U;
+	constexpr std::uint64_t provider_subprocess_budget = 1U;
+#endif
 	void require(const bool condition, const std::string& message)
 	{
 		if (!condition)
@@ -305,10 +312,10 @@ namespace
 		request.sandbox = {sandbox_assurance::enforced, baseline_policy().policy_digest()};
 		request.budget.wall_ms = 2000U;
 		request.budget.cpu_ms = 2000U;
-		request.budget.rss_bytes = 256U * 1024U * 1024U;
+		request.budget.rss_bytes = provider_rss_budget;
 		request.budget.output_bytes = 4U * 1024U * 1024U;
 		request.budget.open_files = 64U;
-		request.budget.subprocesses = 1U;
+		request.budget.subprocesses = provider_subprocess_budget;
 		return request;
 	}
 

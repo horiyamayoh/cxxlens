@@ -1,6 +1,6 @@
 schema: cxxlens.ng-acceptance-manifest.v1
 kind: acceptance-manifest
-document_version: 1.1.0
+document_version: 1.2.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -149,6 +149,8 @@ entries:
     evidence:
       - schemas/cxxlens_ng_release_bundle.yaml
       - docs/design/adr/0061-relocatable-static-shared-install-package.md
+      - docs/design/adr/0062-first-party-sanitizer-closure.md
+      - schemas/cxxlens_ng_sanitizer_coverage.yaml
       - tests/install/run_install_test.cmake.in
       - .github/workflows/quality.yml
-    summary: Static/shared relocatable install is qualified; remaining distribution 1.0 security, support, performance, and production work stays deferred.
+    summary: Static/shared relocatable install and first-party sanitizer closure are qualified; remaining distribution 1.0 support, performance, and production work stays deferred.
