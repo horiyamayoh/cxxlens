@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.40.0
+document_version: 1.41.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -362,7 +362,7 @@ entries:
 
   - id: public.native-provider-sdk
     status: implemented
-    owner_issue: '#110'
+    owner_issue: '#111'
     profile: NG0
     target: cxxlens::clang22_provider_sdk
     headers: [include/cxxlens/provider/clang22.hpp]
@@ -380,8 +380,8 @@ entries:
     lifetime: [translation-unit-and-ast-objects-are-borrowed-callback-only, outputs-must-be-detached-before-return]
     threading: [borrowed-translation-unit-is-not-copyable-or-transferable, callback-is-synchronous]
     versioning: [clang-major-is-explicit-in-package-target-header-and-namespace]
-    invariants: [pointer-types-rejected-at-compile-time, source-range-normalized-to-half-open-detached-source-span, macro-call-primary-span-uses-expansion-range, ordered-macro-spelling-origin-chain-is-provider-evidence, macro-primary-and-origin-ranges-are-read-only, origin-logical-path-never-enters-standard-span-or-call-identity, native-task-carries-exact-source-snapshot-and-file, range-role-is-explicit-per-normalization, logical-path-is-not-span-identity-authority, missing-source-authority-fails-closed, clang-direct-target-identity-does-not-require-same-batch-entity-row, call-kind-is-derived-from-ast-directness-and-shape, virtual-member-kind-retains-static-direct-target, indirect-and-dependent-calls-never-fabricate-direct-targets, known-call-kind-and-target-inconsistency-is-unresolved-and-non-exact, redeclaration-chain-selects-definition-then-canonical-declaration-deterministically, structural-signature-uses-canonical-type-not-source-occurrence, incompatible-redeclaration-is-explicit-unresolved-and-not-exact, missing-soft-target-entity-is-accounted-by-relation-reference-policy, no-silent-clang-major-fallback]
-    implementation_evidence: [src/llvm/clang22/provider_sdk.cpp, src/llvm/clang22/provider_worker.cpp, examples/sdk/clang22_native_provider.cpp, tests/public_headers/provider_clang22_header_test.cpp, tests/adapter/clang22/provider_normalizer_test.cpp, tests/integration/r2_vertical_slice_test.cpp, tests/install/clang22_sdk_consumer/main.cpp, docs/design/adr/0048-cross-tu-direct-target-identity.md, docs/design/adr/0049-shared-source-span-identity.md, docs/design/adr/0050-relation-domain-identity-runtime.md, docs/design/adr/0051-clang-redeclaration-canonicalization.md, docs/design/adr/0052-clang-call-kind-and-target-consistency.md, docs/design/adr/0053-macro-expansion-source-occurrence.md]
+    invariants: [pointer-types-rejected-at-compile-time, source-range-normalized-to-half-open-detached-source-span, call-ordinal-is-source-local-equivalence-class-tie-break, normalizer-output-is-input-permutation-independent, unrelated-call-addition-does-not-change-existing-call-identity, macro-call-primary-span-uses-expansion-range, ordered-macro-spelling-origin-chain-is-provider-evidence, macro-primary-and-origin-ranges-are-read-only, origin-logical-path-never-enters-standard-span-or-call-identity, native-task-carries-exact-source-snapshot-and-file, range-role-is-explicit-per-normalization, logical-path-is-not-span-identity-authority, missing-source-authority-fails-closed, clang-direct-target-identity-does-not-require-same-batch-entity-row, call-kind-is-derived-from-ast-directness-and-shape, virtual-member-kind-retains-static-direct-target, indirect-and-dependent-calls-never-fabricate-direct-targets, known-call-kind-and-target-inconsistency-is-unresolved-and-non-exact, redeclaration-chain-selects-definition-then-canonical-declaration-deterministically, structural-signature-uses-canonical-type-not-source-occurrence, incompatible-redeclaration-is-explicit-unresolved-and-not-exact, missing-soft-target-entity-is-accounted-by-relation-reference-policy, no-silent-clang-major-fallback]
+    implementation_evidence: [src/llvm/clang22/provider_sdk.cpp, src/llvm/clang22/provider_worker.cpp, examples/sdk/clang22_native_provider.cpp, tests/public_headers/provider_clang22_header_test.cpp, tests/adapter/clang22/provider_normalizer_test.cpp, tests/integration/r2_vertical_slice_test.cpp, tests/install/clang22_sdk_consumer/main.cpp, docs/design/adr/0048-cross-tu-direct-target-identity.md, docs/design/adr/0049-shared-source-span-identity.md, docs/design/adr/0050-relation-domain-identity-runtime.md, docs/design/adr/0051-clang-redeclaration-canonicalization.md, docs/design/adr/0052-clang-call-kind-and-target-consistency.md, docs/design/adr/0053-macro-expansion-source-occurrence.md, docs/design/adr/0054-source-local-call-ordinal.md]
 
   - id: public.recipe-foundation
     status: implemented

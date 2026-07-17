@@ -140,6 +140,22 @@ namespace
 		require(value != nullptr, "expected bytes identity value");
 		return *value;
 	}
+
+	[[nodiscard]] std::string canonical_batch(const canonicalized_provider_batch& batch)
+	{
+		std::string output;
+		for (const auto* rows : {
+				 &batch.entity_observations,
+				 &batch.type_observations,
+				 &batch.call_observations,
+				 &batch.entities,
+				 &batch.call_sites,
+				 &batch.direct_targets,
+			 })
+			for (const auto& row : *rows)
+				output += row.canonical_form() + '\n';
+		return output;
+	}
 } // namespace
 
 int main()
@@ -490,6 +506,43 @@ int main()
 				string_cell(reordered_result->direct_targets.front(),
 							"cc.call_direct_target.v1.target") == same_tu_target,
 			"target identity changed with observation order");
+	require(reordered_result && canonical_batch(*reordered_result) == canonical_batch(*exact),
+			"observation permutation changed canonical batch bytes");
+	auto inserted_call = batch();
+	auto unrelated = inserted_call.observations.back();
+	unrelated.semantic_key = "call:unrelated-prefix";
+	unrelated.source_span_id =
+		*sdk::source_span_identity("source-snapshot:one", "file:stable", 1U, 5U, "expression");
+	inserted_call.observations.insert(inserted_call.observations.begin(), std::move(unrelated));
+	auto inserted_result = canonicalize_provider_batch(
+		inserted_call,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(inserted_result.has_value(), "unrelated call insertion failed canonicalization");
+	const auto original_source = string_cell(exact->call_sites.front(), "cc.call_site.v1.source");
+	auto original_after_insertion = std::ranges::find_if(
+		inserted_result->call_sites,
+		[&](const sdk::detached_row& row)
+		{
+			return string_cell(row, "cc.call_site.v1.source") == original_source;
+		});
+	require(original_after_insertion != inserted_result->call_sites.end() &&
+				string_cell(*original_after_insertion, "cc.call_site.v1.call") == call_id,
+			"unrelated call insertion changed an existing call identity");
+	auto same_span = batch();
+	auto duplicate = same_span.observations.back();
+	duplicate.semantic_key = "call:same-span-tie";
+	same_span.observations.push_back(std::move(duplicate));
+	auto same_span_result = canonicalize_provider_batch(
+		same_span, "sha256:1111111111111111111111111111111111111111111111111111111111111111", true);
+	std::ranges::reverse(same_span.observations);
+	auto reversed_same_span = canonicalize_provider_batch(
+		same_span, "sha256:1111111111111111111111111111111111111111111111111111111111111111", true);
+	require(same_span_result && reversed_same_span && same_span_result->call_sites.size() == 2U &&
+				canonical_batch(*same_span_result) == canonical_batch(*reversed_same_span) &&
+				string_cell(same_span_result->call_sites.front(), "cc.call_site.v1.call") !=
+					string_cell(same_span_result->call_sites.back(), "cc.call_site.v1.call"),
+			"same-span canonical tie-break was absent or input-order dependent");
 
 	auto indirect = cross_tu;
 	indirect.observations.front().payload.erase("call.direct_callee");

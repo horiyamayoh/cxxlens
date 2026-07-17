@@ -1,5 +1,5 @@
 {
-  "asset_count": 301,
+  "asset_count": 302,
   "assets": [
     {
       "authority": "active",
@@ -781,6 +781,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0053-macro-expansion-source-occurrence.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0054-source-local-call-ordinal.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2110,7 +2117,7 @@
     }
   ],
   "classifications": {
-    "active": 265,
+    "active": 266,
     "archived": 35,
     "generated": 1
   },

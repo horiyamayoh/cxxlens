@@ -158,6 +158,8 @@ def validate(root: pathlib.Path) -> None:
             "virtual_member",
             "provider.call-kind-target-inconsistent",
             "source_origin_chain",
+            "call_occurrence_class",
+            "ordered_observations",
             "cxxlens.clang22.task.v2",
             "source_snapshot",
         ),

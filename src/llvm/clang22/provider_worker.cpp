@@ -455,6 +455,20 @@ namespace cxxlens::detail::clang22
 				kind == "dependent" || kind == "unresolved";
 		}
 
+		[[nodiscard]] std::string call_occurrence_class(const detached_observation& observation)
+		{
+			std::ostringstream output;
+			for (const auto value : {
+					 std::string_view{observation.compile_unit},
+					 observation.source_span_id ? std::string_view{*observation.source_span_id}
+												: std::string_view{},
+					 entity_field(observation, "call.kind"),
+					 entity_field(observation, "call.caller"),
+				 })
+				output << value.size() << ':' << value;
+			return output.str();
+		}
+
 		class binary_writer
 		{
 		  public:
@@ -1068,6 +1082,15 @@ namespace cxxlens::detail::clang22
 		canonicalized_provider_batch output;
 		output.equivalence_limitations = std::move(invocation_limitations);
 		const auto toolchain = *sdk::semantic_digest("toolchain-context", toolchain_digest);
+		std::vector<const detached_observation*> ordered_observations;
+		ordered_observations.reserve(batch.observations.size());
+		for (const auto& observation : batch.observations)
+			ordered_observations.push_back(&observation);
+		std::ranges::sort(ordered_observations,
+						  [](const detached_observation* left, const detached_observation* right)
+						  {
+							  return left->canonical_form() < right->canonical_form();
+						  });
 		std::map<std::string, std::vector<const detached_observation*>, std::less<>> entity_groups;
 		for (const auto& observation : batch.observations)
 			if (observation.kind == observation_kind::entity)
@@ -1117,11 +1140,11 @@ namespace cxxlens::detail::clang22
 		const auto limitation = limitation_text(output.equivalence_limitations);
 
 		std::map<std::string, std::string, std::less<>> entity_ids;
-		for (const auto& observation : batch.observations)
-			if (observation.kind == observation_kind::entity)
+		for (const auto* observation : ordered_observations)
+			if (observation->kind == observation_kind::entity)
 			{
 				auto local = observation_row(entity_observation_descriptor(),
-											 observation,
+											 *observation,
 											 output.exact_equivalence,
 											 limitation);
 				if (!local)
@@ -1140,22 +1163,38 @@ namespace cxxlens::detail::clang22
 			output.entities.push_back(std::move(*canonical));
 		}
 
-		std::uint64_t call_ordinal{};
-		for (const auto& observation : batch.observations)
+		for (const auto* observation : ordered_observations)
 		{
-			if (observation.kind == observation_kind::type)
+			if (observation->kind != observation_kind::type)
+				continue;
+			auto local = observation_row(
+				type_observation_descriptor(), *observation, output.exact_equivalence, limitation);
+			if (!local)
+				return sdk::unexpected(std::move(local.error()));
+			output.type_observations.push_back(std::move(*local));
+		}
+		std::vector<const detached_observation*> calls;
+		for (const auto& observation : batch.observations)
+			if (observation.kind == observation_kind::call)
+				calls.push_back(&observation);
+		std::ranges::sort(
+			calls,
+			[](const detached_observation* left, const detached_observation* right)
 			{
-				auto local = observation_row(type_observation_descriptor(),
-											 observation,
-											 output.exact_equivalence,
-											 limitation);
-				if (!local)
-					return sdk::unexpected(std::move(local.error()));
-				output.type_observations.push_back(std::move(*local));
-				continue;
+				return std::tuple{call_occurrence_class(*left), left->canonical_form()} <
+					std::tuple{call_occurrence_class(*right), right->canonical_form()};
+			});
+		std::string previous_class;
+		std::uint64_t call_ordinal{};
+		for (const auto* observation_pointer : calls)
+		{
+			const auto& observation = *observation_pointer;
+			const auto occurrence_class = call_occurrence_class(observation);
+			if (occurrence_class != previous_class)
+			{
+				previous_class = occurrence_class;
+				call_ordinal = 0U;
 			}
-			if (observation.kind != observation_kind::call)
-				continue;
 			auto local = observation_row(
 				call_observation_descriptor(), observation, output.exact_equivalence, limitation);
 			if (!local)
