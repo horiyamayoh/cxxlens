@@ -12,6 +12,7 @@ required:
   - runtime
   - tables
   - indexes
+  - counter_storage
   - payload
   - transaction
   - compaction
@@ -26,15 +27,15 @@ properties:
     required: [semantic_contract, decision_adr, owner_issue]
     properties:
       semantic_contract: {const: schemas/cxxlens_ng_snapshot_store_contract.yaml}
-      decision_adr: {const: docs/design/adr/0013-ng-sqlite-physical-store.md}
-      owner_issue: {const: '#68'}
+      decision_adr: {const: docs/design/adr/0079-checked-publication-counters.md}
+      owner_issue: {const: '#148'}
   physical_format:
     type: object
     additionalProperties: false
     required: [id, current, semantic_snapshot_id_excludes_format]
     properties:
       id: {const: cxxlens.sqlite-semantic-store.v2}
-      current: {const: 2.5.0}
+      current: {const: 2.6.0}
       semantic_snapshot_id_excludes_format: {const: true}
   runtime: {$ref: '#/$defs/open_object'}
   tables:
@@ -47,6 +48,15 @@ properties:
     minItems: 1
     uniqueItems: true
     items: {$ref: '#/$defs/open_object'}
+  counter_storage:
+    type: object
+    additionalProperties: false
+    required: [logical_domain, sqlite_integer_encoding, decode, ordering_authority]
+    properties:
+      logical_domain: {const: unsigned-64-bit}
+      sqlite_integer_encoding: {$ref: '#/$defs/open_object'}
+      decode: {const: exact-u64}
+      ordering_authority: {const: decoded-logical-value}
   payload: {$ref: '#/$defs/open_object'}
   transaction: {$ref: '#/$defs/open_object'}
   compaction: {$ref: '#/$defs/open_object'}

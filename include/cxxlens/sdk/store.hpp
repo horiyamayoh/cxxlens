@@ -368,6 +368,12 @@ namespace cxxlens::sdk
 																		   std::string_view);
 		friend result<std::string> rewrite_snapshot_version_for_testing(
 			snapshot_store&, std::string_view, std::string_view, std::uint64_t, std::uint32_t);
+		friend result<std::string> rewrite_publication_counters_for_testing(snapshot_store&,
+																			std::string_view,
+																			std::uint64_t,
+																			std::uint64_t);
+		friend result<void>
+		poison_rejected_generation_for_testing(snapshot_store&, std::string_view, std::uint64_t);
 	};
 
 	/** @brief Transactional writer enforcing stage, independent validation, then atomic publish. */

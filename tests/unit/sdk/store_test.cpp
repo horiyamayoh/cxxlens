@@ -19,6 +19,12 @@ namespace cxxlens::sdk
 																std::string_view);
 	result<std::string> rewrite_snapshot_version_for_testing(
 		snapshot_store&, std::string_view, std::string_view, std::uint64_t, std::uint32_t);
+	result<std::string> rewrite_publication_counters_for_testing(snapshot_store&,
+																 std::string_view,
+																 std::uint64_t,
+																 std::uint64_t);
+	result<void>
+	poison_rejected_generation_for_testing(snapshot_store&, std::string_view, std::uint64_t);
 } // namespace cxxlens::sdk
 
 namespace
@@ -226,6 +232,20 @@ namespace
 		auto published = writer->publish();
 		require(published.has_value(), "store candidate did not publish");
 		return std::move(*published);
+	}
+
+	[[nodiscard]] cxxlens::sdk::result<cxxlens::sdk::snapshot_handle>
+	try_publish(cxxlens::sdk::snapshot_store& store,
+				const cxxlens::sdk::relation_engine& value,
+				std::optional<std::string> parent,
+				const std::string_view channel = "stable")
+	{
+		auto draft = snapshot_draft(value, std::move(parent));
+		draft.series.channel_id = channel;
+		auto writer = store.begin(std::move(draft));
+		require(writer && writer->stage(partition(value, false)) && writer->validate(),
+				"counter boundary publication setup failed");
+		return writer->publish();
 	}
 
 	[[nodiscard]] cxxlens::sdk::partition_draft
@@ -854,6 +874,93 @@ namespace
 		}
 	}
 
+	void check_publication_counter_bounds()
+	{
+		const auto relation_engine = engine();
+		constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+		const auto poison_path =
+			std::filesystem::temp_directory_path() / "cxxlens-ng-corrupt-generation-poison.sqlite";
+		std::filesystem::remove(poison_path);
+		{
+			auto store =
+				cxxlens::sdk::open_sqlite_snapshot_store(poison_path.string(), relation_engine);
+			require(store.has_value(), "generation poison store unavailable");
+			auto snapshot = publish(*store, relation_engine, false);
+			require(cxxlens::sdk::poison_rejected_generation_for_testing(
+						*store, snapshot.publication().publication_id, maximum)
+						.has_value(),
+					"generation poison fixture failed");
+		}
+		auto poisoned =
+			cxxlens::sdk::open_sqlite_snapshot_store(poison_path.string(), relation_engine);
+		require(poisoned.has_value(), "poisoned generation store did not reopen");
+		auto recovered = try_publish(*poisoned, relation_engine, std::nullopt, "recovery");
+		require(recovered && recovered->publication().physical_generation == 1U,
+				"checksum-invalid rejected max generation poisoned the global counter");
+		std::filesystem::remove(poison_path);
+
+		enum class boundary_case
+		{
+			generation_max,
+			sequence_max,
+			generation_almost_max,
+			sequence_almost_max,
+		};
+		const std::array cases{boundary_case::generation_max,
+							   boundary_case::sequence_max,
+							   boundary_case::generation_almost_max,
+							   boundary_case::sequence_almost_max};
+		for (const bool sqlite : {false, true})
+		{
+			for (std::size_t case_index = 0U; case_index < cases.size(); ++case_index)
+			{
+				const auto path = std::filesystem::temp_directory_path() /
+					("cxxlens-ng-counter-boundary-" + std::string{sqlite ? "sqlite" : "memory"} +
+					 "-" + std::to_string(case_index) + ".sqlite");
+				std::filesystem::remove(path);
+				auto store = sqlite
+					? cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine)
+					: cxxlens::sdk::make_in_memory_snapshot_store(relation_engine);
+				require(store.has_value(), "counter boundary store unavailable");
+				auto first = publish(*store, relation_engine, false);
+				const bool generation_axis = cases[case_index] == boundary_case::generation_max ||
+					cases[case_index] == boundary_case::generation_almost_max;
+				const bool at_max = cases[case_index] == boundary_case::generation_max ||
+					cases[case_index] == boundary_case::sequence_max;
+				const auto sequence = generation_axis ? 1U : at_max ? maximum : maximum - 1U;
+				const auto generation = generation_axis ? (at_max ? maximum : maximum - 1U) : 1U;
+				auto rewritten = cxxlens::sdk::rewrite_publication_counters_for_testing(
+					*store, first.publication().publication_id, sequence, generation);
+				require(rewritten.has_value(), "counter boundary fixture failed");
+				const auto parent = std::move(*rewritten);
+				if (sqlite)
+					store = cxxlens::sdk::result<cxxlens::sdk::snapshot_store>{
+						cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine)
+							.value()};
+
+				if (cases[case_index] == boundary_case::generation_max)
+				{
+					auto compacted = store->compact();
+					require(!compacted && compacted.error().code == "store.counter-overflow",
+							"max generation compaction did not fail closed");
+				}
+				auto next = try_publish(*store, relation_engine, parent);
+				if (at_max)
+					require(!next && next.error().code == "store.counter-overflow",
+							"max publication counter wrapped");
+				else
+				{
+					require(next.has_value(), "max-minus-one counter did not allow one increment");
+					auto overflow = try_publish(
+						*store, relation_engine, std::string{next->publication().publication_id});
+					require(!overflow && overflow.error().code == "store.counter-overflow",
+							"counter allowed an increment after reaching max");
+				}
+				std::filesystem::remove(path);
+			}
+		}
+	}
+
 	void check_sqlite_multi_instance_cas()
 	{
 		const auto relation_engine = engine();
@@ -1013,6 +1120,7 @@ int main()
 	check_sqlite_semantic_graph_tamper();
 	check_publication_identity_binding();
 	check_snapshot_version_wire_bounds();
+	check_publication_counter_bounds();
 	check_derived_basis_membership();
 	return 0;
 }

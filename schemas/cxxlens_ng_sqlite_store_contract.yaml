@@ -1,13 +1,13 @@
 schema: cxxlens.ng-sqlite-store-contract.v1
-document_version: 1.3.0
+document_version: 1.4.0
 maturity: implemented
 authority:
   semantic_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
-  decision_adr: docs/design/adr/0013-ng-sqlite-physical-store.md
-  owner_issue: '#68'
+  decision_adr: docs/design/adr/0079-checked-publication-counters.md
+  owner_issue: '#148'
 physical_format:
   id: cxxlens.sqlite-semantic-store.v2
-  current: 2.5.0
+  current: 2.6.0
   semantic_snapshot_id_excludes_format: true
 runtime:
   discovery: explicit-runtime-library
@@ -37,6 +37,13 @@ tables:
 indexes:
   - name: cxxlens_ng_publication_series
     columns: [series_id, sequence]
+counter_storage:
+  logical_domain: unsigned-64-bit
+  sqlite_integer_encoding:
+    zero_through_int64_max: nonnegative-int64
+    int64_max_plus_one_through_uint64_max: negative-twos-complement-int64
+  decode: exact-u64
+  ordering_authority: decoded-logical-value
 payload:
   write_schema: cxxlens.ng-snapshot-payload.v5
   readable_schemas:

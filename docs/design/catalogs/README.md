@@ -6,7 +6,7 @@
 | Logical Query Contract | `schemas/cxxlens_ng_logical_query_contract.yaml` | #61 | accepted exact contract |
 | Query Runtime Contract | `schemas/cxxlens_ng_query_runtime_contract.yaml` | #69 | implemented |
 | Semantic Guarantee Contract | `schemas/cxxlens_ng_semantic_guarantee_contract.yaml` | #62 | accepted exact contract |
-| Snapshot / Store Contract | `schemas/cxxlens_ng_snapshot_store_contract.yaml` | #147 | accepted exact contract |
+| Snapshot / Store Contract | `schemas/cxxlens_ng_snapshot_store_contract.yaml` | #148 | accepted exact contract |
 | SQLite Physical Store | `schemas/cxxlens_ng_sqlite_store_contract.yaml` | #68 | implemented |
 | Provider Protocol | `schemas/cxxlens_ng_provider_protocol.yaml` | #64 | accepted exact contract |
 | Provider Runtime | `schemas/cxxlens_ng_provider_runtime_contract.yaml` | #70 | implemented |

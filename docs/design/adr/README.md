@@ -53,6 +53,7 @@
 | [0064](0064-portable-provider-task-session-binding.md) | portable provider task and session exact binding |
 | [0077](0077-persisted-publication-identity-binding.md) | persisted publication identity binding |
 | [0078](0078-snapshot-version-wire-u32-canonicality.md) | snapshot version wire u32 canonicality |
+| [0079](0079-checked-publication-counters.md) | checked publication counters |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

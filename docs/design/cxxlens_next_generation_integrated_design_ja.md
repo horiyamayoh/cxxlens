@@ -1802,8 +1802,8 @@ message prose は control flow に使用しない。
 
 ### 15.1 Snapshot semantic identity
 
-Issue #147 の exact authority は `schemas/cxxlens_ng_snapshot_store_contract.yaml`
-（`cxxlens.snapshot-store-contract.v1`）と ADR 0078 である。基礎 identity DAG は Issue #63 / ADR 0009 を継承する。
+Issue #148 の exact authority は `schemas/cxxlens_ng_snapshot_store_contract.yaml`
+（`cxxlens.snapshot-store-contract.v1`）と ADR 0079 である。基礎 identity DAG は Issue #63 / ADR 0009 を継承する。
 identity は SHA-256 の全 256 bit と
 `cxxlens-canonical-tuple-v1` の versioned length-prefixed binary tuple を使用し、identity kind ごとに domain
 separation する。JSON text、absolute root、unordered iteration、timestamp、task order、backend layout は authority
@@ -1844,6 +1844,13 @@ Issue #147 / ADR 0078 により、snapshot semantics version の major/minor/pat
 reader で range validation してから構築する。`UINT32_MAX` は受理し、それを超える値は checksum や manifest ID が
 整合していても `store.corrupt` とする。現行 v5 payload は decode 後の canonical re-encode と byte-for-byte 一致を
 要求し、unchecked narrowing によって複数の wire encoding が同じ manifest へ collapse することを禁止する。
+
+Issue #148 / ADR 0079 により、publication sequence と physical generation は unsigned 64-bit counter とし、共通の
+checked add-one だけで進める。最大値からの publish/SQLite head CAS/compact は `store.counter-overflow` で fail closed
+にする。global generation の authority は checksum、publication identity、decoded record、semantic graph の検証を
+完了した committed record だけであり、corrupt および非 committed record の値を採用しない。SQLite physical minor
+2.6 は `INT64_MAX` を超える u64 を負の two's-complement INTEGER として可逆保存し、比較は decode 後の logical u64
+に対して行う。
 
 ### 15.2 Snapshot manifest
 
@@ -2044,7 +2051,8 @@ row/annotation projection を bottom-up に再構成し、manifest と byte-exac
 semantic integrity を宣言してはならない。duplicate snapshot 比較は annotation、coverage、partition binding、partition envelope
 を含み、physical generation/root relocation は除外する。
 
-Issue #132 は SQLite physical minor 2.5.0 に durable `cxxlens_ng_series_head` を追加する。publish は
+Issue #132 は SQLite physical minor 2.5.0 に durable `cxxlens_ng_series_head` を追加する。Issue #148 は minor 2.6.0
+で sequence/generation の全 u64 domain を可逆な signed INTEGER encoding と checked increment で閉じる。publish は
 `BEGIN IMMEDIATE` transaction 内で DB head の current publication/sequence と expected parentを再照合し、immutable publication
 `INSERT` と head updateを同一 commitに含める。別 store instance が先に commitした場合、後続 writerは
 `store.publication-conflict` で rollbackし、memory record/headは更新しない。publish path の `INSERT OR REPLACE` は禁止し、同一

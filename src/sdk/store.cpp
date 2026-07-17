@@ -217,6 +217,14 @@ namespace cxxlens::sdk
 			return {};
 		}
 
+		[[nodiscard]] result<std::uint64_t> checked_counter_increment(const std::uint64_t value,
+																	  const std::string_view field)
+		{
+			if (value == std::numeric_limits<std::uint64_t>::max())
+				return unexpected(store_error("store.counter-overflow", std::string{field}));
+			return value + 1U;
+		}
+
 		[[nodiscard]] std::string canonical_export_of(const snapshot_handle::data& value);
 
 		class binary_writer
@@ -739,6 +747,14 @@ namespace cxxlens::sdk
 			}
 			output.push_back('\'');
 			return output;
+		}
+
+		[[nodiscard]] std::string sqlite_unsigned(const std::uint64_t value)
+		{
+			if (value <= static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+				return std::to_string(value);
+			const auto magnitude = std::numeric_limits<std::uint64_t>::max() - value + 1U;
+			return "-" + std::to_string(magnitude);
 		}
 	} // namespace
 
@@ -2061,6 +2077,16 @@ namespace cxxlens::sdk
 
 		[[nodiscard]] result<std::uint64_t> parse_unsigned(const std::string_view value)
 		{
+			if (value.starts_with('-'))
+			{
+				std::uint64_t magnitude{};
+				const auto parsed =
+					std::from_chars(value.data() + 1, value.data() + value.size(), magnitude);
+				if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() ||
+					magnitude == 0U || magnitude > (std::uint64_t{1U} << 63U))
+					return unexpected(store_error("store.corrupt", "sqlite", "integer"));
+				return std::uint64_t{0U} - magnitude;
+			}
 			std::uint64_t output{};
 			const auto parsed = std::from_chars(value.data(), value.data() + value.size(), output);
 			if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size())
@@ -2098,8 +2124,8 @@ namespace cxxlens::sdk
 			std::ostringstream sql;
 			sql << "BEGIN IMMEDIATE;INSERT OR REPLACE INTO cxxlens_ng_publication VALUES("
 				<< sql_quote(record.publication_id) << ',' << sql_quote(record.series_id) << ','
-				<< sql_quote(record.snapshot_id) << ',' << record.sequence << ','
-				<< record.physical_generation << ','
+				<< sql_quote(record.snapshot_id) << ',' << sqlite_unsigned(record.sequence) << ','
+				<< sqlite_unsigned(record.physical_generation) << ','
 				<< (record.parent_publication ? sql_quote(*record.parent_publication) : "NULL")
 				<< ',' << static_cast<unsigned>(record.state) << ',' << sql_quote(checksum) << ",X'"
 				<< bytes_hex(payload) << "');COMMIT;";
@@ -2147,8 +2173,18 @@ namespace cxxlens::sdk
 				rollback();
 				return unexpected(std::move(prior_sequence.error()));
 			}
-			if (actual_parent != expected_parent || record.parent_publication != expected_parent ||
-				record.sequence != *prior_sequence + 1U)
+			if (actual_parent != expected_parent || record.parent_publication != expected_parent)
+			{
+				rollback();
+				return unexpected(store_error("store.publication-conflict", record.series_id));
+			}
+			auto next_sequence = checked_counter_increment(*prior_sequence, "publication_sequence");
+			if (!next_sequence)
+			{
+				rollback();
+				return unexpected(std::move(next_sequence.error()));
+			}
+			if (record.sequence != *next_sequence)
 			{
 				rollback();
 				return unexpected(store_error("store.publication-conflict", record.series_id));
@@ -2171,8 +2207,8 @@ namespace cxxlens::sdk
 			std::ostringstream insert;
 			insert << "INSERT INTO cxxlens_ng_publication VALUES("
 				   << sql_quote(record.publication_id) << ',' << sql_quote(record.series_id) << ','
-				   << sql_quote(record.snapshot_id) << ',' << record.sequence << ','
-				   << record.physical_generation << ','
+				   << sql_quote(record.snapshot_id) << ',' << sqlite_unsigned(record.sequence)
+				   << ',' << sqlite_unsigned(record.physical_generation) << ','
 				   << (record.parent_publication ? sql_quote(*record.parent_publication) : "NULL")
 				   << ',' << static_cast<unsigned>(record.state) << ',' << sql_quote(checksum)
 				   << ",X'" << bytes_hex(payload) << "');";
@@ -2184,11 +2220,12 @@ namespace cxxlens::sdk
 			const auto head_sql = actual_parent
 				? "UPDATE cxxlens_ng_series_head SET current_publication=" +
 					sql_quote(record.publication_id) +
-					",sequence=" + std::to_string(record.sequence) +
+					",sequence=" + sqlite_unsigned(record.sequence) +
 					" WHERE series_id=" + sql_quote(record.series_id) +
 					" AND current_publication=" + sql_quote(*actual_parent) + ';'
 				: "INSERT INTO cxxlens_ng_series_head VALUES(" + sql_quote(record.series_id) + ',' +
-					sql_quote(record.publication_id) + ',' + std::to_string(record.sequence) + ");";
+					sql_quote(record.publication_id) + ',' + sqlite_unsigned(record.sequence) +
+					");";
 			if (auto updated = database->execute(head_sql); !updated)
 			{
 				rollback();
@@ -2232,7 +2269,6 @@ namespace cxxlens::sdk
 														 : std::optional<std::string>{row[5]},
 										  static_cast<publication_state>(*state),
 										  false};
-				generation = std::max(generation, *physical);
 				if (auto valid = validate_publication_identity(record); !valid)
 				{
 					record.corrupt = true;
@@ -2269,6 +2305,8 @@ namespace cxxlens::sdk
 					records.emplace(record.publication_id, record);
 					continue;
 				}
+				if (record.state == publication_state::committed)
+					generation = std::max(generation, *physical);
 				generation_tokens.push_back(token);
 				records.emplace(record.publication_id, record);
 				publications.emplace(record.publication_id, std::move(*decoded));
@@ -2290,7 +2328,7 @@ namespace cxxlens::sdk
 				if (auto initialized =
 						database->execute("INSERT OR IGNORE INTO cxxlens_ng_series_head VALUES(" +
 										  sql_quote(series) + ',' + sql_quote(publication) + ',' +
-										  std::to_string(record.sequence) + ");");
+										  sqlite_unsigned(record.sequence) + ");");
 					!initialized)
 					return initialized;
 			}
@@ -2412,7 +2450,7 @@ namespace cxxlens::sdk
 
 	store_compatibility snapshot_store::compatibility() const
 	{
-		return {implementation_->backend, {2U, 5U, 0U}, true, false};
+		return {implementation_->backend, {2U, 6U, 0U}, true, false};
 	}
 
 	result<void> snapshot_store::compact()
@@ -2426,7 +2464,10 @@ namespace cxxlens::sdk
 			corrupt != implementation_->records.end())
 			return unexpected(store_error("store.compact-validation-failed", corrupt->first));
 		std::vector<std::pair<std::string, std::shared_ptr<snapshot_handle::data>>> replacements;
-		const auto next_generation = implementation_->generation + 1U;
+		auto next_generation =
+			checked_counter_increment(implementation_->generation, "physical_generation");
+		if (!next_generation)
+			return unexpected(std::move(next_generation.error()));
 		for (const auto& [id, current] : implementation_->publications)
 		{
 			if (current->semantic_manifest.id != snapshot_identity(current->semantic_manifest) ||
@@ -2437,11 +2478,11 @@ namespace cxxlens::sdk
 				if (auto valid = validate_semantic_graph(*current, implementation_->engine); !valid)
 					return unexpected(store_error("store.compact-validation-failed", id));
 			auto replacement = std::make_shared<snapshot_handle::data>(*current);
-			replacement->publication_record_value.physical_generation = next_generation;
+			replacement->publication_record_value.physical_generation = *next_generation;
 			if (auto valid = validate_publication_identity(replacement->publication_record_value);
 				!valid)
 				return unexpected(store_error("store.compact-validation-failed", id));
-			auto token = std::make_shared<const std::uint64_t>(next_generation);
+			auto token = std::make_shared<const std::uint64_t>(*next_generation);
 			replacement->generation_pin = token;
 			if (auto persisted = implementation_->persist(*replacement); !persisted)
 				return unexpected(std::move(persisted.error()));
@@ -2453,7 +2494,7 @@ namespace cxxlens::sdk
 			implementation_->records[id] = replacement->publication_record_value;
 			implementation_->publications[id] = std::move(replacement);
 		}
-		implementation_->generation = next_generation;
+		implementation_->generation = *next_generation;
 		return {};
 	}
 
@@ -2692,14 +2733,22 @@ namespace cxxlens::sdk
 			data_->current_state = publication_state::rejected;
 			return unexpected(store_error("store.publish-stale-parent", series_id));
 		}
-		const auto sequence =
-			head == store.heads.end() ? 1U : store.records.at(head->second).sequence + 1U;
-		const auto generation = store.generation + 1U;
+		auto sequence = head == store.heads.end()
+			? result<std::uint64_t>{std::uint64_t{1U}}
+			: checked_counter_increment(store.records.at(head->second).sequence,
+										"publication_sequence");
+		auto generation = checked_counter_increment(store.generation, "physical_generation");
+		if (!sequence || !generation)
+		{
+			data_->current_state = publication_state::rejected;
+			return unexpected(!sequence ? std::move(sequence.error())
+										: std::move(generation.error()));
+		}
 		publication_record record;
 		record.series_id = series_id;
 		record.snapshot_id = data_->candidate->semantic_manifest.id;
-		record.sequence = sequence;
-		record.physical_generation = generation;
+		record.sequence = *sequence;
+		record.physical_generation = *generation;
 		record.parent_publication = current_parent;
 		record.state = publication_state::committed;
 		record.publication_id = publication_identity(record);
@@ -2722,14 +2771,14 @@ namespace cxxlens::sdk
 			data_->current_state = publication_state::rejected;
 			return unexpected(store_error("store.hash-collision", record.snapshot_id));
 		}
-		auto token = std::make_shared<const std::uint64_t>(generation);
+		auto token = std::make_shared<const std::uint64_t>(*generation);
 		data_->candidate->generation_pin = token;
 		if (auto persisted = store.persist_new(*data_->candidate, current_parent); !persisted)
 		{
 			data_->current_state = publication_state::rolled_back;
 			return unexpected(std::move(persisted.error()));
 		}
-		store.generation = generation;
+		store.generation = *generation;
 		store.generation_tokens.push_back(token);
 		store.records[record.publication_id] = record;
 		store.publications[record.publication_id] = data_->candidate;
@@ -2865,15 +2914,16 @@ namespace cxxlens::sdk
 		std::ostringstream sql;
 		sql << "BEGIN IMMEDIATE;UPDATE cxxlens_ng_publication SET publication_id="
 			<< sql_quote(record.publication_id) << ",series_id=" << sql_quote(record.series_id)
-			<< ",snapshot_id=" << sql_quote(record.snapshot_id) << ",sequence=" << record.sequence
-			<< ",generation=" << record.physical_generation << ",parent="
+			<< ",snapshot_id=" << sql_quote(record.snapshot_id)
+			<< ",sequence=" << sqlite_unsigned(record.sequence)
+			<< ",generation=" << sqlite_unsigned(record.physical_generation) << ",parent="
 			<< (record.parent_publication ? sql_quote(*record.parent_publication) : "NULL")
 			<< ",state=" << static_cast<unsigned>(record.state)
 			<< ",checksum=" << sql_quote(checksum) << ",payload=X'" << bytes_hex(payload)
 			<< "' WHERE publication_id=" << sql_quote(publication_id)
 			<< ";UPDATE cxxlens_ng_series_head SET series_id=" << sql_quote(record.series_id)
 			<< ",current_publication=" << sql_quote(record.publication_id)
-			<< ",sequence=" << record.sequence
+			<< ",sequence=" << sqlite_unsigned(record.sequence)
 			<< " WHERE current_publication=" << sql_quote(publication_id) << ";COMMIT;";
 		if (auto updated = store.implementation_->database->execute(sql.str()); !updated)
 		{
@@ -2949,6 +2999,91 @@ namespace cxxlens::sdk
 			return unexpected(std::move(updated.error()));
 		}
 		return record.publication_id;
+	}
+
+	result<std::string>
+	rewrite_publication_counters_for_testing(snapshot_store& store,
+											 const std::string_view publication_id,
+											 const std::uint64_t sequence,
+											 const std::uint64_t generation)
+	{
+		std::scoped_lock lock{store.implementation_->mutex};
+		const auto found = store.implementation_->publications.find(publication_id);
+		if (found == store.implementation_->publications.end())
+			return unexpected(
+				store_error("store.publication-not-found", std::string{publication_id}));
+		auto replacement = std::make_shared<snapshot_handle::data>(*found->second);
+		auto& record = replacement->publication_record_value;
+		record.sequence = sequence;
+		record.physical_generation = generation;
+		record.publication_id = publication_identity(record);
+		if (auto valid = validate_publication_identity(record); !valid)
+			return unexpected(std::move(valid.error()));
+		auto token = std::make_shared<const std::uint64_t>(generation);
+		replacement->generation_pin = token;
+
+		if (store.implementation_->database != nullptr)
+		{
+			const auto payload = encode_snapshot(*replacement);
+			const auto checksum = content_digest(payload);
+			std::ostringstream sql;
+			sql << "BEGIN IMMEDIATE;UPDATE cxxlens_ng_publication SET publication_id="
+				<< sql_quote(record.publication_id)
+				<< ",sequence=" << sqlite_unsigned(record.sequence)
+				<< ",generation=" << sqlite_unsigned(record.physical_generation)
+				<< ",checksum=" << sql_quote(checksum) << ",payload=X'" << bytes_hex(payload)
+				<< "' WHERE publication_id=" << sql_quote(publication_id)
+				<< ";UPDATE cxxlens_ng_series_head SET current_publication="
+				<< sql_quote(record.publication_id)
+				<< ",sequence=" << sqlite_unsigned(record.sequence)
+				<< " WHERE current_publication=" << sql_quote(publication_id) << ";COMMIT;";
+			if (auto updated = store.implementation_->database->execute(sql.str()); !updated)
+			{
+				(void)store.implementation_->database->execute("ROLLBACK;");
+				return unexpected(std::move(updated.error()));
+			}
+		}
+
+		store.implementation_->records.erase(std::string{publication_id});
+		store.implementation_->publications.erase(std::string{publication_id});
+		store.implementation_->records[record.publication_id] = record;
+		store.implementation_->publications[record.publication_id] = replacement;
+		store.implementation_->heads[record.series_id] = record.publication_id;
+		store.implementation_->generation = generation;
+		store.implementation_->generation_tokens.push_back(token);
+		return record.publication_id;
+	}
+
+	result<void> poison_rejected_generation_for_testing(snapshot_store& store,
+														const std::string_view publication_id,
+														const std::uint64_t generation)
+	{
+		std::scoped_lock lock{store.implementation_->mutex};
+		if (store.implementation_->database == nullptr)
+			return unexpected(store_error("store.corrupt", "test-counter-poison", "backend"));
+		const auto found = store.implementation_->publications.find(publication_id);
+		if (found == store.implementation_->publications.end())
+			return unexpected(
+				store_error("store.publication-not-found", std::string{publication_id}));
+		auto rejected = snapshot_handle::data{*found->second};
+		auto& record = rejected.publication_record_value;
+		record.physical_generation = generation;
+		record.state = publication_state::rejected;
+		const auto payload = encode_snapshot(rejected);
+		const auto invalid_checksum = std::string{"sha256:"} + std::string(64U, '0');
+		std::ostringstream sql;
+		sql << "BEGIN IMMEDIATE;UPDATE cxxlens_ng_publication SET generation="
+			<< sqlite_unsigned(generation) << ",state=" << static_cast<unsigned>(record.state)
+			<< ",checksum=" << sql_quote(invalid_checksum) << ",payload=X'" << bytes_hex(payload)
+			<< "' WHERE publication_id=" << sql_quote(publication_id)
+			<< ";DELETE FROM cxxlens_ng_series_head WHERE current_publication="
+			<< sql_quote(publication_id) << ";COMMIT;";
+		if (auto updated = store.implementation_->database->execute(sql.str()); !updated)
+		{
+			(void)store.implementation_->database->execute("ROLLBACK;");
+			return updated;
+		}
+		return {};
 	}
 
 	snapshot_builder::snapshot_builder(relation_registry registry) : registry_{std::move(registry)}

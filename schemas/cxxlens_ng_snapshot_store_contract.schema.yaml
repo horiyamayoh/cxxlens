@@ -17,6 +17,7 @@ required:
   - snapshot
   - publication_identity
   - wire_decoding
+  - publication_counters
   - publication_series
   - publication_transaction
   - reader_pin
@@ -36,8 +37,8 @@ properties:
       design:
         const: docs/design/cxxlens_next_generation_integrated_design_ja.md#15-immutable-snapshot-and-store
       decision_adr:
-        const: docs/design/adr/0078-snapshot-version-wire-u32-canonicality.md
-      owner_issue: {const: '#147'}
+        const: docs/design/adr/0079-checked-publication-counters.md
+      owner_issue: {const: '#148'}
       owner: {const: steward.ng-store-contract}
   compatibility:
     type: object
@@ -120,6 +121,20 @@ properties:
       overflow: {const: store.corrupt}
       narrowing_before_range_validation: {const: forbidden}
       accepted_v5_payload: {const: decode-encode-byte-identical}
+  publication_counters:
+    type: object
+    additionalProperties: false
+    required: [domain, fields, authority_record, global_generation, increment, maximum_increment, overflow, compaction_uses_shared_increment, sqlite_integer_encoding]
+    properties:
+      domain: {const: unsigned-64-bit}
+      fields: {const: [publication_sequence, physical_generation]}
+      authority_record: {$ref: '#/$defs/open_object'}
+      global_generation: {const: maximum-authority-record-generation}
+      increment: {const: shared-checked-add-one}
+      maximum_increment: {const: reject}
+      overflow: {const: store.counter-overflow}
+      compaction_uses_shared_increment: {const: true}
+      sqlite_integer_encoding: {$ref: '#/$defs/open_object'}
   publication_series: {type: object, required: [selector_fields, series_id, current_api, catalog_only_lookup, missing_selector_field, cross_series_fallback, head_selection]}
   publication_transaction: {type: object, required: [states, visible_states, commit, stale_parent, failed_publish_preserves_head, recovery]}
   reader_pin: {type: object, required: [handle_pins, semantic_snapshot_immutable, reclamation]}
@@ -130,3 +145,4 @@ properties:
 $defs:
   version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
   name: {type: string, pattern: '^[a-z][a-z0-9_.-]+$'}
+  open_object: {type: object, minProperties: 1, additionalProperties: true}

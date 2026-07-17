@@ -1,5 +1,5 @@
 {
-  "asset_count": 361,
+  "asset_count": 362,
   "assets": [
     {
       "authority": "active",
@@ -977,6 +977,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0078-snapshot-version-wire-u32-canonicality.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0079-checked-publication-counters.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2530,7 +2537,7 @@
     }
   ],
   "classifications": {
-    "active": 325,
+    "active": 326,
     "archived": 35,
     "generated": 1
   },

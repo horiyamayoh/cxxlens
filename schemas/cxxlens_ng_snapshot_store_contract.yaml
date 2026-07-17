@@ -1,10 +1,10 @@
 schema: cxxlens.snapshot-store-contract.v1
-document_version: 1.8.0
+document_version: 1.9.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#15-immutable-snapshot-and-store
-  decision_adr: docs/design/adr/0078-snapshot-version-wire-u32-canonicality.md
-  owner_issue: '#147'
+  decision_adr: docs/design/adr/0079-checked-publication-counters.md
+  owner_issue: '#148'
   owner: steward.ng-store-contract
 compatibility:
   version_axis: snapshot-identity-and-publication
@@ -261,6 +261,21 @@ wire_decoding:
   overflow: store.corrupt
   narrowing_before_range_validation: forbidden
   accepted_v5_payload: decode-encode-byte-identical
+publication_counters:
+  domain: unsigned-64-bit
+  fields: [publication_sequence, physical_generation]
+  authority_record:
+    required: [checksum-valid, publication-identity-valid, decoded-record-exact, semantic-graph-valid, committed]
+    excluded: [created, staged, validating, rejected, rolled_back, corrupt]
+  global_generation: maximum-authority-record-generation
+  increment: shared-checked-add-one
+  maximum_increment: reject
+  overflow: store.counter-overflow
+  compaction_uses_shared_increment: true
+  sqlite_integer_encoding:
+    nonnegative_range: zero-through-int64-max
+    upper_unsigned_range: negative-twos-complement-int64
+    round_trip: exact-u64
 publication_series:
   selector_fields:
     - catalog_id
