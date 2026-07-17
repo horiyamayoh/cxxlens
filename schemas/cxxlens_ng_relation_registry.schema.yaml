@@ -357,6 +357,7 @@ $defs:
     - on_missing
     properties:
       source_columns:
+        description: Ordered source side of the positional source-to-target column pairing.
         type: array
         minItems: 1
         uniqueItems: true
@@ -365,6 +366,7 @@ $defs:
       target_relation:
         $ref: '#/$defs/relation_name'
       target_columns:
+        description: Ordered target side of the positional source-to-target column pairing.
         type: array
         minItems: 1
         uniqueItems: true
@@ -535,6 +537,7 @@ $defs:
         items:
           $ref: '#/$defs/column'
       references:
+        description: Unordered collection canonicalized by every serialized reference field.
         type: array
         items:
           $ref: '#/$defs/reference'
@@ -550,6 +553,7 @@ $defs:
             - functional_assertion
             - set
           conflict_columns:
+            description: Unordered unique set canonicalized by stable column ID.
             type: array
             uniqueItems: true
             items:

@@ -1066,6 +1066,11 @@ provenance minimum
 evolution policy
 ```
 
+descriptor collection のうち `columns`、`references`、`conflict_columns` は投入順に意味を持たず、canonical form では
+各 serialized record の全 field を含む strict total order へ整列する。一方、`key_columns`、domain identity projection、
+各 reference 内の source/target column list は位置対応を持つ sequence なので順序を保持する。reference の比較が equivalent
+となるのは serialized reference が同一の場合だけでなければならない。
+
 ### 9.4 Column types
 
 NG0 scalar:

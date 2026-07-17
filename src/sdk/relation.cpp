@@ -420,6 +420,18 @@ namespace cxxlens::sdk
 				std::to_string(static_cast<std::uint8_t>(strength));
 		}
 
+		[[nodiscard]] bool reference_less(const relation_reference_descriptor& left,
+										  const relation_reference_descriptor& right)
+		{
+			return std::tie(left.source_columns,
+							left.strength,
+							left.target_relation,
+							left.target_columns) < std::tie(right.source_columns,
+															right.strength,
+															right.target_relation,
+															right.target_columns);
+		}
+
 		[[nodiscard]] result<std::string> descriptor_binding(const relation_descriptor& descriptor)
 		{
 			return semantic_digest("cxxlens.relation-descriptor-binding.v2",
@@ -742,11 +754,13 @@ namespace cxxlens::sdk
 				   << "\"}";
 		}
 		output << R"(],"conflict_columns":[)";
-		for (std::size_t index = 0U; index < conflict_columns.size(); ++index)
+		auto ordered_conflict_columns = conflict_columns;
+		std::ranges::sort(ordered_conflict_columns);
+		for (std::size_t index = 0U; index < ordered_conflict_columns.size(); ++index)
 		{
 			if (index != 0U)
 				output << ',';
-			output << '"' << escape(conflict_columns[index]) << '"';
+			output << '"' << escape(ordered_conflict_columns[index]) << '"';
 		}
 		output << R"(],"domain_identity":{"contract":")" << escape(domain_identity.contract)
 			   << R"(","projection":[)";
@@ -771,12 +785,7 @@ namespace cxxlens::sdk
 		output << R"(],"merge":")" << merge_name(merge) << R"(","name":")" << escape(name)
 			   << R"(","owner_namespace":")" << escape(owner_namespace) << R"(","references":[)";
 		auto ordered_references = references;
-		std::ranges::sort(ordered_references,
-						  [](const auto& left, const auto& right)
-						  {
-							  return std::tie(left.target_relation, left.source_columns) <
-								  std::tie(right.target_relation, right.source_columns);
-						  });
+		std::ranges::sort(ordered_references, reference_less);
 		for (std::size_t index = 0U; index < ordered_references.size(); ++index)
 		{
 			if (index != 0U)

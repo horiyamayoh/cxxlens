@@ -14,6 +14,7 @@ set(cxxlens_sdk_cases
     digest
     closed-enum-canonical-value
     descriptor-binding
+    descriptor-canonical-collections
     relation-schema-parity
     static-dynamic-query
     snapshot-lifetime

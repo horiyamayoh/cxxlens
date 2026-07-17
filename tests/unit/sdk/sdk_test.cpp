@@ -765,7 +765,10 @@ namespace
 		rejects_stale_binding(std::move(column_type), "column type");
 
 		auto reference = trusted;
-		reference.references.front().strength = reference_strength::soft_semantic;
+		reference.references.front().strength =
+			reference.references.front().strength == reference_strength::hard
+			? reference_strength::soft_semantic
+			: reference_strength::hard;
 		rejects_stale_binding(std::move(reference), "reference");
 
 		auto semantics = trusted;
@@ -793,6 +796,80 @@ namespace
 		require(set_engine && multiset_engine &&
 					set_engine->registry_digest() != multiset_engine->registry_digest(),
 				"different runtime descriptors produced the same registry digest");
+	}
+
+	void check_descriptor_canonical_collections()
+	{
+		using namespace cxxlens::sdk;
+		const auto rebind = [](relation_descriptor& descriptor)
+		{
+			descriptor.descriptor_digest =
+				*semantic_digest("cxxlens.relation-descriptor-binding.v2",
+								 descriptor.contract_digest + "\n" + descriptor.canonical_form());
+		};
+
+		const auto generated = cxxlens::cc::relations::call_site::descriptor();
+		auto generated_permutation = generated;
+		std::ranges::reverse(generated_permutation.references);
+		std::ranges::reverse(generated_permutation.conflict_columns);
+		require(generated_permutation.canonical_form() == generated.canonical_form() &&
+					generated_permutation.descriptor_digest == generated.descriptor_digest &&
+					generated_permutation.validate(),
+				"generated descriptor digest depended on set insertion order");
+
+		auto baseline = generated;
+		baseline.contract_canonical.clear();
+		baseline.contract_digest.clear();
+		const std::vector<std::string> paired_source{baseline.columns[1].id,
+													 baseline.columns[2].id};
+		baseline.references = {
+			{paired_source,
+			 "company.target",
+			 {"company.target.v1.a", "company.target.v1.b"},
+			 reference_strength::hard},
+			{paired_source,
+			 "company.target",
+			 {"company.target.v1.b", "company.target.v1.a"},
+			 reference_strength::hard},
+			{paired_source,
+			 "company.target",
+			 {"company.target.v1.a", "company.target.v1.b"},
+			 reference_strength::soft_semantic},
+		};
+		rebind(baseline);
+		require(baseline.validate().has_value(),
+				"canonical collection baseline descriptor was rejected");
+		const auto expected_form = baseline.canonical_form();
+		const auto expected_digest = baseline.descriptor_digest;
+		require(
+			expected_form.contains(
+				R"("strength":"hard","target_relation":"company.target","target":["company.target.v1.a","company.target.v1.b"])"),
+			"reference canonicalization did not preserve source-target position pairing");
+
+		std::array<std::size_t, 3U> reference_order{0U, 1U, 2U};
+		do
+		{
+			auto candidate = baseline;
+			candidate.references.clear();
+			for (const auto index : reference_order)
+				candidate.references.push_back(baseline.references[index]);
+			rebind(candidate);
+			require(candidate.validate() && candidate.canonical_form() == expected_form &&
+						candidate.descriptor_digest == expected_digest,
+					"reference permutation changed descriptor canonical identity");
+		} while (std::ranges::next_permutation(reference_order).found);
+
+		auto conflict_order = baseline.conflict_columns;
+		std::ranges::sort(conflict_order);
+		do
+		{
+			auto candidate = baseline;
+			candidate.conflict_columns = conflict_order;
+			rebind(candidate);
+			require(candidate.validate() && candidate.canonical_form() == expected_form &&
+						candidate.descriptor_digest == expected_digest,
+					"conflict column permutation changed descriptor canonical identity");
+		} while (std::ranges::next_permutation(conflict_order).found);
 	}
 
 	void check_relation_schema_parity()
@@ -2048,6 +2125,7 @@ int main(const int argc, const char* const argv[])
 		test_case{"digest", check_digest},
 		test_case{"closed-enum-canonical-value", check_closed_enum_and_canonical_value},
 		test_case{"descriptor-binding", check_descriptor_binding},
+		test_case{"descriptor-canonical-collections", check_descriptor_canonical_collections},
 		test_case{"relation-schema-parity", check_relation_schema_parity},
 		test_case{"static-dynamic-query", check_static_dynamic_query},
 		test_case{"snapshot-lifetime", check_snapshot_lifetime},

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import pathlib
@@ -20,6 +21,8 @@ import check_ng_query_contract as query_contract
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tools" / "sdk"))
+from relation_idl_compiler import canonical_relation  # noqa: E402
 CATALOG = pathlib.Path("schemas/cxxlens_ng_public_api_catalog.yaml")
 SCHEMA = pathlib.Path("schemas/cxxlens_ng_public_api_catalog.schema.yaml")
 PROJECT_CATALOG_CONTRACT = pathlib.Path("schemas/cxxlens_ng_project_catalog_contract.yaml")
@@ -364,13 +367,44 @@ def validate_generation_and_negatives(root: pathlib.Path, compiler: str) -> None
                 if marker not in generated_text:
                     fail(f"generated relation tag omitted registry identity: {marker}")
             relation_canonical = json.dumps(
-                relation, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+                canonical_relation(relation),
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
             )
             relation_digest = "sha256:" + hashlib.sha256(
                 relation_canonical.encode("utf-8")
             ).hexdigest()
             if relation_digest not in generated_text:
                 fail(f"generated relation tag omitted exact authority digest: {name}")
+
+            permuted_registry = copy.deepcopy(registry)
+            permuted_relation = next(
+                row for row in permuted_registry["relations"] if row["name"] == name
+            )
+            permuted_relation["references"].reverse()
+            permuted_relation["merge"]["conflict_columns"].reverse()
+            permuted_registry_path = temporary / f"{name}.permuted.yaml"
+            permuted_registry_path.write_text(
+                yaml.safe_dump(permuted_registry, sort_keys=False), encoding="utf-8"
+            )
+            permuted_generated = temporary / f"{filename}.permuted"
+            run(
+                [
+                    sys.executable,
+                    str(root / "tools/sdk/relation_idl_compiler.py"),
+                    "--registry",
+                    str(permuted_registry_path),
+                    "--relation",
+                    name,
+                    "--output",
+                    str(permuted_generated),
+                ],
+                expect_success=True,
+                label=f"relation IDL permutation generation {name}",
+            )
+            if permuted_generated.read_bytes() != generated.read_bytes():
+                fail(f"relation IDL generation depends on set insertion order: {name}")
 
         source = temporary / "generated_test.cpp"
         source.write_text(

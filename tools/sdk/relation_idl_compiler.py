@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import pathlib
@@ -15,6 +16,27 @@ import yaml
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+
+
+def canonical_relation(relation: dict[str, object]) -> dict[str, object]:
+    """Canonicalize only descriptor collections whose schema semantics are unordered."""
+    canonical = copy.deepcopy(relation)
+    references = canonical.get("references", [])
+    assert isinstance(references, list)
+    references.sort(
+        key=lambda reference: (
+            tuple(reference["source_columns"]),
+            str(reference["strength"]),
+            str(reference["target_relation"]),
+            tuple(reference["target_columns"]),
+        )
+    )
+    merge = canonical["merge"]
+    assert isinstance(merge, dict)
+    conflict_columns = merge.get("conflict_columns", [])
+    assert isinstance(conflict_columns, list)
+    conflict_columns.sort()
+    return canonical
 
 
 def parse_type(value: str) -> tuple[str, str, bool]:
@@ -59,6 +81,7 @@ def type_expr(value: str) -> str:
 
 
 def render(relation: dict[str, object]) -> str:
+    relation = canonical_relation(relation)
     qualified = str(relation["generated_cpp_tag"])
     parts = qualified.split("::")
     if parts[0] != "cxxlens" or len(parts) < 3:
