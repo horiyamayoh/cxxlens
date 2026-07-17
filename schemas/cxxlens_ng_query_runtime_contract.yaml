@@ -1,12 +1,12 @@
 schema: cxxlens.query-runtime-contract.v1
-document_version: 1.5.0
+document_version: 1.6.0
 maturity: implemented
 authority:
   logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
   guarantee_contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
   snapshot_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
-  decision_adr: docs/design/adr/0025-query-preallocation-budget-accounting.md
-  owner_issue: '#82'
+  decision_adr: docs/design/adr/0028-query-canonical-union-execution-order.md
+  owner_issue: '#85'
   owner: steward.ng-query-runtime
 compatibility:
   version_axis: query-runtime-result
@@ -55,6 +55,13 @@ planner:
   id: cxxlens.reference-query-planner.v1
   deterministic: true
   public_authority: false
+  canonical_traversal:
+    node_order: rooted-postorder
+    shared_node_evaluation: once
+    union_child_order: canonical-subtree-digest
+    digest_collision_tie_break: raw-canonical-subtree-bytes
+    runtime_controls_follow_traversal: true
+    diagnostic_node_ids: canonical-postorder-ordinal
   scan: canonical-claim-content-order
   join: bounded-reference-nested-loop
   distinct: canonical-key-reduction
@@ -83,6 +90,7 @@ execution:
     - query.interpretation_restrict.v1
   source_backends: [memory, sqlite]
   physical_arrival_order_observable: false
+  commutative_identity_runtime_equivalence: true
   cell_policy:
     states: [present, absent, unknown]
     sql_null_coercion: forbidden
@@ -200,6 +208,7 @@ result:
 qualification:
   backends: [memory, sqlite]
   input_orders: [forward, reverse, seeded-shuffle]
+  union_input_orders: [left-right, right-left]
   comparisons:
     - logical_ir_digest
     - canonical_semantic_rows

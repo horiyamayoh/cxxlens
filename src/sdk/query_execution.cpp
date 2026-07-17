@@ -145,6 +145,64 @@ namespace cxxlens::sdk::query
 			values.erase(std::ranges::unique(values).begin(), values.end());
 		}
 
+		struct canonical_execution_plan
+		{
+			std::vector<const ir_node*> nodes;
+			std::map<std::string, std::string, std::less<>> stable_ids;
+			std::map<std::string, std::vector<std::string>, std::less<>> inputs;
+		};
+
+		[[nodiscard]] std::vector<std::string>
+		canonical_inputs(const ir_node& node,
+						 const std::map<std::string, const ir_node*, std::less<>>& nodes)
+		{
+			auto inputs = node.inputs;
+			if (node.operator_id != "query.union.v1")
+				return inputs;
+			std::ranges::sort(inputs,
+							  [&](const std::string& left, const std::string& right)
+							  {
+								  const auto left_digest =
+									  detail::canonical_subtree_digest(left, nodes);
+								  const auto right_digest =
+									  detail::canonical_subtree_digest(right, nodes);
+								  if (left_digest != right_digest)
+									  return left_digest < right_digest;
+								  return detail::canonical_subtree_form(left, nodes) <
+									  detail::canonical_subtree_form(right, nodes);
+							  });
+			return inputs;
+		}
+
+		void append_canonical_execution_node(
+			const std::string& node_id,
+			const std::map<std::string, const ir_node*, std::less<>>& index,
+			std::set<std::string, std::less<>>& visited,
+			canonical_execution_plan& plan)
+		{
+			if (visited.contains(node_id))
+				return;
+			const auto& node = *index.at(node_id);
+			auto inputs = canonical_inputs(node, index);
+			for (const auto& input : inputs)
+				append_canonical_execution_node(input, index, visited, plan);
+			visited.insert(node_id);
+			plan.inputs.emplace(node_id, std::move(inputs));
+			plan.stable_ids.emplace(node_id, "n" + std::to_string(plan.nodes.size()));
+			plan.nodes.push_back(&node);
+		}
+
+		canonical_execution_plan make_canonical_execution_plan(const logical_query_ir& query)
+		{
+			std::map<std::string, const ir_node*, std::less<>> index;
+			for (const auto& node : query.nodes)
+				index.emplace(node.id, &node);
+			canonical_execution_plan plan;
+			std::set<std::string, std::less<>> visited;
+			append_canonical_execution_node(query.root, index, visited, plan);
+			return plan;
+		}
+
 		struct schema_column_access
 		{
 			std::string descriptor_id;
@@ -1517,21 +1575,25 @@ namespace cxxlens::sdk::query
 
 		runtime_state state;
 		state.budget = request.budget;
+		const auto execution_plan = make_canonical_execution_plan(query);
+		const auto& normalized_root = execution_plan.stable_ids.at(query.root);
 		std::map<std::string, evaluation, std::less<>> evaluations;
 		std::ostringstream physical;
 		physical << "backend=" << snapshot_.physical_backend();
 		if (implicit_terminal_projection)
 			physical << ";terminal=canonical-implicit-project";
-		for (const auto& node : query.nodes)
+		for (const auto* planned_node : execution_plan.nodes)
 		{
+			const auto& node = *planned_node;
+			const auto& stable_id = execution_plan.stable_ids.at(node.id);
 			auto arguments = decode_arguments(node);
 			if (!arguments)
 				return unexpected(std::move(arguments.error()));
-			physical << ";node=" << node.id << ':' << node.operator_id << ':'
+			physical << ";node=" << stable_id << ':' << node.operator_id << ':'
 					 << operator_strategy(node.operator_id);
 			std::vector<const evaluation*> inputs;
 			inputs.reserve(node.inputs.size());
-			for (const auto& input : node.inputs)
+			for (const auto& input : execution_plan.inputs.at(node.id))
 				inputs.push_back(&evaluations.at(input));
 			evaluation output;
 			if (node.operator_id == "query.scan.v1")
@@ -1550,13 +1612,13 @@ namespace cxxlens::sdk::query
 					if (output.rows.size() >= state.budget.max_intermediate_rows)
 					{
 						state.failure_code = "sdk.query-intermediate-budget";
-						state.failure_subject = node.id;
+						state.failure_subject = stable_id;
 						break;
 					}
 					if (state.retained_memory_bytes >= state.budget.max_memory_bytes)
 					{
 						state.failure_code = "sdk.query-memory-budget";
-						state.failure_subject = node.id;
+						state.failure_subject = stable_id;
 						break;
 					}
 					if (state.scanned == state.budget.max_rows_scanned)
@@ -1577,8 +1639,8 @@ namespace cxxlens::sdk::query
 					row.producer_contracts = {annotation->producer};
 					row.provenance = {annotation->provenance_root};
 					row.contributor_guarantees = {annotation->guarantee};
-					if (!append_row(state, node.id, output, std::move(row)) ||
-						!append_source_annotation(state, node.id, *annotation))
+					if (!append_row(state, stable_id, output, std::move(row)) ||
+						!append_source_annotation(state, stable_id, *annotation))
 						break;
 				}
 			}
@@ -1587,7 +1649,7 @@ namespace cxxlens::sdk::query
 				const auto& predicate = std::get<predicate_arguments>(*arguments).predicate;
 				for (const auto& row : inputs.front()->rows)
 					if (evaluate_predicate(row, predicate, column_types))
-						if (!append_row(state, node.id, output, row))
+						if (!append_row(state, stable_id, output, row))
 							break;
 				output.ordered = inputs.front()->ordered;
 				output.order_keys = inputs.front()->order_keys;
@@ -1606,7 +1668,7 @@ namespace cxxlens::sdk::query
 					for (const auto& item : project.columns)
 						projected.values.emplace(
 							item.output, cell_for(row, item.column.column_id, column_types));
-					if (!append_row(state, node.id, output, std::move(projected)))
+					if (!append_row(state, stable_id, output, std::move(projected)))
 						break;
 				}
 				output.ordered = inputs.front()->ordered &&
@@ -1635,7 +1697,7 @@ namespace cxxlens::sdk::query
 						if (!combined)
 							return unexpected(std::move(combined.error()));
 						if (*combined && evaluate_predicate(**combined, predicate, column_types))
-							if (!append_row(state, node.id, output, std::move(**combined)))
+							if (!append_row(state, stable_id, output, std::move(**combined)))
 								break;
 					}
 					if (state.failed())
@@ -1661,7 +1723,7 @@ namespace cxxlens::sdk::query
 							if (output.rows.size() >= state.budget.max_intermediate_rows)
 							{
 								state.failure_code = "sdk.query-intermediate-budget";
-								state.failure_subject = node.id;
+								state.failure_subject = stable_id;
 								break;
 							}
 							selected = left;
@@ -1689,7 +1751,7 @@ namespace cxxlens::sdk::query
 						canonical_producers(selected->producer_contracts);
 						canonical_set(selected->provenance);
 						canonical_guarantees(selected->contributor_guarantees);
-						if (!candidate_fits_memory(state, node.id, *selected))
+						if (!candidate_fits_memory(state, stable_id, *selected))
 							break;
 					}
 					if (state.failed())
@@ -1701,7 +1763,7 @@ namespace cxxlens::sdk::query
 					canonical_producers(selected->producer_contracts);
 					canonical_set(selected->provenance);
 					canonical_guarantees(selected->contributor_guarantees);
-					if (!append_row(state, node.id, output, std::move(*selected)))
+					if (!append_row(state, stable_id, output, std::move(*selected)))
 						break;
 				}
 				output.ordered = inputs[0]->ordered;
@@ -1713,7 +1775,7 @@ namespace cxxlens::sdk::query
 				for (const auto* input : inputs)
 				{
 					for (const auto& row : input->rows)
-						if (!append_row(state, node.id, output, row))
+						if (!append_row(state, stable_id, output, row))
 							break;
 					if (state.failed())
 						break;
@@ -1734,7 +1796,7 @@ namespace cxxlens::sdk::query
 					catch (const std::bad_alloc&)
 					{
 						state.failure_code = "sdk.query-memory-budget";
-						state.failure_subject = node.id;
+						state.failure_subject = stable_id;
 						break;
 					}
 					const auto found = groups.find(key);
@@ -1742,10 +1804,10 @@ namespace cxxlens::sdk::query
 					{
 						auto inserted = row;
 						inserted.multiplicity = 1U;
-						if (!append_row(state, node.id, output, std::move(inserted)))
+						if (!append_row(state, stable_id, output, std::move(inserted)))
 							break;
 						const auto key_bytes = static_cast<std::uint64_t>(key.size());
-						if (!state.reserve_memory(node.id, key_bytes))
+						if (!state.reserve_memory(stable_id, key_bytes))
 							break;
 						try
 						{
@@ -1755,7 +1817,7 @@ namespace cxxlens::sdk::query
 						{
 							state.retained_memory_bytes -= key_bytes;
 							state.failure_code = "sdk.query-memory-budget";
-							state.failure_subject = node.id;
+							state.failure_subject = stable_id;
 							break;
 						}
 						scratch_bytes += key_bytes;
@@ -1782,7 +1844,7 @@ namespace cxxlens::sdk::query
 					canonical_producers(merged.producer_contracts);
 					canonical_set(merged.provenance);
 					canonical_guarantees(merged.contributor_guarantees);
-					if (!replace_row(state, node.id, output, found->second, std::move(merged)))
+					if (!replace_row(state, stable_id, output, found->second, std::move(merged)))
 						break;
 				}
 				state.retained_memory_bytes -= scratch_bytes;
@@ -1791,7 +1853,7 @@ namespace cxxlens::sdk::query
 			else if (node.operator_id == "query.order_by.v1")
 			{
 				for (const auto& row : inputs.front()->rows)
-					if (!append_row(state, node.id, output, row))
+					if (!append_row(state, stable_id, output, row))
 						break;
 				output.order_keys = std::get<order_arguments>(*arguments).keys;
 				if (!state.failed())
@@ -1808,7 +1870,7 @@ namespace cxxlens::sdk::query
 					catch (const std::bad_alloc&)
 					{
 						state.failure_code = "sdk.query-memory-budget";
-						state.failure_subject = node.id;
+						state.failure_subject = stable_id;
 					}
 				output.ordered = true;
 				output.limited = inputs.front()->limited;
@@ -1818,7 +1880,7 @@ namespace cxxlens::sdk::query
 				const auto count = std::get<limit_arguments>(*arguments).count;
 				const auto retained = std::min<std::uint64_t>(inputs.front()->rows.size(), count);
 				for (std::size_t index = 0U; index < retained; ++index)
-					if (!append_row(state, node.id, output, inputs.front()->rows[index]))
+					if (!append_row(state, stable_id, output, inputs.front()->rows[index]))
 						break;
 				output.ordered = inputs.front()->ordered;
 				output.order_keys = inputs.front()->order_keys;
@@ -1837,7 +1899,7 @@ namespace cxxlens::sdk::query
 					{
 						auto restricted = row;
 						restricted.presence = std::move(**presence);
-						if (!append_row(state, node.id, output, std::move(restricted)))
+						if (!append_row(state, stable_id, output, std::move(restricted)))
 							break;
 					}
 				}
@@ -1851,7 +1913,7 @@ namespace cxxlens::sdk::query
 					std::get<interpretation_arguments>(*arguments).interpretation;
 				for (const auto& row : inputs.front()->rows)
 					if (row.interpretation == interpretation)
-						if (!append_row(state, node.id, output, row))
+						if (!append_row(state, stable_id, output, row))
 							break;
 				output.ordered = inputs.front()->ordered;
 				output.order_keys = inputs.front()->order_keys;
@@ -1944,7 +2006,7 @@ namespace cxxlens::sdk::query
 			evaluated.rows.resize(static_cast<std::size_t>(request.budget.max_rows_output));
 			result_data->status = execution_status::truncated;
 			result_data->unresolved.push_back(
-				{"sdk.query-output-budget", query.root, "canonical sealed prefix returned"});
+				{"sdk.query-output-budget", normalized_root, "canonical sealed prefix returned"});
 		}
 		for (std::size_t index = 0U; index < evaluated.rows.size(); ++index)
 		{
@@ -1956,7 +2018,7 @@ namespace cxxlens::sdk::query
 					? execution_status::failed_before_result
 					: execution_status::cancelled_with_partial;
 				result_data->unresolved.push_back({"sdk.query-cancelled",
-												   query.root,
+												   normalized_root,
 												   result_data->row_values.empty()
 													   ? "no sealed rows"
 													   : "sealed canonical prefix returned"});

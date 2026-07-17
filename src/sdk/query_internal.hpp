@@ -1,14 +1,23 @@
 #pragma once
 
+#include <map>
 #include <set>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <cxxlens/sdk/query.hpp>
 
 namespace cxxlens::sdk::query::detail
 {
+	[[nodiscard]] std::string
+	canonical_subtree_form(std::string_view node_id,
+						   const std::map<std::string, const ir_node*, std::less<>>& nodes);
+	[[nodiscard]] std::string
+	canonical_subtree_digest(std::string_view node_id,
+							 const std::map<std::string, const ir_node*, std::less<>>& nodes);
+
 	[[nodiscard]] inline std::vector<std::string>
 	output_aliases(const std::span<const column_ref> columns)
 	{

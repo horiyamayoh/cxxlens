@@ -27,6 +27,7 @@
 | [0025](0025-query-preallocation-budget-accounting.md) | pre-allocation query budget accounting |
 | [0026](0026-query-rooted-dag-closure.md) | Logical Query IR rooted DAG closure |
 | [0027](0027-query-typed-argument-canonicalization.md) | typed node argument canonicalization |
+| [0028](0028-query-canonical-union-execution-order.md) | canonical union execution order |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

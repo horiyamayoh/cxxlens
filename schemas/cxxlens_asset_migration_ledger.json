@@ -1,5 +1,5 @@
 {
-  "asset_count": 273,
+  "asset_count": 274,
   "assets": [
     {
       "authority": "active",
@@ -599,6 +599,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0027-query-typed-argument-canonicalization.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0028-query-canonical-union-execution-order.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1914,7 +1921,7 @@
     }
   ],
   "classifications": {
-    "active": 237,
+    "active": 238,
     "archived": 35,
     "generated": 1
   },

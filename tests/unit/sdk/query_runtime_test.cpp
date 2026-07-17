@@ -1018,6 +1018,54 @@ namespace
 				"advanced query cursor left prior row view live");
 	}
 
+	void check_canonical_union_execution(const fixture& data,
+										 const snapshot_handle& memory_snapshot,
+										 const snapshot_handle& sqlite_snapshot)
+	{
+		const auto make_union = [&](const bool reverse)
+		{
+			const auto key =
+				column_ref{data.left.id, data.left.columns[0].id, data.left.columns[0].type};
+			auto a = query::builder::from(data.left);
+			auto b = query::builder::from(data.left);
+			auto a_predicate =
+				query::equals_present(key, query::literal::typed("query_key_id", "key:a"));
+			auto b_predicate =
+				query::equals_present(key, query::literal::typed("query_key_id", "key:b"));
+			require(a && b && a_predicate && b_predicate, "budgeted union setup failed");
+			auto a_filtered = std::move(*a).where(*a_predicate);
+			auto b_filtered = std::move(*b).where(*b_predicate);
+			require(a_filtered && b_filtered, "budgeted union filters failed");
+			auto united = reverse ? std::move(*b_filtered).union_with(*a_filtered)
+								  : std::move(*a_filtered).union_with(*b_filtered);
+			require(united.has_value(), "budgeted union construction failed");
+			return std::move(*united).finish();
+		};
+
+		const auto left_first = make_union(false);
+		const auto right_first = make_union(true);
+		require(left_first.digest() == right_first.digest(),
+				"union construction order changed logical identity");
+		for (const auto* snapshot : {&memory_snapshot, &sqlite_snapshot})
+		{
+			auto engine = query::reference_engine::bind(*snapshot);
+			require(engine.has_value(), "canonical union engine bind failed");
+			std::array<query::execution_request, 4U> requests{};
+			requests[1].budget.max_rows_scanned = 0U;
+			requests[2].budget.max_rows_scanned = 1U;
+			requests[3].budget.max_intermediate_rows = 1U;
+			for (const auto& request : requests)
+			{
+				auto left_result = engine->execute(left_first, request);
+				auto right_result = engine->execute(right_first, request);
+				require(left_result && right_result,
+						"canonical union execution returned an API error");
+				require(left_result->canonical_form() == right_result->canonical_form(),
+						"union branch order changed a budgeted canonical result");
+			}
+		}
+	}
+
 	void check_bounded_intermediate_budgets(const fixture& data)
 	{
 		auto store = make_in_memory_snapshot_store(data.engine);
@@ -1324,6 +1372,7 @@ int main()
 	check_snapshot_schema_compatibility();
 	check_runtime_matrix(data, memory_snapshot, *sqlite_snapshot);
 	check_partiality(data, memory_snapshot);
+	check_canonical_union_execution(data, memory_snapshot, *sqlite_snapshot);
 	check_bounded_intermediate_budgets(make_budget_fixture());
 	check_side_channel_parity(make_side_channel_fixture());
 	check_closure_applicability(data);

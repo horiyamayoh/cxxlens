@@ -2757,6 +2757,12 @@ growth、implicit terminal project も保持前に検査する。decoded IR meta
 completion 後の result side channel は logical accounting 外であり、process RSS quota とは区別する。physical explain は
 `peak-logical-bytes` と `peak-intermediate-rows` を返す。
 
+Issue #85 / ADR 0028 により reference planner は validated rooted DAG を canonical postorder へ lower してから実行する。
+`union` child は normalized subtree digest、digest collision 時は raw canonical subtree bytes の順に固定し、この total order を
+branch evaluation、bag addition、budget/cancellation accounting に共通利用する。physical explain と unresolved の node subject
+は canonical postorder ordinal へ正規化し、同じ logical digest、snapshot、runtime request の semantic result と side channel
+を builder branch order や任意 node ID に依存させない。
+
 ### 20.13 Physical planning and executable conformance
 
 NG0 planner は deterministic reference implementation とする。

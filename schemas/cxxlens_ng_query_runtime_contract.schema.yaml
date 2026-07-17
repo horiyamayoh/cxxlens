@@ -18,7 +18,7 @@ required:
   - qualification
 properties:
   schema: {const: cxxlens.query-runtime-contract.v1}
-  document_version: {const: 1.5.0}
+  document_version: {const: 1.6.0}
   maturity: {const: implemented}
   authority: {$ref: '#/$defs/nonempty_object'}
   compatibility: {$ref: '#/$defs/nonempty_object'}
@@ -30,6 +30,7 @@ properties:
       - id
       - deterministic
       - public_authority
+      - canonical_traversal
       - scan
       - join
       - distinct
@@ -39,6 +40,7 @@ properties:
       id: {const: cxxlens.reference-query-planner.v1}
       deterministic: {const: true}
       public_authority: {const: false}
+      canonical_traversal: {$ref: '#/$defs/nonempty_object'}
       scan: {const: canonical-claim-content-order}
       join: {const: bounded-reference-nested-loop}
       distinct: {const: canonical-key-reduction}
@@ -51,6 +53,7 @@ properties:
       - operators
       - source_backends
       - physical_arrival_order_observable
+      - commutative_identity_runtime_equivalence
       - cell_policy
       - condition
       - interpretation
@@ -67,6 +70,7 @@ properties:
       source_backends:
         const: [memory, sqlite]
       physical_arrival_order_observable: {const: false}
+      commutative_identity_runtime_equivalence: {const: true}
       cell_policy: {$ref: '#/$defs/nonempty_object'}
       condition: {$ref: '#/$defs/nonempty_object'}
       interpretation: {$ref: '#/$defs/nonempty_object'}

@@ -323,7 +323,11 @@ namespace cxxlens::sdk::query
 				std::ranges::sort(inputs,
 								  [](const std::string& left, const std::string& right)
 								  {
-									  return plain_digest(left) < plain_digest(right);
+									  const auto left_digest = plain_digest(left);
+									  const auto right_digest = plain_digest(right);
+									  return left_digest != right_digest
+										  ? left_digest < right_digest
+										  : left < right;
 								  });
 			std::ostringstream output;
 			output << "{\"arguments\":" << canonical_arguments(node) << ",\"inputs\":[";
@@ -383,6 +387,23 @@ namespace cxxlens::sdk::query
 				collect_columns(operand, columns);
 		}
 	} // namespace
+
+	namespace detail
+	{
+		std::string
+		canonical_subtree_form(const std::string_view node_id,
+							   const std::map<std::string, const ir_node*, std::less<>>& nodes)
+		{
+			return nested_node_json(node_id, nodes);
+		}
+
+		std::string
+		canonical_subtree_digest(const std::string_view node_id,
+								 const std::map<std::string, const ir_node*, std::less<>>& nodes)
+		{
+			return plain_digest(nested_node_json(node_id, nodes));
+		}
+	} // namespace detail
 
 	literal literal::boolean(const bool value)
 	{
