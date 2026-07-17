@@ -235,7 +235,7 @@ namespace cxxlens::sdk::query
 
 		struct node_shape
 		{
-			std::set<std::string, std::less<>> columns;
+			std::map<std::string, value_type, std::less<>> columns;
 			bool ordered{};
 			std::vector<std::string> order_keys;
 		};
@@ -368,12 +368,12 @@ namespace cxxlens::sdk::query
 		if (version != semantic_version{1U, 0U, 0U} || relation_requirements.empty() ||
 			nodes.empty() || root.empty() || output_schema.empty())
 			return cxxlens::sdk::unexpected(query_error("sdk.query-ir-invalid", "structure"));
-		std::set<std::string> descriptors;
+		std::map<std::string, const relation_descriptor*, std::less<>> descriptors;
 		for (const auto& descriptor : relation_requirements)
 		{
 			if (auto valid = descriptor.validate(); !valid)
 				return cxxlens::sdk::unexpected(std::move(valid.error()));
-			if (!descriptors.insert(descriptor.id).second)
+			if (!descriptors.emplace(descriptor.id, &descriptor).second)
 				return cxxlens::sdk::unexpected(
 					query_error("sdk.query-duplicate-relation", descriptor.id));
 		}
@@ -424,7 +424,7 @@ namespace cxxlens::sdk::query
 					return cxxlens::sdk::unexpected(
 						query_error("sdk.query-scan-requirement-missing", scan.descriptor_id));
 				for (const auto& column : descriptor->columns)
-					shape.columns.insert(column.id);
+					shape.columns.emplace(column.id, column.type);
 			}
 			else
 			{
@@ -442,7 +442,7 @@ namespace cxxlens::sdk::query
 							query_error("sdk.query-filter-join-predicate", node.id));
 					std::vector<ir_column_ref> references;
 					collect_columns(predicate->predicate, references);
-					std::set<std::string, std::less<>> available = inputs.front().columns;
+					auto available = inputs.front().columns;
 					if (inputs.size() == 2U)
 						available.insert(inputs[1].columns.begin(), inputs[1].columns.end());
 					for (const auto& reference : references)
@@ -497,7 +497,13 @@ namespace cxxlens::sdk::query
 							item.column.availability == column_availability::require)
 							return cxxlens::sdk::unexpected(query_error(
 								"sdk.query-column-not-in-input", item.column.column_id));
-						projected.columns.insert(item.output);
+						const auto source = inputs.front().columns.find(item.column.column_id);
+						if (source == inputs.front().columns.end())
+							return cxxlens::sdk::unexpected(query_error(
+								"sdk.query-output-schema-mismatch", item.column.column_id));
+						if (!projected.columns.emplace(item.output, source->second).second)
+							return cxxlens::sdk::unexpected(
+								query_error("sdk.query-output-schema-mismatch", item.output));
 						mapping.emplace(item.column.column_id, item.output);
 					}
 					projected.ordered = inputs.front().ordered &&
@@ -533,22 +539,36 @@ namespace cxxlens::sdk::query
 		if (!node_ids.contains(root))
 			return cxxlens::sdk::unexpected(query_error("sdk.query-root-missing", root));
 		for (const auto& column : output_schema)
-			if (!descriptors.contains(column.descriptor_id))
+		{
+			const auto descriptor = descriptors.find(column.descriptor_id);
+			if (descriptor == descriptors.end())
 				return cxxlens::sdk::unexpected(
 					query_error("sdk.query-output-column-foreign", column.column_id));
+			const auto declared = descriptor->second->column(column.column_id);
+			if (!declared || declared->type != column.type)
+				return cxxlens::sdk::unexpected(
+					query_error("sdk.query-output-schema-mismatch", column.column_id));
+		}
 		const bool projected =
 			std::ranges::any_of(nodes,
 								[](const ir_node& node)
 								{
 									return node.operator_id == "query.project.v1";
 								});
-		std::set<std::string, std::less<>> expected;
+		std::map<std::string, value_type, std::less<>> expected;
 		if (projected)
-			for (const auto& alias : output_aliases(output_schema))
-				expected.insert("output." + alias);
+		{
+			const auto aliases = output_aliases(output_schema);
+			for (std::size_t index = 0U; index < output_schema.size(); ++index)
+				if (!expected.emplace("output." + aliases[index], output_schema[index].type).second)
+					return cxxlens::sdk::unexpected(query_error("sdk.query-output-schema-mismatch",
+																output_schema[index].column_id));
+		}
 		else
 			for (const auto& column : output_schema)
-				expected.insert(column.column_id);
+				if (!expected.emplace(column.column_id, column.type).second)
+					return cxxlens::sdk::unexpected(
+						query_error("sdk.query-output-schema-mismatch", column.column_id));
 		if (shapes.at(root).columns != expected)
 			return cxxlens::sdk::unexpected(query_error("sdk.query-output-schema-mismatch", root));
 		return {};

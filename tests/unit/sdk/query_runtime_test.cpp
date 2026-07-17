@@ -382,6 +382,48 @@ namespace
 	void check_ir_validation(const fixture& data)
 	{
 		auto valid = scan_query(data.left);
+		require(valid.validate().has_value(), "builder scan IR did not validate");
+		auto type_mismatch = valid;
+		type_mismatch.output_schema.front().type.scalar = scalar_kind::utf8_string;
+		type_mismatch.output_schema.front().type.parameter.clear();
+		auto rejected_type = type_mismatch.validate();
+		require(!rejected_type && rejected_type.error().code == "sdk.query-output-schema-mismatch",
+				"output scalar type mismatch was accepted");
+
+		type_mismatch = valid;
+		type_mismatch.output_schema.front().type.parameter = "different_query_key_id";
+		auto rejected_parameter = type_mismatch.validate();
+		require(!rejected_parameter &&
+					rejected_parameter.error().code == "sdk.query-output-schema-mismatch",
+				"output typed ID parameter mismatch was accepted");
+
+		type_mismatch = valid;
+		type_mismatch.output_schema.front().type.optional = true;
+		auto rejected_optional = type_mismatch.validate();
+		require(!rejected_optional &&
+					rejected_optional.error().code == "sdk.query-output-schema-mismatch",
+				"output optionality mismatch was accepted");
+
+		type_mismatch = valid;
+		type_mismatch.relation_requirements.push_back(data.right);
+		type_mismatch.output_schema.front().descriptor_id = data.right.id;
+		auto rejected_pair = type_mismatch.validate();
+		require(!rejected_pair && rejected_pair.error().code == "sdk.query-output-schema-mismatch",
+				"inconsistent output descriptor and column IDs were accepted");
+
+		auto projection_source = query::builder::from(data.left);
+		require(projection_source.has_value(), "typed projection validation source failed");
+		const std::array projection_columns{valid.output_schema.front()};
+		auto projection = std::move(*projection_source).project(projection_columns);
+		require(projection.has_value(), "typed projection validation builder failed");
+		auto projected = std::move(*projection).finish();
+		require(projected.validate().has_value(), "builder projection IR did not validate");
+		projected.output_schema.front().type.parameter = "different_query_key_id";
+		auto rejected_projection = projected.validate();
+		require(!rejected_projection &&
+					rejected_projection.error().code == "sdk.query-output-schema-mismatch",
+				"projected output type mismatch was accepted");
+
 		auto malformed = valid;
 		malformed.version = {2U, 0U, 0U};
 		require(!malformed.validate() &&
@@ -426,6 +468,20 @@ namespace
 		auto memory_engine = query::reference_engine::bind(memory_snapshot);
 		auto sqlite_engine = query::reference_engine::bind(sqlite_snapshot);
 		require(memory_engine && sqlite_engine, "reference engine bind failed");
+		auto foreign_schema = scan_query(data.left);
+		foreign_schema.relation_requirements.front().columns.front().type.parameter =
+			"foreign_query_key_id";
+		foreign_schema.relation_requirements.front().descriptor_digest =
+			*semantic_digest("cxxlens.relation-descriptor-binding.v2",
+							 foreign_schema.relation_requirements.front().contract_digest + "\n" +
+								 foreign_schema.relation_requirements.front().canonical_form());
+		foreign_schema.output_schema.front().type.parameter = "foreign_query_key_id";
+		require(foreign_schema.validate().has_value(),
+				"self-consistent external IR schema did not validate");
+		auto foreign_execution = memory_engine->execute(foreign_schema);
+		require(!foreign_execution &&
+					foreign_execution.error().code == "sdk.query-snapshot-schema-mismatch",
+				"snapshot execution accepted an incompatible advertised output type");
 
 		const auto left_key =
 			column_ref{data.left.id, data.left.columns[0].id, data.left.columns[0].type};

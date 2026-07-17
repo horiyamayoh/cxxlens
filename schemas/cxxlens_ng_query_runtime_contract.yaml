@@ -1,12 +1,12 @@
 schema: cxxlens.query-runtime-contract.v1
-document_version: 1.1.0
+document_version: 1.2.0
 maturity: implemented
 authority:
   logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
   guarantee_contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
   snapshot_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
-  decision_adr: docs/design/adr/0021-query-closure-applicability.md
-  owner_issue: '#78'
+  decision_adr: docs/design/adr/0022-logical-query-output-schema-binding.md
+  owner_issue: '#79'
   owner: steward.ng-query-runtime
 compatibility:
   version_axis: query-runtime-result
@@ -30,6 +30,10 @@ input:
       - exact-partition-identity-binding
       - validated-closure-certificate-subject
     annotationless_payload: reject-query-not-synthesize
+    output_column_compatibility:
+      key: exact-column-id
+      value_type_fields: [scalar, parameter, optional]
+      mismatch: sdk.query-snapshot-schema-mismatch
   logical_ir:
     version: 1.0.0
     validation: exact-operator-arguments-column-shape-and-order

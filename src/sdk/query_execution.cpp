@@ -1222,6 +1222,14 @@ namespace cxxlens::sdk::query
 				snapshot_descriptor->version.minor < requirement.version.minor)
 				return unexpected(
 					query_error("sdk.query-snapshot-schema-mismatch", requirement.id));
+			for (const auto& column : query.output_schema)
+				if (column.descriptor_id == requirement.id)
+				{
+					auto snapshot_column = snapshot_descriptor->column(column.column_id);
+					if (!snapshot_column || snapshot_column->type != column.type)
+						return unexpected(
+							query_error("sdk.query-snapshot-schema-mismatch", column.column_id));
+				}
 			descriptors.emplace(requirement.id, *snapshot_descriptor);
 			requirements.insert(requirement.id);
 			for (const auto& column : requirement.columns)

@@ -2640,6 +2640,12 @@ relation requirement は descriptor ID と compatible minor range を持つ。ma
 拒否する。optional minor column が snapshot descriptor にない場合、通常参照は拒否し、明示した
 `absent_if_schema_missing` だけが tagged absent を返す。unknown optional minor column は round-trip 時に保持する。
 
+Issue #79 / ADR 0022 により validator は node shape を column ID の集合ではなく `column ID -> exact value_type` として
+scan、join、union、projection、root まで伝播する。`output_schema` は指定 relation descriptor 自身の column と
+descriptor ID、column ID、scalar、parameter、optionality が完全一致し、root typed shape とも一致しなければならない。
+execution 時も advertised output column の type を snapshot descriptor と再照合し、IR digest が宣言する型と返却
+cell 型の乖離を拒否する。未参照の additive optional column の欠落は compatible minor 規則どおり許容する。
+
 ### 20.10 Query result
 
 ```cpp

@@ -1,5 +1,5 @@
 schema: cxxlens.logical-query-contract.v1
-document_version: 1.0.0
+document_version: 1.1.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#20-logical-query
@@ -149,6 +149,14 @@ schema_compatibility:
     require_explicit_type: true
     exact_column_type_match: true
     narrowing_conversion: reject
+  output_schema:
+    node_shape: canonical-column-id-to-exact-value-type-map
+    unprojected: exact-descriptor-column-and-value-type
+    projected: source-type-propagated-to-output-alias
+    value_type_fields: [scalar, parameter, optional]
+    duplicate_output: reject
+    root_shape_match: exact
+    advertised_output_snapshot_type_match: required-before-execution
 canonicalization:
   static_dynamic_surface_removed: true
   relation_requirements_sort: descriptor-id
