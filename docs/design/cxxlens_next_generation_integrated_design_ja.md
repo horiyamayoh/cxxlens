@@ -4021,6 +4021,15 @@ fail closed にする。installed prefix は revision/tree、toolchain、configu
 no-cache を含む `stress` を通す。unknown file、dependency graph failure、public header、schema、CMake、workflow、selection
 rule 自身の変更は full へ fail closed する。
 
+Issue #141 / ADR 0072 は CI supply chain を source tree と同じ authority に bind する。workflow は remote
+bootstrap script を root 実行せず、checksum と primary fingerprint を照合した repository key、exact epoch-qualified
+LLVM package version、hash 付き direct/transitive Python lock、full commit SHA の Action だけを使用する。package や
+mirror が unavailable の場合に別 version/suite へ fallback しない。各 evidence job は revision/tree、runner image
+version、OS/kernel/architecture、Action revision、tool binary digest、dpkg version、Python distribution RECORD digest、
+supply-chain lock digest を一つの toolchain provenance に記録する。foundation completion report は同じ SHA の全
+provenance を再検証して runner/toolchain/action/package の集合を bind し、artifact と evidence は source SHA と
+toolchain digest を独立に差し替えられない。
+
 ### 26.4 Test classes
 
 - unit

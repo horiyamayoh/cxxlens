@@ -19,6 +19,8 @@ from typing import Any
 import jsonschema
 import yaml
 
+from collect_toolchain_provenance import pinned_actions, provenance_digest
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MANIFEST = pathlib.Path("schemas/cxxlens_ng_foundation_completion_manifest.yaml")
@@ -80,6 +82,91 @@ def validate_schema(document: Any, schema: dict[str, Any], label: str) -> None:
 
 def sha256(path: pathlib.Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def canonical_digest(value: Any) -> str:
+    return "sha256:" + hashlib.sha256(
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+
+
+def load_provenance_directory(directory: pathlib.Path) -> list[dict[str, Any]]:
+    records = []
+    for path in sorted(directory.rglob("toolchain*.json")):
+        value = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            fail(f"toolchain provenance is not a mapping: {path}")
+        records.append(value)
+    if not records:
+        fail("foundation completion requires toolchain provenance records")
+    return records
+
+
+def summarize_supply_chain(
+    root: pathlib.Path,
+    records: list[dict[str, Any]],
+    git_state: dict[str, Any],
+) -> dict[str, Any]:
+    lock_digest = sha256(root / "tools/ci/llvm22-noble.lock.json")
+    requirements_digest = sha256(root / "tools/quality/requirements.lock")
+    expected_source = {
+        "revision": git_state["revision"],
+        "tree": git_state["tree"],
+    }
+    expected_actions = pinned_actions(root)
+    for record in records:
+        if record.get("digest") != provenance_digest(record):
+            fail("toolchain provenance digest mismatch")
+        if record.get("source") != expected_source:
+            fail("toolchain provenance source differs from completion source")
+        supply_chain = record.get("supply_chain", {})
+        if supply_chain.get("lock_digest") != lock_digest:
+            fail("toolchain provenance supply-chain lock mismatch")
+        if supply_chain.get("requirements_digest") != requirements_digest:
+            fail("toolchain provenance requirements lock mismatch")
+        if record.get("actions") != expected_actions:
+            fail("toolchain provenance action set mismatch")
+        runner = record.get("runner")
+        if not isinstance(runner, dict) or runner.get("image_os") in (None, "unavailable") or runner.get(
+            "image_version"
+        ) in (None, "unavailable"):
+            fail("toolchain provenance lacks hosted runner image identity")
+
+    def unique_rows(field: str) -> list[Any]:
+        values = {
+            json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")): row
+            for record in records
+            for row in (
+                record.get(field, [])
+                if isinstance(record.get(field), list)
+                else [record.get(field)]
+            )
+            if row is not None
+        }
+        return [values[key] for key in sorted(values)]
+
+    runners = unique_rows("runner")
+    tools = unique_rows("tools")
+    packages = unique_rows("packages")
+    python_packages = unique_rows("python_distributions")
+    if not packages or any("package_digest" not in row for row in packages):
+        fail("toolchain provenance lacks package digests")
+    if not python_packages or any("record_digest" not in row for row in python_packages):
+        fail("toolchain provenance lacks Python distribution digests")
+    return {
+        "schema": "cxxlens.ci-supply-chain-summary.v1",
+        "lock_digest": lock_digest,
+        "requirements_digest": requirements_digest,
+        "provenance_digests": sorted({record["digest"] for record in records}),
+        "actions": expected_actions,
+        "actions_digest": canonical_digest(expected_actions),
+        "runners": runners,
+        "tools": tools,
+        "packages": packages,
+        "python_distributions": python_packages,
+    }
 
 
 def rows_by_id(rows: list[dict[str, Any]], label: str) -> dict[str, dict[str, Any]]:
@@ -151,6 +238,7 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
         "gate.g2",
         "gate.g3",
         "gate.g4",
+        "gate.ci-supply-chain",
         "gate.quality-evidence",
         "gate.foundation",
     }
@@ -396,6 +484,7 @@ def build_report(
     generated_at: str,
     expected_revision: str | None = None,
     audit_entries: dict[str, dict[str, Any]] | None = None,
+    provenance_records: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     if expected_revision and git_state["revision"] != expected_revision:
         fail(
@@ -458,6 +547,9 @@ def build_report(
         if audit_entries is not None
         else run_audit_checker(root, manifest, git_state, issue_states)
     )
+    if not provenance_records:
+        fail("foundation completion requires supply-chain provenance")
+    supply_chain = summarize_supply_chain(root, provenance_records, git_state)
     report = {
         "schema": "cxxlens.ng-foundation-completion-report.v1",
         "result": "passed",
@@ -471,6 +563,7 @@ def build_report(
             "run_url": run_url,
             "jobs": {job: "success" for job in sorted(ci_jobs)},
         },
+        "supply_chain": supply_chain,
         "issue_states": {
             "required_closed": {
                 str(number): "closed"
@@ -512,6 +605,7 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--expected-revision")
     parser.add_argument("--branch", default="main")
     parser.add_argument("--ci-job", action="append", default=[])
+    parser.add_argument("--provenance-dir", type=pathlib.Path)
     return parser.parse_args()
 
 
@@ -523,8 +617,8 @@ def main() -> int:
         if args.command == "check":
             print("NG foundation completion static checks passed")
             return 0
-        if not args.output or not args.repository or not args.run_url:
-            fail("report requires --output, --repository, and --run-url")
+        if not args.output or not args.repository or not args.run_url or not args.provenance_dir:
+            fail("report requires --output, --repository, --run-url, and --provenance-dir")
         numbers = [*manifest["required_closed_issues"], 71, 56]
         issue_states = github_issue_states(
             args.repository,
@@ -552,6 +646,7 @@ def main() -> int:
             ci_jobs=args.ci_job,
             generated_at=generated_at,
             expected_revision=args.expected_revision,
+            provenance_records=load_provenance_directory(args.provenance_dir.resolve()),
         )
         args.output.write_text(
             json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
@@ -561,6 +656,7 @@ def main() -> int:
         CompletionError,
         OSError,
         subprocess.SubprocessError,
+        json.JSONDecodeError,
         yaml.YAMLError,
     ) as error:
         print(f"NG foundation completion check failed: {error}", file=sys.stderr)

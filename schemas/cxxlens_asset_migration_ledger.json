@@ -1,5 +1,5 @@
 {
-  "asset_count": 346,
+  "asset_count": 355,
   "assets": [
     {
       "authority": "active",
@@ -25,6 +25,13 @@
     {
       "authority": "active",
       "path": ".github/CODEOWNERS",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": ".github/dependabot.yml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -927,6 +934,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/design/adr/0072-ci-supply-chain-provenance.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/design/adr/README.md",
       "removal_issue": null,
       "replacement": null,
@@ -1292,6 +1306,20 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_acceptance_manifest.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_ci_supply_chain_contract.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_ci_supply_chain_contract.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2096,6 +2124,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_ci_supply_chain.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_ng_foundation_completion.py",
       "removal_issue": null,
       "replacement": null,
@@ -2216,6 +2251,27 @@
     {
       "authority": "active",
       "path": "tests/unit/sdk/store_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tools/ci/bootstrap_supply_chain.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tools/ci/llvm22-noble.lock.json",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tools/quality/check_ci_supply_chain.py",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2369,6 +2425,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/requirements.lock",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/requirements.txt",
       "removal_issue": null,
       "replacement": null,
@@ -2425,7 +2488,7 @@
     }
   ],
   "classifications": {
-    "active": 310,
+    "active": 319,
     "archived": 35,
     "generated": 1
   },

@@ -236,6 +236,7 @@ foreach(
         security_contract
         release_contract
         sdk_contract
+        ci_supply_chain
         migration_completion
         foundation_completion)
   add_test(NAME "quality.ng-${contract}"

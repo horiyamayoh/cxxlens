@@ -12,6 +12,7 @@ required:
   - version_contracts
   - evidence_claims
   - ci
+  - supply_chain
   - issue_states
   - asset_ledger
   - audits
@@ -65,6 +66,67 @@ properties:
         type: object
         minProperties: 3
         additionalProperties: {const: success}
+  supply_chain:
+    type: object
+    additionalProperties: false
+    required:
+      - schema
+      - lock_digest
+      - requirements_digest
+      - provenance_digests
+      - actions
+      - actions_digest
+      - runners
+      - tools
+      - packages
+      - python_distributions
+    properties:
+      schema: {const: cxxlens.ci-supply-chain-summary.v1}
+      lock_digest: {$ref: '#/$defs/digest'}
+      requirements_digest: {$ref: '#/$defs/digest'}
+      provenance_digests:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {$ref: '#/$defs/digest'}
+      actions:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          additionalProperties: false
+          required: [workflow, name, revision]
+          properties:
+            workflow: {type: string, minLength: 1}
+            name: {type: string, pattern: '^[^@]+/[^@]+$'}
+            revision: {$ref: '#/$defs/git_object'}
+      actions_digest: {$ref: '#/$defs/digest'}
+      runners:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          required: [label, image_os, image_version, architecture, os_release_digest, kernel]
+      tools:
+        type: array
+        minItems: 1
+        items: {type: object, minProperties: 2}
+      packages:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          required: [package, version, package_digest]
+          properties:
+            package_digest: {$ref: '#/$defs/digest'}
+      python_distributions:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          required: [name, version, record_digest]
+          properties:
+            record_digest: {$ref: '#/$defs/digest'}
   issue_states:
     type: object
     additionalProperties: false

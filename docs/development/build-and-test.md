@@ -10,7 +10,8 @@
 | `install-check` | Release install and downstream consumers |
 
 ```sh
-python3 -m pip install --requirement tools/quality/requirements.txt
+python3 -m pip install --require-hashes --only-binary=:all: \
+  --requirement tools/quality/requirements.lock
 CXX=clang++ python3 tools/quality/run_gate.py check --preset dev-clang \
   --configure --report build/dev-clang/check-report.json
 ```

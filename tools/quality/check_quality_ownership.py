@@ -163,6 +163,39 @@ def make_evidence(
         "tree": git_value(root, "HEAD^{tree}"),
     }:
         raise QualityOwnershipError("toolchain provenance revision/tree mismatch")
+    supply_chain = provenance.get("supply_chain")
+    if not isinstance(supply_chain, dict):
+        raise QualityOwnershipError("toolchain provenance has no supply-chain binding")
+    expected_supply_chain = {
+        "lock_digest": "sha256:"
+        + hashlib.sha256(
+            (root / "tools/ci/llvm22-noble.lock.json").read_bytes()
+        ).hexdigest(),
+        "requirements_digest": "sha256:"
+        + hashlib.sha256(
+            (root / "tools/quality/requirements.lock").read_bytes()
+        ).hexdigest(),
+    }
+    for field, expected in expected_supply_chain.items():
+        if supply_chain.get(field) != expected:
+            raise QualityOwnershipError(
+                f"toolchain provenance {field} differs from repository lock"
+            )
+    runner = provenance.get("runner")
+    if not isinstance(runner, dict) or any(
+        field not in runner
+        for field in (
+            "label",
+            "image_os",
+            "image_version",
+            "architecture",
+            "os_release_digest",
+            "kernel",
+        )
+    ):
+        raise QualityOwnershipError("toolchain provenance runner identity is incomplete")
+    if provenance.get("actions") != pinned_actions(root):
+        raise QualityOwnershipError("toolchain provenance action set mismatch")
     checker_inputs = checker_paths or [str(pathlib.Path(__file__).relative_to(root))]
     checker_projection = {
         "command": check["command"],

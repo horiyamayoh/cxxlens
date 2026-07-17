@@ -35,7 +35,7 @@ def main() -> int:
 
     yamllint = shutil.which("yamllint")
     if yamllint:
-        result |= run([yamllint, "schemas", ".github/workflows"], args.root)
+        result |= run([yamllint, "schemas", ".github"], args.root)
     else:
         print("SKIP: yamllint not installed")
 

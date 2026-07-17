@@ -1,0 +1,109 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-ci-supply-chain-contract.v1
+title: cxxlens CI supply-chain contract
+type: object
+additionalProperties: false
+required:
+  - schema
+  - kind
+  - document_version
+  - maturity
+  - authority
+  - bootstrap
+  - dependency_lock
+  - workflow
+  - provenance
+  - acceptance
+properties:
+  schema: {const: cxxlens.ng-ci-supply-chain-contract.v1}
+  kind: {const: ci-supply-chain-contract}
+  document_version: {$ref: '#/$defs/version'}
+  maturity: {const: implemented}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, adr, issue, owner]
+    properties:
+      design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
+      adr: {const: docs/design/adr/0072-ci-supply-chain-provenance.md}
+      issue: {const: '#141'}
+      owner: {const: steward.ci-supply-chain}
+  bootstrap:
+    type: object
+    additionalProperties: false
+    required: [script, lock, remote_script_execution, signing_key, package_versions, fallback]
+    properties:
+      script: {const: tools/ci/bootstrap_supply_chain.py}
+      lock: {const: tools/ci/llvm22-noble.lock.json}
+      remote_script_execution: {const: forbidden}
+      signing_key: {const: checksum-and-primary-fingerprint-before-root-install}
+      package_versions: {const: exact-epoch-qualified}
+      fallback: {const: forbidden}
+  dependency_lock:
+    type: object
+    additionalProperties: false
+    required: [requirements, installer_flags, transitive, distributions]
+    properties:
+      requirements: {const: tools/quality/requirements.lock}
+      installer_flags:
+        type: array
+        const: [--require-hashes, '--only-binary=:all:']
+      transitive: {const: exact-version-and-sha256}
+      distributions: {const: binary-only}
+  workflow:
+    type: object
+    additionalProperties: false
+    required: [files, action_revision, runner_label, bootstrap_profiles]
+    properties:
+      files:
+        type: array
+        const: [.github/workflows/quality.yml, .github/workflows/nightly.yml]
+      action_revision: {const: full-commit-sha}
+      runner_label: {const: ubuntu-24.04}
+      bootstrap_profiles:
+        type: array
+        const: [compiler, developer, static-analysis]
+  provenance:
+    type: object
+    additionalProperties: false
+    required:
+      - source
+      - runner
+      - actions
+      - tools
+      - packages
+      - python_distributions
+      - lock_digest
+      - requirements_digest
+    properties:
+      source: {const: revision-and-tree}
+      runner: {const: label-image-version-os-release-kernel-architecture}
+      actions: {const: names-and-full-commit-shas}
+      tools: {const: version-path-and-binary-digest}
+      packages: {const: exact-dpkg-versions}
+      python_distributions: {const: versions-and-record-digests}
+      lock_digest: {const: sha256}
+      requirements_digest: {const: sha256}
+  acceptance:
+    type: object
+    additionalProperties: false
+    required:
+      - checksum_mismatch
+      - exact_versions
+      - mutable_action
+      - unpinned_dependency
+      - unavailable_package
+      - completion_binding
+      - offline_replay
+      - artifact_binding
+    properties:
+      checksum_mismatch: {const: reject-before-root-effect}
+      exact_versions: {const: assert-after-install}
+      mutable_action: {const: reject}
+      unpinned_dependency: {const: reject}
+      unavailable_package: {const: fail-without-fallback}
+      completion_binding: {const: runner-toolchain-action-package-provenance}
+      offline_replay: {const: lock-plus-cached-artifacts-no-network}
+      artifact_binding: {const: source-sha-and-toolchain-digest}
+$defs:
+  version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}

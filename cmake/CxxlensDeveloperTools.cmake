@@ -48,6 +48,14 @@ foreach(
 endforeach()
 
 add_custom_target(
+  cxxlens-ng-ci-supply-chain-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ci_supply_chain.py" check
+    --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-ng-sdk-contract-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -139,6 +147,7 @@ add_dependencies(
   cxxlens-documentation-consistency-check
   cxxlens-ng-provider-protocol-check
   cxxlens-ng-provider-runtime-check
+  cxxlens-ng-ci-supply-chain-check
   cxxlens-ng-migration-completion-check
   cxxlens-ng-query-contract-check
   cxxlens-ng-relation-contract-check

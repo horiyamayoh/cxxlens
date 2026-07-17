@@ -1,0 +1,44 @@
+schema: cxxlens.ng-ci-supply-chain-contract.v1
+kind: ci-supply-chain-contract
+document_version: 1.0.0
+maturity: implemented
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md
+  adr: docs/design/adr/0072-ci-supply-chain-provenance.md
+  issue: '#141'
+  owner: steward.ci-supply-chain
+bootstrap:
+  script: tools/ci/bootstrap_supply_chain.py
+  lock: tools/ci/llvm22-noble.lock.json
+  remote_script_execution: forbidden
+  signing_key: checksum-and-primary-fingerprint-before-root-install
+  package_versions: exact-epoch-qualified
+  fallback: forbidden
+dependency_lock:
+  requirements: tools/quality/requirements.lock
+  installer_flags: [--require-hashes, '--only-binary=:all:']
+  transitive: exact-version-and-sha256
+  distributions: binary-only
+workflow:
+  files: [.github/workflows/quality.yml, .github/workflows/nightly.yml]
+  action_revision: full-commit-sha
+  runner_label: ubuntu-24.04
+  bootstrap_profiles: [compiler, developer, static-analysis]
+provenance:
+  source: revision-and-tree
+  runner: label-image-version-os-release-kernel-architecture
+  actions: names-and-full-commit-shas
+  tools: version-path-and-binary-digest
+  packages: exact-dpkg-versions
+  python_distributions: versions-and-record-digests
+  lock_digest: sha256
+  requirements_digest: sha256
+acceptance:
+  checksum_mismatch: reject-before-root-effect
+  exact_versions: assert-after-install
+  mutable_action: reject
+  unpinned_dependency: reject
+  unavailable_package: fail-without-fallback
+  completion_binding: runner-toolchain-action-package-provenance
+  offline_replay: lock-plus-cached-artifacts-no-network
+  artifact_binding: source-sha-and-toolchain-digest

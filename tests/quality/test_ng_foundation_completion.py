@@ -22,6 +22,11 @@ from check_ng_foundation_completion import (  # noqa: E402
     validate_audit_report,
     validate_documents,
 )
+from collect_toolchain_provenance import (  # noqa: E402
+    file_digest,
+    pinned_actions,
+    provenance_digest,
+)
 import check_ng_foundation_audits as foundation_audits  # noqa: E402
 
 
@@ -42,6 +47,49 @@ class NgFoundationCompletionTest(unittest.TestCase):
         cls.audit_entries = run_audit_checker(
             ROOT, cls.manifest, cls.git_state, cls.closed
         )
+        cls.provenance = {
+            "schema": "cxxlens.toolchain-provenance.v1",
+            "source": {
+                "revision": cls.git_state["revision"],
+                "tree": cls.git_state["tree"],
+            },
+            "configuration": "test",
+            "tools": [{"command": "c++", "status": "fixture"}],
+            "packages": [
+                {
+                    "package": "clang-22",
+                    "version": "fixture",
+                    "package_digest": "sha256:" + "5" * 64,
+                }
+            ],
+            "python_distributions": [
+                {
+                    "name": "jsonschema",
+                    "version": "fixture",
+                    "record_digest": "sha256:" + "3" * 64,
+                }
+            ],
+            "actions": pinned_actions(ROOT),
+            "runner": {
+                "label": "ubuntu-24.04",
+                "image_os": "ubuntu24",
+                "image_version": "fixture",
+                "architecture": "X64",
+                "os_release_digest": "sha256:" + "4" * 64,
+                "kernel": "fixture",
+                "fixture": True,
+            },
+            "supply_chain": {
+                "schema": "cxxlens.ci-supply-chain-lock.v1",
+                "lock_path": "tools/ci/llvm22-noble.lock.json",
+                "lock_digest": file_digest(ROOT / "tools/ci/llvm22-noble.lock.json"),
+                "requirements_path": "tools/quality/requirements.lock",
+                "requirements_digest": file_digest(
+                    ROOT / "tools/quality/requirements.lock"
+                ),
+            },
+        }
+        cls.provenance["digest"] = provenance_digest(cls.provenance)
 
     def report(self, **changes: object) -> dict:
         arguments = {
@@ -52,6 +100,7 @@ class NgFoundationCompletionTest(unittest.TestCase):
             "ci_jobs": self.manifest["evidence"]["required_ci_jobs"],
             "generated_at": "2026-07-16T00:00:00Z",
             "audit_entries": copy.deepcopy(self.audit_entries),
+            "provenance_records": [copy.deepcopy(self.provenance)],
         }
         arguments.update(changes)
         return build_report(ROOT, self.manifest, **arguments)
@@ -101,6 +150,26 @@ class NgFoundationCompletionTest(unittest.TestCase):
     def test_missing_ci_job_is_rejected(self) -> None:
         with self.assertRaisesRegex(CompletionError, "CI job evidence differs"):
             self.report(ci_jobs=["build-test"])
+
+    def test_supply_chain_lock_mutation_is_rejected(self) -> None:
+        provenance = copy.deepcopy(self.provenance)
+        provenance["supply_chain"]["lock_digest"] = "sha256:" + "0" * 64
+        provenance["digest"] = provenance_digest(provenance)
+        with self.assertRaisesRegex(CompletionError, "supply-chain lock mismatch"):
+            self.report(provenance_records=[provenance])
+
+    def test_action_revision_mutation_is_rejected(self) -> None:
+        provenance = copy.deepcopy(self.provenance)
+        provenance["actions"][0]["revision"] = "0" * 40
+        provenance["digest"] = provenance_digest(provenance)
+        with self.assertRaisesRegex(CompletionError, "action set mismatch"):
+            self.report(provenance_records=[provenance])
+
+    def test_completion_report_contains_runner_and_package_sbom(self) -> None:
+        supply_chain = self.report()["supply_chain"]
+        self.assertEqual(supply_chain["runners"][0]["label"], "ubuntu-24.04")
+        self.assertEqual(supply_chain["packages"][0]["package"], "clang-22")
+        self.assertTrue(supply_chain["provenance_digests"])
 
     def test_report_schema_rejects_nonzero_audit(self) -> None:
         report = self.report()

@@ -1,0 +1,74 @@
+{
+  "actions": {
+    "actions/checkout": "11bd71901bbe5b1630ceea73d27597364c9af683",
+    "actions/download-artifact": "fa0a91b85d4f404e444e00e005971372dc801d16",
+    "actions/setup-python": "a26af69be951a213d495a4c3e4e4022e16d87065",
+    "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02"
+  },
+  "authority": {
+    "adr": "docs/design/adr/0072-ci-supply-chain-provenance.md",
+    "issue": "#141",
+    "owner": "steward.ci-supply-chain"
+  },
+  "document_version": "1.0.0",
+  "llvm": {
+    "architecture": "amd64",
+    "component": "main",
+    "expected_release": "22.1.8",
+    "package_sha256": {
+      "clang-22": "c35ae50ecf7704b3dd0278837c4c223e72318e15de6869e3c73b58fbc64b547d",
+      "clang-tidy-22": "1e5917c1cd027548aff5cd35ee4f781a867d5daf03d9eb92611fc838ae9fa3dc",
+      "libclang-22-dev": "f723058ab97299f8088cd2319a947570d76381ab9d428219950429a5c5bc5e9d",
+      "llvm-22": "fa5e184d012d2b17312ee4cd1d90e6adb8da3be78aa15cb0aa66438220effa10",
+      "llvm-22-dev": "e5fddde34244e489b351e40daedc952afdd7948fab85ba33290df458faa03490"
+    },
+    "packages": {
+      "clang-22": "1:22.1.8~++20260613092238+e80beda6e255-1~exp1~20260613092253.78",
+      "clang-tidy-22": "1:22.1.8~++20260613092238+e80beda6e255-1~exp1~20260613092253.78",
+      "libclang-22-dev": "1:22.1.8~++20260613092238+e80beda6e255-1~exp1~20260613092253.78",
+      "llvm-22": "1:22.1.8~++20260613092238+e80beda6e255-1~exp1~20260613092253.78",
+      "llvm-22-dev": "1:22.1.8~++20260613092238+e80beda6e255-1~exp1~20260613092253.78"
+    },
+    "profiles": {
+      "compiler": [
+        "clang-22",
+        "llvm-22"
+      ],
+      "developer": [
+        "clang-22",
+        "libclang-22-dev",
+        "llvm-22",
+        "llvm-22-dev"
+      ],
+      "static-analysis": [
+        "clang-22",
+        "clang-tidy-22",
+        "llvm-22"
+      ]
+    },
+    "repository": "https://apt.llvm.org/noble/",
+    "signing_key": {
+      "primary_fingerprint": "6084F3CF814B57C1CF12EFD515CF4D18AF4F7421",
+      "sha256": "8b2a587ffd672c4687e7581dad4b2f6c1bb2ad6b480cd9771ba2ff48e0b8c75d",
+      "url": "https://apt.llvm.org/llvm-snapshot.gpg.key"
+    },
+    "suite": "llvm-toolchain-noble-22"
+  },
+  "python": {
+    "architecture": "x86_64",
+    "implementation": "CPython",
+    "requirements": "tools/quality/requirements.lock",
+    "requirements_sha256": "1a0f2081519ac363013a36617f8214ce0ea72933057df1e3c13720ab07841ff0",
+    "version": "3.12.11"
+  },
+  "runner": {
+    "architecture": "X64",
+    "label": "ubuntu-24.04",
+    "provenance_environment": [
+      "ImageOS",
+      "ImageVersion",
+      "RUNNER_ARCH"
+    ]
+  },
+  "schema": "cxxlens.ci-supply-chain-lock.v1"
+}
