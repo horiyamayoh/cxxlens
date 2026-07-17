@@ -119,6 +119,11 @@ evidence_algebra:
   semi_join: canonical-set-union-of-all-witnesses
   union: preserve-per-occurrence
   distinct: canonical-set-union
+  empty_result:
+    source_annotations: forbidden
+    restriction_binding: selected-condition-and-interpretation-only
+    open_or_incomplete: synthetic-query-empty-unknown
+    exact: all-input-closure-bound-zero-row-proof-only
 ordering:
   default: unordered
   observable_only_after: query.order_by.v1

@@ -1,12 +1,12 @@
 schema: cxxlens.query-runtime-contract.v1
-document_version: 1.16.0
+document_version: 1.17.0
 maturity: implemented
 authority:
   logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
   guarantee_contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
   snapshot_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
-  decision_adr: docs/design/adr/0065-query-bound-contributor-evidence.md
-  owner_issue: '#134'
+  decision_adr: docs/design/adr/0066-query-zero-row-proof-summary.md
+  owner_issue: '#135'
   owner: steward.ng-query-runtime
 compatibility:
   version_axis: query-runtime-result
@@ -230,7 +230,12 @@ result:
   summary_guarantee:
     operation: conservative-meet-over-result-contributing-fragments
     source: final-annotated-row-fragments
-    empty_result_source: reachable-scan-fragments-for-absence-proof-only
+    empty_result_source: canonical-zero-row-proof-context-never-scan-annotations
+    zero_row_proof:
+      selection_binding: logical-condition-and-interpretation-restrictions
+      open_or_incomplete: synthetic-query-empty-unknown
+      exact_requires: complete-input-and-execution-plus-all-applicable-closures
+      filtered_source_annotations: forbidden
     required_fields:
       - approximation
       - scope
@@ -248,6 +253,7 @@ result:
       attribution: singleton-bound-contributor-edge
     composition:
       filter_project_restrict: surviving-fragments-only
+      zero_rows: selection-bound-synthetic-proof-never-source-reaggregation
       join_semi_union_distinct: canonical-bound-edge-composition-then-conservative-meet
       approximation: componentwise-soundness-completeness-all
       verification: implication-closed-intersection

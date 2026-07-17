@@ -1076,7 +1076,7 @@ namespace cxxlens::sdk::query
 
 		[[nodiscard]] query_summary_guarantee
 		summarize_guarantee(const std::span<const annotated_row> rows,
-							const std::span<const snapshot_claim_annotation> empty_result_sources,
+							const std::span<const query_contributor_edge> empty_result_proofs,
 							const std::span<const snapshot_query_coverage> coverage,
 							const std::span<const std::string> closures,
 							const std::span<const query_unresolved> unresolved,
@@ -1136,17 +1136,17 @@ namespace cxxlens::sdk::query
 									provenance);
 				}
 			if (fragments.empty())
-				for (const auto& annotation : empty_result_sources)
+				for (const auto& proof : empty_result_proofs)
 				{
-					const std::array contributors{annotation.assertion};
-					const std::array producers{annotation.producer};
-					const std::array provenance{annotation.provenance_root};
-					append_fragment(annotation.guarantee,
-									annotation.presence,
-									annotation.interpretation,
-									contributors,
-									producers,
-									provenance);
+					const bool certified = inputs_complete && execution_complete && closed_world &&
+						!limited && unresolved.empty() && !closures.empty();
+					const claim_guarantee guarantee = certified
+						? claim_guarantee{"exact",
+										  "query-empty",
+										  "assumptions:none",
+										  {"schema_validated"}}
+						: claim_guarantee{"unknown", "query-empty", "assumptions:unknown", {}};
+					append_fragment(guarantee, proof.condition, proof.interpretation, {}, {}, {});
 				}
 			if (fragments.empty())
 				append_fragment({"unknown", "query-empty", "assumptions:unknown", {}},
@@ -1330,6 +1330,35 @@ namespace cxxlens::sdk::query
 					!collected)
 					return unexpected(std::move(collected.error()));
 			return {};
+		}
+
+		[[nodiscard]] result<std::vector<query_contributor_edge>>
+		empty_result_proofs(const logical_query_ir& query)
+		{
+			std::map<std::string, const ir_node*, std::less<>> nodes;
+			for (const auto& node : query.nodes)
+				nodes.emplace(node.id, &node);
+			closure_selectors selectors;
+			if (auto collected = collect_closure_selectors(query.root, {}, nodes, selectors);
+				!collected)
+				return unexpected(std::move(collected.error()));
+			std::vector<query_contributor_edge> output;
+			for (const auto& [relation, values] : selectors)
+			{
+				(void)relation;
+				for (const auto& selector : values)
+					output.push_back(
+						{{},
+						 {},
+						 {},
+						 {},
+						 selector.condition.value_or(claim_condition{"query-empty", {"empty"}}),
+						 selector.interpretation.value_or("query-empty")});
+			}
+			if (output.empty())
+				output.push_back({{}, {}, {}, {}, {"query-empty", {"empty"}}, "query-empty"});
+			canonical_contributor_edges(output);
+			return output;
 		}
 
 		[[nodiscard]] result<std::pair<bool, std::vector<std::string>>>
@@ -1900,6 +1929,9 @@ namespace cxxlens::sdk::query
 		result_data->closed_world = result_data->input_complete && closure_proof->first;
 		if (closure_proof->first)
 			result_data->closures = std::move(closure_proof->second);
+		auto zero_row_proofs = empty_result_proofs(query);
+		if (!zero_row_proofs)
+			return unexpected(std::move(zero_row_proofs.error()));
 
 		if (request.cancellation != nullptr &&
 			request.cancellation->stop_requested(
@@ -1909,7 +1941,7 @@ namespace cxxlens::sdk::query
 			result_data->unresolved.push_back(
 				{"sdk.query-cancelled", "before-execution", "no sealed rows"});
 			result_data->guarantee = summarize_guarantee({},
-														 {},
+														 *zero_row_proofs,
 														 result_data->coverage,
 														 result_data->closures,
 														 result_data->unresolved,
@@ -2304,7 +2336,7 @@ namespace cxxlens::sdk::query
 			result_data->unresolved.push_back(
 				{state.failure_code, state.failure_subject, "no sealed rows"});
 			result_data->guarantee = summarize_guarantee({},
-														 state.source_annotations,
+														 *zero_row_proofs,
 														 result_data->coverage,
 														 result_data->closures,
 														 result_data->unresolved,
@@ -2362,7 +2394,7 @@ namespace cxxlens::sdk::query
 			result_data->unresolved.push_back(
 				{state.failure_code, state.failure_subject, "no sealed rows"});
 			result_data->guarantee = summarize_guarantee({},
-														 state.source_annotations,
+														 *zero_row_proofs,
 														 result_data->coverage,
 														 result_data->closures,
 														 result_data->unresolved,
@@ -2388,7 +2420,7 @@ namespace cxxlens::sdk::query
 				result_data->unresolved.push_back(
 					{"sdk.query-memory-budget", "canonical-output-order", "no sealed rows"});
 				result_data->guarantee = summarize_guarantee({},
-															 state.source_annotations,
+															 *zero_row_proofs,
 															 result_data->coverage,
 															 result_data->closures,
 															 result_data->unresolved,
@@ -2429,7 +2461,7 @@ namespace cxxlens::sdk::query
 		const bool execution_complete = result_data->status == execution_status::complete;
 		result_data->guarantee = summarize_guarantee(
 			result_data->row_values,
-			state.source_annotations,
+			*zero_row_proofs,
 			result_data->coverage,
 			result_data->closures,
 			result_data->unresolved,

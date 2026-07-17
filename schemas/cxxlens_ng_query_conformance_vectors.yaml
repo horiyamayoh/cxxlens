@@ -1,5 +1,5 @@
 schema: cxxlens.query-conformance-vectors.v1
-document_version: 1.1.0
+document_version: 1.2.0
 authority:
   owner_issue: '#61'
   decision_adr: docs/design/adr/0007-logical-query-algebra.md
@@ -595,3 +595,29 @@ vectors:
       guarantee: under_approximation
       condition: [release]
       interpretation: cc.canonical-1
+- id: filtered-out-weak-empty-summary
+  class: positive
+  operation: validate_empty_result_summary
+  expected:
+    decision: accepted
+    reason_code: query.empty-summary-source-excluded
+  input:
+    result_rows: []
+    selected_condition: [asan]
+    selected_interpretation: cc.selected-1
+    source_fragments:
+    - claim_contributors: [claim-weak]
+      assumptions: [assumption-weak]
+      approximation: unknown
+      interpretation: cc.other-1
+    - claim_contributors: [claim-exact]
+      assumptions: [assumption-exact]
+      approximation: exact
+      interpretation: cc.canonical-1
+    expected_fragments:
+    - claim_contributors: []
+      assumptions: [assumptions:unknown]
+      approximation: unknown
+      condition: [asan]
+      interpretation: cc.selected-1
+      scope: query-empty

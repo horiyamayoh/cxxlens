@@ -123,6 +123,7 @@ REQUIRED_VECTOR_IDS = {
     "logical-ir-without-physical-fields",
     "physical-index-is-not-logical-authority",
     "bound-contributor-fragments-no-cross-product",
+    "filtered-out-weak-empty-summary",
 }
 
 
@@ -896,6 +897,34 @@ def validate_bound_contributor_fragments(value: dict[str, Any]) -> None:
         )
 
 
+def validate_empty_result_summary(value: dict[str, Any]) -> None:
+    if value.get("result_rows"):
+        fail("query.empty-summary-nonempty", "zero-row proof received result rows")
+    fragments = [
+        {
+            "claim_contributors": [],
+            "assumptions": ["assumptions:unknown"],
+            "approximation": "unknown",
+            "condition": value["selected_condition"],
+            "interpretation": value["selected_interpretation"],
+            "scope": "query-empty",
+        }
+    ]
+    if canonical_json(fragments) != canonical_json(value["expected_fragments"]):
+        fail("query.empty-summary-source-leak", "synthetic empty fragment differs")
+    source_contributors = {
+        contributor
+        for fragment in value.get("source_fragments", [])
+        for contributor in fragment.get("claim_contributors", [])
+    }
+    if any(
+        contributor in source_contributors
+        for fragment in fragments
+        for contributor in fragment["claim_contributors"]
+    ):
+        fail("query.empty-summary-source-leak", "filtered source contributor reappeared")
+
+
 def validate_operator_use(contract: dict[str, Any], value: dict[str, Any]) -> None:
     identifier = value["operator"]
     if identifier not in OPERATOR_NEGATIVE_CASES:
@@ -981,6 +1010,9 @@ def execute_vector(
         elif operation == "validate_bound_contributor_fragments":
             validate_bound_contributor_fragments(value)
             reason = "query.bound-contributor-attribution-preserved"
+        elif operation == "validate_empty_result_summary":
+            validate_empty_result_summary(value)
+            reason = "query.empty-summary-source-excluded"
         else:
             fail("query.vector-operation-unknown", operation)
         return {"decision": "accepted", "reason_code": reason, **result}

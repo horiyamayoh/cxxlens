@@ -48,6 +48,7 @@ properties:
           - validate_partial_execution
           - validate_logical_authority
           - validate_bound_contributor_fragments
+          - validate_empty_result_summary
         expected:
           type: object
           additionalProperties: false

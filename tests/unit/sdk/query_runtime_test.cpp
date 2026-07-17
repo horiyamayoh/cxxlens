@@ -2293,6 +2293,129 @@ namespace
 				"one conflicting contributor contaminated an unrelated fragment");
 	}
 
+	void check_empty_result_guarantee(const fixture& data)
+	{
+		auto exact = assertion(data.engine,
+							   left_row(data.left, "key:empty-exact", 1, false),
+							   {"release"},
+							   "company.query.domain",
+							   {"exact", "project", "assumption:exact", {"compiler_verified"}});
+		auto weak = assertion(data.engine,
+							  left_row(data.left, "key:empty-weak", 2, false),
+							  {"debug"},
+							  "company.query.other-domain",
+							  {"unknown", "workspace", "assumption:weak", {"runtime_observed"}});
+		const auto publish_claims = [&](const bool closed)
+		{
+			auto store = make_in_memory_snapshot_store(data.engine);
+			require(store.has_value(), "empty summary store unavailable");
+			const std::vector partitions{partition(exact, 1700U), partition(weak, 1701U)};
+			if (closed)
+			{
+				const std::array<std::size_t, 2U> closure_indexes{0U, 1U};
+				return publish_with_closures(*store, data.engine, partitions, closure_indexes);
+			}
+			auto writer = store->begin(draft(data.engine));
+			require(writer.has_value(), "empty summary writer unavailable");
+			for (const auto& value : partitions)
+				require(writer->stage(value).has_value(), "empty summary partition rejected");
+			require(writer->validate().has_value(), "empty summary snapshot invalid");
+			auto snapshot = writer->publish();
+			require(snapshot.has_value(), "empty summary snapshot unpublished");
+			return std::move(*snapshot);
+		};
+		const auto filter_query = [&](const std::string_view key_value)
+		{
+			const column_ref key{data.left.id, data.left.columns[0].id, data.left.columns[0].type};
+			auto predicate = query::equals_present(
+				key, query::literal::typed("query_key_id", std::string{key_value}));
+			auto source = query::builder::from(data.left);
+			require(predicate && source, "empty summary filter setup rejected");
+			auto filtered = std::move(*source).where(*predicate);
+			require(filtered.has_value(), "empty summary filter rejected");
+			return std::move(*filtered).finish();
+		};
+		const auto execute = [](const snapshot_handle& snapshot,
+								const query::logical_query_ir& logical,
+								const query::execution_request request = {})
+		{
+			auto engine = query::reference_engine::bind(snapshot);
+			require(engine.has_value(), "empty summary engine unavailable");
+			auto result = engine->execute(logical, request);
+			require(result.has_value(), "empty summary execution failed");
+			return std::move(*result);
+		};
+		const auto require_synthetic = [&](const query::query_result& result)
+		{
+			const auto& summary = result.summary_guarantee();
+			require(annotated_rows(result).empty() && summary.fragments.size() == 1U &&
+						summary.fragments.front().claim_contributors.empty() &&
+						summary.fragments.front().producer_contracts.empty() &&
+						summary.fragments.front().provenance.empty() &&
+						summary.fragments.front().guarantee.scope == "query-empty" &&
+						std::ranges::find(summary.assumptions, "assumption:exact") ==
+							summary.assumptions.end() &&
+						std::ranges::find(summary.assumptions, "assumption:weak") ==
+							summary.assumptions.end(),
+					"filtered source annotation reappeared in an empty summary");
+		};
+
+		auto open_snapshot = publish_claims(false);
+		auto empty = execute(open_snapshot, filter_query("key:missing"));
+		require_synthetic(empty);
+		require(empty.summary_guarantee().approximation == "unknown" && !empty.closed(),
+				"open-world empty result was upgraded above unknown");
+
+		auto interpretation_source = query::builder::from(data.left);
+		require(interpretation_source.has_value(), "empty interpretation source rejected");
+		auto interpreted = std::move(*interpretation_source)
+							   .interpretation_restrict("company.query.selected-domain");
+		require(interpreted.has_value(), "empty interpretation restriction rejected");
+		auto interpretation_empty = execute(open_snapshot, std::move(*interpreted).finish());
+		require_synthetic(interpretation_empty);
+		require(interpretation_empty.summary_guarantee().interpretation_partitions ==
+					std::vector<std::string>{"company.query.selected-domain"},
+				"non-selected interpretation reappeared in an empty summary");
+
+		const std::array selected_conditions{std::string{"asan"}};
+		auto condition_empty =
+			execute(open_snapshot, condition_query(data.left, selected_conditions));
+		require_synthetic(condition_empty);
+		require(condition_empty.summary_guarantee().condition_partition.fragments ==
+					std::vector<std::string>{"asan"},
+				"restriction-external condition reappeared in an empty summary");
+
+		query::execution_request failed_request;
+		failed_request.budget.max_rows_scanned = 0U;
+		auto failed = execute(open_snapshot, scan_query(data.left), failed_request);
+		require_synthetic(failed);
+		require(failed.execution() == query::execution_status::failed_before_result &&
+					failed.summary_guarantee().approximation != "exact",
+				"failed empty execution reused scan annotations as exact evidence");
+		query::execution_request truncated_request;
+		truncated_request.budget.max_rows_output = 0U;
+		auto truncated = execute(open_snapshot, scan_query(data.left), truncated_request);
+		require_synthetic(truncated);
+		require(truncated.execution() == query::execution_status::truncated &&
+					truncated.summary_guarantee().approximation != "exact",
+				"truncated empty execution reused scan annotations as exact evidence");
+
+		auto boundary_nonempty = execute(open_snapshot, filter_query("key:empty-exact"));
+		require(
+			annotated_rows(boundary_nonempty).size() == 1U &&
+				!boundary_nonempty.summary_guarantee().fragments.front().claim_contributors.empty(),
+			"nonempty boundary lost its actual contributor");
+		require_synthetic(empty);
+
+		auto closed_snapshot = publish_claims(true);
+		auto closed_empty = execute(closed_snapshot, filter_query("key:missing"));
+		require_synthetic(closed_empty);
+		require(closed_empty.inputs_complete() && closed_empty.closed() &&
+					closed_empty.summary_guarantee().approximation == "exact" &&
+					!closed_empty.summary_guarantee().fragments.front().closure_ids.empty(),
+				"complete closed-world absence lacked an applicable closure-bound exact proof");
+	}
+
 	void check_closure_applicability(const fixture& data)
 	{
 		const auto execute =
@@ -2449,6 +2572,7 @@ int main()
 	check_claim_occurrence_aggregation(data);
 	check_summary_guarantee_algebra(data);
 	check_bound_contributor_edges(data);
+	check_empty_result_guarantee(data);
 	check_closure_applicability(data);
 
 	auto incomplete_store = make_in_memory_snapshot_store(data.engine);

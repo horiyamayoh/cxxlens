@@ -1,5 +1,5 @@
 {
-  "asset_count": 338,
+  "asset_count": 339,
   "assets": [
     {
       "authority": "active",
@@ -879,6 +879,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0065-query-bound-contributor-evidence.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0066-query-zero-row-proof-summary.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2369,7 +2376,7 @@
     }
   ],
   "classifications": {
-    "active": 302,
+    "active": 303,
     "archived": 35,
     "generated": 1
   },

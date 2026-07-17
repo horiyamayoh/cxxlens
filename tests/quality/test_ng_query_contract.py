@@ -53,10 +53,10 @@ class NgQueryContractTests(unittest.TestCase):
     def vector(self, identifier: str) -> dict:
         return next(row for row in self.vectors["vectors"] if row["id"] == identifier)
 
-    def test_contract_has_exact_eleven_ng0_operators_and_thirty_four_vectors(self) -> None:
+    def test_contract_has_exact_eleven_ng0_operators_and_thirty_five_vectors(self) -> None:
         contract, results = validate_all(ROOT)
         self.assertEqual(len(contract["operator_profiles"]), 11)
-        self.assertEqual(len(results), 34)
+        self.assertEqual(len(results), 35)
         self.assertEqual(
             {row["id"] for row in contract["operator_profiles"]},
             set(NG0_OPERATORS),
