@@ -160,6 +160,8 @@ namespace cxxlens::sdk
 
 	/** @brief Encode one recursively validated value using cxxlens-canonical-tuple-v1. */
 	[[nodiscard]] result<std::vector<std::byte>> canonical_binary(const canonical_value& value);
+	/** @brief Strictly decode one complete, canonical cxxlens-canonical-tuple-v1 value. */
+	[[nodiscard]] result<canonical_value> canonical_binary_decode(std::span<const std::byte> bytes);
 	/** @brief Full typed SHA-256 identity using the exact cxxlens domain prefix. */
 	[[nodiscard]] result<std::string>
 	canonical_identity_digest(std::string_view identity_kind,

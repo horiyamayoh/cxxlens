@@ -7,7 +7,7 @@
 
 namespace cxxlens::sdk::detail
 {
-	[[nodiscard]] std::vector<std::byte> claim_occurrence_projection(const claim& value);
+	[[nodiscard]] result<std::vector<std::byte>> claim_occurrence_projection(const claim& value);
 	[[nodiscard]] bool claim_occurrence_less(const claim& left, const claim& right);
 	[[nodiscard]] bool same_claim_occurrence(const claim& left, const claim& right);
 	[[nodiscard]] result<std::string>

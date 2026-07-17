@@ -20,7 +20,10 @@ semantic claim content と evidence occurrence は別の canonical set とする
 - evidence occurrence は claim envelope の全 field を versioned canonical tuple へ投影して total order と exact equality を決める。
 - 全 metadata が同一の occurrence だけを deduplicate し、同じ content でも producer、basis、provenance、guarantee、stage のいずれかが
   異なる occurrence はすべて保持する。
-- batch digest は content ID と occurrence projection digest の双方を bind する。
+- batch content identity v2 は公開 `claim_batch_content_encoding()` と、それだけを hash する `claim_batch_content_digest()` が所有し、
+  schema tag、claims、unresolved references、conflicts、differential disagreements の4 collectionを `canonical_value` の型付き
+  self-delimiting tuple で符号化する。各 record の全 field と collection count を bind し、record は canonical total order、内部 set は
+  canonical sorted unique、claim multiplicity は relation law を維持する。区切り文字の禁止や prose 連結には依存しない。
 - partition manifest の claim set/count は semantic content の一意集合を表し、payload v5 partition envelope と annotation projection は
   canonical evidence occurrence set を lossless に保持する。
 - query scan は非 multiset relation の同じ content occurrence を一つの semantic rowへ集約し、producer、provenance、contributor
@@ -36,6 +39,8 @@ semantic claim content と evidence occurrence は別の canonical set とする
 
 ## Verification
 
-`tests/unit/sdk/sdk_test.cpp` は 5 occurrence の 120 permutation、metadata 差の保持、exact duplicate dedup を検証する。
+`tests/unit/sdk/sdk_test.cpp` は 5 occurrence の 120 permutation、metadata 差の保持、exact duplicate dedup に加え、batch content identity の
+delimiter/NUL collision corpus、全 nested field の binding、4 collection の permutation 不変性を検証する。
+同 test は公開 `canonical_binary_decode()` による encode→decode→encode の byte-for-byte round trip と batch v2 golden digest も固定する。
 `tests/unit/sdk/store_test.cpp` は memory/SQLite/reopen の lossless occurrence set と canonical export parity を検証する。
 `tests/unit/sdk/query_runtime_test.cpp` は同一 content が一 row となり producer/provenance/guarantee 集合へ統合されることを検証する。

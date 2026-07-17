@@ -91,7 +91,7 @@ entries:
         signature: 'result<string> semantic_digest(string_view domain, string_view bytes); string content_digest(span<const byte>)'
       - name: canonical_identity_digest
         kind: function-family
-        signature: 'canonical_value{result<void> validate() const}; result<vector<byte>> canonical_binary(const canonical_value&); result<string> canonical_identity_digest(string_view, span<const canonical_value>)'
+        signature: 'canonical_value{result<void> validate() const}; result<vector<byte>> canonical_binary(const canonical_value&); result<canonical_value> canonical_binary_decode(span<const byte>); result<string> canonical_identity_digest(string_view, span<const canonical_value>)'
       - name: source_span_identity
         kind: function
         signature: 'result<string> source_span_identity(string_view snapshot, string_view file, uint64_t begin, uint64_t end, string_view role)'
@@ -99,7 +99,7 @@ entries:
     lifetime: [result-and-error-own-their-values]
     threading: [value-objects-follow-contained-value-threading]
     versioning: [semantic-digest-is-v2-typed-length-prefixed-and-not-legacy-sha256, canonical-identity-is-cxxlens-canonical-tuple-v1, source-api-axis-independent-from-standard-library-expected]
-    invariants: [success-and-error-are-disjoint, digest-is-full-lowercase-sha256, semantic-domain-is-nonempty-lowercase-identifier, identity-domain-prefix-is-exact-and-versioned, canonical-value-kind-is-closed-and-validated-before-encoding, canonical-value-active-payload-is-exclusive, canonical-value-tuples-validate-recursively, canonical-value-strings-are-strict-utf8, invalid-canonical-values-never-produce-identity-bytes, source-span-identity-binds-snapshot-file-half-open-range-and-role, source-span-identity-excludes-logical-path-and-checkout-root]
+    invariants: [success-and-error-are-disjoint, digest-is-full-lowercase-sha256, semantic-domain-is-nonempty-lowercase-identifier, identity-domain-prefix-is-exact-and-versioned, canonical-value-kind-is-closed-and-validated-before-encoding, canonical-value-active-payload-is-exclusive, canonical-value-tuples-validate-recursively, canonical-value-strings-are-strict-utf8, invalid-canonical-values-never-produce-identity-bytes, canonical-binary-decoder-requires-one-complete-minimal-value-and-round-trips-byte-for-byte, source-span-identity-binds-snapshot-file-half-open-range-and-role, source-span-identity-excludes-logical-path-and-checkout-root]
     implementation_evidence: [src/sdk/common.cpp, tests/unit/sdk/sdk_test.cpp, tests/unit/sdk/store_test.cpp, tests/adapter/clang22/provider_normalizer_test.cpp, docs/design/adr/0049-shared-source-span-identity.md]
 
   - id: public.project-catalog
@@ -184,14 +184,17 @@ entries:
       - name: claim-stage-validator
         kind: function-family
         signature: 'make_assertion; make_canonical_claim; make_derived_claim(inputs, output, prior_snapshot, consumed_partition_content_digests, transform); validate_claim; claim_input_basis_digest'
+      - name: claim-batch-content-identity
+        kind: function
+        signature: 'result<vector<byte>> claim_batch_content_encoding(span<const claim>, span<const unresolved_reference>, span<const claim_conflict>, span<const differential_disagreement>); result<string> claim_batch_content_digest(same spans)'
       - name: claim_batch
         kind: class
         signature: 'result<void> add_observation(const relation_engine&, observation); result<void> add(claim); result<claim_batch_result> commit(const relation_engine&, span<const claim> existing = {}) &&'
-    errors: [sdk.claim-condition-invalid, sdk.condition-universe-mismatch, sdk.claim-guarantee-invalid, sdk.claim-envelope-invalid, sdk.claim-basis-invalid, sdk.claim-stage-invalid, sdk.claim-identity-mismatch, sdk.hard-reference-missing]
+    errors: [sdk.claim-condition-invalid, sdk.condition-universe-mismatch, sdk.claim-guarantee-invalid, sdk.claim-envelope-invalid, sdk.claim-basis-invalid, sdk.claim-stage-invalid, sdk.claim-identity-mismatch, sdk.hard-reference-missing, sdk.canonical-value-invalid]
     lifetime: [claims-own-detached-rows-and-envelope-values, batch-result-owns-unresolved-conflict-and-differential-records]
     threading: [claim-values-may-cross-threads, claim-batch-is-thread-confined]
-    versioning: [claim-envelope-v2, claim-evidence-occurrence-law-v1, semantic-key-assertion-and-content-use-independent-domain-separated-identities]
-    invariants: [observation-is-not-a-claim-stage, claim-stage-membership-is-validated-before-basis-shape, identities-ignore-arrival-jobs-root-and-engine-generation, canonical-and-derived-constructors-independently-revalidate-every-input-claim, canonical-constructor-accepts-only-valid-assertions, invalid-input-validation-errors-are-identical-across-stage-constructors, same-content-metadata-distinct-evidence-occurrences-are-lossless, only-full-envelope-exact-occurrences-deduplicate, occurrence-total-order-and-batch-digest-are-input-permutation-independent, derived-basis-names-strict-prior-snapshot-and-canonical-partition-content-digests, hard-missing-rejects-atomic-batch, soft-missing-preserves-claim-and-unresolved, same-domain-functional-overlap-is-conflict-for-new-new-and-new-existing, cross-domain-overlap-is-differential-disagreement-for-new-new-and-new-existing, existing-existing-disagreements-are-not-replayed, one-shot-and-split-publication-classification-parity, set-multiset-functional-assertion-and-keyed-union-are-explicit]
+    versioning: [claim-envelope-v2, claim-evidence-occurrence-law-v1, claim-batch-content-v2, semantic-key-assertion-and-content-use-independent-domain-separated-identities]
+    invariants: [observation-is-not-a-claim-stage, claim-stage-membership-is-validated-before-basis-shape, identities-ignore-arrival-jobs-root-and-engine-generation, canonical-and-derived-constructors-independently-revalidate-every-input-claim, canonical-constructor-accepts-only-valid-assertions, invalid-input-validation-errors-are-identical-across-stage-constructors, same-content-metadata-distinct-evidence-occurrences-are-lossless, only-full-envelope-exact-occurrences-deduplicate, occurrence-total-order-and-batch-digest-are-input-permutation-independent, batch-content-identity-uses-typed-self-delimiting-canonical-tuples-and-binds-every-nested-record-field, batch-record-collections-have-explicit-canonical-order-count-and-existing-set-or-multiset-semantics, derived-basis-names-strict-prior-snapshot-and-canonical-partition-content-digests, hard-missing-rejects-atomic-batch, soft-missing-preserves-claim-and-unresolved, same-domain-functional-overlap-is-conflict-for-new-new-and-new-existing, cross-domain-overlap-is-differential-disagreement-for-new-new-and-new-existing, existing-existing-disagreements-are-not-replayed, one-shot-and-split-publication-classification-parity, set-multiset-functional-assertion-and-keyed-union-are-explicit]
     implementation_evidence: [src/sdk/claim.cpp, examples/sdk/relation_claim_batch.cpp, tests/unit/sdk/sdk_test.cpp, schemas/cxxlens_ng_claim_envelope.schema.yaml, docs/design/adr/0019-incremental-claim-conflict-classification.md, docs/design/adr/0036-claim-stage-input-revalidation.md, docs/design/adr/0037-lossless-claim-evidence-occurrences.md]
 
   - id: public.snapshot-store

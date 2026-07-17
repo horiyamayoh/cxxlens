@@ -280,7 +280,7 @@ namespace cxxlens::sdk
 
 	namespace detail
 	{
-		std::vector<std::byte> claim_occurrence_projection(const claim& value)
+		result<std::vector<std::byte>> claim_occurrence_projection(const claim& value)
 		{
 			std::vector<canonical_value> basis;
 			if (const auto* direct = std::get_if<direct_claim_basis>(&value.input_basis))
@@ -323,12 +323,12 @@ namespace cxxlens::sdk
 
 		bool claim_occurrence_less(const claim& left, const claim& right)
 		{
-			return claim_occurrence_projection(left) < claim_occurrence_projection(right);
+			return *claim_occurrence_projection(left) < *claim_occurrence_projection(right);
 		}
 
 		bool same_claim_occurrence(const claim& left, const claim& right)
 		{
-			return claim_occurrence_projection(left) == claim_occurrence_projection(right);
+			return *claim_occurrence_projection(left) == *claim_occurrence_projection(right);
 		}
 
 		result<std::string> functional_payload_digest(const relation_descriptor& descriptor,
@@ -574,6 +574,173 @@ namespace cxxlens::sdk
 		return {};
 	}
 
+	result<std::vector<std::byte>> claim_batch_content_encoding(
+		const std::span<const claim> claims,
+		const std::span<const unresolved_reference> unresolved,
+		const std::span<const claim_conflict> conflicts,
+		const std::span<const differential_disagreement> differential_disagreements)
+	{
+		const auto strings = [](const auto& values)
+		{
+			std::vector<canonical_value> output;
+			output.reserve(values.size());
+			for (const auto& value : values)
+				output.push_back(canonical_value::from_string(value));
+			return canonical_value::from_tuple(std::move(output));
+		};
+
+		std::vector<std::pair<const claim*, std::vector<std::byte>>> ordered_claims;
+		ordered_claims.reserve(claims.size());
+		for (const auto& value : claims)
+		{
+			auto occurrence = detail::claim_occurrence_projection(value);
+			if (!occurrence)
+				return unexpected(std::move(occurrence.error()));
+			ordered_claims.emplace_back(&value, std::move(*occurrence));
+		}
+		std::ranges::sort(ordered_claims,
+						  [](const auto& left, const auto& right)
+						  {
+							  return left.second < right.second;
+						  });
+		std::vector<canonical_value> claim_records;
+		claim_records.reserve(ordered_claims.size());
+		for (auto& [value, occurrence] : ordered_claims)
+			claim_records.push_back(canonical_value::from_tuple({
+				canonical_value::from_string("claim"),
+				canonical_value::from_string(value->content),
+				canonical_value::from_bytes(std::move(occurrence)),
+			}));
+
+		auto ordered_unresolved =
+			std::vector<unresolved_reference>{unresolved.begin(), unresolved.end()};
+		std::ranges::sort(ordered_unresolved,
+						  [](const auto& left, const auto& right)
+						  {
+							  return std::tie(left.source_assertion,
+											  left.source_relation,
+											  left.target_relation,
+											  left.source_columns,
+											  left.reason) < std::tie(right.source_assertion,
+																	  right.source_relation,
+																	  right.target_relation,
+																	  right.source_columns,
+																	  right.reason);
+						  });
+		ordered_unresolved.erase(
+			std::ranges::unique(ordered_unresolved,
+								[](const auto& left, const auto& right)
+								{
+									return left.source_assertion == right.source_assertion &&
+										left.source_relation == right.source_relation &&
+										left.target_relation == right.target_relation &&
+										left.source_columns == right.source_columns &&
+										left.reason == right.reason;
+								})
+				.begin(),
+			ordered_unresolved.end());
+		std::vector<canonical_value> unresolved_records;
+		unresolved_records.reserve(ordered_unresolved.size());
+		for (const auto& value : ordered_unresolved)
+			unresolved_records.push_back(canonical_value::from_tuple({
+				canonical_value::from_string("unresolved"),
+				canonical_value::from_string(value.source_assertion),
+				canonical_value::from_string(value.source_relation),
+				canonical_value::from_string(value.target_relation),
+				strings(value.source_columns),
+				canonical_value::from_string(value.reason),
+			}));
+
+		auto ordered_conflicts = std::vector<claim_conflict>{conflicts.begin(), conflicts.end()};
+		detail::canonicalize_claim_conflicts(ordered_conflicts);
+		std::vector<canonical_value> conflict_records;
+		conflict_records.reserve(ordered_conflicts.size());
+		for (const auto& value : ordered_conflicts)
+			conflict_records.push_back(canonical_value::from_tuple({
+				canonical_value::from_string("conflict"),
+				canonical_value::from_string(value.relation),
+				canonical_value::from_string(value.semantic_key),
+				canonical_value::from_string(value.interpretation),
+				strings(value.overlap_fragments),
+				strings(value.assertions),
+				strings(value.contents),
+			}));
+
+		auto ordered_differential = std::vector<differential_disagreement>{
+			differential_disagreements.begin(), differential_disagreements.end()};
+		std::ranges::sort(
+			ordered_differential,
+			[](const differential_disagreement& left, const differential_disagreement& right)
+			{
+				return std::tie(left.relation,
+								left.semantic_key,
+								left.left_interpretation,
+								left.right_interpretation,
+								left.left_content,
+								left.right_content,
+								left.overlap_fragments) < std::tie(right.relation,
+																   right.semantic_key,
+																   right.left_interpretation,
+																   right.right_interpretation,
+																   right.left_content,
+																   right.right_content,
+																   right.overlap_fragments);
+			});
+		ordered_differential.erase(
+			std::ranges::unique(
+				ordered_differential,
+				[](const differential_disagreement& left, const differential_disagreement& right)
+				{
+					return left.relation == right.relation &&
+						left.semantic_key == right.semantic_key &&
+						left.left_interpretation == right.left_interpretation &&
+						left.right_interpretation == right.right_interpretation &&
+						left.left_content == right.left_content &&
+						left.right_content == right.right_content &&
+						left.overlap_fragments == right.overlap_fragments;
+				})
+				.begin(),
+			ordered_differential.end());
+		std::vector<canonical_value> differential_records;
+		differential_records.reserve(ordered_differential.size());
+		for (const auto& value : ordered_differential)
+			differential_records.push_back(canonical_value::from_tuple({
+				canonical_value::from_string("differential"),
+				canonical_value::from_string(value.relation),
+				canonical_value::from_string(value.semantic_key),
+				canonical_value::from_string(value.left_interpretation),
+				canonical_value::from_string(value.right_interpretation),
+				canonical_value::from_string(value.left_content),
+				canonical_value::from_string(value.right_content),
+				strings(value.overlap_fragments),
+			}));
+
+		return canonical_binary(canonical_value::from_tuple({
+			canonical_value::from_string("cxxlens.claim-batch.v2"),
+			canonical_value::from_tuple(std::move(claim_records)),
+			canonical_value::from_tuple(std::move(unresolved_records)),
+			canonical_value::from_tuple(std::move(conflict_records)),
+			canonical_value::from_tuple(std::move(differential_records)),
+		}));
+	}
+
+	result<std::string> claim_batch_content_digest(
+		const std::span<const claim> claims,
+		const std::span<const unresolved_reference> unresolved,
+		const std::span<const claim_conflict> conflicts,
+		const std::span<const differential_disagreement> differential_disagreements)
+	{
+		auto encoded =
+			claim_batch_content_encoding(claims, unresolved, conflicts, differential_disagreements);
+		if (!encoded)
+			return unexpected(std::move(encoded.error()));
+		std::string payload;
+		payload.reserve(encoded->size());
+		for (const auto byte : *encoded)
+			payload.push_back(static_cast<char>(std::to_integer<unsigned char>(byte)));
+		return semantic_digest("cxxlens.claim-batch.v2", payload);
+	}
+
 	result<void> claim_batch::add(claim value)
 	{
 		claims_.push_back(std::move(value));
@@ -781,32 +948,11 @@ namespace cxxlens::sdk
 								})
 				.begin(),
 			output.unresolved.end());
-		std::string canonical;
-		for (const auto& value : output.claims)
-		{
-			const auto occurrence = detail::claim_occurrence_projection(value);
-			canonical += value.content + '|' + content_digest(occurrence) + "\n";
-		}
-		for (const auto& value : output.unresolved)
-			canonical += value.source_assertion + "->" + value.target_relation + "\n";
-		for (const auto& value : output.conflicts)
-		{
-			canonical += "conflict:" + value.relation + ':' + value.semantic_key + ':' +
-				value.interpretation + '\n';
-			for (const auto& fragment : value.overlap_fragments)
-				canonical += "condition:" + fragment + '\n';
-			for (const auto& content : value.contents)
-				canonical += "content:" + content + '\n';
-		}
-		for (const auto& value : output.differential_disagreements)
-		{
-			canonical += "differential:" + value.relation + ':' + value.semantic_key + ':' +
-				value.left_interpretation + ':' + value.right_interpretation + ':' +
-				value.left_content + ':' + value.right_content + '\n';
-			for (const auto& fragment : value.overlap_fragments)
-				canonical += "condition:" + fragment + '\n';
-		}
-		output.content_digest = *semantic_digest("cxxlens.claim-batch.v1", canonical);
+		auto batch_digest = claim_batch_content_digest(
+			output.claims, output.unresolved, output.conflicts, output.differential_disagreements);
+		if (!batch_digest)
+			return unexpected(std::move(batch_digest.error()));
+		output.content_digest = std::move(*batch_digest);
 		return output;
 	}
 } // namespace cxxlens::sdk

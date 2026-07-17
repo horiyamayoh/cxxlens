@@ -1,5 +1,5 @@
 981ff1fba0f2b3f907e10ba33d2b335cf7dbf4ef7e80429bc2ae6fb9ccaa3836  README.md
-3f3e74a34c8f19fc4826fa7639d52a40f9a18735cb8eb3539853bd2219db7273  cxxlens_next_generation_integrated_design_ja.md
+30378cfe3cd38264ef12ae691e37b25f201552e4f491a99693e3c0a5de07c5fe  cxxlens_next_generation_integrated_design_ja.md
 eb03b5bc460ce0ac24c8895dc65effb43e10625a4b93af7b88c7f49d5e9558cc  adr/README.md
 d24534d4936debcc3bad96a6acdec1056c3c437fa7b526c76bb3f13c8b7c5423  adr/0002-semantic-relation-platform.md
 04172ac98fa6b9743cc283d8da063243e95632a9d4df0418df4e7af1d49096b9  adr/0003-versioned-relation-kernel.md
@@ -15,7 +15,7 @@ d5f28b72b07ffc318b6497e8ef5cef59dba597e3fc95df23fdb9535929266bd5  adr/0010-provi
 f05e3378c7f854dd8482524652d594f1e656bc8ec7cbe178172510d4b473d600  adr/0014-deterministic-reference-query-runtime.md
 04aca93cd001e7d09834500a3d3b54d6b90494f21e488c6af795a96d8537c3ac  adr/0015-process-provider-runtime-clang22-normalizer.md
 0db49f505a7b90dea76074b52601d10ce69ce44f824cf1d65e14a2ba347293cf  catalogs/README.md
-590b52e7725b0ce1f1a1928ee5d279b5bd6019f03e4685543003f8b0e4c1704f  ../../schemas/cxxlens_ng_claim_envelope.schema.yaml
+ffcee8e839cb8be30b4843df8f23ca1df043fdd186b4427d82cfa5375e8e2585  ../../schemas/cxxlens_ng_claim_envelope.schema.yaml
 d6b58c2fafeda55a0914b569ea3953806e1169b8e456cbb7520e55671d1605fc  ../../schemas/cxxlens_ng_relation_registry.yaml
 1085ca3ec890e467ac93c4b4fdfc238958a74d417f814eb0519dcccd88a011c7  ../../schemas/cxxlens_ng_relation_registry.schema.yaml
 a2710dac143dea53fd370adb9c959c0411d64a021bf02983bc5c634ec3dd9942  ../../schemas/cxxlens_ng_relation_conformance_vectors.yaml
@@ -51,7 +51,7 @@ c25f30af6e20a6c2aa3489c8b43af5cf7bf15222efa3b8953f576342e5392d82  ../../schemas/
 7b78082fffa1c2fe9475644a18a6b0904d3834370a8bf27f68a1ca9a8430cf71  ../../schemas/cxxlens_ng_provider_runtime_contract.yaml
 09d01ac8c4c76278d9c9cd7c8fd30291bc21ad6746d81a5c66be59e08c82a560  ../../schemas/cxxlens_ng_provider_runtime_contract.schema.yaml
 182df72674f78e858b79767e4e34adea9d01672aff5d025cffed3d2d651ac2af  ../../schemas/cxxlens_ng_provider_execution_report.schema.yaml
-ad60ace7376866235eb485fe137b069d2d5d5e8fb116d925c2efebab87d072d3  ../../schemas/cxxlens_ng_public_api_catalog.yaml
+9ef995e3f3583885f6c7e817eff8cc1a6f0d792ff80f7baa1be9d5ba03b70744  ../../schemas/cxxlens_ng_public_api_catalog.yaml
 a0599e26cfea7572064308e6ac413fc237c4d8562a155354c10717b708613ece  ../../schemas/cxxlens_ng_public_api_catalog.schema.yaml
 22f473204ef45483c80ea0e45431ba1ededd0ff08f428c506736e4d7a91c984a  ../../schemas/cxxlens_ng_acceptance_manifest.yaml
 e8bc1adc409bbac29f762ea134788537fbe7b28dd952e4e669a17ea167ba113b  ../../schemas/cxxlens_ng_acceptance_manifest.schema.yaml

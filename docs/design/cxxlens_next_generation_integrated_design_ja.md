@@ -1407,7 +1407,13 @@ basis、certificate の identity に含めない。
 Issue #94 / ADR 0037 により semantic claim set と evidence occurrence set を分離する。非 multiset relation の claim set は
 canonical sorted unique content ID 集合とし、claim envelope 全 field が完全一致する occurrence だけを deduplicate する。同じ
 content でも producer ID、input basis、provenance、guarantee、stage が異なる occurrence は canonical total order ですべて保持し、
-batch digest は content と occurrence projection の双方を bind する。multiset relation の multiplicity law は変更しない。
+batch content identity v2 は公開 `claim_batch_content_encoding()` と、それだけを hash する `claim_batch_content_digest()` が所有する。
+schema tag、claims、unresolved references、conflicts、differential disagreements の4 collectionを `canonical_value` の型付き
+self-delimiting tuple として符号化し、各 record の全 field と collection count を bind する。record は canonical total order、内部 set は
+canonical sorted unique とし、claim の multiplicity は relation law を維持する。したがって区切り文字や NUL を semantic string から禁止せず、
+prose 連結にも依存しない。公開 `canonical_binary_decode()` は一つの完全な minimal encoding だけを受理し、replay は
+encode→decode→encode の byte-for-byte 一致を検証できる。
+multiset relation の multiplicity law は変更しない。
 
 ### 11.7 Evidence graph
 
@@ -1478,7 +1484,7 @@ overlap condition だけを conflict fragment とし、非overlap fragment の c
 
 Issue #76 / ADR 0019 により batch commit の比較集合は accepted new claims と既存 snapshot claims の和集合とし、
 少なくとも片側が new claimである全 functional pairへ同じ overlap/payload/interpretation classificationを適用する。
-existing-existingの既知 disagreementは再掲しない。pairの左右、conflict/differential record、batch digest入力はclaimの
+existing-existingの既知 disagreementは再掲しない。pairの左右、conflict/differential record、batch content identity入力はclaimの
 canonical orderで固定し、同じclaim集合をone-shot ingestionしても複数publicationへ分割しても、new claimが
 関与する最終classificationは一致しなければならない。exact duplicateとsame payloadはconflictではない。
 

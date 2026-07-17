@@ -169,6 +169,26 @@ namespace cxxlens::sdk
 		std::string content_digest;
 	};
 
+	/**
+	 * @brief Encode all canonical batch result records as one typed, self-delimiting tuple.
+	 * @return `sdk.canonical-value-invalid` if any nested semantic string is invalid UTF-8.
+	 */
+	[[nodiscard]] result<std::vector<std::byte>> claim_batch_content_encoding(
+		std::span<const claim> claims,
+		std::span<const unresolved_reference> unresolved,
+		std::span<const claim_conflict> conflicts,
+		std::span<const differential_disagreement> differential_disagreements);
+
+	/**
+	 * @brief Derive the typed, self-delimiting identity of all canonical batch result records.
+	 * @return `sdk.canonical-value-invalid` if any nested semantic string is invalid UTF-8.
+	 */
+	[[nodiscard]] result<std::string> claim_batch_content_digest(
+		std::span<const claim> claims,
+		std::span<const unresolved_reference> unresolved,
+		std::span<const claim_conflict> conflicts,
+		std::span<const differential_disagreement> differential_disagreements);
+
 	/** @brief Provider-facing atomic batch ingestor with independent stage/reference validation. */
 	class claim_batch
 	{

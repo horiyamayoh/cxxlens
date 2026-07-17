@@ -1,6 +1,22 @@
 $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens.claim-envelope.v2
 title: cxxlens system claim envelope
+x-cxxlens-batch-content-identity:
+  schema: cxxlens.claim-batch.v2
+  public_encoder: cxxlens::sdk::claim_batch_content_encoding
+  public_digest: cxxlens::sdk::claim_batch_content_digest
+  encoding: canonical-value-v2-typed-self-delimiting-tuple
+  root_fields: [schema_tag, claims, unresolved_references, conflicts, differential_disagreements]
+  records:
+    claim: [tag, content, full_occurrence_projection]
+    unresolved_reference: [tag, source_assertion, source_relation, target_relation, source_columns, reason]
+    claim_conflict: [tag, relation, semantic_key, interpretation, overlap_fragments, assertions, contents]
+    differential_disagreement: [tag, relation, semantic_key, left_interpretation, right_interpretation, left_content, right_content, overlap_fragments]
+  collection_contract:
+    count: encoded-by-canonical-tuple
+    order: canonical-total-order
+    nested_sets: canonical-sorted-unique
+    claims: canonical-occurrence-order-with-relation-multiplicity-law-preserved
 type: object
 additionalProperties: false
 required:

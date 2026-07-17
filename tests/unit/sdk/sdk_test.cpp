@@ -712,6 +712,21 @@ namespace
 		auto second = canonical_binary(valid);
 		require(first && second && valid == valid && *first == *second,
 				"equal canonical values did not have equal canonical bytes");
+		auto decoded = canonical_binary_decode(*first);
+		auto round_trip =
+			decoded ? canonical_binary(*decoded) : result<std::vector<std::byte>>{decoded.error()};
+		require(decoded && round_trip && *decoded == valid && *round_trip == *first,
+				"canonical binary decode/encode round trip changed bytes");
+		for (const auto& invalid_binary : {
+				 std::vector<std::byte>{std::byte{0xff}},
+				 std::vector<std::byte>{std::byte{0x00}, std::byte{0x00}},
+				 std::vector<std::byte>{std::byte{0x01}, std::byte{0x02}},
+			 })
+		{
+			auto rejected = canonical_binary_decode(invalid_binary);
+			require(!rejected && rejected.error().code == "sdk.canonical-value-invalid",
+					"invalid canonical binary was decoded");
+		}
 
 		canonical_value invalid_kind;
 		invalid_kind.type = static_cast<canonical_value::kind>(255U);
@@ -870,6 +885,188 @@ namespace
 						candidate.descriptor_digest == expected_digest,
 					"conflict column permutation changed descriptor canonical identity");
 		} while (std::ranges::next_permutation(conflict_order).found);
+	}
+
+	void check_claim_batch_digest_framing()
+	{
+		using namespace cxxlens::sdk;
+		const std::span<const claim> no_claims;
+		const std::span<const unresolved_reference> no_unresolved;
+		const std::span<const claim_conflict> no_conflicts;
+		const std::span<const differential_disagreement> no_differential;
+		const auto differential_digest = [&](const differential_disagreement& value)
+		{
+			const std::array values{value};
+			return claim_batch_content_digest(no_claims, no_unresolved, no_conflicts, values);
+		};
+
+		const std::array delimiters{std::string{":"},
+									std::string{"->"},
+									std::string{"|"},
+									std::string{"\n"},
+									std::string{"\0", 1U}};
+		using differential_field = std::string differential_disagreement::*;
+		const std::array<differential_field, 6U> differential_fields{
+			&differential_disagreement::relation,
+			&differential_disagreement::semantic_key,
+			&differential_disagreement::left_interpretation,
+			&differential_disagreement::right_interpretation,
+			&differential_disagreement::left_content,
+			&differential_disagreement::right_content,
+		};
+		for (const auto& delimiter : delimiters)
+			for (std::size_t field{}; field + 1U < differential_fields.size(); ++field)
+			{
+				differential_disagreement left{"relation",
+											   "semantic-key",
+											   "left",
+											   "right",
+											   "left-content",
+											   "right-content",
+											   {"condition"}};
+				auto right = left;
+				left.*differential_fields[field] = "boundary-left" + delimiter;
+				left.*differential_fields[field + 1U] = "boundary-right";
+				right.*differential_fields[field] = "boundary-left";
+				right.*differential_fields[field + 1U] = delimiter + "boundary-right";
+				auto left_digest = differential_digest(left);
+				auto right_digest = differential_digest(right);
+				require(left_digest && right_digest && *left_digest != *right_digest,
+						"differential disagreement field boundary was ambiguous");
+			}
+
+		differential_disagreement one_fragment{
+			"relation", "key", "left", "right", "content-a", "content-b", {"a\ncondition:b"}};
+		auto two_fragments = one_fragment;
+		two_fragments.overlap_fragments = {"a", "b"};
+		require(*differential_digest(one_fragment) != *differential_digest(two_fragments),
+				"differential fragment count was not bound");
+
+		const std::array unresolved_a{
+			unresolved_reference{"assertion->target", "source", "relation", {"column"}, "reason"}};
+		const std::array unresolved_b{
+			unresolved_reference{"assertion", "source", "target->relation", {"column"}, "reason"}};
+		auto unresolved_digest_a =
+			claim_batch_content_digest(no_claims, unresolved_a, no_conflicts, no_differential);
+		auto unresolved_digest_b =
+			claim_batch_content_digest(no_claims, unresolved_b, no_conflicts, no_differential);
+		require(unresolved_digest_a && unresolved_digest_b &&
+					*unresolved_digest_a != *unresolved_digest_b,
+				"unresolved record boundary or retained fields were not bound");
+		for (const auto& mutation : {
+				 unresolved_reference{
+					 "assertion->target", "different-source", "relation", {"column"}, "reason"},
+				 unresolved_reference{
+					 "assertion->target", "source", "relation", {"different-column"}, "reason"},
+				 unresolved_reference{
+					 "assertion->target", "source", "relation", {"column"}, "different-reason"},
+			 })
+		{
+			const std::array values{mutation};
+			auto digest =
+				claim_batch_content_digest(no_claims, values, no_conflicts, no_differential);
+			require(digest && *digest != *unresolved_digest_a,
+					"unresolved nested field was omitted from the batch digest");
+		}
+
+		const std::array conflict_a{claim_conflict{
+			"relation:key", "semantic", "interpretation", {"a"}, {"assertion"}, {"content"}}};
+		const std::array conflict_b{claim_conflict{
+			"relation", "key:semantic", "interpretation", {"a"}, {"assertion"}, {"content"}}};
+		auto conflict_digest_a =
+			claim_batch_content_digest(no_claims, no_unresolved, conflict_a, no_differential);
+		auto conflict_digest_b =
+			claim_batch_content_digest(no_claims, no_unresolved, conflict_b, no_differential);
+		require(conflict_digest_a && conflict_digest_b && *conflict_digest_a != *conflict_digest_b,
+				"conflict record boundary was ambiguous");
+		auto assertion_mutation = conflict_a;
+		assertion_mutation.front().assertions = {"different-assertion"};
+		require(*claim_batch_content_digest(
+					no_claims, no_unresolved, assertion_mutation, no_differential) !=
+					*conflict_digest_a,
+				"conflict assertions were omitted from the batch digest");
+		for (const auto& mutation : {
+				 claim_conflict{"relation:key",
+								"semantic",
+								"different-interpretation",
+								{"a"},
+								{"assertion"},
+								{"content"}},
+				 claim_conflict{"relation:key",
+								"semantic",
+								"interpretation",
+								{"different-fragment"},
+								{"assertion"},
+								{"content"}},
+				 claim_conflict{"relation:key",
+								"semantic",
+								"interpretation",
+								{"a"},
+								{"assertion"},
+								{"different-content"}},
+			 })
+		{
+			const std::array values{mutation};
+			auto digest =
+				claim_batch_content_digest(no_claims, no_unresolved, values, no_differential);
+			require(digest && *digest != *conflict_digest_a,
+					"conflict nested field was omitted from the batch digest");
+		}
+
+		claim claim_a;
+		claim_a.descriptor = "descriptor|content";
+		claim_a.content = "claim-a";
+		claim_a.interpretation = "interpretation";
+		claim_a.producer = {"producer", "contract"};
+		claim_a.input_basis = direct_claim_basis{"basis"};
+		claim_a.guarantee = {"exact", "scope", "assumptions", {"verified"}};
+		auto claim_b = claim_a;
+		claim_b.descriptor = "descriptor";
+		claim_b.content = "content|claim-a";
+		const std::array claims_a{claim_a};
+		const std::array claims_b{claim_b};
+		auto claim_digest_a =
+			claim_batch_content_digest(claims_a, no_unresolved, no_conflicts, no_differential);
+		auto claim_digest_b =
+			claim_batch_content_digest(claims_b, no_unresolved, no_conflicts, no_differential);
+		require(claim_digest_a && claim_digest_b && *claim_digest_a != *claim_digest_b,
+				"claim content/occurrence boundary was ambiguous");
+
+		std::array differentials{
+			differential_disagreement{"relation", "key-a", "left", "right", "a", "b", {"debug"}},
+			differential_disagreement{"relation", "key-b", "left", "right", "a", "c", {"release"}},
+		};
+		std::array claims{claim_a, claim_b};
+		std::array unresolved{
+			unresolved_reference{"assertion-a", "source-a", "target-a", {"column-a"}, "soft"},
+			unresolved_reference{"assertion-b", "source-b", "target-b", {"column-b"}, "soft"},
+		};
+		std::array conflicts{conflict_a.front(), conflict_b.front()};
+		auto reversed_claims = claims;
+		auto reversed_unresolved = unresolved;
+		auto reversed_conflicts = conflicts;
+		auto reversed_differentials = differentials;
+		std::ranges::reverse(reversed_claims);
+		std::ranges::reverse(reversed_unresolved);
+		std::ranges::reverse(reversed_conflicts);
+		std::ranges::reverse(reversed_differentials);
+		auto forward = claim_batch_content_digest(claims, unresolved, conflicts, differentials);
+		auto reversed = claim_batch_content_digest(
+			reversed_claims, reversed_unresolved, reversed_conflicts, reversed_differentials);
+		require(forward &&
+					*forward ==
+						"semantic-v2:sha256:"
+						"202750ee0bf84e826f6ebb4b739a054f82449c52326829c6c311b3422d0f6140",
+				"claim batch v2 golden digest changed");
+		require(forward && reversed && *forward == *reversed,
+				"set-like batch record permutation changed the digest");
+		auto encoded = claim_batch_content_encoding(claims, unresolved, conflicts, differentials);
+		auto decoded =
+			encoded ? canonical_binary_decode(*encoded) : result<canonical_value>{encoded.error()};
+		auto reencoded =
+			decoded ? canonical_binary(*decoded) : result<std::vector<std::byte>>{decoded.error()};
+		require(encoded && decoded && reencoded && *encoded == *reencoded,
+				"claim batch encode/decode/encode changed canonical bytes");
 	}
 
 	void check_relation_schema_parity()
@@ -2126,6 +2323,7 @@ int main(const int argc, const char* const argv[])
 		test_case{"closed-enum-canonical-value", check_closed_enum_and_canonical_value},
 		test_case{"descriptor-binding", check_descriptor_binding},
 		test_case{"descriptor-canonical-collections", check_descriptor_canonical_collections},
+		test_case{"claim-batch-digest-framing", check_claim_batch_digest_framing},
 		test_case{"relation-schema-parity", check_relation_schema_parity},
 		test_case{"static-dynamic-query", check_static_dynamic_query},
 		test_case{"snapshot-lifetime", check_snapshot_lifetime},

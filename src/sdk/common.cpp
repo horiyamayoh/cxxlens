@@ -76,6 +76,132 @@ namespace cxxlens::sdk
 			}
 		}
 
+		[[nodiscard]] result<std::uint64_t>
+		read_canonical_length(const std::span<const std::byte> bytes, std::size_t& offset)
+		{
+			if (bytes.size() - offset < 8U)
+				return unexpected(
+					error{"sdk.canonical-value-invalid", "binary", "truncated-length"});
+			std::uint64_t value{};
+			for (std::size_t index{}; index < 8U; ++index)
+				value = (value << 8U) | std::to_integer<unsigned char>(bytes[offset + index]);
+			offset += 8U;
+			return value;
+		}
+
+		[[nodiscard]] result<canonical_value>
+		decode_canonical_value(const std::span<const std::byte> bytes)
+		{
+			if (bytes.empty())
+				return unexpected(error{"sdk.canonical-value-invalid", "binary", "missing-tag"});
+			std::size_t offset{1U};
+			const auto tag = std::to_integer<std::uint8_t>(bytes.front());
+			canonical_value output;
+			switch (tag)
+			{
+				case 0x00U:
+					output = canonical_value::null();
+					break;
+				case 0x01U:
+					if (offset == bytes.size() || std::to_integer<std::uint8_t>(bytes[offset]) > 1U)
+						return unexpected(
+							error{"sdk.canonical-value-invalid", "binary", "invalid-boolean"});
+					output = canonical_value::from_boolean(
+						std::to_integer<std::uint8_t>(bytes[offset++]) == 1U);
+					break;
+				case 0x02U:
+				{
+					if (offset == bytes.size() || std::to_integer<std::uint8_t>(bytes[offset]) > 1U)
+						return unexpected(
+							error{"sdk.canonical-value-invalid", "binary", "invalid-integer-sign"});
+					const bool negative = std::to_integer<std::uint8_t>(bytes[offset++]) == 1U;
+					auto width = read_canonical_length(bytes, offset);
+					if (!width)
+						return unexpected(std::move(width.error()));
+					if (*width == 0U || *width > 8U || *width > bytes.size() - offset)
+						return unexpected(error{
+							"sdk.canonical-value-invalid", "binary", "invalid-integer-width"});
+					if (*width > 1U && bytes[offset] == std::byte{0})
+						return unexpected(
+							error{"sdk.canonical-value-invalid", "binary", "noncanonical-integer"});
+					std::uint64_t magnitude{};
+					for (std::uint64_t index{}; index < *width; ++index)
+						magnitude =
+							(magnitude << 8U) | std::to_integer<unsigned char>(bytes[offset++]);
+					constexpr auto signed_max =
+						static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+					if ((!negative && magnitude > signed_max) ||
+						(negative && (magnitude == 0U || magnitude > signed_max + 1U)))
+						return unexpected(
+							error{"sdk.canonical-value-invalid", "binary", "integer-out-of-range"});
+					const auto value = negative
+						? (magnitude == signed_max + 1U ? std::numeric_limits<std::int64_t>::min()
+														: -static_cast<std::int64_t>(magnitude))
+						: static_cast<std::int64_t>(magnitude);
+					output = canonical_value::from_integer(value);
+					break;
+				}
+				case 0x03U:
+				case 0x04U:
+				{
+					auto length = read_canonical_length(bytes, offset);
+					if (!length)
+						return unexpected(std::move(length.error()));
+					if (*length > bytes.size() - offset)
+						return unexpected(
+							error{"sdk.canonical-value-invalid", "binary", "truncated-payload"});
+					const auto end = offset + static_cast<std::size_t>(*length);
+					if (tag == 0x03U)
+						output = canonical_value::from_bytes(std::vector<std::byte>{
+							bytes.begin() + static_cast<std::ptrdiff_t>(offset),
+							bytes.begin() + static_cast<std::ptrdiff_t>(end)});
+					else
+						output = canonical_value::from_string(
+							std::string{reinterpret_cast<const char*>(bytes.data() + offset),
+										static_cast<std::size_t>(*length)});
+					offset = end;
+					break;
+				}
+				case 0x05U:
+				{
+					auto count = read_canonical_length(bytes, offset);
+					if (!count)
+						return unexpected(std::move(count.error()));
+					if (*count > (bytes.size() - offset) / 9U)
+						return unexpected(
+							error{"sdk.canonical-value-invalid", "binary", "invalid-tuple-count"});
+					std::vector<canonical_value> values;
+					values.reserve(static_cast<std::size_t>(*count));
+					for (std::uint64_t index{}; index < *count; ++index)
+					{
+						auto length = read_canonical_length(bytes, offset);
+						if (!length)
+							return unexpected(std::move(length.error()));
+						if (*length == 0U || *length > bytes.size() - offset)
+							return unexpected(error{"sdk.canonical-value-invalid",
+													"binary",
+													"invalid-tuple-item-length"});
+						auto item = decode_canonical_value(
+							bytes.subspan(offset, static_cast<std::size_t>(*length)));
+						if (!item)
+							return unexpected(std::move(item.error()));
+						values.push_back(std::move(*item));
+						offset += static_cast<std::size_t>(*length);
+					}
+					output = canonical_value::from_tuple(std::move(values));
+					break;
+				}
+				default:
+					return unexpected(
+						error{"sdk.canonical-value-invalid", "binary", "unknown-tag"});
+			}
+			if (offset != bytes.size())
+				return unexpected(error{"sdk.canonical-value-invalid", "binary", "trailing-bytes"});
+			if (auto valid = output.validate(); !valid)
+				return unexpected(std::move(valid.error()));
+			return output;
+		}
+
 		[[nodiscard]] error canonical_error(std::string field, std::string detail)
 		{
 			return {"sdk.canonical-value-invalid", std::move(field), std::move(detail)};
@@ -266,6 +392,20 @@ namespace cxxlens::sdk
 		std::vector<std::byte> output;
 		append_canonical(output, value);
 		return output;
+	}
+
+	result<canonical_value> canonical_binary_decode(const std::span<const std::byte> bytes)
+	{
+		auto decoded = decode_canonical_value(bytes);
+		if (!decoded)
+			return unexpected(std::move(decoded.error()));
+		auto encoded = canonical_binary(*decoded);
+		if (!encoded)
+			return unexpected(std::move(encoded.error()));
+		if (*encoded != std::vector<std::byte>{bytes.begin(), bytes.end()})
+			return unexpected(
+				error{"sdk.canonical-value-invalid", "binary", "noncanonical-encoding"});
+		return decoded;
 	}
 
 	result<std::string> canonical_identity_digest(const std::string_view identity_kind,
