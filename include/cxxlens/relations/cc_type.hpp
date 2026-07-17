@@ -35,6 +35,15 @@ namespace cxxlens::cc::relations
 					{"cc.type.v1.dependent", "dependent", {sdk::scalar_kind::boolean, "", false}, true, sdk::column_role::authoritative_payload},
 					{"cc.type.v1.spelling", "spelling", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::display},
 				};
+				output.domain_identity.result_column = "cc.type.v1.type";
+				output.domain_identity.projection = {
+					"cc.type.v1.constructor",
+					"cc.type.v1.nominal_entity",
+					"cc.type.v1.component_signature_digest",
+					"cc.type.v1.qualifiers",
+					"cc.type.v1.dependent",
+				};
+				output.domain_identity.contract = "canonical-binary-tuple-v1";
 				output.key_columns = {
 					"cc.type.v1.type",
 				};

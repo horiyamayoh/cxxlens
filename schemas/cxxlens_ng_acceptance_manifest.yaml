@@ -25,9 +25,9 @@ entries:
     summary: Base identity, source, condition, coverage, truth, and header invariants.
   - id: gate.g1
     status: implemented
-    owner_issue: '#67'
+    owner_issue: '#107'
     profile: NG0
-    contract_issue: '#67'
+    contract_issue: '#107'
     depends_on: [gate.g0]
     evidence:
       - schemas/cxxlens_ng_relation_registry.yaml
@@ -38,7 +38,8 @@ entries:
       - docs/design/adr/0019-incremental-claim-conflict-classification.md
       - docs/design/adr/0036-claim-stage-input-revalidation.md
       - docs/design/adr/0037-lossless-claim-evidence-occurrences.md
-    summary: Relation extension, IDL evolution, references, and static/dynamic parity.
+      - docs/design/adr/0050-relation-domain-identity-runtime.md
+    summary: Relation extension, IDL evolution, references, static/dynamic parity, and runtime domain identity projection.
   - id: gate.g2
     status: implemented
     owner_issue: '#68'
@@ -82,9 +83,9 @@ entries:
     summary: Logical query, standard/custom join, budgets, explicit partiality, and flagship recipe states bound to complete execution.
   - id: gate.g4
     status: implemented
-    owner_issue: '#106'
+    owner_issue: '#107'
     profile: NG0
-    contract_issue: '#106'
+    contract_issue: '#107'
     depends_on: [gate.g1]
     evidence:
       - tests/unit/sdk/provider_runtime_test.cpp
@@ -101,13 +102,14 @@ entries:
       - docs/design/adr/0046-resolved-sandbox-policy-enforcement.md
       - docs/design/adr/0048-cross-tu-direct-target-identity.md
       - docs/design/adr/0049-shared-source-span-identity.md
+      - docs/design/adr/0050-relation-domain-identity-runtime.md
       - src/sdk/provider_validation_internal.hpp
       - src/runtime/provider_process_adapter.cpp
       - schemas/cxxlens_ng_provider_protocol.yaml
       - schemas/cxxlens_ng_provider_runtime_contract.yaml
       - schemas/cxxlens_ng_provider_execution_report.schema.yaml
       - schemas/cxxlens_ng_security_profile.yaml
-    summary: Provider runtime and Clang worker with resolved sandbox, cross-TU targets, and source.span identity parity.
+    summary: Provider runtime and Clang worker with resolved sandbox, cross-TU targets, and descriptor-derived standard row identities.
   - id: gate.g5
     status: deferred
     owner_issue: '#69'

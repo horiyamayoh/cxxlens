@@ -386,6 +386,10 @@ namespace
 		conflicts.conflict_columns.pop_back();
 		rejects_stale_binding(std::move(conflicts), "conflict columns");
 
+		auto domain_projection = trusted;
+		std::ranges::reverse(domain_projection.domain_identity.projection);
+		rejects_stale_binding(std::move(domain_projection), "domain identity projection");
+
 		auto set_descriptor = make_merge_descriptor("company.test.binding", merge_mode::set);
 		auto multiset_descriptor =
 			make_merge_descriptor("company.test.binding", merge_mode::multiset);

@@ -37,6 +37,13 @@ namespace cxxlens::source::relations
 					{"source.file.v1.line_index", "line_index", {sdk::scalar_kind::typed_id, "line_index_id", false}, true, sdk::column_role::authoritative_payload},
 					{"source.file.v1.read_only", "read_only", {sdk::scalar_kind::boolean, "", false}, true, sdk::column_role::authoritative_payload},
 				};
+				output.domain_identity.result_column = "source.file.v1.snapshot";
+				output.domain_identity.projection = {
+					"source.file.v1.file",
+					"source.file.v1.content",
+					"source.file.v1.encoding",
+				};
+				output.domain_identity.contract = "canonical-binary-tuple-v1";
 				output.key_columns = {
 					"source.file.v1.snapshot",
 				};

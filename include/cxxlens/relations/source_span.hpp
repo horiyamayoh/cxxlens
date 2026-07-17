@@ -36,6 +36,15 @@ namespace cxxlens::source::relations
 					{"source.span.v1.origin", "origin", {sdk::scalar_kind::typed_id, "origin_id", true}, false, sdk::column_role::authoritative_payload},
 					{"source.span.v1.read_only", "read_only", {sdk::scalar_kind::boolean, "", false}, true, sdk::column_role::authoritative_payload},
 				};
+				output.domain_identity.result_column = "source.span.v1.span";
+				output.domain_identity.projection = {
+					"source.span.v1.snapshot",
+					"source.span.v1.file",
+					"source.span.v1.begin",
+					"source.span.v1.end",
+					"source.span.v1.role",
+				};
+				output.domain_identity.contract = "canonical-binary-tuple-v1";
 				output.key_columns = {
 					"source.span.v1.span",
 				};

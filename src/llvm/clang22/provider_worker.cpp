@@ -220,21 +220,20 @@ namespace cxxlens::detail::clang22
 			return std::move(builder).finish();
 		}
 
-		[[nodiscard]] sdk::result<sdk::detached_row>
-		entity_row(const detached_observation& observation,
-				   const std::string& entity,
-				   const std::string& toolchain,
-				   const bool exact)
+		[[nodiscard]] sdk::result<sdk::detached_row> entity_row(
+			const detached_observation& observation, const std::string& toolchain, const bool exact)
 		{
 			using relation = cc::relations::entity;
 			relation::builder builder;
-			const auto projection = observation.canonical_form();
 			const auto kind = observation.payload.contains("symbol.kind")
 				? observation.payload.at("symbol.kind")
 				: "unknown";
+			const auto signature = observation.payload.contains("symbol.signature")
+				? observation.payload.at("symbol.signature")
+				: observation.semantic_key;
 			for (auto result : {
 					 builder.set<relation::entity_column>(
-						 sdk::detached_cell::typed("cc_entity_id", entity)),
+						 sdk::detached_cell::typed("cc_entity_id", "pending")),
 					 builder.set<relation::canonicalization>(
 						 symbol_cell(sdk::scalar_kind::closed_symbol,
 									 "cc.canonicalization-state/1",
@@ -244,7 +243,7 @@ namespace cxxlens::detail::clang22
 					 builder.set<relation::structural_signature_digest>(symbol_cell(
 						 sdk::scalar_kind::digest,
 						 {},
-						 *sdk::semantic_digest("cc.entity.structural-signature.v1", projection))),
+						 *sdk::semantic_digest("cc.entity.structural-signature.v1", signature))),
 					 builder.set<relation::toolchain>(
 						 optional_typed("toolchain_context_id", toolchain)),
 					 builder.set<relation::provider_local_key>(
@@ -267,21 +266,21 @@ namespace cxxlens::detail::clang22
 				if (!result)
 					return sdk::unexpected(std::move(result.error()));
 			}
-			return std::move(builder).finish();
-		}
-
-		[[nodiscard]] std::string entity_identity(const std::string_view semantic_key,
-												  const std::string_view toolchain,
-												  const std::string_view variant)
-		{
-			return *sdk::semantic_digest("cc-entity",
-										 std::string{semantic_key} + "\n" + std::string{toolchain} +
-											 "\n" + std::string{variant});
+			auto row = std::move(builder).finish();
+			if (!row)
+				return sdk::unexpected(std::move(row.error()));
+			auto identity = sdk::derive_domain_identity(relation::descriptor(), *row);
+			if (!identity)
+				return sdk::unexpected(std::move(identity.error()));
+			row->cells.at("cc.entity.v1.entity") =
+				sdk::detached_cell::typed("cc_entity_id", std::move(*identity));
+			if (auto valid = sdk::validate_domain_identity(relation::descriptor(), *row); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			return row;
 		}
 
 		[[nodiscard]] sdk::result<sdk::detached_row>
 		call_site_row(const detached_observation& observation,
-					  const std::string& call,
 					  const std::map<std::string, std::string, std::less<>>& entities,
 					  const std::uint64_t ordinal)
 		{
@@ -292,7 +291,8 @@ namespace cxxlens::detail::clang22
 				? observation.payload.at("call.kind")
 				: "unknown";
 			for (auto result : {
-					 builder.set<relation::call>(sdk::detached_cell::typed("cc_call_id", call)),
+					 builder.set<relation::call>(
+						 sdk::detached_cell::typed("cc_call_id", "pending")),
 					 builder.set<relation::compile_unit>(
 						 sdk::detached_cell::typed("compile_unit_id", observation.compile_unit)),
 					 builder.set<relation::kind>(
@@ -314,7 +314,17 @@ namespace cxxlens::detail::clang22
 						return sdk::unexpected(std::move(result.error()));
 				}
 			}
-			return std::move(builder).finish();
+			auto row = std::move(builder).finish();
+			if (!row)
+				return sdk::unexpected(std::move(row.error()));
+			auto identity = sdk::derive_domain_identity(relation::descriptor(), *row);
+			if (!identity)
+				return sdk::unexpected(std::move(identity.error()));
+			row->cells.at("cc.call_site.v1.call") =
+				sdk::detached_cell::typed("cc_call_id", std::move(*identity));
+			if (auto valid = sdk::validate_domain_identity(relation::descriptor(), *row); !valid)
+				return sdk::unexpected(std::move(valid.error()));
+			return row;
 		}
 
 		[[nodiscard]] sdk::result<sdk::detached_row> direct_target_row(const std::string& call,
@@ -333,6 +343,46 @@ namespace cxxlens::detail::clang22
 				if (!result)
 					return sdk::unexpected(std::move(result.error()));
 			return std::move(builder).finish();
+		}
+
+		[[nodiscard]] sdk::result<std::string> row_string(const sdk::detached_row& row,
+														  const std::string_view column)
+		{
+			const auto found = row.cells.find(column);
+			if (found == row.cells.end() || !found->second.value)
+				return sdk::unexpected(
+					provider_error("provider.canonical-row-invalid", std::string{column}));
+			const auto* value = std::get_if<std::string>(&*found->second.value);
+			if (value == nullptr)
+				return sdk::unexpected(provider_error(
+					"provider.canonical-row-invalid", std::string{column}, "not-string"));
+			return *value;
+		}
+
+		[[nodiscard]] sdk::result<detached_observation>
+		direct_callee_observation(const detached_observation& call)
+		{
+			const auto key = call.payload.find("call.direct_callee");
+			const auto kind = call.payload.find("call.direct_callee_kind");
+			const auto signature = call.payload.find("call.direct_callee_signature");
+			if (key == call.payload.end() || key->second.empty() || kind == call.payload.end() ||
+				kind->second.empty() || signature == call.payload.end() ||
+				signature->second.empty())
+				return sdk::unexpected(provider_error(
+					"provider.direct-target-unresolved", call.semantic_key, "projection"));
+			detached_observation output;
+			output.kind = observation_kind::entity;
+			output.compile_unit = call.compile_unit;
+			output.semantic_key = key->second;
+			output.payload.emplace("symbol.kind", kind->second);
+			output.payload.emplace("symbol.signature", signature->second);
+			if (const auto name = call.payload.find("call.direct_callee_qualified_name");
+				name != call.payload.end() && !name->second.empty())
+				output.payload.emplace("symbol.qualified_name", name->second);
+			if (const auto anchor = call.payload.find("call.direct_callee_anchor");
+				anchor != call.payload.end() && !anchor->second.empty())
+				output.source_span_id = anchor->second;
+			return output;
 		}
 
 		class binary_writer
@@ -533,7 +583,24 @@ namespace cxxlens::detail::clang22
 				if (!current_function_.empty())
 					call.payload.emplace("call.caller", current_function_);
 				if (const auto* callee = expression->getDirectCallee(); callee != nullptr)
+				{
 					call.payload.emplace("call.direct_callee", declaration_key(*callee));
+					call.payload.emplace("call.direct_callee_kind", declaration_kind(*callee));
+					call.payload.emplace("call.direct_callee_signature",
+										 callee->getType().getCanonicalType().getAsString());
+					call.payload.emplace("call.direct_callee_qualified_name",
+										 callee->getQualifiedNameAsString());
+					if (unit_->source_manager().isWrittenInMainFile(callee->getLocation()))
+					{
+						auto callee_source = provider::clang22::normalize_source(
+							*unit_,
+							callee->getSourceRange(),
+							{source_snapshot_, file_, "declaration"});
+						if (callee_source)
+							call.payload.emplace("call.direct_callee_anchor",
+												 std::move(callee_source->id));
+					}
+				}
 				else
 					call.payload.emplace("call.unresolved_reason", "no-direct-callee");
 				auto source = provider::clang22::normalize_source(
@@ -888,19 +955,19 @@ namespace cxxlens::detail::clang22
 		for (const auto& observation : batch.observations)
 			if (observation.kind == observation_kind::entity)
 			{
-				const auto entity =
-					entity_identity(observation.semantic_key, toolchain, batch.variant);
-				entity_ids.emplace(observation.semantic_key, entity);
 				auto local = observation_row(entity_observation_descriptor(),
 											 observation,
 											 output.exact_equivalence,
 											 limitation);
-				auto canonical =
-					entity_row(observation, entity, toolchain, output.exact_equivalence);
+				auto canonical = entity_row(observation, toolchain, output.exact_equivalence);
 				if (!local)
 					return sdk::unexpected(std::move(local.error()));
 				if (!canonical)
 					return sdk::unexpected(std::move(canonical.error()));
+				auto entity = row_string(*canonical, "cc.entity.v1.entity");
+				if (!entity)
+					return sdk::unexpected(std::move(entity.error()));
+				entity_ids.emplace(observation.semantic_key, std::move(*entity));
 				output.entity_observations.push_back(std::move(*local));
 				output.entities.push_back(std::move(*canonical));
 			}
@@ -932,13 +999,12 @@ namespace cxxlens::detail::clang22
 					{"provider.source-unavailable", observation.semantic_key, "cc.call_site"});
 				continue;
 			}
-			const auto call = *sdk::semantic_digest(
-				"cc-call",
-				batch.unit + "\n" + batch.variant + "\n" + *observation.source_span_id + "\n" +
-					observation.semantic_key + "\n" + std::to_string(call_ordinal));
-			auto site = call_site_row(observation, call, entity_ids, call_ordinal++);
+			auto site = call_site_row(observation, entity_ids, call_ordinal++);
 			if (!site)
 				return sdk::unexpected(std::move(site.error()));
+			auto call = row_string(*site, "cc.call_site.v1.call");
+			if (!call)
+				return sdk::unexpected(std::move(call.error()));
 			output.call_sites.push_back(std::move(*site));
 			const auto target = observation.payload.find("call.direct_callee");
 			if (target == observation.payload.end() || target->second.empty())
@@ -946,11 +1012,32 @@ namespace cxxlens::detail::clang22
 				const auto reason = observation.payload.contains("call.unresolved_reason")
 					? observation.payload.at("call.unresolved_reason")
 					: "no-direct-callee";
-				output.unresolved.push_back({"provider.direct-target-unresolved", call, reason});
+				output.unresolved.push_back({"provider.direct-target-unresolved", *call, reason});
 				continue;
 			}
-			const auto target_entity = entity_identity(target->second, toolchain, batch.variant);
-			auto direct = direct_target_row(call, target_entity);
+			auto target_entity = entity_ids.find(target->second);
+			std::string target_id;
+			if (target_entity != entity_ids.end())
+				target_id = target_entity->second;
+			else
+			{
+				auto target_observation = direct_callee_observation(observation);
+				if (!target_observation)
+				{
+					output.unresolved.push_back(
+						{"provider.direct-target-unresolved", *call, "projection"});
+					continue;
+				}
+				auto target_row =
+					entity_row(*target_observation, toolchain, output.exact_equivalence);
+				if (!target_row)
+					return sdk::unexpected(std::move(target_row.error()));
+				auto projected = row_string(*target_row, "cc.entity.v1.entity");
+				if (!projected)
+					return sdk::unexpected(std::move(projected.error()));
+				target_id = std::move(*projected);
+			}
+			auto direct = direct_target_row(*call, target_id);
 			if (!direct)
 				return sdk::unexpected(std::move(direct.error()));
 			output.direct_targets.push_back(std::move(*direct));

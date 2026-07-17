@@ -31,6 +31,10 @@ namespace cxxlens::cc::relations
 					{"cc.call_direct_target.v1.target", "target", {sdk::scalar_kind::typed_id, "cc_entity_id", false}, true, sdk::column_role::authoritative_payload},
 					{"cc.call_direct_target.v1.resolution", "resolution", {sdk::scalar_kind::open_symbol, "cc.direct-target-resolution/1", false}, true, sdk::column_role::authoritative_payload},
 				};
+				output.domain_identity.projection = {
+					"cc.call_direct_target.v1.call",
+				};
+				output.domain_identity.contract = "canonical-binary-tuple-v1";
 				output.key_columns = {
 					"cc.call_direct_target.v1.call",
 				};

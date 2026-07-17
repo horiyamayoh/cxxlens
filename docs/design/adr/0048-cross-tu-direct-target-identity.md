@@ -4,6 +4,11 @@
 - Date: 2026-07-17
 - Issue: #105
 
+> Amendment: ADR 0050 / Issue #107 replaces the provider-local `entity_identity` formula below
+> with the accepted `cc.entity` descriptor projection. Cross-TU independence remains required;
+> call observations therefore carry the exact callee kind/signature/anchor projection needed to
+> derive the same target ID without a same-batch entity row. Missing projection fails unresolved.
+
 ## Context
 
 Clang の `CallExpr::getDirectCallee()` は header または別 translation unit の宣言にも canonical declaration key を

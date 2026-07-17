@@ -37,6 +37,18 @@ namespace cxxlens::build::relations
 					{"build.variant.v1.include_search_digest", "include_search_digest", {sdk::scalar_kind::digest, "", false}, true, sdk::column_role::authoritative_payload},
 					{"build.variant.v1.semantic_flags_digest", "semantic_flags_digest", {sdk::scalar_kind::digest, "", false}, true, sdk::column_role::authoritative_payload},
 				};
+				output.domain_identity.result_column = "build.variant.v1.variant";
+				output.domain_identity.projection = {
+					"build.variant.v1.project",
+					"build.variant.v1.toolchain",
+					"build.variant.v1.language",
+					"build.variant.v1.language_standard",
+					"build.variant.v1.target_triple",
+					"build.variant.v1.predefined_macros_digest",
+					"build.variant.v1.include_search_digest",
+					"build.variant.v1.semantic_flags_digest",
+				};
+				output.domain_identity.contract = "canonical-binary-tuple-v1";
 				output.key_columns = {
 					"build.variant.v1.variant",
 				};

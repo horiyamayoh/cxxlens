@@ -34,6 +34,15 @@ namespace cxxlens::company::relations
 					{"company.lock.acquire.v1.mode", "mode", {sdk::scalar_kind::open_symbol, "company.lock-mode/1", false}, true, sdk::column_role::authoritative_payload},
 					{"company.lock.acquire.v1.ordinal", "ordinal", {sdk::scalar_kind::unsigned_integer, "", false}, true, sdk::column_role::authoritative_payload},
 				};
+				output.domain_identity.result_column = "company.lock.acquire.v1.acquire";
+				output.domain_identity.projection = {
+					"company.lock.acquire.v1.lock",
+					"company.lock.acquire.v1.source",
+					"company.lock.acquire.v1.mode",
+					"company.lock.acquire.v1.ordinal",
+					"company.lock.acquire.v1.function",
+				};
+				output.domain_identity.contract = "canonical-binary-tuple-v1";
 				output.key_columns = {
 					"company.lock.acquire.v1.acquire",
 				};

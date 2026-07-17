@@ -92,6 +92,15 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool operator==(const relation_reference_descriptor&) const = default;
 	};
 
+	/** @brief Accepted result-ID projection carried from one relation descriptor authority. */
+	struct domain_identity_descriptor
+	{
+		std::optional<std::string> result_column;
+		std::vector<std::string> projection;
+		std::string contract;
+		[[nodiscard]] bool operator==(const domain_identity_descriptor&) const = default;
+	};
+
 	/** @brief Versioned relation descriptor shared by generated and dynamic APIs. */
 	struct relation_descriptor
 	{
@@ -106,6 +115,7 @@ namespace cxxlens::sdk
 		std::string descriptor_digest;
 		std::vector<column_descriptor> columns;
 		std::vector<std::string> key_columns;
+		domain_identity_descriptor domain_identity;
 		std::vector<relation_reference_descriptor> references;
 		merge_mode merge{merge_mode::set};
 		std::vector<std::string> conflict_columns;
@@ -233,6 +243,14 @@ namespace cxxlens::sdk
 	/** @brief Independently validate a detached row against an exact descriptor. */
 	[[nodiscard]] result<void> validate_row(const relation_descriptor& descriptor,
 											const detached_row& row);
+
+	/** @brief Derive a result ID from the descriptor's ordered typed domain projection. */
+	[[nodiscard]] result<std::string> derive_domain_identity(const relation_descriptor& descriptor,
+															 const detached_row& row);
+
+	/** @brief Independently require a row result ID to equal its descriptor projection. */
+	[[nodiscard]] result<void> validate_domain_identity(const relation_descriptor& descriptor,
+														const detached_row& row);
 
 	/** @brief Typed façade over the common descriptor-aware dynamic row builder. */
 	template <class Relation>

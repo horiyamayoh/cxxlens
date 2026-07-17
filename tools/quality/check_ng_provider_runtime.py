@@ -144,7 +144,7 @@ def validate(root: pathlib.Path) -> None:
             "frontend.clang22.entity_observation",
             "cc.call_site",
             "ignored-or-gcc-specific-option",
-            "entity_identity",
+            "derive_domain_identity",
             "call.direct_callee",
             "cxxlens.clang22.task.v2",
             "source_snapshot",

@@ -124,6 +124,11 @@ def render(relation: dict[str, object]) -> str:
     assert isinstance(claim, dict)
     key = claim["key"]
     assert isinstance(key, list)
+    domain_identity = claim["domain_identity"]
+    assert isinstance(domain_identity, dict)
+    identity_projection = domain_identity["projection"]
+    assert isinstance(identity_projection, list)
+    result_column = domain_identity["result_column"]
     references = relation.get("references", [])
     assert isinstance(references, list)
     merge = relation["merge"]
@@ -131,6 +136,22 @@ def render(relation: dict[str, object]) -> str:
     lines.extend(
         [
             "\t\t\t\t};",
+            *(
+                [
+                    "\t\t\t\toutput.domain_identity.result_column = "
+                    f'"{string(str(result_column))}";'
+                ]
+                if result_column is not None
+                else []
+            ),
+            "\t\t\t\toutput.domain_identity.projection = {",
+            *[
+                f'\t\t\t\t\t"{string(str(value))}",'
+                for value in identity_projection
+            ],
+            "\t\t\t\t};",
+            "\t\t\t\toutput.domain_identity.contract = "
+            f'"{string(str(domain_identity["contract"]))}";',
             "\t\t\t\toutput.key_columns = {",
             *[f'\t\t\t\t\t"{string(str(value))}",' for value in key],
             "\t\t\t\t};",

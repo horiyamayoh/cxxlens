@@ -35,6 +35,15 @@ namespace cxxlens::cc::relations
 					{"cc.call_site.v1.receiver_static_type", "receiver_static_type", {sdk::scalar_kind::typed_id, "cc_type_id", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.call_site.v1.ordinal", "ordinal", {sdk::scalar_kind::unsigned_integer, "", false}, true, sdk::column_role::authoritative_payload},
 				};
+				output.domain_identity.result_column = "cc.call_site.v1.call";
+				output.domain_identity.projection = {
+					"cc.call_site.v1.compile_unit",
+					"cc.call_site.v1.source",
+					"cc.call_site.v1.kind",
+					"cc.call_site.v1.ordinal",
+					"cc.call_site.v1.caller",
+				};
+				output.domain_identity.contract = "canonical-binary-tuple-v1";
 				output.key_columns = {
 					"cc.call_site.v1.call",
 				};

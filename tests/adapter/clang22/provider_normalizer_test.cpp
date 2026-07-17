@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <cstdlib>
 #include <iostream>
 #include <ranges>
@@ -6,6 +8,8 @@
 #include <vector>
 
 #include <cxxlens/provider/clang22.hpp>
+#include <cxxlens/relations/cc_call_site.hpp>
+#include <cxxlens/relations/cc_entity.hpp>
 #include <cxxlens/relations/source_span.hpp>
 
 #include "llvm/clang22/provider_worker.hpp"
@@ -22,6 +26,39 @@ namespace
 			std::cerr << message << '\n';
 			std::exit(1);
 		}
+	}
+
+	[[nodiscard]] sdk::detached_cell
+	symbol_cell(const sdk::scalar_kind kind, std::string parameter, std::string value)
+	{
+		return {{kind, std::move(parameter), false},
+				sdk::cell_state::present,
+				sdk::scalar_value{std::move(value)},
+				std::nullopt};
+	}
+
+	[[nodiscard]] sdk::detached_cell optional_typed(std::string parameter, std::string value)
+	{
+		return {{sdk::scalar_kind::typed_id, std::move(parameter), true},
+				sdk::cell_state::present,
+				sdk::scalar_value{std::move(value)},
+				std::nullopt};
+	}
+
+	[[nodiscard]] sdk::detached_cell optional_bytes(std::vector<std::byte> value)
+	{
+		return {{sdk::scalar_kind::bytes, {}, true},
+				sdk::cell_state::present,
+				sdk::scalar_value{std::move(value)},
+				std::nullopt};
+	}
+
+	[[nodiscard]] sdk::detached_cell optional_utf8(std::string value)
+	{
+		return {{sdk::scalar_kind::utf8_string, {}, true},
+				sdk::cell_state::present,
+				sdk::scalar_value{std::move(value)},
+				std::nullopt};
 	}
 
 	[[nodiscard]] detached_observation observation(const observation_kind kind,
@@ -47,6 +84,7 @@ namespace
 		entity.payload.emplace("symbol.kind", "function");
 		entity.payload.emplace("symbol.qualified_name", "ns::target");
 		entity.payload.emplace("symbol.signature", "int ()");
+		const auto entity_anchor = *entity.source_span_id;
 
 		auto type = observation(observation_kind::type, "type:int");
 		type.payload.emplace("type.canonical", "int");
@@ -56,6 +94,10 @@ namespace
 			"source-snapshot:one", "file:stable", 10U, 18U, "expression");
 		call.payload.emplace("call.kind", "direct_function");
 		call.payload.emplace("call.direct_callee", "clang-usr:target");
+		call.payload.emplace("call.direct_callee_kind", "function");
+		call.payload.emplace("call.direct_callee_signature", "int ()");
+		call.payload.emplace("call.direct_callee_qualified_name", "ns::target");
+		call.payload.emplace("call.direct_callee_anchor", entity_anchor);
 		value.observations = {std::move(entity), std::move(type), std::move(call)};
 		require(value.validate().has_value(), "normalizer fixture batch is invalid");
 		return value;
@@ -68,6 +110,17 @@ namespace
 				"expected target identity cell");
 		const auto* value = std::get_if<std::string>(&*found->second.value);
 		require(value != nullptr, "expected string target identity");
+		return *value;
+	}
+
+	[[nodiscard]] std::vector<std::byte> bytes_cell(const sdk::detached_row& row,
+													const std::string& column)
+	{
+		const auto found = row.cells.find(column);
+		require(found != row.cells.end() && found->second.value.has_value(),
+				"expected bytes identity cell");
+		const auto* value = std::get_if<std::vector<std::byte>>(&*found->second.value);
+		require(value != nullptr, "expected bytes identity value");
 		return *value;
 	}
 } // namespace
@@ -124,8 +177,17 @@ int main()
 			 source_builder.set<source_span::read_only>(sdk::detached_cell::boolean(false)),
 		 })
 		require(result.has_value(), "source.span authority row rejected shared identity");
-	require(std::move(source_builder).finish().has_value(),
-			"source.span builder did not accept shared native identity");
+	auto source_row = std::move(source_builder).finish();
+	require(source_row.has_value(), "source.span builder rejected the shared identity row");
+	auto derived_source = sdk::derive_domain_identity(source_span::descriptor(), *source_row);
+	require(derived_source && *derived_source == *span &&
+				sdk::validate_domain_identity(source_span::descriptor(), *source_row).has_value(),
+			"source.span builder and descriptor identity diverged");
+	auto invalid_source_row = *source_row;
+	invalid_source_row.cells.at("source.span.v1.span") =
+		sdk::detached_cell::typed("source_span_id", "source-span:wrong");
+	require(!sdk::validate_domain_identity(source_span::descriptor(), invalid_source_row),
+			"domain identity validator accepted a mismatched result ID");
 
 	require(entity_observation_descriptor().validate().has_value(),
 			"entity observation descriptor is invalid");
@@ -164,6 +226,100 @@ int main()
 			"exact Clang observation canonicalization failed");
 	require(string_cell(exact->call_sites.front(), "cc.call_site.v1.source") == *span,
 			"worker call-site hard reference differs from base source.span identity");
+	const auto& entity_row = exact->entities.front();
+	const auto& call_row = exact->call_sites.front();
+	require(
+		sdk::validate_domain_identity(cxxlens::cc::relations::entity::descriptor(), entity_row) &&
+			sdk::validate_domain_identity(cxxlens::cc::relations::call_site::descriptor(),
+										  call_row),
+		"worker standard row result ID differs from its descriptor projection");
+	const std::array entity_reference{
+		sdk::canonical_value::from_string("canonical"),
+		sdk::canonical_value::from_string("function"),
+		sdk::canonical_value::null(),
+		sdk::canonical_value::from_string(
+			string_cell(entity_row, "cc.entity.v1.structural_signature_digest")),
+		sdk::canonical_value::from_string(string_cell(entity_row, "cc.entity.v1.anchor")),
+		sdk::canonical_value::from_string(string_cell(entity_row, "cc.entity.v1.toolchain")),
+		sdk::canonical_value::from_bytes(bytes_cell(entity_row, "cc.entity.v1.provider_local_key")),
+	};
+	require(sdk::canonical_identity_digest("cc-entity", entity_reference) ==
+				string_cell(entity_row, "cc.entity.v1.entity"),
+			"independent entity identity encoder differs from descriptor helper");
+	const std::array call_reference{
+		sdk::canonical_value::from_string(string_cell(call_row, "cc.call_site.v1.compile_unit")),
+		sdk::canonical_value::from_string(string_cell(call_row, "cc.call_site.v1.source")),
+		sdk::canonical_value::from_string("direct_function"),
+		sdk::canonical_value::from_integer(0),
+		sdk::canonical_value::null(),
+	};
+	require(sdk::canonical_identity_digest("cc-call", call_reference) ==
+				string_cell(call_row, "cc.call_site.v1.call"),
+			"independent call identity encoder differs from descriptor helper");
+	const auto entity_id = string_cell(entity_row, "cc.entity.v1.entity");
+	for (auto mutation : {
+			 std::pair{"cc.entity.v1.canonicalization",
+					   symbol_cell(sdk::scalar_kind::closed_symbol,
+								   "cc.canonicalization-state/1",
+								   "provider_local")},
+			 std::pair{"cc.entity.v1.kind",
+					   symbol_cell(sdk::scalar_kind::open_symbol, "cc.entity-kind/1", "method")},
+			 std::pair{"cc.entity.v1.semantic_owner",
+					   optional_typed("cc_entity_id", "cc-entity:owner")},
+			 std::pair{"cc.entity.v1.structural_signature_digest",
+					   symbol_cell(sdk::scalar_kind::digest, {}, "sha256:changed")},
+			 std::pair{"cc.entity.v1.anchor",
+					   optional_typed("source_span_id", "source-span:changed")},
+			 std::pair{"cc.entity.v1.toolchain",
+					   optional_typed("toolchain_context_id", "toolchain-context:changed")},
+			 std::pair{"cc.entity.v1.provider_local_key", optional_bytes({std::byte{0x42}})},
+		 })
+	{
+		auto changed = entity_row;
+		changed.cells.insert_or_assign(mutation.first, std::move(mutation.second));
+		auto changed_id =
+			sdk::derive_domain_identity(cxxlens::cc::relations::entity::descriptor(), changed);
+		require(changed_id && *changed_id != entity_id,
+				"entity projection mutation did not change identity");
+	}
+	const auto call_id = string_cell(call_row, "cc.call_site.v1.call");
+	for (auto mutation : {
+			 std::pair{"cc.call_site.v1.compile_unit",
+					   sdk::detached_cell::typed("compile_unit_id", "compile-unit:changed")},
+			 std::pair{"cc.call_site.v1.source",
+					   sdk::detached_cell::typed("source_span_id", "source-span:changed")},
+			 std::pair{"cc.call_site.v1.kind",
+					   symbol_cell(sdk::scalar_kind::open_symbol, "cc.call-kind/1", "virtual")},
+			 std::pair{"cc.call_site.v1.ordinal", sdk::detached_cell::unsigned_integer(1U)},
+			 std::pair{"cc.call_site.v1.caller",
+					   optional_typed("cc_entity_id", "cc-entity:caller")},
+		 })
+	{
+		auto changed = call_row;
+		changed.cells.insert_or_assign(mutation.first, std::move(mutation.second));
+		auto changed_id =
+			sdk::derive_domain_identity(cxxlens::cc::relations::call_site::descriptor(), changed);
+		require(changed_id && *changed_id != call_id,
+				"call projection mutation did not change identity");
+	}
+	auto display_only = entity_row;
+	display_only.cells.at("cc.entity.v1.qualified_name") = optional_utf8("renamed::display");
+	auto display_identity =
+		sdk::derive_domain_identity(cxxlens::cc::relations::entity::descriptor(), display_only);
+	auto unchanged_identity =
+		sdk::derive_domain_identity(cxxlens::cc::relations::entity::descriptor(), entity_row);
+	require(display_identity && unchanged_identity && *display_identity == *unchanged_identity,
+			"non-projection display field changed entity identity");
+	auto hidden_variant = batch();
+	hidden_variant.variant = "variant-" + std::string(64U, 'f');
+	auto hidden_result = canonicalize_provider_batch(
+		hidden_variant,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(hidden_result &&
+				string_cell(hidden_result->entities.front(), "cc.entity.v1.entity") == entity_id &&
+				string_cell(hidden_result->call_sites.front(), "cc.call_site.v1.call") == call_id,
+			"hidden batch variant changed a standard relation ID");
 	const auto same_tu_target =
 		string_cell(exact->direct_targets.front(), "cc.call_direct_target.v1.target");
 

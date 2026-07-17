@@ -1,5 +1,5 @@
 {
-  "asset_count": 297,
+  "asset_count": 298,
   "assets": [
     {
       "authority": "active",
@@ -753,6 +753,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0049-shared-source-span-identity.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0050-relation-domain-identity-runtime.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2082,7 +2089,7 @@
     }
   ],
   "classifications": {
-    "active": 261,
+    "active": 262,
     "archived": 35,
     "generated": 1
   },

@@ -36,6 +36,17 @@ namespace cxxlens::build::relations
 					{"build.toolchain_context.v1.abi_digest", "abi_digest", {sdk::scalar_kind::digest, "", false}, true, sdk::column_role::authoritative_payload},
 					{"build.toolchain_context.v1.plugin_spec_digest", "plugin_spec_digest", {sdk::scalar_kind::digest, "", false}, true, sdk::column_role::authoritative_payload},
 				};
+				output.domain_identity.result_column = "build.toolchain_context.v1.toolchain";
+				output.domain_identity.projection = {
+					"build.toolchain_context.v1.family",
+					"build.toolchain_context.v1.exact_version",
+					"build.toolchain_context.v1.target_triple",
+					"build.toolchain_context.v1.builtin_headers_digest",
+					"build.toolchain_context.v1.sysroot",
+					"build.toolchain_context.v1.abi_digest",
+					"build.toolchain_context.v1.plugin_spec_digest",
+				};
+				output.domain_identity.contract = "canonical-binary-tuple-v1";
 				output.key_columns = {
 					"build.toolchain_context.v1.toolchain",
 				};

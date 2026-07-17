@@ -106,6 +106,10 @@ namespace
 		value.payload.emplace("call.kind", "direct_function");
 		value.payload.emplace("call.caller", callee);
 		value.payload.emplace("call.direct_callee", std::move(callee));
+		value.payload.emplace("call.direct_callee_kind", "function");
+		value.payload.emplace("call.direct_callee_signature", "void ()");
+		value.payload.emplace("call.direct_callee_anchor",
+							  "span-" + std::string(63U, 'd') + source_suffix);
 		return value;
 	}
 

@@ -36,6 +36,14 @@ namespace cxxlens::build::relations
 					{"build.compile_unit.v1.language", "language", {sdk::scalar_kind::open_symbol, "build.language/1", false}, true, sdk::column_role::authoritative_payload},
 					{"build.compile_unit.v1.working_directory", "working_directory", {sdk::scalar_kind::typed_id, "logical_path_id", false}, true, sdk::column_role::authoritative_payload},
 				};
+				output.domain_identity.result_column = "build.compile_unit.v1.compile_unit";
+				output.domain_identity.projection = {
+					"build.compile_unit.v1.main_source",
+					"build.compile_unit.v1.variant",
+					"build.compile_unit.v1.toolchain",
+					"build.compile_unit.v1.effective_invocation_digest",
+				};
+				output.domain_identity.contract = "canonical-binary-tuple-v1";
 				output.key_columns = {
 					"build.compile_unit.v1.compile_unit",
 				};

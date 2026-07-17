@@ -188,6 +188,54 @@ namespace cxxlens::sdk
 			return semantic_digest("cxxlens.relation-descriptor-binding.v2",
 								   descriptor.contract_digest + "\n" + descriptor.canonical_form());
 		}
+
+		[[nodiscard]] result<canonical_value> identity_value(const detached_cell& cell,
+															 const std::string_view column)
+		{
+			if (cell.state == cell_state::absent)
+				return canonical_value::null();
+			if (cell.state != cell_state::present || !cell.value)
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.domain-identity-unresolved", std::string{column}));
+			return std::visit(
+				[&](const auto& value) -> result<canonical_value>
+				{
+					using type = std::remove_cvref_t<decltype(value)>;
+					if constexpr (std::same_as<type, bool>)
+						return canonical_value::from_boolean(value);
+					else if constexpr (std::same_as<type, std::int64_t>)
+						return canonical_value::from_integer(value);
+					else if constexpr (std::same_as<type, std::uint64_t>)
+					{
+						if (value >
+							static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+							return cxxlens::sdk::unexpected(relation_error(
+								"sdk.domain-identity-out-of-range", std::string{column}));
+						return canonical_value::from_integer(static_cast<std::int64_t>(value));
+					}
+					else if constexpr (std::same_as<type, std::string>)
+						return canonical_value::from_string(value);
+					else
+						return canonical_value::from_bytes(value);
+				},
+				*cell.value);
+		}
+
+		[[nodiscard]] result<std::string> identity_kind(const relation_descriptor& descriptor)
+		{
+			if (!descriptor.domain_identity.result_column)
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.domain-identity-unavailable", descriptor.id));
+			auto result_column = descriptor.column(*descriptor.domain_identity.result_column);
+			if (!result_column || result_column->type.scalar != scalar_kind::typed_id ||
+				!result_column->type.parameter.ends_with("_id"))
+				return cxxlens::sdk::unexpected(relation_error(
+					"sdk.domain-identity-invalid", *descriptor.domain_identity.result_column));
+			std::string output = result_column->type.parameter.substr(
+				0U, result_column->type.parameter.size() - std::string_view{"_id"}.size());
+			std::ranges::replace(output, '_', '-');
+			return output;
+		}
 	} // namespace
 
 	std::string value_type::canonical_name() const
@@ -255,6 +303,31 @@ namespace cxxlens::sdk
 		if (key_columns.empty() || !unique_strings(key_columns))
 			return cxxlens::sdk::unexpected(
 				relation_error("sdk.relation-invalid", "key_columns", "unique-nonempty"));
+		if (domain_identity.contract.empty() != domain_identity.projection.empty() ||
+			(domain_identity.contract.empty() && domain_identity.result_column))
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.domain-identity-invalid", id, "shape"));
+		if (!domain_identity.contract.empty())
+		{
+			if (domain_identity.contract != "canonical-binary-tuple-v1" ||
+				!unique_strings(domain_identity.projection))
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.domain-identity-invalid", id, "contract"));
+			for (const auto& projection : domain_identity.projection)
+				if (!column(projection))
+					return cxxlens::sdk::unexpected(
+						relation_error("sdk.domain-identity-invalid", projection, "projection"));
+			if (domain_identity.result_column)
+			{
+				auto result = column(*domain_identity.result_column);
+				if (!result || result->role != column_role::claim_key ||
+					std::ranges::find(domain_identity.projection, *domain_identity.result_column) !=
+						domain_identity.projection.end() ||
+					!identity_kind(*this))
+					return cxxlens::sdk::unexpected(relation_error(
+						"sdk.domain-identity-invalid", *domain_identity.result_column, "result"));
+			}
+		}
 		std::vector<std::string> ids;
 		std::vector<std::string> names;
 		for (const auto& value : columns)
@@ -393,7 +466,20 @@ namespace cxxlens::sdk
 				output << ',';
 			output << '"' << escape(conflict_columns[index]) << '"';
 		}
-		output << R"(],"id":")" << escape(id) << R"(","key_columns":[)";
+		output << R"(],"domain_identity":{"contract":")" << escape(domain_identity.contract)
+			   << R"(","projection":[)";
+		for (std::size_t index = 0U; index < domain_identity.projection.size(); ++index)
+		{
+			if (index != 0U)
+				output << ',';
+			output << '"' << escape(domain_identity.projection[index]) << '"';
+		}
+		output << R"(],"result_column":)";
+		if (domain_identity.result_column)
+			output << '"' << escape(*domain_identity.result_column) << '"';
+		else
+			output << "null";
+		output << R"(},"id":")" << escape(id) << R"(","key_columns":[)";
 		for (std::size_t index = 0U; index < key_columns.size(); ++index)
 		{
 			if (index != 0U)
@@ -817,6 +903,64 @@ namespace cxxlens::sdk
 			if (!descriptor.column(id))
 				return cxxlens::sdk::unexpected(relation_error("sdk.unknown-cell", id));
 		}
+		return {};
+	}
+
+	result<std::string> derive_domain_identity(const relation_descriptor& descriptor,
+											   const detached_row& row)
+	{
+		if (row.descriptor_id != descriptor.id ||
+			descriptor.domain_identity.contract != "canonical-binary-tuple-v1")
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.domain-identity-invalid", descriptor.id, "authority"));
+		auto kind = identity_kind(descriptor);
+		if (!kind)
+			return cxxlens::sdk::unexpected(std::move(kind.error()));
+		std::vector<canonical_value> projection;
+		projection.reserve(descriptor.domain_identity.projection.size());
+		for (const auto& column_id : descriptor.domain_identity.projection)
+		{
+			auto column = descriptor.column(column_id);
+			if (!column)
+				return cxxlens::sdk::unexpected(std::move(column.error()));
+			const auto found = row.cells.find(column_id);
+			if (found == row.cells.end())
+			{
+				if (!column->type.optional)
+					return cxxlens::sdk::unexpected(
+						relation_error("sdk.domain-identity-missing", column_id));
+				projection.push_back(canonical_value::null());
+				continue;
+			}
+			if (!(found->second.type == column->type))
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.cell-type-mismatch", column_id));
+			if (auto valid = found->second.validate(); !valid)
+				return cxxlens::sdk::unexpected(std::move(valid.error()));
+			auto value = identity_value(found->second, column_id);
+			if (!value)
+				return cxxlens::sdk::unexpected(std::move(value.error()));
+			projection.push_back(std::move(*value));
+		}
+		return canonical_identity_digest(*kind, projection);
+	}
+
+	result<void> validate_domain_identity(const relation_descriptor& descriptor,
+										  const detached_row& row)
+	{
+		auto expected = derive_domain_identity(descriptor, row);
+		if (!expected)
+			return cxxlens::sdk::unexpected(std::move(expected.error()));
+		const auto& result_column = *descriptor.domain_identity.result_column;
+		const auto found = row.cells.find(result_column);
+		if (found == row.cells.end() || found->second.state != cell_state::present ||
+			!found->second.value)
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.domain-identity-missing", result_column));
+		const auto* actual = std::get_if<std::string>(&*found->second.value);
+		if (actual == nullptr || *actual != *expected)
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.domain-identity-mismatch", result_column));
 		return {};
 	}
 

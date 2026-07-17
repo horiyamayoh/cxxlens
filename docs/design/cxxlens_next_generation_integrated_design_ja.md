@@ -652,6 +652,12 @@ MUST NOT:
 - unordered container iteration に依存する
 - display path/prose を含める
 
+relation result ID は accepted `domain_identity.result_column` と ordered `projection` を runtime descriptor に保持し、
+`sdk::derive_domain_identity(descriptor,row)` で導出する。domain tag は result column の `typed_id<X_id>` から
+`_id` を除き、`_` を `-` に変換した値とする。optional absent は canonical null とし、unknown、required projection
+欠落、result mismatch は fail closed とする。provider は hidden task/variant metadata を projection 外から混ぜず、
+`sdk::validate_domain_identity` で result cell と row projection の exact 一致を独立再検証する。
+
 semantic floating value を許可する relation は、NaN、signed zero、endianness を schema で定義する。NG0 standard relation は authoritative float を使用しない。
 
 caller-supplied domain と byte payload を受ける `semantic_digest` は ADR 0016 の

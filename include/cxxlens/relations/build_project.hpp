@@ -33,6 +33,13 @@ namespace cxxlens::build::relations
 					{"build.project.v1.logical_root", "logical_root", {sdk::scalar_kind::typed_id, "logical_path_id", false}, true, sdk::column_role::authoritative_payload},
 					{"build.project.v1.environment_digest", "environment_digest", {sdk::scalar_kind::digest, "", false}, true, sdk::column_role::authoritative_payload},
 				};
+				output.domain_identity.result_column = "build.project.v1.project";
+				output.domain_identity.projection = {
+					"build.project.v1.catalog_digest",
+					"build.project.v1.logical_root",
+					"build.project.v1.environment_digest",
+				};
+				output.domain_identity.contract = "canonical-binary-tuple-v1";
 				output.key_columns = {
 					"build.project.v1.project",
 				};

@@ -37,6 +37,17 @@ namespace cxxlens::cc::relations
 					{"cc.entity.v1.provider_local_key", "provider_local_key", {sdk::scalar_kind::bytes, "", true}, false, sdk::column_role::authoritative_payload},
 					{"cc.entity.v1.qualified_name", "qualified_name", {sdk::scalar_kind::utf8_string, "", true}, false, sdk::column_role::display},
 				};
+				output.domain_identity.result_column = "cc.entity.v1.entity";
+				output.domain_identity.projection = {
+					"cc.entity.v1.canonicalization",
+					"cc.entity.v1.kind",
+					"cc.entity.v1.semantic_owner",
+					"cc.entity.v1.structural_signature_digest",
+					"cc.entity.v1.anchor",
+					"cc.entity.v1.toolchain",
+					"cc.entity.v1.provider_local_key",
+				};
+				output.domain_identity.contract = "canonical-binary-tuple-v1";
 				output.key_columns = {
 					"cc.entity.v1.entity",
 				};
