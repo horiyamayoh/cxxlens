@@ -1,8 +1,10 @@
 #include <algorithm>
+#include <charconv>
 #include <functional>
 #include <iomanip>
 #include <limits>
 #include <ranges>
+#include <set>
 #include <sstream>
 #include <tuple>
 
@@ -119,6 +121,232 @@ namespace cxxlens::sdk
 					return std::holds_alternative<std::string>(value);
 			}
 			return false;
+		}
+
+		[[nodiscard]] bool canonical_digest_value(const std::string_view value)
+		{
+			const auto hex = value.starts_with("sha256:")  ? value.substr(7U)
+				: value.starts_with("semantic-v2:sha256:") ? value.substr(19U)
+														   : std::string_view{};
+			return hex.size() == 64U &&
+				std::ranges::all_of(hex,
+									[](const char byte)
+									{
+										return (byte >= '0' && byte <= '9') ||
+											(byte >= 'a' && byte <= 'f');
+									});
+		}
+
+		[[nodiscard]] bool canonical_semantic_version(const std::string_view value)
+		{
+			std::size_t begin{};
+			for (std::size_t component{}; component < 3U; ++component)
+			{
+				const auto end = component == 2U ? value.size() : value.find('.', begin);
+				if (end == std::string_view::npos || end == begin ||
+					(end - begin > 1U && value[begin] == '0'))
+					return false;
+				std::uint32_t parsed{};
+				const auto result =
+					std::from_chars(value.data() + begin, value.data() + end, parsed);
+				if (result.ec != std::errc{} || result.ptr != value.data() + end)
+					return false;
+				begin = end + 1U;
+			}
+			return begin == value.size() + 1U;
+		}
+
+		[[nodiscard]] bool control_free_text(const std::string_view value)
+		{
+			return !value.empty() && detail::valid_utf8(value) &&
+				std::ranges::none_of(value,
+									 [](const char byte)
+									 {
+										 const auto code = static_cast<unsigned char>(byte);
+										 return code < 0x20U || code == 0x7fU;
+									 });
+		}
+
+		[[nodiscard]] const auto& closed_symbol_contracts()
+		{
+			using symbol_values = std::set<std::string_view, std::less<>>;
+			static const std::map<std::string_view, symbol_values, std::less<>> contracts{
+				{"claim-stage/1", {"assertion", "canonical_claim", "derived_claim"}},
+				{"cc.canonicalization-state/1",
+				 {"canonicalized", "provider_local", "ambiguous_equivalence_set"}},
+				{"core.claim-conflict-kind/1", {"authoritative_payload_mismatch"}},
+			};
+			return contracts;
+		}
+
+		[[nodiscard]] bool closed_symbol_value(const std::string_view contract,
+											   const std::string_view value)
+		{
+			const auto& contracts = closed_symbol_contracts();
+			const auto found = contracts.find(contract);
+			return found != contracts.end() && found->second.contains(value);
+		}
+
+		[[nodiscard]] bool supported_set_element_type(const std::string_view type)
+		{
+			if (type == "content_digest" || type == "digest" || type == "assertion_id" ||
+				type == "source_span_id" || type == "evidence_id" || type == "condition_ref" ||
+				type.ends_with("_id"))
+				return true;
+			constexpr std::string_view open_prefix{"open_symbol<"};
+			constexpr std::string_view closed_prefix{"closed_symbol<"};
+			if (type.starts_with(open_prefix) && type.ends_with('>'))
+				return semantics_id(
+					type.substr(open_prefix.size(), type.size() - open_prefix.size() - 1U));
+			if (type.starts_with(closed_prefix) && type.ends_with('>'))
+			{
+				const auto contract =
+					type.substr(closed_prefix.size(), type.size() - closed_prefix.size() - 1U);
+				return semantics_id(contract) && closed_symbol_contracts().contains(contract);
+			}
+			return false;
+		}
+
+		[[nodiscard]] bool set_element_value(const std::string_view type,
+											 const std::string_view value)
+		{
+			if (type == "content_digest" || type == "digest")
+				return canonical_digest_value(value);
+			if (type == "assertion_id" || type == "source_span_id" || type == "evidence_id" ||
+				type == "condition_ref" || type.ends_with("_id"))
+				return control_free_text(value);
+			constexpr std::string_view open_prefix{"open_symbol<"};
+			constexpr std::string_view closed_prefix{"closed_symbol<"};
+			if (type.starts_with(open_prefix) && type.ends_with('>'))
+				return semantics_id(type.substr(open_prefix.size(),
+												type.size() - open_prefix.size() - 1U)) &&
+					control_free_text(value);
+			if (type.starts_with(closed_prefix) && type.ends_with('>'))
+			{
+				const auto contract =
+					type.substr(closed_prefix.size(), type.size() - closed_prefix.size() - 1U);
+				return semantics_id(contract) && closed_symbol_value(contract, value);
+			}
+			return false;
+		}
+
+		[[nodiscard]] bool canonical_set_bytes(const std::string_view element_type,
+											   const std::vector<std::byte>& encoded)
+		{
+			if (!supported_set_element_type(element_type))
+				return false;
+			if (encoded.empty())
+				return true;
+			std::size_t offset{};
+			std::string previous;
+			while (offset < encoded.size())
+			{
+				if (encoded.size() - offset < sizeof(std::uint32_t))
+					return false;
+				std::uint32_t length{};
+				for (std::size_t byte{}; byte < sizeof(length); ++byte)
+					length |= std::to_integer<std::uint32_t>(encoded[offset + byte]) << (byte * 8U);
+				offset += sizeof(length);
+				if (length == 0U || length > encoded.size() - offset)
+					return false;
+				std::string value;
+				value.reserve(length);
+				for (std::size_t byte{}; byte < length; ++byte)
+					value.push_back(static_cast<char>(encoded[offset + byte]));
+				offset += length;
+				if (!set_element_value(element_type, value) ||
+					(!previous.empty() && previous >= value))
+					return false;
+				previous = std::move(value);
+			}
+			return true;
+		}
+
+		[[nodiscard]] bool valid_scalar_type(const value_type& type)
+		{
+			switch (type.scalar)
+			{
+				case scalar_kind::typed_id:
+					return lower_identifier(type.parameter) && type.parameter.ends_with("_id");
+				case scalar_kind::open_symbol:
+					return semantics_id(type.parameter);
+				case scalar_kind::closed_symbol:
+					return semantics_id(type.parameter) &&
+						closed_symbol_contracts().contains(type.parameter);
+				case scalar_kind::set:
+					return supported_set_element_type(type.parameter);
+				case scalar_kind::boolean:
+				case scalar_kind::signed_integer:
+				case scalar_kind::unsigned_integer:
+				case scalar_kind::utf8_string:
+				case scalar_kind::bytes:
+				case scalar_kind::digest:
+				case scalar_kind::semantic_version:
+				case scalar_kind::condition_ref:
+				case scalar_kind::source_span_id:
+				case scalar_kind::evidence_id:
+					return type.parameter.empty();
+			}
+			return false;
+		}
+
+		[[nodiscard]] std::optional<std::string_view>
+		invalid_scalar_detail(const value_type& type, const scalar_value& value)
+		{
+			if (!valid_scalar_type(type))
+				return "type-parameter";
+			if (!matches_scalar(type.scalar, value))
+				return "type-shape";
+			if (const auto* text = std::get_if<std::string>(&value);
+				text != nullptr && !detail::valid_utf8(*text))
+				return "invalid-utf8";
+			const auto* text = std::get_if<std::string>(&value);
+			switch (type.scalar)
+			{
+				case scalar_kind::digest:
+					return type.parameter.empty() && canonical_digest_value(*text)
+						? std::nullopt
+						: std::optional<std::string_view>{"digest"};
+				case scalar_kind::semantic_version:
+					return type.parameter.empty() && canonical_semantic_version(*text)
+						? std::nullopt
+						: std::optional<std::string_view>{"semantic-version"};
+				case scalar_kind::typed_id:
+					if (!lower_identifier(type.parameter) || !type.parameter.ends_with("_id"))
+						return "typed-id-parameter";
+					return control_free_text(*text) ? std::nullopt
+													: std::optional<std::string_view>{"identity"};
+				case scalar_kind::condition_ref:
+				case scalar_kind::source_span_id:
+				case scalar_kind::evidence_id:
+					return type.parameter.empty() && control_free_text(*text)
+						? std::nullopt
+						: std::optional<std::string_view>{"identity"};
+				case scalar_kind::open_symbol:
+					return semantics_id(type.parameter) && control_free_text(*text)
+						? std::nullopt
+						: std::optional<std::string_view>{"open-symbol"};
+				case scalar_kind::closed_symbol:
+					return semantics_id(type.parameter) &&
+							closed_symbol_value(type.parameter, *text)
+						? std::nullopt
+						: std::optional<std::string_view>{"closed-symbol"};
+				case scalar_kind::set:
+					return !type.parameter.empty() &&
+							canonical_set_bytes(type.parameter,
+												std::get<std::vector<std::byte>>(value))
+						? std::nullopt
+						: std::optional<std::string_view>{"set-encoding"};
+				case scalar_kind::boolean:
+				case scalar_kind::signed_integer:
+				case scalar_kind::unsigned_integer:
+				case scalar_kind::utf8_string:
+				case scalar_kind::bytes:
+					return type.parameter.empty()
+						? std::nullopt
+						: std::optional<std::string_view>{"unexpected-parameter"};
+			}
+			return "scalar-kind";
 		}
 
 		[[nodiscard]] std::string scalar_text(const scalar_value& value)
@@ -345,6 +573,9 @@ namespace cxxlens::sdk
 				value.type.parameter == "native_address")
 				return cxxlens::sdk::unexpected(
 					relation_error("sdk.native-address-payload", value.id, value.type.parameter));
+			if (!valid_scalar_type(value.type))
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.column-invalid", value.id, "scalar-type"));
 			ids.push_back(value.id);
 			names.push_back(value.name);
 		}
@@ -783,15 +1014,17 @@ namespace cxxlens::sdk
 
 	result<void> detached_cell::validate() const
 	{
+		if (!valid_scalar_type(type))
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.cell-invalid", "type", "type-parameter"));
 		if (state == cell_state::present)
 		{
-			if (!value || unknown_reason || !matches_scalar(type.scalar, *value))
+			if (!value || unknown_reason)
 				return cxxlens::sdk::unexpected(
 					relation_error("sdk.cell-invalid", "value", "present"));
-			if (const auto* text = std::get_if<std::string>(&*value);
-				text != nullptr && !detail::valid_utf8(*text))
+			if (const auto detail = invalid_scalar_detail(type, *value))
 				return cxxlens::sdk::unexpected(
-					relation_error("sdk.cell-invalid", "value", "invalid-utf8"));
+					relation_error("sdk.cell-invalid", "value", std::string{*detail}));
 		}
 		else if (state == cell_state::absent)
 		{
@@ -804,6 +1037,9 @@ namespace cxxlens::sdk
 		else if (!detail::valid_utf8(*unknown_reason))
 			return cxxlens::sdk::unexpected(
 				relation_error("sdk.cell-invalid", "unknown_reason", "invalid-utf8"));
+		else if (!control_free_text(*unknown_reason))
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.cell-invalid", "unknown_reason", "control-character"));
 		return {};
 	}
 

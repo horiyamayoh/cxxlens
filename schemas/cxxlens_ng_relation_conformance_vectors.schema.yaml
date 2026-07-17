@@ -23,9 +23,9 @@ properties:
     - decision_adr
     properties:
       owner_issue:
-        const: '#60'
+        const: '#114'
       decision_adr:
-        const: docs/design/adr/0006-ng0-relation-and-claim-envelope.md
+        const: docs/design/adr/0057-detached-scalar-value-validation.md
   registry:
     const: schemas/cxxlens_ng_relation_registry.yaml
   vectors:
@@ -54,6 +54,7 @@ properties:
           - validate_envelope_instance
           - resolve_reference
           - validate_symbol
+          - validate_scalar
           - validate_evolution
           - compare_api_ids
           - register_extension

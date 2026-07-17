@@ -62,6 +62,12 @@ REQUIRED_VECTOR_IDS = {
     "soft-reference-missing-unaccounted",
     "open-symbol-unknown-preserved",
     "closed-symbol-unknown-rejected",
+    "canonical-digest-scalar",
+    "malformed-digest-scalar",
+    "noncanonical-semver-scalar",
+    "empty-typed-id-scalar",
+    "canonical-set-scalar",
+    "noncanonical-set-order",
     "minor-optional-column-preserved",
     "minor-required-column-rejected",
     "static-dynamic-column-parity",
@@ -121,6 +127,7 @@ def registry_semantic_projection(registry: dict[str, Any]) -> dict[str, Any]:
         "document_version": registry["document_version"],
         "compatibility": registry["compatibility"],
         "registry_policy": registry["registry_policy"],
+        "scalar_value_contract": registry["scalar_value_contract"],
         "system_claim_envelope": registry["system_claim_envelope"],
         "api_projection": registry["api_projection"],
         "symbol_contracts": sorted(
@@ -452,6 +459,69 @@ def validate_symbol(
     return "accepted", "relation.closed-symbol-known"
 
 
+def validate_scalar(input_value: dict[str, Any]) -> tuple[str, str]:
+    scalar_type = input_value["type"]
+    value = input_value["value"]
+    valid = False
+    if scalar_type == "digest":
+        valid = re.fullmatch(
+            r"(?:sha256|semantic-v2:sha256):[0-9a-f]{64}", value
+        ) is not None
+    elif scalar_type == "semantic_version":
+        match = re.fullmatch(
+            r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)",
+            value,
+        )
+        valid = match is not None and all(
+            int(component) <= 0xFFFFFFFF for component in match.groups()
+        )
+    elif re.fullmatch(r"typed_id<[a-z][a-z0-9_]*_id>", scalar_type):
+        valid = bool(value) and all(
+            ord(character) >= 0x20 and ord(character) != 0x7F
+            for character in value
+        )
+    elif scalar_type.startswith("set<") and scalar_type.endswith(">"):
+        valid = value == value.lower() and len(value) % 2 == 0
+        try:
+            encoded = bytes.fromhex(value)
+        except ValueError:
+            valid = False
+            encoded = b""
+        offset = 0
+        previous: bytes | None = None
+        while valid and offset < len(encoded):
+            if len(encoded) - offset < 4:
+                valid = False
+                break
+            length = int.from_bytes(encoded[offset : offset + 4], "little")
+            offset += 4
+            if length == 0 or length > len(encoded) - offset:
+                valid = False
+                break
+            element = encoded[offset : offset + length]
+            offset += length
+            if previous is not None and previous >= element:
+                valid = False
+                break
+            try:
+                text = element.decode("utf-8")
+            except UnicodeDecodeError:
+                valid = False
+                break
+            if not text or any(
+                ord(character) < 0x20 or ord(character) == 0x7F
+                for character in text
+            ):
+                valid = False
+                break
+            previous = element
+    return (
+        ("accepted", "relation.scalar-valid")
+        if valid
+        else ("rejected", "relation.scalar-invalid")
+    )
+
+
 def semver(value: str) -> tuple[int, int, int]:
     match = re.fullmatch(r"([0-9]+)\.([0-9]+)\.([0-9]+)", value)
     if match is None:
@@ -579,6 +649,8 @@ def execute_vector(
         return resolve_reference(registry, input_value)
     if operation == "validate_symbol":
         return validate_symbol(registry, input_value)
+    if operation == "validate_scalar":
+        return validate_scalar(input_value)
     if operation == "validate_evolution":
         return validate_evolution(registry, input_value)
     if operation == "compare_api_ids":
@@ -631,6 +703,7 @@ def validate_design(root: pathlib.Path) -> None:
         "envelope-presence-only",
         "cc.call_direct_target",
         "Issue #60",
+        "detached-cell-value-v2",
     )
     for marker in required:
         if marker not in design:
@@ -639,8 +712,8 @@ def validate_design(root: pathlib.Path) -> None:
         if stale in design:
             fail("relation.call-example-stale", f"stale call model remains: {stale}")
     index = (root / "docs/design/catalogs/README.md").read_text(encoding="utf-8")
-    if "accepted exact contract" not in index or "#60" not in index:
-        fail("relation.catalog-index-stale", "catalog index does not show accepted #60")
+    if "accepted exact scalar-value contract" not in index or "#114" not in index:
+        fail("relation.catalog-index-stale", "catalog index does not show accepted #114")
 
 
 def validate_contract(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, str]]]:

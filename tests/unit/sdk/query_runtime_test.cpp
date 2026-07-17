@@ -1024,6 +1024,19 @@ namespace
 
 	void check_set_literal_round_trip()
 	{
+		const auto encode_set = [](const std::initializer_list<std::string_view> values)
+		{
+			std::vector<std::byte> output;
+			for (const auto value : values)
+			{
+				const auto length = static_cast<std::uint32_t>(value.size());
+				for (std::size_t byte{}; byte < sizeof(length); ++byte)
+					output.push_back(static_cast<std::byte>(length >> (byte * 8U)));
+				for (const auto character : value)
+					output.push_back(static_cast<std::byte>(character));
+			}
+			return output;
+		};
 		const auto descriptor = set_relation();
 		relation_registry registry;
 		require(registry.add(descriptor).has_value(), "set literal relation rejected");
@@ -1033,7 +1046,7 @@ namespace
 		require(store.has_value(), "set literal store failed");
 		auto writer = store->begin(draft(*relation_engine));
 		require(writer.has_value(), "set literal snapshot writer failed");
-		const std::vector<std::byte> encoded{std::byte{0x0a}, std::byte{0xff}};
+		const auto encoded = encode_set({"const", "volatile"});
 		auto value = assertion(*relation_engine, set_row(descriptor, encoded), {"release"});
 		require(writer->stage(partition(value, 0U)).has_value(), "set literal partition rejected");
 		require(writer->validate().has_value(), "set literal snapshot validation failed");
@@ -1084,7 +1097,7 @@ namespace
 		auto matched = reference->execute(matching);
 		require(matched.has_value() && rows(*matched).size() == 1U,
 				"equal set literal did not match its row");
-		auto unmatched = reference->execute(make_query({std::byte{0x0b}, std::byte{0xff}}));
+		auto unmatched = reference->execute(make_query(encode_set({"mutable"})));
 		require(unmatched.has_value() && rows(*unmatched).empty(),
 				"different set literal matched a row");
 
@@ -1097,17 +1110,41 @@ namespace
 					std::get<std::vector<std::byte>>(empty_literal.value).empty(),
 				"empty set literal decoded as a string");
 
+		constexpr std::string_view encoded_hex{"05000000636f6e737408000000766f6c6174696c65"};
 		for (const auto* malformed : {"0", "0A", "0g"})
 		{
 			auto invalid = matching;
 			auto& arguments = invalid.nodes.back().arguments;
-			const auto encoded_value = arguments.find("\"value\":\"0aff\"");
+			const auto encoded_value =
+				arguments.find("\"value\":\"" + std::string{encoded_hex} + "\"");
 			require(encoded_value != std::string::npos, "set literal fixture encoding changed");
 			arguments.replace(encoded_value,
-							  std::string_view{"\"value\":\"0aff\""}.size(),
+							  encoded_hex.size() + std::string_view{"\"value\":\"\""}.size(),
 							  "\"value\":\"" + std::string{malformed} + "\"");
 			require(!invalid.validate(), "malformed or noncanonical set hex was accepted");
 		}
+
+		for (auto invalid_bytes : {encode_set({"volatile", "const"}),
+								   encode_set({"const", "const"}),
+								   std::vector<std::byte>{std::byte{1U}}})
+		{
+			auto rejected = query::equals_present(
+				qualifiers,
+				query::literal::exact(qualifiers.type, scalar_value{std::move(invalid_bytes)}));
+			require(!rejected && rejected.error().detail == "set-encoding",
+					"noncanonical set bytes were accepted by the typed query builder");
+		}
+
+		auto noncanonical_dynamic = matching;
+		auto& dynamic_arguments = noncanonical_dynamic.nodes.back().arguments;
+		const auto dynamic_value =
+			dynamic_arguments.find("\"value\":\"" + std::string{encoded_hex} + "\"");
+		require(dynamic_value != std::string::npos, "dynamic set fixture encoding changed");
+		dynamic_arguments.replace(dynamic_value,
+								  encoded_hex.size() + std::string_view{"\"value\":\"\""}.size(),
+								  "\"value\":\"08000000766f6c6174696c6505000000636f6e7374\"");
+		require(!noncanonical_dynamic.validate(),
+				"noncanonical set bytes were accepted by dynamic Logical Query IR");
 
 		auto wrong_parameter = matching;
 		auto& arguments = wrong_parameter.nodes.back().arguments;

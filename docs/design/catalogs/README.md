@@ -2,7 +2,7 @@
 
 | Contract | Path | Owner | State |
 |---|---|---|---|
-| Relation Registry | `schemas/cxxlens_ng_relation_registry.yaml` | #60 | accepted exact contract |
+| Relation Registry | `schemas/cxxlens_ng_relation_registry.yaml` | #114 | accepted exact scalar-value contract |
 | Logical Query Contract | `schemas/cxxlens_ng_logical_query_contract.yaml` | #61 | accepted exact contract |
 | Query Runtime Contract | `schemas/cxxlens_ng_query_runtime_contract.yaml` | #69 | implemented |
 | Semantic Guarantee Contract | `schemas/cxxlens_ng_semantic_guarantee_contract.yaml` | #62 | accepted exact contract |

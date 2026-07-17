@@ -121,7 +121,7 @@ entries:
 
   - id: public.relation-static
     status: implemented
-    owner_issue: '#107'
+    owner_issue: '#114'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/sdk/relation.hpp]
@@ -145,12 +145,12 @@ entries:
     lifetime: [generated-tags-are-static-metadata, rows-are-value-owned-and-detached]
     threading: [generated-descriptor-is-immutable, builders-are-thread-confined]
     versioning: [tag-binds-exact-descriptor-id-semantic-major-authority-digest-and-runtime-projection]
-    invariants: [generated-from-accepted-relation-registry, descriptor-digest-binds-authority-and-runtime-semantic-projection, runtime-projection-revalidates-idl-pattern-minimum-unique-key-reference-merge-and-domain-identity-contracts, domain-result-id-is-derived-from-ordered-typed-row-projection, domain-result-id-is-independently-revalidated, committed-generated-source-is-reproducible, external-idl-requires-zero-core-source-diff, native-pointers-not-representable, string-scalars-and-unknown-reasons-require-strict-utf8]
-    implementation_evidence: [tools/sdk/relation_idl_compiler.py, src/sdk/relation.cpp, src/sdk/json_internal.hpp, examples/sdk/typed_query.cpp, tests/unit/sdk/sdk_test.cpp, tests/unit/sdk/query_runtime_test.cpp, tests/adapter/clang22/provider_normalizer_test.cpp, schemas/cxxlens_ng_relation_registry.schema.yaml, docs/design/adr/0018-runtime-relation-schema-parity.md, docs/design/adr/0030-shared-canonical-json-and-utf8-validation.md, docs/design/adr/0050-relation-domain-identity-runtime.md]
+    invariants: [generated-from-accepted-relation-registry, descriptor-digest-binds-authority-and-runtime-semantic-projection, runtime-projection-revalidates-idl-pattern-minimum-unique-key-reference-merge-and-domain-identity-contracts, domain-result-id-is-derived-from-ordered-typed-row-projection, domain-result-id-is-independently-revalidated, committed-generated-source-is-reproducible, external-idl-requires-zero-core-source-diff, native-pointers-not-representable, all-present-scalars-use-detached-cell-value-v2, digest-and-semver-grammars-are-canonical, typed-identities-are-nonempty-control-free-and-parameter-bound, open-symbols-preserve-valid-unknown-values, closed-symbols-require-exact-contract-membership, set-bytes-are-length-prefixed-strictly-sorted-unique-elements, string-scalars-and-unknown-reasons-require-strict-utf8]
+    implementation_evidence: [tools/sdk/relation_idl_compiler.py, src/sdk/relation.cpp, src/sdk/json_internal.hpp, examples/sdk/typed_query.cpp, tests/unit/sdk/sdk_test.cpp, tests/unit/sdk/query_runtime_test.cpp, tests/adapter/clang22/provider_normalizer_test.cpp, schemas/cxxlens_ng_relation_registry.schema.yaml, docs/design/adr/0018-runtime-relation-schema-parity.md, docs/design/adr/0030-shared-canonical-json-and-utf8-validation.md, docs/design/adr/0050-relation-domain-identity-runtime.md, docs/design/adr/0057-detached-scalar-value-validation.md]
 
   - id: public.relation-dynamic
     status: implemented
-    owner_issue: '#107'
+    owner_issue: '#114'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
@@ -168,8 +168,8 @@ entries:
     lifetime: [dynamic-relation-shares-immutable-descriptor-ownership]
     threading: [published-dynamic-relations-and-engines-are-immutable]
     versioning: [lookup-requires-explicit-semantic-major, registry-digest-binds-exact-authority-and-runtime-projections, engine-generation-is-explicit, no-adjacent-version-fallback]
-    invariants: [duplicate-and-conflict-reject, registry-mutation-after-engine-build-rejects, same-descriptor-model-validation-and-domain-identity-projection-as-generated-tags, schema-invalid-runtime-descriptor-rejects-before-adoption, stale-trusted-descriptor-digest-rejects-runtime-field-mutation, string-scalars-and-unknown-reasons-require-strict-utf8]
-    implementation_evidence: [src/sdk/relation.cpp, src/sdk/json_internal.hpp, examples/sdk/dynamic_query.cpp, tests/unit/sdk/sdk_test.cpp, tests/unit/sdk/query_runtime_test.cpp, tests/adapter/clang22/provider_normalizer_test.cpp, schemas/cxxlens_ng_relation_registry.schema.yaml, docs/design/adr/0018-runtime-relation-schema-parity.md, docs/design/adr/0030-shared-canonical-json-and-utf8-validation.md, docs/design/adr/0050-relation-domain-identity-runtime.md]
+    invariants: [duplicate-and-conflict-reject, registry-mutation-after-engine-build-rejects, same-descriptor-model-validation-and-domain-identity-projection-as-generated-tags, schema-invalid-runtime-descriptor-rejects-before-adoption, stale-trusted-descriptor-digest-rejects-runtime-field-mutation, dynamic-rows-and-logical-query-literals-share-detached-cell-value-v2, provider-decode-and-store-reopen-revalidate-the-same-scalar-contract, string-scalars-and-unknown-reasons-require-strict-utf8]
+    implementation_evidence: [src/sdk/relation.cpp, src/sdk/json_internal.hpp, examples/sdk/dynamic_query.cpp, tests/unit/sdk/sdk_test.cpp, tests/unit/sdk/query_runtime_test.cpp, tests/adapter/clang22/provider_normalizer_test.cpp, schemas/cxxlens_ng_relation_registry.schema.yaml, docs/design/adr/0018-runtime-relation-schema-parity.md, docs/design/adr/0030-shared-canonical-json-and-utf8-validation.md, docs/design/adr/0050-relation-domain-identity-runtime.md, docs/design/adr/0057-detached-scalar-value-validation.md]
 
   - id: public.claim-kernel
     status: implemented

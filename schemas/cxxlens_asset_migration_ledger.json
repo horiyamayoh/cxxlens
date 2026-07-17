@@ -1,5 +1,5 @@
 {
-  "asset_count": 306,
+  "asset_count": 307,
   "assets": [
     {
       "authority": "active",
@@ -802,6 +802,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0056-measured-foundation-zero-audits.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0057-detached-scalar-value-validation.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2145,7 +2152,7 @@
     }
   ],
   "classifications": {
-    "active": 270,
+    "active": 271,
     "archived": 35,
     "generated": 1
   },

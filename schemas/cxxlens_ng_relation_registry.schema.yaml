@@ -11,6 +11,7 @@ required:
 - authority
 - compatibility
 - registry_policy
+- scalar_value_contract
 - system_claim_envelope
 - api_projection
 - symbol_contracts
@@ -40,9 +41,9 @@ properties:
       index:
         const: docs/design/catalogs/README.md
       decision_adr:
-        const: docs/design/adr/0006-ng0-relation-and-claim-envelope.md
+        const: docs/design/adr/0057-detached-scalar-value-validation.md
       owner_issue:
-        const: '#60'
+        const: '#114'
       owner:
         const: steward.ng-relations
   compatibility:
@@ -94,6 +95,41 @@ properties:
         const: reject
       extension_code_change:
         const: forbidden
+  scalar_value_contract:
+    type: object
+    additionalProperties: false
+    required:
+    - validator
+    - boundaries
+    - digest_grammar
+    - semantic_version_grammar
+    - utf8_policy
+    - identity_policy
+    - open_symbol_policy
+    - closed_symbol_policy
+    - unknown_reason_policy
+    - set_encoding
+    properties:
+      validator: {const: detached-cell-value-v2}
+      boundaries:
+        const: [row-builder, dynamic-row, logical-query-literal, provider-decode, store-reopen]
+      digest_grammar: {const: canonical-sha256-or-semantic-v2-sha256-lowercase-64hex}
+      semantic_version_grammar: {const: canonical-u32-major-minor-patch-no-leading-zero}
+      utf8_policy: {const: strict-unicode-scalar-sequences}
+      identity_policy: {const: nonempty-control-free-utf8-and-canonical-type-parameter}
+      open_symbol_policy: {const: preserve-control-free-value}
+      closed_symbol_policy: {const: exact-symbol-contract-membership}
+      unknown_reason_policy: {const: nonempty-control-free-utf8}
+      set_encoding:
+        type: object
+        additionalProperties: false
+        required: [format, empty, element_length, ordering, element_validation]
+        properties:
+          format: {const: canonical-length-prefixed-string-elements-v1}
+          empty: {const: zero-bytes}
+          element_length: {const: u32-little-endian}
+          ordering: {const: strict-byte-lexicographic-unique}
+          element_validation: {const: recursive-scalar-contract}
   system_claim_envelope:
     type: object
     additionalProperties: false

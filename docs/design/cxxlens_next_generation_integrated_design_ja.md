@@ -1083,12 +1083,24 @@ struct<T>
 
 NG0 では arbitrary map、nested union、float key を standard relation で使用しない。
 
-set は canonical sorted unique。list は order が semantics の一部である場合だけ使う。
+set は canonical sorted unique。`detached_cell` の byte-backed `set<T>` は empty set を zero bytes、それ以外を
+`u32 little-endian element length || UTF-8 element bytes` の連結で表し、element byte 列は strict ascending / unique とする。
+各 element は nested `T` の scalar contract で再検証し、truncated length、empty element、重複、逆順、invalid UTF-8、invalid
+digest/ID/symbol を拒否する。list は order が semantics の一部である場合だけ使う。
+
+present scalar は `detached-cell-value-v2` を共通 authority とする。digest は `sha256:` または
+`semantic-v2:sha256:` と lowercase 64 hex、semantic version は leading zero のない u32 `major.minor.patch`、typed ID は canonical
+`*_id` parameter と nonempty/control-free UTF-8 value、unknown reason も nonempty/control-free UTF-8 を要求する。general
+`utf8_string` は strict Unicode scalar sequence を要求するが、JSON codec が表現できる control code 自体の意味制約は column
+schema が所有する。この検査は row builder、dynamic row、Logical Query literal、provider decode、store reopen で同一である。
 
 ### 9.5 Open and closed symbols
 
 - open symbol: unknown value を保持できる。minor で symbol 追加可能。
 - closed symbol: exhaustive set。symbol 追加は major change。
+
+closed symbol は `symbol_contracts` の exact membership を必要とし、未知 contract/value は context-free `detached_cell` 境界でも
+fail closed とする。open symbol は canonical contract ID と nonempty/control-free UTF-8 value を満たせば未知値を保持する。
 
 generated C++ API は open symbol を raw `enum class` のみで表してはならない。
 

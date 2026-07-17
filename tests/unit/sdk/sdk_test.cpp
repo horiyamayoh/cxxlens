@@ -308,6 +308,110 @@ namespace
 		return std::move(*row);
 	}
 
+	void check_scalar_value_validation()
+	{
+		using namespace cxxlens::sdk;
+		const auto present_text =
+			[](const scalar_kind kind, const std::string_view parameter, std::string value)
+		{
+			return detached_cell{{kind, std::string{parameter}, false},
+								 cell_state::present,
+								 scalar_value{std::move(value)},
+								 std::nullopt};
+		};
+		const std::string sha =
+			"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+		const std::string semantic =
+			"semantic-v2:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+		require(present_text(scalar_kind::digest, {}, sha).validate().has_value() &&
+					present_text(scalar_kind::digest, {}, semantic).validate().has_value(),
+				"canonical digest scalar was rejected");
+		for (const auto* invalid :
+			 {"not-a-digest",
+			  "sha256:ABCDEF0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+			  "sha256:0123"})
+			require(!present_text(scalar_kind::digest, {}, invalid).validate(),
+					"invalid digest scalar was accepted");
+
+		for (const auto* valid : {"0.0.0", "1.2.3", "4294967295.0.7"})
+			require(present_text(scalar_kind::semantic_version, {}, valid).validate().has_value(),
+					"canonical semantic version was rejected");
+		for (const auto* invalid : {"anything", "01.2.3", "1.2", "1.2.3.4", "4294967296.0.0"})
+			require(!present_text(scalar_kind::semantic_version, {}, invalid).validate(),
+					"invalid semantic version was accepted");
+
+		require(present_text(scalar_kind::closed_symbol, "claim-stage/1", "assertion")
+					.validate()
+					.has_value(),
+				"known closed symbol was rejected");
+		require(
+			!present_text(scalar_kind::closed_symbol, "claim-stage/1", "future_claim_stage")
+					.validate() &&
+				!present_text(scalar_kind::closed_symbol, "company.unknown/1", "known").validate(),
+			"unknown closed symbol or contract was accepted");
+		require(present_text(scalar_kind::open_symbol, "cc.call-kind/1", "vendor_future_call")
+					.validate()
+					.has_value(),
+				"unknown open symbol was not preserved");
+
+		for (const auto& invalid_utf8 : {std::string{"\x80", 1U},
+										 std::string{"\xc0\xaf", 2U},
+										 std::string{"\xe2\x82", 2U},
+										 std::string{"\xed\xa0\x80", 3U},
+										 std::string{"\xf4\x90\x80\x80", 4U}})
+			require(!detached_cell::utf8(invalid_utf8).validate(),
+					"invalid UTF-8 scalar sequence was accepted");
+		require(detached_cell::utf8("valid-😀-雪").validate().has_value(),
+				"valid non-BMP UTF-8 scalar was rejected");
+
+		for (const auto& invalid : {std::string{}, std::string{"id\nvalue"}})
+			require(!detached_cell::typed("cc_entity_id", invalid).validate(),
+					"empty/control-containing typed ID was accepted");
+		require(!detached_cell::typed("not_an_identity_type", "entity:1").validate(),
+				"typed ID parameter without _id was accepted");
+		require(!detached_cell::unknown({scalar_kind::utf8_string, {}, true}, "reason\nnext")
+					 .validate(),
+				"control-containing unknown reason was accepted");
+
+		relation_descriptor descriptor;
+		descriptor.id = "company.scalar_validation.v1";
+		descriptor.name = "company.scalar_validation";
+		descriptor.version = {1U, 0U, 0U};
+		descriptor.semantic_major = 1U;
+		descriptor.semantics = "company.scalar-validation/1";
+		descriptor.owner_namespace = "company.scalar";
+		descriptor.columns = {
+			{descriptor.id + ".key",
+			 "key",
+			 {scalar_kind::typed_id, "scalar_validation_id", false},
+			 true,
+			 column_role::claim_key},
+			{descriptor.id + ".digest",
+			 "digest",
+			 {scalar_kind::digest, {}, false},
+			 true,
+			 column_role::authoritative_payload},
+		};
+		descriptor.key_columns = {descriptor.columns.front().id};
+		descriptor.merge = merge_mode::set;
+		descriptor.descriptor_digest = *semantic_digest("cxxlens.relation-descriptor-binding.v2",
+														"\n" + descriptor.canonical_form());
+		require(descriptor.validate().has_value(), "scalar validation descriptor rejected");
+		row_builder builder{descriptor};
+		require(
+			builder
+				.set(
+					{descriptor.id, descriptor.columns.front().id, descriptor.columns.front().type},
+					detached_cell::typed("scalar_validation_id", "scalar:1"))
+				.has_value(),
+			"scalar validation row key rejected");
+		auto rejected = builder.set(
+			{descriptor.id, descriptor.columns.back().id, descriptor.columns.back().type},
+			present_text(scalar_kind::digest, {}, "not-a-digest"));
+		require(!rejected && rejected.error().detail == "digest",
+				"row builder accepted an invalid digest scalar");
+	}
+
 	void check_digest()
 	{
 		const std::vector<std::byte> empty;
@@ -702,7 +806,7 @@ namespace
 							  column_role::authoritative_payload},
 			column_descriptor{"company.test.columnar.v1.unknown",
 							  "unknown",
-							  {scalar_kind::closed_symbol, "company.test.symbol/1", false},
+							  {scalar_kind::open_symbol, "company.test.symbol/1", false},
 							  true,
 							  column_role::authoritative_payload},
 		};
@@ -1289,6 +1393,7 @@ namespace
 
 int main()
 {
+	check_scalar_value_validation();
 	check_digest();
 	check_descriptor_binding();
 	check_relation_schema_parity();

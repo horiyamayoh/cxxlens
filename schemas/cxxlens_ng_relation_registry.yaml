@@ -1,16 +1,16 @@
 schema: cxxlens.relation-registry.v1
 kind: relation-registry
-document_version: 1.1.0
+document_version: 1.2.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
   index: docs/design/catalogs/README.md
-  decision_adr: docs/design/adr/0006-ng0-relation-and-claim-envelope.md
-  owner_issue: '#60'
+  decision_adr: docs/design/adr/0057-detached-scalar-value-validation.md
+  owner_issue: '#114'
   owner: steward.ng-relations
 compatibility:
   version_axis: relation-descriptor
-  current: 1.1.0
+  current: 1.2.0
   semantic_major_policy: exact-major-compatible-minor
   unknown_optional_columns: preserve
   unknown_open_symbols: preserve
@@ -23,6 +23,22 @@ registry_policy:
   incompatible_key_change: reject
   hard_reference_cycle: reject
   extension_code_change: forbidden
+scalar_value_contract:
+  validator: detached-cell-value-v2
+  boundaries: [row-builder, dynamic-row, logical-query-literal, provider-decode, store-reopen]
+  digest_grammar: canonical-sha256-or-semantic-v2-sha256-lowercase-64hex
+  semantic_version_grammar: canonical-u32-major-minor-patch-no-leading-zero
+  utf8_policy: strict-unicode-scalar-sequences
+  identity_policy: nonempty-control-free-utf8-and-canonical-type-parameter
+  open_symbol_policy: preserve-control-free-value
+  closed_symbol_policy: exact-symbol-contract-membership
+  unknown_reason_policy: nonempty-control-free-utf8
+  set_encoding:
+    format: canonical-length-prefixed-string-elements-v1
+    empty: zero-bytes
+    element_length: u32-little-endian
+    ordering: strict-byte-lexicographic-unique
+    element_validation: recursive-scalar-contract
 system_claim_envelope:
   schema: cxxlens.claim-envelope.v2
   instance_schema: schemas/cxxlens_ng_claim_envelope.schema.yaml

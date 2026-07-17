@@ -1,8 +1,8 @@
 schema: cxxlens.relation-conformance-vectors.v1
-document_version: 1.1.0
+document_version: 1.2.0
 authority:
-  owner_issue: '#60'
-  decision_adr: docs/design/adr/0006-ng0-relation-and-claim-envelope.md
+  owner_issue: '#114'
+  decision_adr: docs/design/adr/0057-detached-scalar-value-validation.md
 registry: schemas/cxxlens_ng_relation_registry.yaml
 vectors:
 - id: exact-registry
@@ -164,6 +164,42 @@ vectors:
   input:
     type: closed_symbol<claim-stage/1>
     value: future_claim_stage
+- id: canonical-digest-scalar
+  class: positive
+  operation: validate_scalar
+  expected: {decision: accepted, reason_code: relation.scalar-valid}
+  input:
+    type: digest
+    value: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+- id: malformed-digest-scalar
+  class: negative
+  operation: validate_scalar
+  expected: {decision: rejected, reason_code: relation.scalar-invalid}
+  input: {type: digest, value: not-a-digest}
+- id: noncanonical-semver-scalar
+  class: negative
+  operation: validate_scalar
+  expected: {decision: rejected, reason_code: relation.scalar-invalid}
+  input: {type: semantic_version, value: 01.2.3}
+- id: empty-typed-id-scalar
+  class: negative
+  operation: validate_scalar
+  expected: {decision: rejected, reason_code: relation.scalar-invalid}
+  input: {type: 'typed_id<cc_entity_id>', value: ''}
+- id: canonical-set-scalar
+  class: positive
+  operation: validate_scalar
+  expected: {decision: accepted, reason_code: relation.scalar-valid}
+  input:
+    type: 'set<open_symbol<cc.type-qualifier/1>>'
+    value: 05000000636f6e737408000000766f6c6174696c65
+- id: noncanonical-set-order
+  class: negative
+  operation: validate_scalar
+  expected: {decision: rejected, reason_code: relation.scalar-invalid}
+  input:
+    type: 'set<open_symbol<cc.type-qualifier/1>>'
+    value: 08000000766f6c6174696c6505000000636f6e7374
 - id: minor-optional-column-preserved
   class: positive
   operation: validate_evolution

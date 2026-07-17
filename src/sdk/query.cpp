@@ -314,6 +314,42 @@ namespace cxxlens::sdk::query
 			return column.scalar == value.scalar && column.parameter == value.parameter;
 		}
 
+		[[nodiscard]] result<void> validate_literal_value(const ir_literal& literal)
+		{
+			static const std::map<std::string, scalar_kind, std::less<>> names{
+				{"bool", scalar_kind::boolean},
+				{"bytes", scalar_kind::bytes},
+				{"closed_symbol", scalar_kind::closed_symbol},
+				{"condition_ref", scalar_kind::condition_ref},
+				{"digest", scalar_kind::digest},
+				{"evidence_id", scalar_kind::evidence_id},
+				{"int64", scalar_kind::signed_integer},
+				{"open_symbol", scalar_kind::open_symbol},
+				{"semantic_version", scalar_kind::semantic_version},
+				{"set", scalar_kind::set},
+				{"source_span_id", scalar_kind::source_span_id},
+				{"typed_id", scalar_kind::typed_id},
+				{"uint64", scalar_kind::unsigned_integer},
+				{"utf8_string", scalar_kind::utf8_string},
+			};
+			auto base = literal.type;
+			std::string parameter;
+			if (const auto open = base.find('<'); open != std::string::npos && base.ends_with('>'))
+			{
+				parameter = base.substr(open + 1U, base.size() - open - 2U);
+				base.resize(open);
+			}
+			const auto found = names.find(base);
+			if (found == names.end())
+				return cxxlens::sdk::unexpected(
+					query_error("sdk.query-literal-type-mismatch", literal.type));
+			detached_cell cell{{found->second, std::move(parameter), false},
+							   cell_state::present,
+							   literal.value,
+							   std::nullopt};
+			return cell.validate();
+		}
+
 		[[nodiscard]] std::string literal_comparison_type(const value_type& column)
 		{
 			auto canonical = column.canonical_name();
@@ -572,6 +608,10 @@ namespace cxxlens::sdk::query
 								query_error("sdk.query-column-not-in-input", reference.column_id));
 					if (predicate->predicate.literal_value && predicate->predicate.column)
 					{
+						if (auto valid =
+								validate_literal_value(*predicate->predicate.literal_value);
+							!valid)
+							return cxxlens::sdk::unexpected(std::move(valid.error()));
 						const auto found = columns.find(predicate->predicate.column->column_id);
 						if (found == columns.end() ||
 							literal_comparison_type(found->second.type) !=
