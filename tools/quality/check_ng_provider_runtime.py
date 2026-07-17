@@ -34,6 +34,31 @@ def validate(root: pathlib.Path) -> None:
     )
     jsonschema.Draft202012Validator.check_schema(contract_schema)
     jsonschema.Draft202012Validator(contract_schema).validate(contract)
+    selection = contract["selection"]
+    if selection["candidate_identity"] != {
+        "schema": "cxxlens.provider-candidate.v1",
+        "digest": "cxxlens-semantic-digest-v2",
+        "fields": [
+            "full-canonical-manifest",
+            "ordered-executable-argv",
+            "authoritative-path",
+            "trust-verdict",
+            "certification-verdict",
+            "canonical-certified-qualifications",
+            "canonical-sandbox-report",
+            "validation-error",
+        ],
+        "source_binding": "decision-source-plus-candidate-digest",
+    }:
+        raise ContractError("provider candidate identity projection is not exact")
+    if selection["candidate_order"] != [
+        "discovery-source-precedence",
+        "provider-id",
+        "provider-version",
+        "binary-digest",
+        "candidate-digest",
+    ]:
+        raise ContractError("provider candidate order is not a strict canonical total order")
     jsonschema.Draft202012Validator.check_schema(report_schema)
     fallback_identity = load(
         root / "schemas/cxxlens_ng_clang22_fallback_identity.yaml"
@@ -118,6 +143,7 @@ def validate(root: pathlib.Path) -> None:
             "expected_binary_digest",
             "provider_fallback_policy",
             "certified_qualifications",
+            "candidate_digest",
             "class provider_selection",
             "selected_candidate() const",
             "authority_request() const",
@@ -189,6 +215,8 @@ def validate(root: pathlib.Path) -> None:
             "network-syscall-deny",
             "inherited-fd-close-range",
             "seccomp-audit-arch",
+            "candidate_identity_digest",
+            "duplicate-canonical-candidate",
         ),
         "src/llvm/clang22/provider_sdk.cpp": (
             "getExpansionRange",
@@ -243,8 +271,8 @@ def validate(root: pathlib.Path) -> None:
     catalog = load(root / "schemas/cxxlens_ng_public_api_catalog.yaml")
     entries = {entry["id"]: entry for entry in catalog["entries"]}
     runtime = entries.get("public.provider-runtime")
-    if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#149":
-        raise ContractError("public.provider-runtime is not an implemented Issue #149 entry")
+    if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#150":
+        raise ContractError("public.provider-runtime is not an implemented Issue #150 entry")
     native = entries.get("public.native-provider-sdk")
     if native is None or native["status"] != "implemented" or native["owner_issue"] != "#139":
         raise ContractError("public.native-provider-sdk is not an implemented Issue #139 entry")

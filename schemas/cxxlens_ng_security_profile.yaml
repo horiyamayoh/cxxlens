@@ -1,12 +1,12 @@
 schema: cxxlens.security-profile.v1
 kind: security-profile
-document_version: 1.4.0
+document_version: 1.5.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
   index: docs/design/catalogs/README.md
-  decision_adr: docs/design/adr/0068-sandbox-assurance-closed-enum-boundary.md
-  owner_issue: '#137'
+  decision_adr: docs/design/adr/0081-provider-candidate-canonical-identity.md
+  owner_issue: '#150'
   owner: steward.ng-security
 registries:
   namespace: schemas/cxxlens_ng_namespace_registry.yaml
@@ -55,8 +55,9 @@ qualification:
 discovery:
   precedence: [explicit_path, installation_manifest, project_config, system_registry]
   path_only: forbidden
-  duplicate_exact_identity: reject-same-precedence-deduplicate-lower-precedence-with-explanation
-  shadowing: reject-provider-version-with-different-package-or-binary
+  duplicate_exact_identity: reject-same-source-canonical-duplicate-deduplicate-lower-precedence-with-explanation
+  candidate_identity: semantic-v2-full-manifest-argv-trust-certification-sandbox-validation
+  shadowing: reject-provider-version-with-distinct-full-candidate-identity
   invalid_higher_precedence: blocks-lower-precedence-fallback
   fallback:
     authority: explicit-policy-exact-tuple-only
@@ -66,7 +67,7 @@ discovery:
     selection_order: [unique-policy-priority, discovery-source-precedence, canonical-identity]
     invalid_higher_policy_priority: blocks-lower-policy-priority
     selection_evidence: policy-semantic-digest-required
-  explanation: selected-and-rejected-candidates-with-stable-reason-codes
+  explanation: selected-and-rejected-candidates-with-candidate-digest-and-stable-reason-codes
 execution_authority:
   selection_token: immutable-private-construction-by-select-provider
   retained_bindings: [original-selection-request, selected-candidate, all-decisions, fallback-policy-digest]

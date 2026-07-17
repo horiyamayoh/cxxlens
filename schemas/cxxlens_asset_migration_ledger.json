@@ -1,5 +1,5 @@
 {
-  "asset_count": 363,
+  "asset_count": 364,
   "assets": [
     {
       "authority": "active",
@@ -991,6 +991,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0080-provider-columnar-typed-digests.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0081-provider-candidate-canonical-identity.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2544,7 +2551,7 @@
     }
   ],
   "classifications": {
-    "active": 327,
+    "active": 328,
     "archived": 35,
     "generated": 1
   },

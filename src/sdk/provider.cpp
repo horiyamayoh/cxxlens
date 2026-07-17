@@ -2987,6 +2987,47 @@ namespace cxxlens::sdk::provider
 											  canonical_form());
 	}
 
+	namespace
+	{
+		[[nodiscard]] std::string ordered_json_array(const std::vector<std::string>& values)
+		{
+			std::ostringstream output;
+			output << '[';
+			for (std::size_t index = 0U; index < values.size(); ++index)
+			{
+				if (index != 0U)
+					output << ',';
+				output << json_string(values[index]);
+			}
+			output << ']';
+			return output.str();
+		}
+
+		[[nodiscard]] std::string candidate_canonical_form(const provider_candidate& candidate)
+		{
+			std::ostringstream output;
+			output << R"({"authoritative_path":)"
+				   << (candidate.authoritative_path ? "true" : "false")
+				   << R"(,"certification_valid":)"
+				   << (candidate.certification_valid ? "true" : "false")
+				   << R"(,"certified_qualifications":)"
+				   << canonical_array(candidate.certified_qualifications)
+				   << R"(,"executable_argv":)" << ordered_json_array(candidate.executable_argv)
+				   << R"(,"manifest":)" << candidate.description.canonical_json()
+				   << R"(,"sandbox":)" << candidate.sandbox.canonical_form()
+				   << R"(,"schema":"cxxlens.provider-candidate.v1","trust_valid":)"
+				   << (candidate.trust_valid ? "true" : "false") << R"(,"validation_error":)"
+				   << json_string(candidate.validation_error) << '}';
+			return output.str();
+		}
+
+		[[nodiscard]] std::string candidate_identity_digest(const provider_candidate& candidate)
+		{
+			return *cxxlens::sdk::semantic_digest("cxxlens.provider-candidate.v1",
+												  candidate_canonical_form(candidate));
+		}
+	} // namespace
+
 	provider_selection::provider_selection(provider_candidate candidate,
 										   provider_selection_request request,
 										   std::vector<provider_candidate_decision> decisions,
@@ -3033,6 +3074,8 @@ namespace cxxlens::sdk::provider
 								}))
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.selection-invalid", "selection-token"));
+		if (auto valid = candidate_.sandbox.validate(); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
 		const auto selected_count =
 			std::ranges::count(decisions_, true, &provider_candidate_decision::selected);
 		const auto selected =
@@ -3047,6 +3090,7 @@ namespace cxxlens::sdk::provider
 			selected->provider_id != candidate_.description.provider_id ||
 			selected->provider_version != candidate_.description.provider_version ||
 			selected->binary_digest != candidate_.description.provider_binary_digest ||
+			selected->candidate_digest != candidate_identity_digest(candidate_) ||
 			selected->reason != expected_reason ||
 			fallback_policy_digest_ != expected_policy_digest ||
 			(fallback_used_ && !request_.fallback_policy))
@@ -3078,6 +3122,7 @@ namespace cxxlens::sdk::provider
 				output << ',';
 			const auto& decision = decisions_[index];
 			output << "{\"binary_digest\":" << json_string(decision.binary_digest)
+				   << ",\"candidate_digest\":" << json_string(decision.candidate_digest)
 				   << ",\"provider_id\":" << json_string(decision.provider_id)
 				   << ",\"provider_version\":" << json_string(decision.provider_version.string())
 				   << ",\"reason\":" << json_string(decision.reason)
@@ -3121,14 +3166,22 @@ namespace cxxlens::sdk::provider
 			if (auto valid = candidate.sandbox.validate(); !valid)
 				return cxxlens::sdk::unexpected(std::move(valid.error()));
 
-		std::map<std::pair<std::string, std::string>, std::set<std::pair<std::string, std::string>>>
-			binaries;
+		std::vector<std::string> candidate_digests;
+		candidate_digests.reserve(candidates.size());
+		using candidate_sources = std::map<std::string, std::set<discovery_source>, std::less<>>;
+		std::map<std::pair<std::string, std::string>, candidate_sources> identities;
 		for (const auto& candidate : candidates)
-			binaries[{candidate.description.provider_id,
-					  candidate.description.provider_version.string()}]
-				.emplace(candidate.description.package_identity,
-						 candidate.description.provider_binary_digest);
-		for (const auto& [identity, values] : binaries)
+		{
+			auto digest = candidate_identity_digest(candidate);
+			auto& sources = identities[{candidate.description.provider_id,
+										candidate.description.provider_version.string()}][digest];
+			if (!sources.insert(candidate.source).second)
+				return cxxlens::sdk::unexpected(provider_error("security.provider-shadowing",
+															   candidate.description.provider_id,
+															   "duplicate-canonical-candidate"));
+			candidate_digests.push_back(std::move(digest));
+		}
+		for (const auto& [identity, values] : identities)
 			if (values.size() > 1U)
 				return cxxlens::sdk::unexpected(
 					provider_error("security.provider-shadowing", identity.first, identity.second));
@@ -3144,11 +3197,13 @@ namespace cxxlens::sdk::provider
 							  return std::tuple{source_rank(lhs.source),
 												lhs.description.provider_id,
 												lhs.description.provider_version,
-												lhs.description.provider_binary_digest} <
+												lhs.description.provider_binary_digest,
+												candidate_digests[left]} <
 								  std::tuple{source_rank(rhs.source),
 											 rhs.description.provider_id,
 											 rhs.description.provider_version,
-											 rhs.description.provider_binary_digest};
+											 rhs.description.provider_binary_digest,
+											 candidate_digests[right]};
 						  });
 
 		std::vector<provider_candidate_decision> decisions;
@@ -3208,6 +3263,7 @@ namespace cxxlens::sdk::provider
 												 candidate.description.provider_id,
 												 candidate.description.provider_version,
 												 candidate.description.provider_binary_digest,
+												 candidate_digests[index],
 												 false,
 												 {}};
 			const bool exact = exact_identity(candidate);
@@ -3298,6 +3354,7 @@ namespace cxxlens::sdk::provider
 								 candidate.description.provider_id,
 								 candidate.description.provider_version,
 								 candidate.description.provider_binary_digest,
+								 candidate_digests[order[decision_index]],
 								 false,
 								 "provider.lower-precedence-not-considered"});
 		}

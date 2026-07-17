@@ -839,6 +839,8 @@ namespace cxxlens::sdk::provider
 		std::string provider_id;
 		semantic_version provider_version;
 		std::string binary_digest;
+		/** @brief Full canonical manifest/executable/sandbox/certification identity digest. */
+		std::string candidate_digest;
 		bool selected{};
 		std::string reason;
 		[[nodiscard]] bool operator==(const provider_candidate_decision&) const = default;

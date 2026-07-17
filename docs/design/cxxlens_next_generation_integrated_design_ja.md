@@ -2301,15 +2301,21 @@ deterministic selection order:
 
 各 discovery source 内では exact explicitly requested provider、trusted certification、project policy、conformance、
 descriptor compatibility、provider ID/version/binary digest の順で判定する。PATH-only discovery は authority ではなく
-`security.path-only-discovery` で reject する。同一 provider ID/version に異なる package/binary が存在すれば
-`security.provider-shadowing`、同一 precedence に exact duplicate があれば `security.duplicate-provider` とする。
+`security.path-only-discovery` で reject する。同一 provider ID/version に異なる full canonical candidate identity が存在するか、
+同一 source に exact duplicate があれば `security.provider-shadowing` として全候補を reject する。
 上位 source の exact candidate が署名、certificate、sandbox 検証に失敗した場合、下位 source への継続は
 `security.downgrade-forbidden` で拒否する。
 
 silent adjacent-version fallback 禁止。
 要求した provider、provider version、binary digest、semantic contract digest、relation version が一致しない
 候補への fallback は、caller policy が明示的に許可し、選択・棄却理由が explain 可能な場合に限る。
-explanation は全候補の source、exact identity、selection/rejection reason、fallback 使用有無を保持する。
+explanation は全候補の source、candidate digest、exact identity、selection/rejection reason、fallback 使用有無を保持する。
+
+Issue #150 / ADR 0081 により candidate identity は manifest 全体、ordered executable argv、authoritative path、trust/certification verdict、
+canonical certified qualifications、sandbox report、validation error を `cxxlens.provider-candidate.v1` の semantic-digest-v2 に bind する。
+source は identity digest へ混入せず decision の source と組にして discovery occurrence を識別する。同じ full identity を異なる source が
+発見した場合だけ source precedence で正規化し、decision order は source、provider ID/version、binary digest、candidate digest の strict total
+order とする。filesystem traversal や caller の列挙順を selection、canonical form、cache、監査証跡の authority にしてはならない。
 bool opt-in は identity authority にならない。ADR 0039 の fallback policy は provider ID/version/binary digest/semantic contract
 digest の exact tuple、requested version に対する direction、unique priority、certification requirement、certified qualification set を
 列挙する。manifest self-claim は qualification の証拠とせず、policy にない同名 provider を候補へ広げない。複数 tuple は policy priority、

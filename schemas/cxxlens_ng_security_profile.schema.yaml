@@ -21,7 +21,7 @@ required:
 properties:
   schema: {const: cxxlens.security-profile.v1}
   kind: {const: security-profile}
-  document_version: {const: 1.4.0}
+  document_version: {const: 1.5.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -30,8 +30,8 @@ properties:
     properties:
       design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
       index: {const: docs/design/catalogs/README.md}
-      decision_adr: {const: docs/design/adr/0068-sandbox-assurance-closed-enum-boundary.md}
-      owner_issue: {const: '#137'}
+      decision_adr: {const: docs/design/adr/0081-provider-candidate-canonical-identity.md}
+      owner_issue: {const: '#150'}
       owner: {const: steward.ng-security}
   registries:
     type: object
@@ -76,12 +76,13 @@ properties:
   discovery:
     type: object
     additionalProperties: false
-    required: [precedence, path_only, duplicate_exact_identity, shadowing, invalid_higher_precedence, fallback, explanation]
+    required: [precedence, path_only, duplicate_exact_identity, candidate_identity, shadowing, invalid_higher_precedence, fallback, explanation]
     properties:
       precedence: {const: [explicit_path, installation_manifest, project_config, system_registry]}
       path_only: {const: forbidden}
-      duplicate_exact_identity: {const: reject-same-precedence-deduplicate-lower-precedence-with-explanation}
-      shadowing: {const: reject-provider-version-with-different-package-or-binary}
+      duplicate_exact_identity: {const: reject-same-source-canonical-duplicate-deduplicate-lower-precedence-with-explanation}
+      candidate_identity: {const: semantic-v2-full-manifest-argv-trust-certification-sandbox-validation}
+      shadowing: {const: reject-provider-version-with-distinct-full-candidate-identity}
       invalid_higher_precedence: {const: blocks-lower-precedence-fallback}
       fallback:
         const:
@@ -92,7 +93,7 @@ properties:
           selection_order: [unique-policy-priority, discovery-source-precedence, canonical-identity]
           invalid_higher_policy_priority: blocks-lower-policy-priority
           selection_evidence: policy-semantic-digest-required
-      explanation: {const: selected-and-rejected-candidates-with-stable-reason-codes}
+      explanation: {const: selected-and-rejected-candidates-with-candidate-digest-and-stable-reason-codes}
   execution_authority:
     const:
       selection_token: immutable-private-construction-by-select-provider

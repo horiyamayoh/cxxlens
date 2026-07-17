@@ -408,6 +408,53 @@ namespace
 		require(!ambiguous && ambiguous.error().code == "security.provider-shadowing",
 				"provider shadowing was first-wins selected");
 
+		std::vector<provider_candidate> metadata_variants;
+		auto manifest_variant = exact;
+		manifest_variant.description.publisher = "company.other";
+		metadata_variants.push_back(manifest_variant);
+		auto argv_variant = exact;
+		argv_variant.executable_argv.back() = "alternate-mode";
+		metadata_variants.push_back(argv_variant);
+		auto sandbox_variant = exact;
+		sandbox_variant.sandbox.evidence_digest =
+			"sha256:7777777777777777777777777777777777777777777777777777777777777777";
+		metadata_variants.push_back(sandbox_variant);
+		auto certification_variant = exact;
+		certification_variant.certification_valid = false;
+		metadata_variants.push_back(certification_variant);
+		for (const auto& variant : metadata_variants)
+		{
+			std::array forward{exact, variant};
+			std::array reverse{variant, exact};
+			auto forward_result = select_provider(selection_request(executable), forward);
+			auto reverse_result = select_provider(selection_request(executable), reverse);
+			require(!forward_result && !reverse_result &&
+						forward_result.error() == reverse_result.error() &&
+						forward_result.error().code == "security.provider-shadowing",
+					"full candidate identity ambiguity depended on discovery input order");
+		}
+
+		auto lower_source = exact;
+		lower_source.source = discovery_source::installation_manifest;
+		std::array duplicate_forward{lower_source, exact};
+		std::array duplicate_reverse{exact, lower_source};
+		auto duplicate_selected = select_provider(selection_request(executable), duplicate_forward);
+		auto duplicate_reversed = select_provider(selection_request(executable), duplicate_reverse);
+		require(duplicate_selected && duplicate_reversed &&
+					duplicate_selected->canonical_form() == duplicate_reversed->canonical_form() &&
+					duplicate_selected->decisions().size() == 2U &&
+					duplicate_selected->decisions()[0U].candidate_digest ==
+						duplicate_selected->decisions()[1U].candidate_digest &&
+					duplicate_selected->decisions()[0U].candidate_digest.starts_with(
+						"semantic-v2:sha256:"),
+				"cross-source exact duplicate selection or evidence was not canonical");
+		auto same_source_duplicate = std::array{exact, exact};
+		auto duplicate_rejected =
+			select_provider(selection_request(executable), same_source_duplicate);
+		require(!duplicate_rejected &&
+					duplicate_rejected.error().code == "security.provider-shadowing",
+				"same-source duplicate candidate was not rejected deterministically");
+
 		auto weak = candidate(
 			executable, "success", discovery_source::explicit_path, sandbox_assurance::best_effort);
 		auto unavailable = select_provider(selection_request(executable), std::span{&weak, 1U});
@@ -460,6 +507,16 @@ namespace
 						semantic_version{1U, 1U, 0U} &&
 					allowed->canonical_form().contains(*allowed->fallback_policy_digest()),
 				"exact fallback policy tuple was not selected or recorded");
+		auto fallback_variant = fallback;
+		fallback_variant.executable_argv.back() = "alternate-fallback-mode";
+		std::array fallback_forward{fallback, fallback_variant};
+		std::array fallback_reverse{fallback_variant, fallback};
+		auto fallback_ambiguous = select_provider(fallback_request, fallback_forward);
+		auto fallback_ambiguous_reversed = select_provider(fallback_request, fallback_reverse);
+		require(!fallback_ambiguous && !fallback_ambiguous_reversed &&
+					fallback_ambiguous.error() == fallback_ambiguous_reversed.error() &&
+					fallback_ambiguous.error().code == "security.provider-shadowing",
+				"fallback candidate ambiguity depended on discovery input order");
 
 		auto unrelated_major = fallback;
 		unrelated_major.description.provider_version = {9U, 0U, 0U};

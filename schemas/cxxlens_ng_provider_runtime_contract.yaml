@@ -1,10 +1,10 @@
 schema: cxxlens.provider-runtime-contract.v1
-document_version: 1.13.0
+document_version: 1.14.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#17-provider-model
-  decision_adr: docs/design/adr/0071-host-to-provider-transcript-validation.md
-  owner_issue: '#140'
+  decision_adr: docs/design/adr/0081-provider-candidate-canonical-identity.md
+  owner_issue: '#150'
   owner: steward.ng-provider-runtime
 dependencies:
   - schemas/cxxlens_ng_provider_protocol.yaml
@@ -79,7 +79,16 @@ selection:
   precedence: [explicit_path, installation_manifest, project_config, system_registry]
   exact_before_fallback: true
   path_only: reject
-  shadowing: reject-all
+  candidate_identity:
+    schema: cxxlens.provider-candidate.v1
+    digest: cxxlens-semantic-digest-v2
+    fields: [full-canonical-manifest, ordered-executable-argv, authoritative-path, trust-verdict, certification-verdict, canonical-certified-qualifications, canonical-sandbox-report, validation-error]
+    source_binding: decision-source-plus-candidate-digest
+  shadowing:
+    distinct-full-identity-same-provider-id-version: reject-all
+    duplicate-full-identity-same-source: reject-all
+    exact-full-identity-different-source: source-precedence-with-complete-explanation
+  candidate_order: [discovery-source-precedence, provider-id, provider-version, binary-digest, candidate-digest]
   higher_precedence_invalid: no-downgrade
   adjacent_provider_or_version: explicit-policy-only
   fallback_policy:
@@ -90,7 +99,7 @@ selection:
     selection_binding: policy-semantic-digest
   explanation:
     all_candidates: required
-    fields: [source, exact_identity, selected, reason, fallback_used]
+    fields: [source, provider-id, provider-version, binary-digest, candidate-digest, selected, reason, fallback-used]
   effective_sandbox:
     policy_digest: exact-selection-authority-request
     minimum: max-selection-request-process-request-manifest
