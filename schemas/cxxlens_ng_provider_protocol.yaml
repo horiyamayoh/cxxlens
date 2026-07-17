@@ -1,11 +1,11 @@
 schema: cxxlens.provider-protocol.v1
-document_version: 1.5.0
+document_version: 1.6.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#18-provider-protocol
   index: docs/design/catalogs/README.md
-  decision_adr: docs/design/adr/0044-shared-provider-transcript-validation.md
-  owner_issue: '#101'
+  decision_adr: docs/design/adr/0045-typed-provider-terminal-verdict.md
+  owner_issue: '#102'
   owner: steward.ng-provider-protocol
 compatibility:
   version_axis: provider-protocol
@@ -123,6 +123,11 @@ state_machine_validation:
     logical: task-accepted-onward-same-state-machine
   fault_injection: mutate-encoded-frame-or-credit-then-shared-decode-and-validate
   reason_parity: same-transcript-same-stable-reason
+  terminal_verdict:
+    success_source: validated-task-complete-only
+    task_failed_reason: registered-non-success-provider-terminal-only
+    provider_success_in_task_failed: reject-as-provider.schema-invalid
+    unknown_reason: reject-as-provider.schema-invalid
   initial_order: [hello, schema_negotiate, task_accepted]
   exact_bindings:
     hello: [canonical-provider-manifest-v1]

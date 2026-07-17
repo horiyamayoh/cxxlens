@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import pathlib
+import re
 import sys
 from typing import Any
 
@@ -66,6 +67,26 @@ def validate(root: pathlib.Path) -> None:
         "semantic_digest": "sha256:" + "4" * 64,
     }
     jsonschema.Draft202012Validator(report_schema).validate(sample_report)
+    stable_terminals = set(contract["terminal"]["stable"])
+    schema_terminals = set(report_schema["properties"]["terminal"]["enum"])
+    if schema_terminals != stable_terminals:
+        raise ContractError("execution report terminal enum diverges from runtime registry")
+    invalid_report = dict(sample_report)
+    invalid_report["terminal"] = "provider.unknown-reason"
+    if not list(jsonschema.Draft202012Validator(report_schema).iter_errors(invalid_report)):
+        raise ContractError("execution report schema accepted an unregistered terminal")
+    runtime_source = (root / "src/sdk/provider_runtime.cpp").read_text(encoding="utf-8")
+    terminal_block = runtime_source.split(
+        "constexpr std::array stable_terminal_reasons{", 1
+    )
+    if len(terminal_block) != 2:
+        raise ContractError("runtime stable terminal registry is missing")
+    cpp_terminals = set(
+        re.findall(r'std::string_view\{"((?:provider|security)\.[a-z0-9-]+)"\}',
+                   terminal_block[1].split("};", 1)[0])
+    )
+    if cpp_terminals != stable_terminals:
+        raise ContractError("C++ terminal registry diverges from runtime authority")
 
     required = {
         "include/cxxlens/sdk/provider.hpp": (
@@ -97,6 +118,8 @@ def validate(root: pathlib.Path) -> None:
             "effective_sandbox",
             "security.sandbox-policy-mismatch",
             "validate_provider_transcript",
+            "allowed_failure_terminal",
+            "validated_success_",
         ),
         "src/sdk/provider_validation_internal.hpp": (
             "transcript_validation_request",
@@ -136,8 +159,8 @@ def validate(root: pathlib.Path) -> None:
     catalog = load(root / "schemas/cxxlens_ng_public_api_catalog.yaml")
     entries = {entry["id"]: entry for entry in catalog["entries"]}
     runtime = entries.get("public.provider-runtime")
-    if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#101":
-        raise ContractError("public.provider-runtime is not an implemented Issue #101 entry")
+    if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#102":
+        raise ContractError("public.provider-runtime is not an implemented Issue #102 entry")
 
     namespaces = load(root / "schemas/cxxlens_ng_namespace_registry.yaml")
     if not any(

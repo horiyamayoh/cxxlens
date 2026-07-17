@@ -133,7 +133,7 @@ int main(const int argument_count, const char* const* arguments)
 	require(processes != nullptr, "system process provider is unavailable");
 	process_provider_runtime runtime{*processes};
 	auto report = runtime.execute(request);
-	require(report && report->terminal == "provider.task-input-invalid" &&
+	require(report && report->terminal == "provider.frontend-request-invalid" &&
 				report->frames.front().type == message_type::hello &&
 				report->frames.back().type == message_type::task_failed,
 			"Clang 22 worker did not use the validated provider protocol");

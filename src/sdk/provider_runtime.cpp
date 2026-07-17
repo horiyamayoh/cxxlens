@@ -95,6 +95,45 @@ namespace cxxlens::sdk::provider
 			return found == descriptors.end() ? nullptr : &*found;
 		}
 
+		constexpr std::array stable_terminal_reasons{
+			std::string_view{"provider.success"},
+			std::string_view{"provider.timeout"},
+			std::string_view{"provider.cancelled"},
+			std::string_view{"provider.output-limit"},
+			std::string_view{"provider.crash"},
+			std::string_view{"provider.malformed-frame"},
+			std::string_view{"provider.checksum-mismatch"},
+			std::string_view{"provider.truncated-stream"},
+			std::string_view{"provider.schema-invalid"},
+			std::string_view{"provider.coverage-incomplete"},
+			std::string_view{"provider.runtime-unavailable"},
+			std::string_view{"provider.binary-identity-mismatch"},
+			std::string_view{"provider.protocol-state-invalid"},
+			std::string_view{"provider.credit-exceeded"},
+			std::string_view{"provider.task-binding-mismatch"},
+			std::string_view{"provider.batch-invalid"},
+			std::string_view{"provider.relation-incompatible"},
+			std::string_view{"provider.required-feature-missing"},
+			std::string_view{"provider.protocol-minor-mismatch"},
+			std::string_view{"provider.unknown-required-extension"},
+			std::string_view{"provider.invalid-frame-flags"},
+			std::string_view{"provider.unsupported-compression"},
+			std::string_view{"provider.frontend-request-invalid"},
+			std::string_view{"security.sandbox-insufficient"},
+		};
+
+		[[nodiscard]] bool stable_terminal_reason(const std::string_view reason)
+		{
+			return std::ranges::find(stable_terminal_reasons, reason) !=
+				stable_terminal_reasons.end();
+		}
+
+		[[nodiscard]] bool allowed_failure_terminal(const std::string_view reason)
+		{
+			return reason != "provider.success" && reason.starts_with("provider.") &&
+				stable_terminal_reason(reason);
+		}
+
 		[[nodiscard]] result<protocol_limits> negotiated_limits(const process_task_request& request)
 		{
 			const auto& offered = request.selection.selected_candidate().description.protocol;
@@ -115,14 +154,14 @@ namespace cxxlens::sdk::provider
 
 	namespace detail
 	{
-		result<std::string>
+		result<transcript_terminal>
 		validate_provider_transcript(const transcript_validation_request& request,
 									 const std::span<const frame> frames,
 									 const protocol_limits session_limits)
 		{
 			const auto fail = [](std::string code, std::string field, std::string detail = {})
 			{
-				return result<std::string>{cxxlens::sdk::unexpected(
+				return result<transcript_terminal>{cxxlens::sdk::unexpected(
 					runtime_error(std::move(code), std::move(field), std::move(detail)))};
 			};
 			std::uint64_t consumed_bytes{};
@@ -145,7 +184,7 @@ namespace cxxlens::sdk::provider
 			bool unresolved_seen{};
 			bool progress_seen{};
 			bool terminal_seen{};
-			std::string terminal;
+			transcript_terminal terminal;
 			std::set<std::string, std::less<>> batches;
 			struct open_batch
 			{
@@ -386,7 +425,7 @@ namespace cxxlens::sdk::provider
 							!value.payload.empty())
 							return fail(
 								"provider.protocol-state-invalid", request.task_id, "complete");
-						terminal = "provider.success";
+						terminal = {transcript_terminal_kind::complete, "provider.success"};
 						terminal_seen = true;
 						break;
 					case message_type::task_failed:
@@ -397,7 +436,10 @@ namespace cxxlens::sdk::provider
 							!value.payload.empty())
 							return fail(
 								"provider.task-binding-mismatch", request.task_id, "failed");
-						terminal = std::string{fields[0U]};
+						if (!allowed_failure_terminal(fields[0U]))
+							return fail(
+								"provider.schema-invalid", request.task_id, "failure-reason");
+						terminal = {transcript_terminal_kind::failed, std::string{fields[0U]}};
 						terminal_seen = true;
 						break;
 					}
@@ -544,7 +586,9 @@ namespace cxxlens::sdk::provider
 			const process_task_request& request, process_output output, std::string terminal)
 		{
 			process_execution_report report;
-			report.terminal = std::move(terminal);
+			report.terminal = stable_terminal_reason(terminal)
+				? std::move(terminal)
+				: std::string{"provider.runtime-unavailable"};
 			report.provider = request.selection.selected_candidate().description;
 			report.task_input_digest = request.task_input_digest;
 			report.normalized_invocation_digest = request.normalized_invocation_digest;
@@ -562,7 +606,8 @@ namespace cxxlens::sdk::provider
 
 	bool process_execution_report::succeeded() const noexcept
 	{
-		return terminal == "provider.success";
+		return validated_success_ && terminal == "provider.success" && !frames.empty() &&
+			frames.back().type == message_type::task_complete;
 	}
 
 	std::string process_execution_report::canonical_form() const
@@ -753,7 +798,8 @@ namespace cxxlens::sdk::provider
 		const auto& manifest = selected_manifest;
 
 		process_execution_report report;
-		report.terminal = std::move(*terminal);
+		report.terminal = terminal->reason;
+		report.validated_success_ = terminal->kind == detail::transcript_terminal_kind::complete;
 		report.provider = manifest;
 		report.task_input_digest = request.task_input_digest;
 		report.normalized_invocation_digest = request.normalized_invocation_digest;

@@ -1,5 +1,5 @@
 {
-  "asset_count": 291,
+  "asset_count": 293,
   "assets": [
     {
       "authority": "active",
@@ -718,6 +718,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0044-shared-provider-transcript-validation.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0045-typed-provider-terminal-verdict.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1599,6 +1606,13 @@
     },
     {
       "authority": "active",
+      "path": "src/sdk/provider_validation_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/sdk/query.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -2040,7 +2054,7 @@
     }
   ],
   "classifications": {
-    "active": 255,
+    "active": 257,
     "archived": 35,
     "generated": 1
   },

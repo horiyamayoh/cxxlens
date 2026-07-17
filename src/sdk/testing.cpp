@@ -60,8 +60,8 @@ namespace cxxlens::sdk::testing
 			report.reason_code = terminal.error().code;
 			return report;
 		}
-		report.accepted = *terminal == "provider.success";
-		report.reason_code = report.accepted ? "accepted" : *terminal;
+		report.accepted = terminal->kind == provider::detail::transcript_terminal_kind::complete;
+		report.reason_code = report.accepted ? "accepted" : terminal->reason;
 		return report;
 	}
 
@@ -91,8 +91,8 @@ namespace cxxlens::sdk::testing
 			report.reason_code = terminal.error().code;
 			return report;
 		}
-		report.accepted = *terminal == "provider.success";
-		report.reason_code = report.accepted ? "accepted" : *terminal;
+		report.accepted = terminal->kind == provider::detail::transcript_terminal_kind::complete;
+		report.reason_code = report.accepted ? "accepted" : terminal->reason;
 		return report;
 	}
 

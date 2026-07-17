@@ -359,7 +359,8 @@ namespace cxxlens::detail::clang22
 			[[nodiscard]] sdk::result<std::uint32_t> integer()
 			{
 				if (remaining() < 4U)
-					return sdk::unexpected(provider_error("provider.task-input-invalid", "length"));
+					return sdk::unexpected(
+						provider_error("provider.frontend-request-invalid", "length"));
 				std::uint32_t output{};
 				for (std::uint32_t shift = 0U; shift < 32U; shift += 8U)
 					output |= std::to_integer<std::uint32_t>(input_[offset_++]) << shift;
@@ -372,7 +373,8 @@ namespace cxxlens::detail::clang22
 				if (!length)
 					return sdk::unexpected(std::move(length.error()));
 				if (*length > maximum_string_bytes || remaining() < *length)
-					return sdk::unexpected(provider_error("provider.task-input-invalid", "string"));
+					return sdk::unexpected(
+						provider_error("provider.frontend-request-invalid", "string"));
 				const auto* data = reinterpret_cast<const char*>(input_.data() + offset_);
 				std::string output{data, *length};
 				offset_ += *length;
@@ -737,7 +739,7 @@ namespace cxxlens::detail::clang22
 	sdk::result<void> clang22_task_input::validate() const
 	{
 		if (compile_unit.empty() || variant.empty())
-			return sdk::unexpected(provider_error("provider.task-input-invalid", "identity"));
+			return sdk::unexpected(provider_error("provider.frontend-request-invalid", "identity"));
 		return provider::clang22::translation_unit_input{logical_path, source, arguments}
 			.validate();
 	}
@@ -747,7 +749,8 @@ namespace cxxlens::detail::clang22
 		if (auto valid = input.validate(); !valid)
 			return sdk::unexpected(std::move(valid.error()));
 		if (input.source.size() > maximum_string_bytes)
-			return sdk::unexpected(provider_error("provider.task-input-invalid", "source-size"));
+			return sdk::unexpected(
+				provider_error("provider.frontend-request-invalid", "source-size"));
 		binary_writer writer;
 		writer.string(task_magic);
 		writer.string(input.compile_unit);
@@ -771,7 +774,7 @@ namespace cxxlens::detail::clang22
 		auto count = reader.integer();
 		if (!magic || !compile_unit || !variant || !logical_path || !source || !count ||
 			*magic != task_magic || *count > maximum_arguments)
-			return sdk::unexpected(provider_error("provider.task-input-invalid", "payload"));
+			return sdk::unexpected(provider_error("provider.frontend-request-invalid", "payload"));
 		clang22_task_input output{
 			std::move(*compile_unit),
 			std::move(*variant),
@@ -788,7 +791,8 @@ namespace cxxlens::detail::clang22
 			output.arguments.push_back(std::move(*argument));
 		}
 		if (!reader.empty())
-			return sdk::unexpected(provider_error("provider.task-input-invalid", "trailing-bytes"));
+			return sdk::unexpected(
+				provider_error("provider.frontend-request-invalid", "trailing-bytes"));
 		if (auto valid = output.validate(); !valid)
 			return sdk::unexpected(std::move(valid.error()));
 		return output;
@@ -978,7 +982,7 @@ namespace cxxlens::detail::clang22
 		auto request = decode_task_input(frames->at(2U).payload);
 		if (!request)
 		{
-			const auto failed = bytes("provider.task-input-invalid|" + task_id + "|payload");
+			const auto failed = bytes("provider.frontend-request-invalid|" + task_id + "|payload");
 			std::vector<std::byte> control{static_cast<std::byte>(0x78U),
 										   static_cast<std::byte>(failed.size())};
 			control.insert(control.end(), failed.begin(), failed.end());

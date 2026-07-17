@@ -15,7 +15,31 @@ required:
 properties:
   schema: {const: cxxlens.provider-execution-report.v1}
   terminal:
-    pattern: '^(provider|security)\.[a-z0-9-]+$'
+    enum:
+      - provider.success
+      - provider.timeout
+      - provider.cancelled
+      - provider.output-limit
+      - provider.crash
+      - provider.malformed-frame
+      - provider.checksum-mismatch
+      - provider.truncated-stream
+      - provider.schema-invalid
+      - provider.coverage-incomplete
+      - provider.runtime-unavailable
+      - provider.binary-identity-mismatch
+      - provider.protocol-state-invalid
+      - provider.credit-exceeded
+      - provider.task-binding-mismatch
+      - provider.batch-invalid
+      - provider.relation-incompatible
+      - provider.required-feature-missing
+      - provider.protocol-minor-mismatch
+      - provider.unknown-required-extension
+      - provider.invalid-frame-flags
+      - provider.unsupported-compression
+      - provider.frontend-request-invalid
+      - security.sandbox-insufficient
   provider:
     type: object
     additionalProperties: false

@@ -136,11 +136,16 @@ int main(const int argument_count, const char* const* arguments)
 																					: EXIT_FAILURE;
 	if (!writer.send(message_type::schema_negotiate, frames->at(1U).control))
 		return EXIT_FAILURE;
-	if (mode == "failed")
+	if (mode == "failed" || mode == "failure-success" || mode == "failure-unknown")
+	{
+		const auto reason = mode == "failure-success"
+			? "provider.success"
+			: (mode == "failure-unknown" ? "provider.unknown-reason" : "provider.schema-invalid");
 		return writer.send(message_type::task_failed,
-						   control("provider.schema-invalid|task-1|fixture"))
+						   control(std::string{reason} + "|task-1|fixture"))
 			? EXIT_SUCCESS
 			: EXIT_FAILURE;
+	}
 	if (mode == "invalid-utf8")
 	{
 		const std::array invalid_control{std::byte{0x61}, std::byte{0x80}};
@@ -277,10 +282,13 @@ int main(const int argument_count, const char* const* arguments)
 	const auto terminal_flags = mode == "success-eos"
 		? static_cast<std::uint16_t>(frame_flag::end_of_stream)
 		: std::uint16_t{};
+	const auto complete_control = mode == "wrong-complete-task"
+		? "other-task|complete"
+		: (mode == "missing-complete-control" ? "" : "task-1|complete");
 	if (!writer.send(message_type::coverage_chunk, control(coverage)) ||
 		!writer.send(message_type::unresolved_chunk, control("")) ||
 		!writer.send(message_type::progress, control("")) ||
-		!writer.send(message_type::task_complete, control("task-1|complete"), {}, terminal_flags))
+		!writer.send(message_type::task_complete, control(complete_control), {}, terminal_flags))
 		return EXIT_FAILURE;
 	return EXIT_SUCCESS;
 }

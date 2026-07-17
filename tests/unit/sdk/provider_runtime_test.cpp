@@ -552,8 +552,23 @@ namespace
 				"frame flags were omitted from semantic transcript identity");
 
 		auto failed = runtime.execute(task(select(executable, "failed")));
-		require(failed && failed->terminal == "provider.schema-invalid",
+		require(failed && failed->terminal == "provider.schema-invalid" &&
+					failed->frames.back().type == message_type::task_failed && !failed->succeeded(),
 				"provider task failure lost its structured terminal");
+		auto forged_success = runtime.execute(task(select(executable, "failure-success")));
+		require(forged_success && forged_success->terminal == "provider.schema-invalid" &&
+					forged_success->frames.back().type == message_type::task_failed &&
+					!forged_success->succeeded(),
+				"task_failed forged a successful process report");
+		auto unknown_failure = runtime.execute(task(select(executable, "failure-unknown")));
+		require(unknown_failure && unknown_failure->terminal == "provider.schema-invalid" &&
+					unknown_failure->frames.back().type == message_type::task_failed &&
+					!unknown_failure->succeeded(),
+				"unregistered task failure escaped the terminal registry");
+		auto forged_report = *failed;
+		forged_report.terminal = "provider.success";
+		require(!forged_report.succeeded(),
+				"raw terminal text overrode the validated report terminal state");
 
 		auto crash = runtime.execute(task(select(executable, "crash")));
 		require(crash && crash->terminal == "provider.crash" &&
@@ -595,6 +610,8 @@ namespace
 				 std::pair{"provider-batch-ack", "provider.protocol-state-invalid"},
 				 std::pair{"missing-accepted", "provider.protocol-state-invalid"},
 				 std::pair{"wrong-task", "provider.task-binding-mismatch"},
+				 std::pair{"wrong-complete-task", "provider.protocol-state-invalid"},
+				 std::pair{"missing-complete-control", "provider.protocol-state-invalid"},
 				 std::pair{"unsealed-batch", "provider.protocol-state-invalid"},
 				 std::pair{"inconsistent-batch", "provider.batch-invalid"},
 				 std::pair{"bad-column", "provider.batch-invalid"},

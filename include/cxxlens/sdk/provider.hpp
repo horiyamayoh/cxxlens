@@ -660,6 +660,10 @@ namespace cxxlens::sdk::provider
 		[[nodiscard]] bool succeeded() const noexcept;
 		[[nodiscard]] std::string canonical_form() const;
 		[[nodiscard]] std::string semantic_digest() const;
+
+	  private:
+		bool validated_success_{};
+		friend class process_provider_runtime;
 	};
 
 	/**

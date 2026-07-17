@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <span>
 #include <string>
 #include <vector>
@@ -8,6 +9,18 @@
 
 namespace cxxlens::sdk::provider::detail
 {
+	enum class transcript_terminal_kind : std::uint8_t
+	{
+		failed,
+		complete,
+	};
+
+	struct transcript_terminal
+	{
+		transcript_terminal_kind kind{transcript_terminal_kind::failed};
+		std::string reason;
+	};
+
 	struct transcript_validation_request
 	{
 		std::string task_id;
@@ -19,7 +32,7 @@ namespace cxxlens::sdk::provider::detail
 		bool require_handshake{};
 	};
 
-	[[nodiscard]] result<std::string>
+	[[nodiscard]] result<transcript_terminal>
 	validate_provider_transcript(const transcript_validation_request& request,
 								 std::span<const frame> frames,
 								 protocol_limits session_limits);

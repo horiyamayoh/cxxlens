@@ -1,10 +1,10 @@
 schema: cxxlens.provider-runtime-contract.v1
-document_version: 1.7.0
+document_version: 1.8.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#17-provider-model
-  decision_adr: docs/design/adr/0044-shared-provider-transcript-validation.md
-  owner_issue: '#101'
+  decision_adr: docs/design/adr/0045-typed-provider-terminal-verdict.md
+  owner_issue: '#102'
   owner: steward.ng-provider-runtime
 dependencies:
   - schemas/cxxlens_ng_provider_protocol.yaml
@@ -113,6 +113,9 @@ protocol_session:
     consumers: [process-runtime, provider-harness, logical-reference, process-reference]
     mode_difference: handshake-prefix-only
     same-transcript_reason: exact
+    terminal_result: typed-complete-or-failed-kind-plus-registered-reason
+    task_failed_allowlist: stable-non-success-provider-terminals-only
+    task_failed_success_or_unknown: provider.schema-invalid
     handshake: exact-identity-schema-feature-order
     task_acceptance: exact-provider-version-task-id-binding
     direction: reject-host-only-provider-output
@@ -140,6 +143,9 @@ protocol_session:
   output_after_terminal: reject
   malformed_or_truncated: reject
 terminal:
+  success_derivation: validated-complete-kind-and-provider.success-and-final-task-complete-frame
+  raw_terminal_text_is_not_authority: true
+  report_schema_membership: exact-stable-enum
   stable:
     - provider.success
     - provider.timeout
