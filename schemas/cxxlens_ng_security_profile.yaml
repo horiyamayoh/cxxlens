@@ -1,12 +1,12 @@
 schema: cxxlens.security-profile.v1
 kind: security-profile
-document_version: 1.1.0
+document_version: 1.2.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
   index: docs/design/catalogs/README.md
-  decision_adr: docs/design/adr/0039-exact-provider-fallback-policy.md
-  owner_issue: '#96'
+  decision_adr: docs/design/adr/0042-immutable-provider-selection-authority.md
+  owner_issue: '#99'
   owner: steward.ng-security
 registries:
   namespace: schemas/cxxlens_ng_namespace_registry.yaml
@@ -67,6 +67,15 @@ discovery:
     invalid_higher_policy_priority: blocks-lower-policy-priority
     selection_evidence: policy-semantic-digest-required
   explanation: selected-and-rejected-candidates-with-stable-reason-codes
+execution_authority:
+  selection_token: immutable-private-construction-by-select-provider
+  retained_bindings: [original-selection-request, selected-candidate, all-decisions, fallback-policy-digest]
+  runtime_revalidation: before-process-effect
+  selected_decision: exact-one-candidate-identity-and-source-bound
+  candidate_verdicts: [authoritative-path, trust, certification, validation-error, certified-qualifications]
+  sandbox_policy_digest: exact-selection-request-binding
+  sandbox_minimum: max-of-selection-request-process-request-manifest
+  default_or_forged_token: provider.selection-invalid
 sandbox:
   assurance_order: [none, best_effort, enforced, certified]
   effective_minimum: max-of-manifest-request-security-profile

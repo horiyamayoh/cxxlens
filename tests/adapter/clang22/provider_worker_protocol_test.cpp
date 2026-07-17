@@ -83,22 +83,30 @@ int main(const int argument_count, const char* const* arguments)
 		std::string{sandbox_policy_digest},
 		"sha256:9090909090909090909090909090909090909090909090909090909090909090",
 	};
-	provider_selection selection{
-		{description,
-		 discovery_source::explicit_path,
-		 {executable},
-		 true,
-		 true,
-		 true,
-		 {"canonical-semantic-qualified", "sandbox-qualified", "schema-conformant"},
-		 discovered_sandbox,
-		 {}},
+	provider_candidate candidate{
+		description,
+		discovery_source::explicit_path,
+		{executable},
+		true,
+		true,
+		true,
+		{"canonical-semantic-qualified", "sandbox-qualified", "schema-conformant"},
+		discovered_sandbox,
 		{},
-		false,
+	};
+	provider_selection_request selection_authority{
+		description.provider_id,
+		description.provider_version,
+		description.provider_binary_digest,
+		description.provider_semantic_contract_digest,
+		{sandbox_assurance::enforced, std::string{sandbox_policy_digest}},
+		true,
 		std::nullopt,
 	};
+	auto selection = select_provider(selection_authority, std::span{&candidate, 1U});
+	require(selection.has_value(), "Clang worker provider selection failed");
 	process_task_request request;
-	request.selection = std::move(selection);
+	request.selection = std::move(*selection);
 	request.output_descriptors = {
 		cxxlens::cc::relations::entity::descriptor(),
 		cxxlens::cc::relations::call_site::descriptor(),

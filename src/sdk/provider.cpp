@@ -916,15 +916,85 @@ namespace cxxlens::sdk::provider
 											  canonical_form());
 	}
 
+	provider_selection::provider_selection(provider_candidate candidate,
+										   provider_selection_request request,
+										   std::vector<provider_candidate_decision> decisions,
+										   const bool fallback_used,
+										   std::optional<std::string> fallback_policy_digest)
+		: candidate_{std::move(candidate)}, request_{std::move(request)},
+		  decisions_{std::move(decisions)}, fallback_used_{fallback_used},
+		  fallback_policy_digest_{std::move(fallback_policy_digest)}, validated_{true}
+	{
+	}
+
+	const provider_candidate& provider_selection::selected_candidate() const noexcept
+	{
+		return candidate_;
+	}
+
+	const provider_selection_request& provider_selection::authority_request() const noexcept
+	{
+		return request_;
+	}
+
+	std::span<const provider_candidate_decision> provider_selection::decisions() const noexcept
+	{
+		return decisions_;
+	}
+
+	bool provider_selection::fallback_used() const noexcept
+	{
+		return fallback_used_;
+	}
+
+	const std::optional<std::string>& provider_selection::fallback_policy_digest() const noexcept
+	{
+		return fallback_policy_digest_;
+	}
+
+	result<void> provider_selection::validate() const
+	{
+		if (!validated_ || decisions_.empty())
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.selection-invalid", "selection-token"));
+		const auto selected_count =
+			std::ranges::count(decisions_, true, &provider_candidate_decision::selected);
+		const auto selected =
+			std::ranges::find(decisions_, true, &provider_candidate_decision::selected);
+		const auto expected_reason = fallback_used_ ? std::string_view{"selected-explicit-fallback"}
+													: std::string_view{"selected-exact"};
+		const auto expected_policy_digest = request_.fallback_policy
+			? std::optional<std::string>{request_.fallback_policy->semantic_digest()}
+			: std::nullopt;
+		if (selected_count != 1 || selected == decisions_.end() ||
+			selected->source != candidate_.source ||
+			selected->provider_id != candidate_.description.provider_id ||
+			selected->provider_version != candidate_.description.provider_version ||
+			selected->binary_digest != candidate_.description.provider_binary_digest ||
+			selected->reason != expected_reason ||
+			fallback_policy_digest_ != expected_policy_digest ||
+			(fallback_used_ && !request_.fallback_policy))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.selection-invalid", "decision-binding"));
+		auto replay = select_provider(request_, std::span{&candidate_, 1U});
+		if (!replay || replay->fallback_used() != fallback_used_ ||
+			replay->fallback_policy_digest() != fallback_policy_digest_)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.selection-invalid",
+							   "authority-revalidation",
+							   replay ? "mismatch" : replay.error().code));
+		return {};
+	}
+
 	std::string provider_selection::canonical_form() const
 	{
 		std::ostringstream output;
 		output << "{\"decisions\":[";
-		for (std::size_t index = 0U; index < decisions.size(); ++index)
+		for (std::size_t index = 0U; index < decisions_.size(); ++index)
 		{
 			if (index != 0U)
 				output << ',';
-			const auto& decision = decisions[index];
+			const auto& decision = decisions_[index];
 			output << "{\"binary_digest\":" << json_string(decision.binary_digest)
 				   << ",\"provider_id\":" << json_string(decision.provider_id)
 				   << ",\"provider_version\":" << json_string(decision.provider_version.string())
@@ -933,13 +1003,13 @@ namespace cxxlens::sdk::provider
 				   << ",\"source\":" << json_string(source_name(decision.source)) << '}';
 		}
 		output << "],\"fallback_policy_digest\":";
-		if (fallback_policy_digest)
-			output << json_string(*fallback_policy_digest);
+		if (fallback_policy_digest_)
+			output << json_string(*fallback_policy_digest_);
 		else
 			output << "null";
-		output << ",\"fallback_used\":" << (fallback_used ? "true" : "false")
-			   << ",\"selected_manifest\":" << candidate.description.canonical_json()
-			   << ",\"selected_source\":" << json_string(source_name(candidate.source)) << '}';
+		output << ",\"fallback_used\":" << (fallback_used_ ? "true" : "false")
+			   << ",\"selected_manifest\":" << candidate_.description.canonical_json()
+			   << ",\"selected_source\":" << json_string(source_name(candidate_.source)) << '}';
 		return output.str();
 	}
 
@@ -1157,6 +1227,7 @@ namespace cxxlens::sdk::provider
 		}
 		return provider_selection{
 			candidates[*selected],
+			request,
 			std::move(decisions),
 			selected_fallback,
 			request.fallback_policy

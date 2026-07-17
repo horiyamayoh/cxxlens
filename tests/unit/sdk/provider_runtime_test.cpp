@@ -9,6 +9,8 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include <cxxlens/relations/company_lock_acquire.hpp>
@@ -18,6 +20,9 @@ namespace
 {
 	using namespace cxxlens::sdk;
 	using namespace cxxlens::sdk::provider;
+	static_assert(!std::is_aggregate_v<provider_selection>);
+	static_assert(std::is_same_v<decltype(std::declval<provider_selection&>().selected_candidate()),
+								 const provider_candidate&>);
 
 	constexpr std::string_view binary_digest =
 		"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -299,8 +304,9 @@ namespace
 	{
 		auto exact = candidate(executable, "success");
 		auto selected = select_provider(selection_request(executable), std::span{&exact, 1U});
-		require(selected && !selected->fallback_used &&
-					selected->decisions.front().reason == "selected-exact",
+		require(selected && !selected->fallback_used() &&
+					selected->decisions().front().reason == "selected-exact" &&
+					selected->validate().has_value(),
 				"exact selection was not explained");
 
 		auto adjacent = exact;
@@ -331,16 +337,44 @@ namespace
 		require(!path_rejected && path_rejected.error().code == "security.downgrade-forbidden",
 				"PATH-only provider discovery became authority");
 
+		for (auto invalid :
+			 {
+				 [&]
+				 {
+					 auto value = exact;
+					 value.trust_valid = false;
+					 return value;
+				 }(),
+				 [&]
+				 {
+					 auto value = exact;
+					 value.certification_valid = false;
+					 return value;
+				 }(),
+				 [&]
+				 {
+					 auto value = exact;
+					 value.validation_error = "security.signature-mismatch";
+					 return value;
+				 }(),
+			 })
+		{
+			auto verdict_rejected =
+				select_provider(selection_request(executable), std::span{&invalid, 1U});
+			require(!verdict_rejected,
+					"invalid trust/certification verdict produced a selection token");
+		}
+
 		auto fallback = exact;
 		fallback.description.provider_version = {1U, 1U, 0U};
 		auto fallback_request = selection_request(executable);
 		fallback_request.fallback_policy = provider_fallback_policy{
 			"company.test.provider-fallback-policy", {fallback_tuple(fallback, 1U)}};
 		auto allowed = select_provider(fallback_request, std::span{&fallback, 1U});
-		require(allowed && allowed->fallback_used && allowed->fallback_policy_digest &&
-					allowed->candidate.description.provider_version ==
+		require(allowed && allowed->fallback_used() && allowed->fallback_policy_digest() &&
+					allowed->selected_candidate().description.provider_version ==
 						semantic_version{1U, 1U, 0U} &&
-					allowed->canonical_form().contains(*allowed->fallback_policy_digest),
+					allowed->canonical_form().contains(*allowed->fallback_policy_digest()),
 				"exact fallback policy tuple was not selected or recorded");
 
 		auto unrelated_major = fallback;
@@ -352,7 +386,7 @@ namespace
 		major_request.fallback_policy = provider_fallback_policy{
 			"company.test.major-policy", {fallback_tuple(unrelated_major, 1U)}};
 		auto major_allowed = select_provider(major_request, std::span{&unrelated_major, 1U});
-		require(major_allowed && major_allowed->fallback_used,
+		require(major_allowed && major_allowed->fallback_used(),
 				"explicitly listed provider major fallback was rejected");
 
 		auto rebuild = exact;
@@ -365,7 +399,7 @@ namespace
 		rebuild_request.fallback_policy =
 			provider_fallback_policy{"company.test.rebuild-policy", {fallback_tuple(rebuild, 1U)}};
 		auto rebuild_allowed = select_provider(rebuild_request, std::span{&rebuild, 1U});
-		require(rebuild_allowed && rebuild_allowed->fallback_used,
+		require(rebuild_allowed && rebuild_allowed->fallback_used(),
 				"listed same-version rebuild tuple was rejected");
 
 		auto semantic_change = fallback;
@@ -381,7 +415,7 @@ namespace
 		semantic_request.fallback_policy =
 			provider_fallback_policy{"company.test.semantic-policy", {std::move(semantic_entry)}};
 		auto semantic_allowed = select_provider(semantic_request, std::span{&semantic_change, 1U});
-		require(semantic_allowed && semantic_allowed->fallback_used,
+		require(semantic_allowed && semantic_allowed->fallback_used(),
 				"qualified listed semantic contract fallback was rejected");
 		auto self_claimed = semantic_change;
 		self_claimed.certified_qualifications = {"canonical-semantic-qualified"};
@@ -400,7 +434,7 @@ namespace
 			{fallback_tuple(secondary, 2U), fallback_tuple(preferred, 1U)}};
 		auto precedence = select_provider(precedence_request, fallback_candidates);
 		require(precedence &&
-					precedence->candidate.description.provider_version ==
+					precedence->selected_candidate().description.provider_version ==
 						semantic_version{1U, 2U, 0U},
 				"fallback policy priority did not define canonical selection");
 		auto reversed_policy = *precedence_request.fallback_policy;
@@ -417,6 +451,9 @@ namespace
 		auto processes = make_system_provider_process_port();
 		require(processes != nullptr, "system provider process port unavailable");
 		process_provider_runtime runtime{*processes};
+		auto forged = runtime.execute(task(provider_selection{}));
+		require(!forged && forged.error().code == "provider.selection-invalid",
+				"default/forged selection token reached process launch");
 
 		for (const auto mode : {"success", "network-check"})
 		{
@@ -437,6 +474,27 @@ namespace
 						" terminal=" + (report ? report->terminal : report.error().code));
 		}
 
+		auto manifest_minimum_candidate = candidate(executable, "success");
+		auto weaker_authority = selection_request(executable);
+		weaker_authority.sandbox.minimum = sandbox_assurance::best_effort;
+		auto manifest_minimum_selection =
+			select_provider(weaker_authority, std::span{&manifest_minimum_candidate, 1U});
+		require(manifest_minimum_selection.has_value(),
+				"manifest-minimum provider selection failed");
+		auto weakened_request = task(std::move(*manifest_minimum_selection));
+		weakened_request.sandbox.minimum = sandbox_assurance::none;
+		auto enforced = runtime.execute(weakened_request);
+		require(enforced && enforced->succeeded() &&
+					enforced->sandbox.achieved == sandbox_assurance::enforced,
+				"runtime did not enforce max(selection, request, manifest) sandbox minimum");
+		auto mismatched_policy = task(select(executable, "success"));
+		mismatched_policy.sandbox.policy_digest =
+			"sha256:9999999999999999999999999999999999999999999999999999999999999999";
+		auto policy_rejected = runtime.execute(mismatched_policy);
+		require(!policy_rejected &&
+					policy_rejected.error().code == "security.sandbox-policy-mismatch",
+				"runtime accepted a sandbox policy not bound by selection authority");
+
 		auto optional = runtime.execute(task(select(executable, "optional-extension")));
 		require(optional && optional->succeeded() && optional->frames.size() == 11U &&
 					optional->frames.at(3U).flags ==
@@ -449,8 +507,12 @@ namespace
 		require(optional_credit && optional_credit->terminal == "provider.credit-exceeded",
 				"skipped optional extension was omitted from frame credit accounting");
 
-		auto minor_request = task(select(executable, "success"));
-		minor_request.selection.candidate.description.protocol.maximum_minor = 1U;
+		auto minor_candidate = candidate(executable, "success");
+		minor_candidate.description.protocol.maximum_minor = 1U;
+		auto minor_selection =
+			select_provider(selection_request(executable), std::span{&minor_candidate, 1U});
+		require(minor_selection.has_value(), "minor-capable provider selection failed");
+		auto minor_request = task(std::move(*minor_selection));
 		minor_request.limits.maximum_minor = 1U;
 		auto negotiated_minor = runtime.execute(minor_request);
 		require(
@@ -540,9 +602,12 @@ namespace
 		require(credit && credit->terminal == "provider.credit-exceeded" && !credit->succeeded(),
 				"provider output exceeding granted frame credit was accepted");
 
-		auto feature_request = task(select(executable, "success"));
-		feature_request.selection.candidate.description.protocol.required_features = {
-			"company.unsupported-feature"};
+		auto feature_candidate = candidate(executable, "success");
+		feature_candidate.description.protocol.required_features = {"company.unsupported-feature"};
+		auto feature_selection =
+			select_provider(selection_request(executable), std::span{&feature_candidate, 1U});
+		require(feature_selection.has_value(), "feature provider selection failed");
+		auto feature_request = task(std::move(*feature_selection));
 		auto feature = runtime.execute(feature_request);
 		require(!feature && feature.error().code == "provider.required-feature-missing",
 				"unsupported required provider feature was negotiated");

@@ -446,14 +446,41 @@ namespace cxxlens::sdk::provider
 		[[nodiscard]] bool operator==(const provider_candidate_decision&) const = default;
 	};
 
-	/** @brief Exact selected candidate plus complete rejection/fallback evidence. */
-	struct provider_selection
+	/** @brief Immutable validated selection token plus complete rejection/fallback evidence. */
+	class provider_selection
 	{
-		provider_candidate candidate;
-		std::vector<provider_candidate_decision> decisions;
-		bool fallback_used{};
-		std::optional<std::string> fallback_policy_digest;
+	  public:
+		provider_selection() = default;
+		/** @brief Return the immutable candidate authorized by this token. */
+		[[nodiscard]] const provider_candidate& selected_candidate() const noexcept;
+		/** @brief Return the immutable request that defined selection authority. */
+		[[nodiscard]] const provider_selection_request& authority_request() const noexcept;
+		/** @brief Return complete immutable selected and rejected candidate evidence. */
+		[[nodiscard]] std::span<const provider_candidate_decision> decisions() const noexcept;
+		/** @brief Whether the selected candidate used the explicit fallback policy. */
+		[[nodiscard]] bool fallback_used() const noexcept;
+		/** @brief Return the exact fallback policy binding, if one was requested. */
+		[[nodiscard]] const std::optional<std::string>& fallback_policy_digest() const noexcept;
+		/** @brief Revalidate selection authority, exact decision, and fallback policy binding. */
+		[[nodiscard]] result<void> validate() const;
+		/** @brief Render immutable selection evidence in canonical order. */
 		[[nodiscard]] std::string canonical_form() const;
+
+	  private:
+		provider_candidate candidate_;
+		provider_selection_request request_;
+		std::vector<provider_candidate_decision> decisions_;
+		bool fallback_used_{};
+		std::optional<std::string> fallback_policy_digest_;
+		bool validated_{};
+
+		provider_selection(provider_candidate candidate,
+						   provider_selection_request request,
+						   std::vector<provider_candidate_decision> decisions,
+						   bool fallback_used,
+						   std::optional<std::string> fallback_policy_digest);
+		friend result<provider_selection> select_provider(const provider_selection_request&,
+														  std::span<const provider_candidate>);
 	};
 
 	/** @brief Select one exact provider without PATH authority or silent downgrade. */

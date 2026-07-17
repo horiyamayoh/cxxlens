@@ -510,6 +510,33 @@ def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any
     ]
     for value, schema_path, label in documents:
         schema_validate(value, load_yaml(root / schema_path), label)
+    runtime_evidence = {
+        "include/cxxlens/sdk/provider.hpp": (
+            "class provider_selection",
+            "selected_candidate() const",
+            "authority_request() const",
+            "result<void> validate() const",
+        ),
+        "src/sdk/provider.cpp": (
+            "provider_selection::validate() const",
+            "selection-token",
+            "decision-binding",
+            "authority-revalidation",
+        ),
+        "src/sdk/provider_runtime.cpp": (
+            "request.selection.validate()",
+            "effective_sandbox",
+            "security.sandbox-policy-mismatch",
+        ),
+    }
+    for relative, markers in runtime_evidence.items():
+        text = (root / relative).read_text(encoding="utf-8")
+        missing = [marker for marker in markers if marker not in text]
+        if missing:
+            fail(
+                "security.untrusted-input-invalid",
+                f"{relative} lacks execution authority markers: {missing}",
+            )
     entry_keys = [(row["kind"], row["prefix"]) for row in namespaces["entries"]]
     if len(entry_keys) != len(set(entry_keys)):
         fail("security.namespace-collision", "duplicate kind/prefix")

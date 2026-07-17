@@ -1,5 +1,5 @@
 {
-  "asset_count": 288,
+  "asset_count": 289,
   "assets": [
     {
       "authority": "active",
@@ -697,6 +697,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0041-provider-control-text-utf8.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0042-immutable-provider-selection-authority.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2019,7 +2026,7 @@
     }
   ],
   "classifications": {
-    "active": 252,
+    "active": 253,
     "archived": 35,
     "generated": 1
   },

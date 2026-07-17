@@ -106,7 +106,7 @@ namespace cxxlens::sdk::provider
 
 		[[nodiscard]] result<protocol_limits> negotiated_limits(const process_task_request& request)
 		{
-			const auto& offered = request.selection.candidate.description.protocol;
+			const auto& offered = request.selection.selected_candidate().description.protocol;
 			const auto minimum =
 				std::max<std::uint32_t>(request.limits.minimum_minor, offered.minimum_minor);
 			const auto maximum =
@@ -251,7 +251,7 @@ namespace cxxlens::sdk::provider
 				std::string rolling_digest;
 			};
 			std::optional<open_batch> batch;
-			const auto& provider = request.selection.candidate.description;
+			const auto& provider = request.selection.selected_candidate().description;
 			const auto expected_hello = provider.canonical_json();
 			const auto expected_schema = std::string{"cxxlens.provider-protocol.v1|minor="} +
 				std::to_string(session_limits.maximum_minor);
@@ -461,7 +461,7 @@ namespace cxxlens::sdk::provider
 		[[nodiscard]] result<std::vector<std::byte>>
 		host_transcript(const process_task_request& request, const protocol_limits session_limits)
 		{
-			const auto& manifest = request.selection.candidate.description;
+			const auto& manifest = request.selection.selected_candidate().description;
 			auto hello = encode_control_text(manifest.canonical_json());
 			auto schema = encode_control_text(std::string{"cxxlens.provider-protocol.v1|minor="} +
 											  std::to_string(session_limits.maximum_minor));
@@ -536,12 +536,47 @@ namespace cxxlens::sdk::provider
 			return static_cast<std::uint8_t>(achieved) >= static_cast<std::uint8_t>(required);
 		}
 
+		[[nodiscard]] std::optional<sandbox_assurance>
+		parse_sandbox_assurance(const std::string_view value) noexcept
+		{
+			if (value == "none")
+				return sandbox_assurance::none;
+			if (value == "best_effort")
+				return sandbox_assurance::best_effort;
+			if (value == "enforced")
+				return sandbox_assurance::enforced;
+			if (value == "certified")
+				return sandbox_assurance::certified;
+			return std::nullopt;
+		}
+
+		[[nodiscard]] result<sandbox_requirement>
+		effective_sandbox(const process_task_request& request)
+		{
+			const auto& authority = request.selection.authority_request().sandbox;
+			if (request.sandbox.policy_digest != authority.policy_digest)
+				return cxxlens::sdk::unexpected(
+					runtime_error("security.sandbox-policy-mismatch", "selection"));
+			const auto manifest_minimum = parse_sandbox_assurance(
+				request.selection.selected_candidate().description.sandbox_minimum);
+			if (!manifest_minimum)
+				return cxxlens::sdk::unexpected(
+					runtime_error("provider.manifest-invalid", "sandbox_minimum"));
+			auto minimum = authority.minimum;
+			if (static_cast<std::uint8_t>(request.sandbox.minimum) >
+				static_cast<std::uint8_t>(minimum))
+				minimum = request.sandbox.minimum;
+			if (static_cast<std::uint8_t>(*manifest_minimum) > static_cast<std::uint8_t>(minimum))
+				minimum = *manifest_minimum;
+			return sandbox_requirement{minimum, authority.policy_digest};
+		}
+
 		[[nodiscard]] process_execution_report transport_failure_report(
 			const process_task_request& request, process_output output, std::string terminal)
 		{
 			process_execution_report report;
 			report.terminal = std::move(terminal);
-			report.provider = request.selection.candidate.description;
+			report.provider = request.selection.selected_candidate().description;
 			report.task_input_digest = request.task_input_digest;
 			report.normalized_invocation_digest = request.normalized_invocation_digest;
 			report.toolchain_digest = request.toolchain_digest;
@@ -623,9 +658,14 @@ namespace cxxlens::sdk::provider
 	result<process_execution_report>
 	process_provider_runtime::execute(const process_task_request& request) const
 	{
-		if (processes_ == nullptr || request.task_id.empty() || request.task_id.contains('|') ||
-			request.selection.candidate.executable_argv.empty() ||
-			request.selection.candidate.executable_argv.front().empty() ||
+		if (processes_ == nullptr)
+			return cxxlens::sdk::unexpected(
+				runtime_error("provider.runtime-unavailable", "process-port"));
+		if (auto valid = request.selection.validate(); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		if (request.task_id.empty() || request.task_id.contains('|') ||
+			request.selection.selected_candidate().executable_argv.empty() ||
+			request.selection.selected_candidate().executable_argv.front().empty() ||
 			!canonical_digest(request.task_input_digest) ||
 			!canonical_digest(request.normalized_invocation_digest) ||
 			!canonical_digest(request.toolchain_digest) ||
@@ -633,10 +673,10 @@ namespace cxxlens::sdk::provider
 			content_digest(request.payload) != request.task_input_digest)
 			return cxxlens::sdk::unexpected(
 				runtime_error("provider.task-invalid", request.task_id));
-		if (auto valid = request.selection.candidate.description.validate(); !valid)
+		if (auto valid = request.selection.selected_candidate().description.validate(); !valid)
 			return cxxlens::sdk::unexpected(std::move(valid.error()));
 		static const std::set<std::string, std::less<>> supported_features{"credit-backpressure"};
-		const auto& protocol = request.selection.candidate.description.protocol;
+		const auto& protocol = request.selection.selected_candidate().description.protocol;
 		if (std::ranges::any_of(protocol.required_features,
 								[&](const std::string& feature)
 								{
@@ -653,12 +693,16 @@ namespace cxxlens::sdk::provider
 			if (auto valid = descriptor.validate(); !valid)
 				return cxxlens::sdk::unexpected(std::move(valid.error()));
 			if (!output_descriptor_ids.insert(descriptor.id).second ||
-				!offered_relation(request.selection.candidate.description, descriptor.id))
+				!offered_relation(request.selection.selected_candidate().description,
+								  descriptor.id))
 				return cxxlens::sdk::unexpected(runtime_error(
 					"provider.relation-incompatible", descriptor.id, "output-descriptor"));
 		}
 		if (auto valid = request.sandbox.validate(); !valid)
 			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		auto sandbox = effective_sandbox(request);
+		if (!sandbox)
+			return cxxlens::sdk::unexpected(std::move(sandbox.error()));
 		if (request.budget.wall_ms == 0U || request.budget.cpu_ms == 0U ||
 			request.budget.rss_bytes == 0U || request.budget.output_bytes == 0U ||
 			request.budget.rows == 0U || request.budget.diagnostics == 0U ||
@@ -674,20 +718,20 @@ namespace cxxlens::sdk::provider
 		if (!transcript)
 			return cxxlens::sdk::unexpected(std::move(transcript.error()));
 		process_invocation invocation;
-		invocation.argv = request.selection.candidate.executable_argv;
+		invocation.argv = request.selection.selected_candidate().executable_argv;
 		invocation.standard_input = std::move(*transcript);
 		invocation.environment = {
-			{"CXXLENS_PROVIDER_ID", request.selection.candidate.description.provider_id},
+			{"CXXLENS_PROVIDER_ID", request.selection.selected_candidate().description.provider_id},
 			{"CXXLENS_PROVIDER_BINARY_DIGEST",
-			 request.selection.candidate.description.provider_binary_digest},
+			 request.selection.selected_candidate().description.provider_binary_digest},
 			{"CXXLENS_PROVIDER_SEMANTIC_CONTRACT_DIGEST",
-			 request.selection.candidate.description.provider_semantic_contract_digest},
+			 request.selection.selected_candidate().description.provider_semantic_contract_digest},
 			{"CXXLENS_PROVIDER_TASK_ID", request.task_id},
 		};
 		invocation.budget = request.budget;
-		invocation.sandbox = request.sandbox;
+		invocation.sandbox = *sandbox;
 		invocation.expected_binary_digest =
-			request.selection.candidate.description.provider_binary_digest;
+			request.selection.selected_candidate().description.provider_binary_digest;
 		auto launched = processes_->run(invocation, request.cancellation);
 		if (!launched)
 			return cxxlens::sdk::unexpected(std::move(launched.error()));
@@ -695,8 +739,8 @@ namespace cxxlens::sdk::provider
 		if (auto valid = output.sandbox.validate(); !valid)
 			return transport_failure_report(
 				request, std::move(output), "provider.runtime-unavailable");
-		if (output.sandbox.policy_digest != request.sandbox.policy_digest ||
-			!sandbox_satisfies(output.sandbox.achieved, request.sandbox.minimum))
+		if (output.sandbox.policy_digest != sandbox->policy_digest ||
+			!sandbox_satisfies(output.sandbox.achieved, sandbox->minimum))
 			return transport_failure_report(
 				request, std::move(output), "security.sandbox-insufficient");
 		if (output.status != process_status::exited)
@@ -727,7 +771,7 @@ namespace cxxlens::sdk::provider
 				{validation_error.code, validation_error.field, validation_error.detail});
 			return report;
 		}
-		const auto& manifest = request.selection.candidate.description;
+		const auto& manifest = request.selection.selected_candidate().description;
 
 		process_execution_report report;
 		report.terminal = std::move(*terminal);

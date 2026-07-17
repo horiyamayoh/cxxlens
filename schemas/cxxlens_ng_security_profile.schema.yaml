@@ -12,6 +12,7 @@ required:
   - signature_contract
   - qualification
   - discovery
+  - execution_authority
   - sandbox
   - product_execution
   - validation_boundary
@@ -20,7 +21,7 @@ required:
 properties:
   schema: {const: cxxlens.security-profile.v1}
   kind: {const: security-profile}
-  document_version: {const: 1.1.0}
+  document_version: {const: 1.2.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -29,8 +30,8 @@ properties:
     properties:
       design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
       index: {const: docs/design/catalogs/README.md}
-      decision_adr: {const: docs/design/adr/0039-exact-provider-fallback-policy.md}
-      owner_issue: {const: '#96'}
+      decision_adr: {const: docs/design/adr/0042-immutable-provider-selection-authority.md}
+      owner_issue: {const: '#99'}
       owner: {const: steward.ng-security}
   registries:
     type: object
@@ -92,6 +93,16 @@ properties:
           invalid_higher_policy_priority: blocks-lower-policy-priority
           selection_evidence: policy-semantic-digest-required
       explanation: {const: selected-and-rejected-candidates-with-stable-reason-codes}
+  execution_authority:
+    const:
+      selection_token: immutable-private-construction-by-select-provider
+      retained_bindings: [original-selection-request, selected-candidate, all-decisions, fallback-policy-digest]
+      runtime_revalidation: before-process-effect
+      selected_decision: exact-one-candidate-identity-and-source-bound
+      candidate_verdicts: [authoritative-path, trust, certification, validation-error, certified-qualifications]
+      sandbox_policy_digest: exact-selection-request-binding
+      sandbox_minimum: max-of-selection-request-process-request-manifest
+      default_or_forged_token: provider.selection-invalid
   sandbox:
     type: object
     additionalProperties: false
