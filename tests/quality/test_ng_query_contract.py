@@ -170,6 +170,19 @@ class NgQueryContractTests(unittest.TestCase):
                 self.registry,
             )
 
+    def test_duplicate_scan_alias_fails_before_shape_collapse(self) -> None:
+        base = copy.deepcopy(
+            self.vector("static-dynamic-normalized-digest")["input"]["static"]
+        )
+        root = base["root"]
+        base["root"] = {
+            "operator": "query.union.v1",
+            "inputs": [root, copy.deepcopy(root)],
+            "arguments": {},
+        }
+        with self.assertRaisesRegex(QueryContractError, "query.duplicate-scan-alias"):
+            validate_ir(base, self.ir_schema, self.contract, self.registry)
+
     def test_absent_unknown_and_null_are_three_distinct_states(self) -> None:
         validate_cell({"state": "absent"})
         validate_cell({"state": "unknown", "reason": "unresolved-1"})

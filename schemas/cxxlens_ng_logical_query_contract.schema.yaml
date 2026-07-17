@@ -37,9 +37,9 @@ properties:
       design:
         const: docs/design/cxxlens_next_generation_integrated_design_ja.md#20-logical-query
       decision_adr:
-        const: docs/design/adr/0007-logical-query-algebra.md
+        const: docs/design/adr/0073-query-scan-alias-uniqueness.md
       owner_issue:
-        const: '#115'
+        const: '#142'
       owner:
         const: steward.ng-query
   compatibility:
@@ -99,6 +99,9 @@ properties:
         - relation_requirements
         - unused_relation_requirement
         - canonical_and_execution_node_sets
+        - scan_alias_identity
+        - reachable_scan_aliases
+        - duplicate_scan_alias
         properties:
           root_count: {const: 1}
           reachability: {const: every-node-reachable-from-root-by-input-edges}
@@ -107,6 +110,9 @@ properties:
           relation_requirements: {const: exactly-referenced-by-reachable-scan-set}
           unused_relation_requirement: {const: sdk.query-unused-relation-requirement}
           canonical_and_execution_node_sets: {const: exact-match}
+          scan_alias_identity: {const: query-local-occurrence}
+          reachable_scan_aliases: {const: unique}
+          duplicate_scan_alias: {const: sdk.query-duplicate-scan-alias}
   collection_model:
     type: object
     required: [kind, occurrence, cell_states, null_policy, duplicate_policy]

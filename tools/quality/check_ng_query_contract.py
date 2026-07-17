@@ -215,6 +215,18 @@ def validate_contract(
         fail("query.partial-aggregate", "partial aggregate is enabled in NG0")
     if contract["collection_model"]["null_policy"]["implicit_three_valued_logic"] != "forbidden":
         fail("query.sql-null-forbidden", "implicit SQL NULL is enabled")
+    rooted = contract["logical_ir"]["rooted_graph"]
+    if (
+        rooted["scan_alias_identity"] != "query-local-occurrence"
+        or rooted["reachable_scan_aliases"] != "unique"
+        or rooted["duplicate_scan_alias"] != "sdk.query-duplicate-scan-alias"
+    ):
+        fail("query.scan-alias-contract-invalid", "scan aliases are not unique occurrences")
+    if (
+        contract["canonicalization"]["source_occurrence"]["union_same_alias"]
+        != "reuse-identical-scan-dag-node-or-reject"
+    ):
+        fail("query.scan-alias-contract-invalid", "union scan sharing is unspecified")
     deferred = _rows_by(contract["deferred_operators"], "id", "deferred operator")
     if not {"query.group.v1", "query.aggregate.v1"}.issubset(deferred):
         fail("query.aggregate-not-deferred", "group/aggregate are not deferred")
@@ -331,6 +343,7 @@ def validate_ir(
     )
     descriptors = _rows_by(registry["relations"], "descriptor_id", "descriptor")
     columns = relation_columns(registry)
+    scan_aliases: set[str] = set()
     for identifier, requirement in requirements.items():
         if identifier not in descriptors:
             fail("query.descriptor-unknown", identifier)
@@ -366,6 +379,10 @@ def validate_ir(
             descriptor = arguments["descriptor_id"]
             if descriptor not in requirements:
                 fail("query.scan-requirement-missing", descriptor)
+            alias = arguments["alias"]
+            if alias in scan_aliases:
+                fail("query.duplicate-scan-alias", alias)
+            scan_aliases.add(alias)
             return NodeShape(
                 frozenset(
                     column_id

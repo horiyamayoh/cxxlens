@@ -1,10 +1,10 @@
 schema: cxxlens.logical-query-contract.v1
-document_version: 1.8.0
+document_version: 1.9.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#20-logical-query
-  decision_adr: docs/design/adr/0007-logical-query-algebra.md
-  owner_issue: '#115'
+  decision_adr: docs/design/adr/0073-query-scan-alias-uniqueness.md
+  owner_issue: '#142'
   owner: steward.ng-query
 compatibility:
   version_axis: logical-query-ir
@@ -50,6 +50,9 @@ logical_ir:
     relation_requirements: exactly-referenced-by-reachable-scan-set
     unused_relation_requirement: sdk.query-unused-relation-requirement
     canonical_and_execution_node_sets: exact-match
+    scan_alias_identity: query-local-occurrence
+    reachable_scan_aliases: unique
+    duplicate_scan_alias: sdk.query-duplicate-scan-alias
 collection_model:
   kind: annotated_multiset
   occurrence:
@@ -221,6 +224,9 @@ canonicalization:
   source_occurrence:
     column_ref_fields: [source_alias, column_id, availability]
     alias_is_semantic: true
+    reachable_scan_aliases_unique: true
+    duplicate_alias: sdk.query-duplicate-scan-alias
+    union_same_alias: reuse-identical-scan-dag-node-or-reject
     alias_change_changes_digest: true
     unqualified_duplicate: sdk.query-column-ambiguous
     missing_in_validated_ir: sdk.query-column-occurrence-missing

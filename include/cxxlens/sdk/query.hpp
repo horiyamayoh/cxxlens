@@ -186,7 +186,10 @@ namespace cxxlens::sdk::query
 	/** @brief Decode and independently validate one node's exact canonical argument object. */
 	[[nodiscard]] result<operator_arguments> decode_arguments(const ir_node& node);
 
-	/** @brief Versioned logical IR independent from physical planning and source surface. */
+	/**
+	 * @brief Versioned logical IR independent from physical planning and source surface.
+	 * @details Every reachable scan alias is a unique query-local occurrence identity.
+	 */
 	struct logical_query_ir
 	{
 		semantic_version version{1U, 0U, 0U};

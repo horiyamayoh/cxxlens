@@ -178,7 +178,7 @@ vectors:
                               inputs: []
                               arguments:
                                 descriptor_id: cc.call_site.v1
-                                alias: calls
+                                alias: calls_debug
                             arguments:
                               interpretation: cc.canonical-1
                           arguments:

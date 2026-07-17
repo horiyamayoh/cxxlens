@@ -620,9 +620,6 @@ namespace cxxlens::sdk::query
 				return cxxlens::sdk::unexpected(
 					query_error("sdk.query-duplicate-relation", descriptor.id));
 		}
-		std::set<std::string> node_ids;
-		std::set<std::string, std::less<>> scanned_descriptors;
-		std::map<std::string, node_shape, std::less<>> shapes;
 		static const std::map<std::string, std::size_t, std::less<>> arities{
 			{"query.scan.v1", 0U},
 			{"query.filter.v1", 1U},
@@ -636,6 +633,60 @@ namespace cxxlens::sdk::query
 			{"query.condition_restrict.v1", 1U},
 			{"query.interpretation_restrict.v1", 1U},
 		};
+		std::set<std::string> structural_node_ids;
+		std::vector<std::string> structural_scan_aliases;
+		std::map<std::string, const ir_node*, std::less<>> structural_node_index;
+		for (const auto& node : nodes)
+		{
+			for (const auto& input : node.inputs)
+				if (!structural_node_ids.contains(input))
+					return cxxlens::sdk::unexpected(
+						query_error("sdk.query-nontopological-node", node.id, input));
+			const auto arity = arities.find(node.operator_id);
+			if (node.id.empty() || arity == arities.end() || node.inputs.size() != arity->second ||
+				!structural_node_ids.insert(node.id).second)
+				return cxxlens::sdk::unexpected(query_error("sdk.query-node-invalid", node.id));
+			structural_node_index.emplace(node.id, &node);
+			auto arguments = decode_arguments(node);
+			if (!arguments)
+				return cxxlens::sdk::unexpected(std::move(arguments.error()));
+			if (const auto* scan = std::get_if<scan_arguments>(&*arguments))
+				structural_scan_aliases.push_back(scan->alias);
+		}
+		if (!structural_node_ids.contains(root))
+			return cxxlens::sdk::unexpected(query_error("sdk.query-root-missing", root));
+		std::set<std::string, std::less<>> structurally_reachable;
+		std::vector<std::string> structural_pending{root};
+		while (!structural_pending.empty())
+		{
+			auto current = std::move(structural_pending.back());
+			structural_pending.pop_back();
+			if (!structurally_reachable.insert(current).second)
+				continue;
+			const auto* node = structural_node_index.at(current);
+			structural_pending.insert(
+				structural_pending.end(), node->inputs.begin(), node->inputs.end());
+		}
+		if (structurally_reachable.size() != nodes.size())
+		{
+			const auto unreachable =
+				std::ranges::find_if(nodes,
+									 [&](const ir_node& node)
+									 {
+										 return !structurally_reachable.contains(node.id);
+									 });
+			return cxxlens::sdk::unexpected(
+				query_error("sdk.query-unreachable-node", unreachable->id));
+		}
+		std::set<std::string, std::less<>> unique_scan_aliases;
+		for (const auto& alias : structural_scan_aliases)
+			if (!unique_scan_aliases.insert(alias).second)
+				return cxxlens::sdk::unexpected(
+					query_error("sdk.query-duplicate-scan-alias", alias));
+
+		std::set<std::string> node_ids;
+		std::set<std::string, std::less<>> scanned_descriptors;
+		std::map<std::string, node_shape, std::less<>> shapes;
 		for (const auto& node : nodes)
 		{
 			for (const auto& input : node.inputs)
@@ -1079,9 +1130,34 @@ namespace cxxlens::sdk::query
 				query_error("sdk.query-union-schema-mismatch", "output_schema"));
 		const auto left_root = ir_.root;
 		merge_requirements(ir_.relation_requirements, right.ir_.relation_requirements);
+		std::map<std::string, std::pair<std::string, std::string>, std::less<>> shared_scans;
+		for (const auto& node : ir_.nodes)
+			if (node.operator_id == "query.scan.v1")
+			{
+				const auto decoded = decode_arguments(node);
+				if (!decoded)
+					return cxxlens::sdk::unexpected(std::move(decoded.error()));
+				const auto& scan = std::get<scan_arguments>(*decoded);
+				shared_scans.emplace(scan.alias, std::pair{scan.descriptor_id, node.id});
+			}
 		std::map<std::string, std::string, std::less<>> remap;
 		for (const auto& node : right.ir_.nodes)
 		{
+			if (node.operator_id == "query.scan.v1")
+			{
+				const auto decoded = decode_arguments(node);
+				if (!decoded)
+					return cxxlens::sdk::unexpected(std::move(decoded.error()));
+				const auto& scan = std::get<scan_arguments>(*decoded);
+				if (const auto shared = shared_scans.find(scan.alias); shared != shared_scans.end())
+				{
+					if (shared->second.first != scan.descriptor_id)
+						return cxxlens::sdk::unexpected(
+							query_error("sdk.query-duplicate-scan-alias", scan.alias));
+					remap.emplace(node.id, shared->second.second);
+					continue;
+				}
+			}
 			std::vector<std::string> inputs;
 			inputs.reserve(node.inputs.size());
 			for (const auto& input : node.inputs)

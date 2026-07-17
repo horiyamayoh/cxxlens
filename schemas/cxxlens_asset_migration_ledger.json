@@ -1,5 +1,5 @@
 {
-  "asset_count": 355,
+  "asset_count": 356,
   "assets": [
     {
       "authority": "active",
@@ -935,6 +935,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0072-ci-supply-chain-provenance.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0073-query-scan-alias-uniqueness.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2488,7 +2495,7 @@
     }
   ],
   "classifications": {
-    "active": 319,
+    "active": 320,
     "archived": 35,
     "generated": 1
   },

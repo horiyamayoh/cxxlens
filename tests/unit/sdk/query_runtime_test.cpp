@@ -1333,7 +1333,15 @@ namespace
 		require(united.has_value(), "union failed");
 		auto distinct = std::move(*united).distinct();
 		require(distinct.has_value(), "distinct failed");
-		queries.push_back(std::move(*distinct).finish());
+		auto distinct_union = std::move(*distinct).finish();
+		require(std::ranges::count_if(distinct_union.nodes,
+									  [](const query::ir_node& node)
+									  {
+										  return node.operator_id == "query.scan.v1";
+									  }) == 1U &&
+					distinct_union.validate().has_value(),
+				"union duplicated one shared scan occurrence instead of reusing its DAG node");
+		queries.push_back(std::move(distinct_union));
 
 		auto ordered = query::builder::from(data.left);
 		require(ordered.has_value(), "order source failed");
@@ -1486,6 +1494,34 @@ namespace
 				"qualified self-join IR did not validate: " +
 					(valid ? std::string{} : valid.error().code + ":" + valid.error().field));
 
+		auto duplicate_alias = logical;
+		auto scans = duplicate_alias.nodes |
+			std::views::filter(
+						 [](const query::ir_node& node)
+						 {
+							 return node.operator_id == "query.scan.v1";
+						 });
+		auto scan = scans.begin();
+		require(scan != scans.end(), "self-join left scan fixture missing");
+		const auto decoded_left = query::decode_arguments(*scan);
+		require(decoded_left.has_value(), "self-join left scan JSON did not decode");
+		const auto left_alias = std::get<query::scan_arguments>(*decoded_left).alias;
+		++scan;
+		require(scan != scans.end(), "self-join right scan fixture missing");
+		scan->arguments =
+			"{\"alias\":\"" + left_alias + "\",\"descriptor_id\":\"" + data.self.id + "\"}";
+		const auto decoded_right = query::decode_arguments(*scan);
+		require(decoded_right.has_value() &&
+					std::get<query::scan_arguments>(*decoded_right).alias == left_alias,
+				"duplicate scan alias JSON path did not decode the public IR surface");
+		for (std::size_t attempt = 0U; attempt < 2U; ++attempt)
+		{
+			const auto rejected = duplicate_alias.validate();
+			require(!rejected && rejected.error().code == "sdk.query-duplicate-scan-alias" &&
+						rejected.error().field == left_alias,
+					"duplicate scan alias did not produce its deterministic validation error");
+		}
+
 		auto execute = [&](const snapshot_handle& snapshot)
 		{
 			auto engine = query::reference_engine::bind(snapshot);
@@ -1515,6 +1551,14 @@ namespace
 					std::set<std::pair<std::string, std::string>>{{"key:b", "key:a"},
 																  {"key:c", "key:a"}},
 				"self-join collapsed the left and right occurrence values");
+
+		auto memory_engine = query::reference_engine::bind(memory_snapshot);
+		require(memory_engine.has_value(), "duplicate alias execution engine bind failed");
+		auto rejected_execution = memory_engine->execute(duplicate_alias);
+		require(!rejected_execution &&
+					rejected_execution.error().code == "sdk.query-duplicate-scan-alias" &&
+					rejected_execution.error().field == left_alias,
+				"reference execution did not reject duplicate aliases at pre-execution validation");
 
 		auto left_scan = query::builder::from(data.self, "left");
 		auto right_scan = query::builder::from(data.self, "right");
