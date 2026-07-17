@@ -28,6 +28,25 @@ namespace cxxlens::sdk
 				std::ranges::adjacent_find(values) == values.end();
 		}
 
+		[[nodiscard]] result<void> claim_strong_id(const std::string_view value, std::string field)
+		{
+			auto valid = validate_strong_id(value);
+			if (!valid)
+				return unexpected(
+					error{"sdk.text-invalid", std::move(field), std::move(valid.error().detail)});
+			return {};
+		}
+
+		[[nodiscard]] result<void> claim_registered_symbol(const std::string_view value,
+														   std::string field)
+		{
+			auto valid = validate_registered_symbol(value);
+			if (!valid)
+				return unexpected(
+					error{"sdk.text-invalid", std::move(field), std::move(valid.error().detail)});
+			return {};
+		}
+
 		[[nodiscard]] std::string json_string(const std::string_view value)
 		{
 			return detail::canonical_json_string(value);
@@ -131,13 +150,25 @@ namespace cxxlens::sdk
 				return unexpected(claim_error("sdk.claim-basis-invalid", "stage", "closed-enum"));
 			if (const auto* direct = std::get_if<direct_claim_basis>(&basis))
 			{
+				if (auto valid = claim_strong_id(direct->basis_digest, "basis_digest"); !valid)
+					return valid;
 				if (stage == claim_stage::derived_claim || !sha256_digest(direct->basis_digest))
 					return unexpected(claim_error("sdk.claim-basis-invalid", "direct"));
 				return {};
 			}
 			const auto& derived = std::get<derived_claim_basis>(basis);
-			if (stage == claim_stage::assertion || derived.input_snapshot.empty() ||
-				derived.consumed_partition_content_digests.empty() ||
+			if (stage == claim_stage::assertion)
+				return unexpected(claim_error("sdk.claim-basis-invalid", "derived"));
+			if (auto valid = claim_strong_id(derived.input_snapshot, "input_snapshot"); !valid)
+				return valid;
+			for (const auto& digest : derived.consumed_partition_content_digests)
+				if (auto valid = claim_strong_id(digest, "consumed_partition_content_digest");
+					!valid)
+					return valid;
+			if (auto valid = claim_strong_id(derived.transform_semantics, "transform_semantics");
+				!valid)
+				return valid;
+			if (derived.consumed_partition_content_digests.empty() ||
 				!sorted_unique(derived.consumed_partition_content_digests) ||
 				!std::ranges::all_of(derived.consumed_partition_content_digests,
 									 partition_content_digest) ||
@@ -160,9 +191,14 @@ namespace cxxlens::sdk
 				return unexpected(std::move(valid.error()));
 			if (auto valid = presence.validate(); !valid)
 				return unexpected(std::move(valid.error()));
-			if (producer.id.empty() || producer.semantic_contract.empty() ||
-				interpretation.empty() || provenance.empty())
-				return unexpected(claim_error("sdk.claim-envelope-invalid", "identity"));
+			for (const auto& [text, field] : {
+					 std::pair<std::string_view, std::string_view>{producer.id, "producer.id"},
+					 {producer.semantic_contract, "producer.semantic_contract"},
+					 {interpretation, "interpretation"},
+					 {provenance, "provenance_root"},
+				 })
+				if (auto valid = claim_strong_id(text, std::string{field}); !valid)
+					return unexpected(std::move(valid.error()));
 			if (auto valid = guarantee.validate(); !valid)
 				return unexpected(std::move(valid.error()));
 			if (auto valid = validate_basis(basis, stage); !valid)
@@ -401,9 +437,13 @@ namespace cxxlens::sdk
 
 	result<void> claim_condition::validate() const
 	{
-		if (universe.empty() || fragments.empty() || !sorted_unique(fragments) ||
-			std::ranges::any_of(fragments, &std::string::empty))
+		if (fragments.empty() || !sorted_unique(fragments))
 			return unexpected(claim_error("sdk.claim-condition-invalid", "condition"));
+		if (auto valid = claim_strong_id(universe, "condition.universe"); !valid)
+			return valid;
+		for (const auto& fragment : fragments)
+			if (auto valid = claim_strong_id(fragment, "condition.fragment"); !valid)
+				return valid;
 		return {};
 	}
 
@@ -418,12 +458,19 @@ namespace cxxlens::sdk
 
 	std::string claim_condition::id() const
 	{
+		if (!validate())
+			return {};
 		const std::array fields{canonical_value::from_string(canonical_form())};
-		return *canonical_identity_digest("condition", fields);
+		auto identity = canonical_identity_digest("condition", fields);
+		return identity ? std::move(*identity) : std::string{};
 	}
 
 	result<std::vector<std::string>> claim_condition::overlap(const claim_condition& other) const
 	{
+		if (auto valid = validate(); !valid)
+			return unexpected(std::move(valid.error()));
+		if (auto valid = other.validate(); !valid)
+			return unexpected(std::move(valid.error()));
 		std::vector<std::string> output;
 		if (universe != other.universe)
 			return unexpected(
@@ -436,9 +483,18 @@ namespace cxxlens::sdk
 	{
 		static const std::set<std::string, std::less<>> approximations{
 			"unknown", "under_approximation", "over_approximation", "exact"};
-		if (!approximations.contains(approximation) || scope.empty() || assumptions.empty() ||
-			!sorted_unique(verification_modalities))
+		if (auto valid = claim_registered_symbol(approximation, "guarantee.approximation"); !valid)
+			return valid;
+		if (!approximations.contains(approximation) || !sorted_unique(verification_modalities))
 			return unexpected(claim_error("sdk.claim-guarantee-invalid", "guarantee"));
+		if (auto valid = claim_strong_id(scope, "guarantee.scope"); !valid)
+			return valid;
+		if (auto valid = claim_strong_id(assumptions, "guarantee.assumptions"); !valid)
+			return valid;
+		for (const auto& modality : verification_modalities)
+			if (auto valid = claim_registered_symbol(modality, "guarantee.verification_modality");
+				!valid)
+				return valid;
 		return {};
 	}
 
@@ -446,6 +502,8 @@ namespace cxxlens::sdk
 	{
 		if (const auto* direct = std::get_if<direct_claim_basis>(&basis))
 		{
+			if (auto valid = claim_strong_id(direct->basis_digest, "basis_digest"); !valid)
+				return unexpected(std::move(valid.error()));
 			if (!sha256_digest(direct->basis_digest))
 				return unexpected(claim_error("sdk.claim-basis-invalid", "direct"));
 			const std::array fields{canonical_value::from_string(direct->basis_digest)};
@@ -455,7 +513,15 @@ namespace cxxlens::sdk
 			return typed->substr(typed->find(':') + 1U);
 		}
 		const auto& derived = std::get<derived_claim_basis>(basis);
-		if (derived.input_snapshot.empty() || derived.consumed_partition_content_digests.empty() ||
+		if (auto valid = claim_strong_id(derived.input_snapshot, "input_snapshot"); !valid)
+			return unexpected(std::move(valid.error()));
+		for (const auto& digest : derived.consumed_partition_content_digests)
+			if (auto valid = claim_strong_id(digest, "consumed_partition_content_digest"); !valid)
+				return unexpected(std::move(valid.error()));
+		if (auto valid = claim_strong_id(derived.transform_semantics, "transform_semantics");
+			!valid)
+			return unexpected(std::move(valid.error()));
+		if (derived.consumed_partition_content_digests.empty() ||
 			!sorted_unique(derived.consumed_partition_content_digests) ||
 			!std::ranges::all_of(derived.consumed_partition_content_digests,
 								 partition_content_digest) ||

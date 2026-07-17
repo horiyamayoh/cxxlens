@@ -69,7 +69,8 @@ namespace cxxlens::sdk::detail
 	[[nodiscard]] inline std::string canonical_json_escape(const std::string_view input)
 	{
 		std::ostringstream output;
-		const bool utf8 = valid_utf8(input);
+		if (!valid_utf8(input))
+			return {};
 		for (const auto byte : input)
 		{
 			const auto unsigned_byte = static_cast<unsigned char>(byte);
@@ -97,7 +98,7 @@ namespace cxxlens::sdk::detail
 					output << "\\t";
 					break;
 				default:
-					if (unsigned_byte < 0x20U || (!utf8 && unsigned_byte >= 0x80U))
+					if (unsigned_byte < 0x20U)
 						append_json_hex_escape(output, unsigned_byte);
 					else
 						output << byte;

@@ -151,6 +151,16 @@ namespace cxxlens::sdk
 		[[nodiscard]] result<void> validate() const;
 		[[nodiscard]] bool operator==(const canonical_value&) const = default;
 	};
+	/** @brief Validate one strict UTF-8 string without changing its Unicode meaning. */
+	[[nodiscard]] result<void> validate_utf8_text(std::string_view value);
+	/** @brief Validate the schema-wide nonempty, control-free, 512-scalar strong ID primitive. */
+	[[nodiscard]] result<void> validate_strong_id(std::string_view value);
+	/** @brief Validate a lowercase registered symbol (`[a-z][a-z0-9_.-]+`). */
+	[[nodiscard]] result<void> validate_registered_symbol(std::string_view value);
+	/** @brief Construct a canonical UTF-8 string only after strict validation. */
+	[[nodiscard]] result<canonical_value> canonical_utf8_string(std::string value);
+	/** @brief Encode one strict UTF-8 string as canonical JSON without semantic repair. */
+	[[nodiscard]] result<std::string> canonical_json_text(std::string_view value);
 	/** @brief Return whether a canonical tuple kind is a defined closed-enum member. */
 	[[nodiscard]] constexpr bool is_valid(const canonical_value::kind value) noexcept
 	{

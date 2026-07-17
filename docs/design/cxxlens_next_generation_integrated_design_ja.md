@@ -1231,6 +1231,12 @@ Issue #63 / ADR 0009 により system claim envelope は `cxxlens.claim-envelope
 は `producer_input_basis` の tagged direct/derived variant とし、direct observation に snapshot ID を要求しない。
 derived claim だけが strict-prior published snapshot と consumed partition content digest を保持できる。
 
+Issue #130 / ADR 0058 により claim envelope の全 text surface は common の `validate_utf8_text()`、
+`validate_strong_id()`、`validate_registered_symbol()` を共有する。strong ID は nonempty、strict UTF-8、control-free、最大512
+Unicode scalar、registered symbol は `[a-z][a-z0-9_.-]+` とする。public builder、aggregate revalidation、stage constructor、store
+adoption は identity encoding より前に同じ検査を行い、checked canonical string/JSON encoder は invalid UTF-8 を escape によって
+別 Unicode textへ救済しない。delimiter の printable character は typed framing で扱い、schema が許可する値を追加禁止しない。
+
 static generated API と runtime dynamic API は同じ descriptor/column ID を使用し、Logical Query IR もその ID を
 operand とする。descriptor digest は exact descriptor の canonical projection から計算する。unknown open symbol と
 minor optional column は保持し、unknown closed symbol、minor required column、key/cardinality/condition/identity の

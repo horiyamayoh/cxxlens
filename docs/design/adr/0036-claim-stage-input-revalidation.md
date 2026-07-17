@@ -21,6 +21,7 @@
   semantic key/assertion/content identity を独立再検証する。
 - derived constructor は同じ policy を全入力へ適用する。
 - 入力 validation error は stage constructor がそのまま返し、valid assertion に対してのみ canonical stage 条件を検証する。
+- ADR 0058 の schema-equivalent text validation error も変換せず、builder/aggregate/stage constructorで同じ categoryを返す。
 - canonical constructor の assertion-only 規則は維持し、canonical/derived claim の再 canonicalization は拒否する。
 
 ## Consequences
@@ -33,3 +34,4 @@
 
 `tests/unit/sdk/sdk_test.cpp` は row、semantic key、assertion/content ID、condition、interpretation、producer contract、guarantee、
 basis の改変を canonical/derived の双方が同じ error で拒否すること、non-assertion stage の拒否、valid assertion の成功を検証する。
+ADR 0058 の UTF-8/control/max-length field mutation も同じ revalidation matrixへ含める。

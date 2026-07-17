@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cstddef>
@@ -343,6 +344,62 @@ namespace cxxlens::sdk
 		return output;
 	}
 
+	result<void> validate_utf8_text(const std::string_view value)
+	{
+		if (!detail::valid_utf8(value))
+			return unexpected(error{"sdk.text-invalid", "value", "invalid-utf8"});
+		return {};
+	}
+
+	result<void> validate_strong_id(const std::string_view value)
+	{
+		if (value.empty())
+			return unexpected(error{"sdk.text-invalid", "value", "empty"});
+		if (auto utf8 = validate_utf8_text(value); !utf8)
+			return utf8;
+		std::size_t scalar_count{};
+		for (std::size_t index{}; index < value.size(); ++scalar_count)
+		{
+			const auto first = static_cast<unsigned char>(value[index]);
+			if (first < 0x20U || first == 0x7fU)
+				return unexpected(error{"sdk.text-invalid", "value", "control-character"});
+			index += first <= 0x7fU ? 1U : first <= 0xdfU ? 2U : first <= 0xefU ? 3U : 4U;
+		}
+		if (scalar_count > 512U)
+			return unexpected(error{"sdk.text-invalid", "value", "max-length"});
+		return {};
+	}
+
+	result<void> validate_registered_symbol(const std::string_view value)
+	{
+		if (auto strong = validate_strong_id(value); !strong)
+			return strong;
+		if (value.size() < 2U || value.front() < 'a' || value.front() > 'z' ||
+			!std::ranges::all_of(value.substr(1U),
+								 [](const char byte)
+								 {
+									 return (byte >= 'a' && byte <= 'z') ||
+										 (byte >= '0' && byte <= '9') || byte == '_' ||
+										 byte == '.' || byte == '-';
+								 }))
+			return unexpected(error{"sdk.text-invalid", "value", "registered-symbol"});
+		return {};
+	}
+
+	result<canonical_value> canonical_utf8_string(std::string value)
+	{
+		if (auto valid = validate_utf8_text(value); !valid)
+			return unexpected(std::move(valid.error()));
+		return canonical_value::from_string(std::move(value));
+	}
+
+	result<std::string> canonical_json_text(const std::string_view value)
+	{
+		if (auto valid = validate_utf8_text(value); !valid)
+			return unexpected(std::move(valid.error()));
+		return detail::canonical_json_string(value);
+	}
+
 	result<void> canonical_value::validate() const
 	{
 		if (!is_valid(type))
@@ -435,8 +492,8 @@ namespace cxxlens::sdk
 											 const std::uint64_t end,
 											 const std::string_view role)
 	{
-		if (source_snapshot.empty() || file.empty() || role.empty() ||
-			role.find('\0') != std::string_view::npos || end < begin ||
+		if (!validate_strong_id(source_snapshot) || !validate_strong_id(file) ||
+			!validate_strong_id(role) || end < begin ||
 			begin > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
 			end > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
 			return unexpected(error{"sdk.source-span-identity-invalid", "projection", {}});

@@ -1,6 +1,16 @@
 $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens.claim-envelope.v2
 title: cxxlens system claim envelope
+x-cxxlens-runtime-validation:
+  shared_primitives:
+    strict_utf8: cxxlens::sdk::validate_utf8_text
+    strong_id: cxxlens::sdk::validate_strong_id
+    registered_symbol: cxxlens::sdk::validate_registered_symbol
+  checked_encoders:
+    canonical_binary_string: cxxlens::sdk::canonical_utf8_string
+    canonical_json_string: cxxlens::sdk::canonical_json_text
+  adoption_surfaces: [public_builder, aggregate_revalidation, stage_constructor, store_import]
+  stable_error: sdk.text-invalid
 x-cxxlens-batch-content-identity:
   schema: cxxlens.claim-batch.v2
   public_encoder: cxxlens::sdk::claim_batch_content_encoding

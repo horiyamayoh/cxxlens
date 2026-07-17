@@ -1,5 +1,5 @@
 {
-  "asset_count": 336,
+  "asset_count": 337,
   "assets": [
     {
       "authority": "active",
@@ -816,6 +816,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0057-detached-scalar-value-validation.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0058-claim-envelope-text-validation-parity.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2355,7 +2362,7 @@
     }
   ],
   "classifications": {
-    "active": 300,
+    "active": 301,
     "archived": 35,
     "generated": 1
   },

@@ -746,6 +746,34 @@ namespace
 		auto identity = canonical_identity_digest("invalid-corpus", invalid_fields);
 		require(!identity && identity.error().code == "sdk.canonical-value-invalid",
 				"nested invalid canonical value entered identity digest");
+
+		const std::array invalid_utf8_corpus{
+			std::string{"\xc0\xaf", 2U},
+			std::string{"\xe0\x80\x80", 3U},
+			std::string{"\xed\xa0\x80", 3U},
+			std::string{"\xf4\x90\x80\x80", 4U},
+			std::string{"\xe2\x82", 2U},
+			std::string{"\xc3\x28", 2U},
+		};
+		for (const auto& text : invalid_utf8_corpus)
+		{
+			require(!validate_utf8_text(text) && !canonical_utf8_string(text) &&
+						!canonical_json_text(text),
+					"invalid UTF-8 was repaired or admitted by a checked text surface");
+		}
+		const std::string max_strong_id(512U, 'a');
+		require(validate_strong_id(max_strong_id) && !validate_strong_id(max_strong_id + "a") &&
+					!validate_strong_id(std::string{"bad\0id", 6U}) &&
+					!validate_strong_id("bad\nidentity") &&
+					validate_strong_id("delimiter|is-framed") &&
+					validate_registered_symbol("schema_validated") &&
+					!validate_registered_symbol("schema|validated"),
+				"strong ID or registered symbol schema boundary diverged");
+		auto json = canonical_json_text("valid-😀\ntext");
+		require(json && *json == "\"valid-😀\\ntext\"",
+				"checked canonical JSON changed valid UTF-8 meaning");
+		require(!source_span_identity(std::string{"bad\xff", 4U}, "file.cpp", 0U, 1U, "token"),
+				"source span identity admitted invalid UTF-8");
 	}
 
 	void check_descriptor_binding()
@@ -1998,6 +2026,22 @@ namespace
 		auto malformed = cxxlens::sdk::make_assertion(*engine, std::move(malformed_observation));
 		require(!malformed && malformed.error().code == "sdk.claim-basis-invalid",
 				"malformed direct claim basis was accepted");
+		auto malformed_text_observation = observe(make_direct_target_row("entity:a"));
+		malformed_text_observation.interpretation = "domain\nforged";
+		auto malformed_text =
+			cxxlens::sdk::make_assertion(*engine, std::move(malformed_text_observation));
+		require(!malformed_text && malformed_text.error().code == "sdk.text-invalid" &&
+					malformed_text.error().field == "interpretation",
+				"public claim builder admitted schema-invalid text");
+		auto max_length_claim = *first;
+		max_length_claim.provenance_root.assign(512U, 'p');
+		require(cxxlens::sdk::validate_claim(*engine, max_length_claim).has_value(),
+				"claim strong ID rejected the schema maximum length");
+		max_length_claim.provenance_root.push_back('p');
+		auto over_length = cxxlens::sdk::validate_claim(*engine, max_length_claim);
+		require(!over_length && over_length.error().code == "sdk.text-invalid" &&
+					over_length.error().detail == "max-length",
+				"claim strong ID admitted maxLength + 1");
 		auto tampered = *first;
 		tampered.content.back() = tampered.content.back() == '0' ? '1' : '0';
 		auto tampered_result = cxxlens::sdk::validate_claim(*engine, tampered);
@@ -2067,8 +2111,39 @@ namespace
 				 changed.guarantee.approximation = "invalid";
 				 values.push_back(changed);
 				 changed = *first;
+				 changed.presence.universe = std::string{"bad\xff", 4U};
+				 values.push_back(changed);
+				 changed = *first;
+				 changed.presence.fragments = {"all\nforged"};
+				 values.push_back(changed);
+				 changed = *first;
+				 changed.interpretation = "domain\nforged";
+				 values.push_back(changed);
+				 changed = *first;
+				 changed.producer.id = std::string{"\x01provider", 9U};
+				 values.push_back(changed);
+				 changed = *first;
+				 changed.producer.semantic_contract = std::string{"bad\xc3\x28", 5U};
+				 values.push_back(changed);
+				 changed = *first;
+				 changed.provenance_root = "evidence\x7froot";
+				 values.push_back(changed);
+				 changed = *first;
+				 changed.guarantee.scope = "project\nforged";
+				 values.push_back(changed);
+				 changed = *first;
+				 changed.guarantee.assumptions = std::string{"bad\0assumption", 14U};
+				 values.push_back(changed);
+				 changed = *first;
+				 changed.guarantee.verification_modalities = {"schema|validated"};
+				 values.push_back(changed);
+				 changed = *first;
 				 std::get<cxxlens::sdk::direct_claim_basis>(changed.input_basis).basis_digest =
 					 "sha256:invalid";
+				 values.push_back(changed);
+				 changed = *first;
+				 std::get<cxxlens::sdk::direct_claim_basis>(changed.input_basis).basis_digest =
+					 std::string{"bad\xc3\x28", 5U};
 				 values.push_back(changed);
 				 return values;
 			 }())
@@ -2107,6 +2182,14 @@ namespace
 		require(derived && derived->stage == cxxlens::sdk::claim_stage::derived_claim &&
 					cxxlens::sdk::validate_claim(*engine, *derived).has_value(),
 				"derived claim stage failed independent validation");
+		auto invalid_derived_text = *derived;
+		std::get<cxxlens::sdk::derived_claim_basis>(invalid_derived_text.input_basis)
+			.input_snapshot = "snapshot\nforged";
+		auto invalid_derived_result = cxxlens::sdk::validate_claim(*engine, invalid_derived_text);
+		require(!invalid_derived_result &&
+					invalid_derived_result.error().code == "sdk.text-invalid" &&
+					invalid_derived_result.error().field == "input_snapshot",
+				"derived basis admitted schema-invalid snapshot ID");
 
 		auto call = cxxlens::sdk::make_assertion(
 			*engine, observe(make_call_row(), {"all", "asan", "debug", "release"}));
