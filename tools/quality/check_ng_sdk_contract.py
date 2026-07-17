@@ -516,6 +516,8 @@ def validate_query_runtime_implementation(root: pathlib.Path) -> None:
         "execution_budget",
         "cancellation_probe",
         "annotated_row",
+        "query_guarantee_fragment",
+        "query_summary_guarantee",
         "query_result",
         "result_row_cursor",
         "reference_engine",
@@ -532,6 +534,7 @@ def validate_query_runtime_implementation(root: pathlib.Path) -> None:
         "inputs_complete",
         "explain_physical",
         "contributor_guarantees",
+        "fragment_set_digest",
     ):
         if marker not in source:
             fail(f"query runtime implementation marker is missing: {marker}")

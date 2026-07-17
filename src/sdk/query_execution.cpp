@@ -928,68 +928,260 @@ namespace cxxlens::sdk::query
 			return output;
 		}
 
-		[[nodiscard]] claim_guarantee
-		summarize_guarantee(const std::vector<snapshot_claim_annotation>& annotations,
+		[[nodiscard]] std::vector<std::string> assumption_ids(const std::string_view value)
+		{
+			std::vector<std::string> output;
+			std::size_t begin{};
+			while (begin <= value.size())
+			{
+				const auto end = value.find(',', begin);
+				const auto item = value.substr(
+					begin, end == std::string_view::npos ? value.size() - begin : end - begin);
+				if (!item.empty())
+					output.emplace_back(item);
+				if (end == std::string_view::npos)
+					break;
+				begin = end + 1U;
+			}
+			canonical_set(output);
+			return output;
+		}
+
+		[[nodiscard]] std::vector<std::string>
+		modality_closure(const std::span<const std::string> values)
+		{
+			std::vector<std::string> output{values.begin(), values.end()};
+			if (std::ranges::any_of(output,
+									[](const std::string& value)
+									{
+										return value == "frontend_replayed" ||
+											value == "compiler_verified" ||
+											value == "link_verified" ||
+											value == "runtime_observed" ||
+											value == "differentially_verified";
+									}))
+				output.emplace_back("schema_validated");
+			canonical_set(output);
+			return output;
+		}
+
+		[[nodiscard]] std::string fragment_json(const query_guarantee_fragment& fragment)
+		{
+			std::ostringstream output;
+			output << "{\"assumptions\":" << strings_json(fragment.assumptions)
+				   << ",\"claim_contributors\":" << strings_json(fragment.claim_contributors)
+				   << ",\"closure_ids\":" << strings_json(fragment.closure_ids)
+				   << ",\"condition_fragments\":" << strings_json(fragment.condition.fragments)
+				   << ",\"condition_partition_complete\":"
+				   << (fragment.condition_partition_complete ? "true" : "false")
+				   << ",\"condition_universe\":" << json_string(fragment.condition.universe)
+				   << ",\"conflicting\":" << (fragment.conflicting ? "true" : "false")
+				   << ",\"coverage_states\":" << strings_json(fragment.coverage_states)
+				   << ",\"guarantee\":" << guarantee_json(fragment.guarantee)
+				   << ",\"interpretation\":" << json_string(fragment.interpretation)
+				   << ",\"provenance\":" << strings_json(fragment.provenance)
+				   << ",\"requires_closure\":" << (fragment.requires_closure ? "true" : "false")
+				   << ",\"unresolved\":" << (fragment.unresolved ? "true" : "false") << '}';
+			return output.str();
+		}
+
+		[[nodiscard]] bool fragment_conflicts(const query_guarantee_fragment& fragment,
+											  const std::span<const claim_conflict> conflicts)
+		{
+			return std::ranges::any_of(
+				conflicts,
+				[&](const claim_conflict& conflict)
+				{
+					return conflict.interpretation == fragment.interpretation &&
+						std::ranges::any_of(fragment.claim_contributors,
+											[&](const std::string& contributor)
+											{
+												return std::ranges::binary_search(
+													conflict.assertions, contributor);
+											}) &&
+						std::ranges::any_of(fragment.condition.fragments,
+											[&](const std::string& condition)
+											{
+												return std::ranges::binary_search(
+													conflict.overlap_fragments, condition);
+											});
+				});
+		}
+
+		[[nodiscard]] query_summary_guarantee
+		summarize_guarantee(const std::span<const annotated_row> rows,
+							const std::span<const snapshot_claim_annotation> empty_result_sources,
+							const std::span<const snapshot_query_coverage> coverage,
+							const std::span<const std::string> closures,
+							const std::span<const query_unresolved> unresolved,
+							const std::span<const claim_conflict> conflicts,
 							const bool inputs_complete,
 							const bool execution_complete,
+							const bool closed_world,
 							const bool limited)
 		{
-			if (annotations.empty())
-				return {"unknown", "query-empty", "assumptions:unknown", {}};
+			std::vector<std::string> coverage_states;
+			for (const auto& item : coverage)
+				coverage_states.push_back(item.unit.state);
+			canonical_set(coverage_states);
+
+			std::vector<query_guarantee_fragment> fragments;
+			auto append_fragment = [&](const claim_guarantee& guarantee,
+									   const claim_condition& condition,
+									   const std::string_view interpretation,
+									   const std::span<const std::string> contributors,
+									   const std::span<const std::string> provenance)
+			{
+				query_guarantee_fragment fragment{guarantee,
+												  condition,
+												  std::string{interpretation},
+												  assumption_ids(guarantee.assumptions),
+												  {contributors.begin(), contributors.end()},
+												  {provenance.begin(), provenance.end()},
+												  coverage_states,
+												  {closures.begin(), closures.end()},
+												  !condition.fragments.empty(),
+												  false,
+												  false,
+												  true};
+				fragment.conflicting = fragment_conflicts(fragment, conflicts);
+				fragment.unresolved = std::ranges::any_of(
+					unresolved,
+					[&](const query_unresolved& item)
+					{
+						return item.code != "sdk.query-input-unresolved" ||
+							std::ranges::binary_search(fragment.claim_contributors, item.subject);
+					});
+				fragments.push_back(std::move(fragment));
+			};
+			for (const auto& row : rows)
+				for (const auto& guarantee : row.contributor_guarantees)
+					append_fragment(guarantee,
+									row.presence,
+									row.interpretation,
+									row.claim_contributors,
+									row.provenance);
+			if (fragments.empty())
+				for (const auto& annotation : empty_result_sources)
+				{
+					const std::array contributors{annotation.assertion};
+					const std::array provenance{annotation.provenance_root};
+					append_fragment(annotation.guarantee,
+									annotation.presence,
+									annotation.interpretation,
+									contributors,
+									provenance);
+				}
+			if (fragments.empty())
+				append_fragment({"unknown", "query-empty", "assumptions:unknown", {}},
+								{"query-empty", {}},
+								"query-empty",
+								{},
+								{});
+
+			std::ranges::sort(
+				fragments,
+				[](const query_guarantee_fragment& left, const query_guarantee_fragment& right)
+				{
+					return fragment_json(left) < fragment_json(right);
+				});
+			fragments.erase(std::ranges::unique(fragments,
+												[](const query_guarantee_fragment& left,
+												   const query_guarantee_fragment& right)
+												{
+													return fragment_json(left) ==
+														fragment_json(right);
+												})
+								.begin(),
+							fragments.end());
+
+			std::vector<std::string> scopes;
+			std::vector<std::string> interpretations;
+			std::vector<std::string> assumptions;
+			std::vector<std::string> condition_fragments;
+			std::vector<std::string> condition_universes;
+			std::vector<std::string> modalities =
+				modality_closure(fragments.front().guarantee.verification_modalities);
 			bool sound = true;
 			bool complete = inputs_complete && execution_complete && !limited;
-			std::set<std::string, std::less<>> scopes;
-			std::set<std::string, std::less<>> assumptions;
-			std::set<std::string, std::less<>> modalities(
-				annotations.front().guarantee.verification_modalities.begin(),
-				annotations.front().guarantee.verification_modalities.end());
-			for (const auto& annotation : annotations)
+			bool exact = complete && closed_world;
+			static const std::set<std::string, std::less<>> blocking{
+				"failed", "unresolved", "unsupported", "stale", "truncated"};
+			for (const auto& fragment : fragments)
 			{
-				const auto& guarantee = annotation.guarantee;
-				sound = sound &&
-					(guarantee.approximation == "exact" ||
-					 guarantee.approximation == "under_approximation");
-				complete = complete &&
-					(guarantee.approximation == "exact" ||
-					 guarantee.approximation == "over_approximation");
-				scopes.insert(guarantee.scope);
-				assumptions.insert(guarantee.assumptions);
-				std::set<std::string, std::less<>> current(
-					guarantee.verification_modalities.begin(),
-					guarantee.verification_modalities.end());
-				std::set<std::string, std::less<>> intersection;
+				const auto& approximation = fragment.guarantee.approximation;
+				sound =
+					sound && (approximation == "exact" || approximation == "under_approximation");
+				complete =
+					complete && (approximation == "exact" || approximation == "over_approximation");
+				exact = exact && approximation == "exact" &&
+					fragment.condition_partition_complete && !fragment.conflicting &&
+					!fragment.unresolved &&
+					(!fragment.requires_closure || !fragment.closure_ids.empty()) &&
+					std::ranges::none_of(fragment.coverage_states,
+										 [&](const std::string& state)
+										 {
+											 return blocking.contains(state);
+										 });
+				if (fragment.conflicting || fragment.unresolved)
+					sound = complete = false;
+				scopes.push_back(fragment.guarantee.scope);
+				interpretations.push_back(fragment.interpretation);
+				assumptions.insert(
+					assumptions.end(), fragment.assumptions.begin(), fragment.assumptions.end());
+				condition_universes.push_back(fragment.condition.universe);
+				condition_fragments.insert(condition_fragments.end(),
+										   fragment.condition.fragments.begin(),
+										   fragment.condition.fragments.end());
+				auto current = modality_closure(fragment.guarantee.verification_modalities);
+				std::vector<std::string> intersection;
 				std::ranges::set_intersection(
-					modalities, current, std::inserter(intersection, intersection.end()));
+					modalities, current, std::back_inserter(intersection));
 				modalities = std::move(intersection);
 			}
+			canonical_set(scopes);
+			canonical_set(interpretations);
+			canonical_set(assumptions);
+			canonical_set(condition_universes);
+			canonical_set(condition_fragments);
+			if (scopes.size() != 1U || condition_universes.size() != 1U)
+				exact = complete = false;
+
+			std::ostringstream fragment_projection;
+			for (const auto& fragment : fragments)
+				fragment_projection << fragment_json(fragment) << '\n';
+			const auto fragment_digest = *semantic_digest("cxxlens.query-guarantee-fragment-set.v1",
+														  fragment_projection.str());
+			std::string scope = scopes.front();
+			if (scopes.size() != 1U)
+			{
+				std::ostringstream projection;
+				for (const auto& value : scopes)
+					projection << value << '\n';
+				scope = "query:" + *semantic_digest("query.scope.v1", projection.str());
+			}
+			std::string universe = condition_universes.front();
+			if (condition_universes.size() != 1U)
+				universe = "query:" +
+					*semantic_digest("query.condition-universe.v1", fragment_projection.str());
+
 			std::string approximation{"unknown"};
-			if (sound && complete)
+			if (exact)
 				approximation = "exact";
 			else if (sound)
 				approximation = "under_approximation";
 			else if (complete)
 				approximation = "over_approximation";
-			std::string scope;
-			if (scopes.size() == 1U)
-				scope = *scopes.begin();
-			else
-			{
-				std::ostringstream joined;
-				for (const auto& value : scopes)
-					joined << value << '\n';
-				scope = "query:" + *semantic_digest("query.scope.v1", joined.str());
-			}
-			std::ostringstream assumption_text;
-			for (auto iterator = assumptions.begin(); iterator != assumptions.end(); ++iterator)
-			{
-				if (iterator != assumptions.begin())
-					assumption_text << ',';
-				assumption_text << *iterator;
-			}
 			return {std::move(approximation),
 					std::move(scope),
-					assumption_text.str(),
-					{modalities.begin(), modalities.end()}};
+					{std::move(universe), std::move(condition_fragments)},
+					std::move(interpretations),
+					std::move(assumptions),
+					std::move(modalities),
+					static_cast<std::uint64_t>(fragments.size()),
+					fragment_digest,
+					"fragments:" + fragment_digest,
+					std::move(fragments)};
 		}
 
 		[[nodiscard]] std::string execution_name(const execution_status status)
@@ -1149,7 +1341,16 @@ namespace cxxlens::sdk::query
 		std::vector<claim_conflict> conflict_values;
 		std::vector<differential_disagreement> disagreement_values;
 		std::vector<claim_producer> producers;
-		claim_guarantee guarantee{"unknown", "query-empty", "assumptions:unknown", {}};
+		query_summary_guarantee guarantee{"unknown",
+										  "query-empty",
+										  {"query-empty", {}},
+										  {"query-empty"},
+										  {"assumptions:unknown"},
+										  {},
+										  0U,
+										  {},
+										  {},
+										  {}};
 		query_explanation logical;
 		query_explanation physical;
 		std::string ir_digest;
@@ -1289,7 +1490,7 @@ namespace cxxlens::sdk::query
 		return data_->producers;
 	}
 
-	const claim_guarantee& query_result::summary_guarantee() const noexcept
+	const query_summary_guarantee& query_result::summary_guarantee() const noexcept
 	{
 		return data_->guarantee;
 	}
@@ -1379,7 +1580,22 @@ namespace cxxlens::sdk::query
 			   << ",\"status\":" << json_string(execution_name(data_->status))
 			   << R"(,"summary_guarantee":{"approximation":)"
 			   << json_string(data_->guarantee.approximation)
-			   << ",\"assumptions\":" << json_string(data_->guarantee.assumptions)
+			   << ",\"assumptions\":" << strings_json(data_->guarantee.assumptions)
+			   << R"(,"condition_partition":{"alternatives":)"
+			   << strings_json(data_->guarantee.condition_partition.fragments)
+			   << ",\"universe\":" << json_string(data_->guarantee.condition_partition.universe)
+			   << "},\"drill_down_ref\":" << json_string(data_->guarantee.drill_down_ref)
+			   << ",\"fragment_count\":" << data_->guarantee.fragment_count
+			   << ",\"fragment_set_digest\":" << json_string(data_->guarantee.fragment_set_digest)
+			   << ",\"fragments\":[";
+		for (std::size_t index = 0U; index < data_->guarantee.fragments.size(); ++index)
+		{
+			if (index != 0U)
+				output << ',';
+			output << fragment_json(data_->guarantee.fragments[index]);
+		}
+		output << "],\"interpretation_partitions\":"
+			   << strings_json(data_->guarantee.interpretation_partitions)
 			   << ",\"scope\":" << json_string(data_->guarantee.scope)
 			   << ",\"verification_modalities\":"
 			   << strings_json(data_->guarantee.verification_modalities) << "},\"unresolved\":[";
@@ -1563,8 +1779,16 @@ namespace cxxlens::sdk::query
 			result_data->status = execution_status::failed_before_result;
 			result_data->unresolved.push_back(
 				{"sdk.query-cancelled", "before-execution", "no sealed rows"});
-			result_data->guarantee =
-				summarize_guarantee({}, result_data->input_complete, false, false);
+			result_data->guarantee = summarize_guarantee({},
+														 {},
+														 result_data->coverage,
+														 result_data->closures,
+														 result_data->unresolved,
+														 {},
+														 result_data->input_complete,
+														 false,
+														 result_data->closed_world,
+														 false);
 			result_data->physical = {"cxxlens.reference-query-planner.v1",
 									 "backend=" + std::string{snapshot_.physical_backend()} +
 										 ";cancelled=before-execution"};
@@ -1968,8 +2192,16 @@ namespace cxxlens::sdk::query
 			result_data->status = execution_status::failed_before_result;
 			result_data->unresolved.push_back(
 				{state.failure_code, state.failure_subject, "no sealed rows"});
-			result_data->guarantee = summarize_guarantee(
-				state.source_annotations, result_data->input_complete, false, false);
+			result_data->guarantee = summarize_guarantee({},
+														 state.source_annotations,
+														 result_data->coverage,
+														 result_data->closures,
+														 result_data->unresolved,
+														 {},
+														 result_data->input_complete,
+														 false,
+														 result_data->closed_world,
+														 false);
 			return query_result{std::move(result_data)};
 		}
 
@@ -2018,8 +2250,16 @@ namespace cxxlens::sdk::query
 			result_data->status = execution_status::failed_before_result;
 			result_data->unresolved.push_back(
 				{state.failure_code, state.failure_subject, "no sealed rows"});
-			result_data->guarantee = summarize_guarantee(
-				state.source_annotations, result_data->input_complete, false, false);
+			result_data->guarantee = summarize_guarantee({},
+														 state.source_annotations,
+														 result_data->coverage,
+														 result_data->closures,
+														 result_data->unresolved,
+														 result_data->conflict_values,
+														 result_data->input_complete,
+														 false,
+														 result_data->closed_world,
+														 false);
 			return query_result{std::move(result_data)};
 		}
 		if (!evaluated.ordered)
@@ -2036,8 +2276,16 @@ namespace cxxlens::sdk::query
 				result_data->status = execution_status::failed_before_result;
 				result_data->unresolved.push_back(
 					{"sdk.query-memory-budget", "canonical-output-order", "no sealed rows"});
-				result_data->guarantee = summarize_guarantee(
-					state.source_annotations, result_data->input_complete, false, false);
+				result_data->guarantee = summarize_guarantee({},
+															 state.source_annotations,
+															 result_data->coverage,
+															 result_data->closures,
+															 result_data->unresolved,
+															 result_data->conflict_values,
+															 result_data->input_complete,
+															 false,
+															 result_data->closed_world,
+															 false);
 				return query_result{std::move(result_data)};
 			}
 		result_data->ordered = evaluated.ordered;
@@ -2069,9 +2317,15 @@ namespace cxxlens::sdk::query
 		}
 		const bool execution_complete = result_data->status == execution_status::complete;
 		result_data->guarantee = summarize_guarantee(
+			result_data->row_values,
 			state.source_annotations,
+			result_data->coverage,
+			result_data->closures,
+			result_data->unresolved,
+			result_data->conflict_values,
 			result_data->input_complete,
 			execution_complete,
+			result_data->closed_world,
 			evaluated.limited || result_data->status != execution_status::complete);
 		return query_result{std::move(result_data)};
 	}

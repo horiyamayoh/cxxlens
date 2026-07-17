@@ -1,5 +1,5 @@
 {
-  "asset_count": 309,
+  "asset_count": 310,
   "assets": [
     {
       "authority": "active",
@@ -823,6 +823,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0059-query-row-guarantee-canonical-projection.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0060-query-summary-guarantee-fragment-algebra.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2166,7 +2173,7 @@
     }
   ],
   "classifications": {
-    "active": 273,
+    "active": 274,
     "archived": 35,
     "generated": 1
   },

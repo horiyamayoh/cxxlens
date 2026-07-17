@@ -18,7 +18,7 @@ required:
   - qualification
 properties:
   schema: {const: cxxlens.query-runtime-contract.v1}
-  document_version: {const: 1.13.0}
+  document_version: {const: 1.14.0}
   maturity: {const: implemented}
   authority: {$ref: '#/$defs/nonempty_object'}
   compatibility: {$ref: '#/$defs/nonempty_object'}
@@ -90,6 +90,7 @@ properties:
       - row_cursor
       - execution_statuses
       - required_side_channels
+      - summary_guarantee
       - success_implies_input_complete
       - success_implies_closed
       - closure_applicability
@@ -105,6 +106,7 @@ properties:
         minItems: 7
         uniqueItems: true
         items: {type: string, minLength: 1}
+      summary_guarantee: {$ref: '#/$defs/nonempty_object'}
       success_implies_input_complete: {const: false}
       success_implies_closed: {const: false}
       closure_applicability: {$ref: '#/$defs/nonempty_object'}

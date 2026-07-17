@@ -1,12 +1,12 @@
 schema: cxxlens.query-runtime-contract.v1
-document_version: 1.13.0
+document_version: 1.14.0
 maturity: implemented
 authority:
   logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
   guarantee_contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
   snapshot_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
-  decision_adr: docs/design/adr/0037-lossless-claim-evidence-occurrences.md
-  owner_issue: '#116'
+  decision_adr: docs/design/adr/0060-query-summary-guarantee-fragment-algebra.md
+  owner_issue: '#117'
   owner: steward.ng-query-runtime
 compatibility:
   version_axis: query-runtime-result
@@ -225,6 +225,41 @@ result:
     - summary_guarantee
     - logical_explanation
     - physical_explanation
+  summary_guarantee:
+    operation: conservative-meet-over-result-contributing-fragments
+    source: final-annotated-row-fragments
+    empty_result_source: reachable-scan-fragments-for-absence-proof-only
+    required_fields:
+      - approximation
+      - scope
+      - condition_partition
+      - interpretation_partitions
+      - assumptions
+      - verification_modalities
+      - fragment_count
+      - fragment_set_digest
+      - drill_down_ref
+    fragment_index:
+      canonical_order: fragment-canonical-json
+      digest_binding: exact-canonical-fragment-set
+      drill_down: embedded-lossless-fragments
+    composition:
+      filter_project_restrict: surviving-fragments-only
+      join_semi_union_distinct: row-contributor-set-union-then-conservative-meet
+      approximation: componentwise-soundness-completeness-all
+      verification: implication-closed-intersection
+      assumptions: canonical-id-set-union
+      scope: single-scope-or-no-exact-upgrade
+      condition: exact-fragment-partition
+      interpretation: partition-no-cross-domain-upgrade
+    exact_preconditions:
+      - every-fragment-exact
+      - input-and-execution-complete
+      - relation-scope-specific-closure-applied
+      - no-blocking-coverage
+      - no-overlapping-same-domain-conflict
+      - no-overlapping-unresolved
+      - condition-partition-complete
   success_implies_input_complete: false
   success_implies_closed: false
   closure_applicability:

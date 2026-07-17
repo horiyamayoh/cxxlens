@@ -348,6 +348,38 @@ namespace cxxlens::sdk::query
 		[[nodiscard]] bool operator==(const query_explanation&) const = default;
 	};
 
+	/** @brief One lossless, result-contributing semantic guarantee fragment. */
+	struct query_guarantee_fragment
+	{
+		claim_guarantee guarantee;
+		claim_condition condition;
+		std::string interpretation;
+		std::vector<std::string> assumptions;
+		std::vector<std::string> claim_contributors;
+		std::vector<std::string> provenance;
+		std::vector<std::string> coverage_states;
+		std::vector<std::string> closure_ids;
+		bool condition_partition_complete{};
+		bool conflicting{};
+		bool unresolved{};
+		bool requires_closure{};
+	};
+
+	/** @brief Conservative result summary with a digest-bound lossless fragment drill-down. */
+	struct query_summary_guarantee
+	{
+		std::string approximation;
+		std::string scope;
+		claim_condition condition_partition;
+		std::vector<std::string> interpretation_partitions;
+		std::vector<std::string> assumptions;
+		std::vector<std::string> verification_modalities;
+		std::uint64_t fragment_count{};
+		std::string fragment_set_digest;
+		std::string drill_down_ref;
+		std::vector<query_guarantee_fragment> fragments;
+	};
+
 	class result_row_cursor;
 
 	/** @brief Immutable query result owning rows and all partiality/evidence side channels. */
@@ -370,7 +402,7 @@ namespace cxxlens::sdk::query
 		[[nodiscard]] std::span<const differential_disagreement>
 		differential_disagreements() const noexcept;
 		[[nodiscard]] std::span<const claim_producer> producer_contracts() const noexcept;
-		[[nodiscard]] const claim_guarantee& summary_guarantee() const noexcept;
+		[[nodiscard]] const query_summary_guarantee& summary_guarantee() const noexcept;
 		[[nodiscard]] const query_explanation& explain_logical() const noexcept;
 		[[nodiscard]] const query_explanation& explain_physical() const noexcept;
 		[[nodiscard]] std::string_view logical_ir_digest() const noexcept;

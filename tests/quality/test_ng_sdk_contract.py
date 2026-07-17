@@ -103,6 +103,62 @@ class NgSdkContractTest(unittest.TestCase):
         with self.assertRaises(jsonschema.ValidationError):
             jsonschema.Draft202012Validator(row_schema).validate(missing)
 
+    def test_query_summary_requires_lossless_fragment_index(self) -> None:
+        schema = load_yaml(
+            ROOT / "schemas/cxxlens_ng_query_execution_result.schema.yaml"
+        )
+        summary_schema = {
+            "$schema": schema["$schema"],
+            "$defs": schema["$defs"],
+            "$ref": "#/$defs/summary_guarantee",
+        }
+        digest = "semantic-v2:sha256:" + "a" * 64
+        guarantee = {
+            "approximation": "exact",
+            "scope": "project",
+            "assumptions": "assumptions:none",
+            "verification_modalities": ["schema_validated"],
+        }
+        fragment = {
+            "guarantee": guarantee,
+            "condition_universe": "build-matrix",
+            "condition_fragments": ["debug"],
+            "interpretation": "cc.canonical-1",
+            "assumptions": ["assumptions:none"],
+            "claim_contributors": ["assertion:one"],
+            "provenance": ["evidence:one"],
+            "coverage_states": ["covered"],
+            "closure_ids": ["closure:one"],
+            "condition_partition_complete": True,
+            "conflicting": False,
+            "unresolved": False,
+            "requires_closure": True,
+        }
+        summary = {
+            "approximation": "exact",
+            "scope": "project",
+            "condition_partition": {
+                "universe": "build-matrix",
+                "alternatives": ["debug"],
+            },
+            "interpretation_partitions": ["cc.canonical-1"],
+            "assumptions": ["assumptions:none"],
+            "verification_modalities": ["schema_validated"],
+            "fragment_count": 1,
+            "fragment_set_digest": digest,
+            "drill_down_ref": "fragments:" + digest,
+            "fragments": [fragment],
+        }
+        validator = jsonschema.Draft202012Validator(summary_schema)
+        validator.validate(summary)
+        for required in ("condition_partition", "fragment_set_digest", "fragments"):
+            missing = copy.deepcopy(summary)
+            missing.pop(required)
+            with self.subTest(required=required), self.assertRaises(
+                jsonschema.ValidationError
+            ):
+                validator.validate(missing)
+
 
 if __name__ == "__main__":
     unittest.main()

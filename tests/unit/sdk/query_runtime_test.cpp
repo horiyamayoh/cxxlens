@@ -323,17 +323,18 @@ namespace
 	[[nodiscard]] claim assertion(const relation_engine& engine,
 								  detached_row row,
 								  std::vector<std::string> fragments,
-								  std::string interpretation = "company.query.domain")
+								  std::string interpretation = "company.query.domain",
+								  claim_guarantee guarantee = {
+									  "exact", "project", "assumptions:none", {"schema_validated"}})
 	{
-		auto value =
-			make_assertion(engine,
-						   {std::move(row),
-							{"company.query.universe", std::move(fragments)},
-							std::move(interpretation),
-							{"company.query.provider", std::string{producer_semantics}},
-							{std::string{direct_basis}},
-							"evidence:query-runtime",
-							{"exact", "project", "assumptions:none", {"schema_validated"}}});
+		auto value = make_assertion(engine,
+									{std::move(row),
+									 {"company.query.universe", std::move(fragments)},
+									 std::move(interpretation),
+									 {"company.query.provider", std::string{producer_semantics}},
+									 {std::string{direct_basis}},
+									 "evidence:query-runtime",
+									 std::move(guarantee)});
 		require(value.has_value(), "query fixture assertion failed");
 		return std::move(*value);
 	}
@@ -1338,7 +1339,17 @@ namespace
 			require(memory->execution() == sqlite->execution() &&
 						memory->inputs_complete() == sqlite->inputs_complete() &&
 						memory->summary_guarantee().approximation ==
-							sqlite->summary_guarantee().approximation,
+							sqlite->summary_guarantee().approximation &&
+						memory->summary_guarantee().fragment_set_digest ==
+							sqlite->summary_guarantee().fragment_set_digest &&
+						memory->summary_guarantee().condition_partition.canonical_form() ==
+							sqlite->summary_guarantee().condition_partition.canonical_form() &&
+						memory->summary_guarantee().interpretation_partitions ==
+							sqlite->summary_guarantee().interpretation_partitions &&
+						memory->summary_guarantee().assumptions ==
+							sqlite->summary_guarantee().assumptions &&
+						memory->summary_guarantee().verification_modalities ==
+							sqlite->summary_guarantee().verification_modalities,
 					"memory/SQLite query side channels diverged");
 			require(memory->logical_ir_digest() == logical.digest(),
 					"query result lost logical IR digest");
@@ -1716,6 +1727,28 @@ namespace
 		require(queried && queried->conflicts().size() == 1U &&
 					queried->differential_disagreements().size() == 1U,
 				"query side channel used claim content identity as functional payload identity");
+		require(queried->summary_guarantee().approximation != "exact" &&
+					std::ranges::any_of(queried->summary_guarantee().fragments,
+										[](const query::query_guarantee_fragment& fragment)
+										{
+											return fragment.conflicting;
+										}),
+				"overlapping same-domain conflict did not block exact summary");
+		const column_ref key{data.left.id, data.left.columns[0].id, data.left.columns[0].type};
+		auto predicate =
+			query::equals_present(key, query::literal::typed("query_key_id", "key:same-domain"));
+		auto source = query::builder::from(data.left);
+		require(predicate && source, "conflict scope filter setup failed");
+		auto filtered_builder = std::move(*source).where(*predicate);
+		require(filtered_builder.has_value(), "conflict scope filter rejected");
+		auto filtered = query_engine->execute(std::move(*filtered_builder).finish());
+		require(filtered &&
+					std::ranges::none_of(filtered->summary_guarantee().fragments,
+										 [](const query::query_guarantee_fragment& fragment)
+										 {
+											 return fragment.conflicting;
+										 }),
+				"filtered-out same-domain conflict contaminated surviving scope");
 
 		claim_batch batch;
 		for (const auto& value : data.claims)
@@ -1875,6 +1908,160 @@ namespace
 			"distinct lost row-level guarantee attribution");
 	}
 
+	void check_summary_guarantee_algebra(const fixture& data)
+	{
+		const auto publish_claims = [&](const std::vector<claim>& claims)
+		{
+			auto store = make_in_memory_snapshot_store(data.engine);
+			require(store.has_value(), "summary guarantee store unavailable");
+			auto writer = store->begin(draft(data.engine));
+			require(writer.has_value(), "summary guarantee writer unavailable");
+			for (std::size_t index = 0U; index < claims.size(); ++index)
+				require(writer->stage(partition(claims[index], 1000U + index)).has_value(),
+						"summary guarantee partition rejected");
+			require(writer->validate().has_value(), "summary guarantee snapshot invalid");
+			auto snapshot = writer->publish();
+			require(snapshot.has_value(), "summary guarantee snapshot unpublished");
+			return std::move(*snapshot);
+		};
+		const auto execute =
+			[](const snapshot_handle& snapshot, const query::logical_query_ir& logical)
+		{
+			auto engine = query::reference_engine::bind(snapshot);
+			require(engine.has_value(), "summary guarantee engine unavailable");
+			auto result = engine->execute(logical);
+			require(result.has_value(), "summary guarantee query failed");
+			return std::move(*result);
+		};
+
+		auto exact = assertion(data.engine,
+							   left_row(data.left, "key:a", 1, false),
+							   {"release"},
+							   "company.query.domain",
+							   {"exact", "project", "assumption:a1", {"compiler_verified"}});
+		auto weak_other =
+			assertion(data.engine,
+					  left_row(data.left, "key:weak-other", 2, false),
+					  {"release"},
+					  "company.query.other-domain",
+					  {"unknown", "project", "assumption:weak", {"runtime_observed"}});
+		auto domain_snapshot = publish_claims({exact, weak_other});
+		auto unrestricted = execute(domain_snapshot, scan_query(data.left));
+		require(unrestricted.summary_guarantee().approximation == "unknown",
+				"accepted exact/unknown meet vector diverged");
+		auto domain_source = query::builder::from(data.left);
+		require(domain_source.has_value(), "summary domain source rejected");
+		auto domain_builder =
+			std::move(*domain_source).interpretation_restrict("company.query.domain");
+		require(domain_builder.has_value(), "summary domain restriction rejected");
+		auto restricted = execute(domain_snapshot, std::move(*domain_builder).finish());
+		require(restricted.summary_guarantee().interpretation_partitions ==
+						std::vector<std::string>{"company.query.domain"} &&
+					std::ranges::none_of(restricted.summary_guarantee().fragments,
+										 [](const query::query_guarantee_fragment& fragment)
+										 {
+											 return fragment.guarantee.approximation == "unknown";
+										 }),
+				"excluded interpretation downgraded selected-domain summary");
+
+		auto weak_row = assertion(data.engine,
+								  left_row(data.left, "key:weak", 3, false),
+								  {"release"},
+								  "company.query.domain",
+								  {"unknown", "project", "assumption:weak", {"runtime_observed"}});
+		auto filtered_snapshot = publish_claims({exact, weak_row});
+		const column_ref key{data.left.id, data.left.columns[0].id, data.left.columns[0].type};
+		auto predicate = query::equals_present(key, query::literal::typed("query_key_id", "key:a"));
+		auto filter_source = query::builder::from(data.left);
+		require(predicate && filter_source, "summary filter setup rejected");
+		auto filter_builder = std::move(*filter_source).where(*predicate);
+		require(filter_builder.has_value(), "summary filter rejected");
+		auto filtered = execute(filtered_snapshot, std::move(*filter_builder).finish());
+		require(std::ranges::none_of(filtered.summary_guarantee().fragments,
+									 [](const query::query_guarantee_fragment& fragment)
+									 {
+										 return fragment.guarantee.approximation == "unknown";
+									 }),
+				"filtered-out weak row downgraded surviving fragment summary");
+		auto unresolved_store = make_in_memory_snapshot_store(data.engine);
+		require(unresolved_store.has_value(), "unresolved scope store unavailable");
+		auto unresolved_writer = unresolved_store->begin(draft(data.engine));
+		require(unresolved_writer && unresolved_writer->stage(partition(exact, 1100U)) &&
+					unresolved_writer->stage(partition(weak_row, 1101U, true)) &&
+					unresolved_writer->validate(),
+				"unresolved scope snapshot invalid");
+		auto unresolved_snapshot = unresolved_writer->publish();
+		require(unresolved_snapshot.has_value(), "unresolved scope snapshot unpublished");
+		predicate = query::equals_present(key, query::literal::typed("query_key_id", "key:a"));
+		filter_source = query::builder::from(data.left);
+		require(predicate && filter_source, "unresolved scope filter setup rejected");
+		filter_builder = std::move(*filter_source).where(*predicate);
+		require(filter_builder.has_value(), "unresolved scope filter rejected");
+		auto unresolved_filtered =
+			execute(*unresolved_snapshot, std::move(*filter_builder).finish());
+		require(!unresolved_filtered.inputs_complete() &&
+					std::ranges::none_of(unresolved_filtered.summary_guarantee().fragments,
+										 [](const query::query_guarantee_fragment& fragment)
+										 {
+											 return fragment.unresolved;
+										 }),
+				"filtered-out unresolved claim contaminated surviving fragment scope");
+
+		auto runtime = assertion(data.engine,
+								 left_row(data.left, "key:runtime", 4, false),
+								 {"debug"},
+								 "company.query.domain",
+								 {"exact", "project", "assumption:a2", {"runtime_observed"}});
+		auto modalities_snapshot = publish_claims({exact, runtime});
+		auto composed = execute(modalities_snapshot, scan_query(data.left));
+		const auto& summary = composed.summary_guarantee();
+		require(
+			summary.assumptions == std::vector<std::string>({"assumption:a1", "assumption:a2"}) &&
+				summary.verification_modalities == std::vector<std::string>{"schema_validated"} &&
+				summary.fragment_count == summary.fragments.size() &&
+				summary.fragment_set_digest.starts_with("semantic-v2:sha256:") &&
+				summary.drill_down_ref == "fragments:" + summary.fragment_set_digest,
+			"summary assumption union, modality closure, or fragment index diverged");
+		const auto canonical = composed.canonical_form();
+		require(canonical.contains("\"condition_partition\":") &&
+					canonical.contains("\"interpretation_partitions\":") &&
+					canonical.contains("\"fragment_set_digest\":") &&
+					canonical.contains("\"drill_down_ref\":") &&
+					canonical.contains("\"fragments\":[{"),
+				"summary required fields did not survive canonical round-trip");
+
+		auto under =
+			assertion(data.engine,
+					  left_row(data.left, "key:under", 5, false),
+					  {"debug"},
+					  "company.query.domain",
+					  {"under_approximation", "project", "assumption:a1", {"schema_validated"}});
+		auto over =
+			assertion(data.engine,
+					  left_row(data.left, "key:over", 6, false),
+					  {"release"},
+					  "company.query.domain",
+					  {"over_approximation", "project", "assumption:a2", {"schema_validated"}});
+		auto component_snapshot = publish_claims({under, over});
+		auto component = execute(component_snapshot, scan_query(data.left));
+		require(component.summary_guarantee().approximation == "unknown",
+				"accepted under/over component meet vector diverged");
+
+		auto nonoverlap_left =
+			assertion(data.engine, left_row(data.left, "key:nonoverlap", 7, false), {"debug"});
+		auto nonoverlap_right =
+			assertion(data.engine, left_row(data.left, "key:nonoverlap", 8, false), {"release"});
+		auto nonoverlap_snapshot = publish_claims({nonoverlap_left, nonoverlap_right});
+		auto nonoverlap = execute(nonoverlap_snapshot, scan_query(data.left));
+		require(nonoverlap.conflicts().empty() &&
+					std::ranges::none_of(nonoverlap.summary_guarantee().fragments,
+										 [](const query::query_guarantee_fragment& fragment)
+										 {
+											 return fragment.conflicting;
+										 }),
+				"non-overlap payload difference blocked an unrelated condition scope");
+	}
+
 	void check_closure_applicability(const fixture& data)
 	{
 		const auto execute =
@@ -1987,7 +2174,8 @@ namespace
 			const std::array alternatives{std::string{"release"}};
 			auto result = execute(snapshot, condition_query(data.left, alternatives));
 			require(result.inputs_complete() && result.closed() &&
-						result.closure_ids().size() == 1U,
+						result.closure_ids().size() == 1U &&
+						result.summary_guarantee().approximation == "exact",
 					"exact superset partition closure did not prove an explicit subset query");
 		}
 	}
@@ -2028,6 +2216,7 @@ int main()
 	check_bounded_intermediate_budgets(make_budget_fixture());
 	check_side_channel_parity(make_side_channel_fixture());
 	check_claim_occurrence_aggregation(data);
+	check_summary_guarantee_algebra(data);
 	check_closure_applicability(data);
 
 	auto incomplete_store = make_in_memory_snapshot_store(data.engine);

@@ -55,7 +55,7 @@ properties:
     type: array
     uniqueItems: true
     items: {$ref: '#/$defs/producer_contract'}
-  summary_guarantee: {$ref: '#/$defs/guarantee'}
+  summary_guarantee: {$ref: '#/$defs/summary_guarantee'}
   inputs_complete: {type: boolean}
   closed: {type: boolean}
   logical_explanation: {$ref: '#/$defs/explanation'}
@@ -180,6 +180,73 @@ $defs:
       scope: {type: string, minLength: 1}
       assumptions: {type: string, minLength: 1}
       verification_modalities: {$ref: '#/$defs/string_set'}
+  guarantee_fragment:
+    type: object
+    additionalProperties: false
+    required:
+      - guarantee
+      - condition_universe
+      - condition_fragments
+      - interpretation
+      - assumptions
+      - claim_contributors
+      - provenance
+      - coverage_states
+      - closure_ids
+      - condition_partition_complete
+      - conflicting
+      - unresolved
+      - requires_closure
+    properties:
+      guarantee: {$ref: '#/$defs/guarantee'}
+      condition_universe: {type: string, minLength: 1}
+      condition_fragments: {$ref: '#/$defs/string_set'}
+      interpretation: {type: string, minLength: 1}
+      assumptions: {$ref: '#/$defs/string_set'}
+      claim_contributors: {$ref: '#/$defs/string_set'}
+      provenance: {$ref: '#/$defs/string_set'}
+      coverage_states: {$ref: '#/$defs/string_set'}
+      closure_ids: {$ref: '#/$defs/string_set'}
+      condition_partition_complete: {type: boolean}
+      conflicting: {type: boolean}
+      unresolved: {type: boolean}
+      requires_closure: {type: boolean}
+  summary_guarantee:
+    type: object
+    additionalProperties: false
+    required:
+      - approximation
+      - scope
+      - condition_partition
+      - interpretation_partitions
+      - assumptions
+      - verification_modalities
+      - fragment_count
+      - fragment_set_digest
+      - drill_down_ref
+      - fragments
+    properties:
+      approximation:
+        enum: [unknown, under_approximation, over_approximation, exact]
+      scope: {type: string, minLength: 1}
+      condition_partition:
+        type: object
+        additionalProperties: false
+        required: [universe, alternatives]
+        properties:
+          universe: {type: string, minLength: 1}
+          alternatives: {$ref: '#/$defs/string_set'}
+      interpretation_partitions: {$ref: '#/$defs/nonempty_string_set'}
+      assumptions: {$ref: '#/$defs/string_set'}
+      verification_modalities: {$ref: '#/$defs/string_set'}
+      fragment_count: {type: integer, minimum: 1}
+      fragment_set_digest: {$ref: '#/$defs/semantic_digest'}
+      drill_down_ref: {type: string, pattern: '^fragments:semantic-v2:sha256:[0-9a-f]{64}$'}
+      fragments:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {$ref: '#/$defs/guarantee_fragment'}
   explanation:
     type: object
     additionalProperties: false

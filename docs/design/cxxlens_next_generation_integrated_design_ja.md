@@ -2899,6 +2899,16 @@ canonical JSON key で sort/deduplicate する。result-wide `summary_guarantee`
 代用にしない。cursor で観測できる guarantee、canonical export、unordered row tie-break、backend parity comparison は同じ
 row field set を使用する。
 
+Issue #117 / ADR 0060 により `summary_guarantee()` は最終 result row に寄与した semantic fragment だけを対象に accepted
+approximation component meet を行う。filter / project / condition / interpretation restriction は surviving fragment を保持し、join、
+semi join、union、distinct は row contributor set を合成する。empty result は absence proof のため reachable scan fragment を参照するが、
+applicable relation/scope closure がなければ exact を名乗れない。
+
+summary は scope、condition partition、interpretation partitions、canonical assumption ID union、modality implication closure intersection、
+fragment count、canonical fragment-set digest、digest-bound drill-down ref、全 fragment を lossless に公開する。exact validator は input /
+execution completeness、coverage、closure、overlap する same-domain conflict / unresolved、condition completeness を独立に確認し、除外済み
+domain/row の weak guarantee や非 overlap conflict を selected scope へ混入させない。
+
 ### 20.11 Execution status and deterministic partiality
 
 ```text
