@@ -57,6 +57,27 @@ namespace cxxlens::detail::clang22
 		[[nodiscard]] sdk::result<void> validate() const;
 	};
 
+	struct declaration_identity_input
+	{
+		std::optional<std::string> usr;
+		std::string toolchain_digest;
+		std::string declaration_kind;
+		std::string qualified_name;
+		std::string canonical_signature;
+		std::string template_identity;
+		std::string constraint_identity;
+		std::string declaration_context;
+		std::string canonical_source_anchor;
+	};
+
+	struct declaration_identity
+	{
+		std::string semantic_key;
+		std::string confidence;
+
+		[[nodiscard]] bool operator==(const declaration_identity&) const = default;
+	};
+
 	struct canonicalized_provider_batch
 	{
 		std::vector<sdk::detached_row> entity_observations;
@@ -81,6 +102,9 @@ namespace cxxlens::detail::clang22
 
 	[[nodiscard]] bool invocation_has_exact_equivalence(std::span<const std::string> arguments,
 														std::vector<std::string>& limitations);
+
+	[[nodiscard]] sdk::result<declaration_identity>
+	make_declaration_identity(const declaration_identity_input& input);
 
 	[[nodiscard]] sdk::result<canonicalized_provider_batch>
 	canonicalize_provider_batch(const observation_batch& batch,

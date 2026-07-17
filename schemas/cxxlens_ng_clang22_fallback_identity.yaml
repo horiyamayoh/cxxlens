@@ -1,0 +1,29 @@
+schema: cxxlens.clang22-fallback-identity.v1
+document_version: 1.0.0
+maturity: accepted
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md#19-native-compiler-integration
+  decision_adr: docs/design/adr/0070-clang22-usr-fallback-identity.md
+  owner_issue: '#139'
+algorithm:
+  domain: clang22.declaration-fallback.v2
+  framing: length-prefixed-named-fields
+  fields: [toolchain_digest, declaration_kind, qualified_name, canonical_signature, template_identity, constraint_identity, declaration_context, canonical_source_anchor]
+  source_anchor: source-snapshot-file-content-digest-and-spelling-offset
+  missing_anchor: provider.declaration-identity-unresolved
+  normal_usr_prefix: 'clang-usr:'
+confidence:
+  usr: exact-usr
+  fallback: structural-fallback
+  fallback_effect: provider-local-non-exact
+vectors:
+  - {id: normal-usr-golden, group: normal-usr, expected: exact-usr-prefix-preserved}
+  - {id: function-overloads, group: overload, expected: distinct}
+  - {id: special-members-and-operators, group: overload, expected: distinct}
+  - {id: template-primary-specializations, group: template, expected: distinct}
+  - {id: constrained-overloads, group: constraint, expected: distinct}
+  - {id: same-signature-redeclaration, group: redeclaration, expected: equal}
+  - {id: definition-preference, group: redeclaration, expected: identity-unchanged}
+  - {id: cross-tu-order-permutation, group: ordering, expected: canonical-output-equal}
+  - {id: unanchored-opaque, group: unresolved, expected: no-key-explicit-unresolved}
+  - {id: toolchain-change, group: toolchain, expected: distinct}

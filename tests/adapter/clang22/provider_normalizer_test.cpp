@@ -156,6 +156,23 @@ namespace
 				output += row.canonical_form() + '\n';
 		return output;
 	}
+
+	[[nodiscard]] declaration_identity_input fallback_identity(std::string kind,
+															   std::string signature,
+															   std::string anchor,
+															   std::string template_value = {},
+															   std::string constraint = {})
+	{
+		return {std::nullopt,
+				"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+				std::move(kind),
+				"ns::f",
+				std::move(signature),
+				std::move(template_value),
+				std::move(constraint),
+				"Namespace:ns:sha256:context",
+				std::move(anchor)};
+	}
 } // namespace
 
 int main()
@@ -237,6 +254,132 @@ int main()
 			"type observation descriptor is invalid");
 	require(call_observation_descriptor().validate().has_value(),
 			"call observation descriptor is invalid");
+
+	auto usr = fallback_identity("function", "void (int)", "source:a");
+	usr.usr = "c:@N@ns@F@f#I#";
+	auto usr_identity = make_declaration_identity(usr);
+	auto integer_overload =
+		make_declaration_identity(fallback_identity("function", "void (int)", "source:overload"));
+	auto double_overload = make_declaration_identity(
+		fallback_identity("function", "void (double)", "source:overload"));
+	auto same_redeclaration =
+		make_declaration_identity(fallback_identity("function", "void (int)", "source:overload"));
+	auto definition_preference_identity =
+		make_declaration_identity(fallback_identity("function", "void (int)", "source:overload"));
+	auto constructor = make_declaration_identity(
+		fallback_identity("constructor", "void (int)", "source:constructor"));
+	auto destructor = make_declaration_identity(
+		fallback_identity("destructor", "void () noexcept", "source:destructor"));
+	auto overloaded_operator = make_declaration_identity(
+		fallback_identity("method", "bool (const ns::value &)", "source:operator"));
+	auto conversion = make_declaration_identity(
+		fallback_identity("method", "operator bool () const", "source:conversion"));
+	auto template_primary = make_declaration_identity(
+		fallback_identity("function", "void (T)", "source:template", "primary<T>"));
+	auto template_int = make_declaration_identity(
+		fallback_identity("function", "void (int)", "source:template", "specialization<int>"));
+	auto template_double = make_declaration_identity(fallback_identity(
+		"function", "void (double)", "source:template", "specialization<double>"));
+	auto constrained_integral = make_declaration_identity(fallback_identity(
+		"function", "void (T)", "source:constraint", "primary<T>", "integral<T>"));
+	auto constrained_floating = make_declaration_identity(fallback_identity(
+		"function", "void (T)", "source:constraint", "primary<T>", "floating_point<T>"));
+	auto other_toolchain_input = fallback_identity("function", "void (int)", "source:overload");
+	other_toolchain_input.toolchain_digest =
+		"sha256:2222222222222222222222222222222222222222222222222222222222222222";
+	auto other_toolchain = make_declaration_identity(other_toolchain_input);
+	auto unanchored = fallback_identity("function", "void (int)", {});
+	require(usr_identity && usr_identity->semantic_key == "clang-usr:c:@N@ns@F@f#I#" &&
+				usr_identity->confidence == "exact-usr" && integer_overload && double_overload &&
+				integer_overload->semantic_key != double_overload->semantic_key &&
+				same_redeclaration && *same_redeclaration == *integer_overload && constructor &&
+				definition_preference_identity &&
+				*definition_preference_identity == *integer_overload && destructor &&
+				overloaded_operator && conversion &&
+				constructor->semantic_key != destructor->semantic_key &&
+				overloaded_operator->semantic_key != conversion->semantic_key && template_primary &&
+				template_int && template_double &&
+				template_primary->semantic_key != template_int->semantic_key &&
+				template_int->semantic_key != template_double->semantic_key &&
+				constrained_integral && constrained_floating &&
+				constrained_integral->semantic_key != constrained_floating->semantic_key &&
+				other_toolchain &&
+				other_toolchain->semantic_key != integer_overload->semantic_key &&
+				!make_declaration_identity(unanchored),
+			"USR failure identity projection collapsed declarations or fabricated an opaque key");
+
+	observation_batch fallback_batch;
+	fallback_batch.unit = "cu-" + std::string(64U, 'f');
+	fallback_batch.variant = "variant-" + std::string(64U, 'e');
+	auto fallback_entity_int =
+		redeclaration(integer_overload->semantic_key, "void (int)", 10U, true, true);
+	auto fallback_entity_double =
+		redeclaration(double_overload->semantic_key, "void (double)", 30U, true, true);
+	fallback_entity_int.compile_unit = fallback_batch.unit;
+	fallback_entity_double.compile_unit = fallback_batch.unit;
+	fallback_entity_int.payload.emplace("symbol.identity_confidence", "structural-fallback");
+	fallback_entity_double.payload.emplace("symbol.identity_confidence", "structural-fallback");
+	const auto fallback_call = [&](const declaration_identity& identity,
+								   const std::string_view signature,
+								   const std::uint64_t begin)
+	{
+		auto value = observation(observation_kind::call, "call:fallback:" + std::to_string(begin));
+		value.compile_unit = fallback_batch.unit;
+		value.source_span_id = *sdk::source_span_identity(
+			"source-snapshot:fallback", "file:fallback", begin, begin + 4U, "expression");
+		value.payload.emplace("call.kind", "direct_function");
+		value.payload.emplace("call.direct_callee", identity.semantic_key);
+		value.payload.emplace("call.direct_callee_kind", "function");
+		value.payload.emplace("call.direct_callee_signature", signature);
+		value.payload.emplace("call.direct_callee_qualified_name", "ns::f");
+		value.payload.emplace("call.direct_callee_identity_confidence", identity.confidence);
+		return value;
+	};
+	fallback_batch.observations = {
+		std::move(fallback_entity_int),
+		std::move(fallback_entity_double),
+		fallback_call(*integer_overload, "void (int)", 50U),
+		fallback_call(*double_overload, "void (double)", 70U),
+	};
+	auto fallback_result = canonicalize_provider_batch(
+		fallback_batch,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	auto reversed_fallback = fallback_batch;
+	std::ranges::reverse(reversed_fallback.observations);
+	auto reversed_fallback_result = canonicalize_provider_batch(
+		reversed_fallback,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(fallback_result && reversed_fallback_result && !fallback_result->exact_equivalence &&
+				fallback_result->entities.size() == 2U &&
+				fallback_result->direct_targets.size() == 2U &&
+				fallback_result->unresolved.empty() &&
+				string_cell(fallback_result->direct_targets.front(),
+							"cc.call_direct_target.v1.target") !=
+					string_cell(fallback_result->direct_targets.back(),
+								"cc.call_direct_target.v1.target") &&
+				fallback_result->direct_targets.front().canonical_form() ==
+					reversed_fallback_result->direct_targets.front().canonical_form() &&
+				fallback_result->direct_targets.back().canonical_form() ==
+					reversed_fallback_result->direct_targets.back().canonical_form(),
+			"fallback overloads lost entity/target identity or became order-dependent");
+	auto opaque_batch = fallback_batch;
+	opaque_batch.observations = {observation(observation_kind::call, "call:opaque")};
+	opaque_batch.observations.front().compile_unit = opaque_batch.unit;
+	opaque_batch.observations.front().source_span_id = *sdk::source_span_identity(
+		"source-snapshot:fallback", "file:fallback", 90U, 94U, "expression");
+	opaque_batch.observations.front().payload.emplace("call.kind", "direct_function");
+	opaque_batch.observations.front().payload.emplace("call.unresolved_reason",
+													  "callee-identity-unavailable");
+	auto opaque_result = canonicalize_provider_batch(
+		opaque_batch,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(opaque_result && !opaque_result->exact_equivalence &&
+				opaque_result->direct_targets.empty() && !opaque_result->unresolved.empty() &&
+				opaque_result->unresolved.front().code == "provider.call-kind-target-inconsistent",
+			"unanchored fallback fabricated or silently omitted a direct target");
 
 	clang22_task_input task{
 		"cu-" + std::string(64U, 'a'),

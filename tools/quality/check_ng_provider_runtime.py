@@ -35,6 +35,28 @@ def validate(root: pathlib.Path) -> None:
     jsonschema.Draft202012Validator.check_schema(contract_schema)
     jsonschema.Draft202012Validator(contract_schema).validate(contract)
     jsonschema.Draft202012Validator.check_schema(report_schema)
+    fallback_identity = load(
+        root / "schemas/cxxlens_ng_clang22_fallback_identity.yaml"
+    )
+    fallback_identity_schema = load(
+        root / "schemas/cxxlens_ng_clang22_fallback_identity.schema.yaml"
+    )
+    jsonschema.Draft202012Validator.check_schema(fallback_identity_schema)
+    jsonschema.Draft202012Validator(fallback_identity_schema).validate(fallback_identity)
+    expected_fallback_vectors = {
+        "normal-usr-golden",
+        "function-overloads",
+        "special-members-and-operators",
+        "template-primary-specializations",
+        "constrained-overloads",
+        "same-signature-redeclaration",
+        "definition-preference",
+        "cross-tu-order-permutation",
+        "unanchored-opaque",
+        "toolchain-change",
+    }
+    if {vector["id"] for vector in fallback_identity["vectors"]} != expected_fallback_vectors:
+        raise ContractError("Clang 22 fallback identity conformance vectors are incomplete")
 
     sample_report = {
         "schema": "cxxlens.provider-execution-report.v1",
@@ -189,6 +211,12 @@ def validate(root: pathlib.Path) -> None:
             "ordered_observations",
             "cxxlens.clang22.task.v2",
             "source_snapshot",
+            "clang22.declaration-fallback.v2",
+            "make_declaration_identity",
+            "canonical_source_anchor",
+            "symbol.identity_confidence",
+            "call.direct_callee_identity_confidence",
+            "provider.declaration-identity-unresolved",
         ),
         "CMakeLists.txt": (
             "cxxlens-clang-worker-22",
@@ -209,6 +237,9 @@ def validate(root: pathlib.Path) -> None:
     runtime = entries.get("public.provider-runtime")
     if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#138":
         raise ContractError("public.provider-runtime is not an implemented Issue #138 entry")
+    native = entries.get("public.native-provider-sdk")
+    if native is None or native["status"] != "implemented" or native["owner_issue"] != "#139":
+        raise ContractError("public.native-provider-sdk is not an implemented Issue #139 entry")
 
     namespaces = load(root / "schemas/cxxlens_ng_namespace_registry.yaml")
     if not any(

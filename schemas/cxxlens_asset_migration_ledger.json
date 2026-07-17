@@ -1,5 +1,5 @@
 {
-  "asset_count": 342,
+  "asset_count": 345,
   "assets": [
     {
       "authority": "active",
@@ -913,6 +913,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/design/adr/0070-clang22-usr-fallback-identity.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/design/adr/README.md",
       "removal_issue": null,
       "replacement": null,
@@ -1285,6 +1292,20 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_claim_envelope.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_clang22_fallback_identity.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_clang22_fallback_identity.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2397,7 +2418,7 @@
     }
   ],
   "classifications": {
-    "active": 306,
+    "active": 309,
     "archived": 35,
     "generated": 1
   },

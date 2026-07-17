@@ -2647,6 +2647,13 @@ structural signature digest は canonical type/signature だけに bindし、sou
 unit、arrival orderを含めない。kind/signature が不整合な redeclaration は
 `provider.entity-redeclaration-incompatible` として unresolved/equivalence limitation に会計し exact を主張しない。
 
+Issue #139 / ADR 0070 により Clang USR 生成失敗は qualified name と declaration kind だけの identity へ fallback しない。
+versioned `clang22.declaration-fallback.v2` encoder は toolchain digest、canonical type/signature、template specialization、constraint、
+declaration context、source content digest と spelling offset による canonical source anchor を length-prefixed field として bind する。
+entity と direct callee は同じ encoder を使用し、identity confidence を `exact-usr` / `structural-fallback` の別 field で保持する。
+fallback は provider-local non-exact だが overload ごとの entity/direct target を統合しない。一意 anchor が作れない場合は opaque key を
+捏造せず `provider.declaration-identity-unresolved` と explicit unresolved call edge を生成する。normal USR identity は変更しない。
+
 `CallExpr` の kind は direct callee の有無と AST shape から決める。free function、member、virtual member、operator の
 direct/static callee はそれぞれ `direct_function`、`direct_member`、`virtual_member`、`operator` とし、
 function pointer、member pointer、dependent call は `indirect_function`、`indirect_member_pointer`、`dependent` とする。

@@ -1,0 +1,46 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.clang22-fallback-identity.v1
+type: object
+additionalProperties: false
+required: [schema, document_version, maturity, authority, algorithm, confidence, vectors]
+properties:
+  schema: {const: cxxlens.clang22-fallback-identity.v1}
+  document_version: {const: 1.0.0}
+  maturity: {const: accepted}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, decision_adr, owner_issue]
+    properties:
+      design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md#19-native-compiler-integration}
+      decision_adr: {const: docs/design/adr/0070-clang22-usr-fallback-identity.md}
+      owner_issue: {const: '#139'}
+  algorithm:
+    type: object
+    additionalProperties: false
+    required: [domain, framing, fields, source_anchor, missing_anchor, normal_usr_prefix]
+    properties:
+      domain: {const: clang22.declaration-fallback.v2}
+      framing: {const: length-prefixed-named-fields}
+      fields:
+        const: [toolchain_digest, declaration_kind, qualified_name, canonical_signature, template_identity, constraint_identity, declaration_context, canonical_source_anchor]
+      source_anchor: {const: source-snapshot-file-content-digest-and-spelling-offset}
+      missing_anchor: {const: provider.declaration-identity-unresolved}
+      normal_usr_prefix: {const: 'clang-usr:'}
+  confidence:
+    const:
+      usr: exact-usr
+      fallback: structural-fallback
+      fallback_effect: provider-local-non-exact
+  vectors:
+    type: array
+    minItems: 10
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, group, expected]
+      properties:
+        id: {type: string, minLength: 1}
+        group: {type: string, minLength: 1}
+        expected: {type: string, minLength: 1}

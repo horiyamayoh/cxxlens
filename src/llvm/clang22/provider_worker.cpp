@@ -21,12 +21,16 @@
 
 #if CXXLENS_HAS_CLANG22
 #include <clang/AST/DeclCXX.h>
+#include <clang/AST/DeclTemplate.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h>
+#include <clang/AST/PrettyPrinter.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Index/USRGeneration.h>
+#include <clang/Lex/Lexer.h>
 #include <llvm/ADT/SmallString.h>
+#include <llvm/Support/raw_ostream.h>
 #endif
 
 namespace cxxlens::detail::clang22
@@ -413,6 +417,9 @@ namespace cxxlens::detail::clang22
 			output.semantic_key = key->second;
 			output.payload.emplace("symbol.kind", kind->second);
 			output.payload.emplace("symbol.signature", signature->second);
+			if (const auto confidence = call.payload.find("call.direct_callee_identity_confidence");
+				confidence != call.payload.end() && !confidence->second.empty())
+				output.payload.emplace("symbol.identity_confidence", confidence->second);
 			if (const auto name = call.payload.find("call.direct_callee_qualified_name");
 				name != call.payload.end() && !name->second.empty())
 				output.payload.emplace("symbol.qualified_name", name->second);
@@ -559,15 +566,115 @@ namespace cxxlens::detail::clang22
 		};
 
 #if CXXLENS_HAS_CLANG22
-		[[nodiscard]] std::string declaration_key(const clang::NamedDecl& declaration)
+		[[nodiscard]] std::string declaration_kind(const clang::FunctionDecl& declaration);
+
+		[[nodiscard]] std::optional<std::string>
+		fallback_source_anchor(provider::clang22::borrowed_translation_unit& unit,
+							   const clang::SourceLocation location,
+							   const std::string_view source_snapshot,
+							   const std::string_view file)
 		{
+			auto& source = unit.source_manager();
+			const auto spelling = source.getSpellingLoc(location);
+			if (spelling.isInvalid() || !source.isWrittenInMainFile(spelling))
+				return std::nullopt;
+			bool invalid{};
+			const auto buffer = source.getBufferData(source.getFileID(spelling), &invalid);
+			if (invalid)
+				return std::nullopt;
+			std::ostringstream projection;
+			projection << source_snapshot.size() << ':' << source_snapshot << file.size() << ':'
+					   << file << ':'
+					   << sdk::content_digest(
+							  std::as_bytes(std::span{buffer.data(), buffer.size()}))
+					   << ':' << source.getFileOffset(spelling);
+			auto anchor =
+				sdk::semantic_digest("clang22.declaration-source-anchor.v1", projection.str());
+			return anchor ? std::optional<std::string>{std::move(*anchor)} : std::nullopt;
+		}
+
+		[[nodiscard]] std::string
+		declaration_context_identity(provider::clang22::borrowed_translation_unit& unit,
+									 const clang::DeclContext& context,
+									 const std::string_view source_snapshot,
+									 const std::string_view file)
+		{
+			std::ostringstream output;
+			const auto* context_declaration = clang::Decl::castFromDeclContext(&context);
+			output << context_declaration->getDeclKindName();
+			if (const auto* declaration = llvm::dyn_cast<clang::NamedDecl>(context_declaration))
+			{
+				const auto* canonical =
+					llvm::cast<clang::NamedDecl>(declaration->getCanonicalDecl());
+				output << ':' << canonical->getQualifiedNameAsString();
+				if (auto anchor = fallback_source_anchor(
+						unit, canonical->getLocation(), source_snapshot, file))
+					output << ':' << *anchor;
+			}
+			return output.str();
+		}
+
+		[[nodiscard]] std::string template_identity(const clang::FunctionDecl& declaration)
+		{
+			std::string output =
+				std::to_string(static_cast<unsigned>(declaration.getTemplatedKind()));
+			if (const auto* arguments = declaration.getTemplateSpecializationArgs())
+			{
+				clang::PrintingPolicy policy{declaration.getASTContext().getLangOpts()};
+				llvm::raw_string_ostream stream{output};
+				for (const auto& argument : arguments->asArray())
+				{
+					stream << ':';
+					argument.print(policy, stream, true);
+				}
+			}
+			return output;
+		}
+
+		[[nodiscard]] std::string
+		constraint_identity(provider::clang22::borrowed_translation_unit& unit,
+							const clang::FunctionDecl& declaration)
+		{
+			const auto* constraint = declaration.getTrailingRequiresClause();
+			if (constraint == nullptr)
+				return {};
+			const auto text = clang::Lexer::getSourceText(
+				clang::CharSourceRange::getTokenRange(constraint->getSourceRange()),
+				unit.source_manager(),
+				unit.ast().getLangOpts());
+			return text.str();
+		}
+
+		[[nodiscard]] sdk::result<declaration_identity>
+		declaration_identity_for(provider::clang22::borrowed_translation_unit& unit,
+								 const clang::FunctionDecl& declaration,
+								 const std::string_view toolchain_digest,
+								 const std::string_view source_snapshot,
+								 const std::string_view file)
+		{
+			const auto* canonical = declaration.getCanonicalDecl();
+			const auto* anchor_declaration = canonical;
+			if (!unit.source_manager().isWrittenInMainFile(canonical->getLocation()))
+				if (const auto* definition = declaration.getDefinition(); definition != nullptr &&
+					unit.source_manager().isWrittenInMainFile(definition->getLocation()))
+					anchor_declaration = definition;
 			llvm::SmallString<256> storage;
-			const auto* canonical = llvm::cast<clang::NamedDecl>(declaration.getCanonicalDecl());
+			std::optional<std::string> usr;
 			if (!clang::index::generateUSRForDecl(canonical, storage) && !storage.empty())
-				return "clang-usr:" + storage.str().str();
-			return *sdk::semantic_digest("clang22.declaration-fallback.v1",
-										 canonical->getQualifiedNameAsString() + "\n" +
-											 canonical->getDeclKindName());
+				usr = storage.str().str();
+			const auto anchor = fallback_source_anchor(
+				unit, anchor_declaration->getLocation(), source_snapshot, file);
+			return make_declaration_identity(
+				{std::move(usr),
+				 std::string{toolchain_digest},
+				 declaration_kind(*canonical),
+				 canonical->getQualifiedNameAsString(),
+				 canonical->getType().getCanonicalType().getAsString(),
+				 template_identity(*canonical),
+				 constraint_identity(unit, *canonical),
+				 declaration_context_identity(
+					 unit, *canonical->getDeclContext(), source_snapshot, file),
+				 anchor.value_or(std::string{})});
 		}
 
 		[[nodiscard]] std::string declaration_kind(const clang::FunctionDecl& declaration)
@@ -608,9 +715,10 @@ namespace cxxlens::detail::clang22
 			observation_visitor(provider::clang22::borrowed_translation_unit& unit,
 								observation_batch& output,
 								std::string source_snapshot,
-								std::string file)
+								std::string file,
+								std::string toolchain_digest)
 				: unit_{&unit}, output_{&output}, source_snapshot_{std::move(source_snapshot)},
-				  file_{std::move(file)}
+				  file_{std::move(file)}, toolchain_digest_{std::move(toolchain_digest)}
 			{
 			}
 
@@ -619,7 +727,9 @@ namespace cxxlens::detail::clang22
 				if (declaration == nullptr)
 					return true;
 				auto previous = current_function_;
-				current_function_ = declaration_key(*declaration);
+				auto identity = declaration_identity_for(
+					*unit_, *declaration, toolchain_digest_, source_snapshot_, file_);
+				current_function_ = identity ? identity->semantic_key : std::string{};
 				const auto traversed =
 					clang::RecursiveASTVisitor<observation_visitor>::TraverseFunctionDecl(
 						declaration);
@@ -632,10 +742,19 @@ namespace cxxlens::detail::clang22
 				if (declaration == nullptr || declaration->isImplicit() ||
 					!unit_->source_manager().isWrittenInMainFile(declaration->getLocation()))
 					return true;
+				auto identity = declaration_identity_for(
+					*unit_, *declaration, toolchain_digest_, source_snapshot_, file_);
+				if (!identity)
+				{
+					++output_->failed_count;
+					output_->diagnostics.push_back(identity.error().code);
+					return true;
+				}
 				detached_observation entity;
 				entity.kind = observation_kind::entity;
 				entity.compile_unit = output_->unit;
-				entity.semantic_key = declaration_key(*declaration);
+				entity.semantic_key = identity->semantic_key;
+				entity.payload.emplace("symbol.identity_confidence", identity->confidence);
 				entity.payload.emplace("symbol.kind", declaration_kind(*declaration));
 				entity.payload.emplace("symbol.qualified_name",
 									   declaration->getQualifiedNameAsString());
@@ -686,7 +805,21 @@ namespace cxxlens::detail::clang22
 					const auto* identity_declaration = callee->getDefinition();
 					if (identity_declaration == nullptr)
 						identity_declaration = callee->getCanonicalDecl();
-					call.payload.emplace("call.direct_callee", declaration_key(*callee));
+					auto callee_identity = declaration_identity_for(
+						*unit_, *identity_declaration, toolchain_digest_, source_snapshot_, file_);
+					if (!callee_identity)
+					{
+						++output_->failed_count;
+						output_->diagnostics.push_back(callee_identity.error().code);
+						call.payload.emplace("call.unresolved_reason",
+											 "callee-identity-unavailable");
+					}
+					else
+					{
+						call.payload.emplace("call.direct_callee", callee_identity->semantic_key);
+						call.payload.emplace("call.direct_callee_identity_confidence",
+											 callee_identity->confidence);
+					}
 					call.payload.emplace("call.direct_callee_kind",
 										 declaration_kind(*identity_declaration));
 					call.payload.emplace(
@@ -747,12 +880,14 @@ namespace cxxlens::detail::clang22
 			observation_batch* output_;
 			std::string source_snapshot_;
 			std::string file_;
+			std::string toolchain_digest_;
 			std::string current_function_;
 			std::map<std::string, std::size_t, std::less<>> seen_;
 		};
 #endif
 
-		[[nodiscard]] sdk::result<observation_batch> extract(const clang22_task_input& input)
+		[[nodiscard]] sdk::result<observation_batch>
+		extract(const clang22_task_input& input, const std::string_view toolchain_digest)
 		{
 			observation_batch output;
 			output.unit = input.compile_unit;
@@ -764,11 +899,15 @@ namespace cxxlens::detail::clang22
 																   input.arguments};
 			auto outcome = provider::clang22::with_translation_unit(
 				native_input,
-				[&output,
-				 &input](provider::clang22::borrowed_translation_unit& unit) -> sdk::result<void>
+				[&output, &input, toolchain_digest](
+					provider::clang22::borrowed_translation_unit& unit) -> sdk::result<void>
 				{
 #if CXXLENS_HAS_CLANG22
-					observation_visitor visitor{unit, output, input.source_snapshot, input.file};
+					observation_visitor visitor{unit,
+												output,
+												input.source_snapshot,
+												input.file,
+												std::string{toolchain_digest}};
 					if (!visitor.TraverseDecl(unit.ast().getTranslationUnitDecl()))
 						return sdk::unexpected(
 							provider_error("provider.native-traversal-failed", output.unit));
@@ -776,6 +915,7 @@ namespace cxxlens::detail::clang22
 #else
 					(void)unit;
 					(void)input;
+					(void)toolchain_digest;
 					return sdk::unexpected(provider_error(
 						"native.unsupported-clang-major", output.unit, "clang-major-22"));
 #endif
@@ -822,7 +962,7 @@ namespace cxxlens::detail::clang22
 				std::vector<std::string> limitations;
 				const auto invocation_exact =
 					invocation_has_exact_equivalence(request_.arguments, limitations);
-				auto batch = extract(request_);
+				auto batch = extract(request_, toolchain_digest_);
 				if (!batch)
 					return sdk::unexpected(std::move(batch.error()));
 				auto normalized = canonicalize_provider_batch(
@@ -911,9 +1051,34 @@ namespace cxxlens::detail::clang22
 				return sdk::unexpected(
 					provider_error("provider.observation-invalid", "source_origin_chain"));
 		for (const auto& [key, value] : payload)
+		{
 			if (key.empty() || key.find('\0') != std::string::npos ||
 				value.find('\0') != std::string::npos)
 				return sdk::unexpected(provider_error("provider.observation-invalid", "payload"));
+			if ((key == "symbol.identity_confidence" ||
+				 key == "call.direct_callee_identity_confidence") &&
+				value != "exact-usr" && value != "structural-fallback")
+				return sdk::unexpected(
+					provider_error("provider.observation-invalid", "identity-confidence"));
+		}
+		const auto confidence_matches =
+			[](const std::string_view key, const std::string_view confidence)
+		{
+			return (confidence == "exact-usr" && key.starts_with("clang-usr:")) ||
+				(confidence == "structural-fallback" && key.starts_with("clang-fallback:"));
+		};
+		if (const auto confidence = payload.find("symbol.identity_confidence");
+			confidence != payload.end() && !confidence_matches(semantic_key, confidence->second))
+			return sdk::unexpected(
+				provider_error("provider.observation-invalid", "identity-confidence-binding"));
+		if (const auto confidence = payload.find("call.direct_callee_identity_confidence");
+			confidence != payload.end())
+		{
+			const auto target = payload.find("call.direct_callee");
+			if (target == payload.end() || !confidence_matches(target->second, confidence->second))
+				return sdk::unexpected(
+					provider_error("provider.observation-invalid", "identity-confidence-binding"));
+		}
 		return {};
 	}
 
@@ -1051,6 +1216,37 @@ namespace cxxlens::detail::clang22
 		return limitations.empty();
 	}
 
+	sdk::result<declaration_identity>
+	make_declaration_identity(const declaration_identity_input& input)
+	{
+		if (input.usr && !input.usr->empty())
+			return declaration_identity{"clang-usr:" + *input.usr, "exact-usr"};
+		if (input.toolchain_digest.size() != 71U ||
+			!input.toolchain_digest.starts_with("sha256:") || input.declaration_kind.empty() ||
+			input.canonical_signature.empty() || input.declaration_context.empty() ||
+			input.canonical_source_anchor.empty())
+			return sdk::unexpected(provider_error(
+				"provider.declaration-identity-unresolved", "fallback", "incomplete-projection"));
+		std::ostringstream projection;
+		const auto append = [&](const std::string_view name, const std::string_view value)
+		{
+			projection << name.size() << ':' << name << value.size() << ':' << value;
+		};
+		append("schema", "clang22.declaration-fallback.v2");
+		append("toolchain_digest", input.toolchain_digest);
+		append("declaration_kind", input.declaration_kind);
+		append("qualified_name", input.qualified_name);
+		append("canonical_signature", input.canonical_signature);
+		append("template_identity", input.template_identity);
+		append("constraint_identity", input.constraint_identity);
+		append("declaration_context", input.declaration_context);
+		append("canonical_source_anchor", input.canonical_source_anchor);
+		return declaration_identity{
+			"clang-fallback:" +
+				*sdk::semantic_digest("clang22.declaration-fallback.v2", projection.str()),
+			"structural-fallback"};
+	}
+
 	sdk::result<canonicalized_provider_batch>
 	canonicalize_provider_batch(const observation_batch& batch,
 								const std::string& toolchain_digest,
@@ -1064,6 +1260,13 @@ namespace cxxlens::detail::clang22
 				provider_error("provider.toolchain-digest-invalid", "toolchain"));
 		for (const auto& diagnostic : batch.diagnostics)
 			invocation_limitations.push_back("frontend-diagnostic:" + diagnostic);
+		for (const auto& observation : batch.observations)
+			for (const auto field : {std::string_view{"symbol.identity_confidence"},
+									 std::string_view{"call.direct_callee_identity_confidence"}})
+				if (const auto confidence = observation.payload.find(field);
+					confidence != observation.payload.end() && confidence->second != "exact-usr")
+					invocation_limitations.push_back("identity-confidence:" + confidence->second +
+													 ":" + observation.semantic_key);
 		std::ranges::sort(invocation_limitations);
 		invocation_limitations.erase(std::ranges::unique(invocation_limitations).begin(),
 									 invocation_limitations.end());
