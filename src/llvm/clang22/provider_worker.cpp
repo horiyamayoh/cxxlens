@@ -270,6 +270,15 @@ namespace cxxlens::detail::clang22
 			return std::move(builder).finish();
 		}
 
+		[[nodiscard]] std::string entity_identity(const std::string_view semantic_key,
+												  const std::string_view toolchain,
+												  const std::string_view variant)
+		{
+			return *sdk::semantic_digest("cc-entity",
+										 std::string{semantic_key} + "\n" + std::string{toolchain} +
+											 "\n" + std::string{variant});
+		}
+
 		[[nodiscard]] sdk::result<sdk::detached_row>
 		call_site_row(const detached_observation& observation,
 					  const std::string& call,
@@ -860,9 +869,8 @@ namespace cxxlens::detail::clang22
 		for (const auto& observation : batch.observations)
 			if (observation.kind == observation_kind::entity)
 			{
-				const auto entity = *sdk::semantic_digest("cc-entity",
-														  observation.semantic_key + "\n" +
-															  toolchain + "\n" + batch.variant);
+				const auto entity =
+					entity_identity(observation.semantic_key, toolchain, batch.variant);
 				entity_ids.emplace(observation.semantic_key, entity);
 				auto local = observation_row(entity_observation_descriptor(),
 											 observation,
@@ -914,18 +922,16 @@ namespace cxxlens::detail::clang22
 				return sdk::unexpected(std::move(site.error()));
 			output.call_sites.push_back(std::move(*site));
 			const auto target = observation.payload.find("call.direct_callee");
-			const auto mapped = target == observation.payload.end()
-				? entity_ids.end()
-				: entity_ids.find(target->second);
-			if (target == observation.payload.end() || mapped == entity_ids.end())
+			if (target == observation.payload.end() || target->second.empty())
 			{
 				const auto reason = observation.payload.contains("call.unresolved_reason")
 					? observation.payload.at("call.unresolved_reason")
-					: "direct-target-unresolved";
+					: "no-direct-callee";
 				output.unresolved.push_back({"provider.direct-target-unresolved", call, reason});
 				continue;
 			}
-			auto direct = direct_target_row(call, mapped->second);
+			const auto target_entity = entity_identity(target->second, toolchain, batch.variant);
+			auto direct = direct_target_row(call, target_entity);
 			if (!direct)
 				return sdk::unexpected(std::move(direct.error()));
 			output.direct_targets.push_back(std::move(*direct));

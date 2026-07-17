@@ -1,5 +1,5 @@
 {
-  "asset_count": 295,
+  "asset_count": 296,
   "assets": [
     {
       "authority": "active",
@@ -739,6 +739,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0047-recipe-execution-completeness-classification.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0048-cross-tu-direct-target-identity.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2068,7 +2075,7 @@
     }
   ],
   "classifications": {
-    "active": 259,
+    "active": 260,
     "archived": 35,
     "generated": 1
   },

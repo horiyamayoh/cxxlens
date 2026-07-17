@@ -112,23 +112,39 @@ namespace
 	[[nodiscard]] canonicalized_provider_batch clang_rows(const std::string& qualified_name,
 														  const bool ambiguous)
 	{
-		observation_batch batch;
-		batch.unit = "cu-" + std::string(64U, 'a');
-		batch.variant = "variant-" + std::string(64U, 'b');
-		batch.observations.push_back(entity_observation("clang-usr:target-a", qualified_name, '1'));
-		batch.observations.push_back(call_observation("call:caller:1", "clang-usr:target-a", '1'));
+		observation_batch entity_batch;
+		entity_batch.unit = "cu-" + std::string(64U, 'a');
+		entity_batch.variant = "variant-" + std::string(64U, 'b');
+		entity_batch.observations.push_back(
+			entity_observation("clang-usr:target-a", qualified_name, '1'));
+		observation_batch call_batch;
+		call_batch.unit = "cu-" + std::string(64U, 'c');
+		call_batch.variant = entity_batch.variant;
+		auto first_call = call_observation("call:caller:1", "clang-usr:target-a", '1');
+		first_call.compile_unit = call_batch.unit;
+		call_batch.observations.push_back(std::move(first_call));
 		if (ambiguous)
 		{
-			batch.observations.push_back(
+			entity_batch.observations.push_back(
 				entity_observation("clang-usr:target-b", qualified_name, '2'));
-			batch.observations.push_back(
-				call_observation("call:caller:2", "clang-usr:target-b", '2'));
+			auto second_call = call_observation("call:caller:2", "clang-usr:target-b", '2');
+			second_call.compile_unit = call_batch.unit;
+			call_batch.observations.push_back(std::move(second_call));
 		}
-		require(batch.validate().has_value(), "Clang observation batch rejected");
-		auto normalized =
-			detail::clang22::canonicalize_provider_batch(batch, std::string{clang_contract}, true);
-		require(normalized.has_value(), "Clang observation canonicalization failed");
-		return std::move(*normalized);
+		require(entity_batch.validate().has_value() && call_batch.validate().has_value(),
+				"cross-TU Clang observation batches rejected");
+		auto normalized_entities = detail::clang22::canonicalize_provider_batch(
+			entity_batch, std::string{clang_contract}, true);
+		auto normalized_calls = detail::clang22::canonicalize_provider_batch(
+			call_batch, std::string{clang_contract}, true);
+		require(normalized_entities && normalized_calls && normalized_calls->entities.empty() &&
+					normalized_calls->direct_targets.size() == call_batch.observations.size() &&
+					normalized_calls->unresolved.empty(),
+				"cross-TU Clang direct target canonicalization failed");
+		normalized_entities->call_observations = std::move(normalized_calls->call_observations);
+		normalized_entities->call_sites = std::move(normalized_calls->call_sites);
+		normalized_entities->direct_targets = std::move(normalized_calls->direct_targets);
+		return std::move(*normalized_entities);
 	}
 
 	[[nodiscard]] detached_row lock_row(std::string acquire, std::string function, std::string mode)

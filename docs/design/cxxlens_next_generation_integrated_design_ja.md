@@ -2532,6 +2532,12 @@ identity は structural observation、normalized source、compile unit、variant
 ID は batch 内対応付けにのみ使う。source がない call や direct target を対応付けられない call は observation を
 保持したまま unresolved とし、standard row を捏造しない。
 
+Clang が `getDirectCallee()` を返した call は、callee declaration が header、別 translation unit、未publication
+partition のいずれにあるかに関係なく、callee semantic key、toolchain、variant を entity row と共有する identity
+projection へ入力して `cc.call_direct_target.target` を導出する。同一 observation batch 内の entity row 存在を
+directness または target identity の条件にしてはならない。未publication entity は relation registry の
+`soft_semantic` / `on_missing: unresolved` policy で会計し、direct callee がない call だけを provider unresolved とする。
+
 ---
 
 ## 20. Logical Query

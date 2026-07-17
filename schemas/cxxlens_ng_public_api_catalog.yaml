@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.34.0
+document_version: 1.35.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -321,7 +321,7 @@ entries:
 
   - id: public.provider-runtime
     status: implemented
-    owner_issue: '#103'
+    owner_issue: '#105'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/sdk/provider.hpp]
@@ -356,7 +356,7 @@ entries:
 
   - id: public.native-provider-sdk
     status: implemented
-    owner_issue: '#66'
+    owner_issue: '#105'
     profile: NG0
     target: cxxlens::clang22_provider_sdk
     headers: [include/cxxlens/provider/clang22.hpp]
@@ -374,8 +374,8 @@ entries:
     lifetime: [translation-unit-and-ast-objects-are-borrowed-callback-only, outputs-must-be-detached-before-return]
     threading: [borrowed-translation-unit-is-not-copyable-or-transferable, callback-is-synchronous]
     versioning: [clang-major-is-explicit-in-package-target-header-and-namespace]
-    invariants: [pointer-types-rejected-at-compile-time, source-range-normalized-to-half-open-detached-source-span, no-silent-clang-major-fallback]
-    implementation_evidence: [src/llvm/clang22/provider_sdk.cpp, src/llvm/clang22/provider_worker.cpp, examples/sdk/clang22_native_provider.cpp, tests/public_headers/provider_clang22_header_test.cpp, tests/adapter/clang22/provider_normalizer_test.cpp, tests/install/clang22_sdk_consumer/main.cpp]
+    invariants: [pointer-types-rejected-at-compile-time, source-range-normalized-to-half-open-detached-source-span, clang-direct-target-identity-does-not-require-same-batch-entity-row, missing-soft-target-entity-is-accounted-by-relation-reference-policy, no-silent-clang-major-fallback]
+    implementation_evidence: [src/llvm/clang22/provider_sdk.cpp, src/llvm/clang22/provider_worker.cpp, examples/sdk/clang22_native_provider.cpp, tests/public_headers/provider_clang22_header_test.cpp, tests/adapter/clang22/provider_normalizer_test.cpp, tests/integration/r2_vertical_slice_test.cpp, tests/install/clang22_sdk_consumer/main.cpp, docs/design/adr/0048-cross-tu-direct-target-identity.md]
 
   - id: public.recipe-foundation
     status: implemented
