@@ -183,6 +183,27 @@ class NgQueryContractTests(unittest.TestCase):
         with self.assertRaisesRegex(QueryContractError, "query.duplicate-scan-alias"):
             validate_ir(base, self.ir_schema, self.contract, self.registry)
 
+    def test_boolean_wrapper_requires_two_operands_in_ir(self) -> None:
+        base = copy.deepcopy(
+            self.vector("static-dynamic-normalized-digest")["input"]["static"]
+        )
+
+        def find_filter(node: dict) -> dict:
+            if node["operator"] == "query.filter.v1":
+                return node
+            for child in node["inputs"]:
+                try:
+                    return find_filter(child)
+                except LookupError:
+                    pass
+            raise LookupError
+
+        filtered = find_filter(base["root"])
+        atom = filtered["arguments"]["predicate"]
+        filtered["arguments"]["predicate"] = {"kind": "and", "operands": [atom]}
+        with self.assertRaisesRegex(QueryContractError, "query.schema-invalid"):
+            validate_ir(base, self.ir_schema, self.contract, self.registry)
+
     def test_absent_unknown_and_null_are_three_distinct_states(self) -> None:
         validate_cell({"state": "absent"})
         validate_cell({"state": "unknown", "reason": "unresolved-1"})

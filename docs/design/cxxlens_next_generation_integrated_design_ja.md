@@ -2767,6 +2767,11 @@ Issue #89 / ADR 0032 により typed literal の storage category は encode/dec
 odd-length、uppercase、non-hex encoding は拒否する。`set<T>` の nested parameter は完全に保持し、column type と parameter が
 一致しない literal は validation で拒否する。executor は decoded set を string に fallback して比較してはならない。
 
+Issue #144 / ADR 0075 により public `query::all()` / `query::any()` は zero operand を
+`sdk.query-empty-expression` で拒否し、one operand は wrapper を生成せず operand 自身へ canonical fold する。`and` / `or` の
+canonical IR wrapper と decoder は引き続き minimum two operands を要求する。これにより factory が成功した unary generic composition は
+atom と同一の where / inner join / semi join semantics を持ち、同一 revision の decoder が自分で生成した value を拒否しない。
+
 Issue #115 / ADR 0058 により scan alias は digest だけの field ではなく query-local column occurrence identity とする。
 relation descriptor の stable column ID は schema authority のまま維持し、predicate、order、project、typed node shape と
 runtime intermediate row は `(source_alias, stable column ID)` で bind する。same relation の複数 scan に対する unqualified

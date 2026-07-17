@@ -227,6 +227,15 @@ def validate_contract(
         != "reuse-identical-scan-dag-node-or-reject"
     ):
         fail("query.scan-alias-contract-invalid", "union scan sharing is unspecified")
+    boolean = contract["canonicalization"]["boolean_predicates"]
+    if boolean != {
+        "zero_operands": "reject-sdk.query-empty-expression",
+        "one_operand_factory": "canonical-fold-to-operand",
+        "wrapper_arity": "minimum-two",
+        "decoder_unary_wrapper": "reject-sdk.query-predicate-shape",
+        "nested_factory_decoder_parity": "required",
+    }:
+        fail("query.boolean-arity-contract-invalid", "factory and decoder arity differ")
     deferred = _rows_by(contract["deferred_operators"], "id", "deferred operator")
     if not {"query.group.v1", "query.aggregate.v1"}.issubset(deferred):
         fail("query.aggregate-not-deferred", "group/aggregate are not deferred")

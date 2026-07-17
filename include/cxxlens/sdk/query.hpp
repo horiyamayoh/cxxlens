@@ -52,9 +52,9 @@ namespace cxxlens::sdk::query
 	[[nodiscard]] expression is_absent(column_ref column);
 	/** @brief Test the semantic unknown cell state. */
 	[[nodiscard]] expression is_unknown(column_ref column);
-	/** @brief Canonical commutative conjunction. */
+	/** @brief Canonical commutative conjunction; rejects zero and folds one operand. */
 	[[nodiscard]] result<expression> all(std::span<const expression> expressions);
-	/** @brief Canonical commutative disjunction. */
+	/** @brief Canonical commutative disjunction; rejects zero and folds one operand. */
 	[[nodiscard]] result<expression> any(std::span<const expression> expressions);
 
 	/** @brief One stable Logical Query IR node. */

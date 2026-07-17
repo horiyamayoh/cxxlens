@@ -568,6 +568,12 @@ namespace cxxlens::sdk::query
 	{
 		if (expressions.empty())
 			return cxxlens::sdk::unexpected(query_error("sdk.query-empty-expression", "all"));
+		if (expressions.size() == 1U)
+		{
+			if (expressions.front().canonical.empty())
+				return cxxlens::sdk::unexpected(query_error("sdk.query-empty-expression", "all"));
+			return expressions.front();
+		}
 		std::vector<std::string> children;
 		std::vector<column_ref> columns;
 		for (const auto& value : expressions)
@@ -599,6 +605,14 @@ namespace cxxlens::sdk::query
 
 	result<expression> any(const std::span<const expression> expressions)
 	{
+		if (expressions.empty())
+			return cxxlens::sdk::unexpected(query_error("sdk.query-empty-expression", "any"));
+		if (expressions.size() == 1U)
+		{
+			if (expressions.front().canonical.empty())
+				return cxxlens::sdk::unexpected(query_error("sdk.query-empty-expression", "any"));
+			return expressions.front();
+		}
 		auto combined = all(expressions);
 		if (!combined)
 			return combined;

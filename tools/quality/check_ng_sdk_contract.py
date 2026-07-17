@@ -648,6 +648,7 @@ def validate_store_implementation(root: pathlib.Path) -> None:
 
 def validate_query_runtime_implementation(root: pathlib.Path) -> None:
     header = (root / "include/cxxlens/sdk/query.hpp").read_text(encoding="utf-8")
+    query_source = (root / "src/sdk/query.cpp").read_text(encoding="utf-8")
     source = (root / "src/sdk/query_execution.cpp").read_text(encoding="utf-8")
     decoder = (root / "src/sdk/query_ir_decoder.cpp").read_text(encoding="utf-8")
     cmake = (root / "CMakeLists.txt").read_text(encoding="utf-8")
@@ -680,6 +681,8 @@ def validate_query_runtime_implementation(root: pathlib.Path) -> None:
     ):
         if marker not in source:
             fail(f"query runtime implementation marker is missing: {marker}")
+    if "expressions.size() == 1U" not in query_source:
+        fail("query boolean unary canonical fold is missing")
     for marker in (
         "duplicate-key",
         "absent_if_schema_missing",
@@ -709,6 +712,8 @@ def validate_query_runtime_implementation(root: pathlib.Path) -> None:
         "successful execution was confused with complete/closed input",
         "duplicate contributor guarantee was not rejected at the public row boundary",
         "cursor owned row and canonical guarantee cardinality diverged",
+        "one-operand all/any did not canonical-fold to its atom",
+        "factory-success unary predicate was rejected by semi_join",
     ):
         if marker not in test:
             fail(f"query runtime acceptance marker is missing: {marker}")

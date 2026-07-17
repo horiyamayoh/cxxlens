@@ -852,8 +852,43 @@ namespace
 		auto second_predicate = query::equals_present(
 			*qualified_predicate_key, query::literal::typed("query_key_id", "key:b"));
 		require(first_predicate && second_predicate, "canonical predicate setup failed");
+		const std::array<query::expression, 0U> no_predicates{};
+		const auto empty_all = query::all(no_predicates);
+		const auto empty_any = query::any(no_predicates);
+		require(!empty_all && empty_all.error().code == "sdk.query-empty-expression" &&
+					empty_all.error().field == "all" && !empty_any &&
+					empty_any.error().code == "sdk.query-empty-expression" &&
+					empty_any.error().field == "any",
+				"zero-operand boolean predicate was accepted");
+		const std::array one_predicate{*first_predicate};
+		auto unary_all = query::all(one_predicate);
+		auto unary_any = query::any(one_predicate);
+		require(unary_all && unary_any && unary_all->canonical == first_predicate->canonical &&
+					unary_any->canonical == first_predicate->canonical &&
+					unary_all->referenced_columns == first_predicate->referenced_columns &&
+					unary_any->referenced_columns == first_predicate->referenced_columns,
+				"one-operand all/any did not canonical-fold to its atom");
+		auto unary_filter_source = query::builder::from(data.left);
+		require(unary_filter_source.has_value(), "unary predicate filter source failed");
+		auto unary_filter = std::move(*unary_filter_source).where(*unary_all);
+		require(unary_filter && std::move(*unary_filter).finish().validate(),
+				"factory-success unary predicate was rejected by where/decoder");
 		const std::array predicate_terms{*first_predicate, *second_predicate};
 		auto conjunction = query::all(predicate_terms);
+		auto disjunction = query::any(predicate_terms);
+		require(disjunction.has_value(), "two-operand disjunction setup failed");
+		const std::array nested_terms{*disjunction};
+		auto nested = query::all(nested_terms);
+		require(nested && nested->canonical == disjunction->canonical,
+				"nested unary all(any(...)) did not fold canonically");
+		auto nested_source = query::builder::from(data.left);
+		require(nested_source.has_value(), "nested predicate source failed");
+		auto nested_filter = std::move(*nested_source).where(*nested);
+		require(nested_filter.has_value(), "nested factory predicate was rejected by where");
+		auto nested_ir = std::move(*nested_filter).finish();
+		require(nested_ir.validate() && query::decode_arguments(nested_ir.nodes.back()) &&
+					nested_ir.canonical_form() == nested_ir.canonical_form(),
+				"boolean predicate decode/encode round-trip diverged");
 		auto predicate_source = query::builder::from(data.left);
 		require(conjunction && predicate_source, "canonical conjunction setup failed");
 		auto filtered = std::move(*predicate_source).where(*conjunction);
@@ -866,6 +901,30 @@ namespace
 		require(represented_predicate.validate().has_value() &&
 					represented_predicate.digest() == canonical_predicate.digest(),
 				"commutative predicate order or duplicate changed normalized identity");
+
+		const auto self_key =
+			column_ref{data.self.id, data.self.columns[0].id, data.self.columns[0].type};
+		auto join_left_key = query::qualify(self_key, "left");
+		auto join_right_key = query::qualify(self_key, "right");
+		require(join_left_key && join_right_key, "unary join predicate qualification failed");
+		auto join_atom = query::equals_present(*join_left_key, *join_right_key);
+		require(join_atom.has_value(), "unary join atom setup failed");
+		const std::array join_terms{*join_atom};
+		auto unary_join_all = query::all(join_terms);
+		auto unary_join_any = query::any(join_terms);
+		require(unary_join_all && unary_join_any, "unary join predicate factory failed");
+		auto inner_left = query::builder::from(data.self, "left");
+		auto inner_right = query::builder::from(data.self, "right");
+		require(inner_left && inner_right, "unary inner join sources failed");
+		auto inner = std::move(*inner_left).inner_join(std::move(*inner_right), *unary_join_all);
+		require(inner && std::move(*inner).finish().validate(),
+				"factory-success unary predicate was rejected by inner_join");
+		auto semi_left = query::builder::from(data.self, "left");
+		auto semi_right = query::builder::from(data.self, "right");
+		require(semi_left && semi_right, "unary semi join sources failed");
+		auto semi = std::move(*semi_left).semi_join(std::move(*semi_right), *unary_join_any);
+		require(semi && std::move(*semi).finish().validate(),
+				"factory-success unary predicate was rejected by semi_join");
 
 		const std::array condition_values{std::string{"debug"}, std::string{"release"}};
 		auto canonical_condition = condition_query(data.left, condition_values);

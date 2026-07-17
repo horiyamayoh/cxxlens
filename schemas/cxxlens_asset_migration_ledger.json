@@ -1,5 +1,5 @@
 {
-  "asset_count": 357,
+  "asset_count": 358,
   "assets": [
     {
       "authority": "active",
@@ -949,6 +949,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0074-query-row-guarantee-set-validation.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0075-query-unary-boolean-canonical-fold.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2502,7 +2509,7 @@
     }
   ],
   "classifications": {
-    "active": 321,
+    "active": 322,
     "archived": 35,
     "generated": 1
   },
