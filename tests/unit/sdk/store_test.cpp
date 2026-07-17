@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -16,6 +17,8 @@ namespace cxxlens::sdk
 	result<void> rewrite_publication_identity_field_for_testing(snapshot_store&,
 																std::string_view,
 																std::string_view);
+	result<std::string> rewrite_snapshot_version_for_testing(
+		snapshot_store&, std::string_view, std::string_view, std::uint64_t, std::uint32_t);
 } // namespace cxxlens::sdk
 
 namespace
@@ -789,6 +792,68 @@ namespace
 		std::filesystem::remove(path);
 	}
 
+	void check_snapshot_version_wire_bounds()
+	{
+		const auto relation_engine = engine();
+		const std::array components{"major", "minor", "patch"};
+		constexpr auto maximum = std::numeric_limits<std::uint32_t>::max();
+		for (std::size_t component_index = 0U; component_index < components.size();
+			 ++component_index)
+		{
+			for (const bool overflow : {false, true})
+			{
+				const auto path = std::filesystem::temp_directory_path() /
+					("cxxlens-ng-snapshot-version-" + std::to_string(component_index) + "-" +
+					 (overflow ? "overflow" : "maximum") + ".sqlite");
+				std::filesystem::remove(path);
+				std::string publication_id;
+				{
+					auto store =
+						cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+					require(store.has_value(), "snapshot version boundary store unavailable");
+					auto snapshot = publish(*store, relation_engine, false);
+					auto rewritten = cxxlens::sdk::rewrite_snapshot_version_for_testing(
+						*store,
+						snapshot.publication().publication_id,
+						components[component_index],
+						overflow ? static_cast<std::uint64_t>(maximum) + 1U : maximum,
+						overflow ? 0U : maximum);
+					require(rewritten.has_value(),
+							"snapshot version mutation fixture failed: " +
+								std::string{components[component_index]});
+					publication_id = std::move(*rewritten);
+				}
+				auto reopened =
+					cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+				require(reopened.has_value(), "snapshot version boundary store did not reopen");
+				auto opened = reopened->open_publication(publication_id);
+				if (overflow)
+				{
+					require(!opened && opened.error().code == "store.publication-corrupt",
+							"oversized snapshot version component was accepted: " +
+								std::string{components[component_index]});
+					auto compacted = reopened->compact();
+					require(!compacted &&
+								compacted.error().code == "store.compact-validation-failed",
+							"compaction accepted oversized snapshot version component");
+				}
+				else
+				{
+					require(opened.has_value(),
+							"UINT32_MAX snapshot version component was rejected: " +
+								std::string{components[component_index]});
+					const auto& version = opened->manifest().snapshot_semantics_version;
+					const auto actual = component_index == 0U ? version.major
+						: component_index == 1U				  ? version.minor
+															  : version.patch;
+					require(actual == maximum && reopened->compact().has_value(),
+							"canonical maximum version payload was not byte-stable");
+				}
+				std::filesystem::remove(path);
+			}
+		}
+	}
+
 	void check_sqlite_multi_instance_cas()
 	{
 		const auto relation_engine = engine();
@@ -947,6 +1012,7 @@ int main()
 	check_sqlite_multi_instance_cas();
 	check_sqlite_semantic_graph_tamper();
 	check_publication_identity_binding();
+	check_snapshot_version_wire_bounds();
 	check_derived_basis_membership();
 	return 0;
 }

@@ -1,10 +1,10 @@
 schema: cxxlens.snapshot-store-contract.v1
-document_version: 1.7.0
+document_version: 1.8.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#15-immutable-snapshot-and-store
-  decision_adr: docs/design/adr/0077-persisted-publication-identity-binding.md
-  owner_issue: '#146'
+  decision_adr: docs/design/adr/0078-snapshot-version-wire-u32-canonicality.md
+  owner_issue: '#147'
   owner: steward.ng-store-contract
 compatibility:
   version_axis: snapshot-identity-and-publication
@@ -254,6 +254,13 @@ publication_identity:
     mismatch: store.corrupt
     before_exposure: true
   compaction: physical-generation-update-preserves-publication-id
+wire_decoding:
+  snapshot_semantics_version_components: [major, minor, patch]
+  component_domain: unsigned-32-bit
+  maximum: 4294967295
+  overflow: store.corrupt
+  narrowing_before_range_validation: forbidden
+  accepted_v5_payload: decode-encode-byte-identical
 publication_series:
   selector_fields:
     - catalog_id

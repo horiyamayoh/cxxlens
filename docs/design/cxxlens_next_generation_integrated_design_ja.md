@@ -1802,8 +1802,8 @@ message prose は control flow に使用しない。
 
 ### 15.1 Snapshot semantic identity
 
-Issue #146 の exact authority は `schemas/cxxlens_ng_snapshot_store_contract.yaml`
-（`cxxlens.snapshot-store-contract.v1`）と ADR 0077 である。基礎 identity DAG は Issue #63 / ADR 0009 を継承する。
+Issue #147 の exact authority は `schemas/cxxlens_ng_snapshot_store_contract.yaml`
+（`cxxlens.snapshot-store-contract.v1`）と ADR 0078 である。基礎 identity DAG は Issue #63 / ADR 0009 を継承する。
 identity は SHA-256 の全 256 bit と
 `cxxlens-canonical-tuple-v1` の versioned length-prefixed binary tuple を使用し、identity kind ごとに domain
 separation する。JSON text、absolute root、unordered iteration、timestamp、task order、backend layout は authority
@@ -1839,6 +1839,11 @@ Issue #146 / ADR 0077 により、persisted publication record は公開前に
 要求する。memory と SQLite の publish/persist/load/read/compact は同じ validator を使用し、不一致は
 `store.corrupt` として fail closed にする。`physical_generation`、state、corrupt flag は publication identity に
 含めず、copy-on-write compaction は generation の更新前後で同じ publication ID を保つ。
+
+Issue #147 / ADR 0078 により、snapshot semantics version の major/minor/patch は wire 上の u64 を typed u32
+reader で range validation してから構築する。`UINT32_MAX` は受理し、それを超える値は checksum や manifest ID が
+整合していても `store.corrupt` とする。現行 v5 payload は decode 後の canonical re-encode と byte-for-byte 一致を
+要求し、unchecked narrowing によって複数の wire encoding が同じ manifest へ collapse することを禁止する。
 
 ### 15.2 Snapshot manifest
 

@@ -266,6 +266,16 @@ namespace cxxlens::sdk
 				offset_ += 8U;
 				return output;
 			}
+			[[nodiscard]] result<std::uint32_t> unsigned_32(const std::string_view field)
+			{
+				auto value = unsigned_value();
+				if (!value)
+					return unexpected(std::move(value.error()));
+				if (*value > std::numeric_limits<std::uint32_t>::max())
+					return unexpected(
+						store_error("store.corrupt", std::string{field}, "u32-overflow"));
+				return static_cast<std::uint32_t>(*value);
+			}
 			[[nodiscard]] result<bool> boolean()
 			{
 				if (offset_ >= bytes_.size() ||
@@ -299,6 +309,10 @@ namespace cxxlens::sdk
 			[[nodiscard]] bool finished() const noexcept
 			{
 				return offset_ == bytes_.size();
+			}
+			[[nodiscard]] std::size_t offset() const noexcept
+			{
+				return offset_;
 			}
 
 		  private:
@@ -1156,9 +1170,9 @@ namespace cxxlens::sdk
 			auto& manifest = value->semantic_manifest;
 			auto schema = reader.string();
 			auto id = reader.string();
-			auto major = reader.unsigned_value();
-			auto minor = reader.unsigned_value();
-			auto patch = reader.unsigned_value();
+			auto major = reader.unsigned_32("snapshot-version-major");
+			auto minor = reader.unsigned_32("snapshot-version-minor");
+			auto patch = reader.unsigned_32("snapshot-version-patch");
 			auto catalog = reader.string();
 			auto universe = reader.string();
 			auto registry = reader.string();
@@ -1169,9 +1183,7 @@ namespace cxxlens::sdk
 				return unexpected(store_error("store.corrupt", "manifest", "header"));
 			manifest.schema = std::move(*schema);
 			manifest.id = std::move(*id);
-			manifest.snapshot_semantics_version = {static_cast<std::uint32_t>(*major),
-												   static_cast<std::uint32_t>(*minor),
-												   static_cast<std::uint32_t>(*patch)};
+			manifest.snapshot_semantics_version = {*major, *minor, *patch};
 			manifest.catalog_semantic_digest = std::move(*catalog);
 			manifest.condition_universe_id = std::move(*universe);
 			manifest.relation_registry_digest = std::move(*registry);
@@ -1572,6 +1584,12 @@ namespace cxxlens::sdk
 				manifest.id != snapshot_identity(manifest) ||
 				publication.snapshot_id != manifest.id)
 				return unexpected(store_error("store.corrupt", "payload", "semantic-digest"));
+			if (payload_has_partition_envelopes)
+			{
+				const auto canonical = encode_snapshot(*value);
+				if (!std::ranges::equal(bytes, canonical))
+					return unexpected(store_error("store.corrupt", "payload", "noncanonical"));
+			}
 			return value;
 		}
 	} // namespace
@@ -2863,6 +2881,74 @@ namespace cxxlens::sdk
 			return updated;
 		}
 		return {};
+	}
+
+	result<std::string> rewrite_snapshot_version_for_testing(snapshot_store& store,
+															 const std::string_view publication_id,
+															 const std::string_view component,
+															 const std::uint64_t wire_value,
+															 const std::uint32_t semantic_value)
+	{
+		std::scoped_lock lock{store.implementation_->mutex};
+		if (store.implementation_->database == nullptr)
+			return unexpected(store_error("store.corrupt", "test-version-rewrite", "backend"));
+		const auto found = store.implementation_->publications.find(publication_id);
+		if (found == store.implementation_->publications.end())
+			return unexpected(
+				store_error("store.publication-not-found", std::string{publication_id}));
+		auto rewritten = snapshot_handle::data{*found->second};
+		auto& version = rewritten.semantic_manifest.snapshot_semantics_version;
+		std::size_t component_index{};
+		if (component == "major")
+			version.major = semantic_value;
+		else if (component == "minor")
+		{
+			version.minor = semantic_value;
+			component_index = 1U;
+		}
+		else if (component == "patch")
+		{
+			version.patch = semantic_value;
+			component_index = 2U;
+		}
+		else
+			return unexpected(store_error("store.corrupt", "test-version-rewrite", "component"));
+		rewritten.semantic_manifest.id = snapshot_identity(rewritten.semantic_manifest);
+		auto& record = rewritten.publication_record_value;
+		record.snapshot_id = rewritten.semantic_manifest.id;
+		record.publication_id = publication_identity(record);
+
+		auto payload = encode_snapshot(rewritten);
+		binary_reader reader{payload};
+		auto magic = reader.string();
+		auto schema = reader.string();
+		auto snapshot_id = reader.string();
+		if (!magic || !schema || !snapshot_id || *magic != "cxxlens.ng-snapshot-payload.v5")
+			return unexpected(store_error("store.corrupt", "test-version-rewrite", "payload"));
+		const auto component_offset = reader.offset() + component_index * 8U;
+		if (payload.size() - component_offset < 8U)
+			return unexpected(store_error("store.corrupt", "test-version-rewrite", "truncated"));
+		for (std::size_t index = 0U; index < 8U; ++index)
+		{
+			const auto shift = static_cast<unsigned>((7U - index) * 8U);
+			payload[component_offset + index] =
+				static_cast<std::byte>((wire_value >> shift) & 0xffU);
+		}
+		const auto checksum = content_digest(payload);
+		std::ostringstream sql;
+		sql << "BEGIN IMMEDIATE;UPDATE cxxlens_ng_publication SET publication_id="
+			<< sql_quote(record.publication_id) << ",snapshot_id=" << sql_quote(record.snapshot_id)
+			<< ",checksum=" << sql_quote(checksum) << ",payload=X'" << bytes_hex(payload)
+			<< "' WHERE publication_id=" << sql_quote(publication_id)
+			<< ";UPDATE cxxlens_ng_series_head SET current_publication="
+			<< sql_quote(record.publication_id)
+			<< " WHERE current_publication=" << sql_quote(publication_id) << ";COMMIT;";
+		if (auto updated = store.implementation_->database->execute(sql.str()); !updated)
+		{
+			(void)store.implementation_->database->execute("ROLLBACK;");
+			return unexpected(std::move(updated.error()));
+		}
+		return record.publication_id;
 	}
 
 	snapshot_builder::snapshot_builder(relation_registry registry) : registry_{std::move(registry)}

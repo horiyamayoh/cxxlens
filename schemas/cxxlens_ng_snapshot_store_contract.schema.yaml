@@ -16,6 +16,7 @@ required:
   - closure
   - snapshot
   - publication_identity
+  - wire_decoding
   - publication_series
   - publication_transaction
   - reader_pin
@@ -35,8 +36,8 @@ properties:
       design:
         const: docs/design/cxxlens_next_generation_integrated_design_ja.md#15-immutable-snapshot-and-store
       decision_adr:
-        const: docs/design/adr/0077-persisted-publication-identity-binding.md
-      owner_issue: {const: '#146'}
+        const: docs/design/adr/0078-snapshot-version-wire-u32-canonicality.md
+      owner_issue: {const: '#147'}
       owner: {const: steward.ng-store-contract}
   compatibility:
     type: object
@@ -108,6 +109,17 @@ properties:
           mismatch: {const: store.corrupt}
           before_exposure: {const: true}
       compaction: {const: physical-generation-update-preserves-publication-id}
+  wire_decoding:
+    type: object
+    additionalProperties: false
+    required: [snapshot_semantics_version_components, component_domain, maximum, overflow, narrowing_before_range_validation, accepted_v5_payload]
+    properties:
+      snapshot_semantics_version_components: {const: [major, minor, patch]}
+      component_domain: {const: unsigned-32-bit}
+      maximum: {const: 4294967295}
+      overflow: {const: store.corrupt}
+      narrowing_before_range_validation: {const: forbidden}
+      accepted_v5_payload: {const: decode-encode-byte-identical}
   publication_series: {type: object, required: [selector_fields, series_id, current_api, catalog_only_lookup, missing_selector_field, cross_series_fallback, head_selection]}
   publication_transaction: {type: object, required: [states, visible_states, commit, stale_parent, failed_publish_preserves_head, recovery]}
   reader_pin: {type: object, required: [handle_pins, semantic_snapshot_immutable, reclamation]}

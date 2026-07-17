@@ -366,6 +366,8 @@ namespace cxxlens::sdk
 		friend result<void> rewrite_publication_identity_field_for_testing(snapshot_store&,
 																		   std::string_view,
 																		   std::string_view);
+		friend result<std::string> rewrite_snapshot_version_for_testing(
+			snapshot_store&, std::string_view, std::string_view, std::uint64_t, std::uint32_t);
 	};
 
 	/** @brief Transactional writer enforcing stage, independent validation, then atomic publish. */

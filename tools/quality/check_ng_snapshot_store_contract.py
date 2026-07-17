@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Executable snapshot identity and publication-series contract for Issue #146."""
+"""Executable snapshot identity and publication-series contract for Issue #147."""
 
 from __future__ import annotations
 
@@ -572,6 +572,15 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
         != "physical-generation-update-preserves-publication-id"
     ):
         fail("store.publication-generation-in-identity", "compaction")
+    if contract["wire_decoding"] != {
+        "snapshot_semantics_version_components": ["major", "minor", "patch"],
+        "component_domain": "unsigned-32-bit",
+        "maximum": (1 << 32) - 1,
+        "overflow": "store.corrupt",
+        "narrowing_before_range_validation": "forbidden",
+        "accepted_v5_payload": "decode-encode-byte-identical",
+    }:
+        fail("store.version-wire-domain-invalid", "semantic version decoding")
     if contract["partition"]["closure_ids_in_identity"] != "forbidden":
         fail("store.identity-cycle", "partition includes closure IDs")
     if set(contract["closure"]["identity_fields"]) != set(CLOSURE_FIELDS):
@@ -597,7 +606,7 @@ def validate_design(root: pathlib.Path) -> None:
         "cxxlens_ng_snapshot_store_contract.yaml",
         "snapshot_series_selector",
         "producer_input_basis",
-        "Issue #146",
+        "Issue #147",
     )
     for marker in required:
         if marker not in design:
@@ -606,7 +615,7 @@ def validate_design(root: pathlib.Path) -> None:
         if stale in design:
             fail("store.design-stale-contract", stale)
     index = (root / "docs/design/catalogs/README.md").read_text(encoding="utf-8")
-    if "Snapshot / Store Contract" not in index or "#146" not in index:
+    if "Snapshot / Store Contract" not in index or "#147" not in index:
         fail("store.catalog-index-stale", "snapshot contract")
 
 
