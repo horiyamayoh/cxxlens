@@ -84,6 +84,7 @@ namespace cxxlens::sdk
 		std::string claim_set_digest;
 		std::string coverage_digest;
 		std::string content_digest;
+		/** @brief Unique semantic content count; evidence occurrence count is payload metadata. */
 		std::uint64_t claim_count{};
 		bool complete{};
 		[[nodiscard]] bool operator==(const partition_manifest&) const = default;
@@ -192,7 +193,7 @@ namespace cxxlens::sdk
 		bool migration_required{};
 	};
 
-	/** @brief Query-visible claim projection preserving semantics beyond the detached row. */
+	/** @brief One canonical query-visible evidence occurrence for a semantic claim. */
 	struct snapshot_claim_annotation
 	{
 		detached_row row;

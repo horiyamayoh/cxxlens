@@ -263,20 +263,63 @@ namespace cxxlens::sdk
 
 		[[nodiscard]] bool claim_order(const claim& left, const claim& right)
 		{
-			return std::tie(left.descriptor,
-							left.semantic_key,
-							left.interpretation,
-							left.assertion,
-							left.content) < std::tie(right.descriptor,
-													 right.semantic_key,
-													 right.interpretation,
-													 right.assertion,
-													 right.content);
+			return detail::claim_occurrence_less(left, right);
 		}
 	} // namespace
 
 	namespace detail
 	{
+		std::vector<std::byte> claim_occurrence_projection(const claim& value)
+		{
+			std::vector<canonical_value> basis;
+			if (const auto* direct = std::get_if<direct_claim_basis>(&value.input_basis))
+				basis = {canonical_value::from_string("direct"),
+						 canonical_value::from_string(direct->basis_digest)};
+			else
+			{
+				const auto& derived = std::get<derived_claim_basis>(value.input_basis);
+				std::vector<canonical_value> consumed;
+				consumed.reserve(derived.consumed_partition_content_digests.size());
+				for (const auto& digest : derived.consumed_partition_content_digests)
+					consumed.push_back(canonical_value::from_string(digest));
+				basis = {canonical_value::from_string("derived"),
+						 canonical_value::from_string(derived.input_snapshot),
+						 canonical_value::from_tuple(std::move(consumed)),
+						 canonical_value::from_string(derived.transform_semantics)};
+			}
+			std::vector<canonical_value> modalities;
+			modalities.reserve(value.guarantee.verification_modalities.size());
+			for (const auto& modality : value.guarantee.verification_modalities)
+				modalities.push_back(canonical_value::from_string(modality));
+			return canonical_binary(canonical_value::from_tuple(
+				{canonical_value::from_string(value.descriptor),
+				 canonical_value::from_string(value.semantic_key),
+				 canonical_value::from_string(value.interpretation),
+				 canonical_value::from_string(value.assertion),
+				 canonical_value::from_string(value.content),
+				 canonical_value::from_string(value.row.canonical_form()),
+				 canonical_value::from_string(value.presence.canonical_form()),
+				 canonical_value::from_integer(static_cast<std::int64_t>(value.stage)),
+				 canonical_value::from_string(value.producer.id),
+				 canonical_value::from_string(value.producer.semantic_contract),
+				 canonical_value::from_tuple(std::move(basis)),
+				 canonical_value::from_string(value.provenance_root),
+				 canonical_value::from_string(value.guarantee.approximation),
+				 canonical_value::from_string(value.guarantee.scope),
+				 canonical_value::from_string(value.guarantee.assumptions),
+				 canonical_value::from_tuple(std::move(modalities))}));
+		}
+
+		bool claim_occurrence_less(const claim& left, const claim& right)
+		{
+			return claim_occurrence_projection(left) < claim_occurrence_projection(right);
+		}
+
+		bool same_claim_occurrence(const claim& left, const claim& right)
+		{
+			return claim_occurrence_projection(left) == claim_occurrence_projection(right);
+		}
+
 		result<std::string> functional_payload_digest(const relation_descriptor& descriptor,
 													  const detached_row& row)
 		{
@@ -586,7 +629,7 @@ namespace cxxlens::sdk
 				return unexpected(std::move(descriptor.error()));
 			const bool deduplicate = descriptor->merge != merge_mode::multiset;
 			if (!deduplicate || output.claims.empty() ||
-				output.claims.back().content != value.content)
+				!detail::same_claim_occurrence(output.claims.back(), value))
 				output.claims.push_back(value);
 		}
 
@@ -698,16 +741,37 @@ namespace cxxlens::sdk
 				}),
 			output.differential_disagreements.end());
 
-		std::ranges::sort(
-			output.unresolved,
-			[](const auto& left, const auto& right)
-			{
-				return std::tie(left.source_assertion, left.target_relation, left.source_columns) <
-					std::tie(right.source_assertion, right.target_relation, right.source_columns);
-			});
+		std::ranges::sort(output.unresolved,
+						  [](const auto& left, const auto& right)
+						  {
+							  return std::tie(left.source_assertion,
+											  left.source_relation,
+											  left.target_relation,
+											  left.source_columns,
+											  left.reason) < std::tie(right.source_assertion,
+																	  right.source_relation,
+																	  right.target_relation,
+																	  right.source_columns,
+																	  right.reason);
+						  });
+		output.unresolved.erase(
+			std::ranges::unique(output.unresolved,
+								[](const auto& left, const auto& right)
+								{
+									return left.source_assertion == right.source_assertion &&
+										left.source_relation == right.source_relation &&
+										left.target_relation == right.target_relation &&
+										left.source_columns == right.source_columns &&
+										left.reason == right.reason;
+								})
+				.begin(),
+			output.unresolved.end());
 		std::string canonical;
 		for (const auto& value : output.claims)
-			canonical += value.content + "\n";
+		{
+			const auto occurrence = detail::claim_occurrence_projection(value);
+			canonical += value.content + '|' + content_digest(occurrence) + "\n";
+		}
 		for (const auto& value : output.unresolved)
 			canonical += value.source_assertion + "->" + value.target_relation + "\n";
 		for (const auto& value : output.conflicts)

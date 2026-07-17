@@ -133,6 +133,23 @@ namespace
 		return draft;
 	}
 
+	[[nodiscard]] cxxlens::sdk::partition_draft
+	occurrence_partition(const cxxlens::sdk::relation_engine& value, const bool reverse)
+	{
+		auto draft = partition(value, false);
+		auto base = make_claim(value, "item:occurrence", "shared");
+		auto provenance = base;
+		provenance.provenance_root = "evidence:alternate";
+		auto producer = base;
+		producer.producer.id = "company.test.alternate-provider";
+		auto guarantee = base;
+		guarantee.guarantee.approximation = "under_approximation";
+		draft.claims = {base, provenance, producer, guarantee, base};
+		if (reverse)
+			std::ranges::reverse(draft.claims);
+		return draft;
+	}
+
 	[[nodiscard]] cxxlens::sdk::snapshot_series_selector
 	selector(const cxxlens::sdk::relation_engine& value)
 	{
@@ -463,6 +480,85 @@ namespace
 		std::filesystem::remove(path);
 	}
 
+	[[nodiscard]] std::vector<std::string>
+	occurrence_evidence(const cxxlens::sdk::snapshot_handle& snapshot)
+	{
+		auto cursor = snapshot.open_claims(descriptor().id);
+		require(cursor.has_value(), "claim occurrence cursor unavailable");
+		std::vector<std::string> output;
+		while (true)
+		{
+			auto next = cursor->next();
+			require(next.has_value(), "claim occurrence cursor failed");
+			if (!*next)
+				break;
+			auto occurrence = (*next)->copy();
+			require(occurrence.has_value(), "claim occurrence view unavailable");
+			output.push_back(occurrence->producer.id + '|' + occurrence->provenance_root + '|' +
+							 occurrence->guarantee.approximation);
+		}
+		std::ranges::sort(output);
+		return output;
+	}
+
+	void check_occurrence_round_trip()
+	{
+		const auto relation_engine = engine();
+		auto manifest = cxxlens::sdk::make_partition_manifest(
+			relation_engine, occurrence_partition(relation_engine, false));
+		require(manifest && manifest->claim_count == 1U,
+				"evidence occurrences changed the semantic claim set");
+		auto memory = cxxlens::sdk::make_in_memory_snapshot_store(relation_engine);
+		require(memory.has_value(), "occurrence memory store unavailable");
+		const auto path = std::filesystem::temp_directory_path() /
+			(std::string{"cxxlens-ng-occurrence-"} +
+			 std::string{relation_engine.registry_digest().substr(7U, 12U)} + ".sqlite");
+		std::filesystem::remove(path);
+		auto sqlite = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+		require(sqlite.has_value(), "occurrence SQLite store unavailable");
+		const auto publish_occurrences =
+			[&](cxxlens::sdk::snapshot_store& store, const bool reverse)
+		{
+			auto writer = store.begin(snapshot_draft(relation_engine));
+			require(writer && writer->stage(occurrence_partition(relation_engine, reverse)) &&
+						writer->validate(),
+					"occurrence publication setup failed");
+			auto published = writer->publish();
+			require(published.has_value(), "occurrence publication failed");
+			return std::move(*published);
+		};
+		auto memory_snapshot = publish_occurrences(*memory, false);
+		auto sqlite_snapshot = publish_occurrences(*sqlite, true);
+		const std::vector<std::string> expected{
+			"company.test.alternate-provider|evidence:root|exact",
+			"company.test.provider|evidence:alternate|exact",
+			"company.test.provider|evidence:root|exact",
+			"company.test.provider|evidence:root|under_approximation"};
+		require(memory_snapshot.id() == sqlite_snapshot.id() &&
+					occurrence_evidence(memory_snapshot) == expected &&
+					occurrence_evidence(sqlite_snapshot) == expected,
+				"memory/SQLite occurrence evidence was not lossless and canonical");
+		auto relation = relation_engine.require_id(descriptor().id);
+		require(relation.has_value(), "occurrence row relation unavailable");
+		auto rows = sqlite_snapshot.open(*relation);
+		require(rows.has_value(), "occurrence row cursor unavailable");
+		auto semantic_row = rows->next();
+		auto semantic_end = rows->next();
+		require(semantic_row && *semantic_row && semantic_end && !*semantic_end,
+				"evidence occurrences duplicated the semantic snapshot row");
+		auto memory_export = memory->canonical_export(memory_snapshot.id());
+		auto sqlite_export = sqlite->canonical_export(sqlite_snapshot.id());
+		require(memory_export && sqlite_export && *memory_export == *sqlite_export,
+				"occurrence canonical export depended on backend or input order");
+		const auto publication_id = std::string{sqlite_snapshot.publication().publication_id};
+		sqlite = cxxlens::sdk::result<cxxlens::sdk::snapshot_store>{
+			cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine).value()};
+		auto reopened = sqlite->open_publication(publication_id);
+		require(reopened && occurrence_evidence(*reopened) == expected,
+				"SQLite reopen lost claim occurrence evidence");
+		std::filesystem::remove(path);
+	}
+
 	void check_sqlite_semantic_graph_tamper()
 	{
 		struct mutation
@@ -639,6 +735,7 @@ int main()
 {
 	check_canonical_vectors();
 	check_backend_parity();
+	check_occurrence_round_trip();
 	check_sqlite_semantic_graph_tamper();
 	check_derived_basis_membership();
 	return 0;

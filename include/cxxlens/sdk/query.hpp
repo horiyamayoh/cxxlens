@@ -311,7 +311,7 @@ namespace cxxlens::sdk::query
 		failed_before_result,
 	};
 
-	/** @brief One annotated multiset occurrence produced by Logical Query IR. */
+	/** @brief One semantic row with canonical contributor evidence sets. */
 	struct annotated_row
 	{
 		std::map<std::string, detached_cell, std::less<>> values;

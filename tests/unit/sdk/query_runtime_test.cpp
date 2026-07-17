@@ -1573,6 +1573,41 @@ namespace
 				"claim kernel and query differential classification diverged");
 	}
 
+	void check_claim_occurrence_aggregation(const fixture& data)
+	{
+		auto base = data.claims.front();
+		auto provenance = base;
+		provenance.provenance_root = "evidence:alternate";
+		auto producer = base;
+		producer.producer.id = "company.query.alternate-provider";
+		auto guarantee = base;
+		guarantee.guarantee.approximation = "under_approximation";
+		auto occurrence_partition = partition(base, 900U);
+		occurrence_partition.claims = {base, provenance, producer, guarantee, base};
+		auto store = make_in_memory_snapshot_store(data.engine);
+		require(store.has_value(), "query occurrence store unavailable");
+		auto writer = store->begin(draft(data.engine));
+		require(writer && writer->stage(std::move(occurrence_partition)) && writer->validate(),
+				"query occurrence snapshot setup failed");
+		auto snapshot = writer->publish();
+		require(snapshot.has_value(), "query occurrence snapshot publication failed");
+		auto engine = query::reference_engine::bind(std::move(*snapshot));
+		require(engine.has_value(), "query occurrence engine bind failed");
+		auto result = engine->execute(scan_query(data.left));
+		require(result && result->producer_contracts().size() == 2U &&
+					result->summary_guarantee().approximation == "under_approximation",
+				"query result lost occurrence producer or conservative guarantee evidence");
+		auto rows = result->rows();
+		auto first = rows.next();
+		require(first && *first, "query occurrence semantic row missing");
+		auto aggregated = (*first)->copy();
+		auto end = rows.next();
+		require(aggregated && aggregated->producer_contracts.size() == 2U &&
+					aggregated->provenance.size() == 2U &&
+					aggregated->contributor_guarantees.size() == 2U && end && !*end,
+				"query scan duplicated semantic content or dropped occurrence metadata");
+	}
+
 	void check_closure_applicability(const fixture& data)
 	{
 		const auto execute =
@@ -1724,6 +1759,7 @@ int main()
 	check_canonical_union_execution(data, memory_snapshot, *sqlite_snapshot);
 	check_bounded_intermediate_budgets(make_budget_fixture());
 	check_side_channel_parity(make_side_channel_fixture());
+	check_claim_occurrence_aggregation(data);
 	check_closure_applicability(data);
 
 	auto incomplete_store = make_in_memory_snapshot_store(data.engine);

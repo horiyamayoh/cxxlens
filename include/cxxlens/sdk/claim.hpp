@@ -156,6 +156,7 @@ namespace cxxlens::sdk
 	/** @brief Atomic batch result with accepted claims and explicit partiality records. */
 	struct claim_batch_result
 	{
+		/** @brief Canonical semantic claims with every distinct evidence occurrence preserved. */
 		std::vector<claim> claims;
 		std::vector<unresolved_reference> unresolved;
 		std::vector<claim_conflict> conflicts;

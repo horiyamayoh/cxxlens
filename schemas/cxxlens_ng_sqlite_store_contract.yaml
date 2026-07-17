@@ -1,5 +1,5 @@
 schema: cxxlens.ng-sqlite-store-contract.v1
-document_version: 1.1.0
+document_version: 1.2.0
 maturity: implemented
 authority:
   semantic_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
@@ -59,6 +59,10 @@ payload:
       - guarantee
       - relation_coverage
     annotationless_payload_query: reject-with-sdk.query-annotations-unavailable
+    occurrence_cardinality:
+      exact_duplicate: deduplicate
+      metadata_distinct_same_content: preserve-losslessly
+      order: full-annotation-canonical-total-order
   closure_proof_projection:
     introduced: cxxlens.ng-snapshot-payload.v4
     fields: [partition_identity_binding, validated_closure_certificate_subject]

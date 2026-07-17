@@ -1537,6 +1537,9 @@ namespace cxxlens::sdk::query
 			if (node.operator_id == "query.scan.v1")
 			{
 				const auto& scan = std::get<scan_arguments>(*arguments);
+				const bool preserve_multiplicity =
+					descriptors.at(scan.descriptor_id).merge == merge_mode::multiset;
+				std::map<std::string, std::size_t, std::less<>> semantic_rows;
 				auto cursor = snapshot_.open_claims(scan.descriptor_id);
 				if (!cursor)
 					return unexpected(std::move(cursor.error()));
@@ -1547,12 +1550,6 @@ namespace cxxlens::sdk::query
 						return unexpected(std::move(next.error()));
 					if (!*next)
 						break;
-					if (output.rows.size() >= state.budget.max_intermediate_rows)
-					{
-						state.failure_code = "sdk.query-intermediate-budget";
-						state.failure_subject = stable_id;
-						break;
-					}
 					if (state.retained_memory_bytes >= state.budget.max_memory_bytes)
 					{
 						state.failure_code = "sdk.query-memory-budget";
@@ -1577,8 +1574,35 @@ namespace cxxlens::sdk::query
 					row.producer_contracts = {annotation->producer};
 					row.provenance = {annotation->provenance_root};
 					row.contributor_guarantees = {annotation->guarantee};
-					if (!append_row(state, stable_id, output, std::move(row)) ||
-						!append_source_annotation(state, stable_id, *annotation))
+					const auto existing = semantic_rows.find(annotation->content);
+					if (!preserve_multiplicity && existing != semantic_rows.end())
+					{
+						auto merged = output.rows[existing->second];
+						merged.producer_contracts.push_back(annotation->producer);
+						merged.provenance.push_back(annotation->provenance_root);
+						merged.contributor_guarantees.push_back(annotation->guarantee);
+						canonical_producers(merged.producer_contracts);
+						canonical_set(merged.provenance);
+						canonical_guarantees(merged.contributor_guarantees);
+						if (!replace_row(
+								state, stable_id, output, existing->second, std::move(merged)))
+							break;
+					}
+					else
+					{
+						if (output.rows.size() >= state.budget.max_intermediate_rows)
+						{
+							state.failure_code = "sdk.query-intermediate-budget";
+							state.failure_subject = stable_id;
+							break;
+						}
+						const auto index = output.rows.size();
+						if (!append_row(state, stable_id, output, std::move(row)))
+							break;
+						if (!preserve_multiplicity)
+							semantic_rows.emplace(annotation->content, index);
+					}
+					if (!append_source_annotation(state, stable_id, *annotation))
 						break;
 				}
 			}

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <iostream>
@@ -729,6 +730,41 @@ namespace
 		auto call = cxxlens::sdk::make_assertion(
 			*engine, observe(make_call_row(), {"all", "asan", "debug", "release"}));
 		require(call.has_value(), "call-site assertion rejected");
+		const std::array existing_call{*call};
+		{
+			auto provenance_occurrence = *first;
+			provenance_occurrence.provenance_root = "evidence:alternate";
+			auto producer_occurrence = *first;
+			producer_occurrence.producer.id = "company.test.alternate-provider";
+			auto guarantee_occurrence = *first;
+			guarantee_occurrence.guarantee.approximation = "under_approximation";
+			const std::array occurrences{
+				*first, provenance_occurrence, producer_occurrence, guarantee_occurrence, *first};
+			std::array<std::size_t, occurrences.size()> permutation{0U, 1U, 2U, 3U, 4U};
+			std::string reference;
+			std::size_t permutation_count{};
+			do
+			{
+				cxxlens::sdk::claim_batch occurrence_batch;
+				for (const auto index : permutation)
+					require(occurrence_batch.add(occurrences[index]).has_value(),
+							"evidence occurrence candidate rejected");
+				auto result = std::move(occurrence_batch).commit(*engine, existing_call);
+				require(result && result->claims.size() == 4U,
+						"claim occurrence law lost metadata or retained an exact duplicate");
+				std::string occurrence_projection = result->content_digest;
+				for (const auto& value : result->claims)
+					occurrence_projection += "\n" + value.producer.id + '|' +
+						value.provenance_root + '|' + value.guarantee.approximation;
+				if (reference.empty())
+					reference = occurrence_projection;
+				require(occurrence_projection == reference,
+						"claim occurrence result depended on input permutation");
+				++permutation_count;
+			} while (std::ranges::next_permutation(permutation).found);
+			require(permutation_count == 120U,
+					"claim occurrence permutation matrix was incomplete");
+		}
 		cxxlens::sdk::claim_batch hard_missing;
 		require(hard_missing.add(*first).has_value(), "hard-reference candidate rejected");
 		auto rejected = std::move(hard_missing).commit(*engine);
@@ -737,7 +773,8 @@ namespace
 
 		cxxlens::sdk::claim_batch soft_missing;
 		require(soft_missing.add(*first).has_value(), "soft-reference candidate rejected");
-		const std::array existing_call{*call};
+		require(soft_missing.add(*first).has_value(),
+				"exact duplicate soft-reference candidate rejected");
 		auto accepted = std::move(soft_missing).commit(*engine, existing_call);
 		require(accepted && accepted->claims.size() == 1U && accepted->unresolved.size() == 1U &&
 					accepted->unresolved.front().target_relation == "cc.entity",

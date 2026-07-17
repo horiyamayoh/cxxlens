@@ -1,5 +1,5 @@
 schema: cxxlens.snapshot-store-contract.v1
-document_version: 1.4.0
+document_version: 1.5.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#15-immutable-snapshot-and-store
@@ -167,6 +167,13 @@ claim_input_basis:
         cross_series: allowed-with-exact-membership
         duplicate_physical_publication: same-semantic-manifest-membership
 partition:
+  semantic_claim_set: canonical-sorted-unique-content-digests
+  evidence_occurrences:
+    identity: full-claim-envelope-canonical-tuple
+    exact_duplicate: deduplicate
+    metadata_distinct_same_content: preserve-losslessly
+    manifest_claim_count: unique-semantic-content-count
+    payload_order: canonical-total-order
   identity_fields:
     - relation_descriptor_id
     - scope

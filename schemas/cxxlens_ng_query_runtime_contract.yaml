@@ -1,12 +1,12 @@
 schema: cxxlens.query-runtime-contract.v1
-document_version: 1.10.0
+document_version: 1.11.0
 maturity: implemented
 authority:
   logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
   guarantee_contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
   snapshot_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
-  decision_adr: docs/design/adr/0032-set-literal-byte-codec-parity.md
-  owner_issue: '#89'
+  decision_adr: docs/design/adr/0037-lossless-claim-evidence-occurrences.md
+  owner_issue: '#94'
   owner: steward.ng-query-runtime
 compatibility:
   version_axis: query-runtime-result
@@ -74,7 +74,11 @@ planner:
     digest_collision_tie_break: raw-canonical-subtree-bytes
     runtime_controls_follow_traversal: true
     diagnostic_node_ids: canonical-postorder-ordinal
-  scan: canonical-claim-content-order
+  scan:
+    order: canonical-claim-evidence-occurrence-order
+    non_multiset_same_content: one-semantic-row
+    occurrence_metadata: canonical-set-union
+    multiset_multiplicity: preserve
   join: bounded-reference-nested-loop
   distinct: canonical-key-reduction
   order: explicit-keys-plus-canonical-row-tie-break
@@ -114,6 +118,7 @@ execution:
   interpretation:
     join: exact-id-only
   evidence:
+    scan_same_content_occurrences: canonical-set-union
     join: canonical-set-union
     semi_join: left-plus-all-compatible-witnesses
     distinct: canonical-set-union

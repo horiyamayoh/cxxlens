@@ -1363,6 +1363,11 @@ semantic input digest を持ち snapshot を持たない。derived basis の `in
 より前の generation でなければならない。containing snapshot ID は store association として管理し、claim、
 basis、certificate の identity に含めない。
 
+Issue #94 / ADR 0037 により semantic claim set と evidence occurrence set を分離する。非 multiset relation の claim set は
+canonical sorted unique content ID 集合とし、claim envelope 全 field が完全一致する occurrence だけを deduplicate する。同じ
+content でも producer ID、input basis、provenance、guarantee、stage が異なる occurrence は canonical total order ですべて保持し、
+batch digest は content と occurrence projection の双方を bind する。multiset relation の multiplicity law は変更しない。
+
 ### 11.7 Evidence graph
 
 node kinds:
@@ -1849,6 +1854,11 @@ state
 partition content は canonical sorted claim content digest と coverage digest を bind する。partition identity または
 content projection に closure ID を含めないため、closure→partition→closure の逆 edge は作れない。partial
 partition を complete/closed として再利用してはならない。
+
+同一 semantic content の evidence occurrence は partition manifest の claim set/count を増やさず、payload の canonical
+partition envelope と annotation set に lossless に保存する。exact duplicate occurrence は writer staging で一件へ縮約する。
+非 multiset query scan は同じ content を一つの semantic row とし、producer、provenance、contributor guarantee を canonical
+set union する。guarantee summary は conservative meet であり、任意の一 occurrence を first-wins で選んではならない。
 
 ### 15.5 Store port
 

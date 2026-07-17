@@ -23,6 +23,8 @@
 
 #include <cxxlens/sdk/store.hpp>
 
+#include "claim_internal.hpp"
+
 namespace cxxlens::sdk
 {
 	namespace
@@ -127,6 +129,7 @@ namespace cxxlens::sdk
 			for (const auto& value : draft.claims)
 				output.push_back(value.content);
 			std::ranges::sort(output);
+			output.erase(std::ranges::unique(output).begin(), output.end());
 			return output;
 		}
 
@@ -525,6 +528,14 @@ namespace cxxlens::sdk
 			writer.string(value.producer.semantic_contract);
 			writer.string(value.provenance_root);
 			encode_guarantee(writer, value.guarantee);
+		}
+
+		[[nodiscard]] std::vector<std::byte>
+		annotation_projection(const snapshot_claim_annotation& value)
+		{
+			binary_writer writer;
+			encode_annotation(writer, value);
+			return std::move(writer).finish();
 		}
 
 		[[nodiscard]] result<snapshot_claim_annotation> decode_annotation(
@@ -938,6 +949,8 @@ namespace cxxlens::sdk
 		void sort_semantic_projections(snapshot_handle::data& value)
 		{
 			std::ranges::sort(value.claim_contents);
+			value.claim_contents.erase(std::ranges::unique(value.claim_contents).begin(),
+									   value.claim_contents.end());
 			std::ranges::sort(
 				value.coverage,
 				[](const snapshot_query_coverage& left, const snapshot_query_coverage& right)
@@ -970,24 +983,33 @@ namespace cxxlens::sdk
 				value.partition_bindings, {}, &snapshot_partition_binding::partition_id);
 			for (auto& [descriptor, rows] : value.rows)
 			{
-				(void)descriptor;
 				std::ranges::sort(rows,
 								  [](const detached_row& left, const detached_row& right)
 								  {
 									  return left.canonical_form() < right.canonical_form();
 								  });
+				const auto relation = value.descriptors.find(descriptor);
+				if (relation != value.descriptors.end() &&
+					relation->second.merge != merge_mode::multiset)
+					rows.erase(std::ranges::unique(
+								   rows,
+								   [](const detached_row& left, const detached_row& right)
+								   {
+									   return left.canonical_form() == right.canonical_form();
+								   })
+								   .begin(),
+							   rows.end());
 			}
 			for (auto& [descriptor, annotations] : value.annotations)
 			{
 				(void)descriptor;
-				std::ranges::sort(
-					annotations,
-					[](const snapshot_claim_annotation& left,
-					   const snapshot_claim_annotation& right)
-					{
-						return std::tie(left.content, left.assertion, left.provenance_root) <
-							std::tie(right.content, right.assertion, right.provenance_root);
-					});
+				std::ranges::sort(annotations,
+								  [](const snapshot_claim_annotation& left,
+									 const snapshot_claim_annotation& right)
+								  {
+									  return annotation_projection(left) <
+										  annotation_projection(right);
+								  });
 			}
 		}
 
@@ -1066,6 +1088,11 @@ namespace cxxlens::sdk
 						store_error("store.corrupt", "partition-envelope", "manifest"));
 				expected.partition_bindings.push_back(
 					partition_binding(partition.partition_id, envelope->second));
+				auto relation = engine.require_id(partition.relation_descriptor_id);
+				if (!relation)
+					return unexpected(std::move(relation.error()));
+				expected.descriptors.emplace(partition.relation_descriptor_id,
+											 relation->descriptor());
 				expected.rows.try_emplace(partition.relation_descriptor_id);
 				expected.annotations.try_emplace(partition.relation_descriptor_id);
 				for (const auto& coverage : envelope->second.coverage)
@@ -1322,6 +1349,8 @@ namespace cxxlens::sdk
 					value->coverage.push_back(std::move(coverage));
 				}
 				std::ranges::sort(annotation_contents);
+				annotation_contents.erase(std::ranges::unique(annotation_contents).begin(),
+										  annotation_contents.end());
 				if ((!value->query_annotations_available && !annotation_contents.empty()) ||
 					(value->query_annotations_available &&
 					 annotation_contents != value->claim_contents))
@@ -1592,7 +1621,6 @@ namespace cxxlens::sdk
 		if (!relation)
 			return unexpected(
 				store_error("store.partition-relation-unknown", draft.relation_descriptor_id));
-		std::set<std::string, std::less<>> claim_ids;
 		for (const auto& value : draft.claims)
 		{
 			if (auto valid = validate_claim(engine, value); !valid)
@@ -1605,8 +1633,6 @@ namespace cxxlens::sdk
 			auto basis = claim_input_basis_digest(value.input_basis);
 			if (!basis || *basis != draft.producer_input_basis_digest)
 				return unexpected(store_error("store.partition-basis-mismatch", value.content));
-			if (!claim_ids.insert(value.content).second)
-				return unexpected(store_error("store.partition-claim-duplicate", value.content));
 		}
 		std::set<std::string, std::less<>> coverage_ids;
 		for (const auto& value : draft.coverage)
@@ -2290,6 +2316,11 @@ namespace cxxlens::sdk
 			return unexpected(store_error("store.transaction-state", "stage"));
 		if (partition.condition.universe != data_->draft.series.condition_universe_id)
 			return unexpected(store_error("store.condition-universe-mismatch", "partition"));
+		std::ranges::sort(partition.claims, detail::claim_occurrence_less);
+		partition.claims.erase(std::unique(partition.claims.begin(),
+										   partition.claims.end(),
+										   detail::same_claim_occurrence),
+							   partition.claims.end());
 		if (auto manifest = make_partition_manifest(data_->store->engine, partition); !manifest)
 			return unexpected(std::move(manifest.error()));
 		data_->partitions.push_back(std::move(partition));
@@ -2456,8 +2487,7 @@ namespace cxxlens::sdk
 				annotations,
 				[](const snapshot_claim_annotation& left, const snapshot_claim_annotation& right)
 				{
-					return std::tie(left.content, left.assertion, left.provenance_root) <
-						std::tie(right.content, right.assertion, right.provenance_root);
+					return annotation_projection(left) < annotation_projection(right);
 				});
 		}
 		if (auto valid = validate_semantic_graph(*candidate, data_->store->engine); !valid)

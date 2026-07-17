@@ -37,6 +37,7 @@ entries:
       - docs/design/adr/0018-runtime-relation-schema-parity.md
       - docs/design/adr/0019-incremental-claim-conflict-classification.md
       - docs/design/adr/0036-claim-stage-input-revalidation.md
+      - docs/design/adr/0037-lossless-claim-evidence-occurrences.md
     summary: Relation extension, IDL evolution, references, and static/dynamic parity.
   - id: gate.g2
     status: implemented
@@ -49,6 +50,7 @@ entries:
       - tools/quality/check_ng_snapshot_store_contract.py
       - tests/install/sdk_consumer/main.cpp
       - docs/design/adr/0021-query-closure-applicability.md
+      - docs/design/adr/0037-lossless-claim-evidence-occurrences.md
     summary: Immutable publication and memory/SQLite semantic parity.
   - id: gate.g3
     status: implemented
