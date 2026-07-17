@@ -210,6 +210,13 @@ namespace cxxlens::sdk
 			return *canonical_identity_digest("publication", fields);
 		}
 
+		[[nodiscard]] result<void> validate_publication_identity(const publication_record& value)
+		{
+			if (value.publication_id != publication_identity(value))
+				return unexpected(store_error("store.corrupt", "publication", "identity"));
+			return {};
+		}
+
 		[[nodiscard]] std::string canonical_export_of(const snapshot_handle::data& value);
 
 		class binary_writer
@@ -1231,6 +1238,8 @@ namespace cxxlens::sdk
 				return unexpected(store_error("store.corrupt", "publication", "state"));
 			publication.state = static_cast<publication_state>(*state);
 			publication.corrupt = *corrupt;
+			if (auto valid = validate_publication_identity(publication); !valid)
+				return unexpected(std::move(valid.error()));
 			auto relation_count = reader.unsigned_value();
 			if (!relation_count || *relation_count > 1'000'000U)
 				return unexpected(store_error("store.corrupt", "rows", "relation-count"));
@@ -2061,6 +2070,8 @@ namespace cxxlens::sdk
 
 		[[nodiscard]] result<void> persist(const snapshot_handle::data& value) const
 		{
+			if (auto valid = validate_publication_identity(value.publication_record_value); !valid)
+				return unexpected(std::move(valid.error()));
 			if (database == nullptr)
 				return {};
 			const auto payload = encode_snapshot(value);
@@ -2084,6 +2095,8 @@ namespace cxxlens::sdk
 		persist_new(const snapshot_handle::data& value,
 					const std::optional<std::string>& expected_parent) const
 		{
+			if (auto valid = validate_publication_identity(value.publication_record_value); !valid)
+				return unexpected(std::move(valid.error()));
 			if (database == nullptr)
 				return {};
 			if (auto begun = database->execute("BEGIN IMMEDIATE;"); !begun)
@@ -2202,6 +2215,12 @@ namespace cxxlens::sdk
 										  static_cast<publication_state>(*state),
 										  false};
 				generation = std::max(generation, *physical);
+				if (auto valid = validate_publication_identity(record); !valid)
+				{
+					record.corrupt = true;
+					records.emplace(record.publication_id, record);
+					continue;
+				}
 				if (content_digest(*payload) != row[7])
 				{
 					record.corrupt = true;
@@ -2300,7 +2319,7 @@ namespace cxxlens::sdk
 		if (head == implementation_->heads.end())
 			return unexpected(store_error("store.current-not-found", selector.id()));
 		const auto& record = implementation_->records.at(head->second);
-		if (record.corrupt)
+		if (record.corrupt || !validate_publication_identity(record))
 			return unexpected(store_error("store.current-corrupt", record.publication_id));
 		const auto publication = implementation_->publications.find(record.publication_id);
 		if (publication == implementation_->publications.end())
@@ -2329,7 +2348,7 @@ namespace cxxlens::sdk
 		}
 		if (selected == nullptr)
 			return unexpected(store_error("store.snapshot-not-found", std::string{snapshot_id}));
-		if (selected->corrupt)
+		if (selected->corrupt || !validate_publication_identity(*selected))
 			return unexpected(store_error("store.snapshot-corrupt", selected->publication_id));
 		const auto publication = implementation_->publications.find(selected->publication_id);
 		if (publication == implementation_->publications.end() ||
@@ -2348,7 +2367,7 @@ namespace cxxlens::sdk
 			record->second.state != publication_state::committed)
 			return unexpected(
 				store_error("store.publication-not-found", std::string{publication_id}));
-		if (record->second.corrupt)
+		if (record->second.corrupt || !validate_publication_identity(record->second))
 			return unexpected(
 				store_error("store.publication-corrupt", std::string{publication_id}));
 		const auto publication = implementation_->publications.find(publication_id);
@@ -2393,13 +2412,17 @@ namespace cxxlens::sdk
 		for (const auto& [id, current] : implementation_->publications)
 		{
 			if (current->semantic_manifest.id != snapshot_identity(current->semantic_manifest) ||
-				current->publication_record_value.corrupt)
+				current->publication_record_value.corrupt ||
+				!validate_publication_identity(current->publication_record_value))
 				return unexpected(store_error("store.compact-validation-failed", id));
 			if (!current->partition_envelopes.empty())
 				if (auto valid = validate_semantic_graph(*current, implementation_->engine); !valid)
 					return unexpected(store_error("store.compact-validation-failed", id));
 			auto replacement = std::make_shared<snapshot_handle::data>(*current);
 			replacement->publication_record_value.physical_generation = next_generation;
+			if (auto valid = validate_publication_identity(replacement->publication_record_value);
+				!valid)
+				return unexpected(store_error("store.compact-validation-failed", id));
 			auto token = std::make_shared<const std::uint64_t>(next_generation);
 			replacement->generation_pin = token;
 			if (auto persisted = implementation_->persist(*replacement); !persisted)
@@ -2662,6 +2685,11 @@ namespace cxxlens::sdk
 		record.parent_publication = current_parent;
 		record.state = publication_state::committed;
 		record.publication_id = publication_identity(record);
+		if (auto valid = validate_publication_identity(record); !valid)
+		{
+			data_->current_state = publication_state::rejected;
+			return unexpected(std::move(valid.error()));
+		}
 		data_->candidate->publication_record_value = record;
 		const bool collision = std::ranges::any_of(
 			store.publications,
@@ -2781,6 +2809,61 @@ namespace cxxlens::sdk
 			bytes_hex(*payload) + "' WHERE publication_id=" + sql_quote(publication_id));
 	}
 	// NOLINTEND(bugprone-easily-swappable-parameters)
+
+	result<void> rewrite_publication_identity_field_for_testing(
+		snapshot_store& store, const std::string_view publication_id, const std::string_view field)
+	{
+		std::scoped_lock lock{store.implementation_->mutex};
+		if (store.implementation_->database == nullptr)
+			return unexpected(store_error("store.corrupt", "test-identity-rewrite", "backend"));
+		const auto found = store.implementation_->publications.find(publication_id);
+		if (found == store.implementation_->publications.end())
+			return unexpected(
+				store_error("store.publication-not-found", std::string{publication_id}));
+		auto rewritten = snapshot_handle::data{*found->second};
+		auto& record = rewritten.publication_record_value;
+		const auto mutate_text = [](std::string& value)
+		{
+			if (value.empty())
+				value = "tampered";
+			else
+				value.back() = value.back() == '0' ? '1' : '0';
+		};
+		if (field == "publication_id")
+			mutate_text(record.publication_id);
+		else if (field == "series_id")
+			mutate_text(record.series_id);
+		else if (field == "snapshot_id")
+			mutate_text(record.snapshot_id);
+		else if (field == "sequence")
+			++record.sequence;
+		else if (field == "parent" && record.parent_publication)
+			mutate_text(*record.parent_publication);
+		else
+			return unexpected(store_error("store.corrupt", "test-identity-rewrite", "field"));
+
+		const auto payload = encode_snapshot(rewritten);
+		const auto checksum = content_digest(payload);
+		std::ostringstream sql;
+		sql << "BEGIN IMMEDIATE;UPDATE cxxlens_ng_publication SET publication_id="
+			<< sql_quote(record.publication_id) << ",series_id=" << sql_quote(record.series_id)
+			<< ",snapshot_id=" << sql_quote(record.snapshot_id) << ",sequence=" << record.sequence
+			<< ",generation=" << record.physical_generation << ",parent="
+			<< (record.parent_publication ? sql_quote(*record.parent_publication) : "NULL")
+			<< ",state=" << static_cast<unsigned>(record.state)
+			<< ",checksum=" << sql_quote(checksum) << ",payload=X'" << bytes_hex(payload)
+			<< "' WHERE publication_id=" << sql_quote(publication_id)
+			<< ";UPDATE cxxlens_ng_series_head SET series_id=" << sql_quote(record.series_id)
+			<< ",current_publication=" << sql_quote(record.publication_id)
+			<< ",sequence=" << record.sequence
+			<< " WHERE current_publication=" << sql_quote(publication_id) << ";COMMIT;";
+		if (auto updated = store.implementation_->database->execute(sql.str()); !updated)
+		{
+			(void)store.implementation_->database->execute("ROLLBACK;");
+			return updated;
+		}
+		return {};
+	}
 
 	snapshot_builder::snapshot_builder(relation_registry registry) : registry_{std::move(registry)}
 	{

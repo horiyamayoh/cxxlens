@@ -1,10 +1,10 @@
 schema: cxxlens.snapshot-store-contract.v1
-document_version: 1.6.0
+document_version: 1.7.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#15-immutable-snapshot-and-store
-  decision_adr: docs/design/adr/0009-snapshot-identity-publication-series.md
-  owner_issue: '#63'
+  decision_adr: docs/design/adr/0077-persisted-publication-identity-binding.md
+  owner_issue: '#146'
   owner: steward.ng-store-contract
 compatibility:
   version_axis: snapshot-identity-and-publication
@@ -244,6 +244,16 @@ snapshot:
     - partition_id
     - content_digest
     - coverage_digest
+publication_identity:
+  domain: publication
+  identity_fields: [series_id, snapshot_id, sequence, parent_publication]
+  excluded_fields: [physical_generation, state, corrupt]
+  persisted_binding:
+    validation: recompute-and-exact-match
+    shared_validator: memory-and-sqlite-persist-load-read-compact
+    mismatch: store.corrupt
+    before_exposure: true
+  compaction: physical-generation-update-preserves-publication-id
 publication_series:
   selector_fields:
     - catalog_id
@@ -281,6 +291,7 @@ compaction:
   validate_before_swap:
     - physical-checksum
     - semantic-snapshot-digest
+    - publication-identity-binding
     - manifest-closure-binding
     - persisted-semantic-object-graph
   failure_preserves_prior_generation: true

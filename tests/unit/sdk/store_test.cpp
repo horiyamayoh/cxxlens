@@ -13,6 +13,9 @@ namespace cxxlens::sdk
 {
 	result<void> rewrite_publication_payload_for_testing(
 		snapshot_store&, std::string_view, std::string_view, std::string_view, std::size_t);
+	result<void> rewrite_publication_identity_field_for_testing(snapshot_store&,
+																std::string_view,
+																std::string_view);
 } // namespace cxxlens::sdk
 
 namespace
@@ -62,6 +65,21 @@ namespace
 		auto built = registry.build("engine-ng0-test");
 		require(built.has_value(), "store engine rejected");
 		return std::move(*built);
+	}
+
+	[[nodiscard]] std::string
+	expected_publication_identity(const cxxlens::sdk::publication_record& value)
+	{
+		using cxxlens::sdk::canonical_value;
+		const std::array fields{
+			canonical_value::from_string(value.series_id),
+			canonical_value::from_string(value.snapshot_id),
+			canonical_value::from_integer(static_cast<std::int64_t>(value.sequence)),
+			canonical_value::from_string(value.parent_publication.value_or("")),
+		};
+		auto identity = cxxlens::sdk::canonical_identity_digest("publication", fields);
+		require(identity.has_value(), "publication identity test oracle rejected a valid record");
+		return std::move(*identity);
 	}
 
 	[[nodiscard]] cxxlens::sdk::detached_row row(std::string key, std::string payload)
@@ -701,6 +719,76 @@ namespace
 		}
 	}
 
+	void check_publication_identity_binding()
+	{
+		const auto relation_engine = engine();
+		const std::array fields{"publication_id", "series_id", "snapshot_id", "sequence", "parent"};
+		for (std::size_t index = 0U; index < fields.size(); ++index)
+		{
+			const auto path = std::filesystem::temp_directory_path() /
+				("cxxlens-ng-publication-identity-" + std::to_string(index) + ".sqlite");
+			std::filesystem::remove(path);
+			std::string target;
+			{
+				auto store =
+					cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+				require(store.has_value(), "publication identity tamper store unavailable");
+				auto first = publish(*store, relation_engine, false);
+				target = first.publication().publication_id;
+				if (std::string_view{fields[index]} == "parent")
+				{
+					auto second = publish(*store, relation_engine, true, target);
+					target = second.publication().publication_id;
+				}
+				require(cxxlens::sdk::rewrite_publication_identity_field_for_testing(
+							*store, target, fields[index])
+							.has_value(),
+						"publication identity mutation fixture failed: " +
+							std::string{fields[index]});
+				if (std::string_view{fields[index]} == "publication_id")
+					target.back() = target.back() == '0' ? '1' : '0';
+			}
+			auto reopened =
+				cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+			require(reopened.has_value(),
+					"identity-mismatched store could not reopen for diagnosis: " +
+						std::string{fields[index]});
+			auto opened = reopened->open_publication(target);
+			require(!opened && opened.error().code == "store.publication-corrupt",
+					"publication identity mutation was accepted: " + std::string{fields[index]});
+			auto compacted = reopened->compact();
+			require(!compacted && compacted.error().code == "store.compact-validation-failed",
+					"compaction accepted publication identity mutation: " +
+						std::string{fields[index]});
+			std::filesystem::remove(path);
+		}
+
+		const auto path = std::filesystem::temp_directory_path() /
+			"cxxlens-ng-publication-generation-identity.sqlite";
+		std::filesystem::remove(path);
+		auto store = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+		require(store.has_value(), "publication generation store unavailable");
+		auto published = publish(*store, relation_engine, false);
+		const auto publication_id = std::string{published.publication().publication_id};
+		const auto generation = published.publication().physical_generation;
+		require(publication_id == expected_publication_identity(published.publication()),
+				"new publication did not satisfy its identity binding");
+		require(store->compact().has_value(), "valid publication compaction failed");
+		auto compacted = store->open_publication(publication_id);
+		require(compacted && compacted->publication().physical_generation > generation &&
+					compacted->publication().publication_id ==
+						expected_publication_identity(compacted->publication()),
+				"physical generation changed publication identity");
+		store = cxxlens::sdk::result<cxxlens::sdk::snapshot_store>{
+			cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine).value()};
+		auto loaded = store->open_publication(publication_id);
+		require(loaded &&
+					loaded->publication().publication_id ==
+						expected_publication_identity(loaded->publication()),
+				"loaded publication escaped identity validation");
+		std::filesystem::remove(path);
+	}
+
 	void check_sqlite_multi_instance_cas()
 	{
 		const auto relation_engine = engine();
@@ -858,6 +946,7 @@ int main()
 	check_occurrence_round_trip();
 	check_sqlite_multi_instance_cas();
 	check_sqlite_semantic_graph_tamper();
+	check_publication_identity_binding();
 	check_derived_basis_membership();
 	return 0;
 }

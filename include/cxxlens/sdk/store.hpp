@@ -175,7 +175,7 @@ namespace cxxlens::sdk
 		return value >= publication_state::created && value <= publication_state::rolled_back;
 	}
 
-	/** @brief Operational record separated from semantic snapshot identity. */
+	/** @brief Operational record whose ID binds series, snapshot, sequence, and parent. */
 	struct publication_record
 	{
 		std::string publication_id;
@@ -363,6 +363,9 @@ namespace cxxlens::sdk
 		friend result<void> mark_publication_corrupt_for_testing(snapshot_store&, std::string_view);
 		friend result<void> rewrite_publication_payload_for_testing(
 			snapshot_store&, std::string_view, std::string_view, std::string_view, std::size_t);
+		friend result<void> rewrite_publication_identity_field_for_testing(snapshot_store&,
+																		   std::string_view,
+																		   std::string_view);
 	};
 
 	/** @brief Transactional writer enforcing stage, independent validation, then atomic publish. */

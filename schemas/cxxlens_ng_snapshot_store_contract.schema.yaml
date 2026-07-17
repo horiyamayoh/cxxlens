@@ -15,6 +15,7 @@ required:
   - partition
   - closure
   - snapshot
+  - publication_identity
   - publication_series
   - publication_transaction
   - reader_pin
@@ -34,8 +35,8 @@ properties:
       design:
         const: docs/design/cxxlens_next_generation_integrated_design_ja.md#15-immutable-snapshot-and-store
       decision_adr:
-        const: docs/design/adr/0009-snapshot-identity-publication-series.md
-      owner_issue: {const: '#63'}
+        const: docs/design/adr/0077-persisted-publication-identity-binding.md
+      owner_issue: {const: '#146'}
       owner: {const: steward.ng-store-contract}
   compatibility:
     type: object
@@ -87,6 +88,26 @@ properties:
   partition: {type: object, required: [identity_fields, content_fields, closure_ids_in_identity, partial_reuse_as_complete]}
   closure: {type: object, required: [subject, identity_fields, forbidden_fields, mutation_of_any_identity_field_changes_id]}
   snapshot: {type: object, required: [manifest_schema, identity_fields, excluded_fields, partition_projection]}
+  publication_identity:
+    type: object
+    additionalProperties: false
+    required: [domain, identity_fields, excluded_fields, persisted_binding, compaction]
+    properties:
+      domain: {const: publication}
+      identity_fields:
+        const: [series_id, snapshot_id, sequence, parent_publication]
+      excluded_fields:
+        const: [physical_generation, state, corrupt]
+      persisted_binding:
+        type: object
+        additionalProperties: false
+        required: [validation, shared_validator, mismatch, before_exposure]
+        properties:
+          validation: {const: recompute-and-exact-match}
+          shared_validator: {const: memory-and-sqlite-persist-load-read-compact}
+          mismatch: {const: store.corrupt}
+          before_exposure: {const: true}
+      compaction: {const: physical-generation-update-preserves-publication-id}
   publication_series: {type: object, required: [selector_fields, series_id, current_api, catalog_only_lookup, missing_selector_field, cross_series_fallback, head_selection]}
   publication_transaction: {type: object, required: [states, visible_states, commit, stale_parent, failed_publish_preserves_head, recovery]}
   reader_pin: {type: object, required: [handle_pins, semantic_snapshot_immutable, reclamation]}

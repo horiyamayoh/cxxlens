@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Executable snapshot identity and publication-series contract for Issue #63."""
+"""Executable snapshot identity and publication-series contract for Issue #146."""
 
 from __future__ import annotations
 
@@ -552,6 +552,26 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
     expected_selector = list(SELECTOR_FIELDS)
     if contract["publication_series"]["selector_fields"] != expected_selector:
         fail("store.selection-authority-incomplete", "selector contract")
+    publication = contract["publication_identity"]
+    if publication["identity_fields"] != [
+        "series_id",
+        "snapshot_id",
+        "sequence",
+        "parent_publication",
+    ]:
+        fail("store.publication-identity-incomplete", "identity fields")
+    if publication["persisted_binding"] != {
+        "validation": "recompute-and-exact-match",
+        "shared_validator": "memory-and-sqlite-persist-load-read-compact",
+        "mismatch": "store.corrupt",
+        "before_exposure": True,
+    }:
+        fail("store.publication-identity-unbound", "persisted binding")
+    if "physical_generation" not in publication["excluded_fields"] or (
+        publication["compaction"]
+        != "physical-generation-update-preserves-publication-id"
+    ):
+        fail("store.publication-generation-in-identity", "compaction")
     if contract["partition"]["closure_ids_in_identity"] != "forbidden":
         fail("store.identity-cycle", "partition includes closure IDs")
     if set(contract["closure"]["identity_fields"]) != set(CLOSURE_FIELDS):
@@ -577,7 +597,7 @@ def validate_design(root: pathlib.Path) -> None:
         "cxxlens_ng_snapshot_store_contract.yaml",
         "snapshot_series_selector",
         "producer_input_basis",
-        "Issue #63",
+        "Issue #146",
     )
     for marker in required:
         if marker not in design:
@@ -586,7 +606,7 @@ def validate_design(root: pathlib.Path) -> None:
         if stale in design:
             fail("store.design-stale-contract", stale)
     index = (root / "docs/design/catalogs/README.md").read_text(encoding="utf-8")
-    if "Snapshot / Store Contract" not in index or "#63" not in index:
+    if "Snapshot / Store Contract" not in index or "#146" not in index:
         fail("store.catalog-index-stale", "snapshot contract")
 
 

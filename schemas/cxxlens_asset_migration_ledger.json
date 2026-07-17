@@ -1,5 +1,5 @@
 {
-  "asset_count": 359,
+  "asset_count": 360,
   "assets": [
     {
       "authority": "active",
@@ -963,6 +963,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0076-query-relation-requirement-reconciliation.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0077-persisted-publication-identity-binding.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2516,7 +2523,7 @@
     }
   ],
   "classifications": {
-    "active": 323,
+    "active": 324,
     "archived": 35,
     "generated": 1
   },

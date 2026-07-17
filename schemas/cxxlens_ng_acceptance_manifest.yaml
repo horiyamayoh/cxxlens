@@ -1,6 +1,6 @@
 schema: cxxlens.ng-acceptance-manifest.v1
 kind: acceptance-manifest
-document_version: 1.4.0
+document_version: 1.5.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -47,9 +47,9 @@ entries:
     summary: Relation extension, scalar values, references, static/dynamic parity, and runtime domain identity projection.
   - id: gate.g2
     status: implemented
-    owner_issue: '#68'
+    owner_issue: '#146'
     profile: NG0
-    contract_issue: '#68'
+    contract_issue: '#146'
     depends_on: [gate.g1]
     evidence:
       - tests/unit/sdk/store_test.cpp
@@ -57,7 +57,8 @@ entries:
       - tests/install/sdk_consumer/main.cpp
       - docs/design/adr/0021-query-closure-applicability.md
       - docs/design/adr/0037-lossless-claim-evidence-occurrences.md
-    summary: Immutable publication and memory/SQLite semantic parity.
+      - docs/design/adr/0077-persisted-publication-identity-binding.md
+    summary: Immutable publication with persisted identity binding and memory/SQLite semantic parity.
   - id: gate.g3
     status: implemented
     owner_issue: '#145'

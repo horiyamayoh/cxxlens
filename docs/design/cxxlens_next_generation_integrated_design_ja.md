@@ -1802,8 +1802,9 @@ message prose は control flow に使用しない。
 
 ### 15.1 Snapshot semantic identity
 
-Issue #63 の exact authority は `schemas/cxxlens_ng_snapshot_store_contract.yaml`
-（`cxxlens.snapshot-store-contract.v1`）と ADR 0009 である。identity は SHA-256 の全 256 bit と
+Issue #146 の exact authority は `schemas/cxxlens_ng_snapshot_store_contract.yaml`
+（`cxxlens.snapshot-store-contract.v1`）と ADR 0077 である。基礎 identity DAG は Issue #63 / ADR 0009 を継承する。
+identity は SHA-256 の全 256 bit と
 `cxxlens-canonical-tuple-v1` の versioned length-prefixed binary tuple を使用し、identity kind ごとに domain
 separation する。JSON text、absolute root、unordered iteration、timestamp、task order、backend layout は authority
 ではない。hash collision は candidate を quarantine し、既存 object を保持して fail closed とする。
@@ -1832,6 +1833,12 @@ snapshot_id = H(
 - elapsed time
 
 同一 semantic content は同じ snapshot ID を持ち得る。lineage/publication record は別 metadata。
+
+Issue #146 / ADR 0077 により、persisted publication record は公開前に
+`publication_id = H(series_id, snapshot_id, sequence, parent_publication)` を共通 validator で再計算し、完全一致を
+要求する。memory と SQLite の publish/persist/load/read/compact は同じ validator を使用し、不一致は
+`store.corrupt` として fail closed にする。`physical_generation`、state、corrupt flag は publication identity に
+含めず、copy-on-write compaction は generation の更新前後で同じ publication ID を保つ。
 
 ### 15.2 Snapshot manifest
 

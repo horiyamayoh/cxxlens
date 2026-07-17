@@ -51,6 +51,7 @@
 | [0062](0062-first-party-sanitizer-closure.md) | first-party sanitizer compile and runtime closure |
 | [0063](0063-project-catalog-bottom-up-identity.md) | project catalog bottom-up exact-input identity |
 | [0064](0064-portable-provider-task-session-binding.md) | portable provider task and session exact binding |
+| [0077](0077-persisted-publication-identity-binding.md) | persisted publication identity binding |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。
