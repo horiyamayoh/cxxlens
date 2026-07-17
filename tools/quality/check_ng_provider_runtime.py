@@ -243,8 +243,8 @@ def validate(root: pathlib.Path) -> None:
     catalog = load(root / "schemas/cxxlens_ng_public_api_catalog.yaml")
     entries = {entry["id"]: entry for entry in catalog["entries"]}
     runtime = entries.get("public.provider-runtime")
-    if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#140":
-        raise ContractError("public.provider-runtime is not an implemented Issue #140 entry")
+    if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#149":
+        raise ContractError("public.provider-runtime is not an implemented Issue #149 entry")
     native = entries.get("public.native-provider-sdk")
     if native is None or native["status"] != "implemented" or native["owner_issue"] != "#139":
         raise ContractError("public.native-provider-sdk is not an implemented Issue #139 entry")

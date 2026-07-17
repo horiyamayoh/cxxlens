@@ -100,6 +100,7 @@ namespace cxxlens::sdk::provider
 		}
 
 		using cbor_scalar = std::variant<std::uint64_t, std::string>;
+		using cbor_fields = std::vector<std::pair<std::string, cbor_scalar>>;
 		enum class cbor_major : std::uint8_t
 		{
 			unsigned_integer = 0U,
@@ -146,8 +147,7 @@ namespace cxxlens::sdk::provider
 			return output;
 		}
 
-		[[nodiscard]] result<std::vector<std::byte>>
-		encode_cbor_map(const std::vector<std::pair<std::string, cbor_scalar>>& fields)
+		[[nodiscard]] result<std::vector<std::byte>> encode_cbor_map(const cbor_fields& fields)
 		{
 			std::vector<std::tuple<std::vector<std::byte>, std::vector<std::byte>>> encoded;
 			encoded.reserve(fields.size());
@@ -342,28 +342,174 @@ namespace cxxlens::sdk::provider
 			}
 		}
 
-		[[nodiscard]] std::string column_chunk_projection(const column_chunk_record& value,
-														  const std::string_view payload_digest)
+		[[nodiscard]] canonical_value digest_field(std::string name, canonical_value value)
 		{
-			return value.task_id + "\n" + value.dependency_group_id + "\n" +
-				value.atomic_output_group_id + "\n" + value.batch_id + "\n" + value.descriptor_id +
-				"\n" + value.descriptor_digest + "\n" + value.column_id + "\n" +
-				std::to_string(value.row_offset) + "\n" + std::to_string(value.row_count) + "\n" +
-				std::to_string(value.chunk_index) + "\n" + value.encoding + "\n" +
-				std::string{payload_digest};
+			return canonical_value::from_tuple(
+				{canonical_value::from_string(std::move(name)), std::move(value)});
 		}
 
-		[[nodiscard]] std::string batch_digest(const columnar_batch_end& value)
+		[[nodiscard]] canonical_value digest_text_field(std::string name,
+														const std::string_view value)
 		{
-			std::string projection = value.task_id + "\n" + value.dependency_group_id + "\n" +
-				value.atomic_output_group_id + "\n" + value.batch_id + "\n" + value.descriptor_id +
-				"\n" + value.descriptor_digest + "\n" + std::to_string(value.row_count);
+			return digest_field(std::move(name), canonical_value::from_string(std::string{value}));
+		}
+
+		[[nodiscard]] canonical_value digest_u64_field(std::string name, const std::uint64_t value)
+		{
+			std::vector<std::byte> encoded;
+			encoded.reserve(sizeof(value));
+			append_big_endian(encoded, value);
+			return digest_field(std::move(name), canonical_value::from_bytes(std::move(encoded)));
+		}
+
+		[[nodiscard]] result<std::string> semantic_tuple_digest(const std::string_view domain,
+																const canonical_value& value,
+																const std::string_view field)
+		{
+			auto encoded = canonical_binary(value);
+			if (!encoded)
+				return cxxlens::sdk::unexpected(provider_error(
+					"provider.columnar-invalid", std::string{field}, "semantic-tuple"));
+			const std::string bytes{reinterpret_cast<const char*>(encoded->data()),
+									encoded->size()};
+			auto digest = semantic_digest(domain, bytes);
+			if (!digest)
+				return cxxlens::sdk::unexpected(std::move(digest.error()));
+			return digest;
+		}
+
+		[[nodiscard]] canonical_value
+		digest_cbor_field(const std::pair<std::string, cbor_scalar>& field)
+		{
+			return std::visit(
+				[&](const auto& value)
+				{
+					using value_type = std::remove_cvref_t<decltype(value)>;
+					if constexpr (std::same_as<value_type, std::string>)
+						return digest_text_field(field.first, value);
+					else
+						return digest_u64_field(field.first, value);
+				},
+				field.second);
+		}
+
+		[[nodiscard]] result<std::string>
+		semantic_fields_digest(const std::string_view domain,
+							   const std::string_view schema,
+							   const cbor_fields& fields,
+							   std::vector<canonical_value> additional_fields,
+							   const std::string_view field)
+		{
+			std::vector<canonical_value> projection;
+			projection.reserve(1U + fields.size() + additional_fields.size());
+			projection.push_back(digest_text_field("schema", schema));
+			for (const auto& semantic_field : fields)
+				projection.push_back(digest_cbor_field(semantic_field));
+			projection.insert(projection.end(),
+							  std::make_move_iterator(additional_fields.begin()),
+							  std::make_move_iterator(additional_fields.end()));
+			return semantic_tuple_digest(
+				domain, canonical_value::from_tuple(std::move(projection)), field);
+		}
+
+		struct semantic_control
+		{
+			std::string digest;
+			std::vector<std::byte> control;
+		};
+
+		[[nodiscard]] result<semantic_control>
+		encode_semantic_control(const std::string_view domain,
+								const std::string_view schema,
+								cbor_fields fields,
+								std::vector<canonical_value> additional_fields,
+								std::string digest_key,
+								const std::string_view field)
+		{
+			auto digest =
+				semantic_fields_digest(domain, schema, fields, std::move(additional_fields), field);
+			if (!digest)
+				return cxxlens::sdk::unexpected(std::move(digest.error()));
+			fields.emplace_back(std::move(digest_key), *digest);
+			auto control = encode_cbor_map(fields);
+			if (!control)
+				return cxxlens::sdk::unexpected(std::move(control.error()));
+			return semantic_control{std::move(*digest), std::move(*control)};
+		}
+
+		[[nodiscard]] cbor_fields chunk_semantic_fields(const column_chunk_record& value,
+														const std::string_view payload_digest)
+		{
+			return {
+				{"task_id", value.task_id},
+				{"dependency_group_id", value.dependency_group_id},
+				{"atomic_output_group_id", value.atomic_output_group_id},
+				{"batch_id", value.batch_id},
+				{"descriptor_id", value.descriptor_id},
+				{"descriptor_digest", value.descriptor_digest},
+				{"column_id", value.column_id},
+				{"row_offset", value.row_offset},
+				{"row_count", static_cast<std::uint64_t>(value.row_count)},
+				{"chunk_index", value.chunk_index},
+				{"encoding", value.encoding},
+				{"payload_digest", std::string{payload_digest}},
+			};
+		}
+
+		[[nodiscard]] result<std::string> column_chunk_digest(const column_chunk_record& value,
+															  const std::string_view payload_digest)
+		{
+			return semantic_fields_digest("cxxlens.provider-column-chunk.v2",
+										  "cxxlens.provider-column-chunk-digest.v2",
+										  chunk_semantic_fields(value, payload_digest),
+										  {},
+										  value.column_id);
+		}
+
+		[[nodiscard]] cbor_fields batch_semantic_fields(const columnar_batch_end& value)
+		{
+			return {
+				{"task_id", value.task_id},
+				{"dependency_group_id", value.dependency_group_id},
+				{"atomic_output_group_id", value.atomic_output_group_id},
+				{"batch_id", value.batch_id},
+				{"descriptor_id", value.descriptor_id},
+				{"descriptor_digest", value.descriptor_digest},
+				{"row_count", value.row_count},
+				{"column_count", static_cast<std::uint64_t>(value.columns.size())},
+				{"chunk_count", static_cast<std::uint64_t>(value.ordered_chunk_digests.size())},
+			};
+		}
+
+		[[nodiscard]] std::vector<canonical_value>
+		batch_additional_fields(const columnar_batch_end& value)
+		{
+			std::vector<canonical_value> columns;
+			columns.reserve(value.columns.size());
 			for (const auto& column : value.columns)
-				projection += "\n" + column.column_id + "|" + std::to_string(column.payload_bytes) +
-					"|" + std::to_string(column.chunk_count);
+				columns.push_back(canonical_value::from_tuple({
+					digest_text_field("column_id", column.column_id),
+					digest_u64_field("payload_bytes", column.payload_bytes),
+					digest_u64_field("chunk_count", column.chunk_count),
+				}));
+			std::vector<canonical_value> digests;
+			digests.reserve(value.ordered_chunk_digests.size());
 			for (const auto& digest : value.ordered_chunk_digests)
-				projection += "\n" + digest;
-			return *semantic_digest("cxxlens.provider-columnar-batch.v1", projection);
+				digests.push_back(digest_text_field("chunk_digest", digest));
+			return {
+				digest_field("columns", canonical_value::from_tuple(std::move(columns))),
+				digest_field("ordered_chunk_digests",
+							 canonical_value::from_tuple(std::move(digests))),
+			};
+		}
+
+		[[nodiscard]] result<std::string> batch_digest(const columnar_batch_end& value)
+		{
+			return semantic_fields_digest("cxxlens.provider-columnar-batch.v2",
+										  "cxxlens.provider-columnar-batch-digest.v2",
+										  batch_semantic_fields(value),
+										  batch_additional_fields(value),
+										  value.batch_id);
 		}
 
 		[[nodiscard]] bool canonical_digest(const std::string_view value)
@@ -1493,29 +1639,19 @@ namespace cxxlens::sdk::provider
 			 {&validity, &unknown, &value_auxiliary, &values, &reason_offsets, &reasons})
 			output.payload.insert(output.payload.end(), section->begin(), section->end());
 		const auto payload_digest = content_digest(output.payload);
-		output.chunk_digest = *semantic_digest("cxxlens.provider-column-chunk.v1",
-											   column_chunk_projection(value, payload_digest));
+		auto semantic = encode_semantic_control("cxxlens.provider-column-chunk.v2",
+												"cxxlens.provider-column-chunk-digest.v2",
+												chunk_semantic_fields(value, payload_digest),
+												{},
+												"chunk_digest",
+												column.id);
+		if (!semantic)
+			return cxxlens::sdk::unexpected(std::move(semantic.error()));
+		output.chunk_digest = std::move(semantic->digest);
 		if (!value.chunk_digest.empty() && value.chunk_digest != output.chunk_digest)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.columnar-invalid", column.id, "chunk-digest"));
-		auto control = encode_cbor_map({
-			{"task_id", value.task_id},
-			{"batch_id", value.batch_id},
-			{"column_id", value.column_id},
-			{"encoding", value.encoding},
-			{"row_count", static_cast<std::uint64_t>(value.row_count)},
-			{"row_offset", value.row_offset},
-			{"chunk_index", value.chunk_index},
-			{"descriptor_id", value.descriptor_id},
-			{"chunk_digest", output.chunk_digest},
-			{"payload_digest", payload_digest},
-			{"descriptor_digest", value.descriptor_digest},
-			{"dependency_group_id", value.dependency_group_id},
-			{"atomic_output_group_id", value.atomic_output_group_id},
-		});
-		if (!control)
-			return cxxlens::sdk::unexpected(std::move(control.error()));
-		output.control = std::move(*control);
+		output.control = std::move(semantic->control);
 		return output;
 	}
 
@@ -1783,10 +1919,10 @@ namespace cxxlens::sdk::provider
 		if (*payload_digest != actual_payload_digest)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.columnar-invalid", column.id, "payload-digest"));
-		const auto expected_chunk =
-			*semantic_digest("cxxlens.provider-column-chunk.v1",
-							 column_chunk_projection(output, actual_payload_digest));
-		if (*chunk_digest != expected_chunk)
+		auto expected_chunk = column_chunk_digest(output, actual_payload_digest);
+		if (!expected_chunk)
+			return cxxlens::sdk::unexpected(std::move(expected_chunk.error()));
+		if (*chunk_digest != *expected_chunk)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.columnar-invalid", column.id, "chunk-digest"));
 		return output;
@@ -1815,17 +1951,24 @@ namespace cxxlens::sdk::provider
 
 	std::string columnar_batch_digest(const columnar_batch_end& value)
 	{
-		return batch_digest(value);
+		auto digest = batch_digest(value);
+		return digest ? std::move(*digest) : std::string{};
 	}
 
 	result<encoded_columnar_batch_end> encode_columnar_batch_end(const columnar_batch_end& value)
 	{
 		const bool empty_batch = value.row_count == 0U;
+		auto semantic = encode_semantic_control("cxxlens.provider-columnar-batch.v2",
+												"cxxlens.provider-columnar-batch-digest.v2",
+												batch_semantic_fields(value),
+												batch_additional_fields(value),
+												"batch_digest",
+												value.batch_id);
 		if (value.task_id.empty() || value.dependency_group_id.empty() ||
 			value.atomic_output_group_id.empty() || value.batch_id.empty() ||
 			value.descriptor_id.empty() || !canonical_digest(value.descriptor_digest) ||
 			value.columns.empty() || empty_batch != value.ordered_chunk_digests.empty() ||
-			value.batch_digest != batch_digest(value))
+			!semantic || value.batch_digest != semantic->digest)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.columnar-invalid", value.batch_id, "batch-end"));
 		encoded_columnar_batch_end output;
@@ -1871,21 +2014,7 @@ namespace cxxlens::sdk::provider
 			const auto encoded = bytes(digest);
 			output.payload.insert(output.payload.end(), encoded.begin(), encoded.end());
 		}
-		auto control = encode_cbor_map({
-			{"task_id", value.task_id},
-			{"batch_id", value.batch_id},
-			{"row_count", value.row_count},
-			{"chunk_count", value.ordered_chunk_digests.size()},
-			{"column_count", value.columns.size()},
-			{"descriptor_id", value.descriptor_id},
-			{"batch_digest", value.batch_digest},
-			{"descriptor_digest", value.descriptor_digest},
-			{"dependency_group_id", value.dependency_group_id},
-			{"atomic_output_group_id", value.atomic_output_group_id},
-		});
-		if (!control)
-			return cxxlens::sdk::unexpected(std::move(control.error()));
-		output.control = std::move(*control);
+		output.control = std::move(semantic->control);
 		return output;
 	}
 
@@ -1986,7 +2115,9 @@ namespace cxxlens::sdk::provider
 				return cxxlens::sdk::unexpected(
 					provider_error("provider.columnar-invalid", output.batch_id, "chunk-digest"));
 		}
-		if (offset != payload.size() || output.batch_digest != batch_digest(output))
+		auto expected_batch_digest = batch_digest(output);
+		if (offset != payload.size() || !expected_batch_digest ||
+			output.batch_digest != *expected_batch_digest)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.columnar-invalid", output.batch_id, "batch-digest"));
 		return output;
@@ -2489,7 +2620,7 @@ namespace cxxlens::sdk::provider
 									column_summaries_,
 									ordered_chunk_digests_,
 									{}};
-		terminal.batch_digest = batch_digest(terminal);
+		terminal.batch_digest = columnar_batch_digest(terminal);
 		auto encoded = encode_columnar_batch_end(terminal);
 		if (!encoded)
 			return cxxlens::sdk::unexpected(std::move(encoded.error()));

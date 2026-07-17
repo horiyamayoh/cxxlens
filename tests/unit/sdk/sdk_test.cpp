@@ -1569,6 +1569,109 @@ namespace
 					decoded_terminal->ordered_chunk_digests == terminal.ordered_chunk_digests &&
 					decoded_terminal->batch_digest == terminal.batch_digest,
 				"column lengths/order/digests did not survive batch-end roundtrip");
+
+		const auto collision_chunk = [&](std::string task, std::string dependency)
+		{
+			return column_chunk_record{std::move(task),
+									   std::move(dependency),
+									   "atomic-1",
+									   "batch-collision",
+									   "company.test.columnar.v1",
+									   descriptor_digest,
+									   columns.front().id,
+									   0U,
+									   2U,
+									   0U,
+									   "fixed-width-bool-u8",
+									   cells.front(),
+									   {}};
+		};
+		const std::array boundary_prefixes{
+			std::string{"task"}, std::string{"task|pipe"}, std::string{"task\0nul", 8U}};
+		const std::array chunk_text_fields{&column_chunk_record::task_id,
+										   &column_chunk_record::dependency_group_id,
+										   &column_chunk_record::atomic_output_group_id,
+										   &column_chunk_record::batch_id,
+										   &column_chunk_record::descriptor_id};
+		for (std::size_t field_index = 0U; field_index + 1U < chunk_text_fields.size();
+			 ++field_index)
+			for (const auto& prefix : boundary_prefixes)
+			{
+				auto left = collision_chunk("task", "dep");
+				auto right = left;
+				left.*chunk_text_fields[field_index] = prefix;
+				left.*chunk_text_fields[field_index + 1U] = "right\nextra";
+				right.*chunk_text_fields[field_index] = prefix + "\nright";
+				right.*chunk_text_fields[field_index + 1U] = "extra";
+				auto encoded_left = encode_column_chunk(left, columns.front());
+				auto encoded_right = encode_column_chunk(right, columns.front());
+				require(encoded_left && encoded_right &&
+							encoded_left->chunk_digest != encoded_right->chunk_digest &&
+							encoded_left->control != encoded_right->control,
+						"typed chunk digest collapsed a delimiter boundary shift");
+				auto decoded_left = decode_column_chunk(
+					encoded_left->control, encoded_left->payload, columns.front());
+				auto decoded_right = decode_column_chunk(
+					encoded_right->control, encoded_right->payload, columns.front());
+				require(decoded_left && decoded_right && decoded_left->task_id == left.task_id &&
+							decoded_left->dependency_group_id == left.dependency_group_id &&
+							decoded_right->task_id == right.task_id &&
+							decoded_right->dependency_group_id == right.dependency_group_id &&
+							(*decoded_left).*chunk_text_fields[field_index] ==
+								left.*chunk_text_fields[field_index] &&
+							(*decoded_left).*chunk_text_fields[field_index + 1U] ==
+								left.*chunk_text_fields[field_index + 1U] &&
+							(*decoded_right).*chunk_text_fields[field_index] ==
+								right.*chunk_text_fields[field_index] &&
+							(*decoded_right).*chunk_text_fields[field_index + 1U] ==
+								right.*chunk_text_fields[field_index + 1U],
+						"chunk control fields were not exactly bound to the typed digest");
+			}
+
+		auto batch_left = terminal;
+		auto batch_right = terminal;
+		const std::array batch_text_fields{&columnar_batch_end::task_id,
+										   &columnar_batch_end::dependency_group_id,
+										   &columnar_batch_end::atomic_output_group_id,
+										   &columnar_batch_end::batch_id,
+										   &columnar_batch_end::descriptor_id};
+		for (std::size_t field_index = 0U; field_index + 1U < batch_text_fields.size();
+			 ++field_index)
+			for (const auto& prefix : boundary_prefixes)
+			{
+				batch_left = terminal;
+				batch_right = terminal;
+				batch_left.*batch_text_fields[field_index] = prefix;
+				batch_left.*batch_text_fields[field_index + 1U] = "right\nextra";
+				batch_right.*batch_text_fields[field_index] = prefix + "\nright";
+				batch_right.*batch_text_fields[field_index + 1U] = "extra";
+				require(columnar_batch_digest(batch_left) != columnar_batch_digest(batch_right),
+						"typed batch digest collapsed a text field boundary shift");
+			}
+		batch_left = terminal;
+		batch_left.task_id = "task";
+		batch_left.dependency_group_id = "dep\nextra";
+		batch_left.batch_digest = columnar_batch_digest(batch_left);
+		auto encoded_batch_left = encode_columnar_batch_end(batch_left);
+		require(encoded_batch_left.has_value(), "delimiter-bearing batch did not encode");
+		auto decoded_batch_left =
+			decode_columnar_batch_end(encoded_batch_left->control, encoded_batch_left->payload);
+		require(decoded_batch_left && decoded_batch_left->task_id == batch_left.task_id &&
+					decoded_batch_left->dependency_group_id == batch_left.dependency_group_id &&
+					decoded_batch_left->batch_digest == batch_left.batch_digest,
+				"batch control fields were not exactly bound to the typed digest");
+		auto list_left = terminal;
+		auto list_right = terminal;
+		list_left.ordered_chunk_digests = {"a\nb", "c"};
+		list_right.ordered_chunk_digests = {"a", "b\nc"};
+		require(columnar_batch_digest(list_left) != columnar_batch_digest(list_right),
+				"typed batch digest collapsed ordered collection element boundaries");
+		auto permuted = terminal;
+		std::ranges::swap(permuted.columns.front(), permuted.columns.back());
+		std::ranges::swap(permuted.ordered_chunk_digests.front(),
+						  permuted.ordered_chunk_digests.back());
+		require(columnar_batch_digest(permuted) != terminal.batch_digest,
+				"ordered column or chunk permutation did not change the batch digest");
 	}
 
 	void check_relation_sink_batch_state()

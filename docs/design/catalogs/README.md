@@ -8,7 +8,7 @@
 | Semantic Guarantee Contract | `schemas/cxxlens_ng_semantic_guarantee_contract.yaml` | #62 | accepted exact contract |
 | Snapshot / Store Contract | `schemas/cxxlens_ng_snapshot_store_contract.yaml` | #148 | accepted exact contract |
 | SQLite Physical Store | `schemas/cxxlens_ng_sqlite_store_contract.yaml` | #68 | implemented |
-| Provider Protocol | `schemas/cxxlens_ng_provider_protocol.yaml` | #64 | accepted exact contract |
+| Provider Protocol | `schemas/cxxlens_ng_provider_protocol.yaml` | #149 | accepted exact contract |
 | Provider Runtime | `schemas/cxxlens_ng_provider_runtime_contract.yaml` | #70 | implemented |
 | Public C++ API Catalog | `schemas/cxxlens_ng_public_api_catalog.yaml` | #66–#70 | implemented |
 | Acceptance Manifest | `schemas/cxxlens_ng_acceptance_manifest.yaml` | #71 | implemented foundation gates |

@@ -750,13 +750,27 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
         fail("provider.dependency-cycle", "contract")
     if contract["reuse_and_invalidation"]["binary_digest_change"] != "invalidate":
         fail("provider.reuse-binary-mismatch", "contract")
+    if contract["columnar_chunks"]["digest_projection"] != {
+        "encoding": "cxxlens-canonical-tuple-v1",
+        "digest": "cxxlens-semantic-digest-v2",
+        "chunk_domain": "cxxlens.provider-column-chunk.v2",
+        "batch_domain": "cxxlens.provider-columnar-batch.v2",
+        "fields": "named-and-typed",
+        "unsigned_integers": "fixed-width-u64-big-endian-bytes",
+        "repeated_collections": "ordered-tuple-with-count-element-length-and-type-tag",
+        "column_order": "descriptor-order",
+        "chunk_digest_order": "wire-order",
+        "delimiter_concatenation": "forbidden",
+        "control_and_digest_encoder": "shared-semantic-field-projection",
+    }:
+        fail("provider.columnar-digest-projection-invalid", "typed tuple")
 
 
 def validate_design(root: pathlib.Path) -> None:
     design = (root / "docs/design/cxxlens_next_generation_integrated_design_ja.md").read_text(encoding="utf-8")
     for marker in (
         "1.0.0-normative", "cxxlens_ng_provider_protocol.yaml", "atomic_output_group",
-        "dependency_group", "deterministic CBOR", "Issue #64",
+        "dependency_group", "deterministic CBOR", "Issue #149",
     ):
         if marker not in design:
             fail("provider.design-marker-missing", marker)
@@ -764,7 +778,7 @@ def validate_design(root: pathlib.Path) -> None:
         if stale in design:
             fail("provider.design-stale-contract", stale)
     index = (root / "docs/design/catalogs/README.md").read_text(encoding="utf-8")
-    if "Provider Protocol" not in index or "accepted exact contract" not in index or "#64" not in index:
+    if "Provider Protocol" not in index or "accepted exact contract" not in index or "#149" not in index:
         fail("provider.catalog-index-stale", "provider protocol")
 
 

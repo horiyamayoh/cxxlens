@@ -2513,6 +2513,13 @@ unknown 以外の reason storage は zero/zero-width でなければならない
 ordered chunk digest 列である。C++ codec と `check_ng_provider_protocol.py` の独立 reference vector は同じ bool
 payload bytes を照合し、portable SDK と別実装の wire parity を gate する。
 
+Issue #149 / ADR 0080 により、column chunk と batch digest の semantic projection は delimiter 連結を禁止し、
+`cxxlens-canonical-tuple-v1` の named typed field recordを共有する。u64 は fixed-width big-endian bytes、column summary
+と ordered chunk digest は count、各 element length、type tag を持つ ordered tuple とする。chunk domain は
+`cxxlens.provider-column-chunk.v2`、batch domain は `cxxlens.provider-columnar-batch.v2` であり、CBOR control の field
+値と encode/decode 時の digest 再計算は同じ semantic field encoder から得る。LF、`|`、NUL を含む valid UTF-8
+metadata でも field/element boundary を移動した別 tuple が同じ digest になることはない。
+
 ADR 0044 の typed logical stream validation は wire decode 後の production authority である。harness と process runtime は
 別々の簡略 state machine を持たず、handshake prefix の有無だけを request parameter として同じ validator を呼ぶ。
 `validate_logical_transcript()` と `validate_process_transcript()` は同じ decoded frames を再検証し、production の acceptance と

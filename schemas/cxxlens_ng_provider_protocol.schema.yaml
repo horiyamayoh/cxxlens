@@ -26,7 +26,7 @@ required:
   - backend_authority
 properties:
   schema: {const: cxxlens.provider-protocol.v1}
-  document_version: {const: 1.9.0}
+  document_version: {const: 1.10.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -36,8 +36,8 @@ properties:
       design:
         const: docs/design/cxxlens_next_generation_integrated_design_ja.md#18-provider-protocol
       index: {const: docs/design/catalogs/README.md}
-      decision_adr: {const: docs/design/adr/0071-host-to-provider-transcript-validation.md}
-      owner_issue: {const: '#140'}
+      decision_adr: {const: docs/design/adr/0080-provider-columnar-typed-digests.md}
+      owner_issue: {const: '#149'}
       owner: {const: steward.ng-provider-protocol}
   compatibility:
     const:
@@ -240,6 +240,18 @@ properties:
   columnar_chunks:
     const:
       batch_scope: exact-relation-descriptor-partition-and-atomic-output-group
+      digest_projection:
+        encoding: cxxlens-canonical-tuple-v1
+        digest: cxxlens-semantic-digest-v2
+        chunk_domain: cxxlens.provider-column-chunk.v2
+        batch_domain: cxxlens.provider-columnar-batch.v2
+        fields: named-and-typed
+        unsigned_integers: fixed-width-u64-big-endian-bytes
+        repeated_collections: ordered-tuple-with-count-element-length-and-type-tag
+        column_order: descriptor-order
+        chunk_digest_order: wire-order
+        delimiter_concatenation: forbidden
+        control_and_digest_encoder: shared-semantic-field-projection
       sdk_row_accumulation:
         maximum_rows_per_chunk: 256
         transpose: row-author-api-to-descriptor-order-columns

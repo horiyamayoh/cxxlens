@@ -188,9 +188,9 @@ namespace cxxlens::sdk::provider
 		std::vector<std::byte> payload;
 	};
 
-	/** @brief Encode exact column lengths, order, chunk digests, and batch digest. */
+	/** @brief Digest exact named fields and ordered collections as a typed canonical tuple. */
 	[[nodiscard]] std::string columnar_batch_digest(const columnar_batch_end& value);
-	/** @brief Encode exact column lengths, order, chunk digests, and batch digest. */
+	/** @brief Encode exact column lengths, order, chunk digests, and typed batch digest. */
 	[[nodiscard]] result<encoded_columnar_batch_end>
 	encode_columnar_batch_end(const columnar_batch_end& value);
 	/** @brief Decode exact column lengths, order, chunk digests, and batch digest. */

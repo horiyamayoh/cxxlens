@@ -1,5 +1,5 @@
 {
-  "asset_count": 362,
+  "asset_count": 363,
   "assets": [
     {
       "authority": "active",
@@ -984,6 +984,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0079-checked-publication-counters.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0080-provider-columnar-typed-digests.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2537,7 +2544,7 @@
     }
   ],
   "classifications": {
-    "active": 326,
+    "active": 327,
     "archived": 35,
     "generated": 1
   },
