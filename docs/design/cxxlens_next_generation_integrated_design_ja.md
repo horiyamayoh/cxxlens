@@ -1952,6 +1952,12 @@ Issue #78 / ADR 0021 は physical minor 2.3.0 / payload v4 に partition の exa
 closure certificate subject を追加した。open 時に partition/certificate ID を再計算して manifest と照合する。
 payload v1〜v3 の closure ID だけから subject を推測してはならず、これらは query の closed-world proof に使わない。
 
+Issue #90 / ADR 0033 は physical minor 2.4.0 / payload v5 に canonical partition envelope を追加する。open と compaction は
+完全な claim envelope、coverage、unresolved から claim identity、claim set、coverage digest、partition content/count/complete、
+row/annotation projection を bottom-up に再構成し、manifest と byte-exact に照合する。局所 validation や payload checksum だけで
+semantic integrity を宣言してはならない。duplicate snapshot 比較は annotation、coverage、partition binding、partition envelope
+を含み、physical generation/root relocation は除外する。
+
 ---
 
 ## 16. Incremental Materialization

@@ -9,6 +9,12 @@
 
 #include <cxxlens/sdk.hpp>
 
+namespace cxxlens::sdk
+{
+	result<void> rewrite_publication_payload_for_testing(
+		snapshot_store&, std::string_view, std::string_view, std::string_view, std::size_t);
+} // namespace cxxlens::sdk
+
 namespace
 {
 	void require(const bool condition, const std::string& message)
@@ -321,11 +327,92 @@ namespace
 				"reopen lost an explicit intact prior publication");
 		std::filesystem::remove(path);
 	}
+
+	void check_sqlite_semantic_graph_tamper()
+	{
+		struct mutation
+		{
+			std::string before;
+			std::string after;
+			std::size_t occurrence;
+			std::string label;
+		};
+		const auto relation_engine = engine();
+		std::vector mutations{
+			mutation{"one", "uno", 1U, "annotation-row"},
+			mutation{"one", "uno", 0U, "detached-row"},
+			mutation{"one", "uno", 2U, "partition-envelope-row"},
+			mutation{"all", "any", 0U, "condition"},
+			mutation{"company.test.canonical-1", "company.test.canonical-2", 0U, "interpretation"},
+			mutation{"company.test.provider", "company.test.provides", 0U, "producer"},
+			mutation{"evidence:root", "evidence:boot", 0U, "provenance"},
+			mutation{"partition", "statement", 0U, "guarantee"},
+			mutation{"compile-unit-1", "compile-unit-2", 0U, "coverage"},
+		};
+		auto source_partition = partition(relation_engine, false);
+		auto source_manifest =
+			cxxlens::sdk::make_partition_manifest(relation_engine, source_partition);
+		require(source_manifest.has_value(), "tamper source manifest rejected");
+		auto changed_claim_set = source_manifest->claim_set_digest;
+		changed_claim_set.back() = changed_claim_set.back() == '0' ? '1' : '0';
+		mutations.push_back(
+			{source_manifest->claim_set_digest, changed_claim_set, 0U, "claim-set-digest"});
+		auto changed_content = source_manifest->content_digest;
+		changed_content.back() = changed_content.back() == '0' ? '1' : '0';
+		mutations.push_back(
+			{source_manifest->content_digest, changed_content, 0U, "partition-content-digest"});
+		auto claim_count_before = source_manifest->content_digest;
+		claim_count_before.append(7U, '\0');
+		claim_count_before.push_back('\2');
+		claim_count_before.push_back('\1');
+		auto claim_count_after = source_manifest->content_digest;
+		claim_count_after.append(7U, '\0');
+		claim_count_after.push_back('\3');
+		claim_count_after.push_back('\1');
+		mutations.push_back(
+			{std::move(claim_count_before), std::move(claim_count_after), 0U, "claim-count"});
+		for (std::size_t index = 0U; index < mutations.size(); ++index)
+		{
+			const auto path = std::filesystem::temp_directory_path() /
+				("cxxlens-ng-store-tamper-" + std::to_string(index) + ".sqlite");
+			std::filesystem::remove(path);
+			{
+				auto sqlite =
+					cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+				require(sqlite.has_value(), "tamper SQLite store unavailable");
+				auto snapshot = publish(*sqlite, relation_engine, false);
+				const auto& item = mutations[index];
+				require(cxxlens::sdk::rewrite_publication_payload_for_testing(
+							*sqlite,
+							snapshot.publication().publication_id,
+							item.before,
+							item.after,
+							item.occurrence)
+							.has_value(),
+						"semantic payload mutation fixture failed: " + std::string{item.label});
+			}
+			auto reopened =
+				cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+			require(reopened.has_value(),
+					"tampered SQLite store could not reopen for diagnosis: " +
+						std::string{mutations[index].label});
+			auto current = reopened->current(selector(relation_engine));
+			require(!current && current.error().code == "store.current-corrupt",
+					"semantic payload mutation was accepted: " +
+						std::string{mutations[index].label});
+			auto compacted = reopened->compact();
+			require(!compacted && compacted.error().code == "store.compact-validation-failed",
+					"compaction accepted a corrupt semantic payload: " +
+						std::string{mutations[index].label});
+			std::filesystem::remove(path);
+		}
+	}
 } // namespace
 
 int main()
 {
 	check_canonical_vectors();
 	check_backend_parity();
+	check_sqlite_semantic_graph_tamper();
 	return 0;
 }

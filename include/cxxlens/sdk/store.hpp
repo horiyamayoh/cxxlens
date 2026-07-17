@@ -2,6 +2,7 @@
 
 /** @file store.hpp @brief Immutable semantic snapshots with memory and SQLite parity. */
 
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -341,6 +342,8 @@ namespace cxxlens::sdk
 		friend result<snapshot_store> open_sqlite_snapshot_store(const std::string&,
 																 relation_engine);
 		friend result<void> mark_publication_corrupt_for_testing(snapshot_store&, std::string_view);
+		friend result<void> rewrite_publication_payload_for_testing(
+			snapshot_store&, std::string_view, std::string_view, std::string_view, std::size_t);
 	};
 
 	/** @brief Transactional writer enforcing stage, independent validation, then atomic publish. */

@@ -550,6 +550,96 @@ namespace cxxlens::sdk
 											 std::move(*guarantee)};
 		}
 
+		void encode_claim(binary_writer& writer, const claim& value)
+		{
+			encode_row(writer, value.row);
+			writer.string(value.descriptor);
+			writer.string(value.semantic_key);
+			writer.string(value.assertion);
+			writer.string(value.content);
+			encode_condition(writer, value.presence);
+			writer.string(value.interpretation);
+			writer.unsigned_value(static_cast<std::uint8_t>(value.stage));
+			writer.string(value.producer.id);
+			writer.string(value.producer.semantic_contract);
+			if (const auto* direct = std::get_if<direct_claim_basis>(&value.input_basis))
+			{
+				writer.boolean(true);
+				writer.string(direct->basis_digest);
+			}
+			else
+			{
+				const auto& derived = std::get<derived_claim_basis>(value.input_basis);
+				writer.boolean(false);
+				writer.string(derived.input_snapshot);
+				encode_strings(writer, derived.consumed_partition_content_digests);
+				writer.string(derived.transform_semantics);
+			}
+			writer.string(value.provenance_root);
+			encode_guarantee(writer, value.guarantee);
+		}
+
+		[[nodiscard]] result<claim> decode_claim(binary_reader& reader,
+												 const relation_engine& engine)
+		{
+			auto row = decode_row(reader);
+			auto descriptor = reader.string();
+			auto semantic_key = reader.string();
+			auto assertion = reader.string();
+			auto content = reader.string();
+			auto condition = decode_condition(reader);
+			auto interpretation = reader.string();
+			auto stage = reader.unsigned_value();
+			auto producer_id = reader.string();
+			auto producer_semantics = reader.string();
+			auto direct_basis = reader.boolean();
+			if (!row || !descriptor || !semantic_key || !assertion || !content || !condition ||
+				!interpretation || !stage ||
+				*stage > static_cast<std::uint8_t>(claim_stage::derived_claim) || !producer_id ||
+				!producer_semantics || !direct_basis)
+				return unexpected(store_error("store.corrupt", "partition-envelope", "claim"));
+			claim_input_basis basis;
+			if (*direct_basis)
+			{
+				auto digest_value = reader.string();
+				if (!digest_value)
+					return unexpected(
+						store_error("store.corrupt", "partition-envelope", "direct-basis"));
+				basis = direct_claim_basis{std::move(*digest_value)};
+			}
+			else
+			{
+				auto input_snapshot = reader.string();
+				auto consumed = decode_strings(reader, "partition-envelope-derived-basis");
+				auto transform = reader.string();
+				if (!input_snapshot || !consumed || !transform)
+					return unexpected(
+						store_error("store.corrupt", "partition-envelope", "derived-basis"));
+				basis = derived_claim_basis{
+					std::move(*input_snapshot), std::move(*consumed), std::move(*transform)};
+			}
+			auto provenance = reader.string();
+			auto guarantee = decode_guarantee(reader);
+			if (!provenance || !guarantee)
+				return unexpected(store_error("store.corrupt", "partition-envelope", "claim-tail"));
+			claim output{std::move(*row),
+						 std::move(*descriptor),
+						 std::move(*semantic_key),
+						 std::move(*assertion),
+						 std::move(*content),
+						 std::move(*condition),
+						 std::move(*interpretation),
+						 static_cast<claim_stage>(*stage),
+						 {std::move(*producer_id), std::move(*producer_semantics)},
+						 std::move(basis),
+						 std::move(*provenance),
+						 std::move(*guarantee)};
+			if (auto valid = validate_claim(engine, output); !valid)
+				return unexpected(store_error(
+					"store.corrupt", "partition-envelope", std::move(valid.error().code)));
+			return output;
+		}
+
 		[[nodiscard]] std::string bytes_hex(const std::span<const std::byte> bytes)
 		{
 			static constexpr std::string_view digits{"0123456789abcdef"};
@@ -614,6 +704,7 @@ namespace cxxlens::sdk
 		std::map<std::string, std::vector<snapshot_claim_annotation>, std::less<>> annotations;
 		std::vector<snapshot_query_coverage> coverage;
 		std::vector<snapshot_partition_binding> partition_bindings;
+		std::map<std::string, partition_draft, std::less<>> partition_envelopes;
 		std::vector<closure_certificate> closure_certificates;
 		std::vector<std::string> claim_contents;
 		std::vector<unresolved_reference> unresolved;
@@ -624,6 +715,63 @@ namespace cxxlens::sdk
 
 	namespace
 	{
+		void encode_partition_envelopes(
+			binary_writer& writer,
+			const std::map<std::string, partition_draft, std::less<>>& envelopes)
+		{
+			writer.unsigned_value(envelopes.size());
+			for (const auto& [partition_id, draft] : envelopes)
+			{
+				auto claims = draft.claims;
+				std::ranges::sort(claims, {}, &claim::content);
+				auto coverage_values = draft.coverage;
+				std::ranges::sort(
+					coverage_values,
+					[](const snapshot_coverage_unit& left, const snapshot_coverage_unit& right)
+					{
+						return left.canonical_form() < right.canonical_form();
+					});
+				auto unresolved_values = draft.unresolved;
+				std::ranges::sort(
+					unresolved_values,
+					[](const unresolved_reference& left, const unresolved_reference& right)
+					{
+						return std::tie(left.source_assertion,
+										left.source_relation,
+										left.target_relation,
+										left.source_columns,
+										left.reason) < std::tie(right.source_assertion,
+																right.source_relation,
+																right.target_relation,
+																right.source_columns,
+																right.reason);
+					});
+				writer.string(partition_id);
+				writer.unsigned_value(claims.size());
+				for (const auto& value : claims)
+					encode_claim(writer, value);
+				writer.unsigned_value(coverage_values.size());
+				for (const auto& coverage : coverage_values)
+				{
+					writer.string(coverage.domain);
+					writer.string(coverage.key);
+					writer.string(coverage.state);
+					writer.string(coverage.reason);
+				}
+				writer.unsigned_value(unresolved_values.size());
+				for (const auto& unresolved : unresolved_values)
+				{
+					writer.string(unresolved.source_assertion);
+					writer.string(unresolved.source_relation);
+					writer.string(unresolved.target_relation);
+					encode_strings(writer, unresolved.source_columns);
+					writer.string(unresolved.reason);
+				}
+			}
+		}
+		[[nodiscard]] std::vector<std::byte>
+		semantic_projection_bytes(const snapshot_handle::data& value);
+
 		[[nodiscard]] std::string canonical_export_of(const snapshot_handle::data& value)
 		{
 			std::ostringstream output;
@@ -651,13 +799,17 @@ namespace cxxlens::sdk
 				output << "unresolved=" << unresolved.source_assertion << '|'
 					   << unresolved.source_relation << '|' << unresolved.target_relation << '|'
 					   << unresolved.reason << '\n';
+			output << "semantic-projection=" << bytes_hex(semantic_projection_bytes(value)) << '\n';
+			binary_writer envelopes;
+			encode_partition_envelopes(envelopes, value.partition_envelopes);
+			output << "partition-envelopes=" << bytes_hex(std::move(envelopes).finish()) << '\n';
 			return output.str();
 		}
 
 		[[nodiscard]] std::vector<std::byte> encode_snapshot(const snapshot_handle::data& value)
 		{
 			binary_writer writer;
-			writer.string("cxxlens.ng-snapshot-payload.v4");
+			writer.string("cxxlens.ng-snapshot-payload.v5");
 			const auto& manifest = value.semantic_manifest;
 			writer.string(manifest.schema);
 			writer.string(manifest.id);
@@ -764,7 +916,169 @@ namespace cxxlens::sdk
 				writer.string(subject.producer_semantics);
 				writer.string(subject.evidence_digest);
 			}
+			encode_partition_envelopes(writer, value.partition_envelopes);
 			return std::move(writer).finish();
+		}
+
+		void sort_semantic_projections(snapshot_handle::data& value)
+		{
+			std::ranges::sort(value.claim_contents);
+			std::ranges::sort(
+				value.coverage,
+				[](const snapshot_query_coverage& left, const snapshot_query_coverage& right)
+				{
+					return std::tie(left.relation_descriptor_id,
+									left.unit.domain,
+									left.unit.key,
+									left.unit.state,
+									left.unit.reason) < std::tie(right.relation_descriptor_id,
+																 right.unit.domain,
+																 right.unit.key,
+																 right.unit.state,
+																 right.unit.reason);
+				});
+			std::ranges::sort(
+				value.unresolved,
+				[](const unresolved_reference& left, const unresolved_reference& right)
+				{
+					return std::tie(left.source_assertion,
+									left.source_relation,
+									left.target_relation,
+									left.source_columns,
+									left.reason) < std::tie(right.source_assertion,
+															right.source_relation,
+															right.target_relation,
+															right.source_columns,
+															right.reason);
+				});
+			std::ranges::sort(
+				value.partition_bindings, {}, &snapshot_partition_binding::partition_id);
+			for (auto& [descriptor, rows] : value.rows)
+			{
+				(void)descriptor;
+				std::ranges::sort(rows,
+								  [](const detached_row& left, const detached_row& right)
+								  {
+									  return left.canonical_form() < right.canonical_form();
+								  });
+			}
+			for (auto& [descriptor, annotations] : value.annotations)
+			{
+				(void)descriptor;
+				std::ranges::sort(
+					annotations,
+					[](const snapshot_claim_annotation& left,
+					   const snapshot_claim_annotation& right)
+					{
+						return std::tie(left.content, left.assertion, left.provenance_root) <
+							std::tie(right.content, right.assertion, right.provenance_root);
+					});
+			}
+		}
+
+		[[nodiscard]] std::vector<std::byte>
+		semantic_projection_bytes(const snapshot_handle::data& value)
+		{
+			binary_writer writer;
+			writer.unsigned_value(value.rows.size());
+			for (const auto& [descriptor, rows] : value.rows)
+			{
+				writer.string(descriptor);
+				writer.unsigned_value(rows.size());
+				for (const auto& row : rows)
+					encode_row(writer, row);
+			}
+			encode_strings(writer, value.claim_contents);
+			writer.unsigned_value(value.unresolved.size());
+			for (const auto& unresolved : value.unresolved)
+			{
+				writer.string(unresolved.source_assertion);
+				writer.string(unresolved.source_relation);
+				writer.string(unresolved.target_relation);
+				encode_strings(writer, unresolved.source_columns);
+				writer.string(unresolved.reason);
+			}
+			writer.unsigned_value(value.annotations.size());
+			for (const auto& [descriptor, annotations] : value.annotations)
+			{
+				writer.string(descriptor);
+				writer.unsigned_value(annotations.size());
+				for (const auto& annotation : annotations)
+					encode_annotation(writer, annotation);
+			}
+			writer.unsigned_value(value.coverage.size());
+			for (const auto& coverage : value.coverage)
+			{
+				writer.string(coverage.relation_descriptor_id);
+				writer.string(coverage.unit.domain);
+				writer.string(coverage.unit.key);
+				writer.string(coverage.unit.state);
+				writer.string(coverage.unit.reason);
+			}
+			writer.unsigned_value(value.partition_bindings.size());
+			for (const auto& binding : value.partition_bindings)
+			{
+				writer.string(binding.partition_id);
+				writer.string(binding.relation_descriptor_id);
+				writer.string(binding.scope);
+				encode_condition(writer, binding.condition);
+				writer.string(binding.interpretation);
+				writer.string(binding.producer_semantics);
+				writer.string(binding.producer_input_basis_digest);
+				writer.string(binding.precision_profile);
+				writer.string(binding.assumption_set_id);
+			}
+			return std::move(writer).finish();
+		}
+
+		[[nodiscard]] result<void> validate_semantic_graph(snapshot_handle::data& value,
+														   const relation_engine& engine)
+		{
+			if (value.partition_envelopes.size() != value.semantic_manifest.partitions.size())
+				return unexpected(
+					store_error("store.corrupt", "partition-envelope", "manifest-count"));
+			snapshot_handle::data expected;
+			expected.query_annotations_available = true;
+			for (const auto& partition : value.semantic_manifest.partitions)
+			{
+				const auto envelope = value.partition_envelopes.find(partition.partition_id);
+				if (envelope == value.partition_envelopes.end())
+					return unexpected(
+						store_error("store.corrupt", "partition-envelope", "manifest-key"));
+				auto rebuilt = make_partition_manifest(engine, envelope->second);
+				if (!rebuilt || *rebuilt != partition)
+					return unexpected(
+						store_error("store.corrupt", "partition-envelope", "manifest"));
+				expected.partition_bindings.push_back(
+					partition_binding(partition.partition_id, envelope->second));
+				expected.rows.try_emplace(partition.relation_descriptor_id);
+				expected.annotations.try_emplace(partition.relation_descriptor_id);
+				for (const auto& coverage : envelope->second.coverage)
+					expected.coverage.push_back({partition.relation_descriptor_id, coverage});
+				for (const auto& claim_value : envelope->second.claims)
+				{
+					expected.rows[claim_value.descriptor].push_back(claim_value.row);
+					expected.annotations[claim_value.descriptor].push_back(
+						{claim_value.row,
+						 claim_value.presence,
+						 claim_value.interpretation,
+						 claim_value.semantic_key,
+						 claim_value.assertion,
+						 claim_value.content,
+						 claim_value.producer,
+						 claim_value.provenance_root,
+						 claim_value.guarantee});
+					expected.claim_contents.push_back(claim_value.content);
+				}
+				expected.unresolved.insert(expected.unresolved.end(),
+										   envelope->second.unresolved.begin(),
+										   envelope->second.unresolved.end());
+			}
+			sort_semantic_projections(expected);
+			sort_semantic_projections(value);
+			if (semantic_projection_bytes(expected) != semantic_projection_bytes(value))
+				return unexpected(store_error("store.corrupt", "partition-envelope", "projection"));
+			return {};
 		}
 
 		[[nodiscard]] result<std::shared_ptr<snapshot_handle::data>>
@@ -776,14 +1090,19 @@ namespace cxxlens::sdk
 				(*magic != "cxxlens.ng-snapshot-payload.v1" &&
 				 *magic != "cxxlens.ng-snapshot-payload.v2" &&
 				 *magic != "cxxlens.ng-snapshot-payload.v3" &&
-				 *magic != "cxxlens.ng-snapshot-payload.v4"))
+				 *magic != "cxxlens.ng-snapshot-payload.v4" &&
+				 *magic != "cxxlens.ng-snapshot-payload.v5"))
 				return unexpected(store_error("store.corrupt", "payload", "format"));
 			const bool payload_has_annotations = *magic == "cxxlens.ng-snapshot-payload.v2" ||
 				*magic == "cxxlens.ng-snapshot-payload.v3" ||
-				*magic == "cxxlens.ng-snapshot-payload.v4";
+				*magic == "cxxlens.ng-snapshot-payload.v4" ||
+				*magic == "cxxlens.ng-snapshot-payload.v5";
 			const bool payload_has_producer = *magic == "cxxlens.ng-snapshot-payload.v3" ||
-				*magic == "cxxlens.ng-snapshot-payload.v4";
-			const bool payload_has_closure_subjects = *magic == "cxxlens.ng-snapshot-payload.v4";
+				*magic == "cxxlens.ng-snapshot-payload.v4" ||
+				*magic == "cxxlens.ng-snapshot-payload.v5";
+			const bool payload_has_closure_subjects = *magic == "cxxlens.ng-snapshot-payload.v4" ||
+				*magic == "cxxlens.ng-snapshot-payload.v5";
+			const bool payload_has_partition_envelopes = *magic == "cxxlens.ng-snapshot-payload.v5";
 			auto value = std::make_shared<snapshot_handle::data>();
 			auto& manifest = value->semantic_manifest;
 			auto schema = reader.string();
@@ -1112,6 +1431,83 @@ namespace cxxlens::sdk
 										std::identity{}))
 					return unexpected(
 						store_error("store.corrupt", "closure-certificates", "manifest"));
+			}
+			if (payload_has_partition_envelopes)
+			{
+				auto envelope_count = reader.unsigned_value();
+				if (!envelope_count || *envelope_count != manifest.partitions.size())
+					return unexpected(store_error("store.corrupt", "partition-envelope", "count"));
+				for (std::uint64_t index = 0U; index < *envelope_count; ++index)
+				{
+					auto partition_id = reader.string();
+					auto claim_count_value = reader.unsigned_value();
+					if (!partition_id || !claim_count_value || *claim_count_value > 10'000'000U)
+						return unexpected(
+							store_error("store.corrupt", "partition-envelope", "header"));
+					const auto binding =
+						std::ranges::find(value->partition_bindings,
+										  *partition_id,
+										  &snapshot_partition_binding::partition_id);
+					if (binding == value->partition_bindings.end())
+						return unexpected(
+							store_error("store.corrupt", "partition-envelope", "binding"));
+					auto draft = identity_draft(*binding);
+					draft.claims.reserve(static_cast<std::size_t>(*claim_count_value));
+					for (std::uint64_t claim_index = 0U; claim_index < *claim_count_value;
+						 ++claim_index)
+					{
+						auto claim_value = decode_claim(reader, engine);
+						if (!claim_value)
+							return unexpected(std::move(claim_value.error()));
+						draft.claims.push_back(std::move(*claim_value));
+					}
+					auto coverage_count_value = reader.unsigned_value();
+					if (!coverage_count_value || *coverage_count_value > 10'000'000U)
+						return unexpected(
+							store_error("store.corrupt", "partition-envelope", "coverage-count"));
+					for (std::uint64_t coverage_index = 0U; coverage_index < *coverage_count_value;
+						 ++coverage_index)
+					{
+						auto domain = reader.string();
+						auto key = reader.string();
+						auto coverage_state = reader.string();
+						auto reason = reader.string();
+						if (!domain || !key || !coverage_state || !reason)
+							return unexpected(
+								store_error("store.corrupt", "partition-envelope", "coverage"));
+						draft.coverage.push_back({std::move(*domain),
+												  std::move(*key),
+												  std::move(*coverage_state),
+												  std::move(*reason)});
+					}
+					auto unresolved_count_value = reader.unsigned_value();
+					if (!unresolved_count_value || *unresolved_count_value > 10'000'000U)
+						return unexpected(
+							store_error("store.corrupt", "partition-envelope", "unresolved-count"));
+					for (std::uint64_t unresolved_index = 0U;
+						 unresolved_index < *unresolved_count_value;
+						 ++unresolved_index)
+					{
+						auto assertion = reader.string();
+						auto source = reader.string();
+						auto target = reader.string();
+						auto columns = decode_strings(reader, "partition-envelope-unresolved");
+						auto reason = reader.string();
+						if (!assertion || !source || !target || !columns || !reason)
+							return unexpected(
+								store_error("store.corrupt", "partition-envelope", "unresolved"));
+						draft.unresolved.push_back({std::move(*assertion),
+													std::move(*source),
+													std::move(*target),
+													std::move(*columns),
+													std::move(*reason)});
+					}
+					if (!value->partition_envelopes.emplace(*partition_id, std::move(draft)).second)
+						return unexpected(
+							store_error("store.corrupt", "partition-envelope", "duplicate"));
+				}
+				if (auto valid = validate_semantic_graph(*value, engine); !valid)
+					return unexpected(std::move(valid.error()));
 			}
 			if (!reader.finished() || manifest.schema != "cxxlens.snapshot-manifest.v1" ||
 				manifest.id != snapshot_identity(manifest) ||
@@ -1764,12 +2160,19 @@ namespace cxxlens::sdk
 
 	store_compatibility snapshot_store::compatibility() const
 	{
-		return {implementation_->backend, {2U, 3U, 0U}, true, false};
+		return {implementation_->backend, {2U, 4U, 0U}, true, false};
 	}
 
 	result<void> snapshot_store::compact()
 	{
 		std::scoped_lock lock{implementation_->mutex};
+		if (const auto corrupt = std::ranges::find_if(implementation_->records,
+													  [](const auto& record)
+													  {
+														  return record.second.corrupt;
+													  });
+			corrupt != implementation_->records.end())
+			return unexpected(store_error("store.compact-validation-failed", corrupt->first));
 		std::vector<std::pair<std::string, std::shared_ptr<snapshot_handle::data>>> replacements;
 		const auto next_generation = implementation_->generation + 1U;
 		for (const auto& [id, current] : implementation_->publications)
@@ -1777,6 +2180,9 @@ namespace cxxlens::sdk
 			if (current->semantic_manifest.id != snapshot_identity(current->semantic_manifest) ||
 				current->publication_record_value.corrupt)
 				return unexpected(store_error("store.compact-validation-failed", id));
+			if (!current->partition_envelopes.empty())
+				if (auto valid = validate_semantic_graph(*current, implementation_->engine); !valid)
+					return unexpected(store_error("store.compact-validation-failed", id));
 			auto replacement = std::make_shared<snapshot_handle::data>(*current);
 			replacement->publication_record_value.physical_generation = next_generation;
 			auto token = std::make_shared<const std::uint64_t>(next_generation);
@@ -1870,6 +2276,7 @@ namespace cxxlens::sdk
 			manifest.partitions.push_back(*built);
 			candidate->partition_bindings.push_back(
 				partition_binding(built->partition_id, partition));
+			candidate->partition_envelopes.emplace(built->partition_id, partition);
 			auto relation = data_->store->engine.require_id(partition.relation_descriptor_id);
 			if (!relation)
 				return unexpected(std::move(relation.error()));
@@ -1983,6 +2390,8 @@ namespace cxxlens::sdk
 						std::tie(right.content, right.assertion, right.provenance_root);
 				});
 		}
+		if (auto valid = validate_semantic_graph(*candidate, data_->store->engine); !valid)
+			return unexpected(std::move(valid.error()));
 		manifest.id = snapshot_identity(manifest);
 		data_->candidate = std::move(candidate);
 		data_->current_state = publication_state::validating;
@@ -2094,6 +2503,47 @@ namespace cxxlens::sdk
 		store.implementation_->publications[std::string{publication_id}] = std::move(corrupted);
 		return {};
 	}
+
+	// The raw before/after pair is intentionally symmetric in this test-only fault injector.
+	// NOLINTBEGIN(bugprone-easily-swappable-parameters)
+	result<void> rewrite_publication_payload_for_testing(snapshot_store& store,
+														 const std::string_view publication_id,
+														 const std::string_view before,
+														 const std::string_view after,
+														 const std::size_t occurrence)
+	{
+		std::scoped_lock lock{store.implementation_->mutex};
+		if (store.implementation_->database == nullptr || before.empty() ||
+			before.size() != after.size())
+			return unexpected(store_error("store.corrupt", "test-rewrite", "invalid"));
+		auto selected = store.implementation_->database->query(
+			"SELECT hex(payload) FROM cxxlens_ng_publication WHERE publication_id=" +
+			sql_quote(publication_id));
+		if (!selected || selected->size() != 1U || selected->front().size() != 1U)
+			return unexpected(
+				store_error("store.publication-not-found", std::string{publication_id}));
+		auto payload = hex_bytes(selected->front().front());
+		if (!payload)
+			return unexpected(std::move(payload.error()));
+		const auto needle = std::as_bytes(std::span{before.data(), before.size()});
+		auto search_begin = payload->begin();
+		decltype(search_begin) found;
+		for (std::size_t index = 0U; index <= occurrence; ++index)
+		{
+			found = std::search(search_begin, payload->end(), needle.begin(), needle.end());
+			if (found == payload->end())
+				return unexpected(store_error("store.corrupt", "test-rewrite", "not-found"));
+			search_begin = found + static_cast<std::ptrdiff_t>(needle.size());
+		}
+		for (std::size_t index = 0U; index < after.size(); ++index)
+			found[static_cast<std::ptrdiff_t>(index)] =
+				static_cast<std::byte>(static_cast<unsigned char>(after[index]));
+		const auto checksum = content_digest(*payload);
+		return store.implementation_->database->execute(
+			"UPDATE cxxlens_ng_publication SET checksum=" + sql_quote(checksum) + ",payload=X'" +
+			bytes_hex(*payload) + "' WHERE publication_id=" + sql_quote(publication_id));
+	}
+	// NOLINTEND(bugprone-easily-swappable-parameters)
 
 	snapshot_builder::snapshot_builder(relation_registry registry) : registry_{std::move(registry)}
 	{

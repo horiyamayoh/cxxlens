@@ -23,8 +23,8 @@ version_contracts:
   query_runtime: 1.0.0
   provider_protocol: 1.0.0
   snapshot_identity: 1.0.0
-  snapshot_payload: cxxlens.ng-snapshot-payload.v4
-  sqlite_physical_format: 2.3.0
+  snapshot_payload: cxxlens.ng-snapshot-payload.v5
+  sqlite_physical_format: 2.4.0
   recipe_semantics: cxxlens.recipes.calls_to_function-1.0.0
 authority_documents:
   - docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -42,6 +42,7 @@ authority_documents:
   - docs/design/adr/0014-deterministic-reference-query-runtime.md
   - docs/design/adr/0015-process-provider-runtime-clang22-normalizer.md
   - docs/design/adr/0021-query-closure-applicability.md
+  - docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md
   - schemas/cxxlens_ng_relation_registry.yaml
   - schemas/cxxlens_ng_logical_query_contract.yaml
   - schemas/cxxlens_ng_semantic_guarantee_contract.yaml

@@ -1,5 +1,5 @@
 schema: cxxlens.snapshot-store-contract.v1
-document_version: 1.1.0
+document_version: 1.2.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#15-immutable-snapshot-and-store
@@ -252,6 +252,7 @@ compaction:
     - physical-checksum
     - semantic-snapshot-digest
     - manifest-closure-binding
+    - persisted-semantic-object-graph
   failure_preserves_prior_generation: true
   pinned_generation_reclamation: deferred
 format_compatibility:
@@ -261,7 +262,13 @@ format_compatibility:
   migration_commit_requires_same_semantic_digest: true
   incompatible_without_migrator: reject
 corruption:
-  verify_on_open: [manifest-digest, object-checksum, closure-binding]
+  verify_on_open: [manifest-digest, object-checksum, closure-binding, persisted-semantic-object-graph]
+  object_graph_reconstruction:
+    source: canonical-partition-envelope
+    identities: [semantic-key, assertion, claim-content, claim-set, coverage, partition-content]
+    manifest_fields: [claim-count, complete, partition-content-digest, coverage-digest]
+    projections: [detached-rows, annotations, claim-contents, coverage, unresolved]
+    mismatch: corrupt-fail-closed
   corrupt_current: structured-failure-no-fallback
   explicit_intact_prior_open: allowed
   repair: new-validated-physical-generation

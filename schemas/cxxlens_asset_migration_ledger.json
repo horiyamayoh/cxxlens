@@ -1,5 +1,5 @@
 {
-  "asset_count": 279,
+  "asset_count": 280,
   "assets": [
     {
       "authority": "active",
@@ -634,6 +634,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0032-set-literal-byte-codec-parity.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1956,7 +1963,7 @@
     }
   ],
   "classifications": {
-    "active": 243,
+    "active": 244,
     "archived": 35,
     "generated": 1
   },

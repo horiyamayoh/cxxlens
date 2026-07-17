@@ -19,6 +19,8 @@ minor を 2.1.0 へ進め、payload v2 に query annotation projection を追加
 payload v3 とし、query row/report が exact producer ID と semantic contract を保持できるようにした。
 Issue #78 / ADR 0021 で minor 2.3.0 / payload v4 に exact partition identity binding と validated closure
 certificate subject を追加し、v1〜v3 の ID-only closure は closed-world proof に使用しない。
+Issue #90 / ADR 0033 で minor 2.4.0 / payload v5 に完全な partition claim envelope を追加し、open/compaction 時に
+manifest と query-visible row/annotation/coverage projection を bottom-up で再構成する。
 
 - `cxxlens_ng_metadata` は physical format version を保持する。
 - `cxxlens_ng_publication` は publication ID、exact series ID、semantic snapshot ID、monotonic sequence、physical
