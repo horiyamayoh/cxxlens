@@ -22,6 +22,7 @@
 #if CXXLENS_HAS_CLANG22
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/Expr.h>
+#include <clang/AST/ExprCXX.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Index/USRGeneration.h>
@@ -408,6 +409,18 @@ namespace cxxlens::detail::clang22
 				entity_field(left, "symbol.signature") == entity_field(right, "symbol.signature");
 		}
 
+		[[nodiscard]] bool call_kind_requires_direct_target(const std::string_view kind)
+		{
+			return kind == "direct_function" || kind == "direct_member" ||
+				kind == "virtual_member" || kind == "operator";
+		}
+
+		[[nodiscard]] bool call_kind_forbids_direct_target(const std::string_view kind)
+		{
+			return kind == "indirect_function" || kind == "indirect_member_pointer" ||
+				kind == "dependent" || kind == "unresolved";
+		}
+
 		class binary_writer
 		{
 		  public:
@@ -536,6 +549,27 @@ namespace cxxlens::detail::clang22
 			return "function";
 		}
 
+		[[nodiscard]] std::string call_kind(const clang::CallExpr& expression)
+		{
+			const auto* direct = expression.getDirectCallee();
+			if (direct == nullptr)
+			{
+				if (expression.isTypeDependent() || expression.isValueDependent())
+					return "dependent";
+				if (llvm::isa<clang::CXXMemberCallExpr>(expression))
+					return "indirect_member_pointer";
+				return "indirect_function";
+			}
+			const auto* method = llvm::dyn_cast<clang::CXXMethodDecl>(direct);
+			if (method == nullptr)
+				return direct->isOverloadedOperator() ? "operator" : "direct_function";
+			const auto* member =
+				llvm::dyn_cast<clang::MemberExpr>(expression.getCallee()->IgnoreParenImpCasts());
+			if (method->isVirtual() && (member == nullptr || !member->hasQualifier()))
+				return "virtual_member";
+			return direct->isOverloadedOperator() ? "operator" : "direct_member";
+		}
+
 		class observation_visitor final : public clang::RecursiveASTVisitor<observation_visitor>
 		{
 		  public:
@@ -608,7 +642,7 @@ namespace cxxlens::detail::clang22
 				detached_observation call;
 				call.kind = observation_kind::call;
 				call.compile_unit = output_->unit;
-				call.payload.emplace("call.kind", "direct_function");
+				call.payload.emplace("call.kind", call_kind(*expression));
 				if (!current_function_.empty())
 					call.payload.emplace("call.caller", current_function_);
 				if (const auto* callee = expression->getDirectCallee(); callee != nullptr)
@@ -636,8 +670,14 @@ namespace cxxlens::detail::clang22
 												 std::move(callee_source->id));
 					}
 				}
+				else if (call.payload.at("call.kind") == "dependent")
+					call.payload.emplace("call.unresolved_reason", "dependent-callee");
+				else if (call.payload.at("call.kind") == "indirect_member_pointer")
+					call.payload.emplace("call.unresolved_reason",
+										 "member-pointer-target-not-modeled");
 				else
-					call.payload.emplace("call.unresolved_reason", "no-direct-callee");
+					call.payload.emplace("call.unresolved_reason",
+										 "function-pointer-target-not-modeled");
 				auto source = provider::clang22::normalize_source(
 					*unit_, expression->getSourceRange(), {source_snapshot_, file_, "expression"});
 				if (!source)
@@ -1011,6 +1051,17 @@ namespace cxxlens::detail::clang22
 					{"provider.entity-redeclaration-incompatible", semantic_key, "cc.entity"});
 			}
 		}
+		for (const auto& observation : batch.observations)
+		{
+			if (observation.kind != observation_kind::call)
+				continue;
+			const auto kind = entity_field(observation, "call.kind");
+			const auto target = entity_field(observation, "call.direct_callee");
+			if ((target.empty() && call_kind_requires_direct_target(kind)) ||
+				(!target.empty() && call_kind_forbids_direct_target(kind)))
+				output.equivalence_limitations.push_back("call-kind-target-inconsistent:" +
+														 observation.semantic_key);
+		}
 		std::ranges::sort(output.equivalence_limitations);
 		output.equivalence_limitations.erase(
 			std::ranges::unique(output.equivalence_limitations).begin(),
@@ -1083,7 +1134,18 @@ namespace cxxlens::detail::clang22
 				const auto reason = observation.payload.contains("call.unresolved_reason")
 					? observation.payload.at("call.unresolved_reason")
 					: "no-direct-callee";
-				output.unresolved.push_back({"provider.direct-target-unresolved", *call, reason});
+				const auto kind = entity_field(observation, "call.kind");
+				const auto code = call_kind_requires_direct_target(kind)
+					? "provider.call-kind-target-inconsistent"
+					: (kind.starts_with("indirect_") ? "provider.indirect-target-unresolved"
+													 : "provider.call-target-unresolved");
+				output.unresolved.push_back({code, *call, reason});
+				continue;
+			}
+			if (call_kind_forbids_direct_target(entity_field(observation, "call.kind")))
+			{
+				output.unresolved.push_back(
+					{"provider.call-kind-target-inconsistent", *call, "unexpected-direct-callee"});
 				continue;
 			}
 			auto target_entity = entity_ids.find(target->second);

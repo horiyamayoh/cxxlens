@@ -2558,6 +2558,13 @@ structural signature digest は canonical type/signature だけに bindし、sou
 unit、arrival orderを含めない。kind/signature が不整合な redeclaration は
 `provider.entity-redeclaration-incompatible` として unresolved/equivalence limitation に会計し exact を主張しない。
 
+`CallExpr` の kind は direct callee の有無と AST shape から決める。free function、member、virtual member、operator の
+direct/static callee はそれぞれ `direct_function`、`direct_member`、`virtual_member`、`operator` とし、
+function pointer、member pointer、dependent call は `indirect_function`、`indirect_member_pointer`、`dependent` とする。
+virtual member の `cc.call_direct_target` は static target であり dynamic dispatch の可能性は kind に保持する。
+indirect/dependent call は target を捏造せず unsupported resolution を unresolved に残す。既知の direct kind と target 欠落、
+または既知の non-direct kind と direct target の組合せは `provider.call-kind-target-inconsistent` として non-exact にする。
+
 ---
 
 ## 20. Logical Query

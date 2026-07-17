@@ -1,5 +1,5 @@
 {
-  "asset_count": 299,
+  "asset_count": 300,
   "assets": [
     {
       "authority": "active",
@@ -767,6 +767,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0051-clang-redeclaration-canonicalization.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0052-clang-call-kind-and-target-consistency.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2096,7 +2103,7 @@
     }
   ],
   "classifications": {
-    "active": 263,
+    "active": 264,
     "archived": 35,
     "generated": 1
   },

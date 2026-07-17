@@ -239,7 +239,8 @@ int main()
 	require(exact && exact->exact_equivalence && exact->entity_observations.size() == 1U &&
 				exact->type_observations.size() == 1U && exact->call_observations.size() == 1U &&
 				exact->entities.size() == 1U && exact->call_sites.size() == 1U &&
-				exact->direct_targets.size() == 1U && exact->unresolved.empty(),
+				exact->direct_targets.size() == 1U && exact->unresolved.empty() &&
+				string_cell(exact->call_sites.front(), "cc.call_site.v1.kind") == "direct_function",
 			"exact Clang observation canonicalization failed");
 	require(string_cell(exact->call_sites.front(), "cc.call_site.v1.source") == *span,
 			"worker call-site hard reference differs from base source.span identity");
@@ -447,12 +448,79 @@ int main()
 
 	auto indirect = cross_tu;
 	indirect.observations.front().payload.erase("call.direct_callee");
-	indirect.observations.front().payload.emplace("call.unresolved_reason", "no-direct-callee");
+	indirect.observations.front().payload.insert_or_assign("call.kind", "indirect_function");
+	indirect.observations.front().payload.emplace("call.unresolved_reason",
+												  "function-pointer-target-not-modeled");
 	auto indirect_result = canonicalize_provider_batch(
 		indirect, "sha256:1111111111111111111111111111111111111111111111111111111111111111", true);
 	require(indirect_result && indirect_result->direct_targets.empty() &&
-				indirect_result->unresolved.size() == 1U,
+				indirect_result->unresolved.size() == 1U &&
+				indirect_result->unresolved.front().code == "provider.indirect-target-unresolved" &&
+				string_cell(indirect_result->call_sites.front(), "cc.call_site.v1.kind") ==
+					"indirect_function",
 			"indirect call received a fabricated direct target");
+	auto member_pointer = indirect;
+	member_pointer.observations.front().payload.insert_or_assign("call.kind",
+																 "indirect_member_pointer");
+	member_pointer.observations.front().payload.insert_or_assign(
+		"call.unresolved_reason", "member-pointer-target-not-modeled");
+	auto member_pointer_result = canonicalize_provider_batch(
+		member_pointer,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(member_pointer_result && member_pointer_result->direct_targets.empty() &&
+				member_pointer_result->unresolved.size() == 1U &&
+				string_cell(member_pointer_result->call_sites.front(), "cc.call_site.v1.kind") ==
+					"indirect_member_pointer",
+			"member-pointer call was not classified as indirect");
+	auto dependent = indirect;
+	dependent.observations.front().payload.insert_or_assign("call.kind", "dependent");
+	dependent.observations.front().payload.insert_or_assign("call.unresolved_reason",
+															"dependent-callee");
+	auto dependent_result = canonicalize_provider_batch(
+		dependent, "sha256:1111111111111111111111111111111111111111111111111111111111111111", true);
+	require(dependent_result && dependent_result->direct_targets.empty() &&
+				dependent_result->unresolved.size() == 1U &&
+				dependent_result->unresolved.front().code == "provider.call-target-unresolved" &&
+				string_cell(dependent_result->call_sites.front(), "cc.call_site.v1.kind") ==
+					"dependent",
+			"dependent call was not preserved as explicit unresolved");
+	auto virtual_call = cross_tu;
+	virtual_call.observations.front().payload.insert_or_assign("call.kind", "virtual_member");
+	auto virtual_result = canonicalize_provider_batch(
+		virtual_call,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(virtual_result && virtual_result->direct_targets.size() == 1U &&
+				virtual_result->unresolved.empty() &&
+				string_cell(virtual_result->call_sites.front(), "cc.call_site.v1.kind") ==
+					"virtual_member",
+			"virtual dispatch lost its static direct target or dynamic-dispatch kind");
+	auto inconsistent = indirect;
+	inconsistent.observations.front().payload.insert_or_assign("call.kind", "direct_function");
+	auto inconsistent_result = canonicalize_provider_batch(
+		inconsistent,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(inconsistent_result && !inconsistent_result->exact_equivalence &&
+				inconsistent_result->direct_targets.empty() &&
+				inconsistent_result->unresolved.size() == 1U &&
+				inconsistent_result->unresolved.front().code ==
+					"provider.call-kind-target-inconsistent",
+			"direct kind without a direct callee was not rejected by the invariant");
+	auto fabricated_indirect = cross_tu;
+	fabricated_indirect.observations.front().payload.insert_or_assign("call.kind",
+																	  "indirect_function");
+	auto fabricated_result = canonicalize_provider_batch(
+		fabricated_indirect,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(fabricated_result && !fabricated_result->exact_equivalence &&
+				fabricated_result->direct_targets.empty() &&
+				fabricated_result->unresolved.size() == 1U &&
+				fabricated_result->unresolved.front().code ==
+					"provider.call-kind-target-inconsistent",
+			"indirect kind with a direct callee fabricated a direct-target row");
 
 	const std::vector<std::string> gcc_specific{"g++", "-fabi-version=18", "-c", "input.cpp"};
 	std::vector<std::string> limitations;
