@@ -35,6 +35,11 @@ namespace cxxlens::sdk
 		closed_symbol,
 		set,
 	};
+	/** @brief Test exact membership in the closed scalar kind enum. */
+	[[nodiscard]] constexpr bool is_valid(const scalar_kind value) noexcept
+	{
+		return value >= scalar_kind::boolean && value <= scalar_kind::set;
+	}
 
 	/** @brief Semantic role of a column in stable claim identity. */
 	enum class column_role : std::uint8_t
@@ -44,6 +49,11 @@ namespace cxxlens::sdk
 		display,
 		auxiliary,
 	};
+	/** @brief Test exact membership in the closed column role enum. */
+	[[nodiscard]] constexpr bool is_valid(const column_role value) noexcept
+	{
+		return value >= column_role::claim_key && value <= column_role::auxiliary;
+	}
 
 	/** @brief Batch merge law declared by a relation descriptor. */
 	enum class merge_mode : std::uint8_t
@@ -53,6 +63,11 @@ namespace cxxlens::sdk
 		functional_assertion,
 		keyed_union,
 	};
+	/** @brief Test exact membership in the closed merge mode enum. */
+	[[nodiscard]] constexpr bool is_valid(const merge_mode value) noexcept
+	{
+		return value >= merge_mode::set && value <= merge_mode::keyed_union;
+	}
 
 	/** @brief Reference strength; soft references preserve their source claim. */
 	enum class reference_strength : std::uint8_t
@@ -60,6 +75,11 @@ namespace cxxlens::sdk
 		hard,
 		soft_semantic,
 	};
+	/** @brief Test exact membership in the closed reference strength enum. */
+	[[nodiscard]] constexpr bool is_valid(const reference_strength value) noexcept
+	{
+		return value >= reference_strength::hard && value <= reference_strength::soft_semantic;
+	}
 
 	/** @brief Exact detached column type. */
 	struct value_type
@@ -196,6 +216,11 @@ namespace cxxlens::sdk
 		absent,
 		unknown,
 	};
+	/** @brief Test exact membership in the closed cell state enum. */
+	[[nodiscard]] constexpr bool is_valid(const cell_state value) noexcept
+	{
+		return value >= cell_state::present && value <= cell_state::unknown;
+	}
 
 	/** @brief Pointer-free detached scalar storage. */
 	using scalar_value =

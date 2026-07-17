@@ -25,6 +25,11 @@ namespace cxxlens::sdk::testing
 		wrong_terminal_task,
 		credit_exceeded,
 	};
+	/** @brief Test exact membership in the closed provider fault enum. */
+	[[nodiscard]] constexpr bool is_valid(const provider_fault value) noexcept
+	{
+		return value >= provider_fault::none && value <= provider_fault::credit_exceeded;
+	}
 
 	/** @brief Canonical conformance observation. */
 	struct conformance_report

@@ -11,6 +11,8 @@
 
 #include <cxxlens/sdk/common.hpp>
 
+#include "json_internal.hpp"
+
 namespace cxxlens::sdk
 {
 	namespace
@@ -65,12 +67,18 @@ namespace cxxlens::sdk
 					append_length(output, value.tuple.size());
 					for (const auto& item : value.tuple)
 					{
-						const auto encoded = canonical_binary(item);
+						std::vector<std::byte> encoded;
+						append_canonical(encoded, item);
 						append_length(output, encoded.size());
 						output.insert(output.end(), encoded.begin(), encoded.end());
 					}
 					return;
 			}
+		}
+
+		[[nodiscard]] error canonical_error(std::string field, std::string detail)
+		{
+			return {"sdk.canonical-value-invalid", std::move(field), std::move(detail)};
 		}
 
 		constexpr std::array<std::uint32_t, 64U> round_constants{
@@ -209,27 +217,75 @@ namespace cxxlens::sdk
 		return output;
 	}
 
-	std::vector<std::byte> canonical_binary(const canonical_value& value)
+	result<void> canonical_value::validate() const
 	{
+		if (!is_valid(type))
+			return unexpected(canonical_error("type", "closed-enum"));
+		const bool common_inactive =
+			boolean || integer != 0 || !byte_string.empty() || !text.empty() || !tuple.empty();
+		switch (type)
+		{
+			case kind::null_value:
+				if (common_inactive)
+					return unexpected(canonical_error("payload", "inactive-field"));
+				break;
+			case kind::boolean:
+				if (integer != 0 || !byte_string.empty() || !text.empty() || !tuple.empty())
+					return unexpected(canonical_error("payload", "inactive-field"));
+				break;
+			case kind::signed_integer:
+				if (boolean || !byte_string.empty() || !text.empty() || !tuple.empty())
+					return unexpected(canonical_error("payload", "inactive-field"));
+				break;
+			case kind::bytes:
+				if (boolean || integer != 0 || !text.empty() || !tuple.empty())
+					return unexpected(canonical_error("payload", "inactive-field"));
+				break;
+			case kind::utf8_string:
+				if (boolean || integer != 0 || !byte_string.empty() || !tuple.empty())
+					return unexpected(canonical_error("payload", "inactive-field"));
+				if (!detail::valid_utf8(text))
+					return unexpected(canonical_error("text", "invalid-utf8"));
+				break;
+			case kind::ordered_tuple:
+				if (boolean || integer != 0 || !byte_string.empty() || !text.empty())
+					return unexpected(canonical_error("payload", "inactive-field"));
+				for (std::size_t index{}; index < tuple.size(); ++index)
+					if (auto valid = tuple[index].validate(); !valid)
+						return unexpected(canonical_error("tuple[" + std::to_string(index) + "]",
+														  valid.error().detail));
+				break;
+		}
+		return {};
+	}
+
+	result<std::vector<std::byte>> canonical_binary(const canonical_value& value)
+	{
+		if (auto valid = value.validate(); !valid)
+			return unexpected(std::move(valid.error()));
 		std::vector<std::byte> output;
 		append_canonical(output, value);
 		return output;
 	}
 
-	std::string canonical_identity_digest(const std::string_view identity_kind,
-										  const std::span<const canonical_value> fields)
+	result<std::string> canonical_identity_digest(const std::string_view identity_kind,
+												  const std::span<const canonical_value> fields)
 	{
+		if (identity_kind.empty() || !detail::valid_utf8(identity_kind))
+			return unexpected(canonical_error("identity_kind", "invalid-utf8-or-empty"));
 		std::string domain{"cxxlens"};
 		domain.push_back('\0');
 		domain.append(identity_kind);
 		domain.append("\0v1\0", 4U);
 		std::vector<canonical_value> values{fields.begin(), fields.end()};
-		const auto encoded = canonical_binary(canonical_value::from_tuple(std::move(values)));
+		auto encoded = canonical_binary(canonical_value::from_tuple(std::move(values)));
+		if (!encoded)
+			return unexpected(std::move(encoded.error()));
 		std::vector<std::byte> bytes;
-		bytes.reserve(domain.size() + encoded.size());
+		bytes.reserve(domain.size() + encoded->size());
 		for (const auto byte : domain)
 			bytes.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
-		bytes.insert(bytes.end(), encoded.begin(), encoded.end());
+		bytes.insert(bytes.end(), encoded->begin(), encoded->end());
 		return std::string{identity_kind} + ':' + content_digest(bytes);
 	}
 
@@ -278,9 +334,11 @@ namespace cxxlens::sdk
 			canonical_value::from_tuple({canonical_value::from_string("cxxlens-semantic-digest-v2"),
 										 canonical_value::from_string(std::string{domain}),
 										 canonical_value::from_bytes(std::move(payload))}));
+		if (!framed)
+			return unexpected(std::move(framed.error()));
 		std::string hash_input;
-		hash_input.reserve(framed.size());
-		for (const auto byte : framed)
+		hash_input.reserve(framed->size());
+		for (const auto byte : *framed)
 			hash_input.push_back(static_cast<char>(std::to_integer<unsigned char>(byte)));
 		const auto state = sha256_words(hash_input);
 		std::ostringstream output;

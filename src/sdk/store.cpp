@@ -91,7 +91,7 @@ namespace cxxlens::sdk
 				text(draft.precision_profile),
 				text(draft.assumption_set_id),
 			};
-			return canonical_identity_digest("partition", fields);
+			return *canonical_identity_digest("partition", fields);
 		}
 
 		[[nodiscard]] snapshot_partition_binding partition_binding(const std::string& partition_id,
@@ -168,7 +168,7 @@ namespace cxxlens::sdk
 				text(value.producer_semantics),
 				text(value.evidence_digest),
 			};
-			return canonical_identity_digest("closure-certificate", fields);
+			return *canonical_identity_digest("closure-certificate", fields);
 		}
 
 		[[nodiscard]] std::string snapshot_identity(const snapshot_manifest& value)
@@ -196,7 +196,7 @@ namespace cxxlens::sdk
 				canonical_value::from_tuple(std::move(partitions)),
 				texts(closures),
 			};
-			return canonical_identity_digest("snapshot", fields);
+			return *canonical_identity_digest("snapshot", fields);
 		}
 
 		[[nodiscard]] std::string publication_identity(const publication_record& value)
@@ -207,7 +207,7 @@ namespace cxxlens::sdk
 				canonical_value::from_integer(static_cast<std::int64_t>(value.sequence)),
 				text(value.parent_publication.value_or("")),
 			};
-			return canonical_identity_digest("publication", fields);
+			return *canonical_identity_digest("publication", fields);
 		}
 
 		[[nodiscard]] std::string canonical_export_of(const snapshot_handle::data& value);
@@ -1587,7 +1587,7 @@ namespace cxxlens::sdk
 								text(relation_registry_digest),
 								text(interpretation_policy_digest),
 								text(trust_policy_digest)};
-		return canonical_identity_digest("snapshot-series", fields);
+		return *canonical_identity_digest("snapshot-series", fields);
 	}
 
 	result<void> snapshot_coverage_unit::validate() const
@@ -1603,7 +1603,7 @@ namespace cxxlens::sdk
 	std::string snapshot_coverage_unit::canonical_form() const
 	{
 		const std::array fields{text(domain), text(key), text(state), text(reason)};
-		return canonical_identity_digest("coverage-unit", fields);
+		return *canonical_identity_digest("coverage-unit", fields);
 	}
 
 	result<partition_manifest> make_partition_manifest(const relation_engine& engine,
@@ -1646,17 +1646,17 @@ namespace cxxlens::sdk
 		const auto coverage = coverage_values(draft);
 		const auto partition_id = partition_identity(draft);
 		const std::array claim_fields{texts(claims)};
-		const auto claim_set = canonical_identity_digest("claim-set", claim_fields.front().tuple);
+		const auto claim_set = *canonical_identity_digest("claim-set", claim_fields.front().tuple);
 		const std::array coverage_fields{texts(coverage)};
 		const auto coverage_digest =
-			canonical_identity_digest("coverage", coverage_fields.front().tuple);
+			*canonical_identity_digest("coverage", coverage_fields.front().tuple);
 		const std::array content_fields{text(partition_id), text(claim_set), text(coverage_digest)};
 		return partition_manifest{partition_id,
 								  draft.relation_descriptor_id,
 								  draft.producer_input_basis_digest,
 								  claim_set,
 								  coverage_digest,
-								  canonical_identity_digest("partition-content", content_fields),
+								  *canonical_identity_digest("partition-content", content_fields),
 								  static_cast<std::uint64_t>(claims.size()),
 								  partition_complete(draft)};
 	}
@@ -1674,7 +1674,7 @@ namespace cxxlens::sdk
 			partition.input_basis_digest != binding.producer_input_basis_digest ||
 			partition_identity(identity) != partition.partition_id ||
 			partition.content_digest !=
-				canonical_identity_digest("partition-content", content_fields) ||
+				*canonical_identity_digest("partition-content", content_fields) ||
 			!digest(partition.input_basis_digest) || !identity_digest(partition.claim_set_digest) ||
 			!identity_digest(partition.coverage_digest) ||
 			!identity_digest(partition.content_digest) || binding.scope.empty() ||
@@ -2678,7 +2678,7 @@ namespace cxxlens::sdk
 			value->rows.emplace(descriptor, std::move(rows));
 		}
 		const std::array fields{canonical_value::from_tuple(std::move(identity_rows))};
-		value->semantic_manifest.id = canonical_identity_digest("snapshot-compat", fields);
+		value->semantic_manifest.id = *canonical_identity_digest("snapshot-compat", fields);
 		value->semantic_manifest.catalog_semantic_digest =
 			*semantic_digest("compat.catalog", "legacy");
 		value->semantic_manifest.condition_universe_id = "compat-universe";
@@ -2686,7 +2686,7 @@ namespace cxxlens::sdk
 			*semantic_digest("compat.registry", "legacy");
 		value->semantic_manifest.interpretation_policy_digest =
 			*semantic_digest("compat.policy", "legacy");
-		value->publication_record_value = {canonical_identity_digest("publication-compat", fields),
+		value->publication_record_value = {*canonical_identity_digest("publication-compat", fields),
 										   "compat-series",
 										   value->semantic_manifest.id,
 										   1U,

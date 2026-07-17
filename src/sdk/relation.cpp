@@ -375,7 +375,7 @@ namespace cxxlens::sdk
 				value);
 		}
 
-		[[nodiscard]] std::string_view role_name(const column_role role)
+		[[nodiscard]] std::string role_name(const column_role role)
 		{
 			switch (role)
 			{
@@ -388,10 +388,10 @@ namespace cxxlens::sdk
 				case column_role::auxiliary:
 					return "auxiliary";
 			}
-			return "invalid";
+			return "invalid-column-role:" + std::to_string(static_cast<std::uint8_t>(role));
 		}
 
-		[[nodiscard]] std::string_view merge_name(const merge_mode mode)
+		[[nodiscard]] std::string merge_name(const merge_mode mode)
 		{
 			switch (mode)
 			{
@@ -404,12 +404,20 @@ namespace cxxlens::sdk
 				case merge_mode::keyed_union:
 					return "keyed_union";
 			}
-			return "invalid";
+			return "invalid-merge-mode:" + std::to_string(static_cast<std::uint8_t>(mode));
 		}
 
-		[[nodiscard]] std::string_view reference_name(const reference_strength strength)
+		[[nodiscard]] std::string reference_name(const reference_strength strength)
 		{
-			return strength == reference_strength::hard ? "hard" : "soft_semantic";
+			switch (strength)
+			{
+				case reference_strength::hard:
+					return "hard";
+				case reference_strength::soft_semantic:
+					return "soft_semantic";
+			}
+			return "invalid-reference-strength:" +
+				std::to_string(static_cast<std::uint8_t>(strength));
 		}
 
 		[[nodiscard]] result<std::string> descriptor_binding(const relation_descriptor& descriptor)
@@ -469,23 +477,54 @@ namespace cxxlens::sdk
 
 	std::string value_type::canonical_name() const
 	{
-		static constexpr std::array<std::string_view, 14U> names{
-			"bool",
-			"int64",
-			"uint64",
-			"utf8_string",
-			"bytes",
-			"digest",
-			"semantic_version",
-			"typed_id",
-			"open_symbol",
-			"condition_ref",
-			"source_span_id",
-			"evidence_id",
-			"closed_symbol",
-			"set",
-		};
-		std::string output{names.at(static_cast<std::size_t>(scalar))};
+		std::string output;
+		switch (scalar)
+		{
+			case scalar_kind::boolean:
+				output = "bool";
+				break;
+			case scalar_kind::signed_integer:
+				output = "int64";
+				break;
+			case scalar_kind::unsigned_integer:
+				output = "uint64";
+				break;
+			case scalar_kind::utf8_string:
+				output = "utf8_string";
+				break;
+			case scalar_kind::bytes:
+				output = "bytes";
+				break;
+			case scalar_kind::digest:
+				output = "digest";
+				break;
+			case scalar_kind::semantic_version:
+				output = "semantic_version";
+				break;
+			case scalar_kind::typed_id:
+				output = "typed_id";
+				break;
+			case scalar_kind::open_symbol:
+				output = "open_symbol";
+				break;
+			case scalar_kind::condition_ref:
+				output = "condition_ref";
+				break;
+			case scalar_kind::source_span_id:
+				output = "source_span_id";
+				break;
+			case scalar_kind::evidence_id:
+				output = "evidence_id";
+				break;
+			case scalar_kind::closed_symbol:
+				output = "closed_symbol";
+				break;
+			case scalar_kind::set:
+				output = "set";
+				break;
+		}
+		if (output.empty())
+			output = "invalid-scalar-kind:" + std::to_string(static_cast<std::uint8_t>(scalar));
 		if (!parameter.empty())
 			output += "<" + parameter + ">";
 		if (optional)
@@ -495,6 +534,17 @@ namespace cxxlens::sdk
 
 	result<void> relation_descriptor::validate() const
 	{
+		if (!is_valid(merge))
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.relation-invalid", "merge", "closed-enum"));
+		for (const auto& value : columns)
+			if (!is_valid(value.type.scalar) || !is_valid(value.role))
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.column-invalid", value.id, "closed-enum"));
+		for (const auto& reference : references)
+			if (!is_valid(reference.strength))
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.reference-invalid", name, "closed-enum"));
 		if (contract_canonical.empty() != contract_digest.empty())
 			return cxxlens::sdk::unexpected(
 				relation_error("sdk.descriptor-digest-mismatch", "contract_digest"));
@@ -1015,7 +1065,10 @@ namespace cxxlens::sdk
 
 	result<void> detached_cell::validate() const
 	{
-		if (!valid_scalar_type(type))
+		if (!is_valid(state))
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.cell-invalid", "state", "closed-enum"));
+		if (!is_valid(type.scalar) || !valid_scalar_type(type))
 			return cxxlens::sdk::unexpected(
 				relation_error("sdk.cell-invalid", "type", "type-parameter"));
 		if (state == cell_state::present)

@@ -286,7 +286,7 @@ int main()
 		sdk::canonical_value::from_string(string_cell(entity_row, "cc.entity.v1.toolchain")),
 		sdk::canonical_value::from_bytes(bytes_cell(entity_row, "cc.entity.v1.provider_local_key")),
 	};
-	require(sdk::canonical_identity_digest("cc-entity", entity_reference) ==
+	require(*sdk::canonical_identity_digest("cc-entity", entity_reference) ==
 				string_cell(entity_row, "cc.entity.v1.entity"),
 			"independent entity identity encoder differs from descriptor helper");
 	const std::array call_reference{
@@ -296,7 +296,7 @@ int main()
 		sdk::canonical_value::from_integer(0),
 		sdk::canonical_value::null(),
 	};
-	require(sdk::canonical_identity_digest("cc-call", call_reference) ==
+	require(*sdk::canonical_identity_digest("cc-call", call_reference) ==
 				string_cell(call_row, "cc.call_site.v1.call"),
 			"independent call identity encoder differs from descriptor helper");
 	const auto entity_id = string_cell(entity_row, "cc.entity.v1.entity");

@@ -127,6 +127,8 @@ namespace cxxlens::sdk
 		[[nodiscard]] result<void> validate_basis(const claim_input_basis& basis,
 												  const claim_stage stage)
 		{
+			if (!is_valid(stage))
+				return unexpected(claim_error("sdk.claim-basis-invalid", "stage", "closed-enum"));
 			if (const auto* direct = std::get_if<direct_claim_basis>(&basis))
 			{
 				if (stage == claim_stage::derived_claim || !sha256_digest(direct->basis_digest))
@@ -186,7 +188,10 @@ namespace cxxlens::sdk
 				canonical_value::from_integer(descriptor.semantic_major),
 				*key_tuple,
 			};
-			output.semantic_key = canonical_identity_digest("semantic-key", key_fields);
+			auto semantic_key = canonical_identity_digest("semantic-key", key_fields);
+			if (!semantic_key)
+				return unexpected(std::move(semantic_key.error()));
+			output.semantic_key = std::move(*semantic_key);
 			const std::array assertion_fields{
 				canonical_value::from_string(output.semantic_key),
 				canonical_value::from_string(presence.universe),
@@ -194,12 +199,18 @@ namespace cxxlens::sdk
 				canonical_value::from_string(interpretation),
 				canonical_value::from_string(producer.semantic_contract),
 			};
-			output.assertion = canonical_identity_digest("assertion", assertion_fields);
+			auto assertion = canonical_identity_digest("assertion", assertion_fields);
+			if (!assertion)
+				return unexpected(std::move(assertion.error()));
+			output.assertion = std::move(*assertion);
 			const std::array content_fields{
 				canonical_value::from_string(output.assertion),
 				*payload_tuple,
 			};
-			output.content = canonical_identity_digest("claim-content", content_fields);
+			auto content = canonical_identity_digest("claim-content", content_fields);
+			if (!content)
+				return unexpected(std::move(content.error()));
+			output.content = std::move(*content);
 			output.presence = std::move(presence);
 			output.interpretation = std::move(interpretation);
 			output.stage = stage;
@@ -291,7 +302,7 @@ namespace cxxlens::sdk
 			modalities.reserve(value.guarantee.verification_modalities.size());
 			for (const auto& modality : value.guarantee.verification_modalities)
 				modalities.push_back(canonical_value::from_string(modality));
-			return canonical_binary(canonical_value::from_tuple(
+			return *canonical_binary(canonical_value::from_tuple(
 				{canonical_value::from_string(value.descriptor),
 				 canonical_value::from_string(value.semantic_key),
 				 canonical_value::from_string(value.interpretation),
@@ -408,7 +419,7 @@ namespace cxxlens::sdk
 	std::string claim_condition::id() const
 	{
 		const std::array fields{canonical_value::from_string(canonical_form())};
-		return canonical_identity_digest("condition", fields);
+		return *canonical_identity_digest("condition", fields);
 	}
 
 	result<std::vector<std::string>> claim_condition::overlap(const claim_condition& other) const
@@ -439,7 +450,9 @@ namespace cxxlens::sdk
 				return unexpected(claim_error("sdk.claim-basis-invalid", "direct"));
 			const std::array fields{canonical_value::from_string(direct->basis_digest)};
 			const auto typed = canonical_identity_digest("producer-input-direct", fields);
-			return typed.substr(typed.find(':') + 1U);
+			if (!typed)
+				return unexpected(std::move(typed.error()));
+			return typed->substr(typed->find(':') + 1U);
 		}
 		const auto& derived = std::get<derived_claim_basis>(basis);
 		if (derived.input_snapshot.empty() || derived.consumed_partition_content_digests.empty() ||
@@ -458,7 +471,9 @@ namespace cxxlens::sdk
 			canonical_value::from_string(derived.transform_semantics),
 		};
 		const auto typed = canonical_identity_digest("producer-input-derived", fields);
-		return typed.substr(typed.find(':') + 1U);
+		if (!typed)
+			return unexpected(std::move(typed.error()));
+		return typed->substr(typed->find(':') + 1U);
 	}
 
 	result<claim> make_assertion(const relation_engine& engine, observation value)

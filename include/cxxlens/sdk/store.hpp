@@ -169,6 +169,11 @@ namespace cxxlens::sdk
 		rejected,
 		rolled_back,
 	};
+	/** @brief Test exact membership in the closed publication state enum. */
+	[[nodiscard]] constexpr bool is_valid(const publication_state value) noexcept
+	{
+		return value >= publication_state::created && value <= publication_state::rolled_back;
+	}
 
 	/** @brief Operational record separated from semantic snapshot identity. */
 	struct publication_record

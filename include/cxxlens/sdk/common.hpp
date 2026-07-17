@@ -147,14 +147,23 @@ namespace cxxlens::sdk
 		[[nodiscard]] static canonical_value from_bytes(std::vector<std::byte> value);
 		[[nodiscard]] static canonical_value from_string(std::string value);
 		[[nodiscard]] static canonical_value from_tuple(std::vector<canonical_value> value);
+		/** @brief Reject invalid kinds, inactive payload, invalid UTF-8, and invalid children. */
+		[[nodiscard]] result<void> validate() const;
 		[[nodiscard]] bool operator==(const canonical_value&) const = default;
 	};
+	/** @brief Return whether a canonical tuple kind is a defined closed-enum member. */
+	[[nodiscard]] constexpr bool is_valid(const canonical_value::kind value) noexcept
+	{
+		return value >= canonical_value::kind::null_value &&
+			value <= canonical_value::kind::ordered_tuple;
+	}
 
-	/** @brief Encode one value using cxxlens-canonical-tuple-v1. */
-	[[nodiscard]] std::vector<std::byte> canonical_binary(const canonical_value& value);
+	/** @brief Encode one recursively validated value using cxxlens-canonical-tuple-v1. */
+	[[nodiscard]] result<std::vector<std::byte>> canonical_binary(const canonical_value& value);
 	/** @brief Full typed SHA-256 identity using the exact cxxlens domain prefix. */
-	[[nodiscard]] std::string canonical_identity_digest(std::string_view identity_kind,
-														std::span<const canonical_value> fields);
+	[[nodiscard]] result<std::string>
+	canonical_identity_digest(std::string_view identity_kind,
+							  std::span<const canonical_value> fields);
 	/** @brief Derive the accepted source.span snapshot/file/range/role domain identity. */
 	[[nodiscard]] result<std::string> source_span_identity(std::string_view source_snapshot,
 														   std::string_view file,

@@ -55,6 +55,11 @@ namespace cxxlens::recipes
 		/** @brief Execution failed before any sealed result could be classified. */
 		failed,
 	};
+	/** @brief Test exact membership in the closed call search state enum. */
+	[[nodiscard]] constexpr bool is_valid(const call_search_state value) noexcept
+	{
+		return value >= call_search_state::matched && value <= call_search_state::failed;
+	}
 
 	/** @brief Flagship call-search report owning both its exact plan and query result. */
 	class call_search_report

@@ -12,6 +12,7 @@ target_link_libraries(cxxlens-unit-sdk PRIVATE cxxlens::clang22_provider_sdk)
 set(cxxlens_sdk_cases
     scalar-value-validation
     digest
+    closed-enum-canonical-value
     descriptor-binding
     relation-schema-parity
     static-dynamic-query

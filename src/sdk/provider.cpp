@@ -497,7 +497,7 @@ namespace cxxlens::sdk::provider
 				case sandbox_assurance::certified:
 					return "certified";
 			}
-			return "none";
+			return "invalid";
 		}
 
 		[[nodiscard]] std::string_view source_name(const discovery_source value) noexcept
@@ -513,7 +513,7 @@ namespace cxxlens::sdk::provider
 				case discovery_source::system_registry:
 					return "system_registry";
 			}
-			return "system_registry";
+			return "invalid";
 		}
 
 		[[nodiscard]] std::string_view direction_name(const fallback_direction value) noexcept
@@ -527,7 +527,7 @@ namespace cxxlens::sdk::provider
 				case fallback_direction::same_version_rebuild:
 					return "same_version_rebuild";
 			}
-			return "upgrade";
+			return "invalid";
 		}
 
 		[[nodiscard]] std::uint8_t source_rank(const discovery_source value) noexcept
@@ -538,7 +538,8 @@ namespace cxxlens::sdk::provider
 		[[nodiscard]] bool sandbox_satisfies(const sandbox_assurance achieved,
 											 const sandbox_assurance required) noexcept
 		{
-			return static_cast<std::uint8_t>(achieved) >= static_cast<std::uint8_t>(required);
+			return is_valid(achieved) && is_valid(required) &&
+				static_cast<std::uint8_t>(achieved) >= static_cast<std::uint8_t>(required);
 		}
 
 		[[nodiscard]] std::optional<sandbox_assurance>
@@ -2124,9 +2125,11 @@ namespace cxxlens::sdk::provider
 
 	result<void> sandbox_requirement::validate() const
 	{
-		if (!canonical_digest(policy_digest))
+		if (!is_valid(minimum) || !canonical_digest(policy_digest))
 			return cxxlens::sdk::unexpected(
-				provider_error("provider.sandbox-requirement-invalid", "policy_digest"));
+				provider_error("provider.sandbox-requirement-invalid",
+							   is_valid(minimum) ? "policy_digest" : "minimum",
+							   is_valid(minimum) ? "" : "closed-enum"));
 		return {};
 	}
 
@@ -2219,10 +2222,12 @@ namespace cxxlens::sdk::provider
 
 	result<void> sandbox_report::validate() const
 	{
-		if (platform.empty() || !unique_nonempty(mechanisms) || !canonical_digest(policy_digest) ||
-			!canonical_digest(evidence_digest))
+		if (!is_valid(achieved) || platform.empty() || !unique_nonempty(mechanisms) ||
+			!canonical_digest(policy_digest) || !canonical_digest(evidence_digest))
 			return cxxlens::sdk::unexpected(
-				provider_error("provider.sandbox-report-invalid", "report"));
+				provider_error("provider.sandbox-report-invalid",
+							   is_valid(achieved) ? "report" : "achieved",
+							   is_valid(achieved) ? "" : "closed-enum"));
 		return {};
 	}
 
@@ -2237,6 +2242,9 @@ namespace cxxlens::sdk::provider
 
 	result<void> provider_fallback_tuple::validate(const semantic_version& requested_version) const
 	{
+		if (!is_valid(direction))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.fallback-policy-invalid", "direction", "closed-enum"));
 		const auto actual_direction = provider_version > requested_version
 			? fallback_direction::upgrade
 			: (provider_version < requested_version ? fallback_direction::downgrade
@@ -2360,7 +2368,12 @@ namespace cxxlens::sdk::provider
 
 	result<void> provider_selection::validate() const
 	{
-		if (!validated_ || decisions_.empty())
+		if (!validated_ || decisions_.empty() || !is_valid(candidate_.source) ||
+			std::ranges::any_of(decisions_,
+								[](const provider_candidate_decision& decision)
+								{
+									return !is_valid(decision.source);
+								}))
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.selection-invalid", "selection-token"));
 		const auto selected_count =
@@ -2437,6 +2450,10 @@ namespace cxxlens::sdk::provider
 		if (candidates.empty())
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.not-found", request.provider_id));
+		for (const auto& candidate : candidates)
+			if (!is_valid(candidate.source))
+				return cxxlens::sdk::unexpected(provider_error(
+					"provider.selection-invalid", "discovery_source", "closed-enum"));
 
 		std::map<std::pair<std::string, std::string>, std::set<std::pair<std::string, std::string>>>
 			binaries;

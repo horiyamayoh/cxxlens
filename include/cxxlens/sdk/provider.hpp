@@ -60,6 +60,12 @@ namespace cxxlens::sdk::provider
 		compressed_payload = 4U,
 		end_of_stream = 8U,
 	};
+	/** @brief Test exact membership in the closed individual frame flag enum. */
+	[[nodiscard]] constexpr bool is_valid(const frame_flag value) noexcept
+	{
+		return value == frame_flag::required_extension || value == frame_flag::optional_extension ||
+			value == frame_flag::compressed_payload || value == frame_flag::end_of_stream;
+	}
 
 	/** @brief Exact negotiated protocol version, supported flags, and frame limits. */
 	struct protocol_limits
@@ -512,6 +518,11 @@ namespace cxxlens::sdk::provider
 		enforced,
 		certified,
 	};
+	/** @brief Test exact membership in the closed sandbox assurance enum. */
+	[[nodiscard]] constexpr bool is_valid(const sandbox_assurance value) noexcept
+	{
+		return value >= sandbox_assurance::none && value <= sandbox_assurance::certified;
+	}
 
 	/** @brief Immutable built-in sandbox policy projected into an exact semantic digest. */
 	struct sandbox_policy
@@ -567,6 +578,12 @@ namespace cxxlens::sdk::provider
 		project_config,
 		system_registry,
 	};
+	/** @brief Test exact membership in the closed discovery source enum. */
+	[[nodiscard]] constexpr bool is_valid(const discovery_source value) noexcept
+	{
+		return value >= discovery_source::explicit_path &&
+			value <= discovery_source::system_registry;
+	}
 
 	/** @brief One discovered candidate before trust, compatibility, and sandbox selection. */
 	struct provider_candidate
@@ -589,6 +606,12 @@ namespace cxxlens::sdk::provider
 		downgrade,
 		same_version_rebuild,
 	};
+	/** @brief Test exact membership in the closed fallback direction enum. */
+	[[nodiscard]] constexpr bool is_valid(const fallback_direction value) noexcept
+	{
+		return value >= fallback_direction::upgrade &&
+			value <= fallback_direction::same_version_rebuild;
+	}
 
 	/** @brief One exact fallback tuple with explicit deterministic policy priority. */
 	struct provider_fallback_tuple
@@ -692,6 +715,11 @@ namespace cxxlens::sdk::provider
 		unavailable,
 		launch_failed,
 	};
+	/** @brief Test exact membership in the closed process status enum. */
+	[[nodiscard]] constexpr bool is_valid(const process_status value) noexcept
+	{
+		return value >= process_status::exited && value <= process_status::launch_failed;
+	}
 
 	/** @brief Shell-free bounded process invocation owned by the provider runtime port. */
 	struct process_invocation

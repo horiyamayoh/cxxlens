@@ -32,6 +32,11 @@ namespace cxxlens::sdk
 		canonical_claim,
 		derived_claim,
 	};
+	/** @brief Test exact membership in the closed claim stage enum. */
+	[[nodiscard]] constexpr bool is_valid(const claim_stage value) noexcept
+	{
+		return value >= claim_stage::assertion && value <= claim_stage::derived_claim;
+	}
 
 	/** @brief Producer identity split from its semantic contract version. */
 	struct claim_producer

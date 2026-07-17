@@ -627,6 +627,112 @@ namespace
 		}
 	}
 
+	void check_closed_enum_and_canonical_value()
+	{
+		using namespace cxxlens::sdk;
+		const auto rejects_out_of_range = [](const auto last, const std::string_view subject)
+		{
+			using enum_type = decltype(last);
+			using underlying = std::underlying_type_t<enum_type>;
+			const auto adjacent = static_cast<enum_type>(static_cast<underlying>(last) + 1U);
+			const auto maximum = static_cast<enum_type>(std::numeric_limits<underlying>::max());
+			require(!is_valid(adjacent) && !is_valid(maximum),
+					"closed enum accepted an out-of-range value: " + std::string{subject});
+		};
+
+		rejects_out_of_range(canonical_value::kind::ordered_tuple, "canonical_value::kind");
+		rejects_out_of_range(scalar_kind::set, "scalar_kind");
+		rejects_out_of_range(column_role::auxiliary, "column_role");
+		rejects_out_of_range(merge_mode::keyed_union, "merge_mode");
+		rejects_out_of_range(reference_strength::soft_semantic, "reference_strength");
+		rejects_out_of_range(cell_state::unknown, "cell_state");
+		rejects_out_of_range(claim_stage::derived_claim, "claim_stage");
+		rejects_out_of_range(publication_state::rolled_back, "publication_state");
+		rejects_out_of_range(query::column_availability::absent_if_schema_missing,
+							 "column_availability");
+		rejects_out_of_range(query::predicate_kind::any, "predicate_kind");
+		rejects_out_of_range(query::execution_checkpoint::phase::before_publish_row,
+							 "execution_checkpoint::phase");
+		rejects_out_of_range(query::execution_status::failed_before_result, "execution_status");
+		rejects_out_of_range(provider::frame_flag::end_of_stream, "frame_flag");
+		rejects_out_of_range(provider::sandbox_assurance::certified, "sandbox_assurance");
+		rejects_out_of_range(provider::discovery_source::system_registry, "discovery_source");
+		rejects_out_of_range(provider::fallback_direction::same_version_rebuild,
+							 "fallback_direction");
+		rejects_out_of_range(provider::process_status::launch_failed, "process_status");
+		rejects_out_of_range(testing::provider_fault::credit_exceeded, "provider_fault");
+		rejects_out_of_range(cxxlens::recipes::call_search_state::failed, "call_search_state");
+
+		auto invalid_cell = detached_cell::unknown({scalar_kind::utf8_string, {}, true}, "reason");
+		invalid_cell.state = static_cast<cell_state>(255U);
+		auto cell_result = invalid_cell.validate();
+		require(!cell_result && cell_result.error().code == "sdk.cell-invalid" &&
+					cell_result.error().detail == "closed-enum",
+				"invalid cell state was treated as unknown");
+
+		const auto trusted = cxxlens::cc::relations::call_site::descriptor();
+		const auto descriptor_rejects =
+			[](relation_descriptor candidate, const std::string_view expected_code)
+		{
+			auto valid = candidate.validate();
+			require(!valid && valid.error().code == expected_code &&
+						valid.error().detail == "closed-enum",
+					"descriptor enum was canonicalized before membership validation");
+		};
+		auto scalar = trusted;
+		scalar.columns.front().type.scalar = static_cast<scalar_kind>(255U);
+		descriptor_rejects(std::move(scalar), "sdk.column-invalid");
+		auto role = trusted;
+		role.columns.front().role = static_cast<column_role>(255U);
+		descriptor_rejects(std::move(role), "sdk.column-invalid");
+		auto merge = trusted;
+		merge.merge = static_cast<merge_mode>(255U);
+		descriptor_rejects(std::move(merge), "sdk.relation-invalid");
+		auto reference = trusted;
+		reference.references.front().strength = static_cast<reference_strength>(255U);
+		descriptor_rejects(std::move(reference), "sdk.reference-invalid");
+		require(value_type{static_cast<scalar_kind>(254U), {}, false}.canonical_name() !=
+					value_type{static_cast<scalar_kind>(255U), {}, false}.canonical_name(),
+				"invalid scalar kinds collapsed or threw during canonicalization");
+
+		provider::sandbox_requirement requirement;
+		requirement.minimum = static_cast<provider::sandbox_assurance>(255U);
+		auto requirement_result = requirement.validate();
+		require(!requirement_result && requirement_result.error().field == "minimum",
+				"invalid sandbox minimum reached ordinal comparison");
+		provider::sandbox_report report;
+		report.achieved = static_cast<provider::sandbox_assurance>(255U);
+		auto report_result = report.validate();
+		require(!report_result && report_result.error().field == "achieved",
+				"invalid achieved sandbox assurance was accepted");
+
+		const auto valid = canonical_value::from_tuple(
+			{canonical_value::null(), canonical_value::from_string("valid-😀")});
+		auto first = canonical_binary(valid);
+		auto second = canonical_binary(valid);
+		require(first && second && valid == valid && *first == *second,
+				"equal canonical values did not have equal canonical bytes");
+
+		canonical_value invalid_kind;
+		invalid_kind.type = static_cast<canonical_value::kind>(255U);
+		canonical_value adjacent_kind = invalid_kind;
+		adjacent_kind.type = static_cast<canonical_value::kind>(6U);
+		canonical_value inactive;
+		inactive.text = "hidden";
+		canonical_value invalid_utf8 = canonical_value::from_string(std::string{"\xc0\xaf", 2U});
+		canonical_value nested = canonical_value::from_tuple({invalid_kind});
+		for (const auto& candidate : {invalid_kind, adjacent_kind, inactive, invalid_utf8, nested})
+		{
+			auto encoded = canonical_binary(candidate);
+			require(!encoded && encoded.error().code == "sdk.canonical-value-invalid",
+					"invalid canonical value entered identity bytes");
+		}
+		const std::array invalid_fields{nested};
+		auto identity = canonical_identity_digest("invalid-corpus", invalid_fields);
+		require(!identity && identity.error().code == "sdk.canonical-value-invalid",
+				"nested invalid canonical value entered identity digest");
+	}
+
 	void check_descriptor_binding()
 	{
 		using cxxlens::sdk::column_role;
@@ -1285,7 +1391,7 @@ namespace
 			canonical_value::from_tuple(std::move(independent_units)),
 		}));
 		auto projection = ordered.canonical_projection();
-		require(projection && independent == *projection,
+		require(projection && independent && *independent == *projection,
 				"independent catalog encoder was not byte-identical");
 
 		using relation = cxxlens::build::relations::project;
@@ -1623,6 +1729,13 @@ namespace
 		auto tampered_result = cxxlens::sdk::validate_claim(*engine, tampered);
 		require(!tampered_result && tampered_result.error().code == "sdk.claim-identity-mismatch",
 				"tampered claim identity was accepted");
+		auto invalid_stage = *first;
+		invalid_stage.stage = static_cast<cxxlens::sdk::claim_stage>(255U);
+		auto invalid_stage_result = cxxlens::sdk::validate_claim(*engine, invalid_stage);
+		require(!invalid_stage_result &&
+					invalid_stage_result.error().code == "sdk.claim-basis-invalid" &&
+					invalid_stage_result.error().field == "stage",
+				"invalid claim stage passed basis validation");
 		const auto rejects_invalid_stage_input =
 			[&](const cxxlens::sdk::claim& invalid, const std::string_view subject)
 		{
@@ -1933,6 +2046,7 @@ int main(const int argc, const char* const argv[])
 	const std::array cases{
 		test_case{"scalar-value-validation", check_scalar_value_validation},
 		test_case{"digest", check_digest},
+		test_case{"closed-enum-canonical-value", check_closed_enum_and_canonical_value},
 		test_case{"descriptor-binding", check_descriptor_binding},
 		test_case{"relation-schema-parity", check_relation_schema_parity},
 		test_case{"static-dynamic-query", check_static_dynamic_query},

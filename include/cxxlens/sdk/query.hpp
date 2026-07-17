@@ -73,6 +73,12 @@ namespace cxxlens::sdk::query
 		require,
 		absent_if_schema_missing,
 	};
+	/** @brief Test exact membership in the closed column availability enum. */
+	[[nodiscard]] constexpr bool is_valid(const column_availability value) noexcept
+	{
+		return value >= column_availability::require &&
+			value <= column_availability::absent_if_schema_missing;
+	}
 
 	/** @brief Occurrence-qualified IR column reference independent from generated C++ types. */
 	struct ir_column_ref
@@ -103,6 +109,11 @@ namespace cxxlens::sdk::query
 		all,
 		any,
 	};
+	/** @brief Test exact membership in the closed predicate kind enum. */
+	[[nodiscard]] constexpr bool is_valid(const predicate_kind value) noexcept
+	{
+		return value >= predicate_kind::equals_present && value <= predicate_kind::any;
+	}
 
 	/** @brief Typed recursive predicate decoded with exact keys and no coercion. */
 	struct decoded_predicate
@@ -278,6 +289,12 @@ namespace cxxlens::sdk::query
 		phase current{phase::before_execution};
 		std::uint64_t ordinal{};
 	};
+	/** @brief Test exact membership in the closed execution checkpoint phase enum. */
+	[[nodiscard]] constexpr bool is_valid(const execution_checkpoint::phase value) noexcept
+	{
+		return value >= execution_checkpoint::phase::before_execution &&
+			value <= execution_checkpoint::phase::before_publish_row;
+	}
 
 	/** @brief Synchronously borrowed cancellation probe; implementations must be noexcept. */
 	class cancellation_probe
@@ -315,6 +332,12 @@ namespace cxxlens::sdk::query
 		cancelled_with_partial,
 		failed_before_result,
 	};
+	/** @brief Test exact membership in the closed execution status enum. */
+	[[nodiscard]] constexpr bool is_valid(const execution_status value) noexcept
+	{
+		return value >= execution_status::complete &&
+			value <= execution_status::failed_before_result;
+	}
 
 	/** @brief One semantic row with canonical contributor evidence sets. */
 	struct annotated_row

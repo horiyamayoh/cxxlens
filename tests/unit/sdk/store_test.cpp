@@ -268,7 +268,7 @@ namespace
 								canonical_value::from_integer(1),
 								canonical_value::from_boolean(true),
 								canonical_value::null()};
-		require(cxxlens::sdk::canonical_identity_digest("canonical-vector", fields) ==
+		require(*cxxlens::sdk::canonical_identity_digest("canonical-vector", fields) ==
 					"canonical-vector:sha256:"
 					"ee43d1e2b86e53b4b52e5452eec0fd6843e858cc0f0230b7f5bf7922b47dde90",
 				"canonical tuple domain vector diverged");
@@ -278,27 +278,29 @@ namespace
 			canonical_value::from_integer(1),
 			canonical_value::from_tuple({canonical_value::from_string("call-1")})};
 		const auto key = cxxlens::sdk::canonical_identity_digest("semantic-key", key_fields);
-		require(key ==
-					"semantic-key:sha256:"
-					"ac3f63290b7c6ebdc6f333eea07752bd32c5b0fa6df8b2ea56f136486e42aae4",
+		require(key &&
+					*key ==
+						"semantic-key:sha256:"
+						"ac3f63290b7c6ebdc6f333eea07752bd32c5b0fa6df8b2ea56f136486e42aae4",
 				"semantic key vector diverged");
 		const std::array assertion_fields{
-			canonical_value::from_string(key),
+			canonical_value::from_string(*key),
 			canonical_value::from_string("universe-1"),
 			canonical_value::from_string("condition-1"),
 			canonical_value::from_string("cc.canonical-1"),
 			canonical_value::from_string(std::string{producer_digest})};
 		const auto assertion =
 			cxxlens::sdk::canonical_identity_digest("assertion", assertion_fields);
-		require(
-			assertion ==
-				"assertion:sha256:83dc78eb2a592a09badb3eb16199aa25de05b7e4283a0281d56eea3ca6f8b5dc",
-			"assertion vector diverged");
+		require(assertion &&
+					*assertion ==
+						"assertion:sha256:"
+						"83dc78eb2a592a09badb3eb16199aa25de05b7e4283a0281d56eea3ca6f8b5dc",
+				"assertion vector diverged");
 		const std::array content_fields{
-			canonical_value::from_string(assertion),
+			canonical_value::from_string(*assertion),
 			canonical_value::from_tuple({canonical_value::from_string("compile-unit-1"),
 										 canonical_value::from_string("direct")})};
-		require(cxxlens::sdk::canonical_identity_digest("claim-content", content_fields) ==
+		require(*cxxlens::sdk::canonical_identity_digest("claim-content", content_fields) ==
 					"claim-content:sha256:"
 					"3ea3d46232c1c1f29193563bd63e175e3bb0bf96b98f8d2f45602e46853f47d2",
 				"claim content vector diverged");
