@@ -38,6 +38,9 @@ class NgSdkContractTest(unittest.TestCase):
         cls.provider_task_schema = load_yaml(
             ROOT / "schemas/cxxlens_ng_portable_provider_task_contract.schema.yaml"
         )
+        cls.provider_manifest_schema = load_yaml(
+            ROOT / "schemas/cxxlens_ng_provider_manifest.schema.yaml"
+        )
 
     def test_exact_catalog_and_ordinary_boundary_are_valid(self) -> None:
         validate_catalog(ROOT, self.catalog)
@@ -91,6 +94,13 @@ class NgSdkContractTest(unittest.TestCase):
         contract["protocol"]["batch_begin"].remove("task_id")
         with self.assertRaises(jsonschema.ValidationError):
             jsonschema.Draft202012Validator(self.provider_task_schema).validate(contract)
+
+    def test_provider_manifest_schema_rejects_runtime_invalid_major_zero(self) -> None:
+        version = self.provider_manifest_schema["$defs"]["version"]
+        validator = jsonschema.Draft202012Validator(version)
+        validator.validate("1.0.0")
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate("0.1.0")
 
     def test_implemented_error_code_cannot_be_omitted(self) -> None:
         catalog = copy.deepcopy(self.catalog)

@@ -2549,6 +2549,26 @@ namespace cxxlens::sdk::provider
 			native ? "cxxlens::clang22_provider_sdk" : "cxxlens::provider_sdk";
 		const std::string header = native ? "<cxxlens/provider/clang22.hpp>" : "<cxxlens/sdk.hpp>";
 		const std::string zero_digest = "sha256:" + std::string(64U, '0');
+		manifest generated_manifest;
+		generated_manifest.provider_id = options.provider_id;
+		generated_manifest.provider_version = {1U, 0U, 0U};
+		generated_manifest.package_identity = options.provider_id + ".package";
+		generated_manifest.publisher = options.provider_id + ".publisher";
+		generated_manifest.license = "UNLICENSED";
+		generated_manifest.protocol.required_features = {"credit-backpressure"};
+		generated_manifest.platform_tuples = {"linux-development"};
+		generated_manifest.provider_binary_digest = zero_digest;
+		generated_manifest.provider_semantic_contract_digest = zero_digest;
+		generated_manifest.offered_relations = {options.relation_name};
+		generated_manifest.interpretation_domains = {options.provider_id + ".interpretation"};
+		generated_manifest.invalidation_contract = zero_digest;
+		generated_manifest.determinism_contract = zero_digest;
+		generated_manifest.resource_class = std::string{"provider"} + ".standard";
+		generated_manifest.requested_qualifications = {"experimental"};
+		generated_manifest.task_output_stage = "assertion";
+		if (auto valid = generated_manifest.validate(); !valid)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.scaffold-invalid", "generated_manifest"));
 		std::vector<scaffold_file> output;
 		output.push_back(
 			{"CMakeLists.txt",
@@ -2557,24 +2577,7 @@ namespace cxxlens::sdk::provider
 				 " CONFIG REQUIRED)\n"
 				 "add_executable(provider src/main.cpp)\ntarget_link_libraries(provider PRIVATE " +
 				 target + ")\ntarget_compile_features(provider PRIVATE cxx_std_23)\n"});
-		output.push_back(
-			{"provider-manifest.json",
-			 R"({"schema":"cxxlens.provider-manifest.v1","provider_id":")" + options.provider_id +
-				 R"(","provider_version":"0.1.0","package_identity":")" + options.provider_id +
-				 R"(.package","provider_binary_digest":")" + zero_digest +
-				 R"(","provider_semantic_contract_digest":")" + zero_digest + R"(","publisher":")" +
-				 options.provider_id +
-				 ".publisher\",\"license\":\"UNLICENSED\",\"signature\":null,"
-				 "\"protocol_range\":{\"major\":1,\"minimum_minor\":0,\"maximum_minor\":0,"
-				 "\"required_features\":[\"credit-backpressure\"],\"optional_features\":[]},"
-				 "\"platform_tuples\":[\"linux-development\"],\"offered_relations\":[\"" +
-				 options.relation_name +
-				 R"("],"required_relations":[],"interpretation_domains":[")" + options.provider_id +
-				 R"(.interpretation"],"invalidation_contract":")" + zero_digest +
-				 R"(","determinism_contract":")" + zero_digest +
-				 "\",\"resource_class\":\"provider.standard\",\"sandbox_minimum\":\"enforced\","
-				 "\"requested_qualifications\":[\"experimental\"],\"trust_flags\":[],"
-				 "\"task_stage\":{\"input\":\"observation\",\"output\":\"assertion\"}}\n"});
+		output.push_back({"provider-manifest.json", generated_manifest.canonical_json() + '\n'});
 		output.push_back({"src/main.cpp",
 						  "#include " + header +
 							  "\n// Implement cxxlens::sdk::provider::portable_provider and "

@@ -785,7 +785,11 @@ namespace cxxlens::sdk::provider
 		std::string relation_name;
 	};
 
-	/** @brief Generate CMake, manifest, source, test, and README files in memory. */
+	/**
+	 * @brief Generate CMake, runtime-valid 1.0.0 manifest, source, test, and README files.
+	 *
+	 * The generated manifest is independently validated before any files are returned.
+	 */
 	[[nodiscard]] result<std::vector<scaffold_file>> make_scaffold(const scaffold_options& options);
 
 	/** @brief Run one task through the protocol server; framing and terminal messages are owned. */

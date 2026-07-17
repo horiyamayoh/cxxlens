@@ -70,4 +70,4 @@ properties:
 $defs:
   id: {type: string, minLength: 1, maxLength: 512}
   digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
-  version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+  version: {type: string, pattern: '^[1-9][0-9]*\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'}

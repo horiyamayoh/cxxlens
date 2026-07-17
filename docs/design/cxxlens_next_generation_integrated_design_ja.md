@@ -2114,6 +2114,10 @@ trust flags
 
 provider ID/version だけで binary identity を仮定しない。
 
+Issue #124 により provider manifest v1 の provider version は runtime/schema の双方で major 1 以上を要求する。
+`make_scaffold()` は初期 version `1.0.0` の manifest value を構築し、同じ public runtime validator を通過した
+canonical JSON だけを生成する。schema-valid だが runtime-invalid な scaffold artifact を返してはならない。
+
 manifest の publisher、signature、trust flag、conformance level、interpretation domain は provider の request であり、
 authority ではない。署名 subject は provider ID/version、package identity、publisher、manifest digest、binary
 digest、semantic contract digest の exact tuple に bind する。standard namespace と canonical interpretation の

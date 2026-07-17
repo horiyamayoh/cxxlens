@@ -1129,9 +1129,11 @@ namespace
 							  &cxxlens::sdk::provider::scaffold_file::relative_path);
 		require(portable_manifest != portable->end() &&
 					portable_manifest->content.contains("cxxlens.provider-manifest.v1") &&
+					portable_manifest->content.contains(R"("provider_version":"1.0.0")") &&
+					!portable_manifest->content.contains(R"("provider_version":"0.)") &&
 					native_cmake != native->end() &&
 					native_cmake->content.contains("cxxlens::clang22_provider_sdk"),
-				"provider scaffold package/manifest contract diverged");
+				"provider scaffold package/runtime-valid manifest contract diverged");
 
 		coverage_provider implementation;
 		auto task = make_provider_task(implementation,
