@@ -2202,11 +2202,17 @@ namespace cxxlens::sdk::provider
 			provider_error("security.sandbox-policy-mismatch", "unknown-policy"));
 	}
 
-	std::string sandbox_evidence_digest(const sandbox_policy& policy,
-										const execution_budget& budget,
-										const sandbox_assurance achieved,
-										const std::span<const std::string> applied_mechanisms)
+	result<std::string>
+	sandbox_evidence_digest(const sandbox_policy& policy,
+							const execution_budget& budget,
+							const sandbox_assurance achieved,
+							const std::span<const std::string> applied_mechanisms)
 	{
+		if (!is_valid(achieved))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.sandbox-report-invalid", "achieved", "closed-enum"));
+		if (auto valid = policy.validate(); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
 		std::vector<std::string> mechanisms{applied_mechanisms.begin(), applied_mechanisms.end()};
 		std::ostringstream projection;
 		projection << policy.canonical_form() << "\npolicy-digest=" << policy.policy_digest()
@@ -2216,8 +2222,8 @@ namespace cxxlens::sdk::provider
 				   << "\nopen-files=" << budget.open_files
 				   << "\nsubprocesses=" << budget.subprocesses
 				   << "\nmechanisms=" << canonical_array(std::move(mechanisms));
-		return *cxxlens::sdk::semantic_digest("cxxlens.provider-sandbox-evidence.v2",
-											  projection.str());
+		return cxxlens::sdk::semantic_digest("cxxlens.provider-sandbox-evidence.v2",
+											 projection.str());
 	}
 
 	result<void> sandbox_report::validate() const
@@ -2396,12 +2402,18 @@ namespace cxxlens::sdk::provider
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.selection-invalid", "decision-binding"));
 		auto replay = select_provider(request_, std::span{&candidate_, 1U});
-		if (!replay || replay->fallback_used() != fallback_used_ ||
+		if (!replay)
+		{
+			if (replay.error().code == "provider.sandbox-requirement-invalid" ||
+				replay.error().code == "provider.sandbox-report-invalid")
+				return cxxlens::sdk::unexpected(std::move(replay.error()));
+			return cxxlens::sdk::unexpected(provider_error(
+				"provider.selection-invalid", "authority-revalidation", replay.error().code));
+		}
+		if (replay->fallback_used() != fallback_used_ ||
 			replay->fallback_policy_digest() != fallback_policy_digest_)
 			return cxxlens::sdk::unexpected(
-				provider_error("provider.selection-invalid",
-							   "authority-revalidation",
-							   replay ? "mismatch" : replay.error().code));
+				provider_error("provider.selection-invalid", "authority-revalidation", "mismatch"));
 		return {};
 	}
 
@@ -2454,6 +2466,9 @@ namespace cxxlens::sdk::provider
 			if (!is_valid(candidate.source))
 				return cxxlens::sdk::unexpected(provider_error(
 					"provider.selection-invalid", "discovery_source", "closed-enum"));
+		for (const auto& candidate : candidates)
+			if (auto valid = candidate.sandbox.validate(); !valid)
+				return cxxlens::sdk::unexpected(std::move(valid.error()));
 
 		std::map<std::pair<std::string, std::string>, std::set<std::pair<std::string, std::string>>>
 			binaries;
@@ -2566,8 +2581,7 @@ namespace cxxlens::sdk::provider
 			{
 				const auto manifest_minimum = parse_sandbox(candidate.description.sandbox_minimum);
 				const auto effective_minimum = manifest_minimum &&
-						static_cast<std::uint8_t>(*manifest_minimum) >
-							static_cast<std::uint8_t>(request.sandbox.minimum)
+						sandbox_satisfies(*manifest_minimum, request.sandbox.minimum)
 					? *manifest_minimum
 					: request.sandbox.minimum;
 				if (!manifest_minimum)

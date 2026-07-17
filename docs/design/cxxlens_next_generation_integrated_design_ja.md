@@ -3616,7 +3616,10 @@ security profile の最大値とする。runtime evidence は platform、mechani
 
 `sandbox_assurance` の ordinal 比較は両 operand の closed-enum membership 検証後にのみ行う。範囲外 minimum/achieved は
 既知 assurance へ正規化せず、それぞれ `provider.sandbox-requirement-invalid` / `provider.sandbox-report-invalid` で拒否する。
-同じ規則を public closed enum 全体に適用し、validator は canonicalization や digest 再計算より先に membership を検証する。
+Issue #137 / ADR 0068 により requirement、report、selection、effective minimum、process output、evidence digest の全 boundary へ
+この規則を適用する。selection/runtime は stable error を not-found/unavailable へ畳まない。`sandbox_evidence_digest` は
+`result<string>` とし、範囲外 achieved から digest を生成しない。validator は canonicalization や digest 再計算より先に
+membership を検証する。同じ規則を public closed enum 全体に適用する。
 
 ADR 0046 の policy registry は baseline と strict の canonical policy bytes、semantic-v2 digest、control projection を authority
 として公開する。baseline は network deny と標準 resource limits、strict はさらに core dump と locked memory の zero limit を

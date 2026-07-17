@@ -1,5 +1,5 @@
 {
-  "asset_count": 340,
+  "asset_count": 341,
   "assets": [
     {
       "authority": "active",
@@ -893,6 +893,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0067-recipe-closed-world-absence-classification.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0068-sandbox-assurance-closed-enum-boundary.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2383,7 +2390,7 @@
     }
   ],
   "classifications": {
-    "active": 304,
+    "active": 305,
     "archived": 35,
     "generated": 1
   },

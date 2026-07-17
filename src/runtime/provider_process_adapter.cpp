@@ -69,11 +69,12 @@ namespace cxxlens::sdk::provider
 													  const bool installed)
 		{
 			auto applied = installed ? policy.mechanisms : std::vector<std::string>{};
+			auto evidence = sandbox_evidence_digest(policy, budget, achieved, applied);
 			return {"linux-glibc",
 					applied,
 					achieved,
 					policy.policy_digest(),
-					sandbox_evidence_digest(policy, budget, achieved, applied)};
+					evidence ? std::move(*evidence) : std::string{}};
 		}
 
 #if defined(__linux__) && defined(__GLIBC__)
@@ -536,12 +537,7 @@ namespace cxxlens::sdk::provider
 					0,
 					{},
 					"linux-glibc-required",
-					{"unsupported",
-					 {},
-					 sandbox_assurance::none,
-					 policy->policy_digest(),
-					 sandbox_evidence_digest(
-						 *policy, invocation.budget, sandbox_assurance::none, applied)},
+					sandbox_evidence(*policy, invocation.budget, sandbox_assurance::none, false),
 					"provider.runtime-unavailable"};
 			}
 		};

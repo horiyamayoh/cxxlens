@@ -5,14 +5,14 @@ additionalProperties: false
 required: [schema, document_version, authority, contract, vectors]
 properties:
   schema: {const: cxxlens.security-conformance-vectors.v1}
-  document_version: {const: 1.0.0}
+  document_version: {const: 1.1.0}
   authority:
     type: object
     additionalProperties: false
     required: [owner_issue, decision_adr]
     properties:
-      owner_issue: {const: '#65'}
-      decision_adr: {const: docs/design/adr/0011-provider-trust-certification-discovery.md}
+      owner_issue: {const: '#137'}
+      decision_adr: {const: docs/design/adr/0068-sandbox-assurance-closed-enum-boundary.md}
   contract: {const: schemas/cxxlens_ng_security_profile.yaml}
   vectors:
     type: array

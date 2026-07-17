@@ -253,6 +253,13 @@ def sandbox(
     profile_minimum: str,
     evidence: dict[str, Any],
 ) -> str:
+    for boundary, assurance in (
+        ("manifest minimum", manifest_minimum),
+        ("request minimum", request_minimum),
+        ("profile minimum", profile_minimum),
+    ):
+        if assurance not in ASSURANCE:
+            fail("security.sandbox-assurance-invalid", boundary)
     required = max(
         (manifest_minimum, request_minimum, profile_minimum), key=ASSURANCE.__getitem__
     )
@@ -263,8 +270,10 @@ def sandbox(
         "policy_digest",
         "evidence_digest",
     }
-    if set(evidence) != required_fields or evidence["achieved"] not in ASSURANCE:
+    if set(evidence) != required_fields:
         fail("security.sandbox-insufficient", "missing achieved assurance evidence")
+    if evidence["achieved"] not in ASSURANCE:
+        fail("security.sandbox-assurance-invalid", "achieved")
     if ASSURANCE[evidence["achieved"]] < ASSURANCE[required]:
         fail("security.sandbox-insufficient", f"{evidence['achieved']} < {required}")
     return evidence["achieved"]
@@ -420,9 +429,14 @@ def _discovery_scenario(scenario: str) -> Any:
 
 
 def _sandbox_scenario(scenario: str) -> str:
-    achieved = {"exact": "enforced", "higher": "certified", "insufficient": "best_effort"}[scenario]
+    required = "enforced"
+    achieved = {"exact": "enforced", "higher": "certified", "insufficient": "best_effort"}.get(scenario, "enforced")
+    if scenario.startswith("required-"):
+        required = scenario.removeprefix("required-")
+    elif scenario.startswith("achieved-"):
+        achieved = scenario.removeprefix("achieved-")
     evidence = {"platform": "linux", "mechanism": "namespaces-seccomp", "achieved": achieved, "policy_digest": "sha256:" + "5" * 64, "evidence_digest": "sha256:" + "6" * 64}
-    return sandbox("best_effort", "enforced", "enforced", evidence)
+    return sandbox("best_effort", required, "enforced", evidence)
 
 
 def _product_scenario(profile: dict[str, Any], scenario: str) -> None:

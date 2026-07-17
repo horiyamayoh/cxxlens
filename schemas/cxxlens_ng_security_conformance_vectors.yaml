@@ -1,8 +1,8 @@
 schema: cxxlens.security-conformance-vectors.v1
-document_version: 1.0.0
+document_version: 1.1.0
 authority:
-  owner_issue: '#65'
-  decision_adr: docs/design/adr/0011-provider-trust-certification-discovery.md
+  owner_issue: '#137'
+  decision_adr: docs/design/adr/0068-sandbox-assurance-closed-enum-boundary.md
 contract: schemas/cxxlens_ng_security_profile.yaml
 vectors:
   - {id: namespace-standard-qualified, class: positive, operation: namespace, input: {scenario: standard-qualified}, expected: {decision: accepted, reason_code: security.namespace-authorized}}
@@ -28,6 +28,10 @@ vectors:
   - {id: sandbox-exact, class: positive, operation: sandbox, input: {scenario: exact}, expected: {decision: accepted, reason_code: security.sandbox-qualified, value: enforced}}
   - {id: sandbox-higher, class: positive, operation: sandbox, input: {scenario: higher}, expected: {decision: accepted, reason_code: security.sandbox-qualified, value: certified}}
   - {id: sandbox-insufficient, class: negative, operation: sandbox, input: {scenario: insufficient}, expected: {decision: rejected, reason_code: security.sandbox-insufficient}}
+  - {id: sandbox-invalid-required-4, class: negative, operation: sandbox, input: {scenario: required-4}, expected: {decision: rejected, reason_code: security.sandbox-assurance-invalid}}
+  - {id: sandbox-invalid-required-255, class: negative, operation: sandbox, input: {scenario: required-255}, expected: {decision: rejected, reason_code: security.sandbox-assurance-invalid}}
+  - {id: sandbox-invalid-achieved-4, class: negative, operation: sandbox, input: {scenario: achieved-4}, expected: {decision: rejected, reason_code: security.sandbox-assurance-invalid}}
+  - {id: sandbox-invalid-achieved-255, class: negative, operation: sandbox, input: {scenario: achieved-255}, expected: {decision: rejected, reason_code: security.sandbox-assurance-invalid}}
   - {id: product-execution-opted-in, class: positive, operation: product_execution, input: {scenario: complete}, expected: {decision: accepted, reason_code: security.product-execution-authorized}}
   - {id: product-execution-no-opt-in, class: negative, operation: product_execution, input: {scenario: no-opt-in}, expected: {decision: rejected, reason_code: security.opt-in-required}}
   - {id: product-execution-audit-missing, class: negative, operation: product_execution, input: {scenario: audit-missing}, expected: {decision: rejected, reason_code: security.audit-evidence-incomplete}}

@@ -46,7 +46,7 @@ class NgSecurityContractTest(unittest.TestCase):
     def test_exact_contract_vectors_and_registries(self) -> None:
         profile, results, counts = validate_all(ROOT)
         self.assertEqual(profile["maturity"], "accepted")
-        self.assertEqual(len(results), 31)
+        self.assertEqual(len(results), 35)
         self.assertEqual(sum(row["decision"] == "accepted" for row in results), 10)
         self.assertEqual(counts["production_certificates"], 0)
         self.assertEqual(report(profile, results, counts)["status"], "green")
@@ -155,6 +155,15 @@ class NgSecurityContractTest(unittest.TestCase):
             sandbox("best_effort", "enforced", "none", evidence)
         evidence["achieved"] = "certified"
         self.assertEqual(sandbox("best_effort", "enforced", "none", evidence), "certified")
+
+    def test_sandbox_assurance_is_a_closed_enum_at_every_boundary(self) -> None:
+        evidence = {"platform": "linux", "mechanism": "seccomp", "achieved": "enforced", "policy_digest": "p", "evidence_digest": "e"}
+        for invalid in ("4", "255"):
+            with self.assertRaisesRegex(SecurityContractError, "sandbox-assurance-invalid"):
+                sandbox("best_effort", invalid, "none", evidence)
+            invalid_evidence = dict(evidence, achieved=invalid)
+            with self.assertRaisesRegex(SecurityContractError, "sandbox-assurance-invalid"):
+                sandbox("best_effort", "enforced", "none", invalid_evidence)
 
     def test_product_execution_needs_opt_in_and_complete_audit(self) -> None:
         fields = self.profile["product_execution"]["audit_fields"]

@@ -1,12 +1,12 @@
 schema: cxxlens.security-profile.v1
 kind: security-profile
-document_version: 1.3.0
+document_version: 1.4.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
   index: docs/design/catalogs/README.md
-  decision_adr: docs/design/adr/0046-resolved-sandbox-policy-enforcement.md
-  owner_issue: '#103'
+  decision_adr: docs/design/adr/0068-sandbox-assurance-closed-enum-boundary.md
+  owner_issue: '#137'
   owner: steward.ng-security
 registries:
   namespace: schemas/cxxlens_ng_namespace_registry.yaml
@@ -78,6 +78,10 @@ execution_authority:
   default_or_forged_token: provider.selection-invalid
 sandbox:
   assurance_order: [none, best_effort, enforced, certified]
+  membership_validation: [requirement, report, selection, effective-minimum, process-output, evidence-digest]
+  ordinal_comparison: validated-operands-only
+  unknown_value: reject-never-map-or-rank
+  stable_errors: {required: provider.sandbox-requirement-invalid, achieved: provider.sandbox-report-invalid}
   effective_minimum: max-of-manifest-request-security-profile
   insufficient: provider-unavailable-no-degradation
   evidence_required: [platform, mechanism, achieved, policy_digest, evidence_digest]
@@ -158,6 +162,7 @@ reason_codes:
   - security.product-execution-authorized
   - security.provider-selected
   - security.provider-shadowing
+  - security.sandbox-assurance-invalid
   - security.sandbox-insufficient
   - security.sandbox-policy-mismatch
   - security.sandbox-qualified

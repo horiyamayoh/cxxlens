@@ -548,7 +548,8 @@ namespace cxxlens::sdk::provider
 		[[nodiscard]] bool sandbox_satisfies(const sandbox_assurance achieved,
 											 const sandbox_assurance required) noexcept
 		{
-			return static_cast<std::uint8_t>(achieved) >= static_cast<std::uint8_t>(required);
+			return is_valid(achieved) && is_valid(required) &&
+				static_cast<std::uint8_t>(achieved) >= static_cast<std::uint8_t>(required);
 		}
 
 		[[nodiscard]] std::optional<sandbox_assurance>
@@ -569,6 +570,10 @@ namespace cxxlens::sdk::provider
 		effective_sandbox(const process_task_request& request)
 		{
 			const auto& authority = request.selection.authority_request().sandbox;
+			if (auto valid = authority.validate(); !valid)
+				return cxxlens::sdk::unexpected(std::move(valid.error()));
+			if (auto valid = request.sandbox.validate(); !valid)
+				return cxxlens::sdk::unexpected(std::move(valid.error()));
 			if (request.sandbox.policy_digest != authority.policy_digest)
 				return cxxlens::sdk::unexpected(
 					runtime_error("security.sandbox-policy-mismatch", "selection"));
@@ -578,10 +583,9 @@ namespace cxxlens::sdk::provider
 				return cxxlens::sdk::unexpected(
 					runtime_error("provider.manifest-invalid", "sandbox_minimum"));
 			auto minimum = authority.minimum;
-			if (static_cast<std::uint8_t>(request.sandbox.minimum) >
-				static_cast<std::uint8_t>(minimum))
+			if (sandbox_satisfies(request.sandbox.minimum, minimum))
 				minimum = request.sandbox.minimum;
-			if (static_cast<std::uint8_t>(*manifest_minimum) > static_cast<std::uint8_t>(minimum))
+			if (sandbox_satisfies(*manifest_minimum, minimum))
 				minimum = *manifest_minimum;
 			return sandbox_requirement{minimum, authority.policy_digest};
 		}
@@ -755,22 +759,22 @@ namespace cxxlens::sdk::provider
 			return cxxlens::sdk::unexpected(std::move(launched.error()));
 		auto output = std::move(*launched);
 		if (auto valid = output.sandbox.validate(); !valid)
-			return transport_failure_report(
-				request, std::move(output), "provider.runtime-unavailable");
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
 		if (output.sandbox.policy_digest != sandbox->policy_digest)
 			return transport_failure_report(
 				request, std::move(output), "security.sandbox-policy-mismatch");
 		auto applied_policy = resolve_sandbox_policy(output.sandbox.policy_digest);
-		if (!applied_policy ||
-			output.sandbox.evidence_digest !=
-				sandbox_evidence_digest(*applied_policy,
-										request.budget,
-										output.sandbox.achieved,
-										output.sandbox.mechanisms))
+		auto evidence = applied_policy
+			? sandbox_evidence_digest(*applied_policy,
+									  request.budget,
+									  output.sandbox.achieved,
+									  output.sandbox.mechanisms)
+			: result<std::string>{
+				  unexpected(runtime_error("security.sandbox-policy-mismatch", "unknown-policy"))};
+		if (!evidence || output.sandbox.evidence_digest != *evidence)
 			return transport_failure_report(
 				request, std::move(output), "security.sandbox-policy-mismatch");
-		if (static_cast<std::uint8_t>(output.sandbox.achieved) >=
-			static_cast<std::uint8_t>(sandbox_assurance::enforced))
+		if (sandbox_satisfies(output.sandbox.achieved, sandbox_assurance::enforced))
 		{
 			auto actual_mechanisms = output.sandbox.mechanisms;
 			std::ranges::sort(actual_mechanisms);

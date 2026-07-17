@@ -128,6 +128,32 @@ namespace
 		}
 	};
 
+	class invalid_sandbox_port final : public provider_process_port
+	{
+	  public:
+		explicit invalid_sandbox_port(const sandbox_assurance achieved) : achieved_{achieved} {}
+
+		[[nodiscard]] result<process_output> run(const process_invocation& invocation,
+												 std::stop_token) const override
+		{
+			return process_output{
+				process_status::exited,
+				0,
+				0,
+				{},
+				{},
+				{"test-port",
+				 {"invalid-assurance"},
+				 achieved_,
+				 invocation.sandbox.policy_digest,
+				 "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"},
+				{}};
+		}
+
+	  private:
+		sandbox_assurance achieved_;
+	};
+
 	[[nodiscard]] std::string executable_digest(const std::string& executable)
 	{
 		std::ifstream input{executable, std::ios::binary};
@@ -504,6 +530,80 @@ namespace
 				"fallback policy identity depended on tuple input order");
 	}
 
+	void check_sandbox_closed_enum(const std::string& executable)
+	{
+		constexpr std::array levels{sandbox_assurance::none,
+									sandbox_assurance::best_effort,
+									sandbox_assurance::enforced,
+									sandbox_assurance::certified};
+		for (const auto required : levels)
+			for (const auto achieved : levels)
+			{
+				auto request = selection_request(executable);
+				request.sandbox.minimum = required;
+				auto value =
+					candidate(executable, "success", discovery_source::explicit_path, achieved);
+				value.description.sandbox_minimum = "none";
+				auto selected = select_provider(request, std::span{&value, 1U});
+				const bool expected =
+					static_cast<std::uint8_t>(achieved) >= static_cast<std::uint8_t>(required);
+				require(selected.has_value() == expected,
+						"valid sandbox assurance comparison matrix diverged");
+			}
+
+		const auto policy = baseline_policy();
+		execution_budget budget;
+		budget.wall_ms = budget.cpu_ms = budget.rss_bytes = budget.output_bytes =
+			budget.open_files = budget.subprocesses = 1U;
+		for (const auto raw : {4U, 255U})
+		{
+			const auto invalid = static_cast<sandbox_assurance>(raw);
+			auto request = selection_request(executable);
+			request.sandbox.minimum = invalid;
+			auto value = candidate(executable, "success");
+			auto invalid_required = select_provider(request, std::span{&value, 1U});
+			require(!invalid_required &&
+						invalid_required.error().code == "provider.sandbox-requirement-invalid" &&
+						invalid_required.error().field == "minimum",
+					"invalid required assurance weakened the selection boundary");
+
+			request = selection_request(executable);
+			value = candidate(executable, "success");
+			value.sandbox.achieved = invalid;
+			auto invalid_achieved = select_provider(request, std::span{&value, 1U});
+			require(!invalid_achieved &&
+						invalid_achieved.error().code == "provider.sandbox-report-invalid" &&
+						invalid_achieved.error().field == "achieved",
+					"invalid achieved assurance passed certified ordinal comparison");
+
+			value = candidate(executable, "success");
+			auto token = select_provider(request, std::span{&value, 1U});
+			require(token.has_value(), "valid sandbox selection token fixture failed");
+			auto& replay_candidate = const_cast<provider_candidate&>(token->selected_candidate());
+			replay_candidate.sandbox.achieved = invalid;
+			auto replay = token->validate();
+			require(!replay && replay.error().code == "provider.sandbox-report-invalid" &&
+						replay.error().field == "achieved",
+					"selection token replay accepted invalid sandbox assurance");
+
+			auto evidence = sandbox_evidence_digest(policy, budget, invalid, policy.mechanisms);
+			require(!evidence && evidence.error().code == "provider.sandbox-report-invalid" &&
+						evidence.error().field == "achieved",
+					"evidence digest canonicalized an invalid sandbox assurance");
+
+			invalid_sandbox_port port{invalid};
+			process_provider_runtime runtime{port};
+			auto report = runtime.execute(task(select(executable, "success")));
+			require(!report && report.error().code == "provider.sandbox-report-invalid" &&
+						report.error().field == "achieved",
+					"custom process port bypassed runtime sandbox enum validation");
+		}
+		for (const auto achieved : levels)
+			require(
+				sandbox_evidence_digest(policy, budget, achieved, policy.mechanisms).has_value(),
+				"valid sandbox assurance failed evidence binding");
+	}
+
 	void check_process_faults(const std::string& executable)
 	{
 		auto processes = make_system_provider_process_port();
@@ -535,6 +635,12 @@ namespace
 			auto applied_policy = report
 				? resolve_sandbox_policy(report->sandbox.policy_digest)
 				: result<sandbox_policy>{unexpected(error{"sdk.test-setup", "sandbox", {}})};
+			auto evidence = report && applied_policy
+				? sandbox_evidence_digest(*applied_policy,
+										  request.budget,
+										  report->sandbox.achieved,
+										  report->sandbox.mechanisms)
+				: result<std::string>{unexpected(error{"sdk.test-setup", "evidence", {}})};
 			require(report && report->succeeded() &&
 						report->frames.front().type == message_type::hello &&
 						report->frames.size() == 15U &&
@@ -548,12 +654,8 @@ namespace
 						report->sandbox.policy_digest ==
 							request.selection.authority_request().sandbox.policy_digest &&
 						applied_policy &&
-						report->sandbox.mechanisms == applied_policy->mechanisms &&
-						report->sandbox.evidence_digest ==
-							sandbox_evidence_digest(*applied_policy,
-													request.budget,
-													report->sandbox.achieved,
-													report->sandbox.mechanisms) &&
+						report->sandbox.mechanisms == applied_policy->mechanisms && evidence &&
+						report->sandbox.evidence_digest == *evidence &&
 						report->canonical_form().contains("cxxlens.provider-execution-report.v1") &&
 						reference && reference->accepted,
 					std::string{"successful process provider failed: "} + mode +
@@ -869,6 +971,7 @@ int main(const int argument_count, const char* const* arguments)
 	require(argument_count == 2, "provider process fixture path missing");
 	const std::string executable{arguments[1]};
 	check_selection(executable);
+	check_sandbox_closed_enum(executable);
 	check_process_faults(executable);
 	check_prior_snapshot_preserved(executable);
 }
