@@ -24,7 +24,7 @@ required:
   - backend_authority
 properties:
   schema: {const: cxxlens.provider-protocol.v1}
-  document_version: {const: 1.3.0}
+  document_version: {const: 1.4.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -34,8 +34,8 @@ properties:
       design:
         const: docs/design/cxxlens_next_generation_integrated_design_ja.md#18-provider-protocol
       index: {const: docs/design/catalogs/README.md}
-      decision_adr: {const: docs/design/adr/0041-provider-control-text-utf8.md}
-      owner_issue: {const: '#98'}
+      decision_adr: {const: docs/design/adr/0043-provider-columnar-wire-batches.md}
+      owner_issue: {const: '#100'}
       owner: {const: steward.ng-provider-protocol}
   compatibility:
     const:
@@ -200,6 +200,10 @@ properties:
   columnar_chunks:
     const:
       batch_scope: exact-relation-descriptor-partition-and-atomic-output-group
+      sdk_row_accumulation:
+        maximum_rows_per_chunk: 256
+        transpose: row-author-api-to-descriptor-order-columns
+        emission_order: row-window-then-descriptor-column
       chunk_key:
         - task_id
         - dependency_group_id
@@ -209,6 +213,21 @@ properties:
         - row_offset
         - row_count
         - chunk_index
+      control:
+        encoding: deterministic-typed-cbor-map
+        exact_keys: [task_id, dependency_group_id, atomic_output_group_id, batch_id, descriptor_id, descriptor_digest, column_id, row_offset, row_count, chunk_index, encoding, payload_digest, chunk_digest]
+      payload:
+        magic: CXCC
+        version: 1
+        header_byte_order: little-endian
+        header: [magic-4, version-u8, scalar-kind-u8, reserved-zero-2, validity-bytes-u32, unknown-bytes-u32, value-auxiliary-bytes-u32, value-bytes-u32, unknown-reason-offset-bytes-u32, unknown-reason-bytes-u32]
+        section_order: [validity-lsb0, unknown-lsb0, value-auxiliary, values, unknown-reason-offsets-u32-le, unknown-reasons-utf8]
+        state_rules:
+          present: validity-one-unknown-zero
+          absent: validity-zero-unknown-zero-optional-only
+          unknown: validity-zero-unknown-one-nonempty-strict-utf8-reason
+          unused_bitmap_bits: zero
+          null_storage: canonical-zero-or-zero-width
       encodings:
         - validity-bitset-lsb0
         - fixed-width-little-endian
@@ -216,6 +235,18 @@ properties:
         - bytes-offsets-u32-little-endian
         - dictionary-index-u32-little-endian
         - content-addressed-blob
+      sdk_canonical_encoding:
+        boolean: fixed-width-bool-u8
+        signed_integer: fixed-width-i64-le
+        unsigned_integer: fixed-width-u64-le
+        open_or_closed_symbol: dictionary-index-u32-le
+        bytes_or_set: bytes-offsets-u32-le
+        other_detached_string: utf8-offsets-u32-le
+      dictionary:
+        auxiliary: [entry-count-u32-le, offsets-count-plus-one-u32-le, strict-utf8-entry-bytes]
+        ordering: byte-lexicographic-unique
+        values: row-aligned-u32-le-index
+        malformed_or_out_of_range_index: reject
       native_layout_payload: forbidden
       batch_end_binds:
         - declared-row-count
@@ -223,6 +254,13 @@ properties:
         - canonical-column-order
         - chunk-digests
         - batch-digest
+      batch_end:
+        control_encoding: deterministic-typed-cbor-map
+        exact_control_keys: [task_id, dependency_group_id, atomic_output_group_id, batch_id, descriptor_id, descriptor_digest, row_count, column_count, chunk_count, batch_digest]
+        payload_magic: CXBE
+        payload_version: 1
+        payload_order: [descriptor-order-column-id-payload-bytes-chunk-count, ordered-chunk-digests]
+        host_validation: exact-length-order-offset-index-digest-recomputation-before-seal
   flow_control:
     const:
       model: host-granted-byte-and-frame-credit

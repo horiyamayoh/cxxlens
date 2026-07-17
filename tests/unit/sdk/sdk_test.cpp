@@ -578,6 +578,153 @@ namespace
 				"native address marker escaped");
 	}
 
+	void check_columnar_wire_codec()
+	{
+		using namespace cxxlens::sdk;
+		using namespace cxxlens::sdk::provider;
+		const std::string descriptor_digest =
+			"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+		const std::array columns{
+			column_descriptor{"company.test.columnar.v1.bool",
+							  "bool",
+							  {scalar_kind::boolean, {}, false},
+							  true,
+							  column_role::authoritative_payload},
+			column_descriptor{"company.test.columnar.v1.int",
+							  "int",
+							  {scalar_kind::signed_integer, {}, false},
+							  true,
+							  column_role::authoritative_payload},
+			column_descriptor{"company.test.columnar.v1.text",
+							  "text",
+							  {scalar_kind::utf8_string, {}, true},
+							  false,
+							  column_role::authoritative_payload},
+			column_descriptor{"company.test.columnar.v1.bytes",
+							  "bytes",
+							  {scalar_kind::bytes, {}, false},
+							  true,
+							  column_role::authoritative_payload},
+			column_descriptor{"company.test.columnar.v1.unknown",
+							  "unknown",
+							  {scalar_kind::closed_symbol, "company.test.symbol/1", false},
+							  true,
+							  column_role::authoritative_payload},
+		};
+		const std::array<std::vector<detached_cell>, columns.size()> cells{
+			std::vector{detached_cell::boolean(true), detached_cell::boolean(false)},
+			std::vector{detached_cell::signed_integer(-42), detached_cell::signed_integer(7)},
+			std::vector{string_cell(columns[2U].type, "hello"),
+						detached_cell::absent(columns[2U].type)},
+			std::vector{detached_cell::bytes({std::byte{}, std::byte{0xff}}),
+						detached_cell::bytes({std::byte{1U}})},
+			std::vector{detached_cell::unknown(columns[4U].type, "not-observed"),
+						string_cell(columns[4U].type, "known")},
+		};
+		const std::array encodings{"fixed-width-bool-u8",
+								   "fixed-width-i64-le",
+								   "utf8-offsets-u32-le",
+								   "bytes-offsets-u32-le",
+								   "dictionary-index-u32-le"};
+		std::vector<batch_column_summary> summaries;
+		std::vector<std::string> digests;
+		std::vector<encoded_column_chunk> encoded_chunks;
+		for (std::size_t index = 0U; index < columns.size(); ++index)
+		{
+			column_chunk_record chunk{"task-columnar",
+									  "dependency-1",
+									  "atomic-1",
+									  "batch-1",
+									  "company.test.columnar.v1",
+									  descriptor_digest,
+									  columns[index].id,
+									  10U,
+									  2U,
+									  3U,
+									  encodings[index],
+									  cells[index],
+									  {}};
+			auto encoded = encode_column_chunk(chunk, columns[index]);
+			require(encoded.has_value(),
+					"typed column chunk did not encode: " + std::to_string(index) + " " +
+						(encoded ? std::string{}
+								 : encoded.error().code + "/" + encoded.error().detail));
+			auto decoded = decode_column_chunk(encoded->control, encoded->payload, columns[index]);
+			require(decoded && decoded->task_id == chunk.task_id &&
+						decoded->dependency_group_id == chunk.dependency_group_id &&
+						decoded->atomic_output_group_id == chunk.atomic_output_group_id &&
+						decoded->batch_id == chunk.batch_id &&
+						decoded->descriptor_id == chunk.descriptor_id &&
+						decoded->descriptor_digest == chunk.descriptor_digest &&
+						decoded->column_id == chunk.column_id && decoded->row_offset == 10U &&
+						decoded->row_count == 2U && decoded->chunk_index == 3U &&
+						decoded->encoding == chunk.encoding &&
+						decoded->cells[0U].canonical_form() == cells[index][0U].canonical_form() &&
+						decoded->cells[1U].canonical_form() == cells[index][1U].canonical_form() &&
+						decoded->chunk_digest == encoded->chunk_digest,
+					"typed column chunk roundtrip lost binding or cell state");
+			summaries.push_back({columns[index].id, encoded->payload.size(), 1U});
+			digests.push_back(encoded->chunk_digest);
+			encoded_chunks.push_back(std::move(*encoded));
+		}
+		const std::array reference_bool_payload{
+			std::byte{0x43}, std::byte{0x58}, std::byte{0x43}, std::byte{0x43}, std::byte{0x01},
+			std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0x00},
+			std::byte{0x00}, std::byte{0x00}, std::byte{0x01}, std::byte{0x00}, std::byte{0x00},
+			std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+			std::byte{0x02}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x0c},
+			std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+			std::byte{0x00}, std::byte{0x00}, std::byte{0x03}, std::byte{0x00}, std::byte{0x01},
+			std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+			std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+			std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+		};
+		require(std::ranges::equal(encoded_chunks.front().payload, reference_bool_payload),
+				"C++ column payload diverged from the independent reference vector");
+
+		auto malformed_validity = encoded_chunks.front();
+		malformed_validity.payload[32U] |= std::byte{0x80};
+		auto validity_rejected = decode_column_chunk(
+			malformed_validity.control, malformed_validity.payload, columns.front());
+		require(!validity_rejected && validity_rejected.error().detail == "unused-validity-bits",
+				"non-zero unused validity bits were accepted");
+		auto malformed_offset = encoded_chunks[2U];
+		malformed_offset.payload[34U] ^= std::byte{1U};
+		auto offset_rejected =
+			decode_column_chunk(malformed_offset.control, malformed_offset.payload, columns[2U]);
+		require(!offset_rejected && offset_rejected.error().detail == "offsets",
+				"malformed variable-width offsets were accepted");
+		auto malformed_dictionary = encoded_chunks[4U];
+		const auto auxiliary_size = static_cast<std::size_t>(
+			std::to_integer<std::uint8_t>(malformed_dictionary.payload[16U]));
+		const auto dictionary_values = 34U + auxiliary_size;
+		malformed_dictionary.payload[dictionary_values + 4U] = std::byte{0xff};
+		auto dictionary_rejected = decode_column_chunk(
+			malformed_dictionary.control, malformed_dictionary.payload, columns[4U]);
+		require(!dictionary_rejected && dictionary_rejected.error().detail == "dictionary-index",
+				"out-of-range dictionary index was accepted");
+
+		columnar_batch_end terminal{"task-columnar",
+									"dependency-1",
+									"atomic-1",
+									"batch-1",
+									"company.test.columnar.v1",
+									descriptor_digest,
+									12U,
+									std::move(summaries),
+									std::move(digests),
+									{}};
+		terminal.batch_digest = columnar_batch_digest(terminal);
+		auto encoded_terminal = encode_columnar_batch_end(terminal);
+		require(encoded_terminal.has_value(), "columnar batch summary did not encode");
+		auto decoded_terminal =
+			decode_columnar_batch_end(encoded_terminal->control, encoded_terminal->payload);
+		require(decoded_terminal && decoded_terminal->columns == terminal.columns &&
+					decoded_terminal->ordered_chunk_digests == terminal.ordered_chunk_digests &&
+					decoded_terminal->batch_digest == terminal.batch_digest,
+				"column lengths/order/digests did not survive batch-end roundtrip");
+	}
+
 	void check_provider_tooling_and_faults()
 	{
 		cxxlens::sdk::provider::coverage_builder incomplete;
@@ -1009,6 +1156,7 @@ int main()
 	check_static_dynamic_query();
 	check_snapshot_lifetime();
 	check_frame_and_native_escape();
+	check_columnar_wire_codec();
 	check_provider_tooling_and_faults();
 	check_relation_engine_and_claim_kernel();
 	return 0;

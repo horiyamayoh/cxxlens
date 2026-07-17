@@ -81,9 +81,9 @@ entries:
     summary: Logical query, standard/custom join, budgets, explicit partiality, and flagship recipe.
   - id: gate.g4
     status: implemented
-    owner_issue: '#99'
+    owner_issue: '#100'
     profile: NG0
-    contract_issue: '#99'
+    contract_issue: '#100'
     depends_on: [gate.g1]
     evidence:
       - tests/unit/sdk/provider_runtime_test.cpp
@@ -94,7 +94,10 @@ entries:
       - docs/design/adr/0040-provider-frame-version-and-flags.md
       - docs/design/adr/0041-provider-control-text-utf8.md
       - docs/design/adr/0042-immutable-provider-selection-authority.md
-    summary: Provider protocol, Clang 22 worker, sandbox, crash, and malformed output.
+      - docs/design/adr/0043-provider-columnar-wire-batches.md
+      - schemas/cxxlens_ng_provider_protocol.yaml
+      - schemas/cxxlens_ng_provider_runtime_contract.yaml
+    summary: Provider protocol, typed columnar wire batches, shared host validation, Clang 22 worker, sandbox, crash, and malformed output.
   - id: gate.g5
     status: deferred
     owner_issue: '#69'

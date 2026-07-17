@@ -1,10 +1,10 @@
 schema: cxxlens.provider-runtime-contract.v1
-document_version: 1.5.0
+document_version: 1.6.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#17-provider-model
-  decision_adr: docs/design/adr/0042-immutable-provider-selection-authority.md
-  owner_issue: '#99'
+  decision_adr: docs/design/adr/0043-provider-columnar-wire-batches.md
+  owner_issue: '#100'
   owner: steward.ng-provider-runtime
 dependencies:
   - schemas/cxxlens_ng_provider_protocol.yaml
@@ -114,7 +114,11 @@ protocol_session:
     direction: reject-host-only-provider-output
     credit: account-encoded-byte-and-frame-before-adoption
     output_schema: request-exact-output-descriptor-id-and-digest
-    batch: dependency-atomic-batch-id-row-shape-count-and-rolling-digest
+    batch: exact-task-dependency-atomic-descriptor-batch-column-offset-count-index-encoding-length-order-chunk-and-batch-digest
+    column_chunk_decoder: shared-host-and-logical-native-independent-value-decoder
+    column_chunk_order: bounded-row-window-then-descriptor-column
+    column_chunk_rejection: malformed-validity-offset-dictionary-index-or-digest-is-provider.batch-invalid
+    batch_end: exact-every-column-length-count-order-and-ordered-chunk-digest-recomputation
     side_channels: coverage-unresolved-progress-complete
     closure: empty-or-independently-validated
     terminal: task-bound-and-all-groups-sealed

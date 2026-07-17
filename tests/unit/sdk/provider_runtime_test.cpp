@@ -101,6 +101,8 @@ namespace
 				return begun;
 			if (auto pushed = output.push(protocol_test_row()); !pushed)
 				return pushed;
+			if (auto pushed = output.push(protocol_test_row()); !pushed)
+				return pushed;
 			if (auto ended = output.end(); !ended)
 				return ended;
 			context.coverage().request("task", task_value.task_id);
@@ -461,12 +463,12 @@ namespace
 			auto report = runtime.execute(request);
 			require(report && report->succeeded() &&
 						report->frames.front().type == message_type::hello &&
-						report->frames.size() == 10U &&
+						report->frames.size() == 15U &&
 						report->frames.at(1U).type == message_type::schema_negotiate &&
 						report->frames.at(2U).type == message_type::task_accepted &&
 						report->frames.at(3U).type == message_type::batch_begin &&
-						report->frames.at(5U).type == message_type::batch_end &&
-						report->frames.at(6U).type == message_type::coverage_chunk &&
+						report->frames.at(10U).type == message_type::batch_end &&
+						report->frames.at(11U).type == message_type::coverage_chunk &&
 						report->frames.back().type == message_type::task_complete &&
 						report->sandbox.achieved == sandbox_assurance::enforced &&
 						report->canonical_form().contains("cxxlens.provider-execution-report.v1"),
@@ -496,13 +498,13 @@ namespace
 				"runtime accepted a sandbox policy not bound by selection authority");
 
 		auto optional = runtime.execute(task(select(executable, "optional-extension")));
-		require(optional && optional->succeeded() && optional->frames.size() == 11U &&
+		require(optional && optional->succeeded() && optional->frames.size() == 16U &&
 					optional->frames.at(3U).flags ==
 						static_cast<std::uint16_t>(frame_flag::optional_extension) &&
 					static_cast<std::uint16_t>(optional->frames.at(3U).type) == 65000U,
 				"unknown optional extension was not skipped with accounting evidence");
 		auto optional_credit_request = task(select(executable, "optional-extension"));
-		optional_credit_request.output_credit.frames = 10U;
+		optional_credit_request.output_credit.frames = 15U;
 		auto optional_credit = runtime.execute(optional_credit_request);
 		require(optional_credit && optional_credit->terminal == "provider.credit-exceeded",
 				"skipped optional extension was omitted from frame credit accounting");
@@ -584,6 +586,8 @@ namespace
 				 std::pair{"unsealed-batch", "provider.protocol-state-invalid"},
 				 std::pair{"inconsistent-batch", "provider.batch-invalid"},
 				 std::pair{"bad-column", "provider.batch-invalid"},
+				 std::pair{"column-length-mismatch", "provider.batch-invalid"},
+				 std::pair{"reordered-column", "provider.batch-invalid"},
 				 std::pair{"unknown-descriptor", "provider.relation-incompatible"},
 				 std::pair{"incomplete-coverage", "provider.coverage-incomplete"},
 				 std::pair{"bad-eos", "provider.protocol-state-invalid"},
@@ -631,6 +635,10 @@ namespace
 		auto logical_frames = decode_frame_stream(sink.transcript);
 		require(logical_frames && logical_frames->size() + 2U == process->frames.size(),
 				"logical/wire provider transcript size diverged");
+		auto aggregated = decode_column_chunk(
+			logical_frames->at(2U).control, logical_frames->at(2U).payload, descriptor);
+		require(aggregated && aggregated->row_count == 2U,
+				"relation_sink did not aggregate bounded rows into a column chunk");
 		for (std::size_t index = 0U; index < logical_frames->size(); ++index)
 			require(logical_frames->at(index).type == process->frames.at(index + 2U).type,
 					"logical/wire provider state transition diverged");

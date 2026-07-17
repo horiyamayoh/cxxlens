@@ -48,12 +48,6 @@ namespace
 		return output;
 	}
 
-	[[nodiscard]] std::vector<std::byte> payload(const std::string_view text)
-	{
-		const auto bytes = std::as_bytes(std::span{text});
-		return {bytes.begin(), bytes.end()};
-	}
-
 	[[nodiscard]] detached_row output_row()
 	{
 		using relation = cxxlens::company::relations::lock_acquire;
@@ -197,11 +191,6 @@ int main(const int argument_count, const char* const* arguments)
 	const auto descriptor_digest = mode == "unknown-descriptor"
 		? std::string{"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}
 		: schema.descriptor_digest;
-	const auto row = mode == "unknown-descriptor"
-		? std::string{"{\"cells\":{},\"descriptor_id\":\"company.unknown.v1\"}"}
-		: output_row().canonical_form();
-	const auto initial = *semantic_digest("cxxlens.provider-batch.v1", descriptor_digest);
-	const auto rolling = *semantic_digest("cxxlens.provider-batch.v1", initial + "\n" + row);
 	if (!writer.send(
 			message_type::batch_begin,
 			control(descriptor + "|" + descriptor_digest + "|dependency-1|atomic-1|batch-1")))
@@ -209,14 +198,74 @@ int main(const int argument_count, const char* const* arguments)
 	if (mode == "unsealed-batch")
 		return writer.send(message_type::task_complete, control("task-1|complete")) ? EXIT_SUCCESS
 																					: EXIT_FAILURE;
-	if (!writer.send(message_type::column_chunk,
-					 control(mode == "bad-column" ? "batch-1|unknown-column|0" : "batch-1|row|0"),
-					 payload(row)))
+	const auto row = output_row();
+	std::vector<batch_column_summary> summaries;
+	std::vector<std::string> chunk_digests;
+	std::vector<encoded_column_chunk> encoded_chunks;
+	for (std::size_t index = 0U; index < schema.columns.size(); ++index)
+	{
+		const auto& column = schema.columns[index];
+		const auto encoding = column.type.scalar == scalar_kind::boolean
+			? "fixed-width-bool-u8"
+			: (column.type.scalar == scalar_kind::signed_integer
+				   ? "fixed-width-i64-le"
+				   : (column.type.scalar == scalar_kind::unsigned_integer
+						  ? "fixed-width-u64-le"
+						  : ((column.type.scalar == scalar_kind::open_symbol ||
+							  column.type.scalar == scalar_kind::closed_symbol)
+								 ? "dictionary-index-u32-le"
+								 : ((column.type.scalar == scalar_kind::bytes ||
+									 column.type.scalar == scalar_kind::set)
+										? "bytes-offsets-u32-le"
+										: "utf8-offsets-u32-le"))));
+		const auto cell = row.cells.contains(column.id) ? row.cells.at(column.id)
+														: detached_cell::absent(column.type);
+		column_chunk_record chunk{"task-1",
+								  "dependency-1",
+								  "atomic-1",
+								  "batch-1",
+								  schema.id,
+								  schema.descriptor_digest,
+								  column.id,
+								  0U,
+								  1U,
+								  0U,
+								  encoding,
+								  {cell},
+								  {}};
+		auto encoded = encode_column_chunk(chunk, column);
+		if (!encoded)
+			return EXIT_FAILURE;
+		if (mode == "bad-column" && index == 0U)
+			encoded->payload.back() ^= std::byte{1U};
+		summaries.push_back({column.id, encoded->payload.size(), 1U});
+		chunk_digests.push_back(encoded->chunk_digest);
+		encoded_chunks.push_back(std::move(*encoded));
+	}
+	if (mode == "reordered-column")
+		std::swap(encoded_chunks[0U], encoded_chunks[1U]);
+	for (const auto& encoded : encoded_chunks)
+		if (!writer.send(message_type::column_chunk, encoded.control, encoded.payload))
+			return EXIT_FAILURE;
+	columnar_batch_end terminal{"task-1",
+								"dependency-1",
+								"atomic-1",
+								"batch-1",
+								schema.id,
+								schema.descriptor_digest,
+								1U,
+								std::move(summaries),
+								std::move(chunk_digests),
+								{}};
+	terminal.batch_digest = columnar_batch_digest(terminal);
+	auto encoded_terminal = encode_columnar_batch_end(terminal);
+	if (!encoded_terminal)
 		return EXIT_FAILURE;
-	const auto sealed_digest = mode == "inconsistent-batch"
-		? std::string{"sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}
-		: rolling;
-	if (!writer.send(message_type::batch_end, control("batch-1|1|" + sealed_digest)))
+	if (mode == "inconsistent-batch")
+		encoded_terminal->payload.back() ^= std::byte{1U};
+	if (mode == "column-length-mismatch")
+		encoded_terminal->payload[10U + schema.columns.front().id.size()] ^= std::byte{1U};
+	if (!writer.send(message_type::batch_end, encoded_terminal->control, encoded_terminal->payload))
 		return EXIT_FAILURE;
 	const auto coverage =
 		mode == "incomplete-coverage" ? "project|catalog|covered|" : "task|task-1|covered|";

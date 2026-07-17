@@ -106,6 +106,87 @@ namespace cxxlens::sdk::provider
 	 */
 	[[nodiscard]] result<std::string> decode_control_text(std::span<const std::byte> control);
 
+	/** @brief One typed column chunk before or after portable wire encoding. */
+	struct column_chunk_record
+	{
+		std::string task_id;
+		std::string dependency_group_id;
+		std::string atomic_output_group_id;
+		std::string batch_id;
+		std::string descriptor_id;
+		std::string descriptor_digest;
+		std::string column_id;
+		std::uint64_t row_offset{};
+		std::uint32_t row_count{};
+		std::uint64_t chunk_index{};
+		std::string encoding;
+		std::vector<detached_cell> cells;
+		std::string chunk_digest;
+	};
+
+	/** @brief Deterministic CBOR control and portable binary payload for one column chunk. */
+	struct encoded_column_chunk
+	{
+		std::vector<std::byte> control;
+		std::vector<std::byte> payload;
+		std::string chunk_digest;
+	};
+
+	/** @brief Encode one descriptor-bound column chunk with validity and unknown bitsets. */
+	[[nodiscard]] result<encoded_column_chunk> encode_column_chunk(const column_chunk_record& value,
+																   const column_descriptor& column);
+	/** @brief Decode and independently validate one descriptor-bound column chunk. */
+	[[nodiscard]] result<column_chunk_record>
+	decode_column_chunk(std::span<const std::byte> control,
+						std::span<const std::byte> payload,
+						const column_descriptor& column);
+	/** @brief Resolve the encoded column id against a relation descriptor and decode it. */
+	[[nodiscard]] result<column_chunk_record>
+	decode_column_chunk(std::span<const std::byte> control,
+						std::span<const std::byte> payload,
+						const relation_descriptor& descriptor);
+
+	/** @brief Descriptor-order cumulative accounting for one completed batch column. */
+	struct batch_column_summary
+	{
+		std::string column_id;
+		std::uint64_t payload_bytes{};
+		std::uint64_t chunk_count{};
+		[[nodiscard]] bool operator==(const batch_column_summary&) const = default;
+	};
+
+	/** @brief Exact terminal binding for a columnar relation batch. */
+	struct columnar_batch_end
+	{
+		std::string task_id;
+		std::string dependency_group_id;
+		std::string atomic_output_group_id;
+		std::string batch_id;
+		std::string descriptor_id;
+		std::string descriptor_digest;
+		std::uint64_t row_count{};
+		std::vector<batch_column_summary> columns;
+		std::vector<std::string> ordered_chunk_digests;
+		std::string batch_digest;
+	};
+
+	/** @brief Deterministic CBOR control and binary ordered summary for batch end. */
+	struct encoded_columnar_batch_end
+	{
+		std::vector<std::byte> control;
+		std::vector<std::byte> payload;
+	};
+
+	/** @brief Encode exact column lengths, order, chunk digests, and batch digest. */
+	[[nodiscard]] std::string columnar_batch_digest(const columnar_batch_end& value);
+	/** @brief Encode exact column lengths, order, chunk digests, and batch digest. */
+	[[nodiscard]] result<encoded_columnar_batch_end>
+	encode_columnar_batch_end(const columnar_batch_end& value);
+	/** @brief Decode exact column lengths, order, chunk digests, and batch digest. */
+	[[nodiscard]] result<columnar_batch_end>
+	decode_columnar_batch_end(std::span<const std::byte> control,
+							  std::span<const std::byte> payload);
+
 	/** @brief Streaming byte destination implemented by process or in-memory transports. */
 	class frame_sink
 	{
@@ -254,15 +335,21 @@ namespace cxxlens::sdk::provider
 	  private:
 		relation_sink(protocol_writer& writer,
 					  relation_descriptor descriptor,
+					  std::string task_id,
 					  std::uint64_t& total_rows,
 					  std::uint64_t maximum_rows);
+		[[nodiscard]] result<void> flush_chunk();
 		protocol_writer* writer_{};
 		relation_descriptor descriptor_;
+		std::string task_id_;
 		std::string dependency_group_;
 		std::string atomic_output_group_;
 		std::string batch_id_;
-		std::string rolling_digest_;
+		std::vector<detached_row> pending_rows_;
+		std::vector<batch_column_summary> column_summaries_;
+		std::vector<std::string> ordered_chunk_digests_;
 		std::uint64_t row_count_{};
+		std::uint64_t emitted_rows_{};
 		std::uint64_t* total_rows_{};
 		std::uint64_t maximum_rows_{};
 		bool open_{};
@@ -273,7 +360,7 @@ namespace cxxlens::sdk::provider
 	class context
 	{
 	  public:
-		context(protocol_writer& writer, execution_context execution);
+		context(protocol_writer& writer, execution_context execution, std::string task_id = {});
 		[[nodiscard]] relation_sink relation(relation_descriptor descriptor);
 		[[nodiscard]] coverage_builder& coverage() noexcept;
 		[[nodiscard]] unresolved_builder& unresolved() noexcept;
@@ -283,6 +370,7 @@ namespace cxxlens::sdk::provider
 	  private:
 		protocol_writer* writer_{};
 		execution_context execution_;
+		std::string task_id_;
 		coverage_builder coverage_;
 		unresolved_builder unresolved_;
 		evidence_builder evidence_;

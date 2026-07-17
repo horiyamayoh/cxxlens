@@ -62,16 +62,6 @@ namespace cxxlens::sdk::provider
 			}
 		}
 
-		[[nodiscard]] std::optional<std::uint64_t> unsigned_value(const std::string_view value)
-		{
-			std::uint64_t output{};
-			const auto parsed = std::from_chars(value.data(), value.data() + value.size(), output);
-			if (value.empty() || parsed.ec != std::errc{} ||
-				parsed.ptr != value.data() + value.size())
-				return std::nullopt;
-			return output;
-		}
-
 		[[nodiscard]] bool namespaced(const std::string_view value)
 		{
 			const auto separator = value.find('.');
@@ -121,96 +111,6 @@ namespace cxxlens::sdk::provider
 			return output;
 		}
 
-		[[nodiscard]] bool canonical_row_shape(const relation_descriptor& descriptor,
-											   const std::string_view payload)
-		{
-			constexpr std::string_view prefix{"{\"cells\":{"};
-			const auto suffix =
-				std::string{"},\"descriptor_id\":"} + json_string(descriptor.id) + "}";
-			if (!cxxlens::sdk::detail::valid_utf8(payload) || !payload.starts_with(prefix) ||
-				!payload.ends_with(suffix))
-				return false;
-			const auto cells =
-				payload.substr(prefix.size(), payload.size() - prefix.size() - suffix.size());
-			std::set<std::string, std::less<>> seen;
-			std::size_t position{};
-			while (position < cells.size())
-			{
-				if (cells[position] != '"')
-					return false;
-				const auto key_end = cells.find('"', position + 1U);
-				if (key_end == std::string_view::npos || key_end + 2U >= cells.size() ||
-					cells[key_end + 1U] != ':' || cells[key_end + 2U] != '{')
-					return false;
-				const std::string key{cells.substr(position + 1U, key_end - position - 1U)};
-				if (key.contains('\\') || !seen.insert(key).second)
-					return false;
-				auto column = descriptor.column(key);
-				if (!column)
-					return false;
-
-				bool quoted{};
-				bool escaped{};
-				std::size_t depth{};
-				std::size_t object_end = std::string_view::npos;
-				for (std::size_t index = key_end + 2U; index < cells.size(); ++index)
-				{
-					const auto byte = cells[index];
-					if (quoted)
-					{
-						if (escaped)
-							escaped = false;
-						else if (byte == '\\')
-							escaped = true;
-						else if (byte == '"')
-							quoted = false;
-						continue;
-					}
-					if (byte == '"')
-						quoted = true;
-					else if (byte == '{')
-						++depth;
-					else if (byte == '}' && (--depth == 0U))
-					{
-						object_end = index;
-						break;
-					}
-				}
-				if (object_end == std::string_view::npos)
-					return false;
-				const auto cell = cells.substr(key_end + 2U, object_end - key_end - 1U);
-				constexpr std::string_view state_prefix{R"({"state":")"};
-				constexpr std::string_view type_separator{R"(","type":)"};
-				const auto state_end = cell.find(type_separator, state_prefix.size());
-				if (!cell.starts_with(state_prefix) || state_end == std::string_view::npos)
-					return false;
-				const auto state =
-					cell.substr(state_prefix.size(), state_end - state_prefix.size());
-				if (state != "present" && state != "absent" && state != "unknown")
-					return false;
-				const auto typed_prefix = std::string{state_prefix} + std::string{state} +
-					std::string{type_separator} + json_string(column->type.canonical_name());
-				if (!cell.starts_with(typed_prefix) ||
-					(state == "present" && !cell.contains(R"(,"value":)")) ||
-					(state == "absent" &&
-					 (!column->type.optional || cell.size() != typed_prefix.size() + 1U)) ||
-					(state == "unknown" && !cell.contains(R"(,"unknown_reason":)")))
-					return false;
-				position = object_end + 1U;
-				if (position < cells.size())
-				{
-					if (cells[position] != ',')
-						return false;
-					++position;
-				}
-			}
-			return std::ranges::all_of(descriptor.columns,
-									   [&](const column_descriptor& column)
-									   {
-										   return !column.required || seen.contains(column.id);
-									   });
-		}
-
 		[[nodiscard]] result<std::string>
 		validate_provider_transcript(const process_task_request& request,
 									 const std::span<const frame> frames,
@@ -246,9 +146,13 @@ namespace cxxlens::sdk::provider
 			struct open_batch
 			{
 				const relation_descriptor* descriptor{};
+				std::string dependency_group_id;
+				std::string atomic_output_group_id;
 				std::string id;
-				std::uint64_t rows{};
-				std::string rolling_digest;
+				std::vector<batch_column_summary> columns;
+				std::vector<std::string> ordered_chunk_digests;
+				std::map<std::string, std::uint64_t, std::less<>> next_row_offsets;
+				std::map<std::string, std::uint64_t, std::less<>> next_chunk_indexes;
 			};
 			std::optional<open_batch> batch;
 			const auto& provider = request.selection.selected_candidate().description;
@@ -281,11 +185,18 @@ namespace cxxlens::sdk::provider
 						"provider.protocol-state-invalid", request.task_id, "terminal-order");
 				if (optional_extension)
 					continue;
-				auto control = decode_control_text(value.control);
-				if (!control)
-					return fail("provider.protocol-state-invalid", request.task_id, "control");
-				if (control->contains('\0'))
-					return fail("provider.protocol-state-invalid", request.task_id, "control-nul");
+				std::optional<std::string> control;
+				if (value.type != message_type::column_chunk &&
+					value.type != message_type::batch_end)
+				{
+					auto decoded = decode_control_text(value.control);
+					if (!decoded)
+						return fail("provider.protocol-state-invalid", request.task_id, "control");
+					if (decoded->contains('\0'))
+						return fail(
+							"provider.protocol-state-invalid", request.task_id, "control-nul");
+					control = std::move(*decoded);
+				}
 				switch (value.type)
 				{
 					case message_type::hello:
@@ -329,42 +240,84 @@ namespace cxxlens::sdk::provider
 							return fail("provider.relation-incompatible",
 										std::string{fields[0U]},
 										"descriptor-digest");
-						auto initial = semantic_digest("cxxlens.provider-batch.v1", fields[1U]);
-						if (!initial)
-							return fail("provider.batch-invalid", request.task_id, "digest");
-						batch = open_batch{
-							descriptor, std::string{fields[4U]}, 0U, std::move(*initial)};
+						open_batch opened{descriptor,
+										  std::string{fields[2U]},
+										  std::string{fields[3U]},
+										  std::string{fields[4U]},
+										  {},
+										  {},
+										  {},
+										  {}};
+						for (const auto& column : descriptor->columns)
+						{
+							opened.columns.push_back({column.id, 0U, 0U});
+							opened.next_row_offsets.emplace(column.id, 0U);
+							opened.next_chunk_indexes.emplace(column.id, 0U);
+						}
+						batch = std::move(opened);
 						break;
 					}
 					case message_type::column_chunk:
 					{
-						const auto fields = split_fields(*control, '|');
-						const auto ordinal =
-							fields.size() == 3U ? unsigned_value(fields[2U]) : std::nullopt;
-						const std::string payload{
-							reinterpret_cast<const char*>(value.payload.data()),
-							value.payload.size()};
-						if (!batch || fields.size() != 3U || fields[0U] != batch->id ||
-							fields[1U] != "row" || !ordinal || *ordinal != batch->rows ||
-							value.payload.empty() ||
-							!canonical_row_shape(*batch->descriptor, payload))
+						if (!batch || value.payload.empty() || batch->descriptor->columns.empty())
 							return fail("provider.batch-invalid", request.task_id, "column");
-						auto rolling = semantic_digest("cxxlens.provider-batch.v1",
-													   batch->rolling_digest + "\n" + payload);
-						if (!rolling)
-							return fail("provider.batch-invalid", request.task_id, "digest");
-						batch->rolling_digest = std::move(*rolling);
-						++batch->rows;
+						auto chunk =
+							decode_column_chunk(value.control, value.payload, *batch->descriptor);
+						if (!chunk)
+							return fail(
+								"provider.batch-invalid", request.task_id, chunk.error().detail);
+						const auto expected_column_index =
+							batch->ordered_chunk_digests.size() % batch->descriptor->columns.size();
+						const auto& expected_column =
+							batch->descriptor->columns[expected_column_index];
+						const auto summary = std::ranges::find(
+							batch->columns, chunk->column_id, &batch_column_summary::column_id);
+						if (chunk->task_id != request.task_id ||
+							chunk->dependency_group_id != batch->dependency_group_id ||
+							chunk->atomic_output_group_id != batch->atomic_output_group_id ||
+							chunk->batch_id != batch->id ||
+							chunk->descriptor_id != batch->descriptor->id ||
+							chunk->descriptor_digest != batch->descriptor->descriptor_digest ||
+							chunk->column_id != expected_column.id ||
+							summary == batch->columns.end() ||
+							chunk->row_offset != batch->next_row_offsets.at(chunk->column_id) ||
+							chunk->chunk_index != batch->next_chunk_indexes.at(chunk->column_id))
+							return fail("provider.batch-invalid", request.task_id, "chunk-binding");
+						summary->payload_bytes += value.payload.size();
+						++summary->chunk_count;
+						batch->next_row_offsets.at(chunk->column_id) += chunk->row_count;
+						++batch->next_chunk_indexes.at(chunk->column_id);
+						batch->ordered_chunk_digests.push_back(std::move(chunk->chunk_digest));
 						break;
 					}
 					case message_type::batch_end:
 					{
-						const auto fields = split_fields(*control, '|');
-						const auto rows =
-							fields.size() == 3U ? unsigned_value(fields[1U]) : std::nullopt;
-						if (!batch || fields.size() != 3U || fields[0U] != batch->id || !rows ||
-							*rows != batch->rows || fields[2U] != batch->rolling_digest ||
-							!value.payload.empty())
+						if (!batch)
+							return fail(
+								"provider.batch-invalid", request.task_id, "end-without-batch");
+						auto batch_terminal =
+							decode_columnar_batch_end(value.control, value.payload);
+						if (!batch_terminal)
+							return fail("provider.batch-invalid",
+										request.task_id,
+										batch_terminal.error().detail);
+						const bool all_rows_match =
+							std::ranges::all_of(batch->next_row_offsets,
+												[&](const auto& item)
+												{
+													return item.second == batch_terminal->row_count;
+												});
+						if (batch_terminal->task_id != request.task_id ||
+							batch_terminal->dependency_group_id != batch->dependency_group_id ||
+							batch_terminal->atomic_output_group_id !=
+								batch->atomic_output_group_id ||
+							batch_terminal->batch_id != batch->id ||
+							batch_terminal->descriptor_id != batch->descriptor->id ||
+							batch_terminal->descriptor_digest !=
+								batch->descriptor->descriptor_digest ||
+							batch_terminal->columns != batch->columns ||
+							batch_terminal->ordered_chunk_digests != batch->ordered_chunk_digests ||
+							!all_rows_match)
 							return fail("provider.batch-invalid", request.task_id, "end");
 						batch.reset();
 						break;

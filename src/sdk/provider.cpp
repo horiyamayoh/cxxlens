@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cctype>
 #include <cstring>
 #include <limits>
@@ -78,6 +79,273 @@ namespace cxxlens::sdk::provider
 			for (const auto byte : text)
 				output.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
 			return output;
+		}
+
+		using cbor_scalar = std::variant<std::uint64_t, std::string>;
+		enum class cbor_major : std::uint8_t
+		{
+			unsigned_integer = 0U,
+			text = 3U,
+			map = 5U,
+		};
+
+		void append_cbor_head(std::vector<std::byte>& output,
+							  const cbor_major major,
+							  const std::uint64_t value)
+		{
+			const auto prefix = static_cast<std::uint8_t>(static_cast<std::uint8_t>(major) << 5U);
+			if (value < 24U)
+				output.push_back(static_cast<std::byte>(
+					static_cast<std::uint8_t>(prefix | static_cast<std::uint8_t>(value))));
+			else if (value <= std::numeric_limits<std::uint8_t>::max())
+			{
+				output.push_back(static_cast<std::byte>(static_cast<std::uint8_t>(prefix | 24U)));
+				output.push_back(static_cast<std::byte>(value));
+			}
+			else if (value <= std::numeric_limits<std::uint16_t>::max())
+			{
+				output.push_back(static_cast<std::byte>(static_cast<std::uint8_t>(prefix | 25U)));
+				append_big_endian(output, static_cast<std::uint16_t>(value));
+			}
+			else if (value <= std::numeric_limits<std::uint32_t>::max())
+			{
+				output.push_back(static_cast<std::byte>(static_cast<std::uint8_t>(prefix | 26U)));
+				append_big_endian(output, static_cast<std::uint32_t>(value));
+			}
+			else
+			{
+				output.push_back(static_cast<std::byte>(static_cast<std::uint8_t>(prefix | 27U)));
+				append_big_endian(output, value);
+			}
+		}
+
+		[[nodiscard]] std::vector<std::byte> cbor_text_value(const std::string_view value)
+		{
+			std::vector<std::byte> output;
+			append_cbor_head(output, cbor_major::text, value.size());
+			const auto encoded = bytes(value);
+			output.insert(output.end(), encoded.begin(), encoded.end());
+			return output;
+		}
+
+		[[nodiscard]] result<std::vector<std::byte>>
+		encode_cbor_map(const std::vector<std::pair<std::string, cbor_scalar>>& fields)
+		{
+			std::vector<std::tuple<std::vector<std::byte>, std::vector<std::byte>>> encoded;
+			encoded.reserve(fields.size());
+			std::set<std::string, std::less<>> keys;
+			for (const auto& [key, value] : fields)
+			{
+				if (!keys.insert(key).second || !cxxlens::sdk::detail::valid_utf8(key))
+					return cxxlens::sdk::unexpected(
+						provider_error("provider.columnar-invalid", key, "cbor-key"));
+				auto encoded_value = std::visit(
+					[](const auto& item)
+					{
+						std::vector<std::byte> output;
+						using item_type = std::remove_cvref_t<decltype(item)>;
+						if constexpr (std::same_as<item_type, std::string>)
+						{
+							append_cbor_head(output, cbor_major::text, item.size());
+							const auto value_bytes = bytes(item);
+							output.insert(output.end(), value_bytes.begin(), value_bytes.end());
+						}
+						else
+							append_cbor_head(output, cbor_major::unsigned_integer, item);
+						return output;
+					},
+					value);
+				if (const auto* text = std::get_if<std::string>(&value);
+					text != nullptr && !cxxlens::sdk::detail::valid_utf8(*text))
+					return cxxlens::sdk::unexpected(
+						provider_error("provider.columnar-invalid", key, "cbor-utf8"));
+				encoded.emplace_back(cbor_text_value(key), std::move(encoded_value));
+			}
+			std::ranges::sort(encoded,
+							  [](const auto& left, const auto& right)
+							  {
+								  const auto& lhs = std::get<0>(left);
+								  const auto& rhs = std::get<0>(right);
+								  return std::pair{lhs.size(), lhs} < std::pair{rhs.size(), rhs};
+							  });
+			std::vector<std::byte> output;
+			append_cbor_head(output, cbor_major::map, encoded.size());
+			for (const auto& [key, value] : encoded)
+			{
+				output.insert(output.end(), key.begin(), key.end());
+				output.insert(output.end(), value.begin(), value.end());
+			}
+			return output;
+		}
+
+		[[nodiscard]] result<std::pair<std::uint64_t, std::size_t>>
+		decode_cbor_argument(const std::span<const std::byte> input,
+							 const std::size_t offset,
+							 const std::uint8_t additional)
+		{
+			if (additional < 24U)
+				return std::pair<std::uint64_t, std::size_t>{additional, offset};
+			const auto width = additional == 24U ? 1U
+				: additional == 25U				 ? 2U
+				: additional == 26U				 ? 4U
+				: additional == 27U				 ? 8U
+												 : 0U;
+			if (width == 0U || offset > input.size() || width > input.size() - offset)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", "cbor", "argument"));
+			std::uint64_t value{};
+			for (std::size_t index = 0U; index < width; ++index)
+				value = (value << 8U) | std::to_integer<std::uint64_t>(input[offset + index]);
+			const auto minimum = width == 1U ? 24U : (std::uint64_t{1U} << (width * 4U));
+			if (value < minimum)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", "cbor", "non-shortest"));
+			return std::pair{value, offset + width};
+		}
+
+		[[nodiscard]] result<std::pair<cbor_scalar, std::size_t>>
+		decode_cbor_scalar(const std::span<const std::byte> input, const std::size_t offset)
+		{
+			if (offset >= input.size())
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", "cbor", "truncated"));
+			const auto initial = std::to_integer<std::uint8_t>(input[offset]);
+			const auto major = initial >> 5U;
+			if (major != 0U && major != 3U)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", "cbor", "scalar-type"));
+			auto argument = decode_cbor_argument(input, offset + 1U, initial & 0x1fU);
+			if (!argument)
+				return cxxlens::sdk::unexpected(std::move(argument.error()));
+			if (major == 0U)
+				return std::pair{cbor_scalar{argument->first}, argument->second};
+			if (argument->first > input.size() - argument->second)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", "cbor", "text-length"));
+			const std::string text{reinterpret_cast<const char*>(input.data() + argument->second),
+								   static_cast<std::size_t>(argument->first)};
+			if (!cxxlens::sdk::detail::valid_utf8(text))
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", "cbor", "utf8"));
+			return std::pair{cbor_scalar{text}, argument->second + text.size()};
+		}
+
+		[[nodiscard]] result<std::map<std::string, cbor_scalar, std::less<>>>
+		decode_cbor_map(const std::span<const std::byte> input)
+		{
+			if (input.empty() || (std::to_integer<std::uint8_t>(input.front()) >> 5U) != 5U)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", "cbor", "map"));
+			const auto initial = std::to_integer<std::uint8_t>(input.front());
+			auto count = decode_cbor_argument(input, 1U, initial & 0x1fU);
+			if (!count)
+				return cxxlens::sdk::unexpected(std::move(count.error()));
+			std::map<std::string, cbor_scalar, std::less<>> output;
+			std::vector<std::byte> previous_key;
+			auto offset = count->second;
+			for (std::uint64_t index = 0U; index < count->first; ++index)
+			{
+				const auto key_begin = offset;
+				auto key = decode_cbor_scalar(input, offset);
+				if (!key || !std::holds_alternative<std::string>(key->first))
+					return cxxlens::sdk::unexpected(
+						provider_error("provider.columnar-invalid", "cbor", "map-key"));
+				offset = key->second;
+				std::vector encoded_key(input.begin() + static_cast<std::ptrdiff_t>(key_begin),
+										input.begin() + static_cast<std::ptrdiff_t>(offset));
+				if (!previous_key.empty() &&
+					std::pair{encoded_key.size(), encoded_key} <=
+						std::pair{previous_key.size(), previous_key})
+					return cxxlens::sdk::unexpected(
+						provider_error("provider.columnar-invalid", "cbor", "map-order"));
+				previous_key = std::move(encoded_key);
+				auto value = decode_cbor_scalar(input, offset);
+				if (!value)
+					return cxxlens::sdk::unexpected(std::move(value.error()));
+				offset = value->second;
+				if (!output
+						 .emplace(std::get<std::string>(std::move(key->first)),
+								  std::move(value->first))
+						 .second)
+					return cxxlens::sdk::unexpected(
+						provider_error("provider.columnar-invalid", "cbor", "duplicate-key"));
+			}
+			if (offset != input.size())
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", "cbor", "trailing"));
+			return output;
+		}
+
+		template <typename T>
+		[[nodiscard]] const T*
+		cbor_field(const std::map<std::string, cbor_scalar, std::less<>>& fields,
+				   const std::string_view key)
+		{
+			const auto found = fields.find(key);
+			return found == fields.end() ? nullptr : std::get_if<T>(&found->second);
+		}
+
+		template <std::unsigned_integral T>
+		void append_little_endian(std::vector<std::byte>& output, const T value)
+		{
+			for (std::size_t index = 0U; index < sizeof(T); ++index)
+				output.push_back(static_cast<std::byte>(value >> (index * 8U)));
+		}
+
+		template <std::unsigned_integral T>
+		[[nodiscard]] T read_little_endian(const std::span<const std::byte> input,
+										   const std::size_t offset)
+		{
+			T output{};
+			for (std::size_t index = 0U; index < sizeof(T); ++index)
+				output |= static_cast<T>(std::to_integer<std::uint64_t>(input[offset + index])
+										 << (index * 8U));
+			return output;
+		}
+
+		[[nodiscard]] std::string_view column_encoding(const scalar_kind kind)
+		{
+			switch (kind)
+			{
+				case scalar_kind::boolean:
+					return "fixed-width-bool-u8";
+				case scalar_kind::signed_integer:
+					return "fixed-width-i64-le";
+				case scalar_kind::unsigned_integer:
+					return "fixed-width-u64-le";
+				case scalar_kind::bytes:
+				case scalar_kind::set:
+					return "bytes-offsets-u32-le";
+				case scalar_kind::open_symbol:
+				case scalar_kind::closed_symbol:
+					return "dictionary-index-u32-le";
+				default:
+					return "utf8-offsets-u32-le";
+			}
+		}
+
+		[[nodiscard]] std::string column_chunk_projection(const column_chunk_record& value,
+														  const std::string_view payload_digest)
+		{
+			return value.task_id + "\n" + value.dependency_group_id + "\n" +
+				value.atomic_output_group_id + "\n" + value.batch_id + "\n" + value.descriptor_id +
+				"\n" + value.descriptor_digest + "\n" + value.column_id + "\n" +
+				std::to_string(value.row_offset) + "\n" + std::to_string(value.row_count) + "\n" +
+				std::to_string(value.chunk_index) + "\n" + value.encoding + "\n" +
+				std::string{payload_digest};
+		}
+
+		[[nodiscard]] std::string batch_digest(const columnar_batch_end& value)
+		{
+			std::string projection = value.task_id + "\n" + value.dependency_group_id + "\n" +
+				value.atomic_output_group_id + "\n" + value.batch_id + "\n" + value.descriptor_id +
+				"\n" + value.descriptor_digest + "\n" + std::to_string(value.row_count);
+			for (const auto& column : value.columns)
+				projection += "\n" + column.column_id + "|" + std::to_string(column.payload_bytes) +
+					"|" + std::to_string(column.chunk_count);
+			for (const auto& digest : value.ordered_chunk_digests)
+				projection += "\n" + digest;
+			return *semantic_digest("cxxlens.provider-columnar-batch.v1", projection);
 		}
 
 		[[nodiscard]] bool canonical_digest(const std::string_view value)
@@ -487,6 +755,656 @@ namespace cxxlens::sdk::provider
 		return output;
 	}
 
+	result<encoded_column_chunk> encode_column_chunk(const column_chunk_record& value,
+													 const column_descriptor& column)
+	{
+		if (value.task_id.empty() || value.dependency_group_id.empty() ||
+			value.atomic_output_group_id.empty() || value.batch_id.empty() ||
+			value.descriptor_id.empty() || !canonical_digest(value.descriptor_digest) ||
+			value.column_id != column.id || value.row_count == 0U ||
+			value.cells.size() != value.row_count ||
+			value.encoding != column_encoding(column.type.scalar))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", value.column_id, "metadata"));
+		const auto bitmap_size = (value.cells.size() + 7U) / 8U;
+		std::vector<std::byte> validity(bitmap_size);
+		std::vector<std::byte> unknown(bitmap_size);
+		std::vector<std::byte> value_auxiliary;
+		std::vector<std::byte> values;
+		std::vector<std::byte> reason_offsets;
+		std::vector<std::byte> reasons;
+		const bool dictionary = value.encoding == "dictionary-index-u32-le";
+		const bool variable = !dictionary && column.type.scalar != scalar_kind::boolean &&
+			column.type.scalar != scalar_kind::signed_integer &&
+			column.type.scalar != scalar_kind::unsigned_integer;
+		std::map<std::string, std::uint32_t, std::less<>> dictionary_indexes;
+		if (dictionary)
+		{
+			std::set<std::string, std::less<>> entries;
+			for (const auto& cell : value.cells)
+				if (cell.state == cell_state::present)
+				{
+					const auto* text =
+						cell.value ? std::get_if<std::string>(&*cell.value) : nullptr;
+					if (text == nullptr || !cxxlens::sdk::detail::valid_utf8(*text))
+						return cxxlens::sdk::unexpected(provider_error(
+							"provider.columnar-invalid", column.id, "dictionary-value"));
+					entries.insert(*text);
+				}
+			append_little_endian(value_auxiliary, static_cast<std::uint32_t>(entries.size()));
+			append_little_endian(value_auxiliary, std::uint32_t{});
+			std::vector<std::byte> dictionary_bytes;
+			for (const auto& entry : entries)
+			{
+				if (dictionary_indexes.size() > std::numeric_limits<std::uint32_t>::max())
+					return cxxlens::sdk::unexpected(
+						provider_error("provider.columnar-invalid", column.id, "dictionary-count"));
+				dictionary_indexes.emplace(entry,
+										   static_cast<std::uint32_t>(dictionary_indexes.size()));
+				const auto encoded = bytes(entry);
+				dictionary_bytes.insert(dictionary_bytes.end(), encoded.begin(), encoded.end());
+				if (dictionary_bytes.size() > std::numeric_limits<std::uint32_t>::max())
+					return cxxlens::sdk::unexpected(
+						provider_error("provider.columnar-invalid", column.id, "dictionary-size"));
+				append_little_endian(value_auxiliary,
+									 static_cast<std::uint32_t>(dictionary_bytes.size()));
+			}
+			value_auxiliary.insert(
+				value_auxiliary.end(), dictionary_bytes.begin(), dictionary_bytes.end());
+		}
+		if (variable)
+			append_little_endian(value_auxiliary, std::uint32_t{});
+		append_little_endian(reason_offsets, std::uint32_t{});
+		for (std::size_t index = 0U; index < value.cells.size(); ++index)
+		{
+			const auto& cell = value.cells[index];
+			if (cell.type != column.type)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", column.id, "cell-type"));
+			if (auto valid = cell.validate(); !valid)
+				return cxxlens::sdk::unexpected(std::move(valid.error()));
+			const auto mask = static_cast<std::byte>(1U << (index % 8U));
+			if (cell.state == cell_state::present)
+				validity[index / 8U] |= mask;
+			else if (cell.state == cell_state::unknown)
+				unknown[index / 8U] |= mask;
+
+			if (column.type.scalar == scalar_kind::boolean)
+				values.push_back(cell.state == cell_state::present && std::get<bool>(*cell.value)
+									 ? std::byte{1U}
+									 : std::byte{});
+			else if (column.type.scalar == scalar_kind::signed_integer)
+				append_little_endian(
+					values,
+					cell.state == cell_state::present
+						? std::bit_cast<std::uint64_t>(std::get<std::int64_t>(*cell.value))
+						: std::uint64_t{});
+			else if (column.type.scalar == scalar_kind::unsigned_integer)
+				append_little_endian(values,
+									 cell.state == cell_state::present
+										 ? std::get<std::uint64_t>(*cell.value)
+										 : std::uint64_t{});
+			else if (dictionary)
+			{
+				const auto index_value = cell.state == cell_state::present
+					? dictionary_indexes.at(std::get<std::string>(*cell.value))
+					: std::uint32_t{};
+				append_little_endian(values, index_value);
+			}
+			else
+			{
+				if (cell.state == cell_state::present)
+				{
+					if (const auto* text = std::get_if<std::string>(&*cell.value))
+					{
+						const auto encoded = bytes(*text);
+						values.insert(values.end(), encoded.begin(), encoded.end());
+					}
+					else
+					{
+						const auto& encoded = std::get<std::vector<std::byte>>(*cell.value);
+						values.insert(values.end(), encoded.begin(), encoded.end());
+					}
+				}
+				if (values.size() > std::numeric_limits<std::uint32_t>::max())
+					return cxxlens::sdk::unexpected(
+						provider_error("provider.columnar-invalid", column.id, "value-size"));
+				append_little_endian(value_auxiliary, static_cast<std::uint32_t>(values.size()));
+			}
+			if (cell.state == cell_state::unknown)
+			{
+				const auto encoded = bytes(*cell.unknown_reason);
+				reasons.insert(reasons.end(), encoded.begin(), encoded.end());
+			}
+			if (reasons.size() > std::numeric_limits<std::uint32_t>::max())
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", column.id, "reason-size"));
+			append_little_endian(reason_offsets, static_cast<std::uint32_t>(reasons.size()));
+		}
+		const std::array sections{validity.size(),
+								  unknown.size(),
+								  value_auxiliary.size(),
+								  values.size(),
+								  reason_offsets.size(),
+								  reasons.size()};
+		if (std::ranges::any_of(sections,
+								[](const std::size_t size)
+								{
+									return size > std::numeric_limits<std::uint32_t>::max();
+								}))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", column.id, "section-size"));
+		encoded_column_chunk output;
+		output.payload = {std::byte{'C'},
+						  std::byte{'X'},
+						  std::byte{'C'},
+						  std::byte{'C'},
+						  std::byte{1U},
+						  static_cast<std::byte>(column.type.scalar),
+						  std::byte{},
+						  std::byte{}};
+		for (const auto size : sections)
+			append_little_endian(output.payload, static_cast<std::uint32_t>(size));
+		for (const auto* section :
+			 {&validity, &unknown, &value_auxiliary, &values, &reason_offsets, &reasons})
+			output.payload.insert(output.payload.end(), section->begin(), section->end());
+		const auto payload_digest = content_digest(output.payload);
+		output.chunk_digest = *semantic_digest("cxxlens.provider-column-chunk.v1",
+											   column_chunk_projection(value, payload_digest));
+		if (!value.chunk_digest.empty() && value.chunk_digest != output.chunk_digest)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", column.id, "chunk-digest"));
+		auto control = encode_cbor_map({
+			{"task_id", value.task_id},
+			{"batch_id", value.batch_id},
+			{"column_id", value.column_id},
+			{"encoding", value.encoding},
+			{"row_count", static_cast<std::uint64_t>(value.row_count)},
+			{"row_offset", value.row_offset},
+			{"chunk_index", value.chunk_index},
+			{"descriptor_id", value.descriptor_id},
+			{"chunk_digest", output.chunk_digest},
+			{"payload_digest", payload_digest},
+			{"descriptor_digest", value.descriptor_digest},
+			{"dependency_group_id", value.dependency_group_id},
+			{"atomic_output_group_id", value.atomic_output_group_id},
+		});
+		if (!control)
+			return cxxlens::sdk::unexpected(std::move(control.error()));
+		output.control = std::move(*control);
+		return output;
+	}
+
+	// The public wire API deliberately takes two labeled byte spans: control then payload.
+	// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+	result<column_chunk_record> decode_column_chunk(const std::span<const std::byte> control,
+													const std::span<const std::byte> payload,
+													const column_descriptor& column)
+	{
+		auto fields = decode_cbor_map(control);
+		if (!fields || fields->size() != 13U)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", column.id, "control-fields"));
+		const auto text = [&](const std::string_view key) -> const std::string*
+		{
+			return cbor_field<std::string>(*fields, key);
+		};
+		const auto number = [&](const std::string_view key) -> const std::uint64_t*
+		{
+			return cbor_field<std::uint64_t>(*fields, key);
+		};
+		const auto* task_id = text("task_id");
+		const auto* dependency = text("dependency_group_id");
+		const auto* atomic = text("atomic_output_group_id");
+		const auto* batch_id = text("batch_id");
+		const auto* descriptor_id = text("descriptor_id");
+		const auto* descriptor_digest = text("descriptor_digest");
+		const auto* column_id = text("column_id");
+		const auto* encoding = text("encoding");
+		const auto* payload_digest = text("payload_digest");
+		const auto* chunk_digest = text("chunk_digest");
+		const auto* row_offset = number("row_offset");
+		const auto* row_count = number("row_count");
+		const auto* chunk_index = number("chunk_index");
+		if (task_id == nullptr || dependency == nullptr || atomic == nullptr ||
+			batch_id == nullptr || descriptor_id == nullptr || descriptor_digest == nullptr ||
+			column_id == nullptr || encoding == nullptr || payload_digest == nullptr ||
+			chunk_digest == nullptr || row_offset == nullptr || row_count == nullptr ||
+			chunk_index == nullptr || task_id->empty() || dependency->empty() || atomic->empty() ||
+			batch_id->empty() || descriptor_id->empty() || !canonical_digest(*descriptor_digest) ||
+			!canonical_digest(*payload_digest) || !canonical_digest(*chunk_digest) ||
+			*column_id != column.id || *encoding != column_encoding(column.type.scalar) ||
+			*row_count == 0U || *row_count > std::numeric_limits<std::uint32_t>::max())
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", column.id, "control"));
+		if (payload.size() < 32U || payload[0] != std::byte{'C'} || payload[1] != std::byte{'X'} ||
+			payload[2] != std::byte{'C'} || payload[3] != std::byte{'C'} ||
+			payload[4] != std::byte{1U} ||
+			std::to_integer<std::uint8_t>(payload[5]) !=
+				static_cast<std::uint8_t>(column.type.scalar) ||
+			payload[6] != std::byte{} || payload[7] != std::byte{})
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", column.id, "payload-header"));
+		std::array<std::uint32_t, 6U> sizes{};
+		std::size_t total{32U};
+		for (std::size_t index = 0U; index < sizes.size(); ++index)
+		{
+			sizes.at(index) = read_little_endian<std::uint32_t>(payload, 8U + index * 4U);
+			if (sizes.at(index) > payload.size() - std::min(total, payload.size()))
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", column.id, "section-length"));
+			total += sizes.at(index);
+		}
+		if (total != payload.size())
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", column.id, "payload-length"));
+		std::array<std::span<const std::byte>, 6U> sections;
+		std::size_t section_offset{32U};
+		for (std::size_t index = 0U; index < sections.size(); ++index)
+		{
+			sections.at(index) = payload.subspan(section_offset, sizes.at(index));
+			section_offset += sizes.at(index);
+		}
+		const auto rows = static_cast<std::uint32_t>(*row_count);
+		const auto bitmap_size = (static_cast<std::size_t>(rows) + 7U) / 8U;
+		const bool dictionary = *encoding == "dictionary-index-u32-le";
+		const bool variable = !dictionary && column.type.scalar != scalar_kind::boolean &&
+			column.type.scalar != scalar_kind::signed_integer &&
+			column.type.scalar != scalar_kind::unsigned_integer;
+		const bool fixed = !variable && !dictionary;
+		const auto fixed_width = column.type.scalar == scalar_kind::boolean ? 1U : 8U;
+		if (sections[0].size() != bitmap_size || sections[1].size() != bitmap_size ||
+			(variable && sections[2].size() != (static_cast<std::size_t>(rows) + 1U) * 4U) ||
+			(fixed && !sections[2].empty()) ||
+			(fixed && sections[3].size() != static_cast<std::size_t>(rows) * fixed_width) ||
+			(dictionary && sections[2].size() < 8U) ||
+			(dictionary && sections[3].size() != static_cast<std::size_t>(rows) * 4U) ||
+			sections[4].size() != (static_cast<std::size_t>(rows) + 1U) * 4U)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", column.id, "shape"));
+		const auto unused_bits = static_cast<std::uint8_t>(rows % 8U);
+		if (unused_bits != 0U)
+		{
+			const auto used_mask = static_cast<std::uint8_t>((1U << unused_bits) - 1U);
+			if ((std::to_integer<std::uint8_t>(sections[0].back()) & ~used_mask) != 0U ||
+				(std::to_integer<std::uint8_t>(sections[1].back()) & ~used_mask) != 0U)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", column.id, "unused-validity-bits"));
+		}
+		struct offset_shape
+		{
+			std::size_t data_size;
+			std::size_t entry_count;
+		};
+		auto offsets = [&](const std::span<const std::byte> encoded,
+						   const offset_shape shape) -> result<std::vector<std::uint32_t>>
+		{
+			std::vector<std::uint32_t> output;
+			output.reserve(shape.entry_count + 1U);
+			for (std::size_t index = 0U; index <= shape.entry_count; ++index)
+			{
+				const auto value = read_little_endian<std::uint32_t>(encoded, index * 4U);
+				if ((!output.empty() && value < output.back()) || value > shape.data_size)
+					return cxxlens::sdk::unexpected(
+						provider_error("provider.columnar-invalid", column.id, "offset"));
+				output.push_back(value);
+			}
+			if (output.front() != 0U || output.back() != shape.data_size)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", column.id, "offset-end"));
+			return output;
+		};
+		result<std::vector<std::uint32_t>> value_offsets{std::vector<std::uint32_t>{}};
+		if (variable)
+			value_offsets = offsets(sections[2], {sections[3].size(), rows});
+		std::vector<std::string> dictionary_entries;
+		if (dictionary)
+		{
+			const auto count = read_little_endian<std::uint32_t>(sections[2], 0U);
+			const auto offset_bytes = (static_cast<std::size_t>(count) + 1U) * 4U;
+			if (offset_bytes > sections[2].size() - 4U)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", column.id, "dictionary-shape"));
+			const auto dictionary_bytes = sections[2].subspan(4U + offset_bytes);
+			auto dictionary_offsets =
+				offsets(sections[2].subspan(4U, offset_bytes), {dictionary_bytes.size(), count});
+			if (!dictionary_offsets || dictionary_offsets->size() != count + 1U)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", column.id, "dictionary-offsets"));
+			dictionary_entries.reserve(count);
+			for (std::size_t index = 0U; index < count; ++index)
+			{
+				const auto begin = dictionary_offsets->at(index);
+				const auto end = dictionary_offsets->at(index + 1U);
+				std::string entry{reinterpret_cast<const char*>(dictionary_bytes.data() + begin),
+								  end - begin};
+				if (!cxxlens::sdk::detail::valid_utf8(entry) ||
+					(!dictionary_entries.empty() && entry <= dictionary_entries.back()))
+					return cxxlens::sdk::unexpected(
+						provider_error("provider.columnar-invalid", column.id, "dictionary-order"));
+				dictionary_entries.push_back(std::move(entry));
+			}
+		}
+		auto unknown_offsets = offsets(sections[4], {sections[5].size(), rows});
+		if (!value_offsets || !unknown_offsets)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", column.id, "offsets"));
+		column_chunk_record output{*task_id,
+								   *dependency,
+								   *atomic,
+								   *batch_id,
+								   *descriptor_id,
+								   *descriptor_digest,
+								   *column_id,
+								   *row_offset,
+								   rows,
+								   *chunk_index,
+								   *encoding,
+								   {},
+								   *chunk_digest};
+		output.cells.reserve(rows);
+		for (std::size_t index = 0U; index < rows; ++index)
+		{
+			const auto mask = static_cast<std::uint8_t>(1U << (index % 8U));
+			const bool present =
+				(std::to_integer<std::uint8_t>(sections[0][index / 8U]) & mask) != 0U;
+			const bool unknown_state =
+				(std::to_integer<std::uint8_t>(sections[1][index / 8U]) & mask) != 0U;
+			if (present && unknown_state)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", column.id, "state-bitmap"));
+			if (!present && !unknown_state && !column.type.optional)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", column.id, "required-absent"));
+			const auto value_begin = variable ? value_offsets->at(index) : 0U;
+			const auto value_end = variable ? value_offsets->at(index + 1U) : 0U;
+			const auto reason_begin = unknown_offsets->at(index);
+			const auto reason_end = unknown_offsets->at(index + 1U);
+			if ((variable && !present && value_begin != value_end) ||
+				(!unknown_state && reason_begin != reason_end))
+				return cxxlens::sdk::unexpected(provider_error(
+					"provider.columnar-invalid", column.id, "noncanonical-null-storage"));
+			if (fixed && !present)
+			{
+				const auto width = column.type.scalar == scalar_kind::boolean ? 1U : 8U;
+				const auto encoded = sections[3].subspan(index * width, width);
+				if (std::ranges::any_of(encoded,
+										[](const std::byte byte)
+										{
+											return byte != std::byte{};
+										}))
+					return cxxlens::sdk::unexpected(provider_error(
+						"provider.columnar-invalid", column.id, "noncanonical-null-storage"));
+			}
+			if (present)
+			{
+				scalar_value decoded;
+				if (column.type.scalar == scalar_kind::boolean)
+				{
+					const auto byte = std::to_integer<std::uint8_t>(sections[3][index]);
+					if (byte > 1U)
+						return cxxlens::sdk::unexpected(
+							provider_error("provider.columnar-invalid", column.id, "boolean"));
+					decoded = byte != 0U;
+				}
+				else if (column.type.scalar == scalar_kind::signed_integer)
+					decoded = std::bit_cast<std::int64_t>(
+						read_little_endian<std::uint64_t>(sections[3], index * 8U));
+				else if (column.type.scalar == scalar_kind::unsigned_integer)
+					decoded = read_little_endian<std::uint64_t>(sections[3], index * 8U);
+				else if (dictionary)
+				{
+					const auto dictionary_index =
+						read_little_endian<std::uint32_t>(sections[3], index * 4U);
+					if (dictionary_index >= dictionary_entries.size())
+						return cxxlens::sdk::unexpected(provider_error(
+							"provider.columnar-invalid", column.id, "dictionary-index"));
+					decoded = dictionary_entries[dictionary_index];
+				}
+				else
+				{
+					const auto encoded = sections[3].subspan(value_begin, value_end - value_begin);
+					if (column.type.scalar == scalar_kind::bytes ||
+						column.type.scalar == scalar_kind::set)
+						decoded = std::vector<std::byte>{encoded.begin(), encoded.end()};
+					else
+					{
+						std::string text_value{reinterpret_cast<const char*>(encoded.data()),
+											   encoded.size()};
+						if (!cxxlens::sdk::detail::valid_utf8(text_value))
+							return cxxlens::sdk::unexpected(provider_error(
+								"provider.columnar-invalid", column.id, "value-utf8"));
+						decoded = std::move(text_value);
+					}
+				}
+				output.cells.push_back({column.type, cell_state::present, std::move(decoded), {}});
+			}
+			else if (unknown_state)
+			{
+				std::string reason{reinterpret_cast<const char*>(sections[5].data() + reason_begin),
+								   reason_end - reason_begin};
+				output.cells.push_back(detached_cell::unknown(column.type, std::move(reason)));
+			}
+			else
+				output.cells.push_back(detached_cell::absent(column.type));
+			if (dictionary && !present &&
+				read_little_endian<std::uint32_t>(sections[3], index * 4U) != 0U)
+				return cxxlens::sdk::unexpected(provider_error(
+					"provider.columnar-invalid", column.id, "noncanonical-null-storage"));
+			if (auto valid = output.cells.back().validate(); !valid)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", column.id, "decoded-cell"));
+		}
+		const auto actual_payload_digest = content_digest(payload);
+		if (*payload_digest != actual_payload_digest)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", column.id, "payload-digest"));
+		const auto expected_chunk =
+			*semantic_digest("cxxlens.provider-column-chunk.v1",
+							 column_chunk_projection(output, actual_payload_digest));
+		if (*chunk_digest != expected_chunk)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", column.id, "chunk-digest"));
+		return output;
+	}
+
+	// The public wire API deliberately takes two labeled byte spans: control then payload.
+	// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+	result<column_chunk_record> decode_column_chunk(const std::span<const std::byte> control,
+													const std::span<const std::byte> payload,
+													const relation_descriptor& descriptor)
+	{
+		auto fields = decode_cbor_map(control);
+		if (!fields)
+			return cxxlens::sdk::unexpected(std::move(fields.error()));
+		const auto* column_id = cbor_field<std::string>(*fields, "column_id");
+		if (column_id == nullptr)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", descriptor.id, "column-id"));
+		const auto column =
+			std::ranges::find(descriptor.columns, *column_id, &column_descriptor::id);
+		if (column == descriptor.columns.end())
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", *column_id, "unknown-column"));
+		return decode_column_chunk(control, payload, *column);
+	}
+
+	std::string columnar_batch_digest(const columnar_batch_end& value)
+	{
+		return batch_digest(value);
+	}
+
+	result<encoded_columnar_batch_end> encode_columnar_batch_end(const columnar_batch_end& value)
+	{
+		if (value.task_id.empty() || value.dependency_group_id.empty() ||
+			value.atomic_output_group_id.empty() || value.batch_id.empty() ||
+			value.descriptor_id.empty() || !canonical_digest(value.descriptor_digest) ||
+			value.columns.empty() || value.ordered_chunk_digests.empty() ||
+			value.batch_digest != batch_digest(value))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", value.batch_id, "batch-end"));
+		encoded_columnar_batch_end output;
+		output.payload = {std::byte{'C'},
+						  std::byte{'X'},
+						  std::byte{'B'},
+						  std::byte{'E'},
+						  std::byte{1U},
+						  std::byte{},
+						  std::byte{},
+						  std::byte{}};
+		std::set<std::string, std::less<>> column_ids;
+		std::uint64_t summarized_chunks{};
+		for (const auto& column : value.columns)
+		{
+			if (column.column_id.empty() ||
+				column.column_id.size() > std::numeric_limits<std::uint16_t>::max() ||
+				!cxxlens::sdk::detail::valid_utf8(column.column_id) || column.chunk_count == 0U ||
+				!column_ids.insert(column.column_id).second ||
+				column.chunk_count > std::numeric_limits<std::uint64_t>::max() - summarized_chunks)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", value.batch_id, "column-summary"));
+			summarized_chunks += column.chunk_count;
+			append_little_endian(output.payload,
+								 static_cast<std::uint16_t>(column.column_id.size()));
+			const auto id = bytes(column.column_id);
+			output.payload.insert(output.payload.end(), id.begin(), id.end());
+			append_little_endian(output.payload, column.payload_bytes);
+			append_little_endian(output.payload, column.chunk_count);
+		}
+		if (summarized_chunks != value.ordered_chunk_digests.size())
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", value.batch_id, "chunk-count"));
+		for (const auto& digest : value.ordered_chunk_digests)
+		{
+			if (!canonical_digest(digest) ||
+				digest.size() > std::numeric_limits<std::uint16_t>::max())
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", value.batch_id, "chunk-summary"));
+			append_little_endian(output.payload, static_cast<std::uint16_t>(digest.size()));
+			const auto encoded = bytes(digest);
+			output.payload.insert(output.payload.end(), encoded.begin(), encoded.end());
+		}
+		auto control = encode_cbor_map({
+			{"task_id", value.task_id},
+			{"batch_id", value.batch_id},
+			{"row_count", value.row_count},
+			{"chunk_count", value.ordered_chunk_digests.size()},
+			{"column_count", value.columns.size()},
+			{"descriptor_id", value.descriptor_id},
+			{"batch_digest", value.batch_digest},
+			{"descriptor_digest", value.descriptor_digest},
+			{"dependency_group_id", value.dependency_group_id},
+			{"atomic_output_group_id", value.atomic_output_group_id},
+		});
+		if (!control)
+			return cxxlens::sdk::unexpected(std::move(control.error()));
+		output.control = std::move(*control);
+		return output;
+	}
+
+	// The public wire API deliberately takes two labeled byte spans: control then payload.
+	// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+	result<columnar_batch_end> decode_columnar_batch_end(const std::span<const std::byte> control,
+														 const std::span<const std::byte> payload)
+	{
+		auto fields = decode_cbor_map(control);
+		if (!fields || fields->size() != 10U || payload.size() < 8U ||
+			payload[0] != std::byte{'C'} || payload[1] != std::byte{'X'} ||
+			payload[2] != std::byte{'B'} || payload[3] != std::byte{'E'} ||
+			payload[4] != std::byte{1U} || payload[5] != std::byte{} || payload[6] != std::byte{} ||
+			payload[7] != std::byte{})
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", "batch-end", "header"));
+		const auto text = [&](const std::string_view key) -> const std::string*
+		{
+			return cbor_field<std::string>(*fields, key);
+		};
+		const auto number = [&](const std::string_view key) -> const std::uint64_t*
+		{
+			return cbor_field<std::uint64_t>(*fields, key);
+		};
+		const auto* column_count = number("column_count");
+		const auto* chunk_count = number("chunk_count");
+		const auto* row_count = number("row_count");
+		if (column_count == nullptr || chunk_count == nullptr || row_count == nullptr ||
+			*column_count == 0U || *chunk_count == 0U)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", "batch-end", "counts"));
+		columnar_batch_end output;
+		const auto assign = [&](std::string& target, const std::string_view key) -> bool
+		{
+			const auto* value = text(key);
+			if (value == nullptr || value->empty())
+				return false;
+			target = *value;
+			return true;
+		};
+		if (!assign(output.task_id, "task_id") ||
+			!assign(output.dependency_group_id, "dependency_group_id") ||
+			!assign(output.atomic_output_group_id, "atomic_output_group_id") ||
+			!assign(output.batch_id, "batch_id") ||
+			!assign(output.descriptor_id, "descriptor_id") ||
+			!assign(output.descriptor_digest, "descriptor_digest") ||
+			!assign(output.batch_digest, "batch_digest"))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", "batch-end", "fields"));
+		if (!canonical_digest(output.descriptor_digest) || !canonical_digest(output.batch_digest))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", output.batch_id, "digest"));
+		output.row_count = *row_count;
+		std::size_t offset{8U};
+		std::set<std::string, std::less<>> column_ids;
+		std::uint64_t summarized_chunks{};
+		for (std::uint64_t index = 0U; index < *column_count; ++index)
+		{
+			if (offset > payload.size() || payload.size() - offset < 2U)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", output.batch_id, "column-length"));
+			const auto length = read_little_endian<std::uint16_t>(payload, offset);
+			offset += 2U;
+			if (length == 0U || payload.size() - offset < static_cast<std::size_t>(length) + 16U)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", output.batch_id, "column-entry"));
+			std::string id{reinterpret_cast<const char*>(payload.data() + offset), length};
+			offset += length;
+			const auto payload_bytes = read_little_endian<std::uint64_t>(payload, offset);
+			offset += 8U;
+			const auto chunks = read_little_endian<std::uint64_t>(payload, offset);
+			offset += 8U;
+			if (!cxxlens::sdk::detail::valid_utf8(id) || chunks == 0U ||
+				!column_ids.insert(id).second ||
+				chunks > std::numeric_limits<std::uint64_t>::max() - summarized_chunks)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", output.batch_id, "column-summary"));
+			summarized_chunks += chunks;
+			output.columns.push_back({std::move(id), payload_bytes, chunks});
+		}
+		if (summarized_chunks != *chunk_count)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", output.batch_id, "chunk-count"));
+		for (std::uint64_t index = 0U; index < *chunk_count; ++index)
+		{
+			if (offset > payload.size() || payload.size() - offset < 2U)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", output.batch_id, "digest-length"));
+			const auto length = read_little_endian<std::uint16_t>(payload, offset);
+			offset += 2U;
+			if (length == 0U || payload.size() - offset < length)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", output.batch_id, "digest-entry"));
+			output.ordered_chunk_digests.emplace_back(
+				reinterpret_cast<const char*>(payload.data() + offset), length);
+			offset += length;
+			if (!canonical_digest(output.ordered_chunk_digests.back()))
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.columnar-invalid", output.batch_id, "chunk-digest"));
+		}
+		if (offset != payload.size() || output.batch_digest != batch_digest(output))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", output.batch_id, "batch-digest"));
+		return output;
+	}
+
 	protocol_writer::protocol_writer(frame_sink& sink, const protocol_limits limits)
 		: sink_{&sink}, limits_{limits}
 	{
@@ -632,10 +1550,11 @@ namespace cxxlens::sdk::provider
 
 	relation_sink::relation_sink(protocol_writer& writer,
 								 relation_descriptor descriptor,
+								 std::string task_id,
 								 std::uint64_t& total_rows,
 								 const std::uint64_t maximum_rows)
-		: writer_{&writer}, descriptor_{std::move(descriptor)}, total_rows_{&total_rows},
-		  maximum_rows_{maximum_rows}
+		: writer_{&writer}, descriptor_{std::move(descriptor)}, task_id_{std::move(task_id)},
+		  total_rows_{&total_rows}, maximum_rows_{maximum_rows}
 	{
 	}
 
@@ -643,7 +1562,8 @@ namespace cxxlens::sdk::provider
 									  std::string atomic_output_group,
 									  std::string batch_id)
 	{
-		if (open_ || dependency_group.empty() || atomic_output_group.empty() || batch_id.empty())
+		if (open_ || task_id_.empty() || dependency_group.empty() || atomic_output_group.empty() ||
+			batch_id.empty())
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.batch-state-invalid", "begin"));
 		if (auto valid = descriptor_.validate(); !valid)
@@ -651,6 +1571,9 @@ namespace cxxlens::sdk::provider
 		dependency_group_ = std::move(dependency_group);
 		atomic_output_group_ = std::move(atomic_output_group);
 		batch_id_ = std::move(batch_id);
+		if (column_summaries_.empty())
+			for (const auto& column : descriptor_.columns)
+				column_summaries_.push_back({column.id, 0U, 0U});
 		auto control =
 			encode_control_text(descriptor_.id + "|" + descriptor_.descriptor_digest + "|" +
 								dependency_group_ + "|" + atomic_output_group_ + "|" + batch_id_);
@@ -658,9 +1581,66 @@ namespace cxxlens::sdk::provider
 			return cxxlens::sdk::unexpected(std::move(control.error()));
 		if (auto sent = writer_->send(message_type::batch_begin, *control); !sent)
 			return sent;
-		rolling_digest_ =
-			*semantic_digest("cxxlens.provider-batch.v1", descriptor_.descriptor_digest);
 		open_ = true;
+		return {};
+	}
+
+	result<void> relation_sink::flush_chunk()
+	{
+		if (pending_rows_.empty())
+			return {};
+		if (!open_ || writer_ == nullptr || pending_rows_.size() > 256U ||
+			column_summaries_.size() != descriptor_.columns.size())
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.columnar-invalid", batch_id_, "flush-state"));
+		for (std::size_t column_index = 0U; column_index < descriptor_.columns.size();
+			 ++column_index)
+		{
+			const auto& column = descriptor_.columns[column_index];
+			auto& summary = column_summaries_[column_index];
+			column_chunk_record chunk{task_id_,
+									  dependency_group_,
+									  atomic_output_group_,
+									  batch_id_,
+									  descriptor_.id,
+									  descriptor_.descriptor_digest,
+									  column.id,
+									  emitted_rows_,
+									  static_cast<std::uint32_t>(pending_rows_.size()),
+									  summary.chunk_count,
+									  std::string{column_encoding(column.type.scalar)},
+									  {},
+									  {}};
+			chunk.cells.reserve(pending_rows_.size());
+			for (const auto& row : pending_rows_)
+			{
+				const auto found = row.cells.find(column.id);
+				if (found == row.cells.end())
+				{
+					if (!column.type.optional)
+						return cxxlens::sdk::unexpected(
+							provider_error("provider.columnar-invalid", column.id, "missing-cell"));
+					chunk.cells.push_back(detached_cell::absent(column.type));
+				}
+				else
+					chunk.cells.push_back(found->second);
+			}
+			auto encoded = encode_column_chunk(chunk, column);
+			if (!encoded)
+				return cxxlens::sdk::unexpected(std::move(encoded.error()));
+			auto validated = decode_column_chunk(encoded->control, encoded->payload, column);
+			if (!validated)
+				return cxxlens::sdk::unexpected(std::move(validated.error()));
+			if (auto sent =
+					writer_->send(message_type::column_chunk, encoded->control, encoded->payload);
+				!sent)
+				return sent;
+			summary.payload_bytes += encoded->payload.size();
+			++summary.chunk_count;
+			ordered_chunk_digests_.push_back(std::move(encoded->chunk_digest));
+		}
+		emitted_rows_ += pending_rows_.size();
+		pending_rows_.clear();
 		return {};
 	}
 
@@ -672,17 +1652,11 @@ namespace cxxlens::sdk::provider
 			return cxxlens::sdk::unexpected(provider_error("provider.output-limit", "rows"));
 		if (auto valid = validate_row(descriptor_, row); !valid)
 			return valid;
-		const auto canonical = row.canonical_form();
-		auto control = encode_control_text(batch_id_ + "|row|" + std::to_string(row_count_));
-		if (!control)
-			return cxxlens::sdk::unexpected(std::move(control.error()));
-		const auto payload = bytes(canonical);
-		if (auto sent = writer_->send(message_type::column_chunk, *control, payload); !sent)
-			return sent;
-		rolling_digest_ =
-			*semantic_digest("cxxlens.provider-batch.v1", rolling_digest_ + "\n" + canonical);
+		pending_rows_.push_back(row);
 		++row_count_;
 		++*total_rows_;
+		if (pending_rows_.size() == 256U)
+			return flush_chunk();
 		return {};
 	}
 
@@ -690,11 +1664,27 @@ namespace cxxlens::sdk::provider
 	{
 		if (!open_)
 			return cxxlens::sdk::unexpected(provider_error("provider.batch-state-invalid", "end"));
-		auto control = encode_control_text(batch_id_ + "|" + std::to_string(row_count_) + "|" +
-										   rolling_digest_);
-		if (!control)
-			return cxxlens::sdk::unexpected(std::move(control.error()));
-		if (auto sent = writer_->send(message_type::batch_end, *control); !sent)
+		if (auto flushed = flush_chunk(); !flushed)
+			return flushed;
+		columnar_batch_end terminal{task_id_,
+									dependency_group_,
+									atomic_output_group_,
+									batch_id_,
+									descriptor_.id,
+									descriptor_.descriptor_digest,
+									row_count_,
+									column_summaries_,
+									ordered_chunk_digests_,
+									{}};
+		terminal.batch_digest = batch_digest(terminal);
+		auto encoded = encode_columnar_batch_end(terminal);
+		if (!encoded)
+			return cxxlens::sdk::unexpected(std::move(encoded.error()));
+		auto validated = decode_columnar_batch_end(encoded->control, encoded->payload);
+		if (!validated)
+			return cxxlens::sdk::unexpected(std::move(validated.error()));
+		if (auto sent = writer_->send(message_type::batch_end, encoded->control, encoded->payload);
+			!sent)
 			return sent;
 		open_ = false;
 		return {};
@@ -705,14 +1695,15 @@ namespace cxxlens::sdk::provider
 		return row_count_;
 	}
 
-	context::context(protocol_writer& writer, execution_context execution)
-		: writer_{&writer}, execution_{std::move(execution)}
+	context::context(protocol_writer& writer, execution_context execution, std::string task_id)
+		: writer_{&writer}, execution_{std::move(execution)}, task_id_{std::move(task_id)}
 	{
 	}
 
 	relation_sink context::relation(relation_descriptor descriptor)
 	{
-		return relation_sink{*writer_, std::move(descriptor), output_rows_, execution_.budget.rows};
+		return relation_sink{
+			*writer_, std::move(descriptor), task_id_, output_rows_, execution_.budget.rows};
 	}
 	coverage_builder& context::coverage() noexcept
 	{
@@ -1305,7 +2296,7 @@ namespace cxxlens::sdk::provider
 			return cxxlens::sdk::unexpected(std::move(accepted.error()));
 		if (auto sent = writer.send(message_type::task_accepted, *accepted); !sent)
 			return sent;
-		context callback_context{writer, std::move(execution)};
+		context callback_context{writer, std::move(execution), task_value.task_id};
 		if (callback_context.stop_requested())
 			return cxxlens::sdk::unexpected(provider_error("provider.cancelled", "task"));
 		auto outcome = provider.run(task_value, callback_context);

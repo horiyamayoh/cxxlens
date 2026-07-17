@@ -91,6 +91,48 @@ def digest(value: Any) -> str:
     return "sha256:" + hashlib.sha256(canonical_json(value)).hexdigest()
 
 
+def reference_bool_column_payload(values: list[bool]) -> bytes:
+    """Independent little-endian reference for the v1 bool column payload."""
+    if not values or len(values) > 256:
+        fail("provider.columnar-invalid", "reference row bound")
+    validity = bytearray((len(values) + 7) // 8)
+    encoded_values = bytearray()
+    for index, value in enumerate(values):
+        validity[index // 8] |= 1 << (index % 8)
+        encoded_values.append(1 if value else 0)
+    unknown = bytes(len(validity))
+    reason_offsets = bytes((len(values) + 1) * 4)
+    sections = (
+        bytes(validity),
+        unknown,
+        b"",
+        bytes(encoded_values),
+        reason_offsets,
+        b"",
+    )
+    return (
+        b"CXCC"
+        + bytes((1, 0, 0, 0))
+        + b"".join(struct.pack("<I", len(section)) for section in sections)
+        + b"".join(sections)
+    )
+
+
+def validate_columnar_reference() -> None:
+    expected = bytes.fromhex(
+        "4358434301000000010000000100000000000000020000000c00000000000000"
+        "03000100000000000000000000000000"
+    )
+    actual = reference_bool_column_payload([True, False])
+    if actual != expected:
+        fail("provider.columnar-reference-mismatch", actual.hex())
+    sizes = struct.unpack("<6I", actual[8:32])
+    if sizes != (1, 1, 0, 2, 12, 0) or sum(sizes) + 32 != len(actual):
+        fail("provider.columnar-reference-mismatch", "section accounting")
+    if actual[32] & 0xFC or actual[33] != 0 or actual[34:36] != b"\x01\x00":
+        fail("provider.columnar-reference-mismatch", "validity/value ordering")
+
+
 def _cbor_head(major: int, value: int) -> bytes:
     if value < 24:
         return bytes([(major << 5) | value])
@@ -694,6 +736,7 @@ def sample_task() -> dict[str, Any]:
 
 
 def validate_contract_shape(contract: dict[str, Any]) -> None:
+    validate_columnar_reference()
     if FRAME.size != 104 or contract["wire"]["fixed_header_bytes"] != FRAME.size:
         fail("provider.wire-header-size-invalid", str(FRAME.size))
     if sum(row["bytes"] for row in contract["wire"]["fixed_header_fields"]) != FRAME.size:
