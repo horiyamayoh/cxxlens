@@ -2175,6 +2175,10 @@ silent adjacent-version fallback 禁止。
 要求した provider、provider version、binary digest、semantic contract digest、relation version が一致しない
 候補への fallback は、caller policy が明示的に許可し、選択・棄却理由が explain 可能な場合に限る。
 explanation は全候補の source、exact identity、selection/rejection reason、fallback 使用有無を保持する。
+bool opt-in は identity authority にならない。ADR 0039 の fallback policy は provider ID/version/binary digest/semantic contract
+digest の exact tuple、requested version に対する direction、unique priority、certification requirement、certified qualification set を
+列挙する。manifest self-claim は qualification の証拠とせず、policy にない同名 provider を候補へ広げない。複数 tuple は policy priority、
+次に discovery source precedence で決定し、selection canonical form は policy semantic digest を保持する。
 
 ### 17.8 In-process providers
 

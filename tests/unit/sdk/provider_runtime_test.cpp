@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <csignal>
 #include <cstdlib>
@@ -227,6 +228,7 @@ namespace
 				true,
 				true,
 				true,
+				{"canonical-semantic-qualified"},
 				make_sandbox(achieved),
 				{}};
 	}
@@ -239,7 +241,26 @@ namespace
 				std::string{semantic_contract_digest},
 				{sandbox_assurance::enforced, std::string{policy_digest}},
 				true,
-				false};
+				std::nullopt};
+	}
+
+	[[nodiscard]] provider_fallback_tuple fallback_tuple(const provider_candidate& value,
+														 const std::uint32_t priority,
+														 const semantic_version requested = {
+															 1U, 0U, 0U})
+	{
+		const auto version = value.description.provider_version;
+		return {priority,
+				value.description.provider_id,
+				version,
+				value.description.provider_binary_digest,
+				value.description.provider_semantic_contract_digest,
+				version > requested
+					? fallback_direction::upgrade
+					: (version < requested ? fallback_direction::downgrade
+										   : fallback_direction::same_version_rebuild),
+				true,
+				{}};
 	}
 
 	[[nodiscard]] process_task_request task(provider_selection selection)
@@ -309,6 +330,86 @@ namespace
 			select_provider(selection_request(executable), std::span{&path_only, 1U});
 		require(!path_rejected && path_rejected.error().code == "security.downgrade-forbidden",
 				"PATH-only provider discovery became authority");
+
+		auto fallback = exact;
+		fallback.description.provider_version = {1U, 1U, 0U};
+		auto fallback_request = selection_request(executable);
+		fallback_request.fallback_policy = provider_fallback_policy{
+			"company.test.provider-fallback-policy", {fallback_tuple(fallback, 1U)}};
+		auto allowed = select_provider(fallback_request, std::span{&fallback, 1U});
+		require(allowed && allowed->fallback_used && allowed->fallback_policy_digest &&
+					allowed->candidate.description.provider_version ==
+						semantic_version{1U, 1U, 0U} &&
+					allowed->canonical_form().contains(*allowed->fallback_policy_digest),
+				"exact fallback policy tuple was not selected or recorded");
+
+		auto unrelated_major = fallback;
+		unrelated_major.description.provider_version = {9U, 0U, 0U};
+		auto major_rejected = select_provider(fallback_request, std::span{&unrelated_major, 1U});
+		require(!major_rejected && major_rejected.error().code == "provider.not-found",
+				"unlisted provider major was accepted by fallback policy");
+		auto major_request = selection_request(executable);
+		major_request.fallback_policy = provider_fallback_policy{
+			"company.test.major-policy", {fallback_tuple(unrelated_major, 1U)}};
+		auto major_allowed = select_provider(major_request, std::span{&unrelated_major, 1U});
+		require(major_allowed && major_allowed->fallback_used,
+				"explicitly listed provider major fallback was rejected");
+
+		auto rebuild = exact;
+		rebuild.description.provider_binary_digest =
+			"sha256:9999999999999999999999999999999999999999999999999999999999999999";
+		auto rebuild_rejected = select_provider(fallback_request, std::span{&rebuild, 1U});
+		require(!rebuild_rejected && rebuild_rejected.error().code == "provider.not-found",
+				"unlisted same-version binary was accepted by fallback policy");
+		auto rebuild_request = selection_request(executable);
+		rebuild_request.fallback_policy =
+			provider_fallback_policy{"company.test.rebuild-policy", {fallback_tuple(rebuild, 1U)}};
+		auto rebuild_allowed = select_provider(rebuild_request, std::span{&rebuild, 1U});
+		require(rebuild_allowed && rebuild_allowed->fallback_used,
+				"listed same-version rebuild tuple was rejected");
+
+		auto semantic_change = fallback;
+		semantic_change.description.provider_semantic_contract_digest =
+			"sha256:8888888888888888888888888888888888888888888888888888888888888888";
+		auto semantic_rejected = select_provider(fallback_request, std::span{&semantic_change, 1U});
+		require(!semantic_rejected && semantic_rejected.error().code == "provider.not-found",
+				"unlisted semantic contract was accepted by fallback policy");
+		semantic_change.certified_qualifications.push_back("cross-version-qualified");
+		auto semantic_entry = fallback_tuple(semantic_change, 1U);
+		semantic_entry.required_qualifications = {"cross-version-qualified"};
+		auto semantic_request = selection_request(executable);
+		semantic_request.fallback_policy =
+			provider_fallback_policy{"company.test.semantic-policy", {std::move(semantic_entry)}};
+		auto semantic_allowed = select_provider(semantic_request, std::span{&semantic_change, 1U});
+		require(semantic_allowed && semantic_allowed->fallback_used,
+				"qualified listed semantic contract fallback was rejected");
+		auto self_claimed = semantic_change;
+		self_claimed.certified_qualifications = {"canonical-semantic-qualified"};
+		self_claimed.description.requested_qualifications.push_back("cross-version-qualified");
+		auto self_claim_rejected = select_provider(semantic_request, std::span{&self_claimed, 1U});
+		require(!self_claim_rejected && self_claim_rejected.error().code == "provider.not-found",
+				"manifest self-claim substituted for certified fallback qualification");
+
+		auto preferred = exact;
+		preferred.description.provider_version = {1U, 2U, 0U};
+		auto secondary = fallback;
+		std::array fallback_candidates{secondary, preferred};
+		auto precedence_request = selection_request(executable);
+		precedence_request.fallback_policy = provider_fallback_policy{
+			"company.test.precedence-policy",
+			{fallback_tuple(secondary, 2U), fallback_tuple(preferred, 1U)}};
+		auto precedence = select_provider(precedence_request, fallback_candidates);
+		require(precedence &&
+					precedence->candidate.description.provider_version ==
+						semantic_version{1U, 2U, 0U},
+				"fallback policy priority did not define canonical selection");
+		auto reversed_policy = *precedence_request.fallback_policy;
+		std::ranges::reverse(reversed_policy.allowed);
+		require(reversed_policy.canonical_form() ==
+						precedence_request.fallback_policy->canonical_form() &&
+					reversed_policy.semantic_digest() ==
+						precedence_request.fallback_policy->semantic_digest(),
+				"fallback policy identity depended on tuple input order");
 	}
 
 	void check_process_faults(const std::string& executable)

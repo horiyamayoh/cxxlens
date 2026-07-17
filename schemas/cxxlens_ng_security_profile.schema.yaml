@@ -20,7 +20,7 @@ required:
 properties:
   schema: {const: cxxlens.security-profile.v1}
   kind: {const: security-profile}
-  document_version: {const: 1.0.0}
+  document_version: {const: 1.1.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -29,8 +29,8 @@ properties:
     properties:
       design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
       index: {const: docs/design/catalogs/README.md}
-      decision_adr: {const: docs/design/adr/0011-provider-trust-certification-discovery.md}
-      owner_issue: {const: '#65'}
+      decision_adr: {const: docs/design/adr/0039-exact-provider-fallback-policy.md}
+      owner_issue: {const: '#96'}
       owner: {const: steward.ng-security}
   registries:
     type: object
@@ -82,7 +82,15 @@ properties:
       duplicate_exact_identity: {const: reject-same-precedence-deduplicate-lower-precedence-with-explanation}
       shadowing: {const: reject-provider-version-with-different-package-or-binary}
       invalid_higher_precedence: {const: blocks-lower-precedence-fallback}
-      fallback: {const: explicit-policy-exact-tuple-only}
+      fallback:
+        const:
+          authority: explicit-policy-exact-tuple-only
+          tuple_fields: [priority, provider_id, provider_version, binary_digest, semantic_contract_digest, direction, require_certification, required_qualifications]
+          direction: [upgrade, downgrade, same_version_rebuild]
+          qualification_evidence: certification-verdict-only-manifest-self-claim-forbidden
+          selection_order: [unique-policy-priority, discovery-source-precedence, canonical-identity]
+          invalid_higher_policy_priority: blocks-lower-policy-priority
+          selection_evidence: policy-semantic-digest-required
       explanation: {const: selected-and-rejected-candidates-with-stable-reason-codes}
   sandbox:
     type: object

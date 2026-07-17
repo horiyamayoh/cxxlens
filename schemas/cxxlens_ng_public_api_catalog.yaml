@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.25.0
+document_version: 1.26.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -312,14 +312,14 @@ entries:
 
   - id: public.provider-runtime
     status: implemented
-    owner_issue: '#95'
+    owner_issue: '#96'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/sdk/provider.hpp]
     symbols:
       - name: provider selection
         kind: function-family
-        signature: 'provider_candidate; provider_selection_request; provider_selection; result<provider_selection> select_provider(const provider_selection_request&, span<const provider_candidate>)'
+        signature: 'provider_candidate{certified_qualifications}; fallback_direction; provider_fallback_tuple; provider_fallback_policy; provider_selection_request{optional<provider_fallback_policy>}; provider_selection{fallback_policy_digest}; result<provider_selection> select_provider(const provider_selection_request&, span<const provider_candidate>)'
       - name: provider process port
         kind: class
         signature: 'provider_process_port::run(const process_invocation&, stop_token) const; unique_ptr<provider_process_port> make_system_provider_process_port()'
@@ -332,12 +332,12 @@ entries:
       - name: provider frame decoding
         kind: function-family
         signature: 'decode_frame_stream(span<const byte>, protocol_limits, uint64_t); decode_control_text(span<const byte>)'
-    errors: [provider.adjacent-fallback-forbidden, provider.batch-invalid, provider.binary-identity-mismatch, provider.cancelled, provider.checksum-mismatch, provider.coverage-incomplete, provider.crash, provider.credit-exceeded, provider.identity-mismatch, provider.lower-precedence-not-considered, provider.malformed-frame, provider.not-found, provider.output-limit, provider.process-launch-failed, provider.process-request-invalid, provider.protocol-state-invalid, provider.relation-incompatible, provider.required-feature-missing, provider.runtime-unavailable, provider.sandbox-report-invalid, provider.sandbox-requirement-invalid, provider.schema-invalid, provider.selection-invalid, provider.stream-invalid, provider.success, provider.task-binding-mismatch, provider.task-invalid, provider.timeout, provider.truncated-stream, provider.worker-stderr, security.certification-missing, security.downgrade-forbidden, security.path-only-discovery, security.provider-shadowing, security.sandbox-insufficient, security.sandbox-policy-mismatch, security.signature-untrusted]
+    errors: [provider.adjacent-fallback-forbidden, provider.batch-invalid, provider.binary-identity-mismatch, provider.cancelled, provider.certification-invalid, provider.checksum-mismatch, provider.coverage-incomplete, provider.crash, provider.credit-exceeded, provider.fallback-lower-policy-precedence, provider.fallback-policy-invalid, provider.fallback-policy-mismatch, provider.fallback-qualification-missing, provider.identity-mismatch, provider.lower-precedence-not-considered, provider.malformed-frame, provider.not-found, provider.output-limit, provider.process-launch-failed, provider.process-request-invalid, provider.protocol-state-invalid, provider.relation-incompatible, provider.required-feature-missing, provider.runtime-unavailable, provider.sandbox-report-invalid, provider.sandbox-requirement-invalid, provider.schema-invalid, provider.selection-invalid, provider.stream-invalid, provider.success, provider.task-binding-mismatch, provider.task-invalid, provider.timeout, provider.truncated-stream, provider.worker-stderr, security.certification-missing, security.downgrade-forbidden, security.path-only-discovery, security.provider-shadowing, security.sandbox-insufficient, security.sandbox-policy-mismatch, security.signature-untrusted]
     lifetime: [process-input-output-report-and-frames-are-value-owned, process-port-is-synchronously-borrowed-by-runtime, native-compiler-objects-never-enter-this-api]
     threading: [runtime-is-concurrent-readable-when-port-is, each-process-task-has-independent-stop-token-and-budget, provider-worker-output-is-detached-before-process-exit]
     versioning: [selection-requires-exact-provider-version-binary-and-semantic-digests, adjacent-fallback-is-explicit-only, process-report-schema-is-independent-from-provider-protocol]
-    invariants: [argv-only-no-shell, executable-content-digest-verified-before-launch, effective-sandbox-minimum-fail-closed, exact-output-descriptor-set-required, typed-handshake-task-direction-credit-batch-side-channel-terminal-state-machine, sealed-schema-and-digest-validated-batches-only, logical-wire-state-transition-parity, crash-timeout-cancel-malformed-distinct, failed-worker-does-not-publish-snapshot]
-    implementation_evidence: [src/sdk/provider.cpp, src/runtime/provider_process_adapter.cpp, src/sdk/provider_runtime.cpp, src/llvm/clang22/provider_worker.cpp, tests/unit/sdk/provider_runtime_test.cpp, tests/adapter/clang22/provider_worker_protocol_test.cpp, tests/link/provider_sdk_link_closure.py, schemas/cxxlens_ng_provider_runtime_contract.yaml, schemas/cxxlens_ng_provider_execution_report.schema.yaml, docs/design/adr/0015-process-provider-runtime-clang22-normalizer.md, docs/design/adr/0038-provider-runtime-protocol-state-validation.md]
+    invariants: [argv-only-no-shell, executable-content-digest-verified-before-launch, effective-sandbox-minimum-fail-closed, fallback-is-named-exact-tuple-policy-not-boolean, certified-qualification-not-manifest-self-claim, unique-policy-priority-defines-canonical-fallback-selection, selection-binds-fallback-policy-semantic-digest, exact-output-descriptor-set-required, typed-handshake-task-direction-credit-batch-side-channel-terminal-state-machine, sealed-schema-and-digest-validated-batches-only, logical-wire-state-transition-parity, crash-timeout-cancel-malformed-distinct, failed-worker-does-not-publish-snapshot]
+    implementation_evidence: [src/sdk/provider.cpp, src/runtime/provider_process_adapter.cpp, src/sdk/provider_runtime.cpp, src/llvm/clang22/provider_worker.cpp, tests/unit/sdk/provider_runtime_test.cpp, tests/adapter/clang22/provider_worker_protocol_test.cpp, tests/link/provider_sdk_link_closure.py, schemas/cxxlens_ng_provider_runtime_contract.yaml, schemas/cxxlens_ng_provider_execution_report.schema.yaml, docs/design/adr/0015-process-provider-runtime-clang22-normalizer.md, docs/design/adr/0038-provider-runtime-protocol-state-validation.md, docs/design/adr/0039-exact-provider-fallback-policy.md]
 
   - id: public.native-provider-sdk
     status: implemented

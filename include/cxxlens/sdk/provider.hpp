@@ -354,11 +354,45 @@ namespace cxxlens::sdk::provider
 		bool authoritative_path{};
 		bool trust_valid{};
 		bool certification_valid{};
+		std::vector<std::string> certified_qualifications;
 		sandbox_report sandbox;
 		std::string validation_error;
 	};
 
-	/** @brief Exact requested provider identity; adjacent fallback is opt-in only. */
+	/** @brief Direction of one exact, explicitly authorized fallback identity. */
+	enum class fallback_direction : std::uint8_t
+	{
+		upgrade,
+		downgrade,
+		same_version_rebuild,
+	};
+
+	/** @brief One exact fallback tuple with explicit deterministic policy priority. */
+	struct provider_fallback_tuple
+	{
+		std::uint32_t priority{};
+		std::string provider_id;
+		semantic_version provider_version;
+		std::string provider_binary_digest;
+		std::string provider_semantic_contract_digest;
+		fallback_direction direction{fallback_direction::upgrade};
+		bool require_certification{true};
+		std::vector<std::string> required_qualifications;
+		[[nodiscard]] result<void> validate(const semantic_version& requested_version) const;
+		[[nodiscard]] std::string canonical_form() const;
+	};
+
+	/** @brief Named exact-tuple fallback policy; lower unique priority wins canonically. */
+	struct provider_fallback_policy
+	{
+		std::string policy_id;
+		std::vector<provider_fallback_tuple> allowed;
+		[[nodiscard]] result<void> validate(const semantic_version& requested_version) const;
+		[[nodiscard]] std::string canonical_form() const;
+		[[nodiscard]] std::string semantic_digest() const;
+	};
+
+	/** @brief Exact requested provider identity with optional exact-tuple fallback policy. */
 	struct provider_selection_request
 	{
 		std::string provider_id;
@@ -367,7 +401,7 @@ namespace cxxlens::sdk::provider
 		std::string provider_semantic_contract_digest;
 		sandbox_requirement sandbox;
 		bool require_certification{true};
-		bool allow_adjacent_fallback{};
+		std::optional<provider_fallback_policy> fallback_policy;
 	};
 
 	/** @brief Explainable decision for every discovered candidate. */
@@ -388,6 +422,7 @@ namespace cxxlens::sdk::provider
 		provider_candidate candidate;
 		std::vector<provider_candidate_decision> decisions;
 		bool fallback_used{};
+		std::optional<std::string> fallback_policy_digest;
 		[[nodiscard]] std::string canonical_form() const;
 	};
 

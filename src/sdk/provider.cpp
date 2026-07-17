@@ -192,6 +192,20 @@ namespace cxxlens::sdk::provider
 			return "system_registry";
 		}
 
+		[[nodiscard]] std::string_view direction_name(const fallback_direction value) noexcept
+		{
+			switch (value)
+			{
+				case fallback_direction::upgrade:
+					return "upgrade";
+				case fallback_direction::downgrade:
+					return "downgrade";
+				case fallback_direction::same_version_rebuild:
+					return "same_version_rebuild";
+			}
+			return "upgrade";
+		}
+
 		[[nodiscard]] std::uint8_t source_rank(const discovery_source value) noexcept
 		{
 			return static_cast<std::uint8_t>(value);
@@ -727,6 +741,93 @@ namespace cxxlens::sdk::provider
 			",\"policy_digest\":" + json_string(policy_digest) + "}";
 	}
 
+	result<void> provider_fallback_tuple::validate(const semantic_version& requested_version) const
+	{
+		const auto actual_direction = provider_version > requested_version
+			? fallback_direction::upgrade
+			: (provider_version < requested_version ? fallback_direction::downgrade
+													: fallback_direction::same_version_rebuild);
+		if (priority == 0U || !namespaced(provider_id) || provider_version.major == 0U ||
+			!canonical_digest(provider_binary_digest) ||
+			!canonical_digest(provider_semantic_contract_digest) || actual_direction != direction ||
+			!unique_nonempty(required_qualifications))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.fallback-policy-invalid", provider_id));
+		return {};
+	}
+
+	std::string provider_fallback_tuple::canonical_form() const
+	{
+		return std::string{R"({"direction":)"} + json_string(direction_name(direction)) +
+			R"(,"priority":)" + std::to_string(priority) + R"(,"provider_binary_digest":)" +
+			json_string(provider_binary_digest) + R"(,"provider_id":)" + json_string(provider_id) +
+			R"(,"provider_semantic_contract_digest":)" +
+			json_string(provider_semantic_contract_digest) + R"(,"provider_version":)" +
+			json_string(provider_version.string()) + R"(,"require_certification":)" +
+			(require_certification ? "true" : "false") + R"(,"required_qualifications":)" +
+			canonical_array(required_qualifications) + "}";
+	}
+
+	result<void> provider_fallback_policy::validate(const semantic_version& requested_version) const
+	{
+		if (!namespaced(policy_id) || allowed.empty())
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.fallback-policy-invalid", policy_id));
+		std::set<std::uint32_t> priorities;
+		std::set<std::tuple<std::string, semantic_version, std::string, std::string>> identities;
+		for (const auto& value : allowed)
+		{
+			if (auto valid = value.validate(requested_version); !valid)
+				return valid;
+			if (!priorities.insert(value.priority).second ||
+				!identities
+					 .emplace(value.provider_id,
+							  value.provider_version,
+							  value.provider_binary_digest,
+							  value.provider_semantic_contract_digest)
+					 .second)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.fallback-policy-invalid", policy_id, "duplicate"));
+		}
+		return {};
+	}
+
+	std::string provider_fallback_policy::canonical_form() const
+	{
+		auto ordered = allowed;
+		std::ranges::sort(
+			ordered,
+			[](const provider_fallback_tuple& left, const provider_fallback_tuple& right)
+			{
+				return std::tie(left.priority,
+								left.provider_id,
+								left.provider_version,
+								left.provider_binary_digest,
+								left.provider_semantic_contract_digest) <
+					std::tie(right.priority,
+							 right.provider_id,
+							 right.provider_version,
+							 right.provider_binary_digest,
+							 right.provider_semantic_contract_digest);
+			});
+		std::ostringstream output;
+		output << R"({"allowed":[)";
+		for (std::size_t index = 0U; index < ordered.size(); ++index)
+		{
+			if (index != 0U)
+				output << ',';
+			output << ordered[index].canonical_form();
+		}
+		output << R"(],"policy_id":)" << json_string(policy_id) << '}';
+		return output.str();
+	}
+
+	std::string provider_fallback_policy::semantic_digest() const
+	{
+		return *cxxlens::sdk::semantic_digest("cxxlens.provider-fallback-policy.v1",
+											  canonical_form());
+	}
+
 	std::string provider_selection::canonical_form() const
 	{
 		std::ostringstream output;
@@ -743,7 +844,12 @@ namespace cxxlens::sdk::provider
 				   << ",\"selected\":" << (decision.selected ? "true" : "false")
 				   << ",\"source\":" << json_string(source_name(decision.source)) << '}';
 		}
-		output << "],\"fallback_used\":" << (fallback_used ? "true" : "false")
+		output << "],\"fallback_policy_digest\":";
+		if (fallback_policy_digest)
+			output << json_string(*fallback_policy_digest);
+		else
+			output << "null";
+		output << ",\"fallback_used\":" << (fallback_used ? "true" : "false")
 			   << ",\"selected_manifest\":" << candidate.description.canonical_json()
 			   << ",\"selected_source\":" << json_string(source_name(candidate.source)) << '}';
 		return output.str();
@@ -759,6 +865,9 @@ namespace cxxlens::sdk::provider
 				provider_error("provider.selection-invalid", "identity"));
 		if (auto valid = request.sandbox.validate(); !valid)
 			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		if (request.fallback_policy)
+			if (auto valid = request.fallback_policy->validate(request.provider_version); !valid)
+				return cxxlens::sdk::unexpected(std::move(valid.error()));
 		if (candidates.empty())
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.not-found", request.provider_id));
@@ -795,16 +904,49 @@ namespace cxxlens::sdk::provider
 
 		std::vector<provider_candidate_decision> decisions;
 		decisions.reserve(candidates.size());
+		const auto exact_identity = [&](const provider_candidate& candidate)
+		{
+			return candidate.description.provider_id == request.provider_id &&
+				candidate.description.provider_version == request.provider_version &&
+				candidate.description.provider_binary_digest == request.provider_binary_digest &&
+				candidate.description.provider_semantic_contract_digest ==
+				request.provider_semantic_contract_digest;
+		};
+		const auto fallback_tuple =
+			[&](const provider_candidate& candidate) -> const provider_fallback_tuple*
+		{
+			if (!request.fallback_policy)
+				return nullptr;
+			const auto found = std::ranges::find_if(
+				request.fallback_policy->allowed,
+				[&](const provider_fallback_tuple& allowed)
+				{
+					return candidate.description.provider_id == allowed.provider_id &&
+						candidate.description.provider_version == allowed.provider_version &&
+						candidate.description.provider_binary_digest ==
+						allowed.provider_binary_digest &&
+						candidate.description.provider_semantic_contract_digest ==
+						allowed.provider_semantic_contract_digest;
+				});
+			return found == request.fallback_policy->allowed.end() ? nullptr : &*found;
+		};
+
 		std::optional<std::uint8_t> exact_precedence;
+		std::optional<std::pair<std::uint32_t, std::uint8_t>> fallback_precedence;
 		for (const auto index : order)
 		{
 			const auto& candidate = candidates[index];
-			if (candidate.description.provider_id == request.provider_id &&
-				candidate.description.provider_version == request.provider_version)
+			if (exact_identity(candidate))
 			{
 				exact_precedence = exact_precedence
 					? std::min(*exact_precedence, source_rank(candidate.source))
 					: source_rank(candidate.source);
+			}
+			else if (const auto* allowed = fallback_tuple(candidate); allowed != nullptr)
+			{
+				const auto precedence = std::pair{allowed->priority, source_rank(candidate.source)};
+				fallback_precedence =
+					fallback_precedence ? std::min(*fallback_precedence, precedence) : precedence;
 			}
 		}
 
@@ -819,13 +961,8 @@ namespace cxxlens::sdk::provider
 												 candidate.description.provider_binary_digest,
 												 false,
 												 {}};
-			const bool exact = candidate.description.provider_id == request.provider_id &&
-				candidate.description.provider_version == request.provider_version &&
-				candidate.description.provider_binary_digest == request.provider_binary_digest &&
-				candidate.description.provider_semantic_contract_digest ==
-					request.provider_semantic_contract_digest;
-			const bool adjacent =
-				candidate.description.provider_id == request.provider_id && !exact;
+			const bool exact = exact_identity(candidate);
+			const auto* allowed_fallback = exact ? nullptr : fallback_tuple(candidate);
 			if (!candidate.authoritative_path)
 				decision.reason = "security.path-only-discovery";
 			else if (auto manifest_valid = candidate.description.validate(); !manifest_valid)
@@ -834,6 +971,8 @@ namespace cxxlens::sdk::provider
 				decision.reason = candidate.validation_error;
 			else if (!candidate.trust_valid)
 				decision.reason = "security.signature-untrusted";
+			else if (!unique_nonempty(candidate.certified_qualifications))
+				decision.reason = "provider.certification-invalid";
 			else if (request.require_certification && !candidate.certification_valid)
 				decision.reason = "security.certification-missing";
 			else if (auto sandbox_valid = candidate.sandbox.validate(); !sandbox_valid)
@@ -863,15 +1002,39 @@ namespace cxxlens::sdk::provider
 						selected = index;
 					}
 				}
-				else if (adjacent && request.allow_adjacent_fallback && !exact_precedence)
+				else if (allowed_fallback != nullptr && !exact_precedence)
 				{
-					decision.selected = true;
-					decision.reason = "selected-explicit-fallback";
-					selected = index;
-					selected_fallback = true;
+					const auto precedence =
+						std::pair{allowed_fallback->priority, source_rank(candidate.source)};
+					const auto qualified = std::ranges::all_of(
+						allowed_fallback->required_qualifications,
+						[&](const std::string& qualification)
+						{
+							return std::ranges::find(candidate.certified_qualifications,
+													 qualification) !=
+								candidate.certified_qualifications.end();
+						});
+					if (fallback_precedence && precedence != *fallback_precedence)
+						decision.reason = "provider.fallback-lower-policy-precedence";
+					else if (allowed_fallback->require_certification &&
+							 !candidate.certification_valid)
+						decision.reason = "security.certification-missing";
+					else if (!qualified)
+						decision.reason = "provider.fallback-qualification-missing";
+					else
+					{
+						decision.selected = true;
+						decision.reason = "selected-explicit-fallback";
+						selected = index;
+						selected_fallback = true;
+					}
 				}
-				else if (adjacent)
-					decision.reason = "provider.adjacent-fallback-forbidden";
+				else if (candidate.description.provider_id == request.provider_id)
+					decision.reason = request.fallback_policy
+						? "provider.fallback-policy-mismatch"
+						: "provider.adjacent-fallback-forbidden";
+				else if (request.fallback_policy)
+					decision.reason = "provider.fallback-policy-mismatch";
 				else
 					decision.reason = "provider.identity-mismatch";
 			}
@@ -904,7 +1067,13 @@ namespace cxxlens::sdk::provider
 				provider_error(downgrade ? "security.downgrade-forbidden" : "provider.not-found",
 							   request.provider_id));
 		}
-		return provider_selection{candidates[*selected], std::move(decisions), selected_fallback};
+		return provider_selection{
+			candidates[*selected],
+			std::move(decisions),
+			selected_fallback,
+			request.fallback_policy
+				? std::optional<std::string>{request.fallback_policy->semantic_digest()}
+				: std::nullopt};
 	}
 
 	result<std::vector<scaffold_file>> make_scaffold(const scaffold_options& options)

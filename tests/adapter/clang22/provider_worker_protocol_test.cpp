@@ -90,10 +90,12 @@ int main(const int argument_count, const char* const* arguments)
 		 true,
 		 true,
 		 true,
+		 {"canonical-semantic-qualified", "sandbox-qualified", "schema-conformant"},
 		 discovered_sandbox,
 		 {}},
 		{},
 		false,
+		std::nullopt,
 	};
 	process_task_request request;
 	request.selection = std::move(selection);

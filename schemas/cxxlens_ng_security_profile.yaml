@@ -1,12 +1,12 @@
 schema: cxxlens.security-profile.v1
 kind: security-profile
-document_version: 1.0.0
+document_version: 1.1.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
   index: docs/design/catalogs/README.md
-  decision_adr: docs/design/adr/0011-provider-trust-certification-discovery.md
-  owner_issue: '#65'
+  decision_adr: docs/design/adr/0039-exact-provider-fallback-policy.md
+  owner_issue: '#96'
   owner: steward.ng-security
 registries:
   namespace: schemas/cxxlens_ng_namespace_registry.yaml
@@ -58,7 +58,14 @@ discovery:
   duplicate_exact_identity: reject-same-precedence-deduplicate-lower-precedence-with-explanation
   shadowing: reject-provider-version-with-different-package-or-binary
   invalid_higher_precedence: blocks-lower-precedence-fallback
-  fallback: explicit-policy-exact-tuple-only
+  fallback:
+    authority: explicit-policy-exact-tuple-only
+    tuple_fields: [priority, provider_id, provider_version, binary_digest, semantic_contract_digest, direction, require_certification, required_qualifications]
+    direction: [upgrade, downgrade, same_version_rebuild]
+    qualification_evidence: certification-verdict-only-manifest-self-claim-forbidden
+    selection_order: [unique-policy-priority, discovery-source-precedence, canonical-identity]
+    invalid_higher_policy_priority: blocks-lower-policy-priority
+    selection_evidence: policy-semantic-digest-required
   explanation: selected-and-rejected-candidates-with-stable-reason-codes
 sandbox:
   assurance_order: [none, best_effort, enforced, certified]

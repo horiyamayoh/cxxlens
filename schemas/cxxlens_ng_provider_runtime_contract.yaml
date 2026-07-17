@@ -1,10 +1,10 @@
 schema: cxxlens.provider-runtime-contract.v1
-document_version: 1.1.0
+document_version: 1.2.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#17-provider-model
-  decision_adr: docs/design/adr/0038-provider-runtime-protocol-state-validation.md
-  owner_issue: '#95'
+  decision_adr: docs/design/adr/0039-exact-provider-fallback-policy.md
+  owner_issue: '#96'
   owner: steward.ng-provider-runtime
 dependencies:
   - schemas/cxxlens_ng_provider_protocol.yaml
@@ -64,6 +64,12 @@ selection:
   shadowing: reject-all
   higher_precedence_invalid: no-downgrade
   adjacent_provider_or_version: explicit-policy-only
+  fallback_policy:
+    representation: named-exact-tuples-not-boolean
+    tuple: [priority, provider_id, provider_version, provider_binary_digest, provider_semantic_contract_digest, direction, require_certification, required_qualifications]
+    qualification_authority: certified-qualifications-not-manifest-self-claims
+    selection_order: [unique-policy-priority, discovery-source-precedence, canonical-identity]
+    selection_binding: policy-semantic-digest
   explanation:
     all_candidates: required
     fields: [source, exact_identity, selected, reason, fallback_used]

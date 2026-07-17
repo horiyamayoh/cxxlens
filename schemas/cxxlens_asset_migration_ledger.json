@@ -1,5 +1,5 @@
 {
-  "asset_count": 285,
+  "asset_count": 286,
   "assets": [
     {
       "authority": "active",
@@ -676,6 +676,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0038-provider-runtime-protocol-state-validation.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0039-exact-provider-fallback-policy.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1998,7 +2005,7 @@
     }
   ],
   "classifications": {
-    "active": 249,
+    "active": 250,
     "archived": 35,
     "generated": 1
   },
