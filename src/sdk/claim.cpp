@@ -219,6 +219,15 @@ namespace cxxlens::sdk
 			return relation->descriptor();
 		}
 
+		[[nodiscard]] result<void> validate_claim_inputs(const relation_engine& engine,
+														 const std::span<const claim> inputs)
+		{
+			for (const auto& input : inputs)
+				if (auto valid = validate_claim(engine, input); !valid)
+					return unexpected(std::move(valid.error()));
+			return {};
+		}
+
 		[[nodiscard]] bool reference_match(const claim& source,
 										   const relation_reference_descriptor& reference,
 										   const claim& target)
@@ -431,6 +440,8 @@ namespace cxxlens::sdk
 									   detached_row canonical_row,
 									   const std::string& transform_semantics)
 	{
+		if (auto valid = validate_claim_inputs(engine, std::span<const claim>{&input, 1U}); !valid)
+			return unexpected(std::move(valid.error()));
 		if (input.stage != claim_stage::assertion || !sha256_digest(transform_semantics))
 			return unexpected(claim_error("sdk.claim-stage-invalid", "canonical_claim"));
 		auto descriptor = descriptor_for(engine, input);
@@ -459,11 +470,8 @@ namespace cxxlens::sdk
 	{
 		if (inputs.empty())
 			return unexpected(claim_error("sdk.claim-basis-invalid", "inputs"));
-		for (const auto& input : inputs)
-		{
-			if (auto valid = validate_claim(engine, input); !valid)
-				return unexpected(std::move(valid.error()));
-		}
+		if (auto valid = validate_claim_inputs(engine, inputs); !valid)
+			return unexpected(std::move(valid.error()));
 		std::ranges::sort(consumed_partition_content_digests);
 		consumed_partition_content_digests.erase(
 			std::unique(consumed_partition_content_digests.begin(),

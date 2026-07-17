@@ -35,6 +35,7 @@
 | [0033](0033-sqlite-semantic-object-graph-revalidation.md) | SQLite semantic object graph revalidation |
 | [0034](0034-complete-partition-closure-subject.md) | complete partition closure subject |
 | [0035](0035-derived-basis-partition-membership.md) | derived basis partition membership |
+| [0036](0036-claim-stage-input-revalidation.md) | claim stage input revalidation |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

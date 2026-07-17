@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.22.0
+document_version: 1.23.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -167,7 +167,7 @@ entries:
 
   - id: public.claim-kernel
     status: implemented
-    owner_issue: '#76'
+    owner_issue: '#93'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/sdk/claim.hpp, include/cxxlens/sdk/relation.hpp]
@@ -185,8 +185,8 @@ entries:
     lifetime: [claims-own-detached-rows-and-envelope-values, batch-result-owns-unresolved-conflict-and-differential-records]
     threading: [claim-values-may-cross-threads, claim-batch-is-thread-confined]
     versioning: [claim-envelope-v2, semantic-key-assertion-and-content-use-independent-domain-separated-identities]
-    invariants: [observation-is-not-a-claim-stage, identities-ignore-arrival-jobs-root-and-engine-generation, derived-basis-names-strict-prior-snapshot-and-canonical-partition-content-digests, hard-missing-rejects-atomic-batch, soft-missing-preserves-claim-and-unresolved, same-domain-functional-overlap-is-conflict-for-new-new-and-new-existing, cross-domain-overlap-is-differential-disagreement-for-new-new-and-new-existing, existing-existing-disagreements-are-not-replayed, one-shot-and-split-publication-classification-parity, set-multiset-functional-assertion-and-keyed-union-are-explicit]
-    implementation_evidence: [src/sdk/claim.cpp, examples/sdk/relation_claim_batch.cpp, tests/unit/sdk/sdk_test.cpp, schemas/cxxlens_ng_claim_envelope.schema.yaml, docs/design/adr/0019-incremental-claim-conflict-classification.md]
+    invariants: [observation-is-not-a-claim-stage, identities-ignore-arrival-jobs-root-and-engine-generation, canonical-and-derived-constructors-independently-revalidate-every-input-claim, canonical-constructor-accepts-only-valid-assertions, invalid-input-validation-errors-are-identical-across-stage-constructors, derived-basis-names-strict-prior-snapshot-and-canonical-partition-content-digests, hard-missing-rejects-atomic-batch, soft-missing-preserves-claim-and-unresolved, same-domain-functional-overlap-is-conflict-for-new-new-and-new-existing, cross-domain-overlap-is-differential-disagreement-for-new-new-and-new-existing, existing-existing-disagreements-are-not-replayed, one-shot-and-split-publication-classification-parity, set-multiset-functional-assertion-and-keyed-union-are-explicit]
+    implementation_evidence: [src/sdk/claim.cpp, examples/sdk/relation_claim_batch.cpp, tests/unit/sdk/sdk_test.cpp, schemas/cxxlens_ng_claim_envelope.schema.yaml, docs/design/adr/0019-incremental-claim-conflict-classification.md, docs/design/adr/0036-claim-stage-input-revalidation.md]
 
   - id: public.snapshot-store
     status: implemented

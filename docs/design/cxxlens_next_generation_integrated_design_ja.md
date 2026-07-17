@@ -1317,6 +1317,11 @@ flowchart LR
 - provider wording/native ID を authoritative payload にしない
 - canonicalization不能時は provider-local claimを保持し、捏造しない
 
+Issue #93 / ADR 0036 により、入力 claim を受け取る stage constructor は stage 固有判定と出力 encoding より前に共通の
+independent input validation を実行する。`make_canonical_claim()` は入力 assertion の row、descriptor、condition、interpretation、
+producer、basis、guarantee、semantic key/assertion/content identity を `validate_claim()` で再検証する。
+`make_derived_claim()` も全入力に同じ policy を適用し、同じ invalid input は同じ validation error で拒否する。
+
 ### 11.5 Derived claim
 
 - input semantic keys/assertions/content digests を保持

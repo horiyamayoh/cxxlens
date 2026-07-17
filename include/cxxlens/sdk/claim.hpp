@@ -103,7 +103,7 @@ namespace cxxlens::sdk
 
 	/** @brief Validate an observation and create an order-independent assertion identity. */
 	[[nodiscard]] result<claim> make_assertion(const relation_engine& engine, observation value);
-	/** @brief Validate and promote one assertion through an explicit canonicalizer contract. */
+	/** @brief Independently revalidate and promote one assertion through a canonicalizer. */
 	[[nodiscard]] result<claim> make_canonical_claim(const relation_engine& engine,
 													 const claim& input,
 													 claim_producer canonicalizer,

@@ -4,6 +4,7 @@
 #include <ranges>
 #include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -627,6 +628,69 @@ namespace
 		auto tampered_result = cxxlens::sdk::validate_claim(*engine, tampered);
 		require(!tampered_result && tampered_result.error().code == "sdk.claim-identity-mismatch",
 				"tampered claim identity was accepted");
+		const auto rejects_invalid_stage_input =
+			[&](const cxxlens::sdk::claim& invalid, const std::string_view subject)
+		{
+			auto independently_invalid = cxxlens::sdk::validate_claim(*engine, invalid);
+			require(!independently_invalid,
+					"invalid claim fixture unexpectedly validated: " + std::string{subject});
+			auto canonical_rejected = cxxlens::sdk::make_canonical_claim(
+				*engine,
+				invalid,
+				{"company.test.canonicalizer", "company.test.canonicalizer.v1"},
+				make_direct_target_row("entity:a"),
+				"sha256:1111111111111111111111111111111111111111111111111111111111111111");
+			require(!canonical_rejected &&
+						canonical_rejected.error().code == independently_invalid.error().code,
+					"canonical constructor bypassed input validation: " + std::string{subject});
+			const std::array invalid_inputs{invalid};
+			auto derived_rejected = cxxlens::sdk::make_derived_claim(
+				*engine,
+				invalid_inputs,
+				observe(make_direct_target_row("entity:a")),
+				"snapshot:1",
+				{"partition-content:sha256:"
+				 "3333333333333333333333333333333333333333333333333333333333333333"},
+				"sha256:2222222222222222222222222222222222222222222222222222222222222222");
+			require(!derived_rejected &&
+						derived_rejected.error().code == independently_invalid.error().code,
+					"canonical and derived input validation diverged: " + std::string{subject});
+		};
+		for (const auto& invalid :
+			 [&]
+			 {
+				 std::vector<cxxlens::sdk::claim> values;
+				 auto changed = *first;
+				 changed.row = make_direct_target_row("entity:b");
+				 values.push_back(changed);
+				 changed = *first;
+				 changed.semantic_key += "-tampered";
+				 values.push_back(changed);
+				 changed = *first;
+				 changed.assertion += "-tampered";
+				 values.push_back(changed);
+				 changed = *first;
+				 changed.content += "-tampered";
+				 values.push_back(changed);
+				 changed = *first;
+				 changed.presence.fragments = {"debug"};
+				 values.push_back(changed);
+				 changed = *first;
+				 changed.interpretation += ".tampered";
+				 values.push_back(changed);
+				 changed = *first;
+				 changed.producer.semantic_contract += ".tampered";
+				 values.push_back(changed);
+				 changed = *first;
+				 changed.guarantee.approximation = "invalid";
+				 values.push_back(changed);
+				 changed = *first;
+				 std::get<cxxlens::sdk::direct_claim_basis>(changed.input_basis).basis_digest =
+					 "sha256:invalid";
+				 values.push_back(changed);
+				 return values;
+			 }())
+			rejects_invalid_stage_input(invalid, "mutated assertion");
 		const auto call_row_for_view = make_call_row();
 		cxxlens::cc::relations::call_site::view typed_view{call_row_for_view};
 		auto absent_caller = typed_view.get<cxxlens::cc::relations::call_site::caller>();
@@ -641,6 +705,14 @@ namespace
 		require(canonical && canonical->stage == cxxlens::sdk::claim_stage::canonical_claim &&
 					cxxlens::sdk::validate_claim(*engine, *canonical).has_value(),
 				"canonical claim stage failed independent validation");
+		auto recanonicalized = cxxlens::sdk::make_canonical_claim(
+			*engine,
+			*canonical,
+			{"company.test.canonicalizer", "company.test.canonicalizer.v1"},
+			make_direct_target_row("entity:a"),
+			"sha256:1111111111111111111111111111111111111111111111111111111111111111");
+		require(!recanonicalized && recanonicalized.error().code == "sdk.claim-stage-invalid",
+				"canonical constructor accepted a non-assertion input stage");
 		const std::array canonical_inputs{*canonical};
 		auto derived = cxxlens::sdk::make_derived_claim(
 			*engine,

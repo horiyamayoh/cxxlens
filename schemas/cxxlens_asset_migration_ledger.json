@@ -1,5 +1,5 @@
 {
-  "asset_count": 282,
+  "asset_count": 283,
   "assets": [
     {
       "authority": "active",
@@ -655,6 +655,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0035-derived-basis-partition-membership.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0036-claim-stage-input-revalidation.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1977,7 +1984,7 @@
     }
   ],
   "classifications": {
-    "active": 246,
+    "active": 247,
     "archived": 35,
     "generated": 1
   },

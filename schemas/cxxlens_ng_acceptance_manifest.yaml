@@ -36,6 +36,7 @@ entries:
       - docs/design/adr/0017-relation-descriptor-binding.md
       - docs/design/adr/0018-runtime-relation-schema-parity.md
       - docs/design/adr/0019-incremental-claim-conflict-classification.md
+      - docs/design/adr/0036-claim-stage-input-revalidation.md
     summary: Relation extension, IDL evolution, references, and static/dynamic parity.
   - id: gate.g2
     status: implemented
