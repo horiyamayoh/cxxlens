@@ -51,7 +51,7 @@ jobs:
           cmake --build --preset ci-quick
           ctest --preset ci-quick --parallel "${CTEST_PARALLEL_LEVEL}" \
             --label-exclude 'quality|install' \
-            --output-junit "build/ci-quick/ctest-build-${{ matrix.shared }}.xml"
+            --output-junit "ctest-build-${{ matrix.shared }}.xml"
           python tools/quality/collect_toolchain_provenance.py \
             --compiler clang++-22 --configuration "ci-quick;shared=${{ matrix.shared }}" \
             --output "build/ci-quick/toolchain-build-${{ matrix.shared }}.json"
@@ -96,7 +96,7 @@ jobs:
           cmake --preset ci-quick -DCXXLENS_CLANG_ADAPTER=ON
           ctest --preset ci-quick --parallel "${CTEST_PARALLEL_LEVEL}" \
             --label-regex quality \
-            --output-junit build/ci-quick/ctest-quality.xml
+            --output-junit ctest-quality.xml
           cmake --build --preset ci-quick --target cxxlens-quality \
             2>&1 | tee build/ci-quick/quality-production.log
           python tools/quality/collect_toolchain_provenance.py \
@@ -158,7 +158,7 @@ jobs:
             cxxlens-provider-scaffold cxxlens-sdk-doctor cxxlens-clang-worker-22
           ctest --preset install-check --parallel "${CTEST_PARALLEL_LEVEL}" \
             --label-regex install \
-            --output-junit "build/install-check/ctest-install-${{ matrix.shared }}.xml"
+            --output-junit "ctest-install-${{ matrix.shared }}.xml"
           python tools/quality/collect_toolchain_provenance.py \
             --compiler clang++-22 --configuration "install-check;shared=${{ matrix.shared }}" \
             --output "build/install-check/toolchain-install-${{ matrix.shared }}.json"
