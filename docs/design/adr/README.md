@@ -31,6 +31,7 @@
 | [0029](0029-query-conflict-canonical-projection.md) | lossless query conflict canonical projection |
 | [0030](0030-shared-canonical-json-and-utf8-validation.md) | shared canonical JSON and strict UTF-8 |
 | [0031](0031-query-json-lexical-and-unicode-validation.md) | query JSON lexical and Unicode validation |
+| [0032](0032-set-literal-byte-codec-parity.md) | set literal byte codec parity |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

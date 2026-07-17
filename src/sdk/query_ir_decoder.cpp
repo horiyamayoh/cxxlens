@@ -469,7 +469,9 @@ namespace cxxlens::sdk::query
 				auto string_value = as_string(**scalar, "literal.value");
 				if (!string_value)
 					return unexpected(std::move(string_value.error()));
-				if (*type == "bytes")
+				const auto byte_backed = *type == "bytes" || *type == "set" ||
+					(type->starts_with("set<") && type->ends_with('>'));
+				if (byte_backed)
 				{
 					auto bytes = hex_bytes(*string_value);
 					if (!bytes)

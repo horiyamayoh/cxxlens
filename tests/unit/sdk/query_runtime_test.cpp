@@ -213,6 +213,59 @@ namespace
 		return std::move(*row);
 	}
 
+	[[nodiscard]] relation_descriptor set_relation()
+	{
+		relation_descriptor value;
+		value.id = "company.query.sets.v1";
+		value.name = "company.query.sets";
+		value.version = {1U, 0U, 0U};
+		value.semantic_major = 1U;
+		value.semantics = "company.query.sets/1";
+		value.owner_namespace = "company.query";
+		value.columns = {
+			{value.id + ".key",
+			 "key",
+			 {scalar_kind::typed_id, "query_set_key_id", false},
+			 true,
+			 column_role::claim_key},
+			{value.id + ".qualifiers",
+			 "qualifiers",
+			 {scalar_kind::set, "open_symbol<cc.type-qualifier/1>", false},
+			 true,
+			 column_role::authoritative_payload},
+		};
+		value.key_columns = {value.columns[0].id};
+		value.merge = merge_mode::set;
+		value.descriptor_digest =
+			*semantic_digest("cxxlens.relation-descriptor-binding.v2",
+							 value.contract_digest + "\n" + value.canonical_form());
+		require(value.validate().has_value(), "set literal descriptor rejected");
+		return value;
+	}
+
+	[[nodiscard]] detached_row set_row(const relation_descriptor& descriptor,
+									   std::vector<std::byte> qualifiers)
+	{
+		row_builder builder{descriptor};
+		require(builder
+					.set({descriptor.id, descriptor.columns[0].id, descriptor.columns[0].type},
+						 detached_cell::typed("query_set_key_id", "key:set"))
+					.has_value(),
+				"set literal key rejected");
+		detached_cell set_value{descriptor.columns[1].type,
+								cell_state::present,
+								scalar_value{std::move(qualifiers)},
+								std::nullopt};
+		require(builder
+					.set({descriptor.id, descriptor.columns[1].id, descriptor.columns[1].type},
+						 std::move(set_value))
+					.has_value(),
+				"set literal value rejected");
+		auto row = std::move(builder).finish();
+		require(row.has_value(), "set literal row did not finish");
+		return std::move(*row);
+	}
+
 	constexpr std::string_view producer_semantics{
 		"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"};
 	constexpr std::string_view direct_basis{
@@ -969,6 +1022,103 @@ namespace
 				"compatible additive snapshot minor was rejected");
 	}
 
+	void check_set_literal_round_trip()
+	{
+		const auto descriptor = set_relation();
+		relation_registry registry;
+		require(registry.add(descriptor).has_value(), "set literal relation rejected");
+		auto relation_engine = registry.build("query-set-literal-generation");
+		require(relation_engine.has_value(), "set literal relation engine failed");
+		auto store = make_in_memory_snapshot_store(*relation_engine);
+		require(store.has_value(), "set literal store failed");
+		auto writer = store->begin(draft(*relation_engine));
+		require(writer.has_value(), "set literal snapshot writer failed");
+		const std::vector<std::byte> encoded{std::byte{0x0a}, std::byte{0xff}};
+		auto value = assertion(*relation_engine, set_row(descriptor, encoded), {"release"});
+		require(writer->stage(partition(value, 0U)).has_value(), "set literal partition rejected");
+		require(writer->validate().has_value(), "set literal snapshot validation failed");
+		auto snapshot = writer->publish();
+		require(snapshot.has_value(), "set literal snapshot publication failed");
+
+		const auto qualifiers =
+			column_ref{descriptor.id, descriptor.columns[1].id, descriptor.columns[1].type};
+		const auto make_query = [&](std::vector<std::byte> literal_bytes)
+		{
+			auto predicate = query::equals_present(
+				qualifiers, query::literal::exact(qualifiers.type, scalar_value{literal_bytes}));
+			auto source = query::builder::from(descriptor);
+			require(predicate && source, "set literal query setup failed");
+			auto filtered = std::move(*source).where(*predicate);
+			require(filtered.has_value(), "set literal filter failed");
+			return std::move(*filtered).finish();
+		};
+
+		auto matching = make_query(encoded);
+		require(matching.validate().has_value(), "set literal logical IR rejected");
+		auto decoded = query::decode_arguments(matching.nodes.back());
+		require(decoded.has_value(), "set literal arguments did not decode");
+		const auto& decoded_predicate = std::get<query::predicate_arguments>(*decoded).predicate;
+		require(
+			decoded_predicate.literal_value.has_value() &&
+				decoded_predicate.literal_value->type == "set<open_symbol<cc.type-qualifier/1>>" &&
+				std::get_if<std::vector<std::byte>>(&decoded_predicate.literal_value->value) !=
+					nullptr &&
+				std::get<std::vector<std::byte>>(decoded_predicate.literal_value->value) == encoded,
+			"set literal decode lost its type parameter or byte-backed value");
+		auto bytes_node = matching.nodes.back();
+		auto& bytes_arguments = bytes_node.arguments;
+		const auto set_type = bytes_arguments.find("set<open_symbol<cc.type-qualifier/1>>");
+		require(set_type != std::string::npos, "bytes literal decoder fixture changed");
+		bytes_arguments.replace(
+			set_type, std::string_view{"set<open_symbol<cc.type-qualifier/1>>"}.size(), "bytes");
+		auto decoded_bytes = query::decode_arguments(bytes_node);
+		require(decoded_bytes.has_value(), "bytes literal regression did not decode");
+		const auto& bytes_literal =
+			*std::get<query::predicate_arguments>(*decoded_bytes).predicate.literal_value;
+		require(std::get_if<std::vector<std::byte>>(&bytes_literal.value) != nullptr &&
+					std::get<std::vector<std::byte>>(bytes_literal.value) == encoded,
+				"bytes literal no longer uses byte-backed decoding");
+
+		auto reference = query::reference_engine::bind(*snapshot);
+		require(reference.has_value(), "set literal reference engine bind failed");
+		auto matched = reference->execute(matching);
+		require(matched.has_value() && rows(*matched).size() == 1U,
+				"equal set literal did not match its row");
+		auto unmatched = reference->execute(make_query({std::byte{0x0b}, std::byte{0xff}}));
+		require(unmatched.has_value() && rows(*unmatched).empty(),
+				"different set literal matched a row");
+
+		auto empty = make_query({});
+		auto empty_arguments = query::decode_arguments(empty.nodes.back());
+		require(empty_arguments.has_value(), "empty set literal did not round-trip");
+		const auto& empty_literal =
+			*std::get<query::predicate_arguments>(*empty_arguments).predicate.literal_value;
+		require(std::get_if<std::vector<std::byte>>(&empty_literal.value) != nullptr &&
+					std::get<std::vector<std::byte>>(empty_literal.value).empty(),
+				"empty set literal decoded as a string");
+
+		for (const auto* malformed : {"0", "0A", "0g"})
+		{
+			auto invalid = matching;
+			auto& arguments = invalid.nodes.back().arguments;
+			const auto encoded_value = arguments.find("\"value\":\"0aff\"");
+			require(encoded_value != std::string::npos, "set literal fixture encoding changed");
+			arguments.replace(encoded_value,
+							  std::string_view{"\"value\":\"0aff\""}.size(),
+							  "\"value\":\"" + std::string{malformed} + "\"");
+			require(!invalid.validate(), "malformed or noncanonical set hex was accepted");
+		}
+
+		auto wrong_parameter = matching;
+		auto& arguments = wrong_parameter.nodes.back().arguments;
+		const auto parameter = arguments.find("open_symbol<cc.type-qualifier/1>");
+		require(parameter != std::string::npos, "set literal parameter fixture changed");
+		arguments.replace(parameter,
+						  std::string_view{"open_symbol<cc.type-qualifier/1>"}.size(),
+						  "open_symbol<cc.attribute/1>");
+		require(!wrong_parameter.validate(), "mismatched set type parameter was accepted");
+	}
+
 	void check_runtime_matrix(const fixture& data,
 							  const snapshot_handle& memory_snapshot,
 							  const snapshot_handle& sqlite_snapshot)
@@ -1566,6 +1716,7 @@ int main()
 	require(sqlite_snapshot.has_value(), "SQLite query snapshot reopen failed");
 
 	check_ir_validation(data);
+	check_set_literal_round_trip();
 	check_canonical_json_encoding(data);
 	check_snapshot_schema_compatibility();
 	check_runtime_matrix(data, memory_snapshot, *sqlite_snapshot);

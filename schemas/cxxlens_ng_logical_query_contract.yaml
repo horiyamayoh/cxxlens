@@ -1,5 +1,5 @@
 schema: cxxlens.logical-query-contract.v1
-document_version: 1.6.0
+document_version: 1.7.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#20-logical-query
@@ -191,6 +191,12 @@ canonicalization:
   commutative_predicates_sort: normalized-child-digest
   commutative_predicates_tie_break: canonical-child-json
   typed_literals: exact-type-and-canonical-value
+  typed_literal_storage:
+    byte_backed: [bytes, set, set-parameterized]
+    encoding: lowercase-hex
+    empty: empty-byte-sequence
+    malformed_or_noncanonical: reject
+    parameter: exact-preserved-and-compared
   node_digest: recursive-content-digest
   physical_information_in_digest: false
   implicit_terminal_projection:

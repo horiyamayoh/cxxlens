@@ -2494,6 +2494,11 @@ Issue #88 / ADR 0031 により argument JSON decoder は RFC 8259 lexical/Unicod
 high+low surrogate pair は non-BMP code point に合成する。raw UTF-8、BMP escape、surrogate pair が同じ Unicode scalar sequence
 を表す場合、typed decode 後の canonical JSON と digest は一致しなければならない。
 
+Issue #89 / ADR 0032 により typed literal の storage category は encode/decode 境界を越えて保存する。`bytes` と
+`set` / `set<T>` は byte-backed scalar として lowercase hex を byte vector に decode し、empty sequence を受理する一方、
+odd-length、uppercase、non-hex encoding は拒否する。`set<T>` の nested parameter は完全に保持し、column type と parameter が
+一致しない literal は validation で拒否する。executor は decoded set を string に fallback して比較してはならない。
+
 ### 20.3 Collection and cell algebra
 
 Logical Query IR v1 の既定 collection は annotated multiset である。一 occurrence は次を持つ。

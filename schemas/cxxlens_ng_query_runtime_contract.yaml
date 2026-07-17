@@ -1,12 +1,12 @@
 schema: cxxlens.query-runtime-contract.v1
-document_version: 1.9.0
+document_version: 1.10.0
 maturity: implemented
 authority:
   logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
   guarantee_contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
   snapshot_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
-  decision_adr: docs/design/adr/0031-query-json-lexical-and-unicode-validation.md
-  owner_issue: '#88'
+  decision_adr: docs/design/adr/0032-set-literal-byte-codec-parity.md
+  owner_issue: '#89'
   owner: steward.ng-query-runtime
 compatibility:
   version_axis: query-runtime-result
@@ -49,6 +49,12 @@ input:
       surrogate_pairs: combine
       invalid_or_isolated_surrogate: reject
       leading_zero_integer: reject
+    typed_literal_codec:
+      byte_backed_scalar_kinds: [bytes, set]
+      wire_encoding: lowercase-hex
+      decoded_value: byte-vector
+      set_parameter: exact-preserved
+      malformed_or_noncanonical: reject
   runtime_request:
     excluded_from_logical_digest: true
     fields:
