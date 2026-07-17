@@ -189,6 +189,46 @@ def validate_boundary(bundle: dict[str, Any]) -> None:
         fail("aggregate target does not exclude optional/native surfaces")
 
 
+def validate_package_qualification(bundle: dict[str, Any], root: pathlib.Path) -> None:
+    qualification = bundle["distribution_surface"]["package_qualification"]
+    if qualification["configurations"] != [
+        {"id": "static", "build_shared": "OFF"},
+        {"id": "shared", "build_shared": "ON"},
+    ]:
+        fail("package qualification must cover the exact static/shared matrix")
+    if qualification["artifact_source"] != "same-configured-and-tested-prefix":
+        fail("release-layout artifacts must come from the qualified install prefix")
+
+    workflow = (root / ".github/workflows/quality.yml").read_text(encoding="utf-8")
+    for marker in (
+        'shared: ["OFF", "ON"]',
+        "-DCXXLENS_BUILD_SHARED=${{ matrix.shared }}",
+        "build/install-check/install-consumer/relocated-prefix",
+        "cxxlens-install-${{ matrix.shared",
+    ):
+        if marker not in workflow:
+            fail(f"static/shared package CI marker is missing: {marker}")
+
+    cmake = (root / "CMakeLists.txt").read_text(encoding="utf-8")
+    for marker in ("INSTALL_RPATH", "$ORIGIN", "@loader_path"):
+        if marker not in cmake:
+            fail(f"relocatable package build marker is missing: {marker}")
+
+    install_test = (root / "tests/install/run_install_test.cmake.in").read_text(
+        encoding="utf-8"
+    )
+    for marker in (
+        "run_installed_tools(original)",
+        "run_installed_tools(relocated)",
+        "--unset=LD_LIBRARY_PATH",
+        "SONAME",
+        "missing shared dependency diagnostic lacks the SONAME",
+        "@CMAKE_COMMAND@\" --install \"${build_dir}",
+    ):
+        if marker not in install_test:
+            fail(f"installed package qualification marker is missing: {marker}")
+
+
 def validate_release_mapping(bundle: dict[str, Any], root: pathlib.Path) -> None:
     profiles = rows_by_id(bundle["profiles"], "profiles")
     if set(profiles) != {"NG0", "NG1", "NG2", "NG3"}:
@@ -296,6 +336,7 @@ def validate_bundle(root: pathlib.Path) -> dict[str, Any]:
     bundle = load_document(root / BUNDLE)
     schema_validate(bundle, load_document(root / BUNDLE_SCHEMA), "NG release bundle")
     validate_boundary(bundle)
+    validate_package_qualification(bundle, root)
     validate_release_mapping(bundle, root)
     validate_version_contract(bundle, root)
     validate_design_markers(root)

@@ -47,6 +47,7 @@
 | [0058](0058-query-scan-occurrence-column-identity.md) | scan occurrence-qualified query column identity |
 | [0059](0059-query-row-guarantee-canonical-projection.md) | lossless row-level guarantee canonical projection |
 | [0060](0060-query-summary-guarantee-fragment-algebra.md) | result-contributing guarantee fragment algebra |
+| [0061](0061-relocatable-static-shared-install-package.md) | relocatable static/shared installed package qualification |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

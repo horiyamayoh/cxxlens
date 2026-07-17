@@ -46,6 +46,7 @@ authority_documents:
   - docs/design/adr/0021-query-closure-applicability.md
   - docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md
   - docs/design/adr/0047-recipe-execution-completeness-classification.md
+  - docs/design/adr/0061-relocatable-static-shared-install-package.md
   - schemas/cxxlens_ng_relation_registry.yaml
   - schemas/cxxlens_ng_logical_query_contract.yaml
   - schemas/cxxlens_ng_semantic_guarantee_contract.yaml
@@ -99,7 +100,10 @@ evidence:
       - schemas/cxxlens_ng_query_conformance_vectors.yaml
       - tests/integration/r2_vertical_slice_test.cpp
     installed_consumers_and_sdks:
+      - CMakeLists.txt
+      - .github/workflows/quality.yml
       - tests/install/run_install_test.cmake.in
+      - schemas/cxxlens_ng_release_bundle.yaml
       - examples/sdk/portable_provider.cpp
       - examples/sdk/clang22_native_provider.cpp
       - examples/sdk/recipe.cpp

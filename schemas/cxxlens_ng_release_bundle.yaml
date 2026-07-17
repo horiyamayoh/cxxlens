@@ -1,5 +1,5 @@
 schema: cxxlens.ng-release-bundle.v1
-document_version: 1.0.0
+document_version: 1.1.0
 maturity: accepted-contract
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -88,6 +88,26 @@ distribution_surface:
     umbrella_excludes: [provider-sdk, recipes, native-provider, native-sdk]
   implementation_state: implemented
   implementation_issue: '#67'
+  package_qualification:
+    implementation_issue: '#118'
+    ci_job: install-consumer
+    configurations:
+      - {id: static, build_shared: 'OFF'}
+      - {id: shared, build_shared: 'ON'}
+    artifact_source: same-configured-and-tested-prefix
+    clean_environment: [LD_LIBRARY_PATH, DYLD_LIBRARY_PATH]
+    direct_installed_tools: [cxxlens-provider-scaffold, cxxlens-sdk-doctor, cxxlens-clang-worker-22]
+    installed_consumers: [core, provider-sdk, clang22-provider-sdk, examples]
+    prefix_relocation: required
+    exported_transitive_dependencies: consumer-link-verified
+    build_tree_runtime_paths: forbidden
+    shared_runtime:
+      linux_tool_origin: '$ORIGIN/../<install-libdir>'
+      linux_library_origin: '$ORIGIN'
+      macos_tool_origin: '@loader_path/../<install-libdir>'
+      macos_library_origin: '@loader_path'
+      soname_binding: distribution-major
+      missing_dependency_diagnostic: loader-explicit-soname
 
 stability_tiers:
   - id: stable

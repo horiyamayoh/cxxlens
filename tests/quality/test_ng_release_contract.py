@@ -19,6 +19,7 @@ from check_ng_release_contract import (  # noqa: E402
     schema_validate,
     validate_boundary,
     validate_bundle,
+    validate_package_qualification,
 )
 
 
@@ -213,6 +214,12 @@ class NgReleaseContractTest(unittest.TestCase):
         kernel["exported_values"].append("clang-ast-node")
         with self.assertRaisesRegex(ReleaseContractError, "exports native"):
             validate_boundary(bundle)
+
+    def test_package_qualification_cannot_omit_shared_configuration(self) -> None:
+        bundle = copy.deepcopy(self.bundle)
+        bundle["distribution_surface"]["package_qualification"]["configurations"].pop()
+        with self.assertRaisesRegex(ReleaseContractError, "static/shared matrix"):
+            validate_package_qualification(bundle, ROOT)
 
     def test_doctor_request_without_environment_is_schema_rejected(self) -> None:
         document = request(SNAPSHOT_AXES, context="snapshot-open")

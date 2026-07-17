@@ -3932,6 +3932,18 @@ provider: success,crash,timeout,malformed
 
 semantic comparison は unordered relation digest と canonical export の両方で行う。
 
+### 26.6 Installed package qualification
+
+static と shared は同じ `install-consumer` CI job の matrix とし、各 configuration で検査した prefix 自体を
+release-layout artifact とする。installed tool は `LD_LIBRARY_PATH` / `DYLD_LIBRARY_PATH` なしで直接実行し、prefix 全体を移設した後も
+同じ結果でなければならない。consumer は core、portable provider SDK、Clang 22 provider SDK、installed example の全 package を build、
+install、clean-environment run する。
+
+shared package は Linux で tool に `$ORIGIN/../<install-libdir>`、library に `$ORIGIN`、macOS で対応する
+`@loader_path` policy を用いる。install binary/library の dynamic section に build-tree path を残さず、SONAME は distribution major に
+bind する。required shared dependency を除去した negative test は loader が欠落 SONAME を明示して fail することを要求する。これらの
+machine-readable authority は release bundle の `distribution_surface.package_qualification` とする。
+
 ---
 
 ## 27. Migration Completion
@@ -4328,7 +4340,7 @@ NG1 default:
 - [ ] root relocation
 - [ ] memory/SQLite
 - [ ] cold/warm
-- [ ] static/shared install consumer
+- [x] static/shared install consumer
 - [ ] README/support state matches acceptance manifest
 
 foundation gate は上記のうち G0–G4/R0–R3 に属する実装済み evidence、install consumer、legacy-zero、

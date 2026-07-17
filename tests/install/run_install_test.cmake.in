@@ -1,5 +1,31 @@
 set(test_root "@CMAKE_CURRENT_BINARY_DIR@/install-consumer")
 set(install_prefix "${test_root}/prefix")
+set(install_libdir "@CMAKE_INSTALL_LIBDIR@")
+
+function(run_clean expected_result)
+  execute_process(
+    COMMAND "@CMAKE_COMMAND@" -E env --unset=LD_LIBRARY_PATH
+            --unset=DYLD_LIBRARY_PATH ${ARGN}
+    RESULT_VARIABLE actual_result
+    OUTPUT_VARIABLE command_output
+    ERROR_VARIABLE command_error)
+  if(NOT actual_result EQUAL expected_result)
+    message(
+      FATAL_ERROR
+        "installed command failed (${actual_result}, expected ${expected_result}): ${ARGN}\nstdout: ${command_output}\nstderr: ${command_error}"
+    )
+  endif()
+endfunction()
+
+function(run_installed_tools label)
+  run_clean(0 "${install_prefix}/bin/cxxlens-sdk-doctor" inspect)
+  run_clean(1 "${install_prefix}/bin/cxxlens-clang-worker-22")
+  set(scaffold_output "${test_root}/scaffold-${label}")
+  file(REMOVE_RECURSE "${scaffold_output}")
+  run_clean(0 "${install_prefix}/bin/cxxlens-provider-scaffold"
+            "${scaffold_output}" company.install.provider portable
+            company.install.relation)
+endfunction()
 
 file(REMOVE_RECURSE "${test_root}")
 execute_process(COMMAND "@CMAKE_COMMAND@" --install "@CMAKE_BINARY_DIR@"
@@ -13,9 +39,9 @@ foreach(
     "${install_prefix}/include/cxxlens/sdk/query.hpp"
     "${install_prefix}/include/cxxlens/provider/clang22.hpp"
     "${install_prefix}/include/cxxlens/relations/cc_call_site.hpp"
-    "${install_prefix}/lib/cmake/cxxlens/cxxlensConfig.cmake"
-    "${install_prefix}/lib/cmake/cxxlensProviderSDK/cxxlensProviderSDKConfig.cmake"
-    "${install_prefix}/lib/cmake/cxxlensClang22ProviderSDK/cxxlensClang22ProviderSDKConfig.cmake"
+    "${install_prefix}/${install_libdir}/cmake/cxxlens/cxxlensConfig.cmake"
+    "${install_prefix}/${install_libdir}/cmake/cxxlensProviderSDK/cxxlensProviderSDKConfig.cmake"
+    "${install_prefix}/${install_libdir}/cmake/cxxlensClang22ProviderSDK/cxxlensClang22ProviderSDKConfig.cmake"
     "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_public_api_catalog.yaml"
     "${install_prefix}/bin/cxxlens-provider-scaffold"
     "${install_prefix}/bin/cxxlens-sdk-doctor"
@@ -25,6 +51,74 @@ foreach(
       FATAL_ERROR "installed next-generation artifact is missing: ${required}")
   endif()
 endforeach()
+
+run_installed_tools(original)
+
+set(relocated_prefix "${test_root}/relocated-prefix")
+file(RENAME "${install_prefix}" "${relocated_prefix}")
+set(install_prefix "${relocated_prefix}")
+run_installed_tools(relocated)
+
+if("@CXXLENS_BUILD_SHARED@" STREQUAL "ON"
+   AND UNIX
+   AND NOT APPLE)
+  find_program(CXXLENS_READELF NAMES readelf llvm-readelf REQUIRED)
+  foreach(tool IN ITEMS cxxlens-provider-scaffold cxxlens-sdk-doctor
+                        cxxlens-clang-worker-22)
+    execute_process(
+      COMMAND "${CXXLENS_READELF}" -d "${install_prefix}/bin/${tool}"
+      OUTPUT_VARIABLE dynamic_section COMMAND_ERROR_IS_FATAL ANY)
+    if(NOT dynamic_section MATCHES "RUNPATH.*\\$ORIGIN/../${install_libdir}")
+      message(FATAL_ERROR "installed tool lacks relocatable RUNPATH: ${tool}")
+    endif()
+    if(dynamic_section MATCHES "@CMAKE_BINARY_DIR@")
+      message(FATAL_ERROR "installed tool retains build-tree path: ${tool}")
+    endif()
+  endforeach()
+  file(GLOB base_libraries
+       "${install_prefix}/${install_libdir}/libcxxlens_base.so.*")
+  if(NOT base_libraries)
+    message(FATAL_ERROR "shared package lacks versioned cxxlens base library")
+  endif()
+  list(GET base_libraries 0 base_library)
+  execute_process(
+    COMMAND "${CXXLENS_READELF}" -d "${base_library}"
+    OUTPUT_VARIABLE library_dynamic_section COMMAND_ERROR_IS_FATAL ANY)
+  if(NOT library_dynamic_section MATCHES "SONAME.*libcxxlens_base.so.0")
+    message(FATAL_ERROR "shared library SONAME does not bind project major")
+  endif()
+  if(NOT library_dynamic_section MATCHES "RUNPATH.*\\$ORIGIN")
+    message(
+      FATAL_ERROR "shared library lacks same-directory relocatable RUNPATH")
+  endif()
+  if(library_dynamic_section MATCHES "@CMAKE_BINARY_DIR@")
+    message(FATAL_ERROR "installed library retains build-tree path")
+  endif()
+
+  set(base_soname "${install_prefix}/${install_libdir}/libcxxlens_base.so.0")
+  set(base_soname_unavailable "${base_soname}.unavailable")
+  if(NOT EXISTS "${base_soname}")
+    message(FATAL_ERROR "shared package lacks the cxxlens base SONAME link")
+  endif()
+  file(RENAME "${base_soname}" "${base_soname_unavailable}")
+  execute_process(
+    COMMAND
+      "@CMAKE_COMMAND@" -E env --unset=LD_LIBRARY_PATH --unset=DYLD_LIBRARY_PATH
+      "${install_prefix}/bin/cxxlens-sdk-doctor" inspect
+    RESULT_VARIABLE missing_dependency_result
+    OUTPUT_VARIABLE missing_dependency_output
+    ERROR_VARIABLE missing_dependency_error)
+  file(RENAME "${base_soname_unavailable}" "${base_soname}")
+  if(missing_dependency_result EQUAL 0)
+    message(FATAL_ERROR "installed tool ignored a missing shared dependency")
+  endif()
+  if(NOT missing_dependency_error MATCHES "libcxxlens_base\\.so\\.0")
+    message(
+      FATAL_ERROR
+        "missing shared dependency diagnostic lacks the SONAME: ${missing_dependency_error}"
+    )
+  endif()
+endif()
 
 foreach(
   forbidden IN
@@ -52,8 +146,11 @@ foreach(consumer IN ITEMS consumer sdk_consumer clang22_sdk_consumer)
   execute_process(COMMAND "@CMAKE_COMMAND@" --build "${build_dir}"
                           COMMAND_ERROR_IS_FATAL ANY)
   string(REPLACE "_" "-" executable_suffix "${consumer}")
-  execute_process(COMMAND "${build_dir}/cxxlens-${executable_suffix}"
-                          COMMAND_ERROR_IS_FATAL ANY)
+  run_clean(0 "${build_dir}/cxxlens-${executable_suffix}")
+  set(consumer_prefix "${test_root}/${consumer}-prefix")
+  execute_process(COMMAND "@CMAKE_COMMAND@" --install "${build_dir}" --prefix
+                          "${consumer_prefix}" COMMAND_ERROR_IS_FATAL ANY)
+  run_clean(0 "${consumer_prefix}/bin/cxxlens-${executable_suffix}")
 endforeach()
 
 set(example_build_dir "${test_root}/examples-consumer-build")
@@ -66,8 +163,11 @@ execute_process(
     "-DClang_DIR=@Clang_DIR@" COMMAND_ERROR_IS_FATAL ANY)
 execute_process(COMMAND "@CMAKE_COMMAND@" --build "${example_build_dir}"
                         COMMAND_ERROR_IS_FATAL ANY)
+set(example_prefix "${test_root}/examples-consumer-prefix")
+execute_process(COMMAND "@CMAKE_COMMAND@" --install "${example_build_dir}"
+                        --prefix "${example_prefix}" COMMAND_ERROR_IS_FATAL ANY)
 foreach(example IN ITEMS recipe typed_query dynamic_query portable_provider
                          clang22-native)
-  execute_process(COMMAND "${example_build_dir}/cxxlens-installed-${example}"
-                          COMMAND_ERROR_IS_FATAL ANY)
+  run_clean(0 "${example_build_dir}/cxxlens-installed-${example}")
+  run_clean(0 "${example_prefix}/bin/cxxlens-installed-${example}")
 endforeach()

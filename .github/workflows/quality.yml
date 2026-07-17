@@ -15,6 +15,10 @@ env:
 jobs:
   build-test:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shared: ["OFF", "ON"]
     steps:
       - uses: actions/checkout@v4
       - name: Install exact Clang 22 toolchain
@@ -31,7 +35,8 @@ jobs:
         env:
           CXX: clang++-22
         run: |
-          cmake --preset ci-quick -DCXXLENS_CLANG_ADAPTER=ON
+          cmake --preset ci-quick -DCXXLENS_CLANG_ADAPTER=ON \
+            -DCXXLENS_BUILD_SHARED=${{ matrix.shared }}
           cmake --build --preset ci-quick
           ctest --preset ci-quick
       - name: Contract and migration gates
@@ -39,6 +44,10 @@ jobs:
 
   install-consumer:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shared: ["OFF", "ON"]
     steps:
       - uses: actions/checkout@v4
       - name: Install Clang 22 and Ninja
@@ -51,9 +60,17 @@ jobs:
         env:
           CXX: clang++-22
         run: |
-          cmake --preset install-check -DCXXLENS_CLANG_ADAPTER=ON
+          cmake --preset install-check -DCXXLENS_CLANG_ADAPTER=ON \
+            -DCXXLENS_BUILD_SHARED=${{ matrix.shared }}
           cmake --build --preset install-check
           ctest --preset install-check --label-regex install
+      - name: Preserve the qualified release-layout artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cxxlens-install-${{ matrix.shared == 'ON' && 'shared' || 'static' }}-${{ github.sha }}
+          path: build/install-check/install-consumer/relocated-prefix
+          if-no-files-found: error
+          retention-days: 30
 
   gcc-public-headers:
     runs-on: ubuntu-24.04

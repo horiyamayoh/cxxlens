@@ -89,6 +89,7 @@ properties:
       - source_surface
       - implementation_state
       - implementation_issue
+      - package_qualification
     properties:
       public_targets:
         type: array
@@ -148,6 +149,68 @@ properties:
         const: implemented
       implementation_issue:
         const: '#67'
+      package_qualification:
+        type: object
+        additionalProperties: false
+        required:
+          - implementation_issue
+          - ci_job
+          - configurations
+          - artifact_source
+          - clean_environment
+          - direct_installed_tools
+          - installed_consumers
+          - prefix_relocation
+          - exported_transitive_dependencies
+          - build_tree_runtime_paths
+          - shared_runtime
+        properties:
+          implementation_issue:
+            const: '#118'
+          ci_job:
+            const: install-consumer
+          configurations:
+            type: array
+            const:
+              - {id: static, build_shared: 'OFF'}
+              - {id: shared, build_shared: 'ON'}
+          artifact_source:
+            const: same-configured-and-tested-prefix
+          clean_environment:
+            const: [LD_LIBRARY_PATH, DYLD_LIBRARY_PATH]
+          direct_installed_tools:
+            const: [cxxlens-provider-scaffold, cxxlens-sdk-doctor, cxxlens-clang-worker-22]
+          installed_consumers:
+            const: [core, provider-sdk, clang22-provider-sdk, examples]
+          prefix_relocation:
+            const: required
+          exported_transitive_dependencies:
+            const: consumer-link-verified
+          build_tree_runtime_paths:
+            const: forbidden
+          shared_runtime:
+            type: object
+            additionalProperties: false
+            required:
+              - linux_tool_origin
+              - linux_library_origin
+              - macos_tool_origin
+              - macos_library_origin
+              - soname_binding
+              - missing_dependency_diagnostic
+            properties:
+              linux_tool_origin:
+                const: '$ORIGIN/../<install-libdir>'
+              linux_library_origin:
+                const: '$ORIGIN'
+              macos_tool_origin:
+                const: '@loader_path/../<install-libdir>'
+              macos_library_origin:
+                const: '@loader_path'
+              soname_binding:
+                const: distribution-major
+              missing_dependency_diagnostic:
+                const: loader-explicit-soname
   stability_tiers:
     type: array
     minItems: 5

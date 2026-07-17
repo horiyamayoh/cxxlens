@@ -51,8 +51,32 @@ function(cxxlens_configure_component target export_name)
                EXPORT_NAME "${export_name}"
                VERSION "${PROJECT_VERSION}"
                SOVERSION "${PROJECT_VERSION_MAJOR}")
+  if(CXXLENS_BUILD_SHARED)
+    if(APPLE)
+      set_target_properties(${target} PROPERTIES INSTALL_RPATH "@loader_path")
+    elseif(UNIX)
+      set_target_properties(${target} PROPERTIES INSTALL_RPATH "$ORIGIN")
+    endif()
+    set_target_properties(${target} PROPERTIES INSTALL_RPATH_USE_LINK_PATH
+                                               FALSE)
+  endif()
   cxxlens_set_project_warnings(${target})
   cxxlens_enable_sanitizers(${target})
+endfunction()
+
+function(cxxlens_configure_installed_tool target)
+  if(CXXLENS_BUILD_SHARED)
+    if(APPLE)
+      set(_cxxlens_tool_rpath "@loader_path/../${CMAKE_INSTALL_LIBDIR}")
+    elseif(UNIX)
+      set(_cxxlens_tool_rpath "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
+    endif()
+    if(DEFINED _cxxlens_tool_rpath)
+      set_target_properties(
+        ${target} PROPERTIES INSTALL_RPATH "${_cxxlens_tool_rpath}"
+                             INSTALL_RPATH_USE_LINK_PATH FALSE)
+    endif()
+  endif()
 endfunction()
 
 add_library(cxxlens_base ${CXXLENS_LIBRARY_TYPE} src/sdk/common.cpp)
@@ -125,12 +149,14 @@ target_link_libraries(cxxlens-provider-scaffold PRIVATE cxxlens::provider_sdk)
 target_compile_features(cxxlens-provider-scaffold PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens-provider-scaffold)
 cxxlens_enable_sanitizers(cxxlens-provider-scaffold)
+cxxlens_configure_installed_tool(cxxlens-provider-scaffold)
 
 add_executable(cxxlens-sdk-doctor tools/sdk/sdk_doctor_main.cpp)
 target_link_libraries(cxxlens-sdk-doctor PRIVATE cxxlens::provider_sdk)
 target_compile_features(cxxlens-sdk-doctor PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens-sdk-doctor)
 cxxlens_enable_sanitizers(cxxlens-sdk-doctor)
+cxxlens_configure_installed_tool(cxxlens-sdk-doctor)
 
 add_executable(cxxlens-clang-worker-22
                src/llvm/clang22/provider_worker_main.cpp)
@@ -141,6 +167,7 @@ target_include_directories(cxxlens-clang-worker-22
 target_compile_features(cxxlens-clang-worker-22 PRIVATE cxx_std_23)
 cxxlens_set_project_warnings(cxxlens-clang-worker-22)
 cxxlens_enable_sanitizers(cxxlens-clang-worker-22)
+cxxlens_configure_installed_tool(cxxlens-clang-worker-22)
 
 set(CXXLENS_COMPILED_TARGETS
     cxxlens_base cxxlens_kernel cxxlens_query cxxlens_recipes
