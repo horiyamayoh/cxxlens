@@ -54,6 +54,10 @@ relation/query result は unordered を既定とする。`order_by` は user key
 必須 tie-break として付加し、total order を作る。`limit` は total-ordered input だけを受理し、その sealed prefix
 を返す。order なし limit は validation error とする。
 
+Issue #133 により `semi_join` は左 occurrence の filter として、左 input の total order metadata、order keys、row subsequenceを
+そのまま保存する。typed builder、IR validator、executor は同じ propertyを適用し、ordered left の直後の `limit` は許可する。
+unordered left は unordered のままであり、`inner_join` は引き続き input orderを保存しない。
+
 partial result は次のときだけ publish する。
 
 - upstream が logically complete な output cap は unordered なら canonical semantic set prefix、ordered なら

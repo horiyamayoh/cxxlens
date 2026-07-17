@@ -1,5 +1,5 @@
 schema: cxxlens.query-runtime-contract.v1
-document_version: 1.14.0
+document_version: 1.15.0
 maturity: implemented
 authority:
   logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
@@ -130,6 +130,7 @@ execution:
     scan_same_content_occurrences: canonical-set-union
     join: canonical-set-union
     semi_join: left-plus-all-compatible-witnesses
+    semi_join_order: preserve-left-total-order-keys-and-filtered-subsequence
     distinct: canonical-set-union
   guarantees:
     composition: conservative-componentwise-meet

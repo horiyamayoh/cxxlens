@@ -1298,6 +1298,32 @@ namespace
 		require(semi.has_value(), "semi join failed");
 		queries.push_back(std::move(*semi).finish());
 
+		auto ordered_semi_left = query::builder::from(data.left);
+		auto ordered_semi_right = query::builder::from(data.right);
+		require(ordered_semi_left && ordered_semi_right, "ordered semi join setup failed");
+		const std::array semi_order_columns{left_key};
+		auto ordered_semi_source = std::move(*ordered_semi_left).order_by(semi_order_columns);
+		require(ordered_semi_source.has_value(), "ordered semi join left order failed");
+		auto ordered_semi = std::move(*ordered_semi_source)
+								.semi_join(std::move(*ordered_semi_right), *join_predicate);
+		require(ordered_semi.has_value(), "ordered semi join failed");
+		auto limited_semi = std::move(*ordered_semi).limit(1U);
+		require(limited_semi.has_value(), "semi join lost the left total order before limit");
+		auto limited_semi_ir = std::move(*limited_semi).finish();
+		require(limited_semi_ir.validate().has_value(),
+				"builder semi join properties diverged from IR validation");
+
+		auto unordered_semi_left = query::builder::from(data.left);
+		auto unordered_semi_right = query::builder::from(data.right);
+		require(unordered_semi_left && unordered_semi_right, "unordered semi join setup failed");
+		auto unordered_semi = std::move(*unordered_semi_left)
+								  .semi_join(std::move(*unordered_semi_right), *join_predicate);
+		require(unordered_semi.has_value(), "unordered semi join failed");
+		auto rejected_semi_limit = std::move(*unordered_semi).limit(1U);
+		require(!rejected_semi_limit &&
+					rejected_semi_limit.error().code == "sdk.query-limit-requires-order",
+				"unordered semi join incorrectly acquired a total order");
+
 		auto union_left = query::builder::from(data.left);
 		auto union_right = query::builder::from(data.left);
 		require(union_left && union_right, "union setup failed");
@@ -1370,6 +1396,13 @@ namespace
 			require(occurrences(memory->explain_physical().text, ";node=") == logical.nodes.size(),
 					"executor evaluation set diverged from validated rooted node set");
 		}
+		auto limited_semi_memory = memory_engine->execute(limited_semi_ir);
+		auto limited_semi_sqlite = sqlite_engine->execute(limited_semi_ir);
+		require(limited_semi_memory && limited_semi_sqlite && limited_semi_memory->ordered() &&
+					limited_semi_sqlite->ordered() &&
+					rows(*limited_semi_memory) == rows(*limited_semi_sqlite) &&
+					rows(*limited_semi_memory).size() == 1U,
+				"semi join execution did not preserve the ordered left filtered subsequence");
 
 		auto implicit_scan = memory_engine->execute(queries.front());
 		auto explicit_source = query::builder::from(data.left);

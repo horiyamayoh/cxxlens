@@ -2821,6 +2821,10 @@ operator ごとの規範規則:
 | `condition_restrict` | nonempty intersection を保存 | restriction と intersection | 保存 | safe input prefix を保存 |
 | `interpretation_restrict` | exact ID match を保存 | 保存 | exact ID filter | safe input prefix を保存 |
 
+Issue #133 により `semi_join` の「条件付き保存」は left input の total order metadata、order keys、filtered row subsequenceを
+そのまま伝播することを意味する。typed builder、IR validator、executor は同じ operator propertyを使用し、ordered left に対する
+semi join直後の `limit` を受理する。unordered left は orderを獲得せず、inner join は orderを保存しない。
+
 ### 20.5 Deferred operators
 
 ```text

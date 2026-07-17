@@ -1057,11 +1057,15 @@ namespace cxxlens::sdk::query
 	result<builder> builder::semi_join(builder right, expression predicate) &&
 	{
 		const auto left_schema = ir_.output_schema;
+		const auto left_total_ordered = total_ordered_;
+		const auto left_order_keys = order_keys_;
 		auto joined = std::move(*this).inner_join(std::move(right), std::move(predicate));
 		if (!joined)
 			return joined;
 		joined->ir_.nodes.back().operator_id = "query.semi_join.v1";
 		joined->ir_.output_schema = left_schema;
+		joined->total_ordered_ = left_total_ordered;
+		joined->order_keys_ = left_order_keys;
 		return joined;
 	}
 
