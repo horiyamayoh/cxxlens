@@ -190,6 +190,60 @@ namespace
 		return std::move(*published);
 	}
 
+	[[nodiscard]] cxxlens::sdk::partition_draft
+	derived_partition(const cxxlens::sdk::relation_engine& value,
+					  std::string input_snapshot,
+					  std::vector<std::string> consumed)
+	{
+		auto inputs = partition(value, false).claims;
+		const std::array input_span{inputs.front()};
+		cxxlens::sdk::observation output{
+			row("item:derived", "derived"),
+			{"universe-1", {"all"}},
+			"company.test.canonical-1",
+			{"company.test.provider", std::string{producer_digest}},
+			{"sha256:9999999999999999999999999999999999999999999999999999999999999999"},
+			"evidence:derived",
+			{"exact", "partition", "assumptions:none", {"schema_validated"}},
+		};
+		auto derived = cxxlens::sdk::make_derived_claim(
+			value,
+			input_span,
+			std::move(output),
+			std::move(input_snapshot),
+			std::move(consumed),
+			"sha256:7777777777777777777777777777777777777777777777777777777777777777");
+		require(derived.has_value(), "derived store claim rejected");
+		cxxlens::sdk::partition_draft draft;
+		draft.relation_descriptor_id = descriptor().id;
+		draft.scope = "compile-unit-derived";
+		draft.condition = derived->presence;
+		draft.interpretation = derived->interpretation;
+		draft.producer_semantics = derived->producer.semantic_contract;
+		draft.precision_profile = "exact";
+		draft.assumption_set_id = "assumptions-empty";
+		draft.claims = {std::move(*derived)};
+		auto basis = cxxlens::sdk::claim_input_basis_digest(draft.claims.front().input_basis);
+		require(basis.has_value(), "derived partition basis rejected");
+		draft.producer_input_basis_digest = std::move(*basis);
+		draft.coverage = {{"compile-unit", "compile-unit-derived", "covered", ""}};
+		return draft;
+	}
+
+	[[nodiscard]] bool validates_derived_partition(cxxlens::sdk::snapshot_store& store,
+												   const cxxlens::sdk::relation_engine& value,
+												   const std::string& parent_publication,
+												   std::string input_snapshot,
+												   std::vector<std::string> consumed)
+	{
+		auto writer = store.begin(snapshot_draft(value, parent_publication));
+		require(writer &&
+					writer->stage(
+						derived_partition(value, std::move(input_snapshot), std::move(consumed))),
+				"derived writer setup failed");
+		return writer->validate().has_value();
+	}
+
 	void check_canonical_vectors()
 	{
 		using cxxlens::sdk::canonical_value;
@@ -488,6 +542,97 @@ namespace
 			std::filesystem::remove(path);
 		}
 	}
+
+	void check_derived_basis_membership()
+	{
+		const auto relation_engine = engine();
+		const auto fake =
+			std::string{"partition-content:sha256:"
+						"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"};
+		{
+			auto store = cxxlens::sdk::make_in_memory_snapshot_store(relation_engine);
+			require(store.has_value(), "derived exact store unavailable");
+			auto prior = publish(*store, relation_engine, false);
+			const auto exact = prior.manifest().partitions.front().content_digest;
+			require(validates_derived_partition(*store,
+												relation_engine,
+												prior.publication().publication_id,
+												std::string{prior.id()},
+												{exact}),
+					"exact prior partition membership was rejected");
+			require(!validates_derived_partition(*store,
+												 relation_engine,
+												 prior.publication().publication_id,
+												 std::string{prior.id()},
+												 {fake}),
+					"nonexistent consumed partition was accepted");
+			require(!validates_derived_partition(*store,
+												 relation_engine,
+												 prior.publication().publication_id,
+												 std::string{prior.id()},
+												 {exact, fake}),
+					"partially invalid consumed partition set was accepted");
+			require(!validates_derived_partition(*store,
+												 relation_engine,
+												 prior.publication().publication_id,
+												 "snapshot:uncommitted",
+												 {exact}),
+					"uncommitted input snapshot was accepted");
+		}
+		{
+			auto store = cxxlens::sdk::make_in_memory_snapshot_store(relation_engine);
+			require(store.has_value(), "derived cross-snapshot store unavailable");
+			auto first = publish(*store, relation_engine, false);
+			auto alternate = partition(relation_engine, false);
+			alternate.scope = "compile-unit-2";
+			alternate.coverage.front().key = "compile-unit-2";
+			auto writer =
+				store->begin(snapshot_draft(relation_engine, first.publication().publication_id));
+			require(writer && writer->stage(std::move(alternate)) && writer->validate(),
+					"alternate snapshot setup failed");
+			auto second = writer->publish();
+			require(second.has_value() && second->id() != first.id(),
+					"alternate snapshot identity did not change");
+			const auto foreign = second->manifest().partitions.front().content_digest;
+			require(!validates_derived_partition(*store,
+												 relation_engine,
+												 second->publication().publication_id,
+												 std::string{first.id()},
+												 {foreign}),
+					"partition from another snapshot was accepted");
+		}
+		{
+			auto store = cxxlens::sdk::make_in_memory_snapshot_store(relation_engine);
+			require(store.has_value(), "derived duplicate publication store unavailable");
+			auto first = publish(*store, relation_engine, false);
+			auto second =
+				publish(*store, relation_engine, true, first.publication().publication_id);
+			require(first.id() == second.id(), "duplicate semantic snapshot ID changed");
+			const auto exact = second.manifest().partitions.front().content_digest;
+			require(validates_derived_partition(*store,
+												relation_engine,
+												second.publication().publication_id,
+												std::string{second.id()},
+												{exact}),
+					"duplicate physical publication changed membership");
+		}
+		{
+			auto store = cxxlens::sdk::make_in_memory_snapshot_store(relation_engine);
+			require(store.has_value(), "derived corrupt publication store unavailable");
+			auto prior = publish(*store, relation_engine, false);
+			const auto exact = prior.manifest().partitions.front().content_digest;
+			require(cxxlens::sdk::mark_publication_corrupt_for_testing(
+						*store, prior.publication().publication_id)
+						.has_value(),
+					"derived corrupt prior setup failed");
+			require(!validates_derived_partition(*store,
+												 relation_engine,
+												 prior.publication().publication_id,
+												 std::string{prior.id()},
+												 {exact}),
+					"corrupt current input snapshot was accepted");
+		}
+	}
 } // namespace
 
 int main()
@@ -495,5 +640,6 @@ int main()
 	check_canonical_vectors();
 	check_backend_parity();
 	check_sqlite_semantic_graph_tamper();
+	check_derived_basis_membership();
 	return 0;
 }

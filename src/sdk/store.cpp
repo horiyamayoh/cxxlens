@@ -2341,18 +2341,36 @@ namespace cxxlens::sdk
 				if (const auto* derived = std::get_if<derived_claim_basis>(&value.input_basis))
 				{
 					std::scoped_lock lock{data_->store->mutex};
-					const bool prior = std::ranges::any_of(
+					const auto prior = std::ranges::find_if(
 						data_->store->publications,
 						[&](const auto& publication)
 						{
 							return publication.second->semantic_manifest.id ==
 								derived->input_snapshot &&
 								publication.second->publication_record_value.state ==
-								publication_state::committed;
+								publication_state::committed &&
+								!publication.second->publication_record_value.corrupt &&
+								publication.second->publication_record_value.physical_generation <=
+								data_->store->generation;
 						});
-					if (!prior)
+					if (prior == data_->store->publications.end())
 						return unexpected(
 							store_error("store.derived-basis-not-prior", value.content));
+					const auto& partitions = prior->second->semantic_manifest.partitions;
+					const bool complete_membership = std::ranges::all_of(
+						derived->consumed_partition_content_digests,
+						[&](const std::string& consumed)
+						{
+							return std::ranges::any_of(
+								partitions,
+								[&](const partition_manifest& partition_manifest_value)
+								{
+									return partition_manifest_value.content_digest == consumed;
+								});
+						});
+					if (!complete_membership)
+						return unexpected(
+							store_error("store.derived-basis-partition-missing", value.content));
 				}
 				candidate->rows[value.descriptor].push_back(value.row);
 				candidate->annotations[value.descriptor].push_back({value.row,

@@ -1963,6 +1963,11 @@ manifest と exact `snapshot_partition_binding` を検証済みの `partition_ce
 assumption set、producer semantics を candidate と exact match する。key-domain/evidence は digest を要求し、NG0 closure kind は
 `relation-key-enumeration` に限定する。standalone API、writer、persisted reopen は同じ validator の accept/reject 集合を持つ。
 
+Issue #92 / ADR 0035 により derived claim の consumed partition digest は文字列宣言だけでは publication できない。writer は
+input snapshot ID を committed、non-corrupt、strict-prior publication の immutable manifest へ解決し、consumed 全 digest が
+その exact partition content 集合に含まれることを atomic に検証する。cross-series input と同一 semantic snapshot の複数
+physical publicationでも exact manifest membership は必須であり、一件でも不存在/別 snapshot 所属なら candidate 全体を拒否する。
+
 ---
 
 ## 16. Incremental Materialization

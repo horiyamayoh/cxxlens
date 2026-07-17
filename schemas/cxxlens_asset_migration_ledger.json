@@ -1,5 +1,5 @@
 {
-  "asset_count": 281,
+  "asset_count": 282,
   "assets": [
     {
       "authority": "active",
@@ -648,6 +648,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0034-complete-partition-closure-subject.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0035-derived-basis-partition-membership.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1970,7 +1977,7 @@
     }
   ],
   "classifications": {
-    "active": 245,
+    "active": 246,
     "archived": 35,
     "generated": 1
   },

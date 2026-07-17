@@ -1,5 +1,5 @@
 schema: cxxlens.snapshot-store-contract.v1
-document_version: 1.3.0
+document_version: 1.4.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#15-immutable-snapshot-and-store
@@ -160,6 +160,12 @@ claim_input_basis:
         - transform_semantics
       input_snapshot: strict-prior-published-snapshot
       consumed_partitions: canonical-sorted-unique
+      publication_validation:
+        input_snapshot: committed-non-corrupt-strict-prior
+        consumed_membership: every-digest-in-exact-input-snapshot-manifest
+        partial_membership: atomic-reject
+        cross_series: allowed-with-exact-membership
+        duplicate_physical_publication: same-semantic-manifest-membership
 partition:
   identity_fields:
     - relation_descriptor_id
