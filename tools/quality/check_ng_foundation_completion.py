@@ -11,6 +11,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 from typing import Any
@@ -27,6 +28,10 @@ MANIFEST_SCHEMA = pathlib.Path(
 REPORT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_foundation_completion_report.schema.yaml"
 )
+AUDIT_REPORT_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_foundation_audit_report.schema.yaml"
+)
+AUDIT_CHECKER = pathlib.Path("tools/quality/check_ng_foundation_audits.py")
 ACCEPTANCE = pathlib.Path("schemas/cxxlens_ng_acceptance_manifest.yaml")
 ACCEPTANCE_SCHEMA = pathlib.Path("schemas/cxxlens_ng_acceptance_manifest.schema.yaml")
 RELEASE_BUNDLE = pathlib.Path("schemas/cxxlens_ng_release_bundle.yaml")
@@ -213,6 +218,13 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
         "--root",
         str(root),
     )
+    run_check(
+        root,
+        "tools/quality/verify_checksums.py",
+        "check",
+        "--root",
+        str(root),
+    )
     return manifest
 
 
@@ -260,6 +272,117 @@ def github_issue_states(repository: str, issue_numbers: list[int], token: str) -
     return result
 
 
+def github_open_issue_states(repository: str, token: str) -> dict[int, str]:
+    result: dict[int, str] = {}
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "cxxlens-foundation-completion",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    page = 1
+    while True:
+        request = urllib.request.Request(
+            f"https://api.github.com/repos/{repository}/issues?state=open&per_page=100&page={page}",
+            headers=headers,
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                documents = json.load(response)
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+            fail(f"could not read current open GitHub issues: {error}")
+        if not isinstance(documents, list):
+            fail("current open GitHub issue response is not a list")
+        for document in documents:
+            if "pull_request" not in document:
+                result[int(document["number"])] = "open"
+        if len(documents) < 100:
+            return result
+        page += 1
+
+
+def validate_audit_report(
+    root: pathlib.Path,
+    audit_report: dict[str, Any],
+    git_state: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    validate_schema(
+        audit_report,
+        load_document(root / AUDIT_REPORT_SCHEMA),
+        "foundation audit report",
+    )
+    if audit_report["revision"] != git_state["revision"]:
+        fail("foundation audit report revision differs from completion revision")
+    if audit_report["tree"] != git_state["tree"]:
+        fail("foundation audit report tree differs from completion tree")
+    audits = audit_report["audits"]
+    if set(audits) != EXPECTED_ZERO_AUDITS:
+        fail("foundation audit report set differs from the accepted gate")
+    for identifier, entry in audits.items():
+        if entry["revision"] != git_state["revision"]:
+            fail(f"foundation audit revision differs: {identifier}")
+        if entry["tree"] != git_state["tree"]:
+            fail(f"foundation audit tree differs: {identifier}")
+        if entry["count"] != len(entry["finding_ids"]):
+            fail(f"foundation audit count differs from finding IDs: {identifier}")
+    nonzero = {
+        identifier: entry["finding_ids"]
+        for identifier, entry in audits.items()
+        if entry["count"]
+    }
+    if nonzero:
+        fail(f"foundation audit findings are nonzero: {nonzero}")
+    return audits
+
+
+def run_audit_checker(
+    root: pathlib.Path,
+    manifest: dict[str, Any],
+    git_state: dict[str, Any],
+    issue_states: dict[int, str],
+) -> dict[str, dict[str, Any]]:
+    with tempfile.TemporaryDirectory(prefix="cxxlens-foundation-audit-") as temporary:
+        issue_path = pathlib.Path(temporary) / "issue-states.json"
+        manifest_path = pathlib.Path(temporary) / "manifest.json"
+        issue_path.write_text(
+            json.dumps({str(number): state for number, state in issue_states.items()}),
+            encoding="utf-8",
+        )
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(root / AUDIT_CHECKER),
+                "report",
+                "--root",
+                str(root),
+                "--manifest",
+                str(manifest_path),
+                "--issue-states",
+                str(issue_path),
+                "--revision",
+                git_state["revision"],
+                "--tree",
+                git_state["tree"],
+            ],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip()
+        fail(f"foundation audit checker failed: {detail}")
+    try:
+        audit_report = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        fail(f"foundation audit checker emitted invalid JSON: {error}")
+    if not isinstance(audit_report, dict):
+        fail("foundation audit checker report is not a mapping")
+    return validate_audit_report(root, audit_report, git_state)
+
+
 def build_report(
     root: pathlib.Path,
     manifest: dict[str, Any],
@@ -296,8 +419,8 @@ def build_report(
     ]
     if missing_closed:
         fail(f"required issues are not closed: {missing_closed}")
-    if issue_states.get(71) != "open" or issue_states.get(56) != "open":
-        fail("gate and tracking issues must be open while the final gate is evaluated")
+    if issue_states.get(71) != "closed" or issue_states.get(56) != "closed":
+        fail("gate and tracking issues must be closed for a passed completion report")
 
     ledger = load_document(root / LEDGER)
     authority_digests = {
@@ -329,25 +452,15 @@ def build_report(
                 str(number): "closed"
                 for number in sorted(manifest["required_closed_issues"])
             },
-            "gate_issue": "open",
-            "tracking_issue": "open",
+            "gate_issue": "closed",
+            "tracking_issue": "closed",
         },
         "asset_ledger": {
             "digest": sha256(root / LEDGER),
             "asset_count": ledger["asset_count"],
             "classifications": ledger["classifications"],
         },
-        "audits": {
-            "legacy_assets": 0,
-            "legacy_authority_references": 0,
-            "legacy_code_paths": 0,
-            "legacy_schemas": 0,
-            "legacy_public_headers": 0,
-            "legacy_ci_gates": 0,
-            "migration_blockers": 0,
-            "unowned_contracts": 0,
-            "documentation_drift": 0,
-        },
+        "audits": run_audit_checker(root, manifest, git_state, issue_states),
         "reproduction": {
             "distribution": "ng-foundation",
             "kernel_semantics": "1.0.0",
@@ -393,6 +506,9 @@ def main() -> int:
             args.repository,
             sorted(set(numbers)),
             os.environ.get("GITHUB_TOKEN", ""),
+        )
+        issue_states.update(
+            github_open_issue_states(args.repository, os.environ.get("GITHUB_TOKEN", ""))
         )
         generated_at = (
             datetime.datetime.now(datetime.timezone.utc)

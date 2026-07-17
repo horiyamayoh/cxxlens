@@ -17,7 +17,7 @@ required:
   - handoff_documents
 properties:
   schema: {const: cxxlens.ng-foundation-completion-manifest.v1}
-  document_version: {const: 1.0.0}
+  document_version: {const: 1.1.0}
   maturity: {const: implemented}
   authority:
     type: object
@@ -32,9 +32,18 @@ properties:
   binding:
     type: object
     additionalProperties: false
-    required: [report_schema, revision, tree, clean_worktree, branch]
+    required:
+      - report_schema
+      - audit_report_schema
+      - audit_checker
+      - revision
+      - tree
+      - clean_worktree
+      - branch
     properties:
       report_schema: {const: schemas/cxxlens_ng_foundation_completion_report.schema.yaml}
+      audit_report_schema: {const: schemas/cxxlens_ng_foundation_audit_report.schema.yaml}
+      audit_checker: {const: tools/quality/check_ng_foundation_audits.py}
       revision: {const: git-head}
       tree: {const: git-head-tree}
       clean_worktree: {const: required}

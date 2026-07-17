@@ -12,7 +12,7 @@
 | Provider Runtime | `schemas/cxxlens_ng_provider_runtime_contract.yaml` | #70 | implemented |
 | Public C++ API Catalog | `schemas/cxxlens_ng_public_api_catalog.yaml` | #66–#70 | implemented |
 | Acceptance Manifest | `schemas/cxxlens_ng_acceptance_manifest.yaml` | #71 | implemented foundation gates |
-| Foundation Completion | `schemas/cxxlens_ng_foundation_completion_manifest.yaml` | #71 | implemented, CI commit-bound report |
+| Foundation Completion | `schemas/cxxlens_ng_foundation_completion_manifest.yaml` | #113 | implemented, CI commit/finding-bound measured-audit report |
 | Security Profile | `schemas/cxxlens_ng_security_profile.yaml` | #65 | accepted exact contract |
 | Release Bundle | `schemas/cxxlens_ng_release_bundle.yaml` | #59 | accepted exact contract |
 

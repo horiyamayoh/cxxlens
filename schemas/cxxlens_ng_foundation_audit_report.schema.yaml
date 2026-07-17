@@ -1,0 +1,59 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-foundation-audit-report.v1
+title: cxxlens next-generation foundation audit report
+type: object
+additionalProperties: false
+required: [schema, revision, tree, audits]
+properties:
+  schema: {const: cxxlens.ng-foundation-audit-report.v1}
+  revision: {$ref: '#/$defs/git_object'}
+  tree: {$ref: '#/$defs/git_object'}
+  audits:
+    type: object
+    additionalProperties: false
+    required:
+      - legacy_assets
+      - legacy_authority_references
+      - legacy_code_paths
+      - legacy_schemas
+      - legacy_public_headers
+      - legacy_ci_gates
+      - migration_blockers
+      - unowned_contracts
+      - documentation_drift
+    properties:
+      legacy_assets: {$ref: '#/$defs/audit'}
+      legacy_authority_references: {$ref: '#/$defs/audit'}
+      legacy_code_paths: {$ref: '#/$defs/audit'}
+      legacy_schemas: {$ref: '#/$defs/audit'}
+      legacy_public_headers: {$ref: '#/$defs/audit'}
+      legacy_ci_gates: {$ref: '#/$defs/audit'}
+      migration_blockers: {$ref: '#/$defs/audit'}
+      unowned_contracts: {$ref: '#/$defs/audit'}
+      documentation_drift: {$ref: '#/$defs/audit'}
+$defs:
+  git_object:
+    type: string
+    pattern: '^[0-9a-f]{40}$'
+  digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  audit:
+    type: object
+    additionalProperties: false
+    required: [checker, revision, tree, targets, target_digest, count, finding_ids]
+    properties:
+      checker: {type: string, pattern: '^foundation-audit\.[a-z0-9.-]+/v[0-9]+$'}
+      revision: {$ref: '#/$defs/git_object'}
+      tree: {$ref: '#/$defs/git_object'}
+      targets:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {type: string, minLength: 1}
+      target_digest: {$ref: '#/$defs/digest'}
+      count: {type: integer, minimum: 0}
+      finding_ids:
+        type: array
+        uniqueItems: true
+        items: {type: string, minLength: 1}

@@ -1,5 +1,5 @@
 {
-  "asset_count": 303,
+  "asset_count": 306,
   "assets": [
     {
       "authority": "active",
@@ -801,6 +801,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/design/adr/0056-measured-foundation-zero-audits.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/design/adr/README.md",
       "removal_issue": null,
       "replacement": null,
@@ -1187,6 +1194,13 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_compatibility_request.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_foundation_audit_report.schema.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1984,6 +1998,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_foundation_audits.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_foundation_completion.py",
       "removal_issue": null,
       "replacement": null,
@@ -2124,7 +2145,7 @@
     }
   ],
   "classifications": {
-    "active": 267,
+    "active": 270,
     "archived": 35,
     "generated": 1
   },

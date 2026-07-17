@@ -1,5 +1,5 @@
 schema: cxxlens.ng-foundation-completion-manifest.v1
-document_version: 1.0.0
+document_version: 1.1.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -9,6 +9,8 @@ authority:
   tracking_issue: '#56'
 binding:
   report_schema: schemas/cxxlens_ng_foundation_completion_report.schema.yaml
+  audit_report_schema: schemas/cxxlens_ng_foundation_audit_report.schema.yaml
+  audit_checker: tools/quality/check_ng_foundation_audits.py
   revision: git-head
   tree: git-head-tree
   clean_worktree: required
@@ -73,6 +75,7 @@ evidence:
     - tools/quality/check_ng_provider_runtime.py
     - tools/quality/check_ng_security_contract.py
     - tools/quality/check_ng_migration_completion.py
+    - tools/quality/check_ng_foundation_audits.py
   claims:
     standard_custom_relation:
       - schemas/cxxlens_ng_relation_conformance_vectors.yaml

@@ -74,8 +74,8 @@ properties:
         type: object
         minProperties: 16
         additionalProperties: {const: closed}
-      gate_issue: {const: open}
-      tracking_issue: {const: open}
+      gate_issue: {const: closed}
+      tracking_issue: {const: closed}
   asset_ledger:
     type: object
     additionalProperties: false
@@ -105,15 +105,15 @@ properties:
       - unowned_contracts
       - documentation_drift
     properties:
-      legacy_assets: {const: 0}
-      legacy_authority_references: {const: 0}
-      legacy_code_paths: {const: 0}
-      legacy_schemas: {const: 0}
-      legacy_public_headers: {const: 0}
-      legacy_ci_gates: {const: 0}
-      migration_blockers: {const: 0}
-      unowned_contracts: {const: 0}
-      documentation_drift: {const: 0}
+      legacy_assets: {$ref: '#/$defs/zero_audit'}
+      legacy_authority_references: {$ref: '#/$defs/zero_audit'}
+      legacy_code_paths: {$ref: '#/$defs/zero_audit'}
+      legacy_schemas: {$ref: '#/$defs/zero_audit'}
+      legacy_public_headers: {$ref: '#/$defs/zero_audit'}
+      legacy_ci_gates: {$ref: '#/$defs/zero_audit'}
+      migration_blockers: {$ref: '#/$defs/zero_audit'}
+      unowned_contracts: {$ref: '#/$defs/zero_audit'}
+      documentation_drift: {$ref: '#/$defs/zero_audit'}
   reproduction:
     type: object
     additionalProperties: false
@@ -127,3 +127,22 @@ $defs:
   digest:
     type: string
     pattern: '^sha256:[0-9a-f]{64}$'
+  git_object:
+    type: string
+    pattern: '^[0-9a-f]{40}$'
+  zero_audit:
+    type: object
+    additionalProperties: false
+    required: [checker, revision, tree, targets, target_digest, count, finding_ids]
+    properties:
+      checker: {type: string, pattern: '^foundation-audit\.[a-z0-9.-]+/v[0-9]+$'}
+      revision: {$ref: '#/$defs/git_object'}
+      tree: {$ref: '#/$defs/git_object'}
+      targets:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {type: string, minLength: 1}
+      target_digest: {$ref: '#/$defs/digest'}
+      count: {const: 0}
+      finding_ids: {type: array, maxItems: 0}

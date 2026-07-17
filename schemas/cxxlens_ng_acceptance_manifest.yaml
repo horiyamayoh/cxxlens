@@ -125,15 +125,17 @@ entries:
     summary: Closure, incomplete absence, invalidation, warm-zero, and bounded recursion.
   - id: gate.foundation
     status: implemented
-    owner_issue: '#71'
+    owner_issue: '#113'
     profile: foundation
-    contract_issue: '#71'
+    contract_issue: '#113'
     depends_on: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4]
     evidence:
       - schemas/cxxlens_ng_foundation_completion_manifest.yaml
+      - schemas/cxxlens_ng_foundation_audit_report.schema.yaml
+      - tools/quality/check_ng_foundation_audits.py
       - tools/quality/check_ng_foundation_completion.py
       - .github/workflows/quality.yml
-    summary: Commit-bound completion of the migrated semantic relation foundation.
+    summary: Commit- and finding-bound completion from measured zero-audit subreports.
   - id: gate.release
     status: deferred
     owner_issue: '#71'

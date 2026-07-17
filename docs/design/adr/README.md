@@ -42,6 +42,7 @@
 | [0040](0040-provider-frame-version-and-flags.md) | provider frame version and flag semantics |
 | [0041](0041-provider-control-text-utf8.md) | strict UTF-8 provider control text |
 | [0042](0042-immutable-provider-selection-authority.md) | immutable provider selection authority token |
+| [0056](0056-measured-foundation-zero-audits.md) | measured foundation zero-audit subreports |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

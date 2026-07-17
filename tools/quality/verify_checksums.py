@@ -72,6 +72,7 @@ PACKAGE_PATHS = (
     "schemas/cxxlens_ng_acceptance_manifest.schema.yaml",
     "schemas/cxxlens_ng_foundation_completion_manifest.yaml",
     "schemas/cxxlens_ng_foundation_completion_manifest.schema.yaml",
+    "schemas/cxxlens_ng_foundation_audit_report.schema.yaml",
     "schemas/cxxlens_ng_foundation_completion_report.schema.yaml",
     "schemas/cxxlens_ng_security_profile.yaml",
     "schemas/cxxlens_ng_security_profile.schema.yaml",

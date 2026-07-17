@@ -3733,6 +3733,14 @@ commit/tree に対する clean checkout、CI job、child issue 状態は
 `cxxlens.ng-foundation-completion-report.v1` の CI artifact が結合する。manifest 自身へ final tree hash を
 埋め込む自己参照は行わない。
 
+zero audit は completion checker が件数を仮定してはならない。`check_ng_foundation_audits.py` は各 audit について checker ID、
+検査対象の canonical set と digest、finding ID、実測 count、revision/tree を
+`cxxlens.ng-foundation-audit-report.v1` として生成する。completion checker は専用 schema を検証し、report 全体と各 entry の
+revision/tree が対象 commit に一致し、`count == len(finding_ids) == 0` の場合だけ passed report へ取り込む。GitHub migration
+blocker の authority set は report 時点の repository の全 open issue とし、新規 issue を未分類のまま zero から除外できない。
+network failure、不正 JSON/schema、checker 未実行、ownership 欠落、checksum drift は fail closed とする。gate/tracking issue を含む
+既知 issue state は対象 digest に含め、passed completion report では gate と tracking issue 自身も closed でなければならない。
+
 ### 26.2 Machine-readable traceability
 
 各 requirement:
