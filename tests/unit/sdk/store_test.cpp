@@ -43,8 +43,8 @@ namespace
 		};
 		value.key_columns = {"company.test.item.v1.key"};
 		value.merge = cxxlens::sdk::merge_mode::set;
-		value.descriptor_digest =
-			cxxlens::sdk::semantic_digest("cxxlens.relation-descriptor.v1", value.canonical_form());
+		value.descriptor_digest = *cxxlens::sdk::semantic_digest("cxxlens.relation-descriptor.v1",
+																 value.canonical_form());
 		return value;
 	}
 

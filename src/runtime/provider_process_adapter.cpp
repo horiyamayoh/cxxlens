@@ -90,7 +90,7 @@ namespace cxxlens::sdk::provider
 				std::move(applied),
 				achieved,
 				requirement.policy_digest,
-				cxxlens::sdk::semantic_digest("cxxlens.provider-sandbox-evidence.v1", evidence)};
+				*cxxlens::sdk::semantic_digest("cxxlens.provider-sandbox-evidence.v1", evidence)};
 		}
 
 #if defined(__linux__) && defined(__GLIBC__)
@@ -509,7 +509,7 @@ namespace cxxlens::sdk::provider
 									   {},
 									   sandbox_assurance::none,
 									   invocation.sandbox.policy_digest,
-									   cxxlens::sdk::semantic_digest(
+									   *cxxlens::sdk::semantic_digest(
 										   "cxxlens.provider-sandbox-evidence.v1", "unsupported")},
 									  "provider.runtime-unavailable"};
 			}

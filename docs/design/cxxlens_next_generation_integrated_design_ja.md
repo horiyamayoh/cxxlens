@@ -654,6 +654,12 @@ MUST NOT:
 
 semantic floating value を許可する relation は、NaN、signed zero、endianness を schema で定義する。NG0 standard relation は authoritative float を使用しない。
 
+caller-supplied domain と byte payload を受ける `semantic_digest` は ADR 0016 の
+`cxxlens-semantic-digest-v2` tuple（contract tag、UTF-8 domain、bytes payload）を使用する。domain は
+`^[a-z][a-z0-9_.-]*$` とし、invalid domain は `sdk.semantic-domain-invalid` で拒否する。v2 の serialized form は
+`semantic-v2:sha256:<64 lowercase hex>` であり、legacy の NUL-separated `sha256:` value と同一 namespace へ
+silent rehash してはならない。legacy value は canonical source から明示的に再計算できる場合だけ移行する。
+
 ### 5.4 Path domains
 
 path は単なる host absolute string ではなく domain 付き logical path とする。
@@ -3481,6 +3487,7 @@ group-level table だけで complete を宣言しない。
 #### G0 — Base invariants
 
 - canonical encoding
+- semantic digest v2 domain/payload injectivity and legacy namespace separation
 - typed IDs
 - source spans
 - truth table

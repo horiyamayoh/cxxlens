@@ -27,9 +27,12 @@ namespace cxxlens::sdk
 
 		[[nodiscard]] bool sha256_digest(const std::string_view value)
 		{
-			if (value.size() != 71U || !value.starts_with("sha256:"))
+			const auto hex = value.starts_with("sha256:")  ? value.substr(7U)
+				: value.starts_with("semantic-v2:sha256:") ? value.substr(19U)
+														   : std::string_view{};
+			if (hex.size() != 64U)
 				return false;
-			return std::ranges::all_of(value.substr(7U),
+			return std::ranges::all_of(hex,
 									   [](const char byte)
 									   {
 										   return std::isdigit(static_cast<unsigned char>(byte)) !=
@@ -42,6 +45,7 @@ namespace cxxlens::sdk
 		{
 			const auto separator = value.find(':');
 			return separator != std::string_view::npos && separator != 0U &&
+				value.substr(separator + 1U).starts_with("sha256:") &&
 				sha256_digest(value.substr(separator + 1U));
 		}
 
@@ -351,8 +355,8 @@ namespace cxxlens::sdk
 		if (!descriptor || canonical_row.descriptor_id != input.descriptor)
 			return unexpected(descriptor ? claim_error("sdk.row-descriptor-mismatch", "descriptor")
 										 : std::move(descriptor.error()));
-		direct_claim_basis basis{semantic_digest("cxxlens.canonical-input-basis.v1",
-												 input.content + "\n" + transform_semantics)};
+		direct_claim_basis basis{*semantic_digest("cxxlens.canonical-input-basis.v1",
+												  input.content + "\n" + transform_semantics)};
 		return encode_claim(*descriptor,
 							std::move(canonical_row),
 							input.presence,
@@ -565,7 +569,7 @@ namespace cxxlens::sdk
 			for (const auto& fragment : value.overlap_fragments)
 				canonical += "condition:" + fragment + '\n';
 		}
-		output.content_digest = semantic_digest("cxxlens.claim-batch.v1", canonical);
+		output.content_digest = *semantic_digest("cxxlens.claim-batch.v1", canonical);
 		return output;
 	}
 } // namespace cxxlens::sdk

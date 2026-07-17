@@ -153,8 +153,8 @@ namespace cxxlens::detail::clang22
 				prefix + "exact_equivalence",
 				prefix + "limitation",
 			};
-			descriptor.descriptor_digest =
-				sdk::semantic_digest("cxxlens.relation-descriptor.v1", descriptor.canonical_form());
+			descriptor.descriptor_digest = *sdk::semantic_digest("cxxlens.relation-descriptor.v1",
+																 descriptor.canonical_form());
 			return descriptor;
 		}
 
@@ -173,7 +173,7 @@ namespace cxxlens::detail::clang22
 								  {sdk::scalar_kind::typed_id, "clang22_observation_id", false}},
 								 sdk::detached_cell::typed(
 									 "clang22_observation_id",
-									 sdk::semantic_digest("clang22.observation.v1", projection))),
+									 *sdk::semantic_digest("clang22.observation.v1", projection))),
 					 builder.set(
 						 {descriptor.id,
 						  prefix + "compile_unit",
@@ -188,8 +188,8 @@ namespace cxxlens::detail::clang22
 								  {sdk::scalar_kind::digest, {}, false}},
 								 symbol_cell(sdk::scalar_kind::digest,
 											 {},
-											 sdk::semantic_digest("clang22.observation-payload.v1",
-																  projection))),
+											 *sdk::semantic_digest("clang22.observation-payload.v1",
+																   projection))),
 					 builder.set({descriptor.id,
 								  prefix + "exact_equivalence",
 								  {sdk::scalar_kind::boolean, {}, false}},
@@ -243,7 +243,7 @@ namespace cxxlens::detail::clang22
 					 builder.set<relation::structural_signature_digest>(symbol_cell(
 						 sdk::scalar_kind::digest,
 						 {},
-						 sdk::semantic_digest("cc.entity.structural-signature.v1", projection))),
+						 *sdk::semantic_digest("cc.entity.structural-signature.v1", projection))),
 					 builder.set<relation::toolchain>(
 						 optional_typed("toolchain_context_id", toolchain)),
 					 builder.set<relation::provider_local_key>(
@@ -435,9 +435,9 @@ namespace cxxlens::detail::clang22
 			const auto* canonical = llvm::cast<clang::NamedDecl>(declaration.getCanonicalDecl());
 			if (!clang::index::generateUSRForDecl(canonical, storage) && !storage.empty())
 				return "clang-usr:" + storage.str().str();
-			return sdk::semantic_digest("clang22.declaration-fallback.v1",
-										canonical->getQualifiedNameAsString() + "\n" +
-											canonical->getDeclKindName());
+			return *sdk::semantic_digest("clang22.declaration-fallback.v1",
+										 canonical->getQualifiedNameAsString() + "\n" +
+											 canonical->getDeclKindName());
 		}
 
 		[[nodiscard]] std::string declaration_kind(const clang::FunctionDecl& declaration)
@@ -499,7 +499,7 @@ namespace cxxlens::detail::clang22
 				type.payload.emplace("type.canonical",
 									 declaration->getType().getCanonicalType().getAsString());
 				type.semantic_key =
-					sdk::semantic_digest("clang22.type.v1", type.payload.at("type.canonical"));
+					*sdk::semantic_digest("clang22.type.v1", type.payload.at("type.canonical"));
 				insert(std::move(type));
 				return true;
 			}
@@ -529,9 +529,9 @@ namespace cxxlens::detail::clang22
 				}
 				call.source_span_id = std::move(source->id);
 				call.semantic_key =
-					sdk::semantic_digest("clang22.call.v1",
-										 current_function_ + "\n" + *call.source_span_id + "\n" +
-											 call.payload["call.direct_callee"]);
+					*sdk::semantic_digest("clang22.call.v1",
+										  current_function_ + "\n" + *call.source_span_id + "\n" +
+											  call.payload["call.direct_callee"]);
 				insert(std::move(call));
 				return true;
 			}
@@ -849,15 +849,15 @@ namespace cxxlens::detail::clang22
 			invocation_exact && invocation_limitations.empty() && batch.failed_count == 0U;
 		output.equivalence_limitations = std::move(invocation_limitations);
 		const auto limitation = limitation_text(output.equivalence_limitations);
-		const auto toolchain = sdk::semantic_digest("toolchain-context", toolchain_digest);
+		const auto toolchain = *sdk::semantic_digest("toolchain-context", toolchain_digest);
 
 		std::map<std::string, std::string, std::less<>> entity_ids;
 		for (const auto& observation : batch.observations)
 			if (observation.kind == observation_kind::entity)
 			{
-				const auto entity = sdk::semantic_digest("cc-entity",
-														 observation.semantic_key + "\n" +
-															 toolchain + "\n" + batch.variant);
+				const auto entity = *sdk::semantic_digest("cc-entity",
+														  observation.semantic_key + "\n" +
+															  toolchain + "\n" + batch.variant);
 				entity_ids.emplace(observation.semantic_key, entity);
 				auto local = observation_row(entity_observation_descriptor(),
 											 observation,
@@ -900,7 +900,7 @@ namespace cxxlens::detail::clang22
 					{"provider.source-unavailable", observation.semantic_key, "cc.call_site"});
 				continue;
 			}
-			const auto call = sdk::semantic_digest(
+			const auto call = *sdk::semantic_digest(
 				"cc-call",
 				batch.unit + "\n" + batch.variant + "\n" + *observation.source_span_id + "\n" +
 					observation.semantic_key + "\n" + std::to_string(call_ordinal));
@@ -984,7 +984,7 @@ namespace cxxlens::detail::clang22
 		sdk::provider::task task{
 			task_id,
 			{request->compile_unit,
-			 sdk::semantic_digest("cxxlens.provider-project.v1", request->compile_unit),
+			 *sdk::semantic_digest("cxxlens.provider-project.v1", request->compile_unit),
 			 ".",
 			 {request->compile_unit}},
 			{entity_observation_descriptor(),

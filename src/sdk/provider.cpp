@@ -91,9 +91,12 @@ namespace cxxlens::sdk::provider
 
 		[[nodiscard]] bool canonical_digest(const std::string_view value)
 		{
-			if (!value.starts_with("sha256:") || value.size() != 71U)
+			const auto hex = value.starts_with("sha256:")  ? value.substr(7U)
+				: value.starts_with("semantic-v2:sha256:") ? value.substr(19U)
+														   : std::string_view{};
+			if (hex.size() != 64U)
 				return false;
-			return std::ranges::all_of(value.substr(7U),
+			return std::ranges::all_of(hex,
 									   [](const char byte)
 									   {
 										   return std::isdigit(static_cast<unsigned char>(byte)) !=
@@ -589,7 +592,7 @@ namespace cxxlens::sdk::provider
 		if (auto sent = writer_->send(message_type::batch_begin, control); !sent)
 			return sent;
 		rolling_digest_ =
-			semantic_digest("cxxlens.provider-batch.v1", descriptor_.descriptor_digest);
+			*semantic_digest("cxxlens.provider-batch.v1", descriptor_.descriptor_digest);
 		open_ = true;
 		return {};
 	}
@@ -608,7 +611,7 @@ namespace cxxlens::sdk::provider
 		if (auto sent = writer_->send(message_type::column_chunk, control, payload); !sent)
 			return sent;
 		rolling_digest_ =
-			semantic_digest("cxxlens.provider-batch.v1", rolling_digest_ + "\n" + canonical);
+			*semantic_digest("cxxlens.provider-batch.v1", rolling_digest_ + "\n" + canonical);
 		++row_count_;
 		++*total_rows_;
 		return {};

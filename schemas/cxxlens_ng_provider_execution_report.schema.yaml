@@ -46,7 +46,7 @@ properties:
         items: {type: string, minLength: 1}
       achieved: {enum: [none, best_effort, enforced, certified]}
       policy_digest: {$ref: '#/$defs/digest'}
-      evidence_digest: {$ref: '#/$defs/digest'}
+      evidence_digest: {$ref: '#/$defs/semantic_digest'}
   frames:
     type: object
     additionalProperties: false
@@ -54,7 +54,7 @@ properties:
     properties:
       count: {type: integer, minimum: 0}
       last_sequence: {type: [integer, 'null'], minimum: 0}
-      transcript_digest: {$ref: '#/$defs/digest'}
+      transcript_digest: {$ref: '#/$defs/semantic_digest'}
   diagnostics:
     type: array
     items:
@@ -65,8 +65,12 @@ properties:
         code: {type: string, pattern: '^(provider|security)\.[a-z0-9-]+$'}
         subject: {type: string}
         detail: {type: string}
-  semantic_digest: {$ref: '#/$defs/digest'}
+  semantic_digest: {$ref: '#/$defs/semantic_digest'}
 $defs:
   digest:
     type: string
     pattern: '^sha256:[0-9a-f]{64}$'
+  semantic_digest:
+    oneOf:
+      - {$ref: '#/$defs/digest'}
+      - {type: string, pattern: '^semantic-v2:sha256:[0-9a-f]{64}$'}

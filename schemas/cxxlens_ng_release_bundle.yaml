@@ -197,7 +197,7 @@ version_axes:
     migration: explicit-only
   - id: identity-contract
     compatibility: exact-major
-    migration: explicit-only
+    migration: explicit-recompute-from-canonical-source-only
   - id: condition-semantics
     compatibility: exact-major
     migration: explicit-only

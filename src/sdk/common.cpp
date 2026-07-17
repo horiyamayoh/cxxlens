@@ -232,16 +232,31 @@ namespace cxxlens::sdk
 		return std::string{identity_kind} + ':' + content_digest(bytes);
 	}
 
-	std::string semantic_digest(const std::string_view domain, const std::string_view bytes)
+	result<std::string> semantic_digest(const std::string_view domain, const std::string_view bytes)
 	{
-		std::string framed;
-		framed.reserve(domain.size() + bytes.size() + 2U);
-		framed.append(domain);
-		framed.push_back('\0');
-		framed.append(bytes);
-		const auto state = sha256_words(framed);
+		if (domain.empty() || domain.front() < 'a' || domain.front() > 'z')
+			return unexpected(error{"sdk.semantic-domain-invalid", "domain", std::string{domain}});
+		for (const auto byte : domain)
+			if (!((byte >= 'a' && byte <= 'z') || (byte >= '0' && byte <= '9') || byte == '.' ||
+				  byte == '_' || byte == '-'))
+				return unexpected(
+					error{"sdk.semantic-domain-invalid", "domain", std::string{domain}});
+
+		std::vector<std::byte> payload;
+		payload.reserve(bytes.size());
+		for (const auto byte : bytes)
+			payload.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
+		auto framed = canonical_binary(
+			canonical_value::from_tuple({canonical_value::from_string("cxxlens-semantic-digest-v2"),
+										 canonical_value::from_string(std::string{domain}),
+										 canonical_value::from_bytes(std::move(payload))}));
+		std::string hash_input;
+		hash_input.reserve(framed.size());
+		for (const auto byte : framed)
+			hash_input.push_back(static_cast<char>(std::to_integer<unsigned char>(byte)));
+		const auto state = sha256_words(hash_input);
 		std::ostringstream output;
-		output << "sha256:" << std::hex << std::setfill('0');
+		output << "semantic-v2:sha256:" << std::hex << std::setfill('0');
 		for (const auto value : state)
 			output << std::setw(8) << value;
 		return output.str();

@@ -21,6 +21,7 @@ entries:
       - tests/unit/sdk/sdk_test.cpp
       - tests/public_headers/sdk_header_test.cpp
       - tools/quality/check_ng_semantic_guarantee.py
+      - docs/design/adr/0016-semantic-digest-v2.md
     summary: Base identity, source, condition, coverage, truth, and header invariants.
   - id: gate.g1
     status: implemented

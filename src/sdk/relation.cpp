@@ -251,7 +251,7 @@ namespace cxxlens::sdk
 						relation_error("sdk.reference-invalid", source, "source-column"));
 		}
 		const auto expected = contract_canonical.empty()
-			? semantic_digest("cxxlens.relation-descriptor.v1", canonical_form())
+			? *semantic_digest("cxxlens.relation-descriptor.v1", canonical_form())
 			: content_digest(std::as_bytes(std::span{contract_canonical}));
 		if (descriptor_digest != expected)
 			return cxxlens::sdk::unexpected(
@@ -364,7 +364,7 @@ namespace cxxlens::sdk
 			return cxxlens::sdk::unexpected(relation_error("sdk.registry-frozen", descriptor.name));
 		if (descriptor.descriptor_digest.empty())
 			descriptor.descriptor_digest =
-				semantic_digest("cxxlens.relation-descriptor.v1", descriptor.canonical_form());
+				*semantic_digest("cxxlens.relation-descriptor.v1", descriptor.canonical_form());
 		if (auto valid = descriptor.validate(); !valid)
 			return valid;
 		if (const auto found = descriptors_.find(descriptor.name); found != descriptors_.end())
@@ -482,7 +482,7 @@ namespace cxxlens::sdk
 		}
 		*frozen_ = true;
 		return relation_engine{descriptors_,
-							   semantic_digest("cxxlens.relation-registry.v1", canonical),
+							   *semantic_digest("cxxlens.relation-registry.v1", canonical),
 							   std::move(generation)};
 	}
 

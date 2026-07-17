@@ -227,7 +227,7 @@ namespace cxxlens::sdk::provider
 			output << frames.back().sequence;
 		output << R"(,"transcript_digest":)"
 			   << json_string(
-					  cxxlens::sdk::semantic_digest("cxxlens.provider-transcript.v1", transcript))
+					  *cxxlens::sdk::semantic_digest("cxxlens.provider-transcript.v1", transcript))
 			   << R"(},"input_binding":{"environment":)" << json_string(environment_digest)
 			   << R"(,"invocation":)" << json_string(normalized_invocation_digest) << R"(,"task":)"
 			   << json_string(task_input_digest) << R"(,"toolchain":)"
@@ -256,8 +256,8 @@ namespace cxxlens::sdk::provider
 		for (const auto& diagnostic : diagnostics)
 			projection << diagnostic.code << '|' << diagnostic.subject << '|' << diagnostic.detail
 					   << '\n';
-		return cxxlens::sdk::semantic_digest("cxxlens.provider-execution-report.v1",
-											 projection.str());
+		return *cxxlens::sdk::semantic_digest("cxxlens.provider-execution-report.v1",
+											  projection.str());
 	}
 
 	process_provider_runtime::process_provider_runtime(const provider_process_port& processes)

@@ -8,7 +8,7 @@
 
 namespace
 {
-	[[nodiscard]] cxxlens::sdk::relation_descriptor source_span_descriptor()
+	[[nodiscard]] cxxlens::sdk::result<cxxlens::sdk::relation_descriptor> source_span_descriptor()
 	{
 		cxxlens::sdk::relation_descriptor descriptor;
 		descriptor.id = "source.span.v1";
@@ -24,8 +24,11 @@ namespace
 							   cxxlens::sdk::column_role::claim_key}};
 		descriptor.key_columns = {"source.span.v1.span"};
 		descriptor.merge = cxxlens::sdk::merge_mode::set;
-		descriptor.descriptor_digest = cxxlens::sdk::semantic_digest(
-			"cxxlens.relation-descriptor.v1", descriptor.canonical_form());
+		auto digest = cxxlens::sdk::semantic_digest("cxxlens.relation-descriptor.v1",
+													descriptor.canonical_form());
+		if (!digest)
+			return cxxlens::sdk::unexpected(std::move(digest.error()));
+		descriptor.descriptor_digest = std::move(*digest);
 		return descriptor;
 	}
 
@@ -60,7 +63,10 @@ namespace
 
 int main()
 {
-	const auto source_descriptor = source_span_descriptor();
+	auto source_descriptor_value = source_span_descriptor();
+	if (!source_descriptor_value)
+		return 1;
+	const auto source_descriptor = std::move(*source_descriptor_value);
 	cxxlens::sdk::relation_registry registry;
 	if (!registry.add(source_descriptor) ||
 		!registry.add(cxxlens::cc::relations::entity::descriptor()) ||

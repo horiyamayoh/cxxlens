@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <ranges>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -121,7 +122,7 @@ namespace
 		descriptor.key_columns = {descriptor.id + ".key"};
 		descriptor.merge = mode;
 		descriptor.conflict_columns = {descriptor.id + ".value"};
-		descriptor.descriptor_digest = cxxlens::sdk::semantic_digest(
+		descriptor.descriptor_digest = *cxxlens::sdk::semantic_digest(
 			"cxxlens.relation-descriptor.v1", descriptor.canonical_form());
 		return descriptor;
 	}
@@ -144,7 +145,7 @@ namespace
 							   cxxlens::sdk::column_role::claim_key}};
 		descriptor.key_columns = {column_id};
 		descriptor.merge = cxxlens::sdk::merge_mode::set;
-		descriptor.descriptor_digest = cxxlens::sdk::semantic_digest(
+		descriptor.descriptor_digest = *cxxlens::sdk::semantic_digest(
 			"cxxlens.relation-descriptor.v1", descriptor.canonical_form());
 		return descriptor;
 	}
@@ -217,6 +218,33 @@ namespace
 		require(cxxlens::sdk::content_digest(empty) ==
 					"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 				"SHA-256 content digest mismatch");
+		const std::string payload_a{"\0b", 2};
+		const std::string invalid_domain{"a\0", 2};
+		auto first = cxxlens::sdk::semantic_digest("a", payload_a);
+		auto second =
+			cxxlens::sdk::semantic_digest("a.b", std::string_view{"binary\0payload", 14U});
+		require(first && second && *first != *second,
+				"semantic digest v2 did not preserve typed domain/payload boundaries");
+		require(*first ==
+					"semantic-v2:sha256:"
+					"0a558924559edbcc7c26286adae66eea9dc33f3e75b1c2747ef1027bf9cb68d3",
+				"semantic digest v2 reference vector diverged");
+		std::set<std::string> length_boundary_digests;
+		for (const auto length : {0U, 1U, 255U, 256U, 65535U, 65536U})
+		{
+			auto digest =
+				cxxlens::sdk::semantic_digest("length.boundary", std::string(length, 'x'));
+			require(digest.has_value(), "semantic digest rejected a binary length boundary");
+			length_boundary_digests.insert(std::move(*digest));
+		}
+		require(length_boundary_digests.size() == 6U,
+				"semantic digest length framing was not injective at a field boundary");
+		for (const auto& invalid : {std::string{}, invalid_domain, std::string{"a\n"}})
+		{
+			auto rejected = cxxlens::sdk::semantic_digest(invalid, "b");
+			require(!rejected && rejected.error().code == "sdk.semantic-domain-invalid",
+					"invalid semantic domain was accepted");
+		}
 	}
 
 	void check_static_dynamic_query()
@@ -523,8 +551,8 @@ namespace
 
 		auto native = make_merge_descriptor("company.test.native", merge_mode::set);
 		native.columns.back().type = {cxxlens::sdk::scalar_kind::typed_id, "native_pointer", false};
-		native.descriptor_digest = cxxlens::sdk::semantic_digest("cxxlens.relation-descriptor.v1",
-																 native.canonical_form());
+		native.descriptor_digest = *cxxlens::sdk::semantic_digest("cxxlens.relation-descriptor.v1",
+																  native.canonical_form());
 		cxxlens::sdk::relation_registry native_registry;
 		auto native_rejected = native_registry.add(std::move(native));
 		require(!native_rejected && native_rejected.error().code == "sdk.native-address-payload",
@@ -541,7 +569,7 @@ namespace
 							   {cycle_a.id + ".key"},
 							   cxxlens::sdk::reference_strength::hard}};
 		for (auto* descriptor : {&cycle_a, &cycle_b})
-			descriptor->descriptor_digest = cxxlens::sdk::semantic_digest(
+			descriptor->descriptor_digest = *cxxlens::sdk::semantic_digest(
 				"cxxlens.relation-descriptor.v1", descriptor->canonical_form());
 		cxxlens::sdk::relation_registry cycle_registry;
 		require(cycle_registry.add(cycle_a) && cycle_registry.add(cycle_b),

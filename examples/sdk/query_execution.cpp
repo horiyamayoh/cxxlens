@@ -6,7 +6,7 @@
 
 namespace
 {
-	[[nodiscard]] cxxlens::sdk::relation_descriptor relation()
+	[[nodiscard]] cxxlens::sdk::result<cxxlens::sdk::relation_descriptor> relation()
 	{
 		cxxlens::sdk::relation_descriptor value;
 		value.id = "company.example.query_metric.v1";
@@ -28,8 +28,11 @@ namespace
 			 cxxlens::sdk::column_role::authoritative_payload},
 		};
 		value.key_columns = {value.columns.front().id};
-		value.descriptor_digest =
+		auto digest =
 			cxxlens::sdk::semantic_digest("cxxlens.relation-descriptor.v1", value.canonical_form());
+		if (!digest)
+			return cxxlens::sdk::unexpected(std::move(digest.error()));
+		value.descriptor_digest = std::move(*digest);
 		return value;
 	}
 
@@ -94,7 +97,10 @@ namespace
 
 int main()
 {
-	const auto descriptor = relation();
+	auto descriptor_value = relation();
+	if (!descriptor_value)
+		return EXIT_FAILURE;
+	const auto descriptor = std::move(*descriptor_value);
 	cxxlens::sdk::relation_registry registry;
 	if (!registry.add(descriptor))
 		return EXIT_FAILURE;

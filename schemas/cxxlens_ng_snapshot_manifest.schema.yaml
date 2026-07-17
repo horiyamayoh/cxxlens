@@ -20,10 +20,10 @@ properties:
       - closures
     properties:
       snapshot_semantics_version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
-      catalog_semantic_digest: {$ref: '#/$defs/digest'}
+      catalog_semantic_digest: {$ref: '#/$defs/semantic_digest'}
       condition_universe_id: {$ref: '#/$defs/strong_id'}
-      relation_registry_digest: {$ref: '#/$defs/digest'}
-      interpretation_policy_digest: {$ref: '#/$defs/digest'}
+      relation_registry_digest: {$ref: '#/$defs/semantic_digest'}
+      interpretation_policy_digest: {$ref: '#/$defs/semantic_digest'}
       partitions:
         type: array
         uniqueItems: true
@@ -34,6 +34,10 @@ properties:
         items: {$ref: '#/$defs/typed_digest'}
 $defs:
   digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  semantic_digest:
+    oneOf:
+      - {$ref: '#/$defs/digest'}
+      - {type: string, pattern: '^semantic-v2:sha256:[0-9a-f]{64}$'}
   typed_digest:
     type: string
     pattern: '^[a-z][a-z0-9_.-]*:sha256:[0-9a-f]{64}$'
@@ -56,7 +60,7 @@ $defs:
     properties:
       partition_id: {$ref: '#/$defs/typed_digest'}
       relation_descriptor_id: {$ref: '#/$defs/strong_id'}
-      input_basis_digest: {$ref: '#/$defs/digest'}
+      input_basis_digest: {$ref: '#/$defs/semantic_digest'}
       claim_set_digest: {$ref: '#/$defs/typed_digest'}
       coverage_digest: {$ref: '#/$defs/typed_digest'}
       content_digest: {$ref: '#/$defs/typed_digest'}

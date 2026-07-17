@@ -599,7 +599,7 @@ namespace cxxlens::sdk::query
 
 	std::string logical_query_ir::digest() const
 	{
-		return semantic_digest("cxxlens.logical-query-ir.v1", canonical_form());
+		return *semantic_digest("cxxlens.logical-query-ir.v1", canonical_form());
 	}
 
 	builder::builder(logical_query_ir ir) : ir_{std::move(ir)} {}

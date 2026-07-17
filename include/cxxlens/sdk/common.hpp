@@ -156,8 +156,12 @@ namespace cxxlens::sdk
 	[[nodiscard]] std::string canonical_identity_digest(std::string_view identity_kind,
 														std::span<const canonical_value> fields);
 
-	/** @brief Full SHA-256 digest with a caller-supplied domain separator. */
-	[[nodiscard]] std::string semantic_digest(std::string_view domain, std::string_view bytes);
+	/**
+	 * @brief Full v2 semantic SHA-256 digest over a typed, length-prefixed domain/payload tuple.
+	 * @return `sdk.semantic-domain-invalid` when domain is not a non-empty lowercase identifier.
+	 */
+	[[nodiscard]] result<std::string> semantic_digest(std::string_view domain,
+													  std::string_view bytes);
 	/** @brief Full SHA-256 content digest without a semantic domain prefix. */
 	[[nodiscard]] std::string content_digest(std::span<const std::byte> bytes);
 } // namespace cxxlens::sdk

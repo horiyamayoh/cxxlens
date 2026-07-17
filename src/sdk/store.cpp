@@ -35,9 +35,12 @@ namespace cxxlens::sdk
 
 		[[nodiscard]] bool digest(const std::string_view value)
 		{
-			if (value.size() != 71U || !value.starts_with("sha256:"))
+			const auto hex = value.starts_with("sha256:")  ? value.substr(7U)
+				: value.starts_with("semantic-v2:sha256:") ? value.substr(19U)
+														   : std::string_view{};
+			if (hex.size() != 64U)
 				return false;
-			return std::ranges::all_of(value.substr(7U),
+			return std::ranges::all_of(hex,
 									   [](const char byte)
 									   {
 										   return (byte >= '0' && byte <= '9') ||
@@ -1928,12 +1931,12 @@ namespace cxxlens::sdk
 		const std::array fields{canonical_value::from_tuple(std::move(identity_rows))};
 		value->semantic_manifest.id = canonical_identity_digest("snapshot-compat", fields);
 		value->semantic_manifest.catalog_semantic_digest =
-			semantic_digest("compat.catalog", "legacy");
+			*semantic_digest("compat.catalog", "legacy");
 		value->semantic_manifest.condition_universe_id = "compat-universe";
 		value->semantic_manifest.relation_registry_digest =
-			semantic_digest("compat.registry", "legacy");
+			*semantic_digest("compat.registry", "legacy");
 		value->semantic_manifest.interpretation_policy_digest =
-			semantic_digest("compat.policy", "legacy");
+			*semantic_digest("compat.policy", "legacy");
 		value->publication_record_value = {canonical_identity_digest("publication-compat", fields),
 										   "compat-series",
 										   value->semantic_manifest.id,

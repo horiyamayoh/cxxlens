@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.4.0
+document_version: 1.5.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -10,7 +10,7 @@ authority:
   owner: steward.ng-sdk
 compatibility:
   version_axis: public-cpp-source-api
-  current: 1.0.0
+  current: 2.0.0
   relation_axis: relation-descriptor
   query_ir_axis: logical-query-ir
   provider_protocol_axis: provider-protocol
@@ -78,7 +78,7 @@ author_paths:
 entries:
   - id: public.common
     status: implemented
-    owner_issue: '#66'
+    owner_issue: '#120'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/sdk/common.hpp]
@@ -88,15 +88,15 @@ entries:
         signature: 'template<class T> class result; result<void>; struct error; struct semantic_version'
       - name: semantic_digest
         kind: function-family
-        signature: 'string semantic_digest(string_view domain, string_view bytes); string content_digest(span<const byte>)'
+        signature: 'result<string> semantic_digest(string_view domain, string_view bytes); string content_digest(span<const byte>)'
       - name: canonical_identity_digest
         kind: function-family
         signature: 'canonical_value; vector<byte> canonical_binary(const canonical_value&); string canonical_identity_digest(string_view, span<const canonical_value>)'
-    errors: []
+    errors: [sdk.semantic-domain-invalid]
     lifetime: [result-and-error-own-their-values]
     threading: [value-objects-follow-contained-value-threading]
-    versioning: [semantic-digest-requires-explicit-domain, canonical-identity-is-cxxlens-canonical-tuple-v1, source-api-axis-independent-from-standard-library-expected]
-    invariants: [success-and-error-are-disjoint, digest-is-full-lowercase-sha256, identity-domain-prefix-is-exact-and-versioned]
+    versioning: [semantic-digest-is-v2-typed-length-prefixed-and-not-legacy-sha256, canonical-identity-is-cxxlens-canonical-tuple-v1, source-api-axis-independent-from-standard-library-expected]
+    invariants: [success-and-error-are-disjoint, digest-is-full-lowercase-sha256, semantic-domain-is-nonempty-lowercase-identifier, identity-domain-prefix-is-exact-and-versioned]
     implementation_evidence: [src/sdk/common.cpp, tests/unit/sdk/sdk_test.cpp, tests/unit/sdk/store_test.cpp]
 
   - id: public.project-catalog

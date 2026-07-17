@@ -74,6 +74,10 @@ $defs:
   digest:
     type: string
     pattern: '^sha256:[0-9a-f]{64}$'
+  semantic_digest:
+    oneOf:
+      - {$ref: '#/$defs/digest'}
+      - {type: string, pattern: '^semantic-v2:sha256:[0-9a-f]{64}$'}
   typed_digest:
     type: string
     pattern: '^[a-z][a-z0-9_.-]*:sha256:[0-9a-f]{64}$'
@@ -83,7 +87,7 @@ $defs:
     required: [kind, basis_digest]
     properties:
       kind: {const: direct}
-      basis_digest: {$ref: '#/$defs/digest'}
+      basis_digest: {$ref: '#/$defs/semantic_digest'}
   derived_basis:
     type: object
     additionalProperties: false

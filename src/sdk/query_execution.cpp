@@ -695,7 +695,7 @@ namespace cxxlens::sdk::query
 				std::ostringstream joined;
 				for (const auto& value : scopes)
 					joined << value << '\n';
-				scope = "query:" + semantic_digest("query.scope.v1", joined.str());
+				scope = "query:" + *semantic_digest("query.scope.v1", joined.str());
 			}
 			std::ostringstream assumption_text;
 			for (auto iterator = assumptions.begin(); iterator != assumptions.end(); ++iterator)

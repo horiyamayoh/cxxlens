@@ -53,7 +53,7 @@ namespace
 		};
 		value.key_columns = {value.columns[0].id};
 		value.descriptor_digest =
-			semantic_digest("cxxlens.relation-descriptor.v1", value.canonical_form());
+			*semantic_digest("cxxlens.relation-descriptor.v1", value.canonical_form());
 		return value;
 	}
 
@@ -80,7 +80,7 @@ namespace
 		};
 		value.key_columns = {value.columns[0].id};
 		value.descriptor_digest =
-			semantic_digest("cxxlens.relation-descriptor.v1", value.canonical_form());
+			*semantic_digest("cxxlens.relation-descriptor.v1", value.canonical_form());
 		return value;
 	}
 

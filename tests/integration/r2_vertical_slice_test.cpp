@@ -369,7 +369,7 @@ namespace
 			output << disagreement.relation << '|' << disagreement.semantic_key << '|'
 				   << disagreement.left_interpretation << '|' << disagreement.right_interpretation
 				   << '\n';
-		return semantic_digest("cxxlens.r2-query-result.v1", output.str());
+		return *semantic_digest("cxxlens.r2-query-result.v1", output.str());
 	}
 
 	[[nodiscard]] query::logical_query_ir typed_custom_query()

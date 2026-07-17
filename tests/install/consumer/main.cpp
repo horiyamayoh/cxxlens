@@ -2,5 +2,5 @@
 
 int main()
 {
-	return cxxlens::sdk::semantic_digest("installed-core", "cxxlens").empty() ? 1 : 0;
+	return cxxlens::sdk::semantic_digest("installed-core", "cxxlens") ? 0 : 1;
 }
