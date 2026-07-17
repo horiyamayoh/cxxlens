@@ -152,6 +152,161 @@ namespace cxxlens::sdk::query
 			return output.str();
 		}
 
+		[[nodiscard]] std::string column_json(const ir_column_ref& column)
+		{
+			const auto availability = column.availability == column_availability::require
+				? "require"
+				: "absent_if_schema_missing";
+			return "{\"availability\":" + json_string(availability) +
+				",\"column_id\":" + json_string(column.column_id) + "}";
+		}
+
+		[[nodiscard]] std::string predicate_json(const decoded_predicate& predicate)
+		{
+			switch (predicate.kind)
+			{
+				case predicate_kind::equals_present:
+					return "{\"column\":" + column_json(*predicate.column) +
+						R"(,"kind":"equals_present","literal":{"type":)" +
+						json_string(predicate.literal_value->type) +
+						",\"value\":" + scalar_json(predicate.literal_value->value) + "}}";
+				case predicate_kind::column_equals_present:
+					return R"({"kind":"column_equals_present","left":)" +
+						column_json(*predicate.left) +
+						",\"right\":" + column_json(*predicate.right) + "}";
+				case predicate_kind::is_present:
+				case predicate_kind::is_absent:
+				case predicate_kind::is_unknown:
+				{
+					const auto kind = predicate.kind == predicate_kind::is_present ? "is_present"
+						: predicate.kind == predicate_kind::is_absent			   ? "is_absent"
+																				   : "is_unknown";
+					return "{\"column\":" + column_json(*predicate.column) +
+						",\"kind\":" + json_string(kind) + "}";
+				}
+				case predicate_kind::all:
+				case predicate_kind::any:
+				{
+					std::vector<std::string> operands;
+					operands.reserve(predicate.operands.size());
+					for (const auto& operand : predicate.operands)
+						operands.push_back(predicate_json(operand));
+					std::ranges::sort(operands,
+									  [](const std::string& left, const std::string& right)
+									  {
+										  const auto left_digest = plain_digest(left);
+										  const auto right_digest = plain_digest(right);
+										  return left_digest != right_digest
+											  ? left_digest < right_digest
+											  : left < right;
+									  });
+					operands.erase(std::ranges::unique(operands).begin(), operands.end());
+					std::ostringstream output;
+					output << "{\"kind\":"
+						   << json_string(predicate.kind == predicate_kind::all ? "and" : "or")
+						   << ",\"operands\":[";
+					for (std::size_t index = 0U; index < operands.size(); ++index)
+					{
+						if (index != 0U)
+							output << ',';
+						output << operands[index];
+					}
+					output << "]}";
+					return output.str();
+				}
+			}
+			return "{}";
+		}
+
+		[[nodiscard]] std::string canonical_arguments(const ir_node& node)
+		{
+			auto decoded = decode_arguments(node);
+			if (!decoded)
+				return "{}";
+			return std::visit(
+				[](const auto& value) -> std::string
+				{
+					using value_type = std::remove_cvref_t<decltype(value)>;
+					if constexpr (std::same_as<value_type, scan_arguments>)
+						return "{\"alias\":" + json_string(value.alias) +
+							",\"descriptor_id\":" + json_string(value.descriptor_id) + "}";
+					else if constexpr (std::same_as<value_type, predicate_arguments>)
+						return "{\"predicate\":" + predicate_json(value.predicate) + "}";
+					else if constexpr (std::same_as<value_type, project_arguments>)
+					{
+						std::ostringstream output;
+						output << "{\"columns\":[";
+						for (std::size_t index = 0U; index < value.columns.size(); ++index)
+						{
+							if (index != 0U)
+								output << ',';
+							output << "{\"column\":" << column_json(value.columns[index].column)
+								   << ",\"output\":" << json_string(value.columns[index].output)
+								   << '}';
+						}
+						output << "]}";
+						return output.str();
+					}
+					else if constexpr (std::same_as<value_type, empty_arguments>)
+						return "{}";
+					else if constexpr (std::same_as<value_type, order_arguments>)
+					{
+						auto state_name = [](const cell_state state)
+						{
+							switch (state)
+							{
+								case cell_state::present:
+									return "present";
+								case cell_state::absent:
+									return "absent";
+								case cell_state::unknown:
+									return "unknown";
+							}
+							return "unknown";
+						};
+						std::ostringstream output;
+						output << "{\"keys\":[";
+						for (std::size_t index = 0U; index < value.keys.size(); ++index)
+						{
+							if (index != 0U)
+								output << ',';
+							const auto& key = value.keys[index];
+							output << "{\"cell_state_order\":[";
+							for (std::size_t state = 0U; state < key.cell_state_order.size();
+								 ++state)
+							{
+								if (state != 0U)
+									output << ',';
+								output << json_string(state_name(key.cell_state_order[state]));
+							}
+							output
+								<< "],\"column\":" << column_json(key.column) << ",\"direction\":"
+								<< json_string(key.ascending ? "ascending" : "descending") << '}';
+						}
+						output << "]}";
+						return output.str();
+					}
+					else if constexpr (std::same_as<value_type, limit_arguments>)
+						return "{\"count\":" + std::to_string(value.count) + "}";
+					else if constexpr (std::same_as<value_type, condition_arguments>)
+					{
+						std::ostringstream output;
+						output << "{\"alternatives\":[";
+						for (std::size_t index = 0U; index < value.alternatives.size(); ++index)
+						{
+							if (index != 0U)
+								output << ',';
+							output << json_string(value.alternatives[index]);
+						}
+						output << "],\"universe\":" << json_string(value.universe) << '}';
+						return output.str();
+					}
+					else
+						return "{\"interpretation\":" + json_string(value.interpretation) + "}";
+				},
+				*decoded);
+		}
+
 		[[nodiscard]] std::string
 		nested_node_json(const std::string_view id,
 						 const std::map<std::string, const ir_node*, std::less<>>& nodes)
@@ -171,7 +326,7 @@ namespace cxxlens::sdk::query
 									  return plain_digest(left) < plain_digest(right);
 								  });
 			std::ostringstream output;
-			output << "{\"arguments\":" << node.arguments << ",\"inputs\":[";
+			output << "{\"arguments\":" << canonical_arguments(node) << ",\"inputs\":[";
 			for (std::size_t index = 0U; index < inputs.size(); ++index)
 			{
 				if (index != 0U)
@@ -380,8 +535,7 @@ namespace cxxlens::sdk::query
 						query_error("sdk.query-nontopological-node", node.id, input));
 			const auto arity = arities.find(node.operator_id);
 			if (node.id.empty() || arity == arities.end() || node.inputs.size() != arity->second ||
-				node.arguments.size() < 2U || node.arguments.front() != '{' ||
-				node.arguments.back() != '}' || !node_ids.insert(node.id).second)
+				!node_ids.insert(node.id).second)
 				return cxxlens::sdk::unexpected(query_error("sdk.query-node-invalid", node.id));
 			auto arguments = decode_arguments(node);
 			if (!arguments)

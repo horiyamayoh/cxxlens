@@ -166,10 +166,14 @@ properties:
     type: object
     required:
     - static_dynamic_surface_removed
+    - operator_arguments
+    - noncanonical_json_input
     - relation_requirements_sort
     - object_members_sort
     - set_members_sort
+    - set_members_deduplicate
     - commutative_predicates_sort
+    - commutative_predicates_tie_break
     - typed_literals
     - node_digest
     - physical_information_in_digest

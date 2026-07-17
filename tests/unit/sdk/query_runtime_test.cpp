@@ -543,6 +543,70 @@ namespace
 	{
 		auto valid = scan_query(data.left);
 		require(valid.validate().has_value(), "builder scan IR did not validate");
+
+		auto canonical_scan_source = query::builder::from(data.left, "items");
+		require(canonical_scan_source.has_value(), "canonical scan source failed");
+		auto canonical_scan = std::move(*canonical_scan_source).finish();
+		auto represented_scan = canonical_scan;
+		represented_scan.nodes.front().arguments =
+			" \n { \"descriptor_id\" : \"" + data.left.id + "\", \"alias\" : \"\\u0069tems\" } \t ";
+		require(represented_scan.validate().has_value(),
+				"equivalent whitespace/member-order/Unicode scan representation was rejected");
+		require(represented_scan.digest() == canonical_scan.digest() &&
+					represented_scan.canonical_form() == canonical_scan.canonical_form(),
+				"scan JSON representation changed normalized logical identity");
+
+		const auto predicate_key =
+			column_ref{data.left.id, data.left.columns[0].id, data.left.columns[0].type};
+		auto first_predicate =
+			query::equals_present(predicate_key, query::literal::typed("query_key_id", "key:a"));
+		auto second_predicate =
+			query::equals_present(predicate_key, query::literal::typed("query_key_id", "key:b"));
+		require(first_predicate && second_predicate, "canonical predicate setup failed");
+		const std::array predicate_terms{*first_predicate, *second_predicate};
+		auto conjunction = query::all(predicate_terms);
+		auto predicate_source = query::builder::from(data.left);
+		require(conjunction && predicate_source, "canonical conjunction setup failed");
+		auto filtered = std::move(*predicate_source).where(*conjunction);
+		require(filtered.has_value(), "canonical conjunction query failed");
+		auto canonical_predicate = std::move(*filtered).finish();
+		auto represented_predicate = canonical_predicate;
+		represented_predicate.nodes.back().arguments = "{\"predicate\":{\"operands\":[" +
+			second_predicate->canonical + "," + first_predicate->canonical + "," +
+			second_predicate->canonical + "],\"kind\":\"and\"}}";
+		require(represented_predicate.validate().has_value() &&
+					represented_predicate.digest() == canonical_predicate.digest(),
+				"commutative predicate order or duplicate changed normalized identity");
+
+		const std::array condition_values{std::string{"debug"}, std::string{"release"}};
+		auto canonical_condition = condition_query(data.left, condition_values);
+		auto represented_condition = canonical_condition;
+		represented_condition.nodes.back().arguments =
+			R"({"universe":"company.query.universe","alternatives":["release","debug","release"]})";
+		require(represented_condition.validate().has_value(),
+				"equivalent condition set representation was rejected");
+		require(represented_condition.digest() == canonical_condition.digest(),
+				"condition set order or duplicate changed normalized identity");
+
+		auto interpretation_source = query::builder::from(data.left);
+		require(interpretation_source.has_value(), "canonical interpretation source failed");
+		auto interpretation_builder =
+			std::move(*interpretation_source).interpretation_restrict("company/query");
+		require(interpretation_builder.has_value(), "canonical interpretation query failed");
+		auto canonical_interpretation = std::move(*interpretation_builder).finish();
+		auto escaped_interpretation = canonical_interpretation;
+		escaped_interpretation.nodes.back().arguments = R"({"interpretation":"company\/query"})";
+		require(escaped_interpretation.validate().has_value() &&
+					escaped_interpretation.digest() == canonical_interpretation.digest(),
+				"equivalent escaped slash changed normalized identity");
+		auto different_interpretation = canonical_interpretation;
+		different_interpretation.nodes.back().arguments = R"({"interpretation":"company/other"})";
+		require(different_interpretation.validate().has_value() &&
+					different_interpretation.digest() != canonical_interpretation.digest(),
+				"different typed argument retained the same normalized identity");
+		require(represented_scan.canonical_form() == represented_scan.canonical_form(),
+				"canonical form was not byte-stable on repeated encoding");
+
 		auto type_mismatch = valid;
 		type_mismatch.output_schema.front().type.scalar = scalar_kind::utf8_string;
 		type_mismatch.output_schema.front().type.parameter.clear();

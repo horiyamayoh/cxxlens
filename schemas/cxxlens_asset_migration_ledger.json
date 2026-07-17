@@ -1,5 +1,5 @@
 {
-  "asset_count": 272,
+  "asset_count": 273,
   "assets": [
     {
       "authority": "active",
@@ -592,6 +592,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0026-query-rooted-dag-closure.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0027-query-typed-argument-canonicalization.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1907,7 +1914,7 @@
     }
   ],
   "classifications": {
-    "active": 236,
+    "active": 237,
     "archived": 35,
     "generated": 1
   },

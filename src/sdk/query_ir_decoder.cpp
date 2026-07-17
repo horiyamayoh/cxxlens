@@ -714,9 +714,9 @@ namespace cxxlens::sdk::query
 					return unexpected(decode_error("condition.alternative", "value"));
 				output.alternatives.push_back(std::move(*alternative));
 			}
-			if (!std::ranges::is_sorted(output.alternatives) ||
-				std::ranges::adjacent_find(output.alternatives) != output.alternatives.end())
-				return unexpected(decode_error("condition.alternatives", "canonical-order"));
+			std::ranges::sort(output.alternatives);
+			output.alternatives.erase(std::ranges::unique(output.alternatives).begin(),
+									  output.alternatives.end());
 			return operator_arguments{std::move(output)};
 		}
 		if (node.operator_id == "query.interpretation_restrict.v1")

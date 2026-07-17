@@ -2483,6 +2483,12 @@ Issue #83 / ADR 0026 により Logical Query IR は一つの root を持つ root
 descriptor は `sdk.query-unused-relation-requirement` とする。canonical root traversal と executor evaluation は常に同じ
 node 集合を扱う。
 
+Issue #84 / ADR 0027 により node argument の raw JSON text は identity authority ではない。全11 operator は exact typed
+`operator_arguments` へ decode した後、key order、escape、integer、column availability、typed literal を単一 canonical
+JSON へ再 encode する。noncanonical whitespace/member order/equivalent escape は受理して normalize し、condition set と
+`and` / `or` operand は canonical sort/dedup する。typed value が同じなら surface/serializer に依存せず digest は同じで
+なければならない。
+
 ### 20.3 Collection and cell algebra
 
 Logical Query IR v1 の既定 collection は annotated multiset である。一 occurrence は次を持つ。
