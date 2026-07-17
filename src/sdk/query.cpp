@@ -4,6 +4,7 @@
 #include <ranges>
 #include <set>
 #include <sstream>
+#include <tuple>
 
 #include <cxxlens/sdk/query.hpp>
 
@@ -414,16 +415,97 @@ namespace cxxlens::sdk::query
 			return canonical;
 		}
 
-		void merge_requirements(std::vector<relation_descriptor>& destination,
-								const std::span<const relation_descriptor> additions)
+		[[nodiscard]] bool additive_optional_minor(const relation_descriptor& lower,
+												   const relation_descriptor& higher)
+		{
+			if (lower.id != higher.id || lower.name != higher.name ||
+				lower.semantic_major != higher.semantic_major ||
+				lower.version.major != higher.version.major ||
+				lower.version.minor >= higher.version.minor ||
+				lower.semantics != higher.semantics ||
+				lower.owner_namespace != higher.owner_namespace ||
+				lower.key_columns != higher.key_columns ||
+				lower.domain_identity != higher.domain_identity ||
+				lower.references != higher.references || lower.merge != higher.merge ||
+				lower.conflict_columns != higher.conflict_columns)
+				return false;
+			for (const auto& column : lower.columns)
+			{
+				const auto found =
+					std::ranges::find(higher.columns, column.id, &column_descriptor::id);
+				if (found == higher.columns.end() || *found != column)
+					return false;
+			}
+			for (const auto& column : higher.columns)
+				if (std::ranges::find(lower.columns, column.id, &column_descriptor::id) ==
+						lower.columns.end() &&
+					(column.required || !column.type.optional))
+					return false;
+			return true;
+		}
+
+		[[nodiscard]] result<void>
+		merge_requirements(std::vector<relation_descriptor>& destination,
+						   const std::span<const relation_descriptor> additions)
 		{
 			for (const auto& descriptor : additions)
 			{
-				if (std::ranges::find(destination, descriptor.id, &relation_descriptor::id) ==
-					destination.end())
+				auto found =
+					std::ranges::find(destination, descriptor.id, &relation_descriptor::id);
+				if (found == destination.end())
+				{
 					destination.push_back(descriptor);
+					continue;
+				}
+				if (found->contract_digest == descriptor.contract_digest &&
+					found->descriptor_digest == descriptor.descriptor_digest &&
+					found->canonical_form() == descriptor.canonical_form())
+					continue;
+				const auto* lower = &*found;
+				const auto* higher = &descriptor;
+				if (higher->version < lower->version)
+					std::swap(lower, higher);
+				if (!additive_optional_minor(*lower, *higher))
+					return cxxlens::sdk::unexpected(
+						query_error("sdk.query-relation-requirement-incompatible", descriptor.id));
+				*found = *higher;
 			}
 			std::ranges::sort(destination, {}, &relation_descriptor::id);
+			return {};
+		}
+
+		void expand_output_schema(std::vector<column_ref>& output_schema,
+								  const std::span<const ir_node> nodes,
+								  const std::span<const relation_descriptor> requirements)
+		{
+			for (const auto& node : nodes)
+			{
+				if (node.operator_id != "query.scan.v1")
+					continue;
+				auto arguments = decode_arguments(node);
+				if (!arguments)
+					continue;
+				const auto& scan = std::get<scan_arguments>(*arguments);
+				const auto descriptor =
+					std::ranges::find(requirements, scan.descriptor_id, &relation_descriptor::id);
+				if (descriptor == requirements.end())
+					continue;
+				for (const auto& column : descriptor->columns)
+					if (std::ranges::none_of(output_schema,
+											 [&](const column_ref& existing)
+											 {
+												 return existing.source_alias == scan.alias &&
+													 existing.column_id == column.id;
+											 }))
+						output_schema.push_back(
+							{descriptor->id, column.id, column.type, scan.alias});
+			}
+			std::ranges::sort(output_schema,
+							  [](const column_ref& left, const column_ref& right)
+							  {
+								  return std::tie(left.source_alias, left.column_id) <
+									  std::tie(right.source_alias, right.column_id);
+							  });
 		}
 
 		struct node_shape
@@ -1092,10 +1174,21 @@ namespace cxxlens::sdk::query
 			return cxxlens::sdk::unexpected(
 				query_error("sdk.query-project-terminal", "inner_join"));
 		const auto left_root = ir_.root;
-		merge_requirements(ir_.relation_requirements, right.ir_.relation_requirements);
+		if (auto merged =
+				merge_requirements(ir_.relation_requirements, right.ir_.relation_requirements);
+			!merged)
+			return cxxlens::sdk::unexpected(std::move(merged.error()));
+		expand_output_schema(ir_.output_schema, ir_.nodes, ir_.relation_requirements);
+		expand_output_schema(right.ir_.output_schema, right.ir_.nodes, ir_.relation_requirements);
 		ir_.output_schema.insert(ir_.output_schema.end(),
 								 right.ir_.output_schema.begin(),
 								 right.ir_.output_schema.end());
+		std::ranges::sort(ir_.output_schema,
+						  [](const column_ref& left, const column_ref& right)
+						  {
+							  return std::tie(left.source_alias, left.column_id) <
+								  std::tie(right.source_alias, right.column_id);
+						  });
 		std::map<std::string, std::string, std::less<>> remap;
 		for (const auto& node : right.ir_.nodes)
 		{
@@ -1122,13 +1215,20 @@ namespace cxxlens::sdk::query
 	result<builder> builder::semi_join(builder right, expression predicate) &&
 	{
 		const auto left_schema = ir_.output_schema;
+		std::set<std::string, std::less<>> left_aliases;
+		for (const auto& column : left_schema)
+			left_aliases.insert(column.source_alias);
 		const auto left_total_ordered = total_ordered_;
 		const auto left_order_keys = order_keys_;
 		auto joined = std::move(*this).inner_join(std::move(right), std::move(predicate));
 		if (!joined)
 			return joined;
 		joined->ir_.nodes.back().operator_id = "query.semi_join.v1";
-		joined->ir_.output_schema = left_schema;
+		std::erase_if(joined->ir_.output_schema,
+					  [&](const column_ref& column)
+					  {
+						  return !left_aliases.contains(column.source_alias);
+					  });
 		joined->total_ordered_ = left_total_ordered;
 		joined->order_keys_ = left_order_keys;
 		return joined;
@@ -1139,11 +1239,20 @@ namespace cxxlens::sdk::query
 		if (projected_ != right.projected_)
 			return cxxlens::sdk::unexpected(
 				query_error("sdk.query-union-schema-mismatch", "projection_state"));
-		if (ir_.output_schema != right.ir_.output_schema)
+		if (auto merged =
+				merge_requirements(ir_.relation_requirements, right.ir_.relation_requirements);
+			!merged)
+			return cxxlens::sdk::unexpected(std::move(merged.error()));
+		auto right_schema = right.ir_.output_schema;
+		if (!projected_)
+		{
+			expand_output_schema(ir_.output_schema, ir_.nodes, ir_.relation_requirements);
+			expand_output_schema(right_schema, right.ir_.nodes, ir_.relation_requirements);
+		}
+		if (ir_.output_schema != right_schema)
 			return cxxlens::sdk::unexpected(
 				query_error("sdk.query-union-schema-mismatch", "output_schema"));
 		const auto left_root = ir_.root;
-		merge_requirements(ir_.relation_requirements, right.ir_.relation_requirements);
 		std::map<std::string, std::pair<std::string, std::string>, std::less<>> shared_scans;
 		for (const auto& node : ir_.nodes)
 			if (node.operator_id == "query.scan.v1")

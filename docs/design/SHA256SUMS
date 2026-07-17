@@ -1,5 +1,5 @@
 981ff1fba0f2b3f907e10ba33d2b335cf7dbf4ef7e80429bc2ae6fb9ccaa3836  README.md
-e8a39fd17223ec49f745a1a34ec9451b105f65539869a62b70c47c09ba0ac6b8  cxxlens_next_generation_integrated_design_ja.md
+29bd29c9693720ccdcd6c2af414aa796d4a14cfbb2a03f9a2d66fb0e3603049d  cxxlens_next_generation_integrated_design_ja.md
 eb03b5bc460ce0ac24c8895dc65effb43e10625a4b93af7b88c7f49d5e9558cc  adr/README.md
 d24534d4936debcc3bad96a6acdec1056c3c437fa7b526c76bb3f13c8b7c5423  adr/0002-semantic-relation-platform.md
 04172ac98fa6b9743cc283d8da063243e95632a9d4df0418df4e7af1d49096b9  adr/0003-versioned-relation-kernel.md
@@ -21,8 +21,8 @@ d6b58c2fafeda55a0914b569ea3953806e1169b8e456cbb7520e55671d1605fc  ../../schemas/
 a2710dac143dea53fd370adb9c959c0411d64a021bf02983bc5c634ec3dd9942  ../../schemas/cxxlens_ng_relation_conformance_vectors.yaml
 62b02c180c7e129591c0ba665db10a75c71e7ae7ee76b6ebca29442293138865  ../../schemas/cxxlens_ng_relation_conformance_vectors.schema.yaml
 d16026c673fc2680b39e526852515df6ce6f4935eafafa9db5f1e7b98421a655  ../../schemas/cxxlens_ng_relation_conformance_report.schema.yaml
-51e8f59318c3a149e15ce5ab253a328f69883d0c234134a945b0814894740b47  ../../schemas/cxxlens_ng_logical_query_contract.yaml
-6ee70e2422d1047b60e2ec441cdea845ffba0ec37bc41c77d763a4cf0c407c2f  ../../schemas/cxxlens_ng_logical_query_contract.schema.yaml
+84b33f37f64ebcd5910b60301ecd4b2ba1888c16cdac781172ca61d59d0a669f  ../../schemas/cxxlens_ng_logical_query_contract.yaml
+71e563d6fc606a1c5b8193fba1f123f6926880b2a8d056484f44c7586ed97170  ../../schemas/cxxlens_ng_logical_query_contract.schema.yaml
 c69266a8b802e54f4a7268bf86d6cecf8106f44ff6e88bfbcb41995efdacb92b  ../../schemas/cxxlens_ng_logical_query_ir.schema.yaml
 18fde8b6b7e6d2c4d641854983ee006af6b27e1202bdc76bc533a995b5585af4  ../../schemas/cxxlens_ng_query_conformance_vectors.yaml
 02a39616bfcda2f42889d0d6dd51545a660a20e67b9d112e1d24d175aad159a5  ../../schemas/cxxlens_ng_query_conformance_vectors.schema.yaml
@@ -51,9 +51,9 @@ c25f30af6e20a6c2aa3489c8b43af5cf7bf15222efa3b8953f576342e5392d82  ../../schemas/
 9fa0b6724fdc7e6bda2b2d649862022934ca85afcc4ef44ee33df604d43ab165  ../../schemas/cxxlens_ng_provider_runtime_contract.yaml
 19461adea03fb400c985c35420b3b29a6997e27c912f6e58842ca68a3da70457  ../../schemas/cxxlens_ng_provider_runtime_contract.schema.yaml
 182df72674f78e858b79767e4e34adea9d01672aff5d025cffed3d2d651ac2af  ../../schemas/cxxlens_ng_provider_execution_report.schema.yaml
-76676e7a416d8fa96cb5180ecf47848ca63edcda63049bdcb077bf4bbd6eecef  ../../schemas/cxxlens_ng_public_api_catalog.yaml
+ea62d1defd78d15eacacdf216bf46d7c057852a36cd82b4f24a54939326937b6  ../../schemas/cxxlens_ng_public_api_catalog.yaml
 a0599e26cfea7572064308e6ac413fc237c4d8562a155354c10717b708613ece  ../../schemas/cxxlens_ng_public_api_catalog.schema.yaml
-f6e636c73ab660bc32aeff6c13e6ea2549cdb3721690783b79ff43c42ffc664b  ../../schemas/cxxlens_ng_acceptance_manifest.yaml
+5b7d2479b8e7244d61d3364cb2123b102c9e593273a9ed4b56745295a58c9499  ../../schemas/cxxlens_ng_acceptance_manifest.yaml
 e8bc1adc409bbac29f762ea134788537fbe7b28dd952e4e669a17ea167ba113b  ../../schemas/cxxlens_ng_acceptance_manifest.schema.yaml
 ce6488c442d9548b2727f0cf0af059856d24fd23e9eabeb6d7f9bc032cfd2fac  ../../schemas/cxxlens_ng_quality_ownership.yaml
 045a6f68d9941f1459b17a800645a01158b1254af5832d9eb6b43dc024f7bc84  ../../schemas/cxxlens_ng_quality_ownership.schema.yaml
@@ -79,4 +79,4 @@ f43fe032c6ee375df8e047444e702186f2a6e64977e050474f561bdbfa7d5f6e  ../../schemas/
 0f710f1973b5eb195df7d41fe79bd2f85bd59f983c4dee77a760cfcb2ce6ef06  ../../schemas/cxxlens_ng_compatibility_request.schema.yaml
 b5e5a4b2af63453d2fe9ef63fd000cbb8cfb725d2364fa2fdc3940c21fc44ed2  ../../schemas/cxxlens_ng_compatibility_report.schema.yaml
 66a139a97e7bc4260683ba2d94b96d62db19d69273399817cc6bbda18292fb9e  ../../schemas/cxxlens_asset_migration_policy.yaml
-e5a44163fa7b0c9f27cd4fc1b5daafac344046b2e1605bd987bba34d9878f9f7  ../../schemas/cxxlens_asset_migration_ledger.json
+ef42450f75e78a7935e5ba97e7ecae47f7e1045da7f5f849c0452f7cf183e254  ../../schemas/cxxlens_asset_migration_ledger.json

@@ -236,6 +236,16 @@ def validate_contract(
         "nested_factory_decoder_parity": "required",
     }:
         fail("query.boolean-arity-contract-invalid", "factory and decoder arity differ")
+    reconciliation = contract["schema_compatibility"]["requirement_reconciliation"]
+    if reconciliation != {
+        "exact_descriptor": "canonical-deduplicate",
+        "compatible_minor": "retain-exact-highest-minor-descriptor",
+        "compatibility": "lower-columns-exact-subset-and-additions-optional",
+        "scan_binding": "expand-every-occurrence-to-retained-descriptor",
+        "permutation": "invariant",
+        "incompatible": "sdk.query-relation-requirement-incompatible",
+    }:
+        fail("query.requirement-reconciliation-invalid", "minor merge policy differs")
     deferred = _rows_by(contract["deferred_operators"], "id", "deferred operator")
     if not {"query.group.v1", "query.aggregate.v1"}.issubset(deferred):
         fail("query.aggregate-not-deferred", "group/aggregate are not deferred")

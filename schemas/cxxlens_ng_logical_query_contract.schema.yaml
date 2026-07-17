@@ -37,9 +37,9 @@ properties:
       design:
         const: docs/design/cxxlens_next_generation_integrated_design_ja.md#20-logical-query
       decision_adr:
-        const: docs/design/adr/0075-query-unary-boolean-canonical-fold.md
+        const: docs/design/adr/0076-query-relation-requirement-reconciliation.md
       owner_issue:
-        const: '#144'
+        const: '#145'
       owner:
         const: steward.ng-query
   compatibility:
@@ -163,6 +163,7 @@ properties:
     type: object
     required:
     - relation_requirement
+    - requirement_reconciliation
     - major_mismatch
     - required_column_missing
     - optional_column_missing

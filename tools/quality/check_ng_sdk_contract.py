@@ -684,6 +684,13 @@ def validate_query_runtime_implementation(root: pathlib.Path) -> None:
     if "expressions.size() == 1U" not in query_source:
         fail("query boolean unary canonical fold is missing")
     for marker in (
+        "additive_optional_minor",
+        "sdk.query-relation-requirement-incompatible",
+        "expand_output_schema",
+    ):
+        if marker not in query_source:
+            fail(f"query requirement reconciliation marker is missing: {marker}")
+    for marker in (
         "duplicate-key",
         "absent_if_schema_missing",
         "sdk.query-argument-invalid",
@@ -714,6 +721,9 @@ def validate_query_runtime_implementation(root: pathlib.Path) -> None:
         "cursor owned row and canonical guarantee cardinality diverged",
         "one-operand all/any did not canonical-fold to its atom",
         "factory-success unary predicate was rejected by semi_join",
+        "compatible minor retained requirement depended on operand order",
+        "compatible minor union reconciliation was not permutation invariant",
+        "incompatible descriptor reconciliation was not deterministic",
     ):
         if marker not in test:
             fail(f"query runtime acceptance marker is missing: {marker}")

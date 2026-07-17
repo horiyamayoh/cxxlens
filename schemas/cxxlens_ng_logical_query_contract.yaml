@@ -1,10 +1,10 @@
 schema: cxxlens.logical-query-contract.v1
-document_version: 1.10.0
+document_version: 1.11.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#20-logical-query
-  decision_adr: docs/design/adr/0075-query-unary-boolean-canonical-fold.md
-  owner_issue: '#144'
+  decision_adr: docs/design/adr/0076-query-relation-requirement-reconciliation.md
+  owner_issue: '#145'
   owner: steward.ng-query
 compatibility:
   version_axis: logical-query-ir
@@ -164,6 +164,13 @@ partial_execution:
   aggregate_partial: forbidden-ng0
 schema_compatibility:
   relation_requirement: descriptor-id-plus-minor-range
+  requirement_reconciliation:
+    exact_descriptor: canonical-deduplicate
+    compatible_minor: retain-exact-highest-minor-descriptor
+    compatibility: lower-columns-exact-subset-and-additions-optional
+    scan_binding: expand-every-occurrence-to-retained-descriptor
+    permutation: invariant
+    incompatible: sdk.query-relation-requirement-incompatible
   major_mismatch: reject
   execution_bind_plan:
     references: [predicate, project, order, join, implicit-output-schema]

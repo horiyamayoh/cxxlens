@@ -1,5 +1,5 @@
 {
-  "asset_count": 358,
+  "asset_count": 359,
   "assets": [
     {
       "authority": "active",
@@ -956,6 +956,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0075-query-unary-boolean-canonical-fold.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0076-query-relation-requirement-reconciliation.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2509,7 +2516,7 @@
     }
   ],
   "classifications": {
-    "active": 322,
+    "active": 323,
     "archived": 35,
     "generated": 1
   },

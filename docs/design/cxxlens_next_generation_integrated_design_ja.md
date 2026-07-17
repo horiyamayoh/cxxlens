@@ -2952,6 +2952,12 @@ relation requirement は descriptor ID と compatible minor range を持つ。ma
 拒否する。optional minor column が snapshot descriptor にない場合、通常参照は拒否し、明示した
 `absent_if_schema_missing` だけが tagged absent を返す。unknown optional minor column は round-trip 時に保持する。
 
+Issue #145 / ADR 0076 により同じ relation ID の requirement merge は first-wins を禁止する。exact descriptor は deduplicateし、
+higher minor が lower の全 column を exact に含み追加 column が optional の場合だけ compatible とする。retained authority は higher minor の
+exact descriptor/version/digestであり、全 scan occurrence の schemaをそのdescriptorへ拡張する。semantic、key、reference、merge、
+identity、同一minor digest、またはnonoptional差分は `sdk.query-relation-requirement-incompatible` で決定的に拒否し、join/unionと
+static/dynamic surfaceのoperand permutationでretained requirementとoutput schemaを変えてはならない。
+
 Issue #79 / ADR 0022 により validator は node shape を column ID の集合ではなく `column ID -> exact value_type` として
 scan、join、union、projection、root まで伝播する。`output_schema` は指定 relation descriptor 自身の column と
 descriptor ID、column ID、scalar、parameter、optionality が完全一致し、root typed shape とも一致しなければならない。

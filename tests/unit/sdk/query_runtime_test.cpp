@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <ranges>
 #include <set>
@@ -1512,6 +1513,127 @@ namespace
 				"success, input completeness, and closure were collapsed");
 	}
 
+	void check_requirement_reconciliation(const fixture& data)
+	{
+		const auto rebind = [](relation_descriptor& descriptor)
+		{
+			descriptor.descriptor_digest =
+				*semantic_digest("cxxlens.relation-descriptor-binding.v2",
+								 descriptor.contract_digest + "\n" + descriptor.canonical_form());
+		};
+		auto newer = data.left;
+		newer.version = {1U, 1U, 0U};
+		newer.columns.push_back({newer.id + ".minor_note",
+								 "minor_note",
+								 {scalar_kind::utf8_string, {}, true},
+								 false,
+								 column_role::auxiliary});
+		rebind(newer);
+		require(newer.validate().has_value(), "compatible minor descriptor fixture invalid");
+
+		const auto join = [&](const relation_descriptor& first,
+							  const std::string_view first_alias,
+							  const relation_descriptor& second,
+							  const std::string_view second_alias)
+		{
+			auto left = query::builder::from(first, first_alias);
+			auto right = query::builder::from(second, second_alias);
+			auto left_key = query::qualify(
+				column_ref{first.id, first.columns[0].id, first.columns[0].type}, first_alias);
+			auto right_key = query::qualify(
+				column_ref{second.id, second.columns[0].id, second.columns[0].type}, second_alias);
+			require(left && right && left_key && right_key,
+					"requirement reconciliation join setup failed");
+			auto predicate = query::equals_present(*left_key, *right_key);
+			require(predicate.has_value(), "requirement reconciliation predicate failed");
+			return std::move(*left).inner_join(std::move(*right), *predicate);
+		};
+
+		auto forward_builder = join(data.left, "old", newer, "new");
+		auto reverse_builder = join(newer, "new", data.left, "old");
+		require(forward_builder && reverse_builder, "compatible minor join was rejected");
+		auto forward = std::move(*forward_builder).finish();
+		auto reverse = std::move(*reverse_builder).finish();
+		require(forward.validate() && reverse.validate(),
+				"compatible minor reconciled join IR did not validate");
+		require(forward.relation_requirements == reverse.relation_requirements,
+				"compatible minor retained requirement depended on operand order");
+		require(forward.output_schema == reverse.output_schema,
+				"compatible minor output schema depended on operand order");
+		require(forward.relation_requirements.size() == 1U &&
+					forward.relation_requirements.front().version == newer.version &&
+					forward.relation_requirements.front().descriptor_digest ==
+						newer.descriptor_digest,
+				"compatible minor did not retain the exact higher descriptor authority");
+		for (const auto* alias : {"old", "new"})
+			require(std::ranges::any_of(forward.output_schema,
+										[&](const column_ref& column)
+										{
+											return column.source_alias == alias &&
+												column.column_id == newer.columns.back().id &&
+												column.type.optional;
+										}),
+					"retained minor descriptor did not bind every scan occurrence");
+
+		auto exact_left = query::builder::from(data.left, "items");
+		auto exact_right = query::builder::from(data.left, "items");
+		require(exact_left && exact_right, "exact requirement merge setup failed");
+		auto exact = std::move(*exact_left).union_with(*exact_right);
+		require(exact.has_value(), "exact descriptor union was rejected");
+		auto exact_ir = std::move(*exact).finish();
+		require(exact_ir.validate() && exact_ir.relation_requirements.size() == 1U &&
+					exact_ir.relation_requirements.front().descriptor_digest ==
+						data.left.descriptor_digest,
+				"exact descriptor merge did not canonically deduplicate");
+
+		auto old_union = query::builder::from(data.left, "items");
+		auto new_union = query::builder::from(newer, "items");
+		auto new_union_left = query::builder::from(newer, "items");
+		auto old_union_right = query::builder::from(data.left, "items");
+		require(old_union && new_union && new_union_left && old_union_right,
+				"compatible minor union setup failed");
+		auto union_forward = std::move(*old_union).union_with(*new_union);
+		auto union_reverse = std::move(*new_union_left).union_with(*old_union_right);
+		require(union_forward && union_reverse, "compatible minor union was rejected");
+		auto union_forward_ir = std::move(*union_forward).finish();
+		auto union_reverse_ir = std::move(*union_reverse).finish();
+		require(union_forward_ir.validate() && union_reverse_ir.validate() &&
+					union_forward_ir.canonical_form() == union_reverse_ir.canonical_form() &&
+					union_forward_ir.relation_requirements.front().descriptor_digest ==
+						newer.descriptor_digest,
+				"compatible minor union reconciliation was not permutation invariant");
+
+		auto incompatible = data.left;
+		incompatible.semantics = "company.query.incompatible/1";
+		rebind(incompatible);
+		require(incompatible.validate().has_value(), "incompatible descriptor fixture invalid");
+		auto rejected_forward = join(data.left, "old", incompatible, "new");
+		auto rejected_reverse = join(incompatible, "new", data.left, "old");
+		require(!rejected_forward && !rejected_reverse &&
+					rejected_forward.error().code ==
+						"sdk.query-relation-requirement-incompatible" &&
+					rejected_reverse.error() == rejected_forward.error() &&
+					rejected_forward.error().field == data.left.id,
+				"incompatible descriptor reconciliation was not deterministic");
+
+		auto dynamic_newer = dynamic_relation{std::make_shared<const relation_descriptor>(newer)};
+		auto static_old = query::builder::from(data.left, "old");
+		auto dynamic_new = query::dynamic_query::from(dynamic_newer, "new");
+		auto static_key = query::qualify(
+			column_ref{data.left.id, data.left.columns[0].id, data.left.columns[0].type}, "old");
+		auto dynamic_key =
+			query::qualify(column_ref{newer.id, newer.columns[0].id, newer.columns[0].type}, "new");
+		require(static_old && dynamic_new && static_key && dynamic_key,
+				"static/dynamic reconciliation setup failed");
+		auto dynamic_predicate = query::equals_present(*static_key, *dynamic_key);
+		require(dynamic_predicate.has_value(), "static/dynamic reconciliation predicate failed");
+		auto mixed = std::move(*static_old).inner_join(std::move(*dynamic_new), *dynamic_predicate);
+		require(mixed &&
+					std::move(*mixed).finish().relation_requirements ==
+						forward.relation_requirements,
+				"static/dynamic requirement reconciliation diverged");
+	}
+
 	void check_self_join_occurrences(const fixture& data,
 									 const snapshot_handle& memory_snapshot,
 									 const snapshot_handle& sqlite_snapshot)
@@ -2690,6 +2812,7 @@ int main()
 	check_canonical_json_encoding(data);
 	check_snapshot_schema_compatibility();
 	check_runtime_matrix(data, memory_snapshot, *sqlite_snapshot);
+	check_requirement_reconciliation(data);
 	check_self_join_occurrences(data, memory_snapshot, *sqlite_snapshot);
 	check_partiality(data, memory_snapshot);
 	check_canonical_union_execution(data, memory_snapshot, *sqlite_snapshot);
