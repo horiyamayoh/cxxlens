@@ -62,6 +62,7 @@ entries:
       - docs/design/adr/0020-query-functional-payload-parity.md
       - docs/design/adr/0021-query-closure-applicability.md
       - docs/design/adr/0022-logical-query-output-schema-binding.md
+      - docs/design/adr/0023-query-terminal-projection-parity.md
     summary: Logical query, standard/custom join, budgets, explicit partiality, and flagship recipe.
   - id: gate.g4
     status: implemented

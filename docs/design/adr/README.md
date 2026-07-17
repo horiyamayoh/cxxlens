@@ -22,6 +22,7 @@
 | [0020](0020-query-functional-payload-parity.md) | query functional payload classification parity |
 | [0021](0021-query-closure-applicability.md) | query closure certificate applicability |
 | [0022](0022-logical-query-output-schema-binding.md) | Logical Query IR typed output schema binding |
+| [0023](0023-query-terminal-projection-parity.md) | canonical implicit terminal projection parity |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

@@ -1,5 +1,5 @@
 schema: cxxlens.logical-query-contract.v1
-document_version: 1.1.0
+document_version: 1.2.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#20-logical-query
@@ -166,6 +166,11 @@ canonicalization:
   typed_literals: exact-type-and-canonical-value
   node_digest: recursive-content-digest
   physical_information_in_digest: false
+  implicit_terminal_projection:
+    when: no-explicit-query.project.v1-node
+    output_ids: canonical-output-aliases
+    executor_required: true
+    explicit_implicit_digest_and_row_shape_equal: true
 operator_profiles:
 - id: query.scan.v1
   name: scan

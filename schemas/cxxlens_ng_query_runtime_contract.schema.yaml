@@ -18,7 +18,7 @@ required:
   - qualification
 properties:
   schema: {const: cxxlens.query-runtime-contract.v1}
-  document_version: {const: 1.2.0}
+  document_version: {const: 1.3.0}
   maturity: {const: implemented}
   authority: {$ref: '#/$defs/nonempty_object'}
   compatibility: {$ref: '#/$defs/nonempty_object'}
@@ -56,6 +56,7 @@ properties:
       - interpretation
       - evidence
       - guarantees
+      - terminal_projection
     properties:
       operators:
         type: array
@@ -71,6 +72,7 @@ properties:
       interpretation: {$ref: '#/$defs/nonempty_object'}
       evidence: {$ref: '#/$defs/nonempty_object'}
       guarantees: {$ref: '#/$defs/nonempty_object'}
+      terminal_projection: {$ref: '#/$defs/nonempty_object'}
   budget: {$ref: '#/$defs/nonempty_object'}
   cancellation: {$ref: '#/$defs/nonempty_object'}
   result:

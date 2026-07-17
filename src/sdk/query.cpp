@@ -7,6 +7,8 @@
 
 #include <cxxlens/sdk/query.hpp>
 
+#include "query_internal.hpp"
+
 namespace cxxlens::sdk::query
 {
 	namespace
@@ -118,36 +120,9 @@ namespace cxxlens::sdk::query
 			return output;
 		}
 
-		[[nodiscard]] std::vector<std::string>
-		output_aliases(const std::span<const column_ref> columns)
-		{
-			std::vector<std::string> aliases;
-			aliases.reserve(columns.size());
-			std::set<std::string, std::less<>> used;
-			for (const auto& column : columns)
-			{
-				auto separator = column.column_id.rfind('.');
-				auto alias =
-					column.column_id.substr(separator == std::string::npos ? 0U : separator + 1U);
-				if (used.contains(alias))
-				{
-					alias = column.column_id;
-					for (auto& byte : alias)
-						if (byte == '.' || byte == '-')
-							byte = '_';
-				}
-				const auto base = alias;
-				for (std::uint64_t suffix = 2U; used.contains(alias); ++suffix)
-					alias = base + "_" + std::to_string(suffix);
-				used.insert(alias);
-				aliases.push_back(std::move(alias));
-			}
-			return aliases;
-		}
-
 		[[nodiscard]] std::string projections_json(const std::span<const column_ref> columns)
 		{
-			const auto aliases = output_aliases(columns);
+			const auto aliases = detail::output_aliases(columns);
 			std::ostringstream output;
 			output << '[';
 			for (std::size_t index = 0U; index < columns.size(); ++index)
@@ -558,7 +533,7 @@ namespace cxxlens::sdk::query
 		std::map<std::string, value_type, std::less<>> expected;
 		if (projected)
 		{
-			const auto aliases = output_aliases(output_schema);
+			const auto aliases = detail::output_aliases(output_schema);
 			for (std::size_t index = 0U; index < output_schema.size(); ++index)
 				if (!expected.emplace("output." + aliases[index], output_schema[index].type).second)
 					return cxxlens::sdk::unexpected(query_error("sdk.query-output-schema-mismatch",
@@ -589,7 +564,7 @@ namespace cxxlens::sdk::query
 								 }))
 			root_json = R"({"arguments":{"columns":)" + projections_json(output_schema) +
 				"},\"inputs\":[" + root_json + R"(],"operator":"query.project.v1"})";
-		const auto aliases = output_aliases(output_schema);
+		const auto aliases = detail::output_aliases(output_schema);
 		std::ostringstream output;
 		output << "{\"condition_policy\":{\"empty_intersection\":\"discard\","
 				  "\"require_same_universe\":true},\"interpretation_policy\":{"

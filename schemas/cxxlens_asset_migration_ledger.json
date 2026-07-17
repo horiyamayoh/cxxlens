@@ -1,5 +1,5 @@
 {
-  "asset_count": 267,
+  "asset_count": 269,
   "assets": [
     {
       "authority": "active",
@@ -564,6 +564,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0022-logical-query-output-schema-binding.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0023-query-terminal-projection-parity.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1452,6 +1459,13 @@
     },
     {
       "authority": "active",
+      "path": "src/sdk/query_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/sdk/query_ir_decoder.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -1872,7 +1886,7 @@
     }
   ],
   "classifications": {
-    "active": 231,
+    "active": 233,
     "archived": 35,
     "generated": 1
   },

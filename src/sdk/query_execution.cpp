@@ -17,6 +17,7 @@
 #include <cxxlens/sdk/query.hpp>
 
 #include "claim_internal.hpp"
+#include "query_internal.hpp"
 
 namespace cxxlens::sdk::query
 {
@@ -458,10 +459,10 @@ namespace cxxlens::sdk::query
 					{
 						if (values[left]->interpretation == values[right]->interpretation)
 							continue;
-						auto left_payload = detail::functional_payload_digest(descriptor->second,
-																			  values[left]->row);
-						auto right_payload = detail::functional_payload_digest(descriptor->second,
-																			   values[right]->row);
+						auto left_payload = cxxlens::sdk::detail::functional_payload_digest(
+							descriptor->second, values[left]->row);
+						auto right_payload = cxxlens::sdk::detail::functional_payload_digest(
+							descriptor->second, values[right]->row);
 						if (!left_payload || !right_payload)
 							return unexpected(!left_payload ? std::move(left_payload.error())
 															: std::move(right_payload.error()));
@@ -554,6 +555,27 @@ namespace cxxlens::sdk::query
 			bool limited{};
 		};
 
+		void apply_implicit_terminal_projection(
+			evaluation& value,
+			const std::span<const column_ref> output_schema,
+			const std::map<std::string, value_type, std::less<>>& column_types)
+		{
+			const auto aliases = detail::output_aliases(output_schema);
+			std::map<std::string, std::string, std::less<>> mapping;
+			for (std::size_t index = 0U; index < output_schema.size(); ++index)
+				mapping.emplace(output_schema[index].column_id, "output." + aliases[index]);
+			for (auto& row : value.rows)
+			{
+				std::map<std::string, detached_cell, std::less<>> projected;
+				for (std::size_t index = 0U; index < output_schema.size(); ++index)
+					projected.emplace("output." + aliases[index],
+									  cell_for(row, output_schema[index].column_id, column_types));
+				row.values = std::move(projected);
+			}
+			for (auto& key : value.order_keys)
+				key.column.column_id = mapping.at(key.column.column_id);
+		}
+
 		struct runtime_state
 		{
 			execution_budget budget;
@@ -641,10 +663,10 @@ namespace cxxlens::sdk::query
 				for (std::size_t left = 0U; left < values.size(); ++left)
 					for (std::size_t right = left + 1U; right < values.size(); ++right)
 					{
-						auto left_payload = detail::functional_payload_digest(descriptor->second,
-																			  values[left]->row);
-						auto right_payload = detail::functional_payload_digest(descriptor->second,
-																			   values[right]->row);
+						auto left_payload = cxxlens::sdk::detail::functional_payload_digest(
+							descriptor->second, values[left]->row);
+						auto right_payload = cxxlens::sdk::detail::functional_payload_digest(
+							descriptor->second, values[right]->row);
 						if (!left_payload || !right_payload)
 							return unexpected(!left_payload ? std::move(left_payload.error())
 															: std::move(right_payload.error()));
@@ -1203,6 +1225,12 @@ namespace cxxlens::sdk::query
 	{
 		if (auto valid = query.validate(); !valid)
 			return unexpected(std::move(valid.error()));
+		const bool implicit_terminal_projection =
+			std::ranges::none_of(query.nodes,
+								 [](const ir_node& node)
+								 {
+									 return node.operator_id == "query.project.v1";
+								 });
 		auto result_data = std::make_shared<query_result::data>();
 		result_data->ir_digest = query.digest();
 		result_data->snapshot = snapshot_.id();
@@ -1301,6 +1329,8 @@ namespace cxxlens::sdk::query
 		std::map<std::string, evaluation, std::less<>> evaluations;
 		std::ostringstream physical;
 		physical << "backend=" << snapshot_.physical_backend();
+		if (implicit_terminal_projection)
+			physical << ";terminal=canonical-implicit-project";
 		for (const auto& node : query.nodes)
 		{
 			auto arguments = decode_arguments(node);
@@ -1545,6 +1575,8 @@ namespace cxxlens::sdk::query
 		}
 
 		auto evaluated = evaluations.at(query.root);
+		if (implicit_terminal_projection)
+			apply_implicit_terminal_projection(evaluated, query.output_schema, column_types);
 		if (!evaluated.ordered)
 			std::ranges::sort(evaluated.rows,
 							  [](const annotated_row& left, const annotated_row& right)

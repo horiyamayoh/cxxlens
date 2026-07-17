@@ -1,12 +1,12 @@
 schema: cxxlens.query-runtime-contract.v1
-document_version: 1.2.0
+document_version: 1.3.0
 maturity: implemented
 authority:
   logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
   guarantee_contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
   snapshot_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
-  decision_adr: docs/design/adr/0022-logical-query-output-schema-binding.md
-  owner_issue: '#79'
+  decision_adr: docs/design/adr/0023-query-terminal-projection-parity.md
+  owner_issue: '#80'
   owner: steward.ng-query-runtime
 compatibility:
   version_axis: query-runtime-result
@@ -95,6 +95,12 @@ execution:
   guarantees:
     composition: conservative-componentwise-meet
     incomplete_or_partial_exact_upgrade: forbidden
+  terminal_projection:
+    implicit_when_no_explicit_project: true
+    alias_calculation_shared_with_canonicalizer: true
+    application_order: before-canonical-sort-budget-and-publication
+    output_column_prefix: output.
+    preserves: [multiplicity, condition, interpretation, evidence, guarantee]
 budget:
   zero_is_valid_empty_budget: true
   scan_or_intermediate_exhaustion:

@@ -5,6 +5,7 @@
 #include <iostream>
 #include <optional>
 #include <ranges>
+#include <set>
 #include <span>
 #include <string>
 #include <utility>
@@ -330,6 +331,35 @@ namespace
 		return output;
 	}
 
+	[[nodiscard]] std::vector<query::annotated_row>
+	annotated_rows(const query::query_result& result)
+	{
+		auto cursor = result.rows();
+		std::vector<query::annotated_row> output;
+		while (true)
+		{
+			auto next = cursor.next();
+			require(next.has_value(), "annotated result cursor failed");
+			if (!*next)
+				break;
+			auto row = (*next)->copy();
+			require(row.has_value(), "annotated result row copy failed");
+			output.push_back(std::move(*row));
+		}
+		return output;
+	}
+
+	[[nodiscard]] std::set<std::string, std::less<>> row_keys(const query::annotated_row& row)
+	{
+		std::set<std::string, std::less<>> output;
+		for (const auto& [column, cell] : row.values)
+		{
+			(void)cell;
+			output.insert(column);
+		}
+		return output;
+	}
+
 	[[nodiscard]] query::logical_query_ir scan_query(const relation_descriptor& descriptor)
 	{
 		auto builder = query::builder::from(descriptor);
@@ -579,11 +609,42 @@ namespace
 					"physical explanation did not expose backend-only information");
 			require(!memory->explain_logical().text.contains("backend="),
 					"physical backend leaked into logical explanation");
+			for (const auto& row : annotated_rows(*memory))
+				for (const auto& [column, cell] : row.values)
+				{
+					(void)cell;
+					require(
+						column.starts_with("output.") &&
+							memory->explain_logical().text.contains("\"id\":\"" + column + "\""),
+						"runtime row key diverged from logical output schema");
+				}
 		}
+
+		auto implicit_scan = memory_engine->execute(queries.front());
+		auto explicit_source = query::builder::from(data.left);
+		require(implicit_scan && explicit_source, "implicit/explicit projection setup failed");
+		std::vector<column_ref> all_left_columns;
+		for (const auto& column : data.left.columns)
+			all_left_columns.push_back({data.left.id, column.id, column.type});
+		auto explicit_builder = std::move(*explicit_source).project(all_left_columns);
+		require(explicit_builder.has_value(), "equivalent explicit projection failed");
+		auto explicit_query = std::move(*explicit_builder).finish();
+		auto explicit_result = memory_engine->execute(explicit_query);
+		require(explicit_result && explicit_query.digest() == queries.front().digest() &&
+					rows(*explicit_result) == rows(*implicit_scan),
+				"equivalent implicit and explicit projections diverged");
 
 		auto join_memory = memory_engine->execute(queries[4]);
 		require(join_memory && rows(*join_memory).size() == 3U,
 				"condition/interpretation-aware inner join diverged");
+		const std::set<std::string, std::less<>> join_columns{"output.company_query_right_v1_key",
+															  "output.key",
+															  "output.label",
+															  "output.note",
+															  "output.value"};
+		const auto joined_rows = annotated_rows(*join_memory);
+		require(!joined_rows.empty() && row_keys(joined_rows.front()) == join_columns,
+				"implicit join projection did not use deterministic duplicate aliases");
 		auto distinct_memory = memory_engine->execute(queries[6]);
 		require(distinct_memory && rows(*distinct_memory).size() == 2U,
 				"distinct did not merge conditions/evidence deterministically");
