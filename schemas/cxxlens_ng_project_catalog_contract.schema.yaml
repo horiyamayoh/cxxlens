@@ -1,0 +1,63 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens_ng_project_catalog_contract.schema.yaml
+title: cxxlens project catalog contract
+type: object
+additionalProperties: false
+required: [schema, document_version, maturity, authority, value_types, canonical_projection, identity, consumers, acceptance]
+properties:
+  schema: {const: cxxlens.project-catalog-contract.v1}
+  document_version: {const: 1.0.0}
+  maturity: {const: accepted}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, decision_adr, owner_issue, owner]
+    properties:
+      design: {type: string, minLength: 1}
+      decision_adr: {const: docs/design/adr/0063-project-catalog-bottom-up-identity.md}
+      owner_issue: {const: '#121'}
+      owner: {const: steward.ng-kernel}
+  value_types:
+    type: object
+    additionalProperties: false
+    required: [compile_unit_entry, project_catalog]
+    properties:
+      compile_unit_entry: {$ref: '#/$defs/nonempty_object'}
+      project_catalog: {$ref: '#/$defs/nonempty_object'}
+  canonical_projection:
+    type: object
+    additionalProperties: false
+    required: [codec, domain, fields, entry_fields, ordering, duplicate_policy]
+    properties:
+      codec: {const: cxxlens-canonical-tuple-v1}
+      domain: {const: cxxlens.project-catalog.v1}
+      fields: {const: [contract_tag, logical_root, environment_digest, compile_units]}
+      entry_fields: {const: [compile_unit_id, effective_invocation_digest, source_digest, environment_digest]}
+      ordering: {const: compile-unit-id-byte-order}
+      duplicate_policy: {const: reject-identical-and-conflicting}
+  identity:
+    type: object
+    additionalProperties: false
+    required: [catalog_digest, catalog_id, validation]
+    properties:
+      catalog_digest: {const: semantic-digest-v2-over-canonical-projection}
+      catalog_id: {const: catalog-prefix-plus-exact-catalog-digest}
+      validation: {const: bottom-up-recompute-and-exact-compare}
+  consumers:
+    type: object
+    additionalProperties: false
+    required: [provider_task, build_project, catalog_loader]
+    properties:
+      provider_task: {const: validate-before-task-accepted}
+      build_project: {const: exact-catalog-id-digest-logical-root-environment-fields}
+      catalog_loader: {const: project_catalog-make-only}
+  acceptance:
+    type: array
+    minItems: 7
+    uniqueItems: true
+    items: {type: string, pattern: '^[a-z0-9-]+$'}
+$defs:
+  nonempty_object:
+    type: object
+    minProperties: 1
+    additionalProperties: true

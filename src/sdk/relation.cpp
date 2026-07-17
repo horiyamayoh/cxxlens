@@ -1201,15 +1201,109 @@ namespace cxxlens::sdk
 		return {};
 	}
 
-	result<void> project_catalog::validate() const
+	result<void> catalog_compile_unit::validate() const
 	{
-		if (catalog_id.empty() || catalog_digest.empty() || logical_root.empty())
+		if (!control_free_text(compile_unit_id))
 			return cxxlens::sdk::unexpected(
-				relation_error("sdk.project-catalog-invalid", "identity"));
-		if (!std::ranges::is_sorted(compile_units) ||
-			std::ranges::adjacent_find(compile_units) != compile_units.end())
+				relation_error("sdk.project-catalog-invalid", "compile_unit_id", "identity"));
+		for (const auto& [field, digest] : {
+				 std::pair{std::string_view{"effective_invocation_digest"},
+						   std::string_view{effective_invocation_digest}},
+				 std::pair{std::string_view{"source_digest"}, std::string_view{source_digest}},
+				 std::pair{std::string_view{"environment_digest"},
+						   std::string_view{environment_digest}},
+			 })
+			if (!canonical_digest_value(digest))
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.project-catalog-invalid", std::string{field}, "digest"));
+		return {};
+	}
+
+	result<std::vector<std::byte>> project_catalog::canonical_projection() const
+	{
+		if (!control_free_text(logical_root))
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.project-catalog-invalid", "logical_root", "identity"));
+		if (!canonical_digest_value(environment_digest))
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.project-catalog-invalid", "environment_digest", "digest"));
+		if (!std::ranges::is_sorted(compile_units, {}, &catalog_compile_unit::compile_unit_id))
 			return cxxlens::sdk::unexpected(
 				relation_error("sdk.project-catalog-invalid", "compile_units", "canonical-order"));
+
+		std::vector<canonical_value> entries;
+		entries.reserve(compile_units.size());
+		std::string_view previous_id;
+		for (const auto& unit : compile_units)
+		{
+			if (auto valid = unit.validate(); !valid)
+				return cxxlens::sdk::unexpected(std::move(valid.error()));
+			if (!previous_id.empty() && previous_id == unit.compile_unit_id)
+				return cxxlens::sdk::unexpected(relation_error(
+					"sdk.project-catalog-invalid", "compile_units", "duplicate-or-conflict"));
+			previous_id = unit.compile_unit_id;
+			entries.push_back(canonical_value::from_tuple({
+				canonical_value::from_string(unit.compile_unit_id),
+				canonical_value::from_string(unit.effective_invocation_digest),
+				canonical_value::from_string(unit.source_digest),
+				canonical_value::from_string(unit.environment_digest),
+			}));
+		}
+		return canonical_binary(canonical_value::from_tuple({
+			canonical_value::from_string("cxxlens.project-catalog.v1"),
+			canonical_value::from_string(logical_root),
+			canonical_value::from_string(environment_digest),
+			canonical_value::from_tuple(std::move(entries)),
+		}));
+	}
+
+	result<project_catalog>
+	project_catalog::make(std::string logical_root_value,
+						  std::string environment_digest_value,
+						  std::vector<catalog_compile_unit> compile_unit_values)
+	{
+		std::ranges::sort(compile_unit_values, {}, &catalog_compile_unit::compile_unit_id);
+		project_catalog output{
+			{},
+			{},
+			std::move(logical_root_value),
+			std::move(environment_digest_value),
+			std::move(compile_unit_values),
+		};
+		auto projection = output.canonical_projection();
+		if (!projection)
+			return cxxlens::sdk::unexpected(std::move(projection.error()));
+		std::string bytes;
+		bytes.reserve(projection->size());
+		for (const auto byte : *projection)
+			bytes.push_back(static_cast<char>(std::to_integer<unsigned char>(byte)));
+		auto digest = semantic_digest("cxxlens.project-catalog.v1", bytes);
+		if (!digest)
+			return cxxlens::sdk::unexpected(std::move(digest.error()));
+		output.catalog_digest = std::move(*digest);
+		output.catalog_id = "catalog:" + output.catalog_digest;
+		return output;
+	}
+
+	result<void> project_catalog::validate() const
+	{
+		if (!canonical_digest_value(catalog_digest))
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.project-catalog-invalid", "catalog_digest", "digest"));
+		auto projection = canonical_projection();
+		if (!projection)
+			return cxxlens::sdk::unexpected(std::move(projection.error()));
+		std::string bytes;
+		bytes.reserve(projection->size());
+		for (const auto byte : *projection)
+			bytes.push_back(static_cast<char>(std::to_integer<unsigned char>(byte)));
+		auto expected_digest = semantic_digest("cxxlens.project-catalog.v1", bytes);
+		if (!expected_digest || catalog_digest != *expected_digest)
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.project-catalog-invalid", "catalog_digest", "mismatch"));
+		if (catalog_id != "catalog:" + *expected_digest)
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.project-catalog-invalid", "catalog_id", "mismatch"));
 		return {};
 	}
 

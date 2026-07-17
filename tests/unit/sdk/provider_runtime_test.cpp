@@ -760,9 +760,17 @@ namespace
 		writer.grant_credit({64U * 1024U * 1024U, 65536U});
 		parity_provider provider;
 		const auto& descriptor = cxxlens::company::relations::lock_acquire::descriptor();
+		auto logical_catalog = project_catalog::make(
+			".",
+			"sha256:3333333333333333333333333333333333333333333333333333333333333333",
+			{{"unit.cpp",
+			  "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+			  std::string{binary_digest},
+			  "sha256:3333333333333333333333333333333333333333333333333333333333333333"}});
+		require(logical_catalog.has_value(), "logical parity catalog failed");
 		const cxxlens::sdk::provider::task logical_task{
 			"task-1",
-			{"catalog", std::string{binary_digest}, ".", {"unit.cpp"}},
+			std::move(*logical_catalog),
 			{descriptor},
 			"all",
 			"company.test.canonical-1",

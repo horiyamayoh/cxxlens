@@ -1,5 +1,5 @@
 {
-  "asset_count": 311,
+  "asset_count": 320,
   "assets": [
     {
       "authority": "active",
@@ -130,6 +130,13 @@
     {
       "authority": "active",
       "path": "cmake/CxxlensDeveloperTools.cmake",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "cmake/CxxlensSanitizerOptions.cpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -843,6 +850,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/design/adr/0062-first-party-sanitizer-closure.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/design/adr/README.md",
       "removal_issue": null,
       "replacement": null,
@@ -1515,6 +1529,20 @@
     },
     {
       "authority": "active",
+      "path": "schemas/cxxlens_ng_sanitizer_coverage.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_sanitizer_coverage.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "schemas/cxxlens_ng_security_conformance_report.schema.yaml",
       "removal_issue": null,
       "replacement": null,
@@ -1809,6 +1837,20 @@
     },
     {
       "authority": "active",
+      "path": "tests/canary/expect_failure.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/canary/sanitizer_canary.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/fixtures/provider_process_fixture.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -1838,6 +1880,13 @@
     {
       "authority": "active",
       "path": "tests/install/consumer/main.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/install/consumer_sanitizers.cmake",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1978,6 +2027,13 @@
     {
       "authority": "active",
       "path": "tests/quality/test_ng_snapshot_store_contract.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/quality/test_sanitizer_coverage.py",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2131,6 +2187,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_sanitizer_coverage.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/requirements.txt",
       "removal_issue": null,
       "replacement": null,
@@ -2180,7 +2243,7 @@
     }
   ],
   "classifications": {
-    "active": 275,
+    "active": 284,
     "archived": 35,
     "generated": 1
   },

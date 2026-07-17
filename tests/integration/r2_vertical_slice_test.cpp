@@ -55,6 +55,20 @@ namespace
 		}
 	}
 
+	[[nodiscard]] project_catalog make_project_catalog(std::string root, std::string unit_id)
+	{
+		const std::string environment{basis_digest};
+		auto catalog = project_catalog::make(
+			std::move(root),
+			environment,
+			{{std::move(unit_id),
+			  "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+			  "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+			  environment}});
+		require(catalog.has_value(), "integration project catalog was rejected");
+		return std::move(*catalog);
+	}
+
 	[[nodiscard]] detached_cell optional_typed(std::string parameter, std::string value)
 	{
 		auto output = detached_cell::typed(std::move(parameter), std::move(value));
@@ -198,9 +212,13 @@ namespace
 				return pushed;
 			if (auto ended = sink.end(); !ended)
 				return ended;
-			context.coverage().request("compile-unit", task.project.compile_units.front());
-			if (auto covered = context.coverage().classify(
-					{"compile-unit", task.project.compile_units.front(), "covered", {}});
+			context.coverage().request("compile-unit",
+									   task.project.compile_units.front().compile_unit_id);
+			if (auto covered =
+					context.coverage().classify({"compile-unit",
+												 task.project.compile_units.front().compile_unit_id,
+												 "covered",
+												 {}});
 				!covered)
 				return covered;
 			context.coverage().request("task", task.task_id);
@@ -469,7 +487,7 @@ namespace
 		lock_provider implementation{row};
 		provider::task task;
 		task.task_id = "r2-task-jobs-" + std::to_string(jobs);
-		task.project = {"catalog:r2", "sha256:catalog-r2", root, {"cu-" + std::string(64U, 'a')}};
+		task.project = make_project_catalog(root, "cu-" + std::string(64U, 'a'));
 		task.outputs = {company::relations::lock_acquire::descriptor()};
 		task.condition = "condition:all";
 		task.interpretation = "cxxlens.clang22";
@@ -486,7 +504,7 @@ namespace
 		lock_provider implementation{row};
 		provider::task task;
 		task.task_id = "r2-fault";
-		task.project = {"catalog:r2", "sha256:catalog-r2", ".", {"cu-" + std::string(64U, 'a')}};
+		task.project = make_project_catalog(".", "cu-" + std::string(64U, 'a'));
 		task.outputs = {company::relations::lock_acquire::descriptor()};
 		task.condition = "condition:all";
 		task.interpretation = "cxxlens.clang22";

@@ -82,7 +82,16 @@ int main()
 	lock_provider implementation;
 	cxxlens::sdk::provider::task task;
 	task.task_id = "task-1";
-	task.project = {"catalog-1", "sha256:catalog", ".", {"unit-1"}};
+	auto catalog = cxxlens::sdk::project_catalog::make(
+		".",
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		{{"unit-1",
+		  "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+		  "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+		  "sha256:1111111111111111111111111111111111111111111111111111111111111111"}});
+	if (!catalog)
+		return 1;
+	task.project = std::move(*catalog);
 	task.outputs = {cxxlens::company::relations::lock_acquire::descriptor()};
 	task.condition = "condition:all";
 	task.interpretation = "provider.company.example";

@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <cxxlens/provider/clang22.hpp>
+#include <cxxlens/relations/build_project.hpp>
 #include <cxxlens/relations/cc_call_direct_target.hpp>
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
@@ -53,6 +54,29 @@ namespace
 			std::cerr << message << '\n';
 			std::exit(1);
 		}
+	}
+
+	[[nodiscard]] std::string digest(const char digit)
+	{
+		return "sha256:" + std::string(64U, digit);
+	}
+
+	[[nodiscard]] cxxlens::sdk::catalog_compile_unit catalog_unit(std::string id, const char seed)
+	{
+		const auto next = [](const char value)
+		{
+			return value == 'f' ? '0' : static_cast<char>(value + 1);
+		};
+		return {std::move(id), digest(seed), digest(next(seed)), digest(next(next(seed)))};
+	}
+
+	[[nodiscard]] cxxlens::sdk::project_catalog
+	make_catalog(std::string root, std::vector<cxxlens::sdk::catalog_compile_unit> units)
+	{
+		auto catalog =
+			cxxlens::sdk::project_catalog::make(std::move(root), digest('d'), std::move(units));
+		require(catalog.has_value(), "valid project catalog was rejected");
+		return std::move(*catalog);
 	}
 
 	[[nodiscard]] cxxlens::sdk::detached_cell string_cell(cxxlens::sdk::value_type type,
@@ -924,6 +948,89 @@ namespace
 				"column lengths/order/digests did not survive batch-end roundtrip");
 	}
 
+	void check_project_catalog_identity()
+	{
+		using cxxlens::sdk::canonical_value;
+		const auto unit_a = catalog_unit("unit:a", '1');
+		const auto unit_b = catalog_unit("unit:b", '4');
+		auto ordered = make_catalog("workspace", {unit_a, unit_b});
+		auto permuted = make_catalog("workspace", {unit_b, unit_a});
+		auto ordered_projection = ordered.canonical_projection();
+		auto permuted_projection = permuted.canonical_projection();
+		require(ordered.catalog_id == permuted.catalog_id &&
+					ordered.catalog_digest == permuted.catalog_digest && ordered_projection &&
+					permuted_projection && *ordered_projection == *permuted_projection,
+				"catalog input permutation changed canonical identity");
+
+		auto added = ordered;
+		added.compile_units.push_back(catalog_unit("unit:c", '7'));
+		auto removed = ordered;
+		removed.compile_units.pop_back();
+		auto replaced = ordered;
+		replaced.compile_units.front().source_digest = digest('9');
+		auto moved_root = ordered;
+		moved_root.logical_root = "relocated-workspace";
+		auto malformed = ordered;
+		malformed.catalog_digest = "sha256:not-a-digest";
+		require(!added.validate() && !removed.validate() && !replaced.validate() &&
+					!moved_root.validate() && !malformed.validate() &&
+					malformed.validate().error().field == "catalog_digest",
+				"catalog validation did not bind every authoritative input");
+
+		auto duplicate =
+			cxxlens::sdk::project_catalog::make("workspace", digest('d'), {unit_a, unit_a});
+		auto conflicting_unit = unit_a;
+		conflicting_unit.source_digest = digest('e');
+		auto conflicting = cxxlens::sdk::project_catalog::make(
+			"workspace", digest('d'), {unit_a, conflicting_unit});
+		require(!duplicate && !conflicting && duplicate.error().detail == "duplicate-or-conflict" &&
+					conflicting.error().detail == "duplicate-or-conflict",
+				"duplicate or conflicting compile-unit identity was accepted");
+
+		std::vector<canonical_value> independent_units;
+		for (const auto& unit : ordered.compile_units)
+			independent_units.push_back(canonical_value::from_tuple({
+				canonical_value::from_string(unit.compile_unit_id),
+				canonical_value::from_string(unit.effective_invocation_digest),
+				canonical_value::from_string(unit.source_digest),
+				canonical_value::from_string(unit.environment_digest),
+			}));
+		auto independent = cxxlens::sdk::canonical_binary(canonical_value::from_tuple({
+			canonical_value::from_string("cxxlens.project-catalog.v1"),
+			canonical_value::from_string(ordered.logical_root),
+			canonical_value::from_string(ordered.environment_digest),
+			canonical_value::from_tuple(std::move(independent_units)),
+		}));
+		auto projection = ordered.canonical_projection();
+		require(projection && independent == *projection,
+				"independent catalog encoder was not byte-identical");
+
+		using relation = cxxlens::build::relations::project;
+		cxxlens::sdk::detached_row project_row{relation::descriptor().id, {}};
+		project_row.cells.emplace(
+			relation::catalog::ref().column_id,
+			cxxlens::sdk::detached_cell::typed("catalog_id", ordered.catalog_id));
+		project_row.cells.emplace(
+			relation::catalog_digest::ref().column_id,
+			string_cell({cxxlens::sdk::scalar_kind::digest, {}, false}, ordered.catalog_digest));
+		project_row.cells.emplace(
+			relation::logical_root::ref().column_id,
+			cxxlens::sdk::detached_cell::typed("logical_path_id", ordered.logical_root));
+		project_row.cells.emplace(relation::environment_digest::ref().column_id,
+								  string_cell({cxxlens::sdk::scalar_kind::digest, {}, false},
+											  ordered.environment_digest));
+		project_row.cells.emplace(
+			relation::project_column::ref().column_id,
+			cxxlens::sdk::detached_cell::typed("project_id", "project:pending"));
+		auto project_id = cxxlens::sdk::derive_domain_identity(relation::descriptor(), project_row);
+		require(project_id.has_value(), "build.project identity derivation failed");
+		project_row.cells.at(relation::project_column::ref().column_id) =
+			cxxlens::sdk::detached_cell::typed("project_id", std::move(*project_id));
+		require(cxxlens::sdk::validate_row(relation::descriptor(), project_row) &&
+					cxxlens::sdk::validate_domain_identity(relation::descriptor(), project_row),
+				"build.project row did not preserve catalog identity fields");
+	}
+
 	void check_provider_tooling_and_faults()
 	{
 		cxxlens::sdk::provider::coverage_builder incomplete;
@@ -955,7 +1062,7 @@ namespace
 		coverage_provider implementation;
 		cxxlens::sdk::provider::task task;
 		task.task_id = "task-1";
-		task.project = {"catalog-1", "sha256:catalog", ".", {"unit-1"}};
+		task.project = make_catalog(".", {catalog_unit("unit-1", '1')});
 		task.outputs = {cxxlens::cc::relations::call_site::descriptor()};
 		task.condition = "condition:all";
 		task.interpretation = "company.test";
@@ -975,6 +1082,9 @@ namespace
 			implementation, task, cxxlens::sdk::testing::provider_fault::wrong_terminal_task);
 		auto credit_exceeded = harness.run(
 			implementation, task, cxxlens::sdk::testing::provider_fault::credit_exceeded);
+		auto forged_task = task;
+		forged_task.project.logical_root = "forged-root";
+		auto forged = harness.run(implementation, forged_task);
 		auto reference = accepted
 			? cxxlens::sdk::testing::validate_logical_transcript(
 				  task,
@@ -992,7 +1102,9 @@ namespace
 				  wrong_direction->frames,
 				  {std::numeric_limits<std::uint64_t>::max(), 4096U})
 			: reference;
-		require(accepted && accepted->accepted && corrupt && !corrupt->accepted &&
+		require(accepted && accepted->accepted && forged && !forged->accepted &&
+					forged->reason_code == "provider.task-invalid" && forged->frames.empty() &&
+					corrupt && !corrupt->accepted &&
 					corrupt->reason_code == "provider.checksum-mismatch" && truncated &&
 					!truncated->accepted && truncated->reason_code == "provider.truncated-stream" &&
 					cancelled && !cancelled->accepted &&
@@ -1401,6 +1513,7 @@ int main()
 	check_snapshot_lifetime();
 	check_frame_and_native_escape();
 	check_columnar_wire_codec();
+	check_project_catalog_identity();
 	check_provider_tooling_and_faults();
 	check_relation_engine_and_claim_kernel();
 	return 0;

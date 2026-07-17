@@ -26,6 +26,12 @@ class NgSdkContractTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.catalog = load_yaml(ROOT / "schemas/cxxlens_ng_public_api_catalog.yaml")
+        cls.project_catalog_contract = load_yaml(
+            ROOT / "schemas/cxxlens_ng_project_catalog_contract.yaml"
+        )
+        cls.project_catalog_schema = load_yaml(
+            ROOT / "schemas/cxxlens_ng_project_catalog_contract.schema.yaml"
+        )
 
     def test_exact_catalog_and_ordinary_boundary_are_valid(self) -> None:
         validate_catalog(ROOT, self.catalog)
@@ -55,6 +61,18 @@ class NgSdkContractTest(unittest.TestCase):
         recipe["owner_issue"] = "#73"
         with self.assertRaisesRegex(SdkContractError, "Issue #104"):
             validate_catalog(ROOT, catalog)
+
+    def test_project_catalog_projection_cannot_drop_source_digest(self) -> None:
+        contract = copy.deepcopy(self.project_catalog_contract)
+        contract["canonical_projection"]["entry_fields"].remove("source_digest")
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(self.project_catalog_schema).validate(contract)
+
+    def test_project_catalog_duplicate_policy_is_fail_closed(self) -> None:
+        contract = copy.deepcopy(self.project_catalog_contract)
+        contract["canonical_projection"]["duplicate_policy"] = "first-wins"
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(self.project_catalog_schema).validate(contract)
 
     def test_implemented_error_code_cannot_be_omitted(self) -> None:
         catalog = copy.deepcopy(self.catalog)

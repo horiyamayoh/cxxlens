@@ -1304,10 +1304,26 @@ namespace cxxlens::detail::clang22
 		if (!writer.send(message_type::schema_negotiate, frames->at(1U).control))
 			return EXIT_FAILURE;
 		const auto control_parts = std::string_view{*task_control};
-		const auto separator = control_parts.find('|');
-		if (separator == std::string_view::npos)
+		std::array<std::string_view, 5U> task_fields;
+		std::size_t field_begin{};
+		for (std::size_t index = 0U; index < task_fields.size(); ++index)
+		{
+			const auto separator = control_parts.find('|', field_begin);
+			if ((index + 1U < task_fields.size() && separator == std::string_view::npos) ||
+				(index + 1U == task_fields.size() && separator != std::string_view::npos))
+				return EXIT_FAILURE;
+			const auto field_end =
+				separator == std::string_view::npos ? control_parts.size() : separator;
+			task_fields.at(index) = control_parts.substr(field_begin, field_end - field_begin);
+			field_begin = field_end + 1U;
+		}
+		if (std::ranges::any_of(task_fields,
+								[](const std::string_view field)
+								{
+									return field.empty();
+								}))
 			return EXIT_FAILURE;
-		const std::string task_id{control_parts.substr(0U, separator)};
+		const std::string task_id{task_fields[0U]};
 
 		auto request = decode_task_input(frames->at(2U).payload);
 		if (!request)
@@ -1319,12 +1335,36 @@ namespace cxxlens::detail::clang22
 			(void)writer.send(message_type::task_failed, control);
 			return EXIT_SUCCESS;
 		}
+		if (sdk::content_digest(frames->at(2U).payload) != task_fields[1U])
+		{
+			const auto failed = bytes("provider.frontend-request-invalid|" + task_id + "|digest");
+			std::vector<std::byte> control{static_cast<std::byte>(0x78U),
+										   static_cast<std::byte>(failed.size())};
+			control.insert(control.end(), failed.begin(), failed.end());
+			(void)writer.send(message_type::task_failed, control);
+			return EXIT_SUCCESS;
+		}
+		const std::string toolchain_digest{task_fields[3U]};
+		const std::string environment_digest{task_fields[4U]};
+		const auto source_digest = sdk::content_digest(std::as_bytes(std::span{request->source}));
+		auto catalog = sdk::project_catalog::make(".",
+												  environment_digest,
+												  {{request->compile_unit,
+													std::string{task_fields[2U]},
+													source_digest,
+													environment_digest}});
+		if (!catalog)
+		{
+			const auto failed = bytes("provider.frontend-request-invalid|" + task_id + "|project");
+			std::vector<std::byte> control{static_cast<std::byte>(0x78U),
+										   static_cast<std::byte>(failed.size())};
+			control.insert(control.end(), failed.begin(), failed.end());
+			(void)writer.send(message_type::task_failed, control);
+			return EXIT_SUCCESS;
+		}
 		sdk::provider::task task{
 			task_id,
-			{request->compile_unit,
-			 *sdk::semantic_digest("cxxlens.provider-project.v1", request->compile_unit),
-			 ".",
-			 {request->compile_unit}},
+			std::move(*catalog),
 			{entity_observation_descriptor(),
 			 type_observation_descriptor(),
 			 call_observation_descriptor(),
@@ -1334,15 +1374,6 @@ namespace cxxlens::detail::clang22
 			"all",
 			"cc.clang22-canonical-1",
 		};
-		const auto toolchain_separator = control_parts.rfind('|');
-		const auto environment_separator = toolchain_separator == std::string_view::npos
-			? std::string_view::npos
-			: control_parts.rfind('|', toolchain_separator - 1U);
-		const std::string toolchain_digest{
-			environment_separator == std::string_view::npos
-				? std::string_view{}
-				: control_parts.substr(environment_separator + 1U,
-									   toolchain_separator - environment_separator - 1U)};
 		canonical_provider provider{std::move(*request), toolchain_digest};
 		(void)sdk::provider::run_worker(provider, task, writer);
 		return EXIT_SUCCESS;

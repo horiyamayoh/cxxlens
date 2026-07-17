@@ -1,0 +1,38 @@
+schema: cxxlens.project-catalog-contract.v1
+document_version: 1.0.0
+maturity: accepted
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md#53-canonical-tuple
+  decision_adr: docs/design/adr/0063-project-catalog-bottom-up-identity.md
+  owner_issue: '#121'
+  owner: steward.ng-kernel
+value_types:
+  compile_unit_entry:
+    fields: [compile_unit_id, effective_invocation_digest, source_digest, environment_digest]
+    identity: stable-control-free-typed-id
+    digests: exact-canonical-digest
+  project_catalog:
+    fields: [catalog_id, catalog_digest, logical_root, environment_digest, compile_units]
+canonical_projection:
+  codec: cxxlens-canonical-tuple-v1
+  domain: cxxlens.project-catalog.v1
+  fields: [contract_tag, logical_root, environment_digest, compile_units]
+  entry_fields: [compile_unit_id, effective_invocation_digest, source_digest, environment_digest]
+  ordering: compile-unit-id-byte-order
+  duplicate_policy: reject-identical-and-conflicting
+identity:
+  catalog_digest: semantic-digest-v2-over-canonical-projection
+  catalog_id: catalog-prefix-plus-exact-catalog-digest
+  validation: bottom-up-recompute-and-exact-compare
+consumers:
+  provider_task: validate-before-task-accepted
+  build_project: exact-catalog-id-digest-logical-root-environment-fields
+  catalog_loader: project_catalog-make-only
+acceptance:
+  - add-delete-replace-mismatch
+  - logical-root-mismatch
+  - malformed-digest-rejected
+  - permutation-byte-identical
+  - duplicate-conflict-rejected
+  - independent-encoder-byte-identical
+  - forged-provider-task-rejected-before-acceptance

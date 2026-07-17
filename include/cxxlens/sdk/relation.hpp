@@ -306,13 +306,43 @@ namespace cxxlens::sdk
 		const detached_row& row_;
 	};
 
+	/** @brief One exact compile-unit identity and its catalog authority digests. */
+	struct catalog_compile_unit
+	{
+		/** @brief Stable compile-unit identity within the catalog. */
+		std::string compile_unit_id;
+		/** @brief Digest of the exact effective compiler invocation. */
+		std::string effective_invocation_digest;
+		/** @brief Digest of the exact source input bytes. */
+		std::string source_digest;
+		/** @brief Digest of the unit's effective environment authority. */
+		std::string environment_digest;
+		/** @brief Validate the typed identity and all exact digest grammars. */
+		[[nodiscard]] result<void> validate() const;
+		[[nodiscard]] bool operator==(const catalog_compile_unit&) const = default;
+	};
+
 	/** @brief Immutable project input descriptor used by providers and snapshots. */
 	struct project_catalog
 	{
+		/** @brief Content ID derived from the exact catalog digest. */
 		std::string catalog_id;
+		/** @brief Semantic digest of canonical_projection(). */
 		std::string catalog_digest;
+		/** @brief Logical, host-location-independent project root. */
 		std::string logical_root;
-		std::vector<std::string> compile_units;
+		/** @brief Digest of the catalog-wide environment authority. */
+		std::string environment_digest;
+		/** @brief Compile units in canonical compile-unit-ID order. */
+		std::vector<catalog_compile_unit> compile_units;
+		/** @brief Canonicalize entries and derive the exact content-bound catalog identity. */
+		[[nodiscard]] static result<project_catalog>
+		make(std::string logical_root_value,
+			 std::string environment_digest_value,
+			 std::vector<catalog_compile_unit> compile_unit_values);
+		/** @brief Encode the authoritative root/environment/compile-unit projection. */
+		[[nodiscard]] result<std::vector<std::byte>> canonical_projection() const;
+		/** @brief Recompute and compare the digest and catalog ID bottom-up. */
 		[[nodiscard]] result<void> validate() const;
 	};
 

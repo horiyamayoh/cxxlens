@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.42.0
+document_version: 1.43.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -104,20 +104,20 @@ entries:
 
   - id: public.project-catalog
     status: implemented
-    owner_issue: '#66'
+    owner_issue: '#121'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/sdk/relation.hpp]
     symbols:
       - name: project_catalog
         kind: value
-        signature: 'struct project_catalog { string catalog_id; string catalog_digest; string logical_root; vector<string> compile_units; result<void> validate() const; }'
+        signature: 'struct catalog_compile_unit { string compile_unit_id; string effective_invocation_digest; string source_digest; string environment_digest; result<void> validate() const; }; struct project_catalog { string catalog_id; string catalog_digest; string logical_root; string environment_digest; vector<catalog_compile_unit> compile_units; static result<project_catalog> make(string, string, vector<catalog_compile_unit>); result<vector<byte>> canonical_projection() const; result<void> validate() const; }'
     errors: [sdk.project-catalog-invalid]
     lifetime: [value-owned-and-detached]
     threading: [immutable-values-may-be-copied-across-threads]
-    versioning: [catalog-digest-binds-exact-input]
-    invariants: [compile-units-canonical-sorted-unique, no-first-wins]
-    implementation_evidence: [src/sdk/relation.cpp, tests/unit/sdk/sdk_test.cpp]
+    versioning: [catalog-digest-binds-exact-input, project-catalog-projection-v1, catalog-id-is-catalog-prefix-plus-exact-digest]
+    invariants: [compile-unit-entry-binds-stable-id-and-exact-invocation-source-environment-digests, logical-root-and-catalog-environment-are-authoritative, compile-units-canonical-sorted-unique, duplicate-and-conflicting-unit-identities-fail-closed, validator-recomputes-digest-and-id-bottom-up, provider-validates-before-task-accepted, build-project-preserves-the-same-catalog-authority, no-first-wins]
+    implementation_evidence: [schemas/cxxlens_ng_project_catalog_contract.yaml, src/sdk/relation.cpp, src/sdk/provider.cpp, src/llvm/clang22/provider_worker.cpp, tests/unit/sdk/sdk_test.cpp, tests/integration/r2_vertical_slice_test.cpp, docs/design/adr/0063-project-catalog-bottom-up-identity.md]
 
   - id: public.relation-static
     status: implemented

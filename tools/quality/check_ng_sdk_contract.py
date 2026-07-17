@@ -22,6 +22,8 @@ import check_ng_query_contract as query_contract
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 CATALOG = pathlib.Path("schemas/cxxlens_ng_public_api_catalog.yaml")
 SCHEMA = pathlib.Path("schemas/cxxlens_ng_public_api_catalog.schema.yaml")
+PROJECT_CATALOG_CONTRACT = pathlib.Path("schemas/cxxlens_ng_project_catalog_contract.yaml")
+PROJECT_CATALOG_SCHEMA = pathlib.Path("schemas/cxxlens_ng_project_catalog_contract.schema.yaml")
 EXPECTED_PATHS = {
     "generated-typed-query",
     "runtime-dynamic-query",
@@ -83,6 +85,54 @@ def unique_rows(rows: list[dict[str, Any]], label: str) -> dict[str, dict[str, A
     return result
 
 
+def validate_project_catalog_contract(
+    root: pathlib.Path, entries: dict[str, dict[str, Any]]
+) -> None:
+    contract = load_yaml(root / PROJECT_CATALOG_CONTRACT)
+    schema_validate(contract, load_yaml(root / PROJECT_CATALOG_SCHEMA))
+    public_entry = entries.get("public.project-catalog", {})
+    if public_entry.get("owner_issue") != "#121":
+        fail("project catalog ownership must remain with Issue #121")
+    signature = "\n".join(
+        symbol.get("signature", "") for symbol in public_entry.get("symbols", [])
+    )
+    for marker in (
+        "catalog_compile_unit",
+        "effective_invocation_digest",
+        "source_digest",
+        "environment_digest",
+        "project_catalog> make",
+        "canonical_projection",
+    ):
+        if marker not in signature:
+            fail(f"project catalog public projection marker is missing: {marker}")
+
+    registry = load_yaml(root / "schemas/cxxlens_ng_relation_registry.yaml")
+    project = next(
+        (row for row in registry["relations"] if row["name"] == "build.project"), None
+    )
+    if project is None:
+        fail("build.project catalog consumer is missing")
+    columns = {column["name"] for column in project["columns"]}
+    required = {"catalog", "catalog_digest", "logical_root", "environment_digest"}
+    if not required.issubset(columns):
+        fail(f"build.project catalog authority fields are missing: {sorted(required - columns)}")
+
+    header = (root / "include/cxxlens/sdk/relation.hpp").read_text(encoding="utf-8")
+    relation_source = (root / "src/sdk/relation.cpp").read_text(encoding="utf-8")
+    provider_source = (root / "src/sdk/provider.cpp").read_text(encoding="utf-8")
+    worker_source = (root / "src/llvm/clang22/provider_worker.cpp").read_text(encoding="utf-8")
+    for marker in ("catalog_compile_unit", "project_catalog::make", "canonical_projection"):
+        if marker not in header + relation_source:
+            fail(f"project catalog implementation marker is missing: {marker}")
+    validation = provider_source.find("task_value.project.validate()")
+    acceptance = provider_source.find("message_type::task_accepted", validation)
+    if validation < 0 or acceptance < 0 or validation > acceptance:
+        fail("provider task catalog is not validated before task_accepted")
+    if "sdk::project_catalog::make(" not in worker_source:
+        fail("native provider worker bypasses the shared project catalog loader")
+
+
 def validate_catalog(root: pathlib.Path, catalog: dict[str, Any]) -> None:
     schema_validate(catalog, load_yaml(root / SCHEMA))
     paths = unique_rows(catalog["author_paths"], "author path")
@@ -101,6 +151,7 @@ def validate_catalog(root: pathlib.Path, catalog: dict[str, Any]) -> None:
         )
     if entries.get("public.recipe", {}).get("owner_issue") != "#104":
         fail("flagship recipe execution-completeness ownership must remain with Issue #104")
+    validate_project_catalog_contract(root, entries)
     recipe_source = (root / "src/sdk/recipe.cpp").read_text(encoding="utf-8")
     for marker in (
         "execution_status::complete",

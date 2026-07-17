@@ -666,6 +666,13 @@ caller-supplied domain と byte payload を受ける `semantic_digest` は ADR 0
 `semantic-v2:sha256:<64 lowercase hex>` であり、legacy の NUL-separated `sha256:` value と同一 namespace へ
 silent rehash してはならない。legacy value は canonical source から明示的に再計算できる場合だけ移行する。
 
+project catalog は ADR 0063 と `schemas/cxxlens_ng_project_catalog_contract.yaml` を authority とする。compile unit entry は stable
+`compile_unit_id` と exact invocation/source/environment digest を保持する。catalog projection は contract tag、logical root、catalog
+environment digest、compile-unit ID byte order の全 entry を canonical binary tuple で encode する。duplicate/conflict は拒否し、
+`catalog_digest` は semantic digest v2、`catalog_id` は `catalog:` + exact digest とする。loader と validator は同一 codec を使い、provider
+task は `task_accepted` より前に bottom-up 再計算する。`build.project` は catalog ID/digest/root/environment を同じ validated value から
+写像し、別 authority や first-wins fallback を持たない。
+
 ### 5.4 Path domains
 
 path は単なる host absolute string ではなく domain 付き logical path とする。
