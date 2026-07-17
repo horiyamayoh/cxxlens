@@ -1,6 +1,6 @@
 schema: cxxlens.ng-acceptance-manifest.v1
 kind: acceptance-manifest
-document_version: 1.2.0
+document_version: 1.3.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -140,7 +140,7 @@ entries:
     owner_issue: '#113'
     profile: foundation
     contract_issue: '#113'
-    depends_on: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4]
+    depends_on: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4, gate.quality-evidence]
     evidence:
       - schemas/cxxlens_ng_foundation_completion_manifest.yaml
       - schemas/cxxlens_ng_foundation_audit_report.schema.yaml
@@ -148,6 +148,26 @@ entries:
       - tools/quality/check_ng_foundation_completion.py
       - .github/workflows/quality.yml
     summary: Commit- and finding-bound completion from measured zero-audit subreports.
+  - id: gate.quality-evidence
+    status: implemented
+    owner_issue: '#156'
+    profile: foundation
+    contract_issue: '#156'
+    depends_on: [gate.g0]
+    evidence:
+      - schemas/cxxlens_ng_quality_ownership.yaml
+      - schemas/cxxlens_ng_quality_evidence.schema.yaml
+      - schemas/cxxlens_ng_install_artifact_manifest.schema.yaml
+      - tools/quality/check_quality_ownership.py
+      - tools/quality/run_gate.py
+      - tools/quality/collect_toolchain_provenance.py
+      - tools/quality/install_artifact_manifest.py
+      - tests/quality/test_quality_ownership.py
+      - tests/unit/sdk/check_case_registration.py
+      - tests/install/run_install_test.cmake.in
+      - .github/workflows/quality.yml
+      - .github/workflows/nightly.yml
+    summary: Single-owner logical evidence, bound provenance, resource-aware parallel gates, and selectable install/SDK tests.
   - id: gate.release
     status: deferred
     owner_issue: '#71'

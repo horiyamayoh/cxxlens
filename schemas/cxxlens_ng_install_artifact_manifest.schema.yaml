@@ -1,0 +1,42 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.install-artifact-manifest.v1
+title: cxxlens installed prefix artifact manifest
+type: object
+additionalProperties: false
+required: [schema, source, configuration, configuration_digest, toolchain, files, prefix_digest, manifest_digest]
+properties:
+  schema: {const: cxxlens.install-artifact-manifest.v1}
+  source:
+    type: object
+    additionalProperties: false
+    required: [revision, tree]
+    properties:
+      revision: {type: string, pattern: '^[0-9a-f]{40}$'}
+      tree: {type: string, pattern: '^[0-9a-f]{40}$'}
+  configuration: {type: string, minLength: 1}
+  configuration_digest: {$ref: '#/$defs/digest'}
+  toolchain:
+    type: object
+    additionalProperties: false
+    required: [compiler, identity, binary_digest, digest]
+    properties:
+      compiler: {type: string, minLength: 1}
+      identity: {type: string, minLength: 1}
+      binary_digest: {$ref: '#/$defs/digest'}
+      digest: {$ref: '#/$defs/digest'}
+  files:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      additionalProperties: false
+      required: [path, kind, mode, digest]
+      properties:
+        path: {type: string, minLength: 1}
+        kind: {enum: [file, symlink]}
+        mode: {type: integer, minimum: 0}
+        digest: {$ref: '#/$defs/digest'}
+  prefix_digest: {$ref: '#/$defs/digest'}
+  manifest_digest: {$ref: '#/$defs/digest'}
+$defs:
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}

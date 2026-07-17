@@ -1,0 +1,35 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.quality-evidence.v1
+title: cxxlens quality evidence
+type: object
+additionalProperties: false
+required:
+  - schema
+  - evidence_id
+  - logical_check_id
+  - check_version
+  - configuration
+  - revision
+  - tree
+  - toolchain_digest
+  - configuration_digest
+  - checker_digest
+  - input_digest
+  - output_digest
+  - result
+properties:
+  schema: {const: cxxlens.quality-evidence.v1}
+  evidence_id: {type: string, pattern: '^quality-evidence:[0-9a-f]{64}$'}
+  logical_check_id: {type: string, pattern: '^[a-z][a-z0-9.-]+$'}
+  check_version: {type: integer, minimum: 1}
+  configuration: {type: string, pattern: '^[a-z][a-z0-9.-]+$'}
+  revision: {type: string, pattern: '^[0-9a-f]{40}$'}
+  tree: {type: string, pattern: '^[0-9a-f]{40}$'}
+  toolchain_digest: {$ref: '#/$defs/digest'}
+  configuration_digest: {$ref: '#/$defs/digest'}
+  checker_digest: {$ref: '#/$defs/digest'}
+  input_digest: {$ref: '#/$defs/digest'}
+  output_digest: {$ref: '#/$defs/digest'}
+  result: {const: passed}
+$defs:
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}

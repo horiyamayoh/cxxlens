@@ -13,6 +13,9 @@
 | Public C++ API Catalog | `schemas/cxxlens_ng_public_api_catalog.yaml` | #66–#70 | implemented |
 | Acceptance Manifest | `schemas/cxxlens_ng_acceptance_manifest.yaml` | #71 | implemented foundation gates |
 | Foundation Completion | `schemas/cxxlens_ng_foundation_completion_manifest.yaml` | #113 | implemented, CI commit/finding-bound measured-audit report |
+| Quality Evidence Ownership | `schemas/cxxlens_ng_quality_ownership.yaml` | #156 | implemented single-owner and revision/toolchain/input-bound evidence contract |
+| Quality Evidence Instance | `schemas/cxxlens_ng_quality_evidence.schema.yaml` | #156 | implemented exact configuration evidence and workflow aggregation schema |
+| Install Artifact Manifest | `schemas/cxxlens_ng_install_artifact_manifest.schema.yaml` | #156 | implemented revision/tree/toolchain/configuration/all-file binding |
 | Security Profile | `schemas/cxxlens_ng_security_profile.yaml` | #65 | accepted exact contract |
 | Release Bundle | `schemas/cxxlens_ng_release_bundle.yaml` | #59 | accepted exact contract |
 

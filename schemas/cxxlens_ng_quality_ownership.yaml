@@ -1,0 +1,98 @@
+schema: cxxlens.ng-quality-ownership.v1
+document_version: 1.0.0
+maturity: implemented
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md
+  issue: '#156'
+  owner: steward.quality-evidence
+evidence_binding:
+  contract: cxxlens.quality-evidence.v1
+  fields:
+    - logical_check_id
+    - check_version
+    - revision
+    - tree
+    - toolchain_digest
+    - configuration_digest
+    - checker_digest
+    - input_digest
+    - output_digest
+  cache_is_evidence: false
+checks:
+  - id: quality.unit-contracts
+    version: 1
+    owner: ctest
+    command: ctest --label-regex quality
+    inputs: [tests/quality, tools/quality, schemas]
+    dimensions: [linkage-independent]
+    configurations: [linkage-independent]
+  - id: quality.production-contracts
+    version: 1
+    owner: quality-target
+    command: cmake --build --target cxxlens-quality
+    inputs: [tools/quality, schemas, docs, .github/workflows]
+    dimensions: [linkage-independent]
+    configurations: [linkage-independent]
+  - id: cpp.runtime-tests
+    version: 1
+    owner: build-test
+    command: ctest --label-exclude 'quality|install'
+    inputs: [include, src, tests]
+    dimensions: [static, shared, clang22]
+    configurations: [static-clang22, shared-clang22]
+  - id: package.installed-consumers
+    version: 1
+    owner: install-job
+    command: ctest --label-regex install
+    inputs: [CMakeLists.txt, cmake, include, src, tests/install, tools/quality/install_artifact_manifest.py, schemas/cxxlens_ng_install_artifact_manifest.schema.yaml]
+    dimensions: [static, shared, clang22]
+    configurations: [static-clang22, shared-clang22]
+  - id: public-headers.gcc
+    version: 1
+    owner: gcc-header-job
+    command: g++ -std=c++23 -fsyntax-only
+    inputs: [include, tests/public_headers]
+    dimensions: [gcc]
+    configurations: [gcc]
+  - id: sanitizer.asan-ubsan
+    version: 1
+    owner: nightly
+    command: ctest --preset asan-ubsan --label-exclude quality
+    inputs: [CMakeLists.txt, cmake, include, src, tests]
+    dimensions: [asan-ubsan, clang22]
+    configurations: [asan-ubsan-clang22]
+  - id: sanitizer.tsan
+    version: 1
+    owner: nightly
+    command: ctest --preset tsan --label-exclude quality
+    inputs: [CMakeLists.txt, cmake, include, src, tests]
+    dimensions: [tsan, clang22]
+    configurations: [tsan-clang22]
+  - id: analysis.clang-tidy
+    version: 1
+    owner: nightly
+    command: cmake --build --target cxxlens-clang-tidy
+    inputs: [include, src, .clang-tidy]
+    dimensions: [clang22]
+    configurations: [clang22]
+modes:
+  fast:
+    owners: [ctest]
+    final_sha: false
+  check:
+    owners: [ctest, quality-target, build-test]
+    final_sha: false
+  full:
+    owners: [ctest, quality-target, build-test, install-job, gcc-header-job]
+    final_sha: true
+  stress:
+    owners: [ctest, quality-target, build-test, install-job, gcc-header-job, nightly]
+    final_sha: true
+selection:
+  unknown: full
+  graph_failure: full
+  public_header: full
+  schema: full
+  cmake: full
+  workflow: full
+  selector: full

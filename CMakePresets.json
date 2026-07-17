@@ -77,12 +77,12 @@
     }
   ],
   "buildPresets": [
-    {"name": "dev-clang", "configurePreset": "dev-clang", "jobs": 4},
-    {"name": "ci-quick", "configurePreset": "ci-quick", "jobs": 4},
-    {"name": "docs", "configurePreset": "docs", "jobs": 4},
-    {"name": "asan-ubsan", "configurePreset": "asan-ubsan", "jobs": 4},
-    {"name": "install-check", "configurePreset": "install-check", "jobs": 4},
-    {"name": "tsan", "configurePreset": "tsan", "jobs": 4}
+    {"name": "dev-clang", "configurePreset": "dev-clang"},
+    {"name": "ci-quick", "configurePreset": "ci-quick"},
+    {"name": "docs", "configurePreset": "docs"},
+    {"name": "asan-ubsan", "configurePreset": "asan-ubsan"},
+    {"name": "install-check", "configurePreset": "install-check"},
+    {"name": "tsan", "configurePreset": "tsan"}
   ],
   "testPresets": [
     {"name": "dev-clang", "configurePreset": "dev-clang", "output": {"outputOnFailure": true}},

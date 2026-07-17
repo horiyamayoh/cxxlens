@@ -8,18 +8,26 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: nightly-quality
+  cancel-in-progress: false
+
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: ${{ vars.CXXLENS_SANITIZER_BUILD_JOBS || 2 }}
+  CTEST_PARALLEL_LEVEL: ${{ vars.CXXLENS_SANITIZER_TEST_JOBS || 2 }}
+
 jobs:
   sanitizers:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
       - name: Install Clang 22 and Ninja
         run: |
           wget --quiet https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 22
           sudo apt-get install --yes llvm-22 ninja-build
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.12"
       - run: python -m pip install --requirement tools/quality/requirements.txt
@@ -32,22 +40,42 @@ jobs:
           export ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer-22)"
           cmake --preset asan-ubsan
           cmake --build --preset asan-ubsan
-          ctest --preset asan-ubsan
+          ctest --preset asan-ubsan --parallel "${CTEST_PARALLEL_LEVEL}" \
+            --label-exclude quality --output-junit build/asan-ubsan/ctest.xml
           python3 tools/quality/check_sanitizer_coverage.py check --root . \
             --build-dir build/asan-ubsan --expected address,undefined \
-            --require-install-consumers
+            --require-install-consumers 2>&1 | tee build/asan-ubsan/sanitizer-coverage.log
+          python tools/quality/collect_toolchain_provenance.py \
+            --compiler clang++-22 --configuration asan-ubsan-clang22 \
+            --output build/asan-ubsan/toolchain.json
+          python tools/quality/check_quality_ownership.py evidence \
+            --check-id sanitizer.asan-ubsan --configuration asan-ubsan-clang22 \
+            --toolchain-provenance build/asan-ubsan/toolchain.json \
+            --checker tools/quality/check_sanitizer_coverage.py \
+            --output build/asan-ubsan/ctest.xml \
+            --output build/asan-ubsan/sanitizer-coverage.log \
+            --evidence-output build/asan-ubsan/asan-ubsan.evidence.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-nightly-asan-ubsan-${{ github.sha }}
+          path: |
+            build/asan-ubsan/ctest.xml
+            build/asan-ubsan/sanitizer-coverage.log
+            build/asan-ubsan/toolchain.json
+            build/asan-ubsan/asan-ubsan.evidence.json
+          if-no-files-found: error
 
   thread-sanitizer:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
       - name: Install Clang 22 and Ninja
         run: |
           wget --quiet https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 22
           sudo apt-get install --yes llvm-22 ninja-build
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.12"
       - run: python -m pip install --requirement tools/quality/requirements.txt
@@ -58,25 +86,123 @@ jobs:
         run: |
           cmake --preset tsan
           cmake --build --preset tsan
-          ctest --preset tsan
+          ctest --preset tsan --parallel 1 --label-exclude quality \
+            --output-junit build/tsan/ctest.xml
           python3 tools/quality/check_sanitizer_coverage.py check --root . \
             --build-dir build/tsan --expected thread \
-            --require-install-consumers
+            --require-install-consumers 2>&1 | tee build/tsan/sanitizer-coverage.log
+          python tools/quality/collect_toolchain_provenance.py \
+            --compiler clang++-22 --configuration tsan-clang22 \
+            --output build/tsan/toolchain.json
+          python tools/quality/check_quality_ownership.py evidence \
+            --check-id sanitizer.tsan --configuration tsan-clang22 \
+            --toolchain-provenance build/tsan/toolchain.json \
+            --checker tools/quality/check_sanitizer_coverage.py \
+            --output build/tsan/ctest.xml \
+            --output build/tsan/sanitizer-coverage.log \
+            --evidence-output build/tsan/tsan.evidence.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-nightly-tsan-${{ github.sha }}
+          path: |
+            build/tsan/ctest.xml
+            build/tsan/sanitizer-coverage.log
+            build/tsan/toolchain.json
+            build/tsan/tsan.evidence.json
+          if-no-files-found: error
 
   static-analysis:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
       - name: Install Clang tools
         run: |
           wget --quiet https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 22
           sudo apt-get install --yes clang-tidy-22 ninja-build
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --requirement tools/quality/requirements.txt
       - name: clang-tidy
         env:
           CXX: clang++-22
         run: |
           cmake --preset ci-quick
-          cmake --build --preset ci-quick
-          cmake --build --preset ci-quick --target cxxlens-clang-tidy
+          cmake --build --preset ci-quick --target cxxlens-clang-tidy \
+            2>&1 | tee build/ci-quick/clang-tidy.log
+          python tools/quality/collect_toolchain_provenance.py \
+            --compiler clang++-22 --configuration clang22 \
+            --output build/ci-quick/toolchain.json
+          python tools/quality/check_quality_ownership.py evidence \
+            --check-id analysis.clang-tidy --configuration clang22 \
+            --toolchain-provenance build/ci-quick/toolchain.json \
+            --checker .clang-tidy \
+            --output build/ci-quick/clang-tidy.log \
+            --evidence-output build/ci-quick/clang-tidy.evidence.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-nightly-clang-tidy-${{ github.sha }}
+          path: |
+            build/ci-quick/clang-tidy.log
+            build/ci-quick/toolchain.json
+            build/ci-quick/clang-tidy.evidence.json
+          if-no-files-found: error
+
+  evidence-ownership:
+    needs: [sanitizers, thread-sanitizer, static-analysis]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --requirement tools/quality/requirements.txt
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8
+        with:
+          pattern: cxxlens-nightly-*-${{ github.sha }}
+          path: build/nightly-evidence-input
+      - run: |
+          python tools/quality/check_quality_ownership.py aggregate \
+            --owner nightly --evidence-dir build/nightly-evidence-input \
+            --report build/nightly-evidence-set.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-nightly-evidence-${{ github.sha }}
+          path: build/nightly-evidence-set.json
+          if-no-files-found: error
+
+  clean-full:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - name: Install exact Clang 22 toolchain
+        run: |
+          wget --quiet https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install --yes libclang-22-dev llvm-22-dev ninja-build
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --requirement tools/quality/requirements.txt
+      - name: Clean no-cache stress gate
+        env:
+          CXX: clang++-22
+          CCACHE_DISABLE: "1"
+        run: |
+          python tools/quality/run_gate.py stress --preset ci-quick --configure \
+            --report "${RUNNER_TEMP}/cxxlens-clean-full.json"
+          python tools/quality/collect_toolchain_provenance.py \
+            --compiler clang++-22 --configuration "ci-quick;clean-no-cache;stress" \
+            --output "${RUNNER_TEMP}/cxxlens-clean-full-toolchain.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-clean-full-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/cxxlens-clean-full.json
+            ${{ runner.temp }}/cxxlens-clean-full*.xml
+            ${{ runner.temp }}/cxxlens-clean-full-toolchain.json
+            build/ci-quick/.ninja_log
+          if-no-files-found: error

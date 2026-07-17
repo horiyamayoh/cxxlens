@@ -151,6 +151,7 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
         "gate.g2",
         "gate.g3",
         "gate.g4",
+        "gate.quality-evidence",
         "gate.foundation",
     }
     if any(gates[identifier]["status"] != "implemented" for identifier in required_implemented):
@@ -394,6 +395,7 @@ def build_report(
     ci_jobs: list[str],
     generated_at: str,
     expected_revision: str | None = None,
+    audit_entries: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     if expected_revision and git_state["revision"] != expected_revision:
         fail(
@@ -421,6 +423,14 @@ def build_report(
         fail(f"required issues are not closed: {missing_closed}")
     if issue_states.get(71) != "closed" or issue_states.get(56) != "closed":
         fail("gate and tracking issues must be closed for a passed completion report")
+    current_open = sorted(
+        number for number, state in issue_states.items() if state == "open"
+    )
+    if current_open:
+        fail(
+            "foundation audit findings are nonzero: "
+            + str([f"github.issue.open:{number}" for number in current_open])
+        )
 
     ledger = load_document(root / LEDGER)
     authority_digests = {
@@ -434,6 +444,20 @@ def build_report(
         }
         for claim, paths in manifest["evidence"]["claims"].items()
     }
+    audits = (
+        validate_audit_report(
+            root,
+            {
+                "schema": "cxxlens.ng-foundation-audit-report.v1",
+                "revision": git_state["revision"],
+                "tree": git_state["tree"],
+                "audits": audit_entries,
+            },
+            git_state,
+        )
+        if audit_entries is not None
+        else run_audit_checker(root, manifest, git_state, issue_states)
+    )
     report = {
         "schema": "cxxlens.ng-foundation-completion-report.v1",
         "result": "passed",
@@ -460,7 +484,7 @@ def build_report(
             "asset_count": ledger["asset_count"],
             "classifications": ledger["classifications"],
         },
-        "audits": run_audit_checker(root, manifest, git_state, issue_states),
+        "audits": audits,
         "reproduction": {
             "distribution": "ng-foundation",
             "kernel_semantics": "1.0.0",
