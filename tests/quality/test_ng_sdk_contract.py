@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import pathlib
 import sys
 import unittest
@@ -133,6 +134,25 @@ class NgSdkContractTest(unittest.TestCase):
                     "verification_modalities": ["schema_validated"],
                 }
             ],
+            "contributor_edges": [
+                {
+                    "claim_contributor": "assertion:one",
+                    "producer": {
+                        "id": "provider.one",
+                        "semantic_contract": "sha256:" + "a" * 64,
+                    },
+                    "provenance": "evidence:one",
+                    "guarantee": {
+                        "approximation": "exact",
+                        "scope": "project",
+                        "assumptions": "assumptions:none",
+                        "verification_modalities": ["schema_validated"],
+                    },
+                    "condition_universe": "build-matrix",
+                    "condition_fragments": ["debug"],
+                    "interpretation": "cc.canonical-1",
+                }
+            ],
             "interpretation": "cc.canonical-1",
             "claim_contributors": ["assertion:one"],
             "producer_contracts": [
@@ -148,6 +168,10 @@ class NgSdkContractTest(unittest.TestCase):
         missing.pop("contributor_guarantees")
         with self.assertRaises(jsonschema.ValidationError):
             jsonschema.Draft202012Validator(row_schema).validate(missing)
+        missing_edge = copy.deepcopy(row)
+        missing_edge.pop("contributor_edges")
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(row_schema).validate(missing_edge)
 
     def test_query_summary_requires_lossless_fragment_index(self) -> None:
         schema = load_yaml(
@@ -172,6 +196,12 @@ class NgSdkContractTest(unittest.TestCase):
             "interpretation": "cc.canonical-1",
             "assumptions": ["assumptions:none"],
             "claim_contributors": ["assertion:one"],
+            "producer_contracts": [
+                {
+                    "id": "provider.one",
+                    "semantic_contract": "sha256:" + "a" * 64,
+                }
+            ],
             "provenance": ["evidence:one"],
             "coverage_states": ["covered"],
             "closure_ids": ["closure:one"],
@@ -197,6 +227,12 @@ class NgSdkContractTest(unittest.TestCase):
         }
         validator = jsonschema.Draft202012Validator(summary_schema)
         validator.validate(summary)
+        canonical = json.dumps(summary, sort_keys=True, separators=(",", ":"))
+        decoded = json.loads(canonical)
+        validator.validate(decoded)
+        self.assertEqual(
+            canonical, json.dumps(decoded, sort_keys=True, separators=(",", ":"))
+        )
         for required in ("condition_partition", "fragment_set_digest", "fragments"):
             missing = copy.deepcopy(summary)
             missing.pop(required)

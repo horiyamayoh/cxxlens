@@ -1,5 +1,5 @@
 {
-  "asset_count": 337,
+  "asset_count": 338,
   "assets": [
     {
       "authority": "active",
@@ -872,6 +872,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0064-portable-provider-task-session-binding.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0065-query-bound-contributor-evidence.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2362,7 +2369,7 @@
     }
   ],
   "classifications": {
-    "active": 301,
+    "active": 302,
     "archived": 35,
     "generated": 1
   },

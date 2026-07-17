@@ -1,5 +1,5 @@
 schema: cxxlens.query-conformance-vectors.v1
-document_version: 1.0.0
+document_version: 1.1.0
 authority:
   owner_issue: '#61'
   decision_adr: docs/design/adr/0007-logical-query-algebra.md
@@ -565,3 +565,33 @@ vectors:
       operator: query.scan.v1
       descriptor_id: cc.call_site.v1
       index_name: sqlite-call-index
+- id: bound-contributor-fragments-no-cross-product
+  class: positive
+  operation: validate_bound_contributor_fragments
+  expected:
+    decision: accepted
+    reason_code: query.bound-contributor-attribution-preserved
+  input:
+    operator: query.inner_join.v1
+    expected_fragments:
+    - claim_contributors: [claim-a]
+      producer_contracts: [producer-a]
+      provenance: [evidence-a]
+      approximation: exact
+    - claim_contributors: [claim-b]
+      producer_contracts: [producer-b]
+      provenance: [evidence-b]
+      approximation: under_approximation
+    contributor_edges:
+    - claim_contributor: claim-a
+      producer: producer-a
+      provenance: evidence-a
+      guarantee: exact
+      condition: [release]
+      interpretation: cc.canonical-1
+    - claim_contributor: claim-b
+      producer: producer-b
+      provenance: evidence-b
+      guarantee: under_approximation
+      condition: [release]
+      interpretation: cc.canonical-1

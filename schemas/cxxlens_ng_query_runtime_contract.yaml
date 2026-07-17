@@ -1,12 +1,12 @@
 schema: cxxlens.query-runtime-contract.v1
-document_version: 1.15.0
+document_version: 1.16.0
 maturity: implemented
 authority:
   logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
   guarantee_contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
   snapshot_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
-  decision_adr: docs/design/adr/0060-query-summary-guarantee-fragment-algebra.md
-  owner_issue: '#117'
+  decision_adr: docs/design/adr/0065-query-bound-contributor-evidence.md
+  owner_issue: '#134'
   owner: steward.ng-query-runtime
 compatibility:
   version_axis: query-runtime-result
@@ -211,6 +211,7 @@ result:
       - producer_contracts
       - provenance
       - contributor_guarantees
+      - contributor_edges
   execution_statuses:
     - complete
     - truncated
@@ -244,9 +245,10 @@ result:
       canonical_order: fragment-canonical-json
       digest_binding: exact-canonical-fragment-set
       drill_down: embedded-lossless-fragments
+      attribution: singleton-bound-contributor-edge
     composition:
       filter_project_restrict: surviving-fragments-only
-      join_semi_union_distinct: row-contributor-set-union-then-conservative-meet
+      join_semi_union_distinct: canonical-bound-edge-composition-then-conservative-meet
       approximation: componentwise-soundness-completeness-all
       verification: implication-closed-intersection
       assumptions: canonical-id-set-union
@@ -287,6 +289,8 @@ result:
     unordered_query: canonical-annotated-row-order
     row_projection:
       contributor_guarantees: canonical-structured-set
+      contributor_edges: canonical-bound-claim-producer-provenance-guarantee-condition-interpretation-set
+      independent_evidence_sets: derived-projections-only
       guarantee_fields: [approximation, scope, assumptions, verification_modalities]
       guarantee_order: canonical-json-lexical
       lossless_against_row_cursor: true

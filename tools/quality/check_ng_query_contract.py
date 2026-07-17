@@ -122,6 +122,7 @@ REQUIRED_VECTOR_IDS = {
     "partial-aggregate-publication",
     "logical-ir-without-physical-fields",
     "physical-index-is-not-logical-authority",
+    "bound-contributor-fragments-no-cross-product",
 }
 
 
@@ -870,6 +871,31 @@ def validate_partial_execution(value: dict[str, Any]) -> tuple[str, int]:
     fail("query.partial-kind-unknown", kind)
 
 
+def validate_bound_contributor_fragments(value: dict[str, Any]) -> None:
+    edges = value.get("contributor_edges", [])
+    expected = value.get("expected_fragments", [])
+    if value.get("operator") not in {
+        "query.inner_join.v1",
+        "query.semi_join.v1",
+        "query.distinct.v1",
+    }:
+        fail("query.bound-contributor-operator", "unsupported composition operator")
+    fragments = [
+        {
+            "claim_contributors": [edge["claim_contributor"]],
+            "producer_contracts": [edge["producer"]],
+            "provenance": [edge["provenance"]],
+            "approximation": edge["guarantee"],
+        }
+        for edge in edges
+    ]
+    if not edges or canonical_json(fragments) != canonical_json(expected):
+        fail(
+            "query.bound-contributor-attribution-lost",
+            "fragment attribution differs from bound contributor edges",
+        )
+
+
 def validate_operator_use(contract: dict[str, Any], value: dict[str, Any]) -> None:
     identifier = value["operator"]
     if identifier not in OPERATOR_NEGATIVE_CASES:
@@ -952,6 +978,9 @@ def execute_vector(
         elif operation == "validate_logical_authority":
             validate_logical_authority(contract, value["document"])
             reason = "query.logical-authority-clean"
+        elif operation == "validate_bound_contributor_fragments":
+            validate_bound_contributor_fragments(value)
+            reason = "query.bound-contributor-attribution-preserved"
         else:
             fail("query.vector-operation-unknown", operation)
         return {"decision": "accepted", "reason_code": reason, **result}

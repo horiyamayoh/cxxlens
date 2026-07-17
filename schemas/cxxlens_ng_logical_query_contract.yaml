@@ -64,6 +64,7 @@ collection_model:
     interpretation: stable-interpretation-id
     claim_contributors: canonical-assertion-id-set
     provenance: canonical-evidence-id-set
+    contributor_edges: canonical-bound-claim-producer-provenance-guarantee-condition-interpretation-set
   cell_states:
   - id: present
     fields: [type, value]
@@ -94,6 +95,7 @@ collection_model:
       condition: union
       claim_contributors: canonical-set-union
       provenance: canonical-set-union
+      contributor_edges: canonical-bound-edge-union
 condition_algebra:
   representation: finite-canonical-alternative-set-ng0
   require_same_universe: true
@@ -110,6 +112,8 @@ interpretation_algebra:
   distinct_partition: interpretation-id
   restriction: exact-id-filter
 evidence_algebra:
+  row_authority: bound-contributor-edges
+  independent_sets: derived-projections-only
   filter_project_restrictions: preserve
   join: canonical-set-union
   semi_join: canonical-set-union-of-all-witnesses

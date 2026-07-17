@@ -296,6 +296,74 @@ namespace cxxlens::sdk::query
 						 values.end());
 		}
 
+		void canonical_contributor_edges(std::vector<query_contributor_edge>& values)
+		{
+			std::ranges::sort(
+				values,
+				[](const query_contributor_edge& left, const query_contributor_edge& right)
+				{
+					return left.canonical_form() < right.canonical_form();
+				});
+			values.erase(std::ranges::unique(values,
+											 [](const query_contributor_edge& left,
+												const query_contributor_edge& right)
+											 {
+												 return left.canonical_form() ==
+													 right.canonical_form();
+											 })
+							 .begin(),
+						 values.end());
+		}
+
+		[[nodiscard]] bool
+		contributor_edges_are_canonical(const std::vector<query_contributor_edge>& values)
+		{
+			return std::ranges::is_sorted(
+					   values,
+					   [](const query_contributor_edge& left, const query_contributor_edge& right)
+					   {
+						   return left.canonical_form() < right.canonical_form();
+					   }) &&
+				std::ranges::adjacent_find(
+					values,
+					[](const query_contributor_edge& left, const query_contributor_edge& right)
+					{
+						return left.canonical_form() == right.canonical_form();
+					}) == values.end();
+		}
+
+		void refresh_contributor_projections(annotated_row& row)
+		{
+			row.claim_contributors.clear();
+			row.producer_contracts.clear();
+			row.provenance.clear();
+			row.contributor_guarantees.clear();
+			for (const auto& edge : row.contributor_edges)
+			{
+				row.claim_contributors.push_back(edge.claim_contributor);
+				row.producer_contracts.push_back(edge.producer);
+				row.provenance.push_back(edge.provenance);
+				row.contributor_guarantees.push_back(edge.guarantee);
+			}
+			canonical_set(row.claim_contributors);
+			canonical_producers(row.producer_contracts);
+			canonical_set(row.provenance);
+			canonical_guarantees(row.contributor_guarantees);
+		}
+
+		void canonicalize_contributor_edges(annotated_row& row)
+		{
+			canonical_contributor_edges(row.contributor_edges);
+			refresh_contributor_projections(row);
+		}
+
+		void bind_contributor_condition(annotated_row& row, const claim_condition& condition)
+		{
+			for (auto& edge : row.contributor_edges)
+				edge.condition = condition;
+			canonicalize_contributor_edges(row);
+		}
+
 		[[nodiscard]] bool producers_are_canonical(const std::vector<claim_producer>& values)
 		{
 			return std::ranges::is_sorted(
@@ -484,21 +552,10 @@ namespace cxxlens::sdk::query
 			}
 			output.multiplicity *= right.multiplicity;
 			output.presence = std::move(**presence);
-			output.claim_contributors.insert(output.claim_contributors.end(),
-											 right.claim_contributors.begin(),
-											 right.claim_contributors.end());
-			output.producer_contracts.insert(output.producer_contracts.end(),
-											 right.producer_contracts.begin(),
-											 right.producer_contracts.end());
-			output.provenance.insert(
-				output.provenance.end(), right.provenance.begin(), right.provenance.end());
-			output.contributor_guarantees.insert(output.contributor_guarantees.end(),
-												 right.contributor_guarantees.begin(),
-												 right.contributor_guarantees.end());
-			canonical_set(output.claim_contributors);
-			canonical_producers(output.producer_contracts);
-			canonical_set(output.provenance);
-			canonical_guarantees(output.contributor_guarantees);
+			output.contributor_edges.insert(output.contributor_edges.end(),
+											right.contributor_edges.begin(),
+											right.contributor_edges.end());
+			bind_contributor_condition(output, output.presence);
 			return std::optional<annotated_row>{std::move(output)};
 		}
 
@@ -979,7 +1036,16 @@ namespace cxxlens::sdk::query
 				   << ",\"coverage_states\":" << strings_json(fragment.coverage_states)
 				   << ",\"guarantee\":" << guarantee_json(fragment.guarantee)
 				   << ",\"interpretation\":" << json_string(fragment.interpretation)
-				   << ",\"provenance\":" << strings_json(fragment.provenance)
+				   << ",\"producer_contracts\":[";
+			for (std::size_t index = 0U; index < fragment.producer_contracts.size(); ++index)
+			{
+				if (index != 0U)
+					output << ',';
+				output << "{\"id\":" << json_string(fragment.producer_contracts[index].id)
+					   << ",\"semantic_contract\":"
+					   << json_string(fragment.producer_contracts[index].semantic_contract) << '}';
+			}
+			output << ']' << ",\"provenance\":" << strings_json(fragment.provenance)
 				   << ",\"requires_closure\":" << (fragment.requires_closure ? "true" : "false")
 				   << ",\"unresolved\":" << (fragment.unresolved ? "true" : "false") << '}';
 			return output.str();
@@ -1030,6 +1096,7 @@ namespace cxxlens::sdk::query
 									   const claim_condition& condition,
 									   const std::string_view interpretation,
 									   const std::span<const std::string> contributors,
+									   const std::span<const claim_producer> producers,
 									   const std::span<const std::string> provenance)
 			{
 				query_guarantee_fragment fragment{guarantee,
@@ -1037,6 +1104,7 @@ namespace cxxlens::sdk::query
 												  std::string{interpretation},
 												  assumption_ids(guarantee.assumptions),
 												  {contributors.begin(), contributors.end()},
+												  {producers.begin(), producers.end()},
 												  {provenance.begin(), provenance.end()},
 												  coverage_states,
 												  {closures.begin(), closures.end()},
@@ -1055,27 +1123,36 @@ namespace cxxlens::sdk::query
 				fragments.push_back(std::move(fragment));
 			};
 			for (const auto& row : rows)
-				for (const auto& guarantee : row.contributor_guarantees)
-					append_fragment(guarantee,
-									row.presence,
-									row.interpretation,
-									row.claim_contributors,
-									row.provenance);
+				for (const auto& edge : row.contributor_edges)
+				{
+					const std::array contributors{edge.claim_contributor};
+					const std::array producers{edge.producer};
+					const std::array provenance{edge.provenance};
+					append_fragment(edge.guarantee,
+									edge.condition,
+									edge.interpretation,
+									contributors,
+									producers,
+									provenance);
+				}
 			if (fragments.empty())
 				for (const auto& annotation : empty_result_sources)
 				{
 					const std::array contributors{annotation.assertion};
+					const std::array producers{annotation.producer};
 					const std::array provenance{annotation.provenance_root};
 					append_fragment(annotation.guarantee,
 									annotation.presence,
 									annotation.interpretation,
 									contributors,
+									producers,
 									provenance);
 				}
 			if (fragments.empty())
 				append_fragment({"unknown", "query-empty", "assumptions:unknown", {}},
 								{"query-empty", {}},
 								"query-empty",
+								{},
 								{},
 								{});
 
@@ -1358,12 +1435,37 @@ namespace cxxlens::sdk::query
 		std::string publication;
 	};
 
+	result<void> query_contributor_edge::validate() const
+	{
+		if (claim_contributor.empty() || producer.id.empty() ||
+			producer.semantic_contract.empty() || provenance.empty() || interpretation.empty())
+			return unexpected(query_error("sdk.query-row-invalid", "contributor_edges"));
+		if (auto valid = guarantee.validate(); !valid)
+			return unexpected(std::move(valid.error()));
+		return condition.validate();
+	}
+
+	std::string query_contributor_edge::canonical_form() const
+	{
+		std::ostringstream output;
+		output << "{\"claim_contributor\":" << json_string(claim_contributor)
+			   << ",\"condition_fragments\":" << strings_json(condition.fragments)
+			   << ",\"condition_universe\":" << json_string(condition.universe)
+			   << ",\"guarantee\":" << guarantee_json(guarantee)
+			   << ",\"interpretation\":" << json_string(interpretation)
+			   << ",\"producer\":{\"id\":" << json_string(producer.id)
+			   << ",\"semantic_contract\":" << json_string(producer.semantic_contract)
+			   << "},\"provenance\":" << json_string(provenance) << '}';
+		return output.str();
+	}
+
 	result<void> annotated_row::validate() const
 	{
 		if (multiplicity == 0U || interpretation.empty() || claim_contributors.empty() ||
 			producer_contracts.empty() || provenance.empty() || contributor_guarantees.empty() ||
-			!sorted_unique(claim_contributors) || !producers_are_canonical(producer_contracts) ||
-			!sorted_unique(provenance))
+			contributor_edges.empty() || !sorted_unique(claim_contributors) ||
+			!producers_are_canonical(producer_contracts) || !sorted_unique(provenance) ||
+			!contributor_edges_are_canonical(contributor_edges))
 			return unexpected(query_error("sdk.query-row-invalid", "annotation"));
 		if (auto valid = presence.validate(); !valid)
 			return unexpected(std::move(valid.error()));
@@ -1380,6 +1482,24 @@ namespace cxxlens::sdk::query
 		for (const auto& guarantee : contributor_guarantees)
 			if (auto valid = guarantee.validate(); !valid)
 				return unexpected(std::move(valid.error()));
+		for (const auto& edge : contributor_edges)
+			if (edge.interpretation != interpretation)
+				return unexpected(query_error("sdk.query-row-invalid", "contributor_edges"));
+			else if (auto valid = edge.validate(); !valid)
+				return unexpected(std::move(valid.error()));
+		auto projected = *this;
+		refresh_contributor_projections(projected);
+		if (projected.claim_contributors != claim_contributors ||
+			projected.producer_contracts != producer_contracts ||
+			projected.provenance != provenance ||
+			projected.contributor_guarantees.size() != contributor_guarantees.size() ||
+			!std::ranges::equal(projected.contributor_guarantees,
+								contributor_guarantees,
+								[](const claim_guarantee& left, const claim_guarantee& right)
+								{
+									return guarantee_key(left) == guarantee_key(right);
+								}))
+			return unexpected(query_error("sdk.query-row-invalid", "contributor_projections"));
 		return {};
 	}
 
@@ -1387,6 +1507,8 @@ namespace cxxlens::sdk::query
 	{
 		auto guarantees = contributor_guarantees;
 		canonical_guarantees(guarantees);
+		auto edges = contributor_edges;
+		canonical_contributor_edges(edges);
 		std::ostringstream output;
 		output << "{\"claim_contributors\":" << strings_json(claim_contributors)
 			   << ",\"condition_fragments\":" << strings_json(presence.fragments)
@@ -1399,7 +1521,14 @@ namespace cxxlens::sdk::query
 			output << guarantee_json(guarantees[index]);
 		}
 		output << ']' << ",\"interpretation\":" << json_string(interpretation)
-			   << ",\"multiplicity\":" << multiplicity << ",\"producer_contracts\":[";
+			   << ",\"contributor_edges\":[";
+		for (std::size_t edge = 0U; edge < edges.size(); ++edge)
+		{
+			if (edge != 0U)
+				output << ',';
+			output << edges[edge].canonical_form();
+		}
+		output << ']' << ",\"multiplicity\":" << multiplicity << ",\"producer_contracts\":[";
 		for (std::size_t producer = 0U; producer < producer_contracts.size(); ++producer)
 		{
 			if (producer != 0U)
@@ -1859,16 +1988,23 @@ namespace cxxlens::sdk::query
 					row.producer_contracts = {annotation->producer};
 					row.provenance = {annotation->provenance_root};
 					row.contributor_guarantees = {annotation->guarantee};
+					row.contributor_edges = {{annotation->assertion,
+											  annotation->producer,
+											  annotation->provenance_root,
+											  annotation->guarantee,
+											  annotation->presence,
+											  annotation->interpretation}};
 					const auto existing = semantic_rows.find(annotation->content);
 					if (!preserve_multiplicity && existing != semantic_rows.end())
 					{
 						auto merged = output.rows[existing->second];
-						merged.producer_contracts.push_back(annotation->producer);
-						merged.provenance.push_back(annotation->provenance_root);
-						merged.contributor_guarantees.push_back(annotation->guarantee);
-						canonical_producers(merged.producer_contracts);
-						canonical_set(merged.provenance);
-						canonical_guarantees(merged.contributor_guarantees);
+						merged.contributor_edges.push_back({annotation->assertion,
+															annotation->producer,
+															annotation->provenance_root,
+															annotation->guarantee,
+															annotation->presence,
+															annotation->interpretation});
+						canonicalize_contributor_edges(merged);
 						if (!replace_row(
 								state, stable_id, output, existing->second, std::move(merged)))
 							break;
@@ -1986,29 +2122,17 @@ namespace cxxlens::sdk::query
 							}
 							selected = left;
 							selected->presence.fragments.clear();
+							selected->contributor_edges.clear();
 						}
 						const auto& witness = **combined;
 						selected->presence.fragments.insert(selected->presence.fragments.end(),
 															witness.presence.fragments.begin(),
 															witness.presence.fragments.end());
-						selected->claim_contributors.insert(selected->claim_contributors.end(),
-															witness.claim_contributors.begin(),
-															witness.claim_contributors.end());
-						selected->producer_contracts.insert(selected->producer_contracts.end(),
-															witness.producer_contracts.begin(),
-															witness.producer_contracts.end());
-						selected->provenance.insert(selected->provenance.end(),
-													witness.provenance.begin(),
-													witness.provenance.end());
-						selected->contributor_guarantees.insert(
-							selected->contributor_guarantees.end(),
-							witness.contributor_guarantees.begin(),
-							witness.contributor_guarantees.end());
+						selected->contributor_edges.insert(selected->contributor_edges.end(),
+														   witness.contributor_edges.begin(),
+														   witness.contributor_edges.end());
 						canonical_set(selected->presence.fragments);
-						canonical_set(selected->claim_contributors);
-						canonical_producers(selected->producer_contracts);
-						canonical_set(selected->provenance);
-						canonical_guarantees(selected->contributor_guarantees);
+						canonicalize_contributor_edges(*selected);
 						if (!candidate_fits_memory(state, stable_id, *selected))
 							break;
 					}
@@ -2017,10 +2141,7 @@ namespace cxxlens::sdk::query
 					if (!selected)
 						continue;
 					canonical_set(selected->presence.fragments);
-					canonical_set(selected->claim_contributors);
-					canonical_producers(selected->producer_contracts);
-					canonical_set(selected->provenance);
-					canonical_guarantees(selected->contributor_guarantees);
+					canonicalize_contributor_edges(*selected);
 					if (!append_row(state, stable_id, output, std::move(*selected)))
 						break;
 				}
@@ -2086,22 +2207,11 @@ namespace cxxlens::sdk::query
 					merged.presence.fragments.insert(merged.presence.fragments.end(),
 													 row.presence.fragments.begin(),
 													 row.presence.fragments.end());
-					merged.claim_contributors.insert(merged.claim_contributors.end(),
-													 row.claim_contributors.begin(),
-													 row.claim_contributors.end());
-					merged.producer_contracts.insert(merged.producer_contracts.end(),
-													 row.producer_contracts.begin(),
-													 row.producer_contracts.end());
-					merged.provenance.insert(
-						merged.provenance.end(), row.provenance.begin(), row.provenance.end());
-					merged.contributor_guarantees.insert(merged.contributor_guarantees.end(),
-														 row.contributor_guarantees.begin(),
-														 row.contributor_guarantees.end());
+					merged.contributor_edges.insert(merged.contributor_edges.end(),
+													row.contributor_edges.begin(),
+													row.contributor_edges.end());
 					canonical_set(merged.presence.fragments);
-					canonical_set(merged.claim_contributors);
-					canonical_producers(merged.producer_contracts);
-					canonical_set(merged.provenance);
-					canonical_guarantees(merged.contributor_guarantees);
+					canonicalize_contributor_edges(merged);
 					if (!replace_row(state, stable_id, output, found->second, std::move(merged)))
 						break;
 				}
@@ -2157,6 +2267,7 @@ namespace cxxlens::sdk::query
 					{
 						auto restricted = row;
 						restricted.presence = std::move(**presence);
+						bind_contributor_condition(restricted, restricted.presence);
 						if (!append_row(state, stable_id, output, std::move(restricted)))
 							break;
 					}

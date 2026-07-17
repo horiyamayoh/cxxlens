@@ -320,20 +320,22 @@ namespace
 	constexpr std::string_view direct_basis{
 		"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
 
-	[[nodiscard]] claim assertion(const relation_engine& engine,
-								  detached_row row,
-								  std::vector<std::string> fragments,
-								  std::string interpretation = "company.query.domain",
-								  claim_guarantee guarantee = {
-									  "exact", "project", "assumptions:none", {"schema_validated"}})
+	[[nodiscard]] claim assertion(
+		const relation_engine& engine,
+		detached_row row,
+		std::vector<std::string> fragments,
+		std::string interpretation = "company.query.domain",
+		claim_guarantee guarantee = {"exact", "project", "assumptions:none", {"schema_validated"}},
+		std::string producer_id = "company.query.provider",
+		std::string provenance = "evidence:query-runtime")
 	{
 		auto value = make_assertion(engine,
 									{std::move(row),
 									 {"company.query.universe", std::move(fragments)},
 									 std::move(interpretation),
-									 {"company.query.provider", std::string{producer_semantics}},
+									 {std::move(producer_id), std::string{producer_semantics}},
 									 {std::string{direct_basis}},
-									 "evidence:query-runtime",
+									 std::move(provenance),
 									 std::move(guarantee)});
 		require(value.has_value(), "query fixture assertion failed");
 		return std::move(*value);
@@ -1864,20 +1866,34 @@ namespace
 					aggregated->contributor_guarantees.size() == 2U && end && !*end,
 				"query scan duplicated semantic content or dropped occurrence metadata");
 
-		auto exact_row = *aggregated;
-		exact_row.contributor_guarantees = {base.guarantee};
-		auto under_row = exact_row;
-		under_row.contributor_guarantees = {guarantee.guarantee};
+		const auto row_for_approximation = [&](const std::string_view approximation)
+		{
+			auto row = *aggregated;
+			const auto found =
+				std::ranges::find_if(row.contributor_edges,
+									 [&](const query::query_contributor_edge& edge)
+									 {
+										 return edge.guarantee.approximation == approximation;
+									 });
+			require(found != row.contributor_edges.end(), "expected contributor edge missing");
+			const auto edge = *found;
+			row.contributor_edges = {edge};
+			row.claim_contributors = {edge.claim_contributor};
+			row.producer_contracts = {edge.producer};
+			row.provenance = {edge.provenance};
+			row.contributor_guarantees = {edge.guarantee};
+			return row;
+		};
+		auto exact_row = row_for_approximation("exact");
+		auto under_row = row_for_approximation("under_approximation");
 		require(exact_row.validate() && under_row.validate() &&
 					exact_row.canonical_form() != under_row.canonical_form(),
 				"row-level guarantee did not affect canonical identity");
-		auto forward = exact_row;
-		forward.contributor_guarantees = {base.guarantee, guarantee.guarantee};
-		auto reverse = exact_row;
-		reverse.contributor_guarantees = {guarantee.guarantee, base.guarantee};
-		require(forward.validate() && reverse.validate() &&
-					forward.canonical_form() == reverse.canonical_form(),
-				"guarantee insertion order changed canonical row identity");
+		auto forward = *aggregated;
+		auto reverse = forward;
+		std::ranges::reverse(reverse.contributor_edges);
+		require(forward.validate() && forward.canonical_form() == reverse.canonical_form(),
+				"contributor edge insertion order changed canonical row identity");
 
 		auto second_exact = exact_row;
 		second_exact.values.at("output.value") = detached_cell::signed_integer(3);
@@ -2095,6 +2111,188 @@ namespace
 				"non-overlap payload difference blocked an unrelated condition scope");
 	}
 
+	void check_bound_contributor_edges(const fixture& data)
+	{
+		const auto publish_claims = [&](const std::vector<std::pair<claim, bool>>& claims)
+		{
+			auto store = make_in_memory_snapshot_store(data.engine);
+			require(store.has_value(), "bound contributor store unavailable");
+			auto writer = store->begin(draft(data.engine));
+			require(writer.has_value(), "bound contributor writer unavailable");
+			for (std::size_t index = 0U; index < claims.size(); ++index)
+				require(
+					writer
+						->stage(partition(claims[index].first, 1600U + index, claims[index].second))
+						.has_value(),
+					"bound contributor partition rejected");
+			require(writer->validate().has_value(), "bound contributor snapshot invalid");
+			auto snapshot = writer->publish();
+			require(snapshot.has_value(), "bound contributor snapshot unpublished");
+			return std::move(*snapshot);
+		};
+		const auto joined_query = [&](const bool semi)
+		{
+			const column_ref left_key{
+				data.left.id, data.left.columns[0].id, data.left.columns[0].type};
+			const column_ref right_key{
+				data.right.id, data.right.columns[0].id, data.right.columns[0].type};
+			auto left = query::builder::from(data.left);
+			auto right = query::builder::from(data.right);
+			auto predicate = query::equals_present(left_key, right_key);
+			require(left && right && predicate, "bound contributor join setup failed");
+			auto joined = semi ? std::move(*left).semi_join(std::move(*right), *predicate)
+							   : std::move(*left).inner_join(std::move(*right), *predicate);
+			require(joined.has_value(), "bound contributor join rejected");
+			return std::move(*joined).finish();
+		};
+		const auto guarantee_equal = [](const claim_guarantee& left, const claim_guarantee& right)
+		{
+			return left.approximation == right.approximation && left.scope == right.scope &&
+				left.assumptions == right.assumptions &&
+				left.verification_modalities == right.verification_modalities;
+		};
+		const auto fragment_matches_edge = [&](const query::query_guarantee_fragment& fragment,
+											   const query::query_contributor_edge& edge)
+		{
+			return fragment.claim_contributors ==
+				std::vector<std::string>{edge.claim_contributor} &&
+				fragment.producer_contracts == std::vector<claim_producer>{edge.producer} &&
+				fragment.provenance == std::vector<std::string>{edge.provenance} &&
+				fragment.condition == edge.condition &&
+				fragment.interpretation == edge.interpretation &&
+				guarantee_equal(fragment.guarantee, edge.guarantee);
+		};
+		const auto require_lossless =
+			[&](const query::query_result& result, const std::size_t expected_edges)
+		{
+			auto values = annotated_rows(result);
+			std::vector<query::query_contributor_edge> edges;
+			for (const auto& row : values)
+				edges.insert(
+					edges.end(), row.contributor_edges.begin(), row.contributor_edges.end());
+			std::ranges::sort(edges,
+							  [](const auto& left, const auto& right)
+							  {
+								  return left.canonical_form() < right.canonical_form();
+							  });
+			edges.erase(std::ranges::unique(edges,
+											[](const auto& left, const auto& right)
+											{
+												return left.canonical_form() ==
+													right.canonical_form();
+											})
+							.begin(),
+						edges.end());
+			require(edges.size() == expected_edges &&
+						result.summary_guarantee().fragments.size() == expected_edges,
+					"contributor edge or summary fragment count diverged");
+			for (const auto& fragment : result.summary_guarantee().fragments)
+				require(fragment.claim_contributors.size() == 1U &&
+							fragment.producer_contracts.size() == 1U &&
+							fragment.provenance.size() == 1U &&
+							std::ranges::any_of(edges,
+												[&](const auto& edge)
+												{
+													return fragment_matches_edge(fragment, edge);
+												}),
+						"summary fragment introduced cross-product attribution");
+		};
+
+		auto left = assertion(data.engine,
+							  left_row(data.left, "key:bound", 1, false),
+							  {"release"},
+							  "company.query.domain",
+							  {"exact", "project", "assumption:left", {"compiler_verified"}},
+							  "company.query.left-provider",
+							  "evidence:left");
+		auto right =
+			assertion(data.engine,
+					  right_row(data.right, "key:bound", "right"),
+					  {"release"},
+					  "company.query.domain",
+					  {"under_approximation", "project", "assumption:right", {"runtime_observed"}},
+					  "company.query.right-provider",
+					  "evidence:right");
+		auto unresolved_snapshot = publish_claims({{left, false}, {right, true}});
+		auto unresolved_engine = query::reference_engine::bind(unresolved_snapshot);
+		require(unresolved_engine.has_value(), "bound contributor engine unavailable");
+		auto joined = unresolved_engine->execute(joined_query(false));
+		require(joined.has_value(), "bound contributor join failed");
+		require_lossless(*joined, 2U);
+		const auto& joined_fragments = joined->summary_guarantee().fragments;
+		const auto left_fragment = std::ranges::find(joined_fragments,
+													 left.assertion,
+													 [](const auto& fragment)
+													 {
+														 return fragment.claim_contributors.front();
+													 });
+		const auto right_fragment =
+			std::ranges::find(joined_fragments,
+							  right.assertion,
+							  [](const auto& fragment)
+							  {
+								  return fragment.claim_contributors.front();
+							  });
+		require(left_fragment != joined_fragments.end() &&
+					right_fragment != joined_fragments.end() && !left_fragment->unresolved &&
+					right_fragment->unresolved,
+				"one unresolved contributor contaminated an unrelated fragment");
+
+		auto witness_one = assertion(data.engine,
+									 right_row(data.right, "key:bound", "one"),
+									 {"release"},
+									 "company.query.domain",
+									 {"exact", "project", "assumption:one", {"schema_validated"}},
+									 "company.query.witness-one",
+									 "evidence:witness-one");
+		auto witness_two =
+			assertion(data.engine,
+					  right_row(data.right, "key:bound", "two"),
+					  {"release"},
+					  "company.query.domain",
+					  {"under_approximation", "project", "assumption:two", {"schema_validated"}},
+					  "company.query.witness-two",
+					  "evidence:witness-two");
+		auto witness_snapshot =
+			publish_claims({{left, false}, {witness_one, false}, {witness_two, false}});
+		auto witness_engine = query::reference_engine::bind(witness_snapshot);
+		require(witness_engine.has_value(), "semi witness engine unavailable");
+		auto semi = witness_engine->execute(joined_query(true));
+		require(semi.has_value() && annotated_rows(*semi).size() == 1U,
+				"semi join did not return one left row");
+		require_lossless(*semi, 3U);
+
+		auto conflicting =
+			assertion(data.engine,
+					  left_row(data.left, "key:bound", 2, false),
+					  {"release"},
+					  "company.query.domain",
+					  {"exact", "project", "assumption:conflict", {"schema_validated"}},
+					  "company.query.conflict-provider",
+					  "evidence:conflict");
+		auto conflict_snapshot =
+			publish_claims({{left, false}, {conflicting, false}, {witness_one, false}});
+		auto conflict_engine = query::reference_engine::bind(conflict_snapshot);
+		require(conflict_engine.has_value(), "conflict binding engine unavailable");
+		auto conflict_result = conflict_engine->execute(joined_query(false));
+		require(conflict_result.has_value(), "conflict binding join failed");
+		const auto witness_fragment =
+			std::ranges::find(conflict_result->summary_guarantee().fragments,
+							  witness_one.assertion,
+							  [](const auto& fragment)
+							  {
+								  return fragment.claim_contributors.front();
+							  });
+		require(witness_fragment != conflict_result->summary_guarantee().fragments.end() &&
+					!witness_fragment->conflicting &&
+					std::ranges::any_of(conflict_result->summary_guarantee().fragments,
+										[](const auto& fragment)
+										{
+											return fragment.conflicting;
+										}),
+				"one conflicting contributor contaminated an unrelated fragment");
+	}
+
 	void check_closure_applicability(const fixture& data)
 	{
 		const auto execute =
@@ -2250,6 +2448,7 @@ int main()
 	check_side_channel_parity(make_side_channel_fixture());
 	check_claim_occurrence_aggregation(data);
 	check_summary_guarantee_algebra(data);
+	check_bound_contributor_edges(data);
 	check_closure_applicability(data);
 
 	auto incomplete_store = make_in_memory_snapshot_store(data.engine);

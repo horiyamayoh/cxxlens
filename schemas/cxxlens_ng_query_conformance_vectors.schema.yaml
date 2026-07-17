@@ -47,6 +47,7 @@ properties:
           - validate_continuation
           - validate_partial_execution
           - validate_logical_authority
+          - validate_bound_contributor_fragments
         expected:
           type: object
           additionalProperties: false

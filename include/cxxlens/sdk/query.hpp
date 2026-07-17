@@ -339,7 +339,20 @@ namespace cxxlens::sdk::query
 			value <= execution_status::failed_before_result;
 	}
 
-	/** @brief One semantic row with canonical contributor evidence sets. */
+	/** @brief One canonical support edge binding a claim to all of its evidence. */
+	struct query_contributor_edge
+	{
+		std::string claim_contributor;
+		claim_producer producer;
+		std::string provenance;
+		claim_guarantee guarantee;
+		claim_condition condition;
+		std::string interpretation;
+		[[nodiscard]] result<void> validate() const;
+		[[nodiscard]] std::string canonical_form() const;
+	};
+
+	/** @brief One semantic row with authoritative bound evidence and derived projections. */
 	struct annotated_row
 	{
 		std::map<std::string, detached_cell, std::less<>> values;
@@ -350,6 +363,7 @@ namespace cxxlens::sdk::query
 		std::vector<claim_producer> producer_contracts;
 		std::vector<std::string> provenance;
 		std::vector<claim_guarantee> contributor_guarantees;
+		std::vector<query_contributor_edge> contributor_edges;
 		[[nodiscard]] result<void> validate() const;
 		[[nodiscard]] std::string canonical_form() const;
 	};
@@ -379,6 +393,7 @@ namespace cxxlens::sdk::query
 		std::string interpretation;
 		std::vector<std::string> assumptions;
 		std::vector<std::string> claim_contributors;
+		std::vector<claim_producer> producer_contracts;
 		std::vector<std::string> provenance;
 		std::vector<std::string> coverage_states;
 		std::vector<std::string> closure_ids;
