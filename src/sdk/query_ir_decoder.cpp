@@ -382,21 +382,26 @@ namespace cxxlens::sdk::query
 		[[nodiscard]] result<ir_column_ref> column(const json_value& value)
 		{
 			auto object = as_object(value, "column");
-			if (!object || !exact_keys(**object, {"availability", "column_id"}, "column"))
+			if (!object ||
+				!exact_keys(**object, {"availability", "column_id", "source_alias"}, "column"))
 				return unexpected(decode_error("column", "shape"));
 			auto identifier_value = required(**object, "column_id");
 			auto availability_value = required(**object, "availability");
-			if (!identifier_value || !availability_value)
+			auto alias_value = required(**object, "source_alias");
+			if (!identifier_value || !availability_value || !alias_value)
 				return unexpected(decode_error("column", "missing"));
 			auto identifier = as_string(**identifier_value, "column_id");
 			auto availability = as_string(**availability_value, "availability");
-			if (!identifier || identifier->empty() || !availability)
+			auto alias = as_string(**alias_value, "source_alias");
+			if (!identifier || identifier->empty() || !availability || !alias)
 				return unexpected(decode_error("column", "value"));
 			if (*availability == "require")
-				return ir_column_ref{std::move(*identifier), column_availability::require};
+				return ir_column_ref{
+					std::move(*identifier), column_availability::require, std::move(*alias)};
 			if (*availability == "absent_if_schema_missing")
 				return ir_column_ref{std::move(*identifier),
-									 column_availability::absent_if_schema_missing};
+									 column_availability::absent_if_schema_missing,
+									 std::move(*alias)};
 			return unexpected(decode_error("availability", *availability));
 		}
 

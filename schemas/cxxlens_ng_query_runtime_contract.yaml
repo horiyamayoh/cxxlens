@@ -1,12 +1,12 @@
 schema: cxxlens.query-runtime-contract.v1
-document_version: 1.11.0
+document_version: 1.12.0
 maturity: implemented
 authority:
   logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
   guarantee_contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
   snapshot_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
   decision_adr: docs/design/adr/0037-lossless-claim-evidence-occurrences.md
-  owner_issue: '#94'
+  owner_issue: '#115'
   owner: steward.ng-query-runtime
 compatibility:
   version_axis: query-runtime-result
@@ -42,6 +42,10 @@ input:
   logical_ir:
     version: 1.0.0
     validation: exact-operator-arguments-column-shape-and-order
+    column_identity:
+      authority: source-alias-plus-stable-column-id
+      scan_alias: semantic-query-local-occurrence
+      relation_descriptor: stable-column-authority-only
     argument_decoder: typed-fail-closed
     argument_json:
       lexical_standard: RFC-8259
@@ -79,7 +83,12 @@ planner:
     non_multiset_same_content: one-semantic-row
     occurrence_metadata: canonical-set-union
     multiset_multiplicity: preserve
+    row_key: source-alias-plus-stable-column-id
   join: bounded-reference-nested-loop
+  self_join:
+    duplicate_stable_column_ids: preserve-per-source-alias
+    predicate_binding: exact-source-occurrence
+    provenance: canonical-set-union-without-cell-collapse
   distinct: canonical-key-reduction
   order: explicit-keys-plus-canonical-row-tie-break
   physical_explain:
@@ -130,6 +139,7 @@ execution:
     alias_calculation_shared_with_canonicalizer: true
     application_order: before-canonical-sort-budget-and-publication
     output_column_prefix: output.
+    duplicate_leaf_alias: source-alias-prefixed
     preserves: [multiplicity, condition, interpretation, evidence, guarantee]
 budget:
   zero_is_valid_empty_budget: true

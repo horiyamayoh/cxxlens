@@ -178,7 +178,7 @@ vectors:
                               inputs: []
                               arguments:
                                 descriptor_id: cc.call_site.v1
-                                alias: calls_debug
+                                alias: calls
                             arguments:
                               interpretation: cc.canonical-1
                           arguments:
@@ -192,7 +192,7 @@ vectors:
                               inputs: []
                               arguments:
                                 descriptor_id: cc.call_site.v1
-                                alias: calls_release
+                                alias: calls
                             arguments:
                               interpretation: cc.canonical-1
                           arguments:
@@ -210,9 +210,11 @@ vectors:
                           left:
                             column_id: cc.call_site.v1.call
                             availability: require
+                            source_alias: calls
                           right:
                             column_id: cc.call_direct_target.v1.call
                             availability: require
+                            source_alias: targets
                     - operator: query.scan.v1
                       inputs: []
                       arguments:
@@ -224,9 +226,11 @@ vectors:
                         left:
                           column_id: cc.call_site.v1.call
                           availability: require
+                          source_alias: calls
                         right:
                           column_id: cc.call_direct_target.v1.call
                           availability: require
+                          source_alias: targets_join
                   - operator: query.scan.v1
                     inputs: []
                     arguments:
@@ -238,15 +242,18 @@ vectors:
                       left:
                         column_id: cc.call_direct_target.v1.target
                         availability: require
+                        source_alias: targets_join
                       right:
                         column_id: cc.entity.v1.entity
                         availability: require
+                        source_alias: entities
                 arguments:
                   predicate:
                     kind: equals_present
                     column:
                       column_id: cc.entity.v1.qualified_name
                       availability: require
+                      source_alias: entities
                     literal:
                       type: utf8_string
                       value: app::dangerous
@@ -256,6 +263,7 @@ vectors:
               - column:
                   column_id: cc.call_site.v1.call
                   availability: require
+                  source_alias: calls
                 direction: ascending
                 cell_state_order: [absent, present, unknown]
           arguments:
@@ -265,10 +273,12 @@ vectors:
           - column:
               column_id: cc.call_site.v1.call
               availability: require
+              source_alias: calls
             output: output.call
           - column:
               column_id: cc.call_site.v1.source
               availability: require
+              source_alias: calls
             output: output.source
       output_schema:
       - id: output.call

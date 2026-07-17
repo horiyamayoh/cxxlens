@@ -127,12 +127,14 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool operator==(const relation_descriptor&) const = default;
 	};
 
-	/** @brief Stable reference to one descriptor column. */
+	/** @brief Stable descriptor column, optionally bound to a query-local scan occurrence. */
 	struct column_ref
 	{
 		std::string descriptor_id;
 		std::string column_id;
 		value_type type;
+		/** @brief Query-local scan alias; empty only before a query builder binds the reference. */
+		std::string source_alias{}; // NOLINT(readability-redundant-member-init)
 		[[nodiscard]] bool operator==(const column_ref&) const = default;
 	};
 

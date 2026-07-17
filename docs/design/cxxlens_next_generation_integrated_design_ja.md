@@ -2623,6 +2623,7 @@ Backend Execution
 
 - relation name/version requirement
 - stable column ID
+- scan occurrence alias と occurrence-qualified column reference
 - typed literals
 - logical operators
 - condition restriction
@@ -2680,12 +2681,18 @@ Issue #89 / ADR 0032 により typed literal の storage category は encode/dec
 odd-length、uppercase、non-hex encoding は拒否する。`set<T>` の nested parameter は完全に保持し、column type と parameter が
 一致しない literal は validation で拒否する。executor は decoded set を string に fallback して比較してはならない。
 
+Issue #115 / ADR 0058 により scan alias は digest だけの field ではなく query-local column occurrence identity とする。
+relation descriptor の stable column ID は schema authority のまま維持し、predicate、order、project、typed node shape と
+runtime intermediate row は `(source_alias, stable column ID)` で bind する。same relation の複数 scan に対する unqualified
+reference は曖昧として拒否し、`query::qualify()` で side を明示する。alias は semantic field なので変更は logical digest を
+変更し、terminal projection だけが occurrence-qualified key を `output.*` へ rename する。
+
 ### 20.3 Collection and cell algebra
 
 Logical Query IR v1 の既定 collection は annotated multiset である。一 occurrence は次を持つ。
 
 ```text
-stable column ID -> tagged cell
+(scan occurrence alias, stable column ID) -> tagged cell
 positive multiplicity
 condition universe + canonical alternatives
 interpretation ID

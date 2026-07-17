@@ -1,10 +1,10 @@
 schema: cxxlens.logical-query-contract.v1
-document_version: 1.7.0
+document_version: 1.8.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#20-logical-query
   decision_adr: docs/design/adr/0007-logical-query-algebra.md
-  owner_issue: '#61'
+  owner_issue: '#115'
   owner: steward.ng-query
 compatibility:
   version_axis: logical-query-ir
@@ -53,7 +53,12 @@ logical_ir:
 collection_model:
   kind: annotated_multiset
   occurrence:
-    values: stable-column-id-to-tagged-cell
+    values: scan-occurrence-and-stable-column-id-to-tagged-cell
+    column_identity:
+      stable_authority: relation-descriptor-column-id
+      query_local_occurrence: required-scan-source-alias
+      runtime_key: [source-alias, stable-column-id]
+      projection_boundary: rename-to-output-id-only
     multiplicity: positive-integer
     presence: condition-universe-and-canonical-alternative-set
     interpretation: stable-interpretation-id
@@ -114,7 +119,7 @@ ordering:
   default: unordered
   observable_only_after: query.order_by.v1
   total_order:
-    user_keys: ordered-stable-column-ids
+    user_keys: ordered-source-alias-and-stable-column-ids
     cell_state_order: explicit-per-key
     final_tie_break: canonical-annotated-row-digest
   unordered_comparison: canonical-semantic-multiset
@@ -163,8 +168,8 @@ schema_compatibility:
     exact_column_type_match: true
     narrowing_conversion: reject
   output_schema:
-    node_shape: canonical-column-id-to-exact-value-type-map
-    unprojected: exact-descriptor-column-and-value-type
+    node_shape: canonical-occurrence-qualified-column-id-to-exact-value-type-map
+    unprojected: exact-source-alias-descriptor-column-and-value-type
     projected: source-type-propagated-to-output-alias
     value_type_fields: [scalar, parameter, optional]
     duplicate_output: reject
@@ -204,6 +209,13 @@ canonicalization:
     output_ids: canonical-output-aliases
     executor_required: true
     explicit_implicit_digest_and_row_shape_equal: true
+  source_occurrence:
+    column_ref_fields: [source_alias, column_id, availability]
+    alias_is_semantic: true
+    alias_change_changes_digest: true
+    unqualified_duplicate: sdk.query-column-ambiguous
+    missing_in_validated_ir: sdk.query-column-occurrence-missing
+    self_join: lossless-left-and-right-cells
 operator_profiles:
 - id: query.scan.v1
   name: scan

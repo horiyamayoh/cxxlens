@@ -179,6 +179,7 @@ namespace cxxlens::sdk
 			return contracts;
 		}
 
+		// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 		[[nodiscard]] bool closed_symbol_value(const std::string_view contract,
 											   const std::string_view value)
 		{

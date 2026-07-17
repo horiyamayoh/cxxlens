@@ -18,7 +18,7 @@ required:
   - qualification
 properties:
   schema: {const: cxxlens.query-runtime-contract.v1}
-  document_version: {const: 1.11.0}
+  document_version: {const: 1.12.0}
   maturity: {const: implemented}
   authority: {$ref: '#/$defs/nonempty_object'}
   compatibility: {$ref: '#/$defs/nonempty_object'}
@@ -33,6 +33,7 @@ properties:
       - canonical_traversal
       - scan
       - join
+      - self_join
       - distinct
       - order
       - physical_explain
@@ -43,6 +44,7 @@ properties:
       canonical_traversal: {$ref: '#/$defs/nonempty_object'}
       scan: {$ref: '#/$defs/nonempty_object'}
       join: {const: bounded-reference-nested-loop}
+      self_join: {$ref: '#/$defs/nonempty_object'}
       distinct: {const: canonical-key-reduction}
       order: {const: explicit-keys-plus-canonical-row-tie-break}
       physical_explain: {$ref: '#/$defs/nonempty_object'}

@@ -44,6 +44,8 @@ namespace cxxlens::sdk::query
 	[[nodiscard]] result<expression> equals_present(column_ref column, const literal& value);
 	/** @brief Build an exact column equality predicate. */
 	[[nodiscard]] result<expression> equals_present(column_ref left, column_ref right);
+	/** @brief Bind a stable descriptor column to one query-local scan occurrence. */
+	[[nodiscard]] result<column_ref> qualify(column_ref column, std::string_view source_alias);
 	/** @brief Test the present cell state. */
 	[[nodiscard]] expression is_present(column_ref column);
 	/** @brief Test the absent cell state. */
@@ -72,11 +74,13 @@ namespace cxxlens::sdk::query
 		absent_if_schema_missing,
 	};
 
-	/** @brief Stable IR column reference independent from generated C++ column types. */
+	/** @brief Occurrence-qualified IR column reference independent from generated C++ types. */
 	struct ir_column_ref
 	{
 		std::string column_id;
 		column_availability availability{column_availability::require};
+		/** @brief Required scan occurrence alias in validated Logical Query IR. */
+		std::string source_alias{}; // NOLINT(readability-redundant-member-init)
 		[[nodiscard]] bool operator==(const ir_column_ref&) const = default;
 	};
 
@@ -208,6 +212,7 @@ namespace cxxlens::sdk::query
 
 	  private:
 		explicit builder(logical_query_ir ir);
+		[[nodiscard]] result<column_ref> bind_column(const column_ref& column) const;
 		[[nodiscard]] result<void> require_columns(std::span<const column_ref> columns) const;
 		[[nodiscard]] std::string
 		append(std::string operator_id, std::vector<std::string> inputs, std::string arguments);

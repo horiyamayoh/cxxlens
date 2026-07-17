@@ -272,7 +272,7 @@ namespace cxxlens::detail::clang22
 					 builder.set<relation::canonicalization>(
 						 symbol_cell(sdk::scalar_kind::closed_symbol,
 									 "cc.canonicalization-state/1",
-									 exact ? "canonical" : "provider_local")),
+									 exact ? "canonicalized" : "provider_local")),
 					 builder.set<relation::kind>(
 						 symbol_cell(sdk::scalar_kind::open_symbol, "cc.entity-kind/1", kind)),
 					 builder.set<relation::structural_signature_digest>(symbol_cell(

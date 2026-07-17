@@ -28,7 +28,7 @@ namespace cxxlens::sdk::query
 		[[nodiscard]] std::string column_json(const column_ref& column)
 		{
 			return R"({"availability":"require","column_id":)" + json_string(column.column_id) +
-				"}";
+				",\"source_alias\":" + json_string(column.source_alias) + "}";
 		}
 
 		[[nodiscard]] std::string scalar_json(const scalar_value& value)
@@ -126,7 +126,8 @@ namespace cxxlens::sdk::query
 				? "require"
 				: "absent_if_schema_missing";
 			return "{\"availability\":" + json_string(availability) +
-				",\"column_id\":" + json_string(column.column_id) + "}";
+				",\"column_id\":" + json_string(column.column_id) +
+				",\"source_alias\":" + json_string(column.source_alias) + "}";
 		}
 
 		[[nodiscard]] std::string predicate_json(const decoded_predicate& predicate)
@@ -184,6 +185,60 @@ namespace cxxlens::sdk::query
 				}
 			}
 			return "{}";
+		}
+
+		[[nodiscard]] result<void>
+		bind_predicate_occurrences(decoded_predicate& predicate,
+								   const std::span<const column_ref> columns)
+		{
+			auto bind = [&](ir_column_ref& reference) -> result<void>
+			{
+				std::vector<std::string_view> aliases;
+				for (const auto& column : columns)
+					if (column.column_id == reference.column_id &&
+						(reference.source_alias.empty() ||
+						 column.source_alias == reference.source_alias))
+						aliases.push_back(column.source_alias);
+				if (aliases.empty())
+					return cxxlens::sdk::unexpected(
+						query_error("sdk.query-column-mismatch", reference.column_id));
+				if (aliases.size() != 1U)
+					return cxxlens::sdk::unexpected(
+						query_error("sdk.query-column-ambiguous", reference.column_id));
+				reference.source_alias = aliases.front();
+				return {};
+			};
+			if (predicate.column)
+				if (auto bound = bind(*predicate.column); !bound)
+					return bound;
+			if (predicate.left)
+				if (auto bound = bind(*predicate.left); !bound)
+					return bound;
+			if (predicate.right)
+				if (auto bound = bind(*predicate.right); !bound)
+					return bound;
+			for (auto& operand : predicate.operands)
+				if (auto bound = bind_predicate_occurrences(operand, columns); !bound)
+					return bound;
+			return {};
+		}
+
+		[[nodiscard]] result<std::string>
+		bound_predicate_json(const expression& predicate,
+							 const std::span<const column_ref> columns,
+							 const std::string_view operator_id)
+		{
+			ir_node node{"binding",
+						 std::string{operator_id},
+						 {},
+						 "{\"predicate\":" + predicate.canonical + "}"};
+			auto arguments = decode_arguments(node);
+			if (!arguments)
+				return cxxlens::sdk::unexpected(std::move(arguments.error()));
+			auto& decoded = std::get<predicate_arguments>(*arguments).predicate;
+			if (auto bound = bind_predicate_occurrences(decoded, columns); !bound)
+				return cxxlens::sdk::unexpected(std::move(bound.error()));
+			return predicate_json(decoded);
 		}
 
 		[[nodiscard]] std::string canonical_arguments(const ir_node& node)
@@ -378,6 +433,31 @@ namespace cxxlens::sdk::query
 			std::vector<std::string> order_keys;
 		};
 
+		[[nodiscard]] std::optional<std::string>
+		resolve_occurrence(const std::map<std::string, value_type, std::less<>>& columns,
+						   const ir_column_ref& reference)
+		{
+			if (!reference.source_alias.empty())
+			{
+				auto key =
+					detail::occurrence_column_id(reference.source_alias, reference.column_id);
+				return columns.contains(key) ? std::optional<std::string>{std::move(key)}
+											 : std::nullopt;
+			}
+			std::optional<std::string> match;
+			const auto suffix = std::string{detail::occurrence_separator} + reference.column_id;
+			for (const auto& [key, type] : columns)
+			{
+				(void)type;
+				if (!key.ends_with(suffix))
+					continue;
+				if (match)
+					return std::nullopt;
+				match = key;
+			}
+			return match;
+		}
+
 		void collect_columns(const decoded_predicate& predicate,
 							 std::vector<ir_column_ref>& columns)
 		{
@@ -460,6 +540,14 @@ namespace cxxlens::sdk::query
 						  {std::move(left), std::move(right)}};
 	}
 
+	result<column_ref> qualify(column_ref column, const std::string_view source_alias)
+	{
+		if (!valid_identifier(source_alias))
+			return cxxlens::sdk::unexpected(query_error("sdk.query-alias-invalid", "source_alias"));
+		column.source_alias = source_alias;
+		return column;
+	}
+
 	expression is_present(column_ref column)
 	{
 		return {"{\"column\":" + column_json(column) + R"(,"kind":"is_present"})",
@@ -535,10 +623,6 @@ namespace cxxlens::sdk::query
 		std::set<std::string> node_ids;
 		std::set<std::string, std::less<>> scanned_descriptors;
 		std::map<std::string, node_shape, std::less<>> shapes;
-		std::map<std::string, column_descriptor, std::less<>> columns;
-		for (const auto& descriptor : relation_requirements)
-			for (const auto& column : descriptor.columns)
-				columns.emplace(column.id, column);
 		static const std::map<std::string, std::size_t, std::less<>> arities{
 			{"query.scan.v1", 0U},
 			{"query.filter.v1", 1U},
@@ -580,7 +664,8 @@ namespace cxxlens::sdk::query
 						query_error("sdk.query-scan-requirement-missing", scan.descriptor_id));
 				scanned_descriptors.insert(scan.descriptor_id);
 				for (const auto& column : descriptor->columns)
-					shape.columns.emplace(column.id, column.type);
+					shape.columns.emplace(detail::occurrence_column_id(scan.alias, column.id),
+										  column.type);
 			}
 			else
 			{
@@ -602,8 +687,11 @@ namespace cxxlens::sdk::query
 					if (inputs.size() == 2U)
 						available.insert(inputs[1].columns.begin(), inputs[1].columns.end());
 					for (const auto& reference : references)
-						if (!available.contains(reference.column_id) &&
-							reference.availability == column_availability::require)
+						if (reference.source_alias.empty())
+							return cxxlens::sdk::unexpected(query_error(
+								"sdk.query-column-occurrence-missing", reference.column_id));
+						else if (!resolve_occurrence(available, reference) &&
+								 reference.availability == column_availability::require)
 							return cxxlens::sdk::unexpected(
 								query_error("sdk.query-column-not-in-input", reference.column_id));
 					if (predicate->predicate.literal_value && predicate->predicate.column)
@@ -612,9 +700,10 @@ namespace cxxlens::sdk::query
 								validate_literal_value(*predicate->predicate.literal_value);
 							!valid)
 							return cxxlens::sdk::unexpected(std::move(valid.error()));
-						const auto found = columns.find(predicate->predicate.column->column_id);
-						if (found == columns.end() ||
-							literal_comparison_type(found->second.type) !=
+						const auto key =
+							resolve_occurrence(available, *predicate->predicate.column);
+						if (!key ||
+							literal_comparison_type(available.at(*key)) !=
 								predicate->predicate.literal_value->type)
 							return cxxlens::sdk::unexpected(
 								query_error("sdk.query-literal-type-mismatch",
@@ -653,18 +742,22 @@ namespace cxxlens::sdk::query
 					std::map<std::string, std::string, std::less<>> mapping;
 					for (const auto& item : project.columns)
 					{
-						if (!inputs.front().columns.contains(item.column.column_id) &&
-							item.column.availability == column_availability::require)
+						if (item.column.source_alias.empty())
+							return cxxlens::sdk::unexpected(query_error(
+								"sdk.query-column-occurrence-missing", item.column.column_id));
+						const auto source = resolve_occurrence(inputs.front().columns, item.column);
+						if (!source && item.column.availability == column_availability::require)
 							return cxxlens::sdk::unexpected(query_error(
 								"sdk.query-column-not-in-input", item.column.column_id));
-						const auto source = inputs.front().columns.find(item.column.column_id);
-						if (source == inputs.front().columns.end())
+						if (!source)
 							return cxxlens::sdk::unexpected(query_error(
 								"sdk.query-output-schema-mismatch", item.column.column_id));
-						if (!projected.columns.emplace(item.output, source->second).second)
+						if (!projected.columns
+								 .emplace(item.output, inputs.front().columns.at(*source))
+								 .second)
 							return cxxlens::sdk::unexpected(
 								query_error("sdk.query-output-schema-mismatch", item.output));
-						mapping.emplace(item.column.column_id, item.output);
+						mapping.emplace(*source, item.output);
 					}
 					projected.ordered = inputs.front().ordered &&
 						std::ranges::all_of(inputs.front().order_keys,
@@ -684,10 +777,14 @@ namespace cxxlens::sdk::query
 					shape.order_keys.clear();
 					for (const auto& key : order.keys)
 					{
-						if (!shape.columns.contains(key.column.column_id))
+						if (key.column.source_alias.empty())
+							return cxxlens::sdk::unexpected(query_error(
+								"sdk.query-column-occurrence-missing", key.column.column_id));
+						const auto source = resolve_occurrence(shape.columns, key.column);
+						if (!source)
 							return cxxlens::sdk::unexpected(
 								query_error("sdk.query-column-not-in-input", key.column.column_id));
-						shape.order_keys.push_back(key.column.column_id);
+						shape.order_keys.push_back(*source);
 					}
 				}
 				else if (node.operator_id == "query.limit.v1" && !inputs.front().ordered)
@@ -724,6 +821,9 @@ namespace cxxlens::sdk::query
 		}
 		for (const auto& column : output_schema)
 		{
+			if (column.source_alias.empty())
+				return cxxlens::sdk::unexpected(
+					query_error("sdk.query-column-occurrence-missing", column.column_id));
 			const auto descriptor = descriptors.find(column.descriptor_id);
 			if (descriptor == descriptors.end())
 				return cxxlens::sdk::unexpected(
@@ -750,7 +850,11 @@ namespace cxxlens::sdk::query
 		}
 		else
 			for (const auto& column : output_schema)
-				if (!expected.emplace(column.column_id, column.type).second)
+				if (!expected
+						 .emplace(
+							 detail::occurrence_column_id(column.source_alias, column.column_id),
+							 column.type)
+						 .second)
 					return cxxlens::sdk::unexpected(
 						query_error("sdk.query-output-schema-mismatch", column.column_id));
 		if (shapes.at(root).columns != expected)
@@ -822,7 +926,7 @@ namespace cxxlens::sdk::query
 			return cxxlens::sdk::unexpected(query_error("sdk.query-alias-invalid", "alias"));
 		logical_query_ir ir;
 		for (const auto& column : descriptor.columns)
-			ir.output_schema.push_back({descriptor.id, column.id, column.type});
+			ir.output_schema.push_back({descriptor.id, column.id, column.type, resolved_alias});
 		ir.relation_requirements.push_back(descriptor);
 		ir.nodes.push_back({"n0",
 							"query.scan.v1",
@@ -836,18 +940,26 @@ namespace cxxlens::sdk::query
 	result<void> builder::require_columns(const std::span<const column_ref> columns) const
 	{
 		for (const auto& column : columns)
-		{
-			const auto descriptor = std::ranges::find(
-				ir_.relation_requirements, column.descriptor_id, &relation_descriptor::id);
-			if (descriptor == ir_.relation_requirements.end())
-				return cxxlens::sdk::unexpected(
-					query_error("sdk.query-foreign-column", column.column_id));
-			auto expected = descriptor->column(column.column_id);
-			if (!expected || !(expected->type == column.type))
-				return cxxlens::sdk::unexpected(
-					query_error("sdk.query-column-mismatch", column.column_id));
-		}
+			if (auto bound = bind_column(column); !bound)
+				return cxxlens::sdk::unexpected(std::move(bound.error()));
 		return {};
+	}
+
+	result<column_ref> builder::bind_column(const column_ref& column) const
+	{
+		std::vector<column_ref> matches;
+		for (const auto& candidate : ir_.output_schema)
+			if (candidate.descriptor_id == column.descriptor_id &&
+				candidate.column_id == column.column_id && candidate.type == column.type &&
+				(column.source_alias.empty() || candidate.source_alias == column.source_alias))
+				matches.push_back(candidate);
+		if (matches.empty())
+			return cxxlens::sdk::unexpected(
+				query_error("sdk.query-column-mismatch", column.column_id, column.source_alias));
+		if (matches.size() != 1U)
+			return cxxlens::sdk::unexpected(
+				query_error("sdk.query-column-ambiguous", column.column_id));
+		return std::move(matches.front());
 	}
 
 	std::string
@@ -865,9 +977,11 @@ namespace cxxlens::sdk::query
 			return cxxlens::sdk::unexpected(query_error("sdk.query-project-terminal", "where"));
 		if (auto valid = require_columns(predicate.referenced_columns); !valid)
 			return cxxlens::sdk::unexpected(std::move(valid.error()));
-		(void)append("query.filter.v1",
-					 {ir_.root},
-					 "{\"predicate\":" + std::move(predicate.canonical) + "}");
+		auto canonical = bound_predicate_json(predicate, ir_.output_schema, "query.filter.v1");
+		if (!canonical)
+			return cxxlens::sdk::unexpected(std::move(canonical.error()));
+		(void)append(
+			"query.filter.v1", {ir_.root}, "{\"predicate\":" + std::move(*canonical) + "}");
 		return std::move(*this);
 	}
 
@@ -877,15 +991,28 @@ namespace cxxlens::sdk::query
 			return cxxlens::sdk::unexpected(query_error("sdk.query-project-terminal", "project"));
 		if (columns.empty())
 			return cxxlens::sdk::unexpected(query_error("sdk.query-empty-projection", "columns"));
-		if (auto valid = require_columns(columns); !valid)
-			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		std::vector<column_ref> bound;
+		bound.reserve(columns.size());
+		for (const auto& column : columns)
+		{
+			auto value = bind_column(column);
+			if (!value)
+				return cxxlens::sdk::unexpected(std::move(value.error()));
+			bound.push_back(std::move(*value));
+		}
 		(void)append(
-			"query.project.v1", {ir_.root}, "{\"columns\":" + projections_json(columns) + "}");
-		ir_.output_schema.assign(columns.begin(), columns.end());
+			"query.project.v1", {ir_.root}, "{\"columns\":" + projections_json(bound) + "}");
+		ir_.output_schema = bound;
 		projected_ = true;
 		if (total_ordered_)
 			for (const auto& key : order_keys_)
-				if (std::ranges::find(columns, key, &column_ref::column_id) == columns.end())
+				if (std::ranges::none_of(bound,
+										 [&](const column_ref& column)
+										 {
+											 return detail::occurrence_column_id(
+														column.source_alias, column.column_id) ==
+												 key;
+										 }))
 				{
 					total_ordered_ = false;
 					order_keys_.clear();
@@ -901,6 +1028,9 @@ namespace cxxlens::sdk::query
 				query_error("sdk.query-project-terminal", "inner_join"));
 		const auto left_root = ir_.root;
 		merge_requirements(ir_.relation_requirements, right.ir_.relation_requirements);
+		ir_.output_schema.insert(ir_.output_schema.end(),
+								 right.ir_.output_schema.begin(),
+								 right.ir_.output_schema.end());
 		std::map<std::string, std::string, std::less<>> remap;
 		for (const auto& node : right.ir_.nodes)
 		{
@@ -912,13 +1042,13 @@ namespace cxxlens::sdk::query
 		}
 		if (auto valid = require_columns(predicate.referenced_columns); !valid)
 			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		auto canonical = bound_predicate_json(predicate, ir_.output_schema, "query.inner_join.v1");
+		if (!canonical)
+			return cxxlens::sdk::unexpected(std::move(canonical.error()));
 		const auto right_root = remap.at(right.ir_.root);
 		(void)append("query.inner_join.v1",
 					 {left_root, right_root},
-					 "{\"predicate\":" + std::move(predicate.canonical) + "}");
-		ir_.output_schema.insert(ir_.output_schema.end(),
-								 right.ir_.output_schema.begin(),
-								 right.ir_.output_schema.end());
+					 "{\"predicate\":" + std::move(*canonical) + "}");
 		total_ordered_ = false;
 		order_keys_.clear();
 		return std::move(*this);
@@ -974,14 +1104,21 @@ namespace cxxlens::sdk::query
 			return cxxlens::sdk::unexpected(query_error("sdk.query-project-terminal", "order_by"));
 		if (columns.empty())
 			return cxxlens::sdk::unexpected(query_error("sdk.query-empty-order", "columns"));
-		if (auto valid = require_columns(columns); !valid)
-			return cxxlens::sdk::unexpected(std::move(valid.error()));
-		(void)append(
-			"query.order_by.v1", {ir_.root}, "{\"keys\":" + order_keys_json(columns) + "}");
+		std::vector<column_ref> bound;
+		bound.reserve(columns.size());
+		for (const auto& column : columns)
+		{
+			auto value = bind_column(column);
+			if (!value)
+				return cxxlens::sdk::unexpected(std::move(value.error()));
+			bound.push_back(std::move(*value));
+		}
+		(void)append("query.order_by.v1", {ir_.root}, "{\"keys\":" + order_keys_json(bound) + "}");
 		total_ordered_ = true;
 		order_keys_.clear();
-		for (const auto& column : columns)
-			order_keys_.push_back(column.column_id);
+		for (const auto& column : bound)
+			order_keys_.push_back(
+				detail::occurrence_column_id(column.source_alias, column.column_id));
 		return std::move(*this);
 	}
 

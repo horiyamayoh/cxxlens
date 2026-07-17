@@ -277,7 +277,7 @@ int main()
 										  call_row),
 		"worker standard row result ID differs from its descriptor projection");
 	const std::array entity_reference{
-		sdk::canonical_value::from_string("canonical"),
+		sdk::canonical_value::from_string("canonicalized"),
 		sdk::canonical_value::from_string("function"),
 		sdk::canonical_value::null(),
 		sdk::canonical_value::from_string(
@@ -309,8 +309,9 @@ int main()
 					   symbol_cell(sdk::scalar_kind::open_symbol, "cc.entity-kind/1", "method")},
 			 std::pair{"cc.entity.v1.semantic_owner",
 					   optional_typed("cc_entity_id", "cc-entity:owner")},
-			 std::pair{"cc.entity.v1.structural_signature_digest",
-					   symbol_cell(sdk::scalar_kind::digest, {}, "sha256:changed")},
+			 std::pair{
+				 "cc.entity.v1.structural_signature_digest",
+				 symbol_cell(sdk::scalar_kind::digest, {}, "sha256:" + std::string(64U, 'f'))},
 			 std::pair{"cc.entity.v1.anchor",
 					   optional_typed("source_span_id", "source-span:changed")},
 			 std::pair{"cc.entity.v1.toolchain",
@@ -323,7 +324,8 @@ int main()
 		auto changed_id =
 			sdk::derive_domain_identity(cxxlens::cc::relations::entity::descriptor(), changed);
 		require(changed_id && *changed_id != entity_id,
-				"entity projection mutation did not change identity");
+				"entity projection mutation did not change identity: " +
+					std::string{mutation.first});
 	}
 	const auto call_id = string_cell(call_row, "cc.call_site.v1.call");
 	for (auto mutation : {

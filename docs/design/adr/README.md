@@ -44,6 +44,7 @@
 | [0042](0042-immutable-provider-selection-authority.md) | immutable provider selection authority token |
 | [0056](0056-measured-foundation-zero-audits.md) | measured foundation zero-audit subreports |
 | [0057](0057-detached-scalar-value-validation.md) | shared detached scalar value validation |
+| [0058](0058-query-scan-occurrence-column-identity.md) | scan occurrence-qualified query column identity |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

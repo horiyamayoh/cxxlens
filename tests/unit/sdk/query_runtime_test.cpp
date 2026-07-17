@@ -108,6 +108,55 @@ namespace
 		return value;
 	}
 
+	[[nodiscard]] relation_descriptor self_join_relation()
+	{
+		relation_descriptor value;
+		value.id = "company.query.self.v1";
+		value.name = "company.query.self";
+		value.version = {1U, 0U, 0U};
+		value.semantic_major = 1U;
+		value.semantics = "company.query.self/1";
+		value.owner_namespace = "company.query";
+		value.columns = {
+			{value.id + ".key",
+			 "key",
+			 {scalar_kind::typed_id, "query_key_id", false},
+			 true,
+			 column_role::claim_key},
+			{value.id + ".parent",
+			 "parent",
+			 {scalar_kind::typed_id, "query_key_id", false},
+			 true,
+			 column_role::authoritative_payload},
+		};
+		value.key_columns = {value.columns[0].id};
+		value.merge = merge_mode::functional_assertion;
+		value.conflict_columns = {value.columns[1].id};
+		value.descriptor_digest =
+			*semantic_digest("cxxlens.relation-descriptor-binding.v2",
+							 value.contract_digest + "\n" + value.canonical_form());
+		return value;
+	}
+
+	[[nodiscard]] detached_row
+	self_join_row(const relation_descriptor& descriptor, std::string key, std::string parent)
+	{
+		row_builder builder{descriptor};
+		require(builder
+					.set({descriptor.id, descriptor.columns[0].id, descriptor.columns[0].type},
+						 detached_cell::typed("query_key_id", std::move(key)))
+					.has_value(),
+				"self-join key rejected");
+		require(builder
+					.set({descriptor.id, descriptor.columns[1].id, descriptor.columns[1].type},
+						 detached_cell::typed("query_key_id", std::move(parent)))
+					.has_value(),
+				"self-join parent rejected");
+		auto row = std::move(builder).finish();
+		require(row.has_value(), "self-join row did not finish");
+		return std::move(*row);
+	}
+
 	[[nodiscard]] detached_row left_row(const relation_descriptor& descriptor,
 										std::string key,
 										const std::int64_t value,
@@ -295,15 +344,18 @@ namespace
 		relation_descriptor right;
 		relation_engine engine;
 		std::vector<claim> claims;
+		relation_descriptor self{};
 	};
 
 	[[nodiscard]] fixture make_fixture()
 	{
 		auto left = left_relation();
 		auto right = right_relation();
+		auto self = self_join_relation();
 		relation_registry registry;
 		require(registry.add(left).has_value(), "left relation rejected");
 		require(registry.add(right).has_value(), "right relation rejected");
+		require(registry.add(self).has_value(), "self-join relation rejected");
 		auto engine = registry.build("query-runtime-generation");
 		require(engine.has_value(), "query relation engine failed");
 		std::vector<claim> claims;
@@ -315,7 +367,14 @@ namespace
 		claims.push_back(assertion(*engine, right_row(right, "key:b", "beta"), {"debug"}));
 		claims.push_back(assertion(
 			*engine, right_row(right, "key:a", "other"), {"debug"}, "company.query.other-domain"));
-		return {std::move(left), std::move(right), std::move(*engine), std::move(claims)};
+		claims.push_back(assertion(*engine, self_join_row(self, "key:a", "key:root"), {"release"}));
+		claims.push_back(assertion(*engine, self_join_row(self, "key:b", "key:a"), {"release"}));
+		claims.push_back(assertion(*engine, self_join_row(self, "key:c", "key:a"), {"release"}));
+		return {std::move(left),
+				std::move(right),
+				std::move(*engine),
+				std::move(claims),
+				std::move(self)};
 	}
 
 	[[nodiscard]] fixture make_side_channel_fixture()
@@ -527,6 +586,18 @@ namespace
 			output.insert(column);
 		}
 		return output;
+	}
+
+	[[nodiscard]] std::string present_string(const query::annotated_row& row,
+											 const std::string_view column)
+	{
+		const auto found = row.values.find(column);
+		require(found != row.values.end() && found->second.state == cell_state::present &&
+					found->second.value.has_value(),
+				"expected present query string cell missing");
+		const auto value = std::get_if<std::string>(&*found->second.value);
+		require(value != nullptr, "query cell did not contain a string value");
+		return *value;
 	}
 
 	[[nodiscard]] std::uint64_t physical_metric(const std::string_view physical,
@@ -769,10 +840,12 @@ namespace
 
 		const auto predicate_key =
 			column_ref{data.left.id, data.left.columns[0].id, data.left.columns[0].type};
-		auto first_predicate =
-			query::equals_present(predicate_key, query::literal::typed("query_key_id", "key:a"));
-		auto second_predicate =
-			query::equals_present(predicate_key, query::literal::typed("query_key_id", "key:b"));
+		auto qualified_predicate_key = query::qualify(predicate_key, "company_query_left");
+		require(qualified_predicate_key.has_value(), "canonical predicate qualification failed");
+		auto first_predicate = query::equals_present(
+			*qualified_predicate_key, query::literal::typed("query_key_id", "key:a"));
+		auto second_predicate = query::equals_present(
+			*qualified_predicate_key, query::literal::typed("query_key_id", "key:b"));
 		require(first_predicate && second_predicate, "canonical predicate setup failed");
 		const std::array predicate_terms{*first_predicate, *second_predicate};
 		auto conjunction = query::all(predicate_terms);
@@ -1304,8 +1377,8 @@ namespace
 		auto join_memory = memory_engine->execute(queries[4]);
 		require(join_memory && rows(*join_memory).size() == 3U,
 				"condition/interpretation-aware inner join diverged");
-		const std::set<std::string, std::less<>> join_columns{"output.company_query_right_v1_key",
-															  "output.key",
+		const std::set<std::string, std::less<>> join_columns{"output.company_query_left_key",
+															  "output.company_query_right_key",
 															  "output.label",
 															  "output.note",
 															  "output.value"};
@@ -1322,6 +1395,87 @@ namespace
 		require(limited_memory->execution() == query::execution_status::complete &&
 					limited_memory->inputs_complete() && !limited_memory->closed(),
 				"success, input completeness, and closure were collapsed");
+	}
+
+	void check_self_join_occurrences(const fixture& data,
+									 const snapshot_handle& memory_snapshot,
+									 const snapshot_handle& sqlite_snapshot)
+	{
+		const column_ref key{data.self.id, data.self.columns[0].id, data.self.columns[0].type};
+		const column_ref parent{data.self.id, data.self.columns[1].id, data.self.columns[1].type};
+		auto left_key = query::qualify(key, "left");
+		auto right_key = query::qualify(key, "right");
+		auto left_parent = query::qualify(parent, "left");
+		require(left_key && right_key && left_parent, "self-join occurrence qualification failed");
+		require(!query::qualify(key, "Invalid-Alias"),
+				"invalid query occurrence alias was accepted");
+
+		auto ambiguous_left = query::builder::from(data.self, "left");
+		auto ambiguous_right = query::builder::from(data.self, "right");
+		auto ambiguous_predicate = query::equals_present(key, key);
+		require(ambiguous_left && ambiguous_right && ambiguous_predicate,
+				"ambiguous self-join setup failed");
+		auto ambiguous = std::move(*ambiguous_left)
+							 .inner_join(std::move(*ambiguous_right), *ambiguous_predicate);
+		require(!ambiguous && ambiguous.error().code == "sdk.query-column-ambiguous",
+				"unqualified self-join column did not fail as ambiguous");
+
+		auto left = query::builder::from(data.self, "left");
+		auto right = query::builder::from(data.self, "right");
+		require(left.has_value(), "qualified self-join left scan failed");
+		auto filtered = std::move(*left).where(query::is_present(*left_key));
+		auto predicate = query::equals_present(*left_parent, *right_key);
+		require(filtered && right && predicate, "qualified self-join setup failed");
+		auto joined = std::move(*filtered).inner_join(std::move(*right), *predicate);
+		require(joined.has_value(), "qualified self-join construction failed");
+		const std::array order_columns{*right_key};
+		auto ordered = std::move(*joined).order_by(order_columns);
+		require(ordered.has_value(), "qualified self-join order failed");
+		const std::array projection{*left_key, *right_key};
+		auto projected = std::move(*ordered).project(projection);
+		require(projected.has_value(), "qualified self-join projection failed");
+		auto logical = std::move(*projected).finish();
+		auto valid = logical.validate();
+		require(valid.has_value(),
+				"qualified self-join IR did not validate: " +
+					(valid ? std::string{} : valid.error().code + ":" + valid.error().field));
+
+		auto execute = [&](const snapshot_handle& snapshot)
+		{
+			auto engine = query::reference_engine::bind(snapshot);
+			require(engine.has_value(), "self-join reference engine bind failed");
+			return engine->execute(logical);
+		};
+		auto memory = execute(memory_snapshot);
+		auto sqlite = execute(sqlite_snapshot);
+		require(memory && sqlite && rows(*memory) == rows(*sqlite),
+				"self-join memory/SQLite parity failed");
+		const auto result_rows = annotated_rows(*memory);
+		require(result_rows.size() == 2U && memory->ordered(),
+				"self-join returned an unexpected row count or order guarantee");
+		require(std::ranges::all_of(result_rows,
+									[](const query::annotated_row& row)
+									{
+										return row.claim_contributors.size() == 2U;
+									}),
+				"self-join collapsed left/right claim contributors");
+		const std::set<std::pair<std::string, std::string>> pairs{
+			{present_string(result_rows[0], "output.left_key"),
+			 present_string(result_rows[0], "output.right_key")},
+			{present_string(result_rows[1], "output.left_key"),
+			 present_string(result_rows[1], "output.right_key")},
+		};
+		require(pairs ==
+					std::set<std::pair<std::string, std::string>>{{"key:b", "key:a"},
+																  {"key:c", "key:a"}},
+				"self-join collapsed the left and right occurrence values");
+
+		auto left_scan = query::builder::from(data.self, "left");
+		auto right_scan = query::builder::from(data.self, "right");
+		require(left_scan && right_scan &&
+					std::move(*left_scan).finish().digest() !=
+						std::move(*right_scan).finish().digest(),
+				"semantic scan occurrence aliases did not affect the logical digest");
 	}
 
 	void check_partiality(const fixture& data, const snapshot_handle& snapshot)
@@ -1792,6 +1946,7 @@ int main()
 	check_canonical_json_encoding(data);
 	check_snapshot_schema_compatibility();
 	check_runtime_matrix(data, memory_snapshot, *sqlite_snapshot);
+	check_self_join_occurrences(data, memory_snapshot, *sqlite_snapshot);
 	check_partiality(data, memory_snapshot);
 	check_canonical_union_execution(data, memory_snapshot, *sqlite_snapshot);
 	check_bounded_intermediate_budgets(make_budget_fixture());

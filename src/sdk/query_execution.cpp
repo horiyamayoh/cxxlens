@@ -310,15 +310,45 @@ namespace cxxlens::sdk::query
 			return detached_cell::absent(type);
 		}
 
+		[[nodiscard]] std::optional<std::string>
+		resolve_occurrence(const std::map<std::string, value_type, std::less<>>& column_types,
+						   const ir_column_ref& reference)
+		{
+			if (!reference.source_alias.empty())
+			{
+				auto key =
+					detail::occurrence_column_id(reference.source_alias, reference.column_id);
+				return column_types.contains(key) ? std::optional<std::string>{std::move(key)}
+												  : std::nullopt;
+			}
+			if (column_types.contains(reference.column_id))
+				return reference.column_id;
+			std::optional<std::string> match;
+			const auto suffix = std::string{detail::occurrence_separator} + reference.column_id;
+			for (const auto& [key, type] : column_types)
+			{
+				(void)type;
+				if (!key.ends_with(suffix))
+					continue;
+				if (match)
+					return std::nullopt;
+				match = key;
+			}
+			return match;
+		}
+
 		[[nodiscard]] detached_cell
 		cell_for(const annotated_row& row,
-				 const std::string_view column,
+				 const ir_column_ref& reference,
 				 const std::map<std::string, value_type, std::less<>>& column_types)
 		{
-			const auto found = row.values.find(column);
+			const auto column = resolve_occurrence(column_types, reference);
+			if (!column)
+				return detached_cell::absent({scalar_kind::utf8_string, {}, true});
+			const auto found = row.values.find(*column);
 			if (found != row.values.end())
 				return found->second;
-			const auto type = column_types.find(column);
+			const auto type = column_types.find(*column);
 			if (type != column_types.end())
 				return absent_cell(type->second);
 			return detached_cell::absent({scalar_kind::utf8_string, {}, true});
@@ -393,19 +423,19 @@ namespace cxxlens::sdk::query
 													   row, child, column_types);
 											   });
 				case predicate_kind::equals_present:
-					return present_equal(cell_for(row, predicate.column->column_id, column_types),
+					return present_equal(cell_for(row, *predicate.column, column_types),
 										 literal_cell(*predicate.literal_value));
 				case predicate_kind::column_equals_present:
-					return present_equal(cell_for(row, predicate.left->column_id, column_types),
-										 cell_for(row, predicate.right->column_id, column_types));
+					return present_equal(cell_for(row, *predicate.left, column_types),
+										 cell_for(row, *predicate.right, column_types));
 				case predicate_kind::is_present:
-					return cell_for(row, predicate.column->column_id, column_types).state ==
+					return cell_for(row, *predicate.column, column_types).state ==
 						cell_state::present;
 				case predicate_kind::is_absent:
-					return cell_for(row, predicate.column->column_id, column_types).state ==
+					return cell_for(row, *predicate.column, column_types).state ==
 						cell_state::absent;
 				case predicate_kind::is_unknown:
-					return cell_for(row, predicate.column->column_id, column_types).state ==
+					return cell_for(row, *predicate.column, column_types).state ==
 						cell_state::unknown;
 			}
 			return false;
@@ -580,8 +610,8 @@ namespace cxxlens::sdk::query
 		{
 			for (const auto& key : keys)
 			{
-				const auto left_cell = cell_for(left, key.column.column_id, column_types);
-				const auto right_cell = cell_for(right, key.column.column_id, column_types);
+				const auto left_cell = cell_for(left, key.column, column_types);
+				const auto right_cell = cell_for(right, key.column, column_types);
 				auto state_rank = [&](const cell_state state)
 				{
 					const auto found = std::ranges::find(key.cell_state_order, state);
@@ -621,9 +651,12 @@ namespace cxxlens::sdk::query
 			auto output = source;
 			output.values.clear();
 			for (std::size_t index = 0U; index < output_schema.size(); ++index)
-				output.values.emplace(
-					"output." + aliases[index],
-					cell_for(source, output_schema[index].column_id, column_types));
+				output.values.emplace("output." + aliases[index],
+									  cell_for(source,
+											   {output_schema[index].column_id,
+												column_availability::require,
+												output_schema[index].source_alias},
+											   column_types));
 			return output;
 		}
 
@@ -1446,9 +1479,20 @@ namespace cxxlens::sdk::query
 				}
 			descriptors.emplace(requirement.id, *snapshot_descriptor);
 			requirements.insert(requirement.id);
-			for (const auto& column : requirement.columns)
-				column_types.emplace(column.id, column.type);
 		}
+		for (const auto& node : query.nodes)
+			if (node.operator_id == "query.scan.v1")
+			{
+				auto arguments = decode_arguments(node);
+				if (!arguments)
+					return unexpected(std::move(arguments.error()));
+				const auto& scan = std::get<scan_arguments>(*arguments);
+				const auto requirement = std::ranges::find(
+					query.relation_requirements, scan.descriptor_id, &relation_descriptor::id);
+				for (const auto& column : requirement->columns)
+					column_types.emplace(detail::occurrence_column_id(scan.alias, column.id),
+										 column.type);
+			}
 		for (const auto& coverage : snapshot_.input_coverage())
 			if (requirements.contains(coverage.relation_descriptor_id))
 				result_data->coverage.push_back(coverage);
@@ -1567,7 +1611,8 @@ namespace cxxlens::sdk::query
 						return unexpected(std::move(annotation.error()));
 					++state.scanned;
 					annotated_row row;
-					row.values = annotation->row.cells;
+					for (const auto& [column, cell] : annotation->row.cells)
+						row.values.emplace(detail::occurrence_column_id(scan.alias, column), cell);
 					row.presence = annotation->presence;
 					row.interpretation = annotation->interpretation;
 					row.claim_contributors = {annotation->assertion};
@@ -1622,14 +1667,21 @@ namespace cxxlens::sdk::query
 				const auto& project = std::get<project_arguments>(*arguments);
 				std::map<std::string, std::string, std::less<>> mapping;
 				for (const auto& item : project.columns)
-					mapping.emplace(item.column.column_id, item.output);
+				{
+					auto source = resolve_occurrence(column_types, item.column);
+					if (!source)
+						return unexpected(
+							query_error("sdk.query-column-mismatch", item.column.column_id));
+					mapping.emplace(*source, item.output);
+					column_types.emplace(item.output, column_types.at(*source));
+				}
 				for (const auto& row : inputs.front()->rows)
 				{
 					auto projected = row;
 					projected.values.clear();
 					for (const auto& item : project.columns)
-						projected.values.emplace(
-							item.output, cell_for(row, item.column.column_id, column_types));
+						projected.values.emplace(item.output,
+												 cell_for(row, item.column, column_types));
 					if (!append_row(state, stable_id, output, std::move(projected)))
 						break;
 				}
@@ -1637,13 +1689,17 @@ namespace cxxlens::sdk::query
 					std::ranges::all_of(inputs.front()->order_keys,
 										[&](const order_key& key)
 										{
-											return mapping.contains(key.column.column_id);
+											auto source =
+												resolve_occurrence(column_types, key.column);
+											return source && mapping.contains(*source);
 										});
 				if (output.ordered)
 					for (const auto& key : inputs.front()->order_keys)
 					{
 						auto projected = key;
-						projected.column.column_id = mapping.at(key.column.column_id);
+						const auto source = resolve_occurrence(column_types, key.column);
+						projected.column.column_id = mapping.at(*source);
+						projected.column.source_alias.clear();
 						output.order_keys.push_back(std::move(projected));
 					}
 				output.limited = inputs.front()->limited;
@@ -1918,7 +1974,10 @@ namespace cxxlens::sdk::query
 			const auto aliases = detail::output_aliases(query.output_schema);
 			std::map<std::string, std::string, std::less<>> mapping;
 			for (std::size_t index = 0U; index < query.output_schema.size(); ++index)
-				mapping.emplace(query.output_schema[index].column_id, "output." + aliases[index]);
+				mapping.emplace(
+					detail::occurrence_column_id(query.output_schema[index].source_alias,
+												 query.output_schema[index].column_id),
+					"output." + aliases[index]);
 			for (std::size_t index = 0U; index < evaluated.rows.size(); ++index)
 				if (!replace_row(state,
 								 "implicit-terminal-project",
@@ -1929,7 +1988,11 @@ namespace cxxlens::sdk::query
 					break;
 			if (!state.failed())
 				for (auto& key : evaluated.order_keys)
-					key.column.column_id = mapping.at(key.column.column_id);
+				{
+					const auto source = resolve_occurrence(column_types, key.column);
+					key.column.column_id = mapping.at(*source);
+					key.column.source_alias.clear();
+				}
 		}
 		physical << ";peak-logical-bytes=" << state.peak_memory_bytes
 				 << ";peak-intermediate-rows=" << state.peak_intermediate_rows;

@@ -39,7 +39,7 @@ properties:
       decision_adr:
         const: docs/design/adr/0007-logical-query-algebra.md
       owner_issue:
-        const: '#61'
+        const: '#115'
       owner:
         const: steward.ng-query
   compatibility:

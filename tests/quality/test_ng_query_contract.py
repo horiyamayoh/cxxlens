@@ -148,6 +148,7 @@ class NgQueryContractTests(unittest.TestCase):
                         "column": {
                             "column_id": "cc.call_site.v1.call",
                             "availability": "require",
+                            "source_alias": "calls",
                         },
                         "output": "output.call",
                     }

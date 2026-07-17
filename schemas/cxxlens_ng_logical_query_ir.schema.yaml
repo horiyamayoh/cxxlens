@@ -97,12 +97,15 @@ $defs:
   column_ref:
     type: object
     additionalProperties: false
-    required: [column_id, availability]
+    required: [column_id, availability, source_alias]
     properties:
       column_id:
         $ref: '#/$defs/column_id'
       availability:
         enum: [require, absent_if_schema_missing]
+      source_alias:
+        type: string
+        pattern: ^[a-z][a-z0-9_]*$
   typed_literal:
     type: object
     additionalProperties: false
