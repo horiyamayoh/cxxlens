@@ -138,6 +138,65 @@ namespace
 		return std::move(*row);
 	}
 
+	[[nodiscard]] relation_descriptor schema_relation(const std::uint32_t minor,
+													  const bool include_value,
+													  std::string key_parameter,
+													  const bool include_note)
+	{
+		relation_descriptor value;
+		value.id = "company.query.schema.v1";
+		value.name = "company.query.schema";
+		value.version = {1U, minor, 0U};
+		value.semantic_major = 1U;
+		value.semantics = "company.query.schema/1";
+		value.owner_namespace = "company.query";
+		value.columns.push_back({value.id + ".key",
+								 "key",
+								 {scalar_kind::typed_id, std::move(key_parameter), false},
+								 true,
+								 column_role::claim_key});
+		if (include_value)
+			value.columns.push_back({value.id + ".value",
+									 "value",
+									 {scalar_kind::signed_integer, {}, false},
+									 true,
+									 column_role::auxiliary});
+		if (include_note)
+			value.columns.push_back({value.id + ".note",
+									 "note",
+									 {scalar_kind::utf8_string, {}, true},
+									 false,
+									 column_role::auxiliary});
+		value.key_columns = {value.id + ".key"};
+		value.merge = merge_mode::set;
+		value.descriptor_digest =
+			*semantic_digest("cxxlens.relation-descriptor-binding.v2",
+							 value.contract_digest + "\n" + value.canonical_form());
+		require(value.validate().has_value(), "schema compatibility descriptor rejected");
+		return value;
+	}
+
+	[[nodiscard]] detached_row schema_row(const relation_descriptor& descriptor)
+	{
+		row_builder builder{descriptor};
+		const auto key = descriptor.column(descriptor.id + ".key");
+		require(key.has_value(), "schema compatibility key missing");
+		require(builder
+					.set({descriptor.id, key->id, key->type},
+						 detached_cell::typed(key->type.parameter, "key:schema"))
+					.has_value(),
+				"schema compatibility key rejected");
+		if (const auto column = descriptor.column(descriptor.id + ".value"))
+			require(builder
+						.set({descriptor.id, column->id, column->type},
+							 detached_cell::signed_integer(7))
+						.has_value(),
+					"schema compatibility value rejected");
+		auto row = std::move(builder).finish();
+		require(row.has_value(), "schema compatibility row did not finish");
+		return std::move(*row);
+	}
+
 	constexpr std::string_view producer_semantics{
 		"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"};
 	constexpr std::string_view direct_basis{
@@ -274,6 +333,25 @@ namespace
 		require(writer->validate().has_value(), "query snapshot validation failed");
 		auto snapshot = writer->publish();
 		require(snapshot.has_value(), "query snapshot publication failed");
+		return std::move(*snapshot);
+	}
+
+	[[nodiscard]] snapshot_handle publish_schema_snapshot(relation_descriptor descriptor)
+	{
+		relation_registry registry;
+		require(registry.add(descriptor).has_value(), "schema snapshot relation rejected");
+		auto engine = registry.build("query-schema-compatibility-generation");
+		require(engine.has_value(), "schema snapshot relation engine failed");
+		auto store = make_in_memory_snapshot_store(*engine);
+		require(store.has_value(), "schema snapshot store failed");
+		auto writer = store->begin(draft(*engine));
+		require(writer.has_value(), "schema snapshot writer failed");
+		auto value = assertion(*engine, schema_row(descriptor), {"release"});
+		require(writer->stage(partition(value, 0U)).has_value(),
+				"schema snapshot partition rejected");
+		require(writer->validate().has_value(), "schema snapshot validation failed");
+		auto snapshot = writer->publish();
+		require(snapshot.has_value(), "schema snapshot publication failed");
 		return std::move(*snapshot);
 	}
 
@@ -489,6 +567,84 @@ namespace
 		require(left_first && right_first &&
 					left_first->ir().digest() == right_first->ir().digest(),
 				"commutative union changed normalized IR digest");
+	}
+
+	void check_snapshot_schema_compatibility()
+	{
+		const auto execute =
+			[](const snapshot_handle& snapshot, const query::logical_query_ir& logical)
+		{
+			auto engine = query::reference_engine::bind(snapshot);
+			require(engine.has_value(), "schema compatibility reference engine bind failed");
+			return engine->execute(logical);
+		};
+
+		const auto query_required = schema_relation(0U, true, "schema_query_key_id", false);
+		const auto missing_required_snapshot =
+			publish_schema_snapshot(schema_relation(2U, false, "schema_query_key_id", false));
+		auto missing_required = execute(missing_required_snapshot, scan_query(query_required));
+		require(!missing_required &&
+					missing_required.error().code == "sdk.query-snapshot-schema-mismatch",
+				"larger snapshot minor hid a missing required column");
+
+		const auto mismatched_parameter_snapshot =
+			publish_schema_snapshot(schema_relation(1U, true, "foreign_query_key_id", false));
+		auto mismatched_parameter =
+			execute(mismatched_parameter_snapshot, scan_query(query_required));
+		require(!mismatched_parameter &&
+					mismatched_parameter.error().code == "sdk.query-snapshot-schema-mismatch",
+				"snapshot accepted an incompatible typed ID parameter");
+
+		auto changed_role = schema_relation(1U, true, "schema_query_key_id", false);
+		changed_role.columns[1].role = column_role::authoritative_payload;
+		changed_role.descriptor_digest =
+			*semantic_digest("cxxlens.relation-descriptor-binding.v2",
+							 changed_role.contract_digest + "\n" + changed_role.canonical_form());
+		const auto changed_role_snapshot = publish_schema_snapshot(std::move(changed_role));
+		auto mismatched_role = execute(changed_role_snapshot, scan_query(query_required));
+		require(!mismatched_role &&
+					mismatched_role.error().code == "sdk.query-snapshot-schema-mismatch",
+				"snapshot accepted an incompatible column role");
+
+		const auto query_optional = schema_relation(0U, true, "schema_query_key_id", true);
+		const auto missing_optional_snapshot =
+			publish_schema_snapshot(schema_relation(1U, true, "schema_query_key_id", false));
+		auto required_optional = execute(missing_optional_snapshot, scan_query(query_optional));
+		require(!required_optional &&
+					required_optional.error().code == "sdk.query-snapshot-schema-mismatch",
+				"required access accepted a missing optional column");
+
+		const auto note = query_optional.column(query_optional.id + ".note");
+		require(note.has_value(), "optional query note missing");
+		auto optional_source = query::builder::from(query_optional);
+		require(optional_source.has_value(), "optional projection source failed");
+		const std::array optional_columns{column_ref{query_optional.id, note->id, note->type}};
+		auto optional_projection = std::move(*optional_source).project(optional_columns);
+		require(optional_projection.has_value(), "optional projection failed");
+		auto optional_query = std::move(*optional_projection).finish();
+		auto& arguments = optional_query.nodes.back().arguments;
+		const std::string required_marker{"\"availability\":\"require\""};
+		const auto availability = arguments.find(required_marker);
+		require(availability != std::string::npos, "optional projection availability missing");
+		arguments.replace(
+			availability, required_marker.size(), "\"availability\":\"absent_if_schema_missing\"");
+		require(optional_query.validate().has_value(),
+				"optional absent-if-missing query did not validate");
+		auto optional_result = execute(missing_optional_snapshot, optional_query);
+		require(optional_result.has_value(),
+				"absent-if-missing access rejected an additive optional column");
+		auto optional_rows = annotated_rows(*optional_result);
+		require(optional_rows.size() == 1U && optional_rows.front().values.size() == 1U,
+				"absent-if-missing projection returned the wrong shape");
+		const auto& optional_cell = optional_rows.front().values.begin()->second;
+		require(optional_cell.state == cell_state::absent && optional_cell.type == note->type,
+				"absent-if-missing did not synthesize a typed absent cell");
+
+		const auto additive_snapshot =
+			publish_schema_snapshot(schema_relation(1U, true, "schema_query_key_id", true));
+		auto additive = execute(additive_snapshot, scan_query(query_required));
+		require(additive.has_value() && annotated_rows(*additive).size() == 1U,
+				"compatible additive snapshot minor was rejected");
 	}
 
 	void check_runtime_matrix(const fixture& data,
@@ -883,6 +1039,7 @@ int main()
 	require(sqlite_snapshot.has_value(), "SQLite query snapshot reopen failed");
 
 	check_ir_validation(data);
+	check_snapshot_schema_compatibility();
 	check_runtime_matrix(data, memory_snapshot, *sqlite_snapshot);
 	check_partiality(data, memory_snapshot);
 	check_side_channel_parity(make_side_channel_fixture());

@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.12.0
+document_version: 1.13.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -222,7 +222,7 @@ entries:
 
   - id: public.logical-query
     status: implemented
-    owner_issue: '#80'
+    owner_issue: '#81'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/sdk/query.hpp]
@@ -241,11 +241,11 @@ entries:
     threading: [builders-are-thread-confined, completed-ir-is-value-owned]
     versioning: [logical-query-ir-version-is-independent, operator-ids-are-versioned]
     invariants: [typed-and-dynamic-paths-normalize-to-identical-ir, no-implicit-literal-coercion, node-shape-propagates-exact-value-type, output-schema-exactly-matches-owning-descriptor-and-root-typed-shape, projected-output-type-is-derived-from-source-column, implicit-terminal-project-uses-the-same-canonical-output-aliases-as-explicit-project, equivalent-explicit-and-implicit-project-digests-match, limit-requires-total-order]
-    implementation_evidence: [src/sdk/query.cpp, src/sdk/query_internal.hpp, src/sdk/query_ir_decoder.cpp, examples/sdk/typed_query.cpp, examples/sdk/dynamic_query.cpp, tests/unit/sdk/sdk_test.cpp, tests/unit/sdk/query_runtime_test.cpp, docs/design/adr/0022-logical-query-output-schema-binding.md, docs/design/adr/0023-query-terminal-projection-parity.md]
+    implementation_evidence: [src/sdk/query.cpp, src/sdk/query_internal.hpp, src/sdk/query_ir_decoder.cpp, examples/sdk/typed_query.cpp, examples/sdk/dynamic_query.cpp, tests/unit/sdk/sdk_test.cpp, tests/unit/sdk/query_runtime_test.cpp, docs/design/adr/0022-logical-query-output-schema-binding.md, docs/design/adr/0023-query-terminal-projection-parity.md, docs/design/adr/0024-query-snapshot-schema-compatibility.md]
 
   - id: public.query-runtime
     status: implemented
-    owner_issue: '#80'
+    owner_issue: '#81'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/sdk/query.hpp, include/cxxlens/sdk/store.hpp]
@@ -269,8 +269,8 @@ entries:
     lifetime: [reference-engine-owns-snapshot-pin, query-result-owns-rows-producer-contracts-and-side-channels, result-row-view-expires-on-cursor-advance, cancellation-probe-is-synchronously-borrowed]
     threading: [reference-engine-and-query-result-are-concurrent-readable, execution-is-logically-immutable, result-row-cursor-is-thread-confined, cancellation-probe-must-be-noexcept]
     versioning: [query-runtime-result-v1-independent-from-logical-ir-v1, reference-physical-plan-is-internal, runtime-budget-and-cancellation-excluded-from-ir-digest]
-    invariants: [all-11-ng0-operators-use-accepted-annotated-multiset-algebra, memory-and-sqlite-semantic-parity, physical-scan-order-unobservable, advertised-output-columns-exactly-match-snapshot-types-before-execution, implicit-terminal-projection-runs-before-sort-budget-and-result-publication, every-runtime-row-key-is-a-canonical-output-schema-id, sql-null-unknown-conflict-not-coerced, budget-and-cancellation-return-canonical-sealed-prefix-only, success-input-complete-and-closed-are-distinct, closed-requires-exact-certificate-for-every-reachable-scan-input-range, unrelated-condition-interpretation-and-relation-certificates-never-prove-closure, exact-partition-certificate-may-prove-an-explicit-condition-subset, result-closure-ids-are-applied-only, producer-contracts-conflicts-and-differential-disagreements-survive-query, query-and-claim-kernel-share-functional-payload-projection-and-classification, claim-content-identity-is-not-functional-payload-identity, logical-explain-excludes-physical-authority]
-    implementation_evidence: [src/sdk/query_execution.cpp, src/sdk/query.cpp, src/sdk/query_internal.hpp, src/sdk/claim.cpp, src/sdk/claim_internal.hpp, examples/sdk/query_execution.cpp, tests/unit/sdk/query_runtime_test.cpp, tests/integration/r2_vertical_slice_test.cpp, schemas/cxxlens_ng_query_runtime_contract.yaml, schemas/cxxlens_ng_query_execution_result.schema.yaml, docs/design/adr/0014-deterministic-reference-query-runtime.md, docs/design/adr/0020-query-functional-payload-parity.md, docs/design/adr/0021-query-closure-applicability.md, docs/design/adr/0022-logical-query-output-schema-binding.md, docs/design/adr/0023-query-terminal-projection-parity.md]
+    invariants: [all-11-ng0-operators-use-accepted-annotated-multiset-algebra, memory-and-sqlite-semantic-parity, physical-scan-order-unobservable, all-referenced-columns-bind-to-exact-snapshot-type-required-role-before-scan, only-explicit-absent-if-schema-missing-may-synthesize-typed-absent-for-an-optional-column, advertised-output-columns-exactly-match-snapshot-types-before-execution, implicit-terminal-projection-runs-before-sort-budget-and-result-publication, every-runtime-row-key-is-a-canonical-output-schema-id, sql-null-unknown-conflict-not-coerced, budget-and-cancellation-return-canonical-sealed-prefix-only, success-input-complete-and-closed-are-distinct, closed-requires-exact-certificate-for-every-reachable-scan-input-range, unrelated-condition-interpretation-and-relation-certificates-never-prove-closure, exact-partition-certificate-may-prove-an-explicit-condition-subset, result-closure-ids-are-applied-only, producer-contracts-conflicts-and-differential-disagreements-survive-query, query-and-claim-kernel-share-functional-payload-projection-and-classification, claim-content-identity-is-not-functional-payload-identity, logical-explain-excludes-physical-authority]
+    implementation_evidence: [src/sdk/query_execution.cpp, src/sdk/query.cpp, src/sdk/query_internal.hpp, src/sdk/claim.cpp, src/sdk/claim_internal.hpp, examples/sdk/query_execution.cpp, tests/unit/sdk/query_runtime_test.cpp, tests/integration/r2_vertical_slice_test.cpp, schemas/cxxlens_ng_query_runtime_contract.yaml, schemas/cxxlens_ng_query_execution_result.schema.yaml, docs/design/adr/0014-deterministic-reference-query-runtime.md, docs/design/adr/0020-query-functional-payload-parity.md, docs/design/adr/0021-query-closure-applicability.md, docs/design/adr/0022-logical-query-output-schema-binding.md, docs/design/adr/0023-query-terminal-projection-parity.md, docs/design/adr/0024-query-snapshot-schema-compatibility.md]
 
   - id: public.provider-sdk
     status: implemented

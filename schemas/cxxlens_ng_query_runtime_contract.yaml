@@ -1,12 +1,12 @@
 schema: cxxlens.query-runtime-contract.v1
-document_version: 1.3.0
+document_version: 1.4.0
 maturity: implemented
 authority:
   logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
   guarantee_contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
   snapshot_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
-  decision_adr: docs/design/adr/0023-query-terminal-projection-parity.md
-  owner_issue: '#80'
+  decision_adr: docs/design/adr/0024-query-snapshot-schema-compatibility.md
+  owner_issue: '#81'
   owner: steward.ng-query-runtime
 compatibility:
   version_axis: query-runtime-result
@@ -32,7 +32,12 @@ input:
     annotationless_payload: reject-query-not-synthesize
     output_column_compatibility:
       key: exact-column-id
+      bind_phase: before-scan
+      reference_sites: [predicate, project, order, join, implicit-output-schema]
       value_type_fields: [scalar, parameter, optional]
+      descriptor_fields: [required, role]
+      required_or_direct_missing: reject
+      absent_if_schema_missing: optional-additive-only-typed-absent
       mismatch: sdk.query-snapshot-schema-mismatch
   logical_ir:
     version: 1.0.0

@@ -2651,6 +2651,12 @@ executor も実行する。canonicalizer と executor は同じ `output_aliases(
 `output.*` ID へ rename する。projection は unordered canonical sort、output budget、cancellation publication より前に
 適用し、explicit/implicit project の digest と result row shape を一致させる。
 
+Issue #81 / ADR 0024 により execution bind は predicate、project、order、join、implicit output の全参照 column から
+schema compatibility plan を作る。`require` は snapshot column の存在と scalar、parameter、optionality、required flag、
+role の完全一致を要求する。欠落を許すのは query descriptor 上も optional である明示
+`absent_if_schema_missing` だけであり、semantic major 一致と snapshot minor 下限を満たしても required shape の破壊は
+`sdk.query-snapshot-schema-mismatch` とする。
+
 ### 20.10 Query result
 
 ```cpp

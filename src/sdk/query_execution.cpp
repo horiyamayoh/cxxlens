@@ -144,6 +144,83 @@ namespace cxxlens::sdk::query
 			values.erase(std::ranges::unique(values).begin(), values.end());
 		}
 
+		struct schema_column_access
+		{
+			std::string descriptor_id;
+			column_descriptor expected;
+			column_availability availability{column_availability::absent_if_schema_missing};
+		};
+
+		void collect_schema_references(const decoded_predicate& predicate,
+									   std::vector<ir_column_ref>& output)
+		{
+			if (predicate.column)
+				output.push_back(*predicate.column);
+			if (predicate.left)
+				output.push_back(*predicate.left);
+			if (predicate.right)
+				output.push_back(*predicate.right);
+			for (const auto& operand : predicate.operands)
+				collect_schema_references(operand, output);
+		}
+
+		[[nodiscard]] result<std::map<std::string, schema_column_access, std::less<>>>
+		make_schema_compatibility_plan(const logical_query_ir& query,
+									   const bool implicit_terminal_projection)
+		{
+			std::map<std::string, schema_column_access, std::less<>> plan;
+			auto add = [&](const ir_column_ref& reference) -> result<void>
+			{
+				const relation_descriptor* owner{};
+				const column_descriptor* expected{};
+				for (const auto& descriptor : query.relation_requirements)
+				{
+					const auto column = std::ranges::find(
+						descriptor.columns, reference.column_id, &column_descriptor::id);
+					if (column == descriptor.columns.end())
+						continue;
+					if (owner != nullptr)
+						return unexpected(
+							query_error("sdk.query-snapshot-schema-mismatch", reference.column_id));
+					owner = &descriptor;
+					expected = &*column;
+				}
+				if (owner == nullptr || expected == nullptr)
+					return unexpected(
+						query_error("sdk.query-snapshot-schema-mismatch", reference.column_id));
+				auto [position, inserted] = plan.emplace(
+					reference.column_id,
+					schema_column_access{owner->id, *expected, reference.availability});
+				if (!inserted && reference.availability == column_availability::require)
+					position->second.availability = column_availability::require;
+				return {};
+			};
+
+			for (const auto& node : query.nodes)
+			{
+				auto arguments = decode_arguments(node);
+				if (!arguments)
+					return unexpected(std::move(arguments.error()));
+				std::vector<ir_column_ref> references;
+				if (const auto* predicate = std::get_if<predicate_arguments>(&*arguments))
+					collect_schema_references(predicate->predicate, references);
+				else if (const auto* project = std::get_if<project_arguments>(&*arguments))
+					for (const auto& item : project->columns)
+						references.push_back(item.column);
+				else if (const auto* order = std::get_if<order_arguments>(&*arguments))
+					for (const auto& key : order->keys)
+						references.push_back(key.column);
+				for (const auto& reference : references)
+					if (auto added = add(reference); !added)
+						return unexpected(std::move(added.error()));
+			}
+			if (implicit_terminal_projection)
+				for (const auto& column : query.output_schema)
+					if (auto added = add({column.column_id, column_availability::require}); !added)
+						return unexpected(std::move(added.error()));
+			return plan;
+		}
+
 		[[nodiscard]] std::string guarantee_key(const claim_guarantee& value)
 		{
 			return value.approximation + "\n" + value.scope + "\n" + value.assumptions + "\n" +
@@ -1231,6 +1308,9 @@ namespace cxxlens::sdk::query
 								 {
 									 return node.operator_id == "query.project.v1";
 								 });
+		auto schema_plan = make_schema_compatibility_plan(query, implicit_terminal_projection);
+		if (!schema_plan)
+			return unexpected(std::move(schema_plan.error()));
 		auto result_data = std::make_shared<query_result::data>();
 		result_data->ir_digest = query.digest();
 		result_data->snapshot = snapshot_.id();
@@ -1250,13 +1330,25 @@ namespace cxxlens::sdk::query
 				snapshot_descriptor->version.minor < requirement.version.minor)
 				return unexpected(
 					query_error("sdk.query-snapshot-schema-mismatch", requirement.id));
-			for (const auto& column : query.output_schema)
-				if (column.descriptor_id == requirement.id)
+			for (const auto& [column_id, access] : *schema_plan)
+				if (access.descriptor_id == requirement.id)
 				{
-					auto snapshot_column = snapshot_descriptor->column(column.column_id);
-					if (!snapshot_column || snapshot_column->type != column.type)
+					auto snapshot_column = snapshot_descriptor->column(column_id);
+					if (!snapshot_column)
+					{
+						const bool permitted_absence =
+							access.availability == column_availability::absent_if_schema_missing &&
+							!access.expected.required && access.expected.type.optional;
+						if (!permitted_absence)
+							return unexpected(
+								query_error("sdk.query-snapshot-schema-mismatch", column_id));
+						continue;
+					}
+					if (snapshot_column->type != access.expected.type ||
+						snapshot_column->required != access.expected.required ||
+						snapshot_column->role != access.expected.role)
 						return unexpected(
-							query_error("sdk.query-snapshot-schema-mismatch", column.column_id));
+							query_error("sdk.query-snapshot-schema-mismatch", column_id));
 				}
 			descriptors.emplace(requirement.id, *snapshot_descriptor);
 			requirements.insert(requirement.id);

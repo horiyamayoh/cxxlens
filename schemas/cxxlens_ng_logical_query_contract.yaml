@@ -1,5 +1,5 @@
 schema: cxxlens.logical-query-contract.v1
-document_version: 1.2.0
+document_version: 1.3.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#20-logical-query
@@ -140,6 +140,11 @@ partial_execution:
 schema_compatibility:
   relation_requirement: descriptor-id-plus-minor-range
   major_mismatch: reject
+  execution_bind_plan:
+    references: [predicate, project, order, join, implicit-output-schema]
+    aggregation: require-dominates-absent-if-schema-missing
+    snapshot_match_fields: [column-id, scalar, parameter, optional, required, role]
+    mismatch: sdk.query-snapshot-schema-mismatch
   required_column_missing: reject
   optional_column_missing:
     direct_reference: reject
