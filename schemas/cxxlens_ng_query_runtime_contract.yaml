@@ -1,12 +1,12 @@
 schema: cxxlens.query-runtime-contract.v1
-document_version: 1.7.0
+document_version: 1.8.0
 maturity: implemented
 authority:
   logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
   guarantee_contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
   snapshot_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
-  decision_adr: docs/design/adr/0029-query-conflict-canonical-projection.md
-  owner_issue: '#86'
+  decision_adr: docs/design/adr/0030-shared-canonical-json-and-utf8-validation.md
+  owner_issue: '#87'
   owner: steward.ng-query-runtime
 compatibility:
   version_axis: query-runtime-result
@@ -162,6 +162,14 @@ cancellation:
   physical_schedule_independent: true
 result:
   schema: schemas/cxxlens_ng_query_execution_result.schema.yaml
+  canonical_json:
+    encoder: shared-sdk-internal
+    control_bytes_00_1f: always-escaped
+    utf8: strict-validated-before-retention
+    unicode_normalization: none-byte-preserving
+    invalid_utf8: reject-sdk.cell-invalid
+    byte_scalar_encoding: lowercase-hex
+    backend_semantic_projection: byte-identical
   row_cursor:
     thread_affine: true
     view_lifetime: until-next-advance

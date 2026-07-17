@@ -18,6 +18,7 @@
 #include <cxxlens/sdk/query.hpp>
 
 #include "claim_internal.hpp"
+#include "json_internal.hpp"
 #include "query_internal.hpp"
 
 namespace cxxlens::sdk::query
@@ -30,44 +31,9 @@ namespace cxxlens::sdk::query
 			return {std::move(code), std::move(field), std::move(detail)};
 		}
 
-		[[nodiscard]] std::string escape_json(const std::string_view input)
-		{
-			std::ostringstream output;
-			for (const auto byte : input)
-			{
-				switch (byte)
-				{
-					case '\\':
-						output << "\\\\";
-						break;
-					case '"':
-						output << "\\\"";
-						break;
-					case '\b':
-						output << "\\b";
-						break;
-					case '\f':
-						output << "\\f";
-						break;
-					case '\n':
-						output << "\\n";
-						break;
-					case '\r':
-						output << "\\r";
-						break;
-					case '\t':
-						output << "\\t";
-						break;
-					default:
-						output << byte;
-				}
-			}
-			return output.str();
-		}
-
 		[[nodiscard]] std::string json_string(const std::string_view value)
 		{
-			return "\"" + escape_json(value) + "\"";
+			return cxxlens::sdk::detail::canonical_json_string(value);
 		}
 
 		[[nodiscard]] std::string scalar_json(const scalar_value& value)

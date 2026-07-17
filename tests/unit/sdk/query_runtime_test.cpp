@@ -499,6 +499,113 @@ namespace
 		return std::move(*builder).finish();
 	}
 
+	void check_canonical_json_encoding(const fixture& data)
+	{
+		std::string text;
+		for (unsigned int byte = 0U; byte < 0x20U; ++byte)
+			text.push_back(static_cast<char>(byte));
+		text += "\"\\雪";
+		row_builder builder{data.left};
+		require(builder
+					.set({data.left.id, data.left.columns[0].id, data.left.columns[0].type},
+						 detached_cell::typed("query_key_id", "key:json"))
+					.has_value(),
+				"JSON fixture key rejected");
+		require(builder
+					.set({data.left.id, data.left.columns[1].id, data.left.columns[1].type},
+						 detached_cell::signed_integer(42))
+					.has_value(),
+				"JSON fixture value rejected");
+		require(builder
+					.set({data.left.id, data.left.columns[2].id, data.left.columns[2].type},
+						 detached_cell{data.left.columns[2].type,
+									   cell_state::present,
+									   scalar_value{text},
+									   std::nullopt})
+					.has_value(),
+				"valid UTF-8/control JSON fixture rejected");
+		auto row = std::move(builder).finish();
+		require(row.has_value(), "JSON fixture row did not finish");
+		const auto value = assertion(data.engine, std::move(*row), {"release"});
+
+		const auto publish_one = [&](snapshot_store& store)
+		{
+			auto writer = store.begin(draft(data.engine));
+			require(writer.has_value(), "JSON fixture writer failed");
+			require(writer->stage(partition(value, 0U)).has_value(),
+					"JSON fixture partition rejected");
+			require(writer->validate().has_value(), "JSON fixture snapshot validation failed");
+			auto snapshot = writer->publish();
+			require(snapshot.has_value(), "JSON fixture snapshot publication failed");
+			return std::move(*snapshot);
+		};
+
+		auto memory_store = make_in_memory_snapshot_store(data.engine);
+		require(memory_store.has_value(), "JSON fixture memory store failed");
+		auto memory_snapshot = publish_one(*memory_store);
+		const auto database =
+			std::filesystem::temp_directory_path() / "cxxlens-ng-query-json.sqlite";
+		std::filesystem::remove(database);
+		std::filesystem::remove(database.string() + "-wal");
+		std::filesystem::remove(database.string() + "-shm");
+		auto sqlite_store = open_sqlite_snapshot_store(database.string(), data.engine);
+		require(sqlite_store.has_value(), "JSON fixture SQLite store failed");
+		auto sqlite_snapshot = publish_one(*sqlite_store);
+
+		const auto execute = [&](const snapshot_handle& snapshot)
+		{
+			auto engine = query::reference_engine::bind(snapshot);
+			require(engine.has_value(), "JSON fixture engine bind failed");
+			auto result = engine->execute(scan_query(data.left));
+			require(result.has_value(), "JSON fixture query failed");
+			return result->canonical_form();
+		};
+		const auto memory_json = execute(memory_snapshot);
+		const auto sqlite_json = execute(sqlite_snapshot);
+		for (const auto byte : memory_json)
+			require(static_cast<unsigned char>(byte) >= 0x20U,
+					"canonical result contains a raw JSON control byte");
+		for (const auto* escape : {"\\u0000",
+								   "\\u0001",
+								   "\\b",
+								   "\\t",
+								   "\\n",
+								   "\\f",
+								   "\\r",
+								   "\\u000b",
+								   "\\u001f",
+								   "\\\"",
+								   "\\\\"})
+			require(memory_json.contains(escape),
+					"canonical result omitted a required JSON escape");
+		require(memory_json.contains("雪"), "non-ASCII UTF-8 did not round-trip");
+		const auto row_projection = [](const std::string& serialized)
+		{
+			const auto begin = serialized.find("\"rows\":[");
+			const auto end = serialized.find("],\"schema\"", begin);
+			require(begin != std::string::npos && end != std::string::npos,
+					"canonical result row projection missing");
+			return serialized.substr(begin, end - begin + 1U);
+		};
+		require(row_projection(memory_json) == row_projection(sqlite_json),
+				"memory/SQLite JSON row serialization diverged");
+
+		const std::string invalid_utf8{"\xc0\xaf", 2U};
+		auto invalid_value = detached_cell::utf8(invalid_utf8);
+		auto invalid_value_result = invalid_value.validate();
+		require(!invalid_value_result && invalid_value_result.error().detail == "invalid-utf8",
+				"invalid UTF-8 string value was accepted");
+		auto invalid_reason =
+			detached_cell::unknown({scalar_kind::utf8_string, {}, true}, invalid_utf8);
+		auto invalid_reason_result = invalid_reason.validate();
+		require(!invalid_reason_result && invalid_reason_result.error().detail == "invalid-utf8",
+				"invalid UTF-8 unknown reason was accepted");
+
+		std::filesystem::remove(database);
+		std::filesystem::remove(database.string() + "-wal");
+		std::filesystem::remove(database.string() + "-shm");
+	}
+
 	[[nodiscard]] query::logical_query_ir
 	condition_query(const relation_descriptor& descriptor,
 					const std::span<const std::string> alternatives,
@@ -1410,6 +1517,7 @@ int main()
 	require(sqlite_snapshot.has_value(), "SQLite query snapshot reopen failed");
 
 	check_ir_validation(data);
+	check_canonical_json_encoding(data);
 	check_snapshot_schema_compatibility();
 	check_runtime_matrix(data, memory_snapshot, *sqlite_snapshot);
 	check_partiality(data, memory_snapshot);

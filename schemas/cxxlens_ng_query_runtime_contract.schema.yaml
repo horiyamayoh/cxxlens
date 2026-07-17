@@ -18,7 +18,7 @@ required:
   - qualification
 properties:
   schema: {const: cxxlens.query-runtime-contract.v1}
-  document_version: {const: 1.7.0}
+  document_version: {const: 1.8.0}
   maturity: {const: implemented}
   authority: {$ref: '#/$defs/nonempty_object'}
   compatibility: {$ref: '#/$defs/nonempty_object'}
@@ -84,6 +84,7 @@ properties:
     additionalProperties: false
     required:
       - schema
+      - canonical_json
       - row_cursor
       - execution_statuses
       - required_side_channels
@@ -93,6 +94,7 @@ properties:
       - canonical_order
     properties:
       schema: {const: schemas/cxxlens_ng_query_execution_result.schema.yaml}
+      canonical_json: {$ref: '#/$defs/nonempty_object'}
       row_cursor: {$ref: '#/$defs/nonempty_object'}
       execution_statuses:
         const: [complete, truncated, cancelled_with_partial, failed_before_result]

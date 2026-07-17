@@ -8,6 +8,8 @@
 
 #include <cxxlens/sdk/relation.hpp>
 
+#include "json_internal.hpp"
+
 namespace cxxlens::sdk
 {
 	namespace
@@ -89,35 +91,7 @@ namespace cxxlens::sdk
 
 		[[nodiscard]] std::string escape(const std::string_view input)
 		{
-			std::ostringstream output;
-			for (const auto byte : input)
-			{
-				switch (byte)
-				{
-					case '\\':
-						output << "\\\\";
-						break;
-					case '"':
-						output << "\\\"";
-						break;
-					case '\n':
-						output << "\\n";
-						break;
-					case '\r':
-						output << "\\r";
-						break;
-					case '\t':
-						output << "\\t";
-						break;
-					default:
-						if (static_cast<unsigned char>(byte) < 0x20U)
-							output << "\\u" << std::hex << std::setw(4) << std::setfill('0')
-								   << static_cast<unsigned int>(static_cast<unsigned char>(byte));
-						else
-							output << byte;
-				}
-			}
-			return output.str();
+			return detail::canonical_json_escape(input);
 		}
 
 		[[nodiscard]] bool matches_scalar(const scalar_kind kind, const scalar_value& value)
@@ -728,6 +702,10 @@ namespace cxxlens::sdk
 			if (!value || unknown_reason || !matches_scalar(type.scalar, *value))
 				return cxxlens::sdk::unexpected(
 					relation_error("sdk.cell-invalid", "value", "present"));
+			if (const auto* text = std::get_if<std::string>(&*value);
+				text != nullptr && !detail::valid_utf8(*text))
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.cell-invalid", "value", "invalid-utf8"));
 		}
 		else if (state == cell_state::absent)
 		{
@@ -737,6 +715,9 @@ namespace cxxlens::sdk
 		}
 		else if (value || !unknown_reason || unknown_reason->empty())
 			return cxxlens::sdk::unexpected(relation_error("sdk.cell-invalid", "state", "unknown"));
+		else if (!detail::valid_utf8(*unknown_reason))
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.cell-invalid", "unknown_reason", "invalid-utf8"));
 		return {};
 	}
 

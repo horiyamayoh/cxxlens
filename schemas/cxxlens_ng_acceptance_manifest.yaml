@@ -69,6 +69,7 @@ entries:
       - docs/design/adr/0027-query-typed-argument-canonicalization.md
       - docs/design/adr/0028-query-canonical-union-execution-order.md
       - docs/design/adr/0029-query-conflict-canonical-projection.md
+      - docs/design/adr/0030-shared-canonical-json-and-utf8-validation.md
     summary: Logical query, standard/custom join, budgets, explicit partiality, and flagship recipe.
   - id: gate.g4
     status: implemented

@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <cctype>
-#include <iomanip>
 #include <limits>
 #include <ranges>
 #include <set>
@@ -8,6 +7,8 @@
 #include <tuple>
 
 #include <cxxlens/sdk/provider.hpp>
+
+#include "json_internal.hpp"
 
 namespace cxxlens::sdk::provider
 {
@@ -31,42 +32,9 @@ namespace cxxlens::sdk::provider
 									});
 		}
 
-		[[nodiscard]] std::string escape_json(const std::string_view input)
-		{
-			std::ostringstream output;
-			for (const auto byte : input)
-			{
-				switch (byte)
-				{
-					case '\\':
-						output << "\\\\";
-						break;
-					case '"':
-						output << "\\\"";
-						break;
-					case '\n':
-						output << "\\n";
-						break;
-					case '\r':
-						output << "\\r";
-						break;
-					case '\t':
-						output << "\\t";
-						break;
-					default:
-						if (static_cast<unsigned char>(byte) < 0x20U)
-							output << "\\u" << std::hex << std::setw(4) << std::setfill('0')
-								   << static_cast<unsigned int>(static_cast<unsigned char>(byte));
-						else
-							output << byte;
-				}
-			}
-			return output.str();
-		}
-
 		[[nodiscard]] std::string json_string(const std::string_view value)
 		{
-			return "\"" + escape_json(value) + "\"";
+			return cxxlens::sdk::detail::canonical_json_string(value);
 		}
 
 		template <std::unsigned_integral T>

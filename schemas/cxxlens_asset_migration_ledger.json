@@ -1,5 +1,5 @@
 {
-  "asset_count": 275,
+  "asset_count": 276,
   "assets": [
     {
       "authority": "active",
@@ -613,6 +613,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0029-query-conflict-canonical-projection.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0030-shared-canonical-json-and-utf8-validation.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1928,7 +1935,7 @@
     }
   ],
   "classifications": {
-    "active": 239,
+    "active": 240,
     "archived": 35,
     "generated": 1
   },

@@ -1,7 +1,6 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
-#include <iomanip>
 #include <ranges>
 #include <set>
 #include <sstream>
@@ -11,6 +10,7 @@
 #include <cxxlens/sdk/claim.hpp>
 
 #include "claim_internal.hpp"
+#include "json_internal.hpp"
 
 namespace cxxlens::sdk
 {
@@ -28,42 +28,9 @@ namespace cxxlens::sdk
 				std::ranges::adjacent_find(values) == values.end();
 		}
 
-		[[nodiscard]] std::string escape_json(const std::string_view input)
-		{
-			std::ostringstream output;
-			for (const auto byte : input)
-			{
-				switch (byte)
-				{
-					case '\\':
-						output << "\\\\";
-						break;
-					case '"':
-						output << "\\\"";
-						break;
-					case '\n':
-						output << "\\n";
-						break;
-					case '\r':
-						output << "\\r";
-						break;
-					case '\t':
-						output << "\\t";
-						break;
-					default:
-						if (static_cast<unsigned char>(byte) < 0x20U)
-							output << "\\u" << std::hex << std::setw(4) << std::setfill('0')
-								   << static_cast<unsigned int>(static_cast<unsigned char>(byte));
-						else
-							output << byte;
-				}
-			}
-			return output.str();
-		}
-
 		[[nodiscard]] std::string json_string(const std::string_view value)
 		{
-			return "\"" + escape_json(value) + "\"";
+			return detail::canonical_json_string(value);
 		}
 
 		[[nodiscard]] std::string strings_json(const std::vector<std::string>& values)

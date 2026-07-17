@@ -29,6 +29,7 @@
 | [0027](0027-query-typed-argument-canonicalization.md) | typed node argument canonicalization |
 | [0028](0028-query-canonical-union-execution-order.md) | canonical union execution order |
 | [0029](0029-query-conflict-canonical-projection.md) | lossless query conflict canonical projection |
+| [0030](0030-shared-canonical-json-and-utf8-validation.md) | shared canonical JSON and strict UTF-8 |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。
