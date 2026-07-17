@@ -365,6 +365,7 @@ namespace cxxlens::sdk::query
 		std::vector<std::string> claim_contributors;
 		std::vector<claim_producer> producer_contracts;
 		std::vector<std::string> provenance;
+		/** @brief Nonempty canonical sorted-unique projection of edge guarantees. */
 		std::vector<claim_guarantee> contributor_guarantees;
 		std::vector<query_contributor_edge> contributor_edges;
 		[[nodiscard]] result<void> validate() const;

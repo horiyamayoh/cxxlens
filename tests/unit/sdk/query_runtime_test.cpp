@@ -575,6 +575,8 @@ namespace
 				break;
 			auto row = (*next)->copy();
 			require(row.has_value(), "annotated result row copy failed");
+			require(row->validate().has_value(),
+					"query engine published a noncanonical annotated row");
 			output.push_back(std::move(*row));
 		}
 		return output;
@@ -1909,6 +1911,27 @@ namespace
 					aggregated->provenance.size() == 2U &&
 					aggregated->contributor_guarantees.size() == 2U && end && !*end,
 				"query scan duplicated semantic content or dropped occurrence metadata");
+		require(aggregated->validate().has_value(),
+				"cursor owned copy did not preserve a valid canonical row");
+		auto duplicate_guarantee = *aggregated;
+		duplicate_guarantee.contributor_guarantees.push_back(
+			duplicate_guarantee.contributor_guarantees.front());
+		const auto duplicate_rejected = duplicate_guarantee.validate();
+		require(!duplicate_rejected && duplicate_rejected.error().code == "sdk.query-row-invalid" &&
+					duplicate_rejected.error().field == "contributor_guarantees",
+				"duplicate contributor guarantee was not rejected at the public row boundary");
+		auto reordered_guarantees = *aggregated;
+		std::ranges::reverse(reordered_guarantees.contributor_guarantees);
+		require(reordered_guarantees.canonical_form() == aggregated->canonical_form() &&
+					!reordered_guarantees.validate(),
+				"guarantee insertion order changed identity or remained a second valid state");
+		const auto row_form = aggregated->canonical_form();
+		const auto guarantee_begin = row_form.find("\"contributor_guarantees\":[");
+		const auto guarantee_end = row_form.find("\"contributor_edges\":[", guarantee_begin);
+		require(guarantee_begin != std::string::npos && guarantee_end != std::string::npos &&
+					occurrences(row_form.substr(guarantee_begin, guarantee_end - guarantee_begin),
+								"\"approximation\"") == aggregated->contributor_guarantees.size(),
+				"cursor owned row and canonical guarantee cardinality diverged");
 
 		const auto row_for_approximation = [&](const std::string_view approximation)
 		{

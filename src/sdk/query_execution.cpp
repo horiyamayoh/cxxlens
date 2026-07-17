@@ -275,6 +275,22 @@ namespace cxxlens::sdk::query
 						 values.end());
 		}
 
+		[[nodiscard]] bool guarantees_are_canonical(const std::vector<claim_guarantee>& values)
+		{
+			return std::ranges::is_sorted(
+					   values,
+					   [](const claim_guarantee& left, const claim_guarantee& right)
+					   {
+						   return guarantee_key(left) < guarantee_key(right);
+					   }) &&
+				std::ranges::adjacent_find(
+					values,
+					[](const claim_guarantee& left, const claim_guarantee& right)
+					{
+						return guarantee_key(left) == guarantee_key(right);
+					}) == values.end();
+		}
+
 		[[nodiscard]] std::string producer_key(const claim_producer& value)
 		{
 			return value.id + "\n" + value.semantic_contract;
@@ -1511,6 +1527,8 @@ namespace cxxlens::sdk::query
 		for (const auto& guarantee : contributor_guarantees)
 			if (auto valid = guarantee.validate(); !valid)
 				return unexpected(std::move(valid.error()));
+		if (!guarantees_are_canonical(contributor_guarantees))
+			return unexpected(query_error("sdk.query-row-invalid", "contributor_guarantees"));
 		for (const auto& edge : contributor_edges)
 			if (edge.interpretation != interpretation)
 				return unexpected(query_error("sdk.query-row-invalid", "contributor_edges"));

@@ -18,7 +18,7 @@ required:
   - qualification
 properties:
   schema: {const: cxxlens.query-runtime-contract.v1}
-  document_version: {const: 1.17.0}
+  document_version: {const: 1.18.0}
   maturity: {const: implemented}
   authority: {$ref: '#/$defs/nonempty_object'}
   compatibility: {$ref: '#/$defs/nonempty_object'}

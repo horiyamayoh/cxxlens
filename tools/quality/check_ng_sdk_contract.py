@@ -675,6 +675,7 @@ def validate_query_runtime_implementation(root: pathlib.Path) -> None:
         "inputs_complete",
         "explain_physical",
         "contributor_guarantees",
+        "guarantees_are_canonical",
         "fragment_set_digest",
     ):
         if marker not in source:
@@ -706,6 +707,8 @@ def validate_query_runtime_implementation(root: pathlib.Path) -> None:
         "physical index leaked into logical IR",
         "cancellation did not return deterministic sealed partial result",
         "successful execution was confused with complete/closed input",
+        "duplicate contributor guarantee was not rejected at the public row boundary",
+        "cursor owned row and canonical guarantee cardinality diverged",
     ):
         if marker not in test:
             fail(f"query runtime acceptance marker is missing: {marker}")

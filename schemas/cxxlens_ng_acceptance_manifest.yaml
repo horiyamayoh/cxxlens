@@ -60,9 +60,9 @@ entries:
     summary: Immutable publication and memory/SQLite semantic parity.
   - id: gate.g3
     status: implemented
-    owner_issue: '#142'
+    owner_issue: '#143'
     profile: NG0
-    contract_issue: '#142'
+    contract_issue: '#143'
     depends_on: [gate.g2]
     evidence:
       - tests/unit/sdk/query_runtime_test.cpp
@@ -90,7 +90,8 @@ entries:
       - docs/design/adr/0059-query-row-guarantee-canonical-projection.md
       - docs/design/adr/0060-query-summary-guarantee-fragment-algebra.md
       - docs/design/adr/0073-query-scan-alias-uniqueness.md
-    summary: Logical query with unique scan occurrences, lossless self-joins, budgets, explicit partiality, and flagship recipe absence bound to applicable closed-world proof.
+      - docs/design/adr/0074-query-row-guarantee-set-validation.md
+    summary: Logical query with unique scan occurrences, canonical lossless row guarantee sets, budgets, explicit partiality, and flagship recipe absence bound to applicable closed-world proof.
   - id: gate.g4
     status: implemented
     owner_issue: '#140'

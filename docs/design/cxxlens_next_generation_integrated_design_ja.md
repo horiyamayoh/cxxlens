@@ -2996,6 +2996,11 @@ canonical JSON key で sort/deduplicate する。result-wide `summary_guarantee`
 代用にしない。cursor で観測できる guarantee、canonical export、unordered row tie-break、backend parity comparison は同じ
 row field set を使用する。
 
+Issue #143 / ADR 0074 により `contributor_guarantees` は public `annotated_row` 自身でも nonempty canonical
+sorted-unique set でなければならない。`validate()` は各 guarantee の内容検証後に canonical JSON key の順序と重複を直接検証し、
+違反を `sdk.query-row-invalid` / `contributor_guarantees` で拒否する。cursor view、owned copy、canonical JSON、result schema は同じ
+件数と内容だけを観測し、canonical form の silent dedup で invalid public state を隠してはならない。
+
 Issue #117 / ADR 0060 により `summary_guarantee()` は最終 result row に寄与した semantic fragment だけを対象に accepted
 approximation component meet を行う。filter / project / condition / interpretation restriction は surviving fragment を保持し、join、
 semi join、union、distinct は row contributor set を合成する。empty result の source annotation fallback は Issue #135 で廃止され、

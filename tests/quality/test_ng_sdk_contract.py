@@ -172,6 +172,12 @@ class NgSdkContractTest(unittest.TestCase):
         missing_edge.pop("contributor_edges")
         with self.assertRaises(jsonschema.ValidationError):
             jsonschema.Draft202012Validator(row_schema).validate(missing_edge)
+        duplicate = copy.deepcopy(row)
+        duplicate["contributor_guarantees"].append(
+            copy.deepcopy(duplicate["contributor_guarantees"][0])
+        )
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(row_schema).validate(duplicate)
 
     def test_query_summary_requires_lossless_fragment_index(self) -> None:
         schema = load_yaml(

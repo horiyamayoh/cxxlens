@@ -1,12 +1,12 @@
 schema: cxxlens.query-runtime-contract.v1
-document_version: 1.17.0
+document_version: 1.18.0
 maturity: implemented
 authority:
   logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
   guarantee_contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
   snapshot_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
-  decision_adr: docs/design/adr/0066-query-zero-row-proof-summary.md
-  owner_issue: '#135'
+  decision_adr: docs/design/adr/0074-query-row-guarantee-set-validation.md
+  owner_issue: '#143'
   owner: steward.ng-query-runtime
 compatibility:
   version_axis: query-runtime-result
@@ -295,6 +295,8 @@ result:
     unordered_query: canonical-annotated-row-order
     row_projection:
       contributor_guarantees: canonical-structured-set
+      contributor_guarantee_validation: reject-noncanonical-order-or-duplicate
+      public_surface_cardinality: cursor-owned-copy-canonical-json-schema-identical
       contributor_edges: canonical-bound-claim-producer-provenance-guarantee-condition-interpretation-set
       independent_evidence_sets: derived-projections-only
       guarantee_fields: [approximation, scope, assumptions, verification_modalities]
