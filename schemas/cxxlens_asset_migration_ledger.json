@@ -1,5 +1,5 @@
 {
-  "asset_count": 284,
+  "asset_count": 285,
   "assets": [
     {
       "authority": "active",
@@ -669,6 +669,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0037-lossless-claim-evidence-occurrences.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0038-provider-runtime-protocol-state-validation.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1991,7 +1998,7 @@
     }
   ],
   "classifications": {
-    "active": 248,
+    "active": 249,
     "archived": 35,
     "generated": 1
   },

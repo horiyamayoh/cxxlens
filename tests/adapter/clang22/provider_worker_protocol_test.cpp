@@ -5,6 +5,9 @@
 #include <span>
 #include <string>
 
+#include <cxxlens/relations/cc_call_direct_target.hpp>
+#include <cxxlens/relations/cc_call_site.hpp>
+#include <cxxlens/relations/cc_entity.hpp>
 #include <cxxlens/sdk.hpp>
 
 namespace
@@ -94,6 +97,11 @@ int main(const int argument_count, const char* const* arguments)
 	};
 	process_task_request request;
 	request.selection = std::move(selection);
+	request.output_descriptors = {
+		cxxlens::cc::relations::entity::descriptor(),
+		cxxlens::cc::relations::call_site::descriptor(),
+		cxxlens::cc::relations::call_direct_target::descriptor(),
+	};
 	request.task_id = "clang22-malformed-input";
 	request.payload = {std::byte{0x01}, std::byte{0x02}};
 	request.task_input_digest = content_digest(request.payload);

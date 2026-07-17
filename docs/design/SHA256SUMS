@@ -1,6 +1,6 @@
 981ff1fba0f2b3f907e10ba33d2b335cf7dbf4ef7e80429bc2ae6fb9ccaa3836  README.md
-b28a1d1d4e7888aefc29d2e5882d2fef5cc1acfa142adc664f9201d1ff081ece  cxxlens_next_generation_integrated_design_ja.md
-aece4019c4cd3e4da7e487e2c35e979d2d591895ade31b702cd3537a8d482c8f  adr/README.md
+8aa97ad5d0bca91604f9742a362a1158fea89418a951851b986430f7493eca5b  cxxlens_next_generation_integrated_design_ja.md
+882e4832e2b26f082286ab73a0dff39d2825be0b39c81d1f6479c42279a3a659  adr/README.md
 d24534d4936debcc3bad96a6acdec1056c3c437fa7b526c76bb3f13c8b7c5423  adr/0002-semantic-relation-platform.md
 04172ac98fa6b9743cc283d8da063243e95632a9d4df0418df4e7af1d49096b9  adr/0003-versioned-relation-kernel.md
 7504c5feb1e8b71f54a8995d325badfa3a7bcb3f5aa2d45c4e9341cd8aebc7b3  adr/0005-product-boundary-release-compatibility.md
@@ -39,8 +39,8 @@ f66b1748934cd10248eb72a385f351601cf8b153024efa84c649cb3b7459a99b  ../../schemas/
 ef57bf93af173c83710d36523a0574bddd7b567fc14e93f1091ee373c678c785  ../../schemas/cxxlens_ng_store_conformance_vectors.yaml
 f1c021050e9ef2402655adb635da8e6243448c92c055c948b98350b1f77090c7  ../../schemas/cxxlens_ng_store_conformance_vectors.schema.yaml
 8b7b767b17f794fc2d3f9e49f17ebffe512c2bdbb56cff5a0a2905c6c3090d77  ../../schemas/cxxlens_ng_store_conformance_report.schema.yaml
-6047be7c9d66ea8d0b3753fb6e544cf3e12f60b1c6b0aa6c15f66737a9ecd326  ../../schemas/cxxlens_ng_provider_protocol.yaml
-27d82f6acf9023d7d9433ec7b809d456bc4f24d1d91a57644fe95c3a726ee346  ../../schemas/cxxlens_ng_provider_protocol.schema.yaml
+2082d423a729d34edfa680e56db84493913447ceed4bd87e4143aec439dda375  ../../schemas/cxxlens_ng_provider_protocol.yaml
+cef7ca741abc8403ddded099cba4333dd6ee2e1709ef0c9bc2c173956202eeb1  ../../schemas/cxxlens_ng_provider_protocol.schema.yaml
 7987dd7f8ec540c7f82c6e64157c424525f0b7ce47a71a4820c90e145aed55d1  ../../schemas/cxxlens_ng_provider_manifest.schema.yaml
 b09bcf83383df929345ca0ad3b65722e642f1d1e21aad2efd8aa8c1f72042a99  ../../schemas/cxxlens_ng_provider_task.schema.yaml
 3247cfc421b708250818f35bd4503e48bbb21294445daf00e780cdfd6eaddf7b  ../../schemas/cxxlens_ng_provider_conformance_vectors.yaml
@@ -48,12 +48,12 @@ b09bcf83383df929345ca0ad3b65722e642f1d1e21aad2efd8aa8c1f72042a99  ../../schemas/
 e7a3392e2d489e7746dabf80ee8c08c986bb096dcd43c9cc8da601d123867636  ../../schemas/cxxlens_ng_provider_conformance_report.schema.yaml
 49cc8f4ddf61a916385e53ee41460627a3f4959ebf7228e9ee18dcffa8d0b52b  ../../schemas/cxxlens_ng_provider_fuzz_corpus.yaml
 8edcaa0832ce6a74dbf94ac931f7e4dcb46e2c85b1bc5b5d2218823daec91c98  ../../schemas/cxxlens_ng_provider_fuzz_corpus.schema.yaml
-37ddc3d54fcafc4b6915494b3f829b1ed8c1a627db0e48125cf0e887ea142ac5  ../../schemas/cxxlens_ng_provider_runtime_contract.yaml
-7b04c1b3365f4ff49f2b3e35c6577f75c823418491c86d436b75cab190dcee05  ../../schemas/cxxlens_ng_provider_runtime_contract.schema.yaml
+c9b770cfbdc55deff4fa86fbbb16cee696b9818ba0616f988275f897dbc9ead3  ../../schemas/cxxlens_ng_provider_runtime_contract.yaml
+5f214f85833a1322ed6e7ed396b8fbc9e4da0ee92fab0bd68758246a06ac35c3  ../../schemas/cxxlens_ng_provider_runtime_contract.schema.yaml
 5bbc6b04075f77548e12d401cf9b5005d2326bcc63e19bf13e5e67930459eb06  ../../schemas/cxxlens_ng_provider_execution_report.schema.yaml
-22b9098458506f344bf514ad819efab0409eb5733d84403dd8f52dc56081ddaa  ../../schemas/cxxlens_ng_public_api_catalog.yaml
+918ab3a41b0dd684762dc6b482193a2fecb79a93fc51792066ed5c38413dcc90  ../../schemas/cxxlens_ng_public_api_catalog.yaml
 a0599e26cfea7572064308e6ac413fc237c4d8562a155354c10717b708613ece  ../../schemas/cxxlens_ng_public_api_catalog.schema.yaml
-2a4eb0dc0d35d890a5ba0d65941bdc2f89c4e29e0c0189b2804946a995ba67f5  ../../schemas/cxxlens_ng_acceptance_manifest.yaml
+a0ac50c0aa35767275668327e17fc2359f5a376f60aec487b04da0f73efa2717  ../../schemas/cxxlens_ng_acceptance_manifest.yaml
 e8bc1adc409bbac29f762ea134788537fbe7b28dd952e4e669a17ea167ba113b  ../../schemas/cxxlens_ng_acceptance_manifest.schema.yaml
 b2ccabe2056415b9deff3dec5c0748426c5a6728f06aa61be64bc400c6da620b  ../../schemas/cxxlens_ng_foundation_completion_manifest.yaml
 9463f1419cfcde6454b44952154eb6cdaac9369a9692a13b09b17c94e36c37e0  ../../schemas/cxxlens_ng_foundation_completion_manifest.schema.yaml
@@ -74,4 +74,4 @@ f020e896c84ef3336039114ebb4a02a56cb0c630690e11716b08f7647d4241d7  ../../schemas/
 0f710f1973b5eb195df7d41fe79bd2f85bd59f983c4dee77a760cfcb2ce6ef06  ../../schemas/cxxlens_ng_compatibility_request.schema.yaml
 b5e5a4b2af63453d2fe9ef63fd000cbb8cfb725d2364fa2fdc3940c21fc44ed2  ../../schemas/cxxlens_ng_compatibility_report.schema.yaml
 66a139a97e7bc4260683ba2d94b96d62db19d69273399817cc6bbda18292fb9e  ../../schemas/cxxlens_asset_migration_policy.yaml
-6f1b906391558b4b871718436872f3f69fa3c307d2c9fb128e10aafe1ce216e1  ../../schemas/cxxlens_asset_migration_ledger.json
+593fbac998e3fcc341d8d3d07d35d705b6c985b55c026ba98df5d339fe37fcb3  ../../schemas/cxxlens_asset_migration_ledger.json

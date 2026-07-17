@@ -11,6 +11,7 @@ required:
   - profiles
   - wire
   - message_types
+  - state_machine_validation
   - handshake
   - columnar_chunks
   - flow_control
@@ -23,7 +24,7 @@ required:
   - backend_authority
 properties:
   schema: {const: cxxlens.provider-protocol.v1}
-  document_version: {const: 1.0.0}
+  document_version: {const: 1.1.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -33,8 +34,8 @@ properties:
       design:
         const: docs/design/cxxlens_next_generation_integrated_design_ja.md#18-provider-protocol
       index: {const: docs/design/catalogs/README.md}
-      decision_adr: {const: docs/design/adr/0010-provider-wire-streaming-atomicity.md}
-      owner_issue: {const: '#64'}
+      decision_adr: {const: docs/design/adr/0038-provider-runtime-protocol-state-validation.md}
+      owner_issue: {const: '#95'}
       owner: {const: steward.ng-provider-protocol}
   compatibility:
     const:
@@ -154,6 +155,10 @@ properties:
           - {id: 23, name: heartbeat, direction: bidirectional, profile: NG1}
       unknown_required: {const: reject}
       unknown_optional: {const: skip-and-account}
+  state_machine_validation:
+    type: object
+    minProperties: 1
+    additionalProperties: true
   handshake:
     const:
       hello_required:
@@ -280,6 +285,11 @@ properties:
         - provider.schema-invalid
         - provider.hard-reference-missing
         - provider.coverage-incomplete
+        - provider.protocol-state-invalid
+        - provider.credit-exceeded
+        - provider.task-binding-mismatch
+        - provider.batch-invalid
+        - provider.relation-incompatible
       current_dependency_group: rollback
       unsealed_groups: rollback
       prior_adopted_groups: retain-only-if-predeclared-partial-policy

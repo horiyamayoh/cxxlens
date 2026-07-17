@@ -957,14 +957,17 @@ namespace cxxlens::detail::clang22
 		const auto frame_credit = unsigned_field(*credit, first_credit_separator);
 		if (!byte_credit || !frame_credit || *byte_credit == 0U || *frame_credit == 0U)
 			return EXIT_FAILURE;
-		if (!std::string_view{*hello}.starts_with(std::string{provider_id} + "|1.0.0|") ||
-			std::ranges::count(std::string_view{*hello}, '|') != 3)
+		if (!std::string_view{*hello}.contains(std::string{R"("provider_id":")"} +
+											   std::string{provider_id} + "\"") ||
+			!std::string_view{*hello}.contains(R"("provider_version":"1.0.0")"))
 			return EXIT_FAILURE;
 
 		stream_sink sink{output};
 		sdk::provider::protocol_writer writer{sink};
 		writer.grant_credit({*byte_credit, *frame_credit});
 		if (!writer.send(message_type::hello, frames->at(0U).control))
+			return EXIT_FAILURE;
+		if (!writer.send(message_type::schema_negotiate, frames->at(1U).control))
 			return EXIT_FAILURE;
 
 		auto request = decode_task_input(frames->at(2U).payload);

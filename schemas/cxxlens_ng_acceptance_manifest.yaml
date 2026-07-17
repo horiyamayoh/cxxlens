@@ -81,14 +81,15 @@ entries:
     summary: Logical query, standard/custom join, budgets, explicit partiality, and flagship recipe.
   - id: gate.g4
     status: implemented
-    owner_issue: '#70'
+    owner_issue: '#95'
     profile: NG0
-    contract_issue: '#70'
+    contract_issue: '#95'
     depends_on: [gate.g1]
     evidence:
       - tests/unit/sdk/provider_runtime_test.cpp
       - tests/adapter/clang22/provider_worker_protocol_test.cpp
       - tests/adapter/clang22/provider_normalizer_test.cpp
+      - docs/design/adr/0038-provider-runtime-protocol-state-validation.md
     summary: Provider protocol, Clang 22 worker, sandbox, crash, and malformed output.
   - id: gate.g5
     status: deferred

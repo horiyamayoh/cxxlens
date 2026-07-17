@@ -1,11 +1,11 @@
 schema: cxxlens.provider-protocol.v1
-document_version: 1.0.0
+document_version: 1.1.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#18-provider-protocol
   index: docs/design/catalogs/README.md
-  decision_adr: docs/design/adr/0010-provider-wire-streaming-atomicity.md
-  owner_issue: '#64'
+  decision_adr: docs/design/adr/0038-provider-runtime-protocol-state-validation.md
+  owner_issue: '#95'
   owner: steward.ng-provider-protocol
 compatibility:
   version_axis: provider-protocol
@@ -100,6 +100,29 @@ message_types:
     - {id: 23, name: heartbeat, direction: bidirectional, profile: NG1}
   unknown_required: reject
   unknown_optional: skip-and-account
+state_machine_validation:
+  validator_bypass: forbidden
+  initial_order: [hello, schema_negotiate, task_accepted]
+  exact_bindings:
+    hello: [canonical-provider-manifest-v1]
+    task_accepted: [provider-id, provider-version, task-id]
+    batch_begin: [relation-descriptor-id, relation-descriptor-digest, dependency-group-id, atomic-output-group-id, batch-id]
+    task_complete: [task-id, complete]
+  success_preconditions:
+    - all-output-within-host-credit
+    - all-message-directions-valid
+    - every-batch-schema-valid-and-sealed
+    - every-batch-count-and-digest-valid
+    - coverage-unresolved-progress-complete
+    - closure-empty-or-independently-validated
+    - no-output-after-terminal
+  deterministic_rejections:
+    - provider.protocol-state-invalid
+    - provider.credit-exceeded
+    - provider.task-binding-mismatch
+    - provider.batch-invalid
+    - provider.relation-incompatible
+    - provider.coverage-incomplete
 handshake:
   hello_required:
     - provider_id
@@ -220,6 +243,11 @@ failures:
     - provider.schema-invalid
     - provider.hard-reference-missing
     - provider.coverage-incomplete
+    - provider.protocol-state-invalid
+    - provider.credit-exceeded
+    - provider.task-binding-mismatch
+    - provider.batch-invalid
+    - provider.relation-incompatible
   current_dependency_group: rollback
   unsealed_groups: rollback
   prior_adopted_groups: retain-only-if-predeclared-partial-policy

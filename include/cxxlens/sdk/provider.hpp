@@ -448,6 +448,8 @@ namespace cxxlens::sdk::provider
 	struct process_task_request
 	{
 		provider_selection selection;
+		/** Exact relation schemas authorized for provider output and batch validation. */
+		std::vector<relation_descriptor> output_descriptors;
 		std::string task_id;
 		std::vector<std::byte> payload;
 		std::string task_input_digest;
@@ -480,7 +482,12 @@ namespace cxxlens::sdk::provider
 		[[nodiscard]] std::string semantic_digest() const;
 	};
 
-	/** @brief Backend-independent host validator for one out-of-process provider task. */
+	/**
+	 * @brief Backend-independent typed protocol validator for one process-provider task.
+	 * @details Success requires negotiated identity/schema, exact task binding, granted credit,
+	 * authorized descriptor and row shape, sealed batch digests, complete side channels, and a
+	 * task-bound terminal. Invalid direction or state transitions fail closed.
+	 */
 	class process_provider_runtime
 	{
 	  public:

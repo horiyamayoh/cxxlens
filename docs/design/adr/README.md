@@ -37,6 +37,7 @@
 | [0035](0035-derived-basis-partition-membership.md) | derived basis partition membership |
 | [0036](0036-claim-stage-input-revalidation.md) | claim stage input revalidation |
 | [0037](0037-lossless-claim-evidence-occurrences.md) | lossless claim evidence occurrences |
+| [0038](0038-provider-runtime-protocol-state-validation.md) | typed process-provider protocol state validation |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

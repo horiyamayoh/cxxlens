@@ -1,10 +1,10 @@
 schema: cxxlens.provider-runtime-contract.v1
-document_version: 1.0.0
+document_version: 1.1.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#17-provider-model
-  decision_adr: docs/design/adr/0015-process-provider-runtime-clang22-normalizer.md
-  owner_issue: '#70'
+  decision_adr: docs/design/adr/0038-provider-runtime-protocol-state-validation.md
+  owner_issue: '#95'
   owner: steward.ng-provider-runtime
 dependencies:
   - schemas/cxxlens_ng_provider_protocol.yaml
@@ -76,6 +76,7 @@ protocol_session:
     - close
   provider_output:
     - hello
+    - schema_negotiate
     - task_accepted
     - batch_begin
     - column_chunk
@@ -84,6 +85,18 @@ protocol_session:
     - unresolved_chunk
     - progress
     - task_complete
+    - task_failed
+  typed_validation:
+    handshake: exact-identity-schema-feature-order
+    task_acceptance: exact-provider-version-task-id-binding
+    direction: reject-host-only-provider-output
+    credit: account-encoded-byte-and-frame-before-adoption
+    output_schema: request-exact-output-descriptor-id-and-digest
+    batch: dependency-atomic-batch-id-row-shape-count-and-rolling-digest
+    side_channels: coverage-unresolved-progress-complete
+    closure: empty-or-independently-validated
+    terminal: task-bound-and-all-groups-sealed
+    validator_bypass: forbidden
   sequence: contiguous-from-zero
   terminal_last: required
   output_after_terminal: reject
@@ -102,6 +115,12 @@ terminal:
     - provider.coverage-incomplete
     - provider.runtime-unavailable
     - provider.binary-identity-mismatch
+    - provider.protocol-state-invalid
+    - provider.credit-exceeded
+    - provider.task-binding-mismatch
+    - provider.batch-invalid
+    - provider.relation-incompatible
+    - provider.required-feature-missing
     - provider.frontend-request-invalid
     - security.sandbox-insufficient
   prior_published_snapshot: immutable
@@ -164,3 +183,4 @@ acceptance:
   - adjacent-provider-never-silent-fallback
   - insufficient-enforced-sandbox-is-unavailable
   - worker-native-sdk-provider-package-install-conformance
+  - process-transcript-typed-state-machine-and-logical-wire-parity

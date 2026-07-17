@@ -555,8 +555,9 @@ namespace cxxlens::sdk::provider
 		dependency_group_ = std::move(dependency_group);
 		atomic_output_group_ = std::move(atomic_output_group);
 		batch_id_ = std::move(batch_id);
-		const auto control = cbor_text(descriptor_.id + "|" + dependency_group_ + "|" +
-									   atomic_output_group_ + "|" + batch_id_);
+		const auto control =
+			cbor_text(descriptor_.id + "|" + descriptor_.descriptor_digest + "|" +
+					  dependency_group_ + "|" + atomic_output_group_ + "|" + batch_id_);
 		if (auto sent = writer_->send(message_type::batch_begin, control); !sent)
 			return sent;
 		rolling_digest_ =

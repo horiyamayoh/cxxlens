@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <limits>
+#include <map>
 #include <ranges>
 #include <set>
 #include <sstream>
@@ -32,9 +34,394 @@ namespace cxxlens::sdk::provider
 									});
 		}
 
+		[[nodiscard]] bool protocol_digest(const std::string_view value)
+		{
+			constexpr std::string_view semantic_prefix{"semantic-v2:"};
+			return canonical_digest(value) ||
+				(value.starts_with(semantic_prefix) &&
+				 canonical_digest(value.substr(semantic_prefix.size())));
+		}
+
 		[[nodiscard]] std::string json_string(const std::string_view value)
 		{
 			return cxxlens::sdk::detail::canonical_json_string(value);
+		}
+
+		[[nodiscard]] std::vector<std::string_view> split_fields(const std::string_view value,
+																 const char separator)
+		{
+			std::vector<std::string_view> output;
+			std::size_t begin{};
+			while (true)
+			{
+				const auto end = value.find(separator, begin);
+				output.push_back(value.substr(begin, end - begin));
+				if (end == std::string_view::npos)
+					return output;
+				begin = end + 1U;
+			}
+		}
+
+		[[nodiscard]] std::optional<std::uint64_t> unsigned_value(const std::string_view value)
+		{
+			std::uint64_t output{};
+			const auto parsed = std::from_chars(value.data(), value.data() + value.size(), output);
+			if (value.empty() || parsed.ec != std::errc{} ||
+				parsed.ptr != value.data() + value.size())
+				return std::nullopt;
+			return output;
+		}
+
+		[[nodiscard]] bool namespaced(const std::string_view value)
+		{
+			const auto separator = value.find('.');
+			return separator != std::string_view::npos && separator != 0U &&
+				separator + 1U < value.size();
+		}
+
+		[[nodiscard]] bool offered_relation(const manifest& value,
+											const std::string_view descriptor)
+		{
+			return std::ranges::any_of(value.offered_relations,
+									   [&](const std::string& offered)
+									   {
+										   if (offered == descriptor)
+											   return true;
+										   const auto version = offered.rfind('@');
+										   if (version == std::string::npos)
+											   return false;
+										   return descriptor ==
+											   offered.substr(0U, version) + ".v" +
+											   offered.substr(version + 1U);
+									   });
+		}
+
+		[[nodiscard]] const relation_descriptor*
+		output_descriptor(const process_task_request& request, const std::string_view id)
+		{
+			const auto found =
+				std::ranges::find(request.output_descriptors, id, &relation_descriptor::id);
+			return found == request.output_descriptors.end() ? nullptr : &*found;
+		}
+
+		[[nodiscard]] bool canonical_row_shape(const relation_descriptor& descriptor,
+											   const std::string_view payload)
+		{
+			constexpr std::string_view prefix{"{\"cells\":{"};
+			const auto suffix =
+				std::string{"},\"descriptor_id\":"} + json_string(descriptor.id) + "}";
+			if (!cxxlens::sdk::detail::valid_utf8(payload) || !payload.starts_with(prefix) ||
+				!payload.ends_with(suffix))
+				return false;
+			const auto cells =
+				payload.substr(prefix.size(), payload.size() - prefix.size() - suffix.size());
+			std::set<std::string, std::less<>> seen;
+			std::size_t position{};
+			while (position < cells.size())
+			{
+				if (cells[position] != '"')
+					return false;
+				const auto key_end = cells.find('"', position + 1U);
+				if (key_end == std::string_view::npos || key_end + 2U >= cells.size() ||
+					cells[key_end + 1U] != ':' || cells[key_end + 2U] != '{')
+					return false;
+				const std::string key{cells.substr(position + 1U, key_end - position - 1U)};
+				if (key.contains('\\') || !seen.insert(key).second)
+					return false;
+				auto column = descriptor.column(key);
+				if (!column)
+					return false;
+
+				bool quoted{};
+				bool escaped{};
+				std::size_t depth{};
+				std::size_t object_end = std::string_view::npos;
+				for (std::size_t index = key_end + 2U; index < cells.size(); ++index)
+				{
+					const auto byte = cells[index];
+					if (quoted)
+					{
+						if (escaped)
+							escaped = false;
+						else if (byte == '\\')
+							escaped = true;
+						else if (byte == '"')
+							quoted = false;
+						continue;
+					}
+					if (byte == '"')
+						quoted = true;
+					else if (byte == '{')
+						++depth;
+					else if (byte == '}' && (--depth == 0U))
+					{
+						object_end = index;
+						break;
+					}
+				}
+				if (object_end == std::string_view::npos)
+					return false;
+				const auto cell = cells.substr(key_end + 2U, object_end - key_end - 1U);
+				constexpr std::string_view state_prefix{R"({"state":")"};
+				constexpr std::string_view type_separator{R"(","type":)"};
+				const auto state_end = cell.find(type_separator, state_prefix.size());
+				if (!cell.starts_with(state_prefix) || state_end == std::string_view::npos)
+					return false;
+				const auto state =
+					cell.substr(state_prefix.size(), state_end - state_prefix.size());
+				if (state != "present" && state != "absent" && state != "unknown")
+					return false;
+				const auto typed_prefix = std::string{state_prefix} + std::string{state} +
+					std::string{type_separator} + json_string(column->type.canonical_name());
+				if (!cell.starts_with(typed_prefix) ||
+					(state == "present" && !cell.contains(R"(,"value":)")) ||
+					(state == "absent" &&
+					 (!column->type.optional || cell.size() != typed_prefix.size() + 1U)) ||
+					(state == "unknown" && !cell.contains(R"(,"unknown_reason":)")))
+					return false;
+				position = object_end + 1U;
+				if (position < cells.size())
+				{
+					if (cells[position] != ',')
+						return false;
+					++position;
+				}
+			}
+			return std::ranges::all_of(descriptor.columns,
+									   [&](const column_descriptor& column)
+									   {
+										   return !column.required || seen.contains(column.id);
+									   });
+		}
+
+		[[nodiscard]] result<std::string>
+		validate_provider_transcript(const process_task_request& request,
+									 const std::span<const frame> frames)
+		{
+			const auto fail = [](std::string code, std::string field, std::string detail = {})
+			{
+				return result<std::string>{cxxlens::sdk::unexpected(
+					runtime_error(std::move(code), std::move(field), std::move(detail)))};
+			};
+			std::uint64_t consumed_bytes{};
+			for (const auto& value : frames)
+			{
+				auto encoded = encode_frame(value, request.limits);
+				if (!encoded || consumed_bytes > request.output_credit.bytes ||
+					encoded->size() > request.output_credit.bytes - consumed_bytes)
+					return fail("provider.credit-exceeded", request.task_id, "bytes");
+				consumed_bytes += encoded->size();
+			}
+			if (frames.size() > request.output_credit.frames)
+				return fail("provider.credit-exceeded", request.task_id, "frames");
+
+			std::uint64_t expected_sequence{};
+			bool hello_seen{};
+			bool schema_seen{};
+			bool accepted{};
+			bool coverage_seen{};
+			bool unresolved_seen{};
+			bool progress_seen{};
+			bool terminal_seen{};
+			std::string terminal;
+			std::set<std::string, std::less<>> batches;
+			struct open_batch
+			{
+				const relation_descriptor* descriptor{};
+				std::string id;
+				std::uint64_t rows{};
+				std::string rolling_digest;
+			};
+			std::optional<open_batch> batch;
+			const auto& provider = request.selection.candidate.description;
+			const auto expected_hello = provider.canonical_json();
+			const auto expected_schema = std::string{"cxxlens.provider-protocol.v1|minor=0"};
+			const auto expected_accepted = provider.provider_id + "|" +
+				provider.provider_version.string() + "|" + request.task_id;
+
+			for (std::size_t index = 0U; index < frames.size(); ++index)
+			{
+				const auto& value = frames[index];
+				if (value.stream_id != 1U || value.sequence != expected_sequence++)
+					return fail("provider.protocol-state-invalid", request.task_id, "sequence");
+				if (terminal_seen ||
+					(index + 1U == frames.size() && value.type != message_type::task_complete &&
+					 value.type != message_type::task_failed))
+					return fail(
+						"provider.protocol-state-invalid", request.task_id, "terminal-order");
+				auto control = decode_control_text(value.control);
+				if (!control)
+					return fail("provider.protocol-state-invalid", request.task_id, "control");
+				switch (value.type)
+				{
+					case message_type::hello:
+						if (index != 0U || hello_seen || *control != expected_hello ||
+							!value.payload.empty())
+							return fail(
+								"provider.binary-identity-mismatch", request.task_id, "hello");
+						hello_seen = true;
+						break;
+					case message_type::schema_negotiate:
+						if (!hello_seen || schema_seen || accepted || *control != expected_schema ||
+							!value.payload.empty())
+							return fail(
+								"provider.protocol-state-invalid", request.task_id, "schema");
+						schema_seen = true;
+						break;
+					case message_type::task_accepted:
+						if (!schema_seen || accepted || *control != expected_accepted ||
+							!value.payload.empty())
+							return fail(
+								"provider.task-binding-mismatch", request.task_id, "accepted");
+						accepted = true;
+						break;
+					case message_type::batch_begin:
+					{
+						const auto fields = split_fields(*control, '|');
+						if (!accepted || batch || fields.size() != 5U ||
+							std::ranges::any_of(fields,
+												[](const std::string_view field)
+												{
+													return field.empty();
+												}) ||
+							!protocol_digest(fields[1U]) || !value.payload.empty() ||
+							!batches.insert(std::string{fields[4U]}).second)
+							return fail("provider.batch-invalid", request.task_id, "begin");
+						if (!offered_relation(provider, fields[0U]))
+							return fail(
+								"provider.relation-incompatible", std::string{fields[0U]}, "offer");
+						const auto* descriptor = output_descriptor(request, fields[0U]);
+						if (descriptor == nullptr || descriptor->descriptor_digest != fields[1U])
+							return fail("provider.relation-incompatible",
+										std::string{fields[0U]},
+										"descriptor-digest");
+						auto initial = semantic_digest("cxxlens.provider-batch.v1", fields[1U]);
+						if (!initial)
+							return fail("provider.batch-invalid", request.task_id, "digest");
+						batch = open_batch{
+							descriptor, std::string{fields[4U]}, 0U, std::move(*initial)};
+						break;
+					}
+					case message_type::column_chunk:
+					{
+						const auto fields = split_fields(*control, '|');
+						const auto ordinal =
+							fields.size() == 3U ? unsigned_value(fields[2U]) : std::nullopt;
+						const std::string payload{
+							reinterpret_cast<const char*>(value.payload.data()),
+							value.payload.size()};
+						if (!batch || fields.size() != 3U || fields[0U] != batch->id ||
+							fields[1U] != "row" || !ordinal || *ordinal != batch->rows ||
+							value.payload.empty() ||
+							!canonical_row_shape(*batch->descriptor, payload))
+							return fail("provider.batch-invalid", request.task_id, "column");
+						auto rolling = semantic_digest("cxxlens.provider-batch.v1",
+													   batch->rolling_digest + "\n" + payload);
+						if (!rolling)
+							return fail("provider.batch-invalid", request.task_id, "digest");
+						batch->rolling_digest = std::move(*rolling);
+						++batch->rows;
+						break;
+					}
+					case message_type::batch_end:
+					{
+						const auto fields = split_fields(*control, '|');
+						const auto rows =
+							fields.size() == 3U ? unsigned_value(fields[1U]) : std::nullopt;
+						if (!batch || fields.size() != 3U || fields[0U] != batch->id || !rows ||
+							*rows != batch->rows || fields[2U] != batch->rolling_digest ||
+							!value.payload.empty())
+							return fail("provider.batch-invalid", request.task_id, "end");
+						batch.reset();
+						break;
+					}
+					case message_type::coverage_chunk:
+					{
+						if (!accepted || batch || coverage_seen || !value.payload.empty())
+							return fail(
+								"provider.protocol-state-invalid", request.task_id, "coverage");
+						coverage_seen = true;
+						bool task_covered{};
+						std::set<std::pair<std::string, std::string>> seen;
+						for (const auto line : split_fields(*control, '\n'))
+						{
+							const auto fields = split_fields(line, '|');
+							static const std::set<std::string_view> states{
+								"covered", "excluded", "failed", "not_applicable", "unresolved"};
+							if (fields.size() != 4U || fields[0U].empty() || fields[1U].empty() ||
+								!states.contains(fields[2U]) ||
+								!seen.emplace(fields[0U], fields[1U]).second)
+								return fail(
+									"provider.coverage-incomplete", request.task_id, "coverage");
+							task_covered = task_covered ||
+								(fields[0U] == "task" && fields[1U] == request.task_id &&
+								 fields[2U] == "covered");
+						}
+						if (!task_covered)
+							return fail("provider.coverage-incomplete", request.task_id, "task");
+						break;
+					}
+					case message_type::unresolved_chunk:
+					case message_type::progress:
+					{
+						bool& seen = value.type == message_type::unresolved_chunk ? unresolved_seen
+																				  : progress_seen;
+						if (!accepted || batch || seen || !value.payload.empty())
+							return fail(
+								"provider.protocol-state-invalid", request.task_id, "side-channel");
+						seen = true;
+						if (!control->empty())
+							for (const auto line : split_fields(*control, '\n'))
+							{
+								const auto fields = split_fields(line, '|');
+								if (fields.size() != 3U || !namespaced(fields[0U]) ||
+									fields[1U].empty())
+									return fail("provider.protocol-state-invalid",
+												request.task_id,
+												"side-channel-value");
+							}
+						break;
+					}
+					case message_type::task_complete:
+						if (!accepted || batch || !coverage_seen || !unresolved_seen ||
+							!progress_seen || *control != request.task_id + "|complete" ||
+							!value.payload.empty())
+							return fail(
+								"provider.protocol-state-invalid", request.task_id, "complete");
+						terminal = "provider.success";
+						terminal_seen = true;
+						break;
+					case message_type::task_failed:
+					{
+						const auto fields = split_fields(*control, '|');
+						if (!schema_seen || fields.size() < 2U || !namespaced(fields[0U]) ||
+							!value.payload.empty())
+							return fail(
+								"provider.protocol-state-invalid", request.task_id, "failed");
+						terminal = std::string{fields[0U]};
+						terminal_seen = true;
+						break;
+					}
+					case message_type::hello_ack:
+					case message_type::open_task:
+					case message_type::input_descriptor:
+					case message_type::input_chunk:
+					case message_type::credit:
+					case message_type::batch_ack:
+					case message_type::batch_reject:
+					case message_type::cancel:
+						return fail(
+							"provider.protocol-state-invalid", request.task_id, "direction");
+					case message_type::closure_candidate:
+					case message_type::resume:
+					case message_type::close:
+						return fail(
+							"provider.protocol-state-invalid", request.task_id, "unsupported");
+				}
+			}
+			if (!hello_seen || !schema_seen || !terminal_seen)
+				return fail("provider.truncated-stream", request.task_id, "state");
+			return terminal;
 		}
 
 		template <std::unsigned_integral T>
@@ -74,13 +461,7 @@ namespace cxxlens::sdk::provider
 		{
 			const auto& manifest = request.selection.candidate.description;
 			const std::array values{
-				frame{message_type::hello_ack,
-					  1U,
-					  0U,
-					  cbor_text(manifest.provider_id + "|" + manifest.provider_version.string() +
-								"|" + manifest.provider_binary_digest + "|" +
-								manifest.provider_semantic_contract_digest),
-					  {}},
+				frame{message_type::hello_ack, 1U, 0U, cbor_text(manifest.canonical_json()), {}},
 				frame{message_type::schema_negotiate,
 					  1U,
 					  1U,
@@ -248,6 +629,29 @@ namespace cxxlens::sdk::provider
 				runtime_error("provider.task-invalid", request.task_id));
 		if (auto valid = request.selection.candidate.description.validate(); !valid)
 			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		static const std::set<std::string, std::less<>> supported_features{"credit-backpressure"};
+		const auto& protocol = request.selection.candidate.description.protocol;
+		if (protocol.minimum_minor > 0U ||
+			std::ranges::any_of(protocol.required_features,
+								[&](const std::string& feature)
+								{
+									return !supported_features.contains(feature);
+								}))
+			return cxxlens::sdk::unexpected(
+				runtime_error("provider.required-feature-missing", "protocol"));
+		if (request.output_descriptors.empty())
+			return cxxlens::sdk::unexpected(
+				runtime_error("provider.task-invalid", "output_descriptors"));
+		std::set<std::string, std::less<>> output_descriptor_ids;
+		for (const auto& descriptor : request.output_descriptors)
+		{
+			if (auto valid = descriptor.validate(); !valid)
+				return cxxlens::sdk::unexpected(std::move(valid.error()));
+			if (!output_descriptor_ids.insert(descriptor.id).second ||
+				!offered_relation(request.selection.candidate.description, descriptor.id))
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.relation-incompatible", descriptor.id, "output-descriptor"));
+		}
 		if (auto valid = request.sandbox.validate(); !valid)
 			return cxxlens::sdk::unexpected(std::move(valid.error()));
 		if (request.budget.wall_ms == 0U || request.budget.cpu_ms == 0U ||
@@ -304,49 +708,21 @@ namespace cxxlens::sdk::provider
 				{frames.error().code, request.task_id, frames.error().field});
 			return report;
 		}
-		std::uint64_t expected_sequence{};
-		bool terminal_seen{};
-		std::string terminal;
-		for (std::size_t index = 0U; index < frames->size(); ++index)
+		auto terminal = validate_provider_transcript(request, *frames);
+		if (!terminal)
 		{
-			const auto& value = (*frames)[index];
-			if (value.stream_id != 1U || value.sequence != expected_sequence++)
-				return transport_failure_report(
-					request, std::move(output), "provider.malformed-frame");
-			if (terminal_seen)
-				return transport_failure_report(
-					request, std::move(output), "provider.malformed-frame");
-			if (value.type == message_type::task_complete)
-			{
-				terminal = "provider.success";
-				terminal_seen = true;
-			}
-			else if (value.type == message_type::task_failed)
-			{
-				auto decoded = decode_control_text(value.control);
-				terminal = decoded && decoded->starts_with("provider.")
-					? decoded->substr(0U, decoded->find('|'))
-					: "provider.schema-invalid";
-				terminal_seen = true;
-			}
-			if (terminal_seen && index + 1U != frames->size())
-				return transport_failure_report(
-					request, std::move(output), "provider.malformed-frame");
+			auto validation_error = std::move(terminal.error());
+			auto report =
+				transport_failure_report(request, std::move(output), validation_error.code);
+			report.frames = std::move(*frames);
+			report.diagnostics.push_back(
+				{validation_error.code, validation_error.field, validation_error.detail});
+			return report;
 		}
-		if (frames->front().type != message_type::hello || !terminal_seen)
-			return transport_failure_report(
-				request, std::move(output), "provider.truncated-stream");
-		auto hello = decode_control_text(frames->front().control);
 		const auto& manifest = request.selection.candidate.description;
-		const auto expected_hello = manifest.provider_id + "|" +
-			manifest.provider_version.string() + "|" + manifest.provider_binary_digest + "|" +
-			manifest.provider_semantic_contract_digest;
-		if (!hello || *hello != expected_hello)
-			return transport_failure_report(
-				request, std::move(output), "provider.binary-identity-mismatch");
 
 		process_execution_report report;
-		report.terminal = std::move(terminal);
+		report.terminal = std::move(*terminal);
 		report.provider = manifest;
 		report.task_input_digest = request.task_input_digest;
 		report.normalized_invocation_digest = request.normalized_invocation_digest;

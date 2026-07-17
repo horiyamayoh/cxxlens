@@ -10,6 +10,7 @@
 #include <string_view>
 #include <vector>
 
+#include <cxxlens/relations/company_lock_acquire.hpp>
 #include <cxxlens/sdk.hpp>
 
 namespace
@@ -32,6 +33,74 @@ namespace
 			std::exit(1);
 		}
 	}
+
+	[[nodiscard]] detached_row protocol_test_row()
+	{
+		using relation = cxxlens::company::relations::lock_acquire;
+		relation::builder builder;
+		require(builder
+					.set<relation::acquire>(
+						detached_cell::typed("company_lock_acquire_id", "lock-acquire:1"))
+					.has_value(),
+				"protocol row acquire setup failed");
+		require(builder.set<relation::lock>(detached_cell::typed("company_lock_id", "lock:1"))
+					.has_value(),
+				"protocol row lock setup failed");
+		require(builder.set<relation::source>(detached_cell::typed("source_span_id", "span:1"))
+					.has_value(),
+				"protocol row source setup failed");
+		require(builder
+					.set<relation::mode>(
+						detached_cell{{scalar_kind::open_symbol, "company.lock-mode/1", false},
+									  cell_state::present,
+									  scalar_value{std::string{"exclusive"}},
+									  std::nullopt})
+					.has_value(),
+				"protocol row mode setup failed");
+		require(builder.set<relation::ordinal>(detached_cell::unsigned_integer(0U)).has_value(),
+				"protocol row ordinal setup failed");
+		auto row = std::move(builder).finish();
+		require(row.has_value(), "protocol row validation failed");
+		return std::move(*row);
+	}
+
+	class transcript_sink final : public frame_sink
+	{
+	  public:
+		result<void> write(const std::span<const std::byte> bytes) override
+		{
+			transcript.insert(transcript.end(), bytes.begin(), bytes.end());
+			return {};
+		}
+
+		std::vector<std::byte> transcript;
+	};
+
+	class parity_provider final : public portable_provider
+	{
+	  public:
+		[[nodiscard]] std::string_view id() const noexcept override
+		{
+			return "company.test.process-provider";
+		}
+		[[nodiscard]] semantic_version version() const noexcept override
+		{
+			return {1U, 0U, 0U};
+		}
+		result<void> run(const cxxlens::sdk::provider::task& task_value,
+						 cxxlens::sdk::provider::context& context) override
+		{
+			auto output = context.relation(cxxlens::company::relations::lock_acquire::descriptor());
+			if (auto begun = output.begin("dependency-1", "atomic-1", "batch-1"); !begun)
+				return begun;
+			if (auto pushed = output.push(protocol_test_row()); !pushed)
+				return pushed;
+			if (auto ended = output.end(); !ended)
+				return ended;
+			context.coverage().request("task", task_value.task_id);
+			return context.coverage().classify({"task", task_value.task_id, "covered", {}});
+		}
+	};
 
 	[[nodiscard]] std::string executable_digest(const std::string& executable)
 	{
@@ -177,6 +246,7 @@ namespace
 	{
 		process_task_request request;
 		request.selection = std::move(selection);
+		request.output_descriptors = {cxxlens::company::relations::lock_acquire::descriptor()};
 		request.task_id = "task-1";
 		request.payload = {std::byte{0x01}, std::byte{0x02}, std::byte{0x03}};
 		request.task_input_digest = content_digest(request.payload);
@@ -253,10 +323,17 @@ namespace
 			auto report = runtime.execute(request);
 			require(report && report->succeeded() &&
 						report->frames.front().type == message_type::hello &&
+						report->frames.size() == 10U &&
+						report->frames.at(1U).type == message_type::schema_negotiate &&
+						report->frames.at(2U).type == message_type::task_accepted &&
+						report->frames.at(3U).type == message_type::batch_begin &&
+						report->frames.at(5U).type == message_type::batch_end &&
+						report->frames.at(6U).type == message_type::coverage_chunk &&
 						report->frames.back().type == message_type::task_complete &&
 						report->sandbox.achieved == sandbox_assurance::enforced &&
 						report->canonical_form().contains("cxxlens.provider-execution-report.v1"),
-					std::string{"successful process provider failed: "} + mode);
+					std::string{"successful process provider failed: "} + mode +
+						" terminal=" + (report ? report->terminal : report.error().code));
 		}
 
 		auto failed = runtime.execute(task(select(executable, "failed")));
@@ -295,6 +372,61 @@ namespace
 		auto identity = runtime.execute(task(select(executable, "wrong-identity")));
 		require(identity && identity->terminal == "provider.binary-identity-mismatch",
 				"worker identity mismatch was accepted");
+
+		for (const auto& [mode, terminal] : std::array{
+				 std::pair{"minimal", "provider.protocol-state-invalid"},
+				 std::pair{"provider-credit", "provider.protocol-state-invalid"},
+				 std::pair{"provider-open-task", "provider.protocol-state-invalid"},
+				 std::pair{"provider-batch-ack", "provider.protocol-state-invalid"},
+				 std::pair{"missing-accepted", "provider.protocol-state-invalid"},
+				 std::pair{"wrong-task", "provider.task-binding-mismatch"},
+				 std::pair{"unsealed-batch", "provider.protocol-state-invalid"},
+				 std::pair{"inconsistent-batch", "provider.batch-invalid"},
+				 std::pair{"bad-column", "provider.batch-invalid"},
+				 std::pair{"unknown-descriptor", "provider.relation-incompatible"},
+				 std::pair{"incomplete-coverage", "provider.coverage-incomplete"},
+			 })
+		{
+			auto rejected = runtime.execute(task(select(executable, mode)));
+			require(rejected && rejected->terminal == terminal && !rejected->succeeded(),
+					std::string{"invalid provider transcript was accepted: "} + mode);
+		}
+
+		auto credit_request = task(select(executable, "success"));
+		credit_request.output_credit.frames = 1U;
+		auto credit = runtime.execute(credit_request);
+		require(credit && credit->terminal == "provider.credit-exceeded" && !credit->succeeded(),
+				"provider output exceeding granted frame credit was accepted");
+
+		auto feature_request = task(select(executable, "success"));
+		feature_request.selection.candidate.description.protocol.required_features = {
+			"company.unsupported-feature"};
+		auto feature = runtime.execute(feature_request);
+		require(!feature && feature.error().code == "provider.required-feature-missing",
+				"unsupported required provider feature was negotiated");
+
+		auto process = runtime.execute(task(select(executable, "success")));
+		require(process && process->succeeded(), "process parity transcript failed");
+		transcript_sink sink;
+		protocol_writer writer{sink};
+		writer.grant_credit({64U * 1024U * 1024U, 65536U});
+		parity_provider provider;
+		const auto& descriptor = cxxlens::company::relations::lock_acquire::descriptor();
+		const cxxlens::sdk::provider::task logical_task{
+			"task-1",
+			{"catalog", std::string{binary_digest}, ".", {"unit.cpp"}},
+			{descriptor},
+			"all",
+			"company.test.canonical-1",
+		};
+		auto logical = run_worker(provider, logical_task, writer);
+		require(logical.has_value(), "in-process logical provider stream failed");
+		auto logical_frames = decode_frame_stream(sink.transcript);
+		require(logical_frames && logical_frames->size() + 2U == process->frames.size(),
+				"logical/wire provider transcript size diverged");
+		for (std::size_t index = 0U; index < logical_frames->size(); ++index)
+			require(logical_frames->at(index).type == process->frames.at(index + 2U).type,
+					"logical/wire provider state transition diverged");
 	}
 
 	void check_prior_snapshot_preserved(const std::string& executable)

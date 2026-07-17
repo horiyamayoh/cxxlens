@@ -2207,7 +2207,10 @@ NG0 reference implementation は `cxxlens::sdk::provider::process_provider_runti
 shell を介さない argv、explicit environment、anonymous sealed input、process group、resource limit、
 `no_new_privs`、network syscall deny を適用する。timeout、cancel、output limit、signal crash、
 malformed/truncated stream は同一 failure に潰さず、sandbox minimum 未達時は起動しない。詳細 contract は
-`schemas/cxxlens_ng_provider_runtime_contract.yaml` と ADR 0015 を authority とする。
+`schemas/cxxlens_ng_provider_runtime_contract.yaml`、ADR 0015、ADR 0038 を authority とする。process task は manifest の
+relation offer に加えて exact output descriptor set を渡す。runtime は schema response、task acceptance/binding、direction、
+credit、batch nesting/group/descriptor/row shape/count/digest、coverage/unresolved/progress、terminal seal を typed state machine で
+検証し、全 invariant を満たさない output を semantic result として採用しない。
 
 ### 17.10 Native SDK packaging
 
@@ -2282,6 +2285,12 @@ HEARTBEAT (NG1)
 credit を消費する前に payload を送ってはならない。ACK は stream ID、highest contiguous
 sequence、staged digest に bind する。resume token はそれらに task ID と protocol session ID を加えて
 bind し、stale/foreign token を reject する。
+
+out-of-process transcript は ADR 0038 の typed validator を迂回してはならない。`hello` と schema response の後に
+provider ID/version/task ID へ bind した `task_accepted` が必要であり、provider が host direction の message を送ること、
+credit 超過、未許可 descriptor/column、unsealed または digest 不一致 batch、不完全な coverage/unresolved/progress、
+task ID が異なる terminal は fail closed とする。`task_complete` は全 group が sealed/validated で side channel が完結した
+adoptable state からだけ遷移できる。in-process logical stream と wire stream は同じ semantic state transition を共有する。
 
 ### 18.3 Version
 
