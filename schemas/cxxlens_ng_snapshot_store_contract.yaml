@@ -1,5 +1,5 @@
 schema: cxxlens.snapshot-store-contract.v1
-document_version: 1.2.0
+document_version: 1.3.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#15-immutable-snapshot-and-store
@@ -177,7 +177,18 @@ partition:
   closure_ids_in_identity: forbidden
   partial_reuse_as_complete: forbidden
 closure:
-  subject: exact-relation-partition-content-and-coverage
+  subject: complete-immutable-partition-certificate-subject
+  subject_projection:
+    values: [partition-manifest, snapshot-partition-binding]
+    validator: make-partition-certificate-subject
+    recompute: [partition-id, partition-content-digest]
+    exact_match: [relation, producer-input-basis]
+  candidate_binding:
+    exact_match: [relation, partition-id, partition-content, coverage, condition, interpretation, assumption-set, producer-semantics]
+    key_domain: digest-required
+    evidence: digest-required
+    allowed_kinds: [relation-key-enumeration]
+  incomplete_manifest_only_validator: forbidden
   identity_fields:
     - relation_descriptor_id
     - subject_partition_id

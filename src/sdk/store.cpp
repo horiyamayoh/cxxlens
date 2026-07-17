@@ -48,6 +48,21 @@ namespace cxxlens::sdk
 									   });
 		}
 
+		[[nodiscard]] bool identity_digest(const std::string_view value)
+		{
+			const auto marker = value.rfind(":sha256:");
+			if (marker == std::string_view::npos || marker == 0U)
+				return false;
+			const auto hex = value.substr(marker + 8U);
+			return hex.size() == 64U &&
+				std::ranges::all_of(hex,
+									[](const char byte)
+									{
+										return (byte >= '0' && byte <= '9') ||
+											(byte >= 'a' && byte <= 'f');
+									});
+		}
+
 		[[nodiscard]] canonical_value text(std::string value)
 		{
 			return canonical_value::from_string(std::move(value));
@@ -1414,7 +1429,13 @@ namespace cxxlens::sdk
 						subject.producer_semantics != binding->producer_semantics)
 						return unexpected(
 							store_error("store.corrupt", "closure-certificates", "binding"));
-					auto certificate = make_closure_certificate(*partition, std::move(subject));
+					auto validation_subject =
+						make_partition_certificate_subject(*partition, *binding);
+					if (!validation_subject)
+						return unexpected(
+							store_error("store.corrupt", "closure-certificates", "subject"));
+					auto certificate =
+						make_closure_certificate(*validation_subject, std::move(subject));
 					if (!certificate || certificate->id != *id_value)
 						return unexpected(
 							store_error("store.corrupt", "closure-certificates", "identity"));
@@ -1614,22 +1635,53 @@ namespace cxxlens::sdk
 								  partition_complete(draft)};
 	}
 
-	result<closure_certificate> make_closure_certificate(const partition_manifest& partition,
-														 closure_candidate candidate)
+	result<partition_certificate_subject>
+	make_partition_certificate_subject(partition_manifest partition,
+									   snapshot_partition_binding binding)
 	{
+		const auto identity = identity_draft(binding);
+		const std::array content_fields{text(partition.partition_id),
+										text(partition.claim_set_digest),
+										text(partition.coverage_digest)};
+		if (partition.partition_id != binding.partition_id ||
+			partition.relation_descriptor_id != binding.relation_descriptor_id ||
+			partition.input_basis_digest != binding.producer_input_basis_digest ||
+			partition_identity(identity) != partition.partition_id ||
+			partition.content_digest !=
+				canonical_identity_digest("partition-content", content_fields) ||
+			!digest(partition.input_basis_digest) || !identity_digest(partition.claim_set_digest) ||
+			!identity_digest(partition.coverage_digest) ||
+			!identity_digest(partition.content_digest) || binding.scope.empty() ||
+			binding.interpretation.empty() || !digest(binding.producer_semantics) ||
+			binding.precision_profile.empty() || binding.assumption_set_id.empty() ||
+			!binding.condition.validate())
+			return unexpected(store_error("store.closure-subject-invalid", partition.partition_id));
+		return partition_certificate_subject{std::move(partition), std::move(binding)};
+	}
+
+	result<closure_certificate>
+	make_closure_certificate(const partition_certificate_subject& subject,
+							 closure_candidate candidate)
+	{
+		const auto& partition = subject.partition;
+		const auto& binding = subject.binding;
 		if (!partition.complete)
 			return unexpected(
 				store_error("store.partial-partition-closure", partition.partition_id));
 		if (candidate.relation_descriptor_id != partition.relation_descriptor_id ||
 			candidate.subject_partition_id != partition.partition_id ||
 			candidate.partition_content_digest != partition.content_digest ||
-			candidate.coverage_digest != partition.coverage_digest)
+			candidate.coverage_digest != partition.coverage_digest ||
+			candidate.condition != binding.condition ||
+			candidate.interpretation != binding.interpretation ||
+			candidate.assumption_set_id != binding.assumption_set_id ||
+			candidate.producer_semantics != binding.producer_semantics)
 			return unexpected(
 				store_error("store.closure-binding-mismatch", partition.partition_id));
 		if (!digest(candidate.key_domain_digest) || !digest(candidate.producer_semantics) ||
 			!digest(candidate.evidence_digest) || candidate.interpretation.empty() ||
-			candidate.assumption_set_id.empty() || candidate.closure_kind.empty() ||
-			!candidate.condition.validate())
+			candidate.assumption_set_id.empty() ||
+			candidate.closure_kind != "relation-key-enumeration" || !candidate.condition.validate())
 			return unexpected(store_error("store.closure-invalid", partition.partition_id));
 		return closure_certificate{closure_identity(candidate), std::move(candidate)};
 	}
@@ -2265,18 +2317,16 @@ namespace cxxlens::sdk
 		manifest.condition_universe_id = data_->draft.series.condition_universe_id;
 		manifest.relation_registry_digest = data_->draft.series.relation_registry_digest;
 		manifest.interpretation_policy_digest = data_->draft.series.interpretation_policy_digest;
-		std::map<std::string, const partition_draft*, std::less<>> drafts;
 		for (const auto& partition : data_->partitions)
 		{
 			auto built = make_partition_manifest(data_->store->engine, partition);
 			if (!built)
 				return unexpected(std::move(built.error()));
-			if (!drafts.emplace(built->partition_id, &partition).second)
+			if (!candidate->partition_envelopes.emplace(built->partition_id, partition).second)
 				return unexpected(store_error("store.partition-duplicate", built->partition_id));
 			manifest.partitions.push_back(*built);
 			candidate->partition_bindings.push_back(
 				partition_binding(built->partition_id, partition));
-			candidate->partition_envelopes.emplace(built->partition_id, partition);
 			auto relation = data_->store->engine.require_id(partition.relation_descriptor_id);
 			if (!relation)
 				return unexpected(std::move(relation.error()));
@@ -2331,14 +2381,16 @@ namespace cxxlens::sdk
 			if (subject == manifest.partitions.end())
 				return unexpected(
 					store_error("store.closure-subject-missing", closure.subject_partition_id));
-			const auto* draft = drafts.at(subject->partition_id);
-			if (closure.condition != draft->condition ||
-				closure.interpretation != draft->interpretation ||
-				closure.assumption_set_id != draft->assumption_set_id ||
-				closure.producer_semantics != draft->producer_semantics)
+			const auto binding = std::ranges::find(candidate->partition_bindings,
+												   subject->partition_id,
+												   &snapshot_partition_binding::partition_id);
+			if (binding == candidate->partition_bindings.end())
 				return unexpected(
-					store_error("store.closure-binding-mismatch", closure.subject_partition_id));
-			auto certificate = make_closure_certificate(*subject, closure);
+					store_error("store.closure-subject-missing", closure.subject_partition_id));
+			auto validation_subject = make_partition_certificate_subject(*subject, *binding);
+			if (!validation_subject)
+				return unexpected(std::move(validation_subject.error()));
+			auto certificate = make_closure_certificate(*validation_subject, closure);
 			if (!certificate)
 				return unexpected(std::move(certificate.error()));
 			manifest.closure_ids.push_back(certificate->id);

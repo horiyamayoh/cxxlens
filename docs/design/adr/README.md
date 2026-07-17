@@ -33,6 +33,7 @@
 | [0031](0031-query-json-lexical-and-unicode-validation.md) | query JSON lexical and Unicode validation |
 | [0032](0032-set-literal-byte-codec-parity.md) | set literal byte codec parity |
 | [0033](0033-sqlite-semantic-object-graph-revalidation.md) | SQLite semantic object graph revalidation |
+| [0034](0034-complete-partition-closure-subject.md) | complete partition closure subject |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

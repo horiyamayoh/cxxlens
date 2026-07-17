@@ -73,6 +73,7 @@ entries:
       - docs/design/adr/0031-query-json-lexical-and-unicode-validation.md
       - docs/design/adr/0032-set-literal-byte-codec-parity.md
       - docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md
+      - docs/design/adr/0034-complete-partition-closure-subject.md
     summary: Logical query, standard/custom join, budgets, explicit partiality, and flagship recipe.
   - id: gate.g4
     status: implemented

@@ -114,12 +114,25 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool operator==(const closure_certificate&) const = default;
 	};
 
+	/** @brief Complete immutable partition projection required to validate a closure proof. */
+	struct partition_certificate_subject
+	{
+		partition_manifest partition;
+		snapshot_partition_binding binding;
+		[[nodiscard]] bool operator==(const partition_certificate_subject&) const = default;
+	};
+
 	/** @brief Independently validate and derive the exact partition identity projection. */
 	[[nodiscard]] result<partition_manifest> make_partition_manifest(const relation_engine& engine,
 																	 const partition_draft& draft);
+	/** @brief Bind a manifest to every immutable partition identity field used by closure. */
+	[[nodiscard]] result<partition_certificate_subject>
+	make_partition_certificate_subject(partition_manifest partition,
+									   snapshot_partition_binding binding);
 	/** @brief Independently validate an exact closure binding and derive its identity. */
 	[[nodiscard]] result<closure_certificate>
-	make_closure_certificate(const partition_manifest& partition, closure_candidate candidate);
+	make_closure_certificate(const partition_certificate_subject& subject,
+							 closure_candidate candidate);
 
 	/** @brief Semantic manifest; operational publication fields are deliberately absent. */
 	struct snapshot_manifest

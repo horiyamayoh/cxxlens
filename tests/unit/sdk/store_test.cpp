@@ -155,6 +155,25 @@ namespace
 				std::move(parent)};
 	}
 
+	[[nodiscard]] cxxlens::sdk::partition_certificate_subject
+	certificate_subject(const cxxlens::sdk::partition_manifest& manifest,
+						const cxxlens::sdk::partition_draft& draft)
+	{
+		auto subject =
+			cxxlens::sdk::make_partition_certificate_subject(manifest,
+															 {manifest.partition_id,
+															  draft.relation_descriptor_id,
+															  draft.scope,
+															  draft.condition,
+															  draft.interpretation,
+															  draft.producer_semantics,
+															  draft.producer_input_basis_digest,
+															  draft.precision_profile,
+															  draft.assumption_set_id});
+		require(subject.has_value(), "partition certificate subject rejected");
+		return std::move(*subject);
+	}
+
 	[[nodiscard]] cxxlens::sdk::snapshot_handle
 	publish(cxxlens::sdk::snapshot_store& store,
 			const cxxlens::sdk::relation_engine& value,
@@ -291,10 +310,72 @@ namespace
 			"relation-key-enumeration",
 			partial.producer_semantics,
 			"sha256:5555555555555555555555555555555555555555555555555555555555555555"};
-		auto rejected_closure = cxxlens::sdk::make_closure_certificate(*partial_manifest, closure);
+		auto partial_subject = certificate_subject(*partial_manifest, partial);
+		auto rejected_closure = cxxlens::sdk::make_closure_certificate(partial_subject, closure);
 		require(!rejected_closure &&
 					rejected_closure.error().code == "store.partial-partition-closure",
 				"partial partition received a closure certificate");
+
+		auto complete = partition(relation_engine, false);
+		auto complete_manifest = cxxlens::sdk::make_partition_manifest(relation_engine, complete);
+		require(complete_manifest.has_value(), "complete closure partition rejected");
+		auto complete_subject = certificate_subject(*complete_manifest, complete);
+		cxxlens::sdk::closure_candidate exact{
+			complete.relation_descriptor_id,
+			complete_manifest->partition_id,
+			complete_manifest->content_digest,
+			complete_manifest->coverage_digest,
+			"sha256:4444444444444444444444444444444444444444444444444444444444444444",
+			complete.condition,
+			complete.interpretation,
+			complete.assumption_set_id,
+			"relation-key-enumeration",
+			complete.producer_semantics,
+			"sha256:5555555555555555555555555555555555555555555555555555555555555555"};
+		auto first_certificate = cxxlens::sdk::make_closure_certificate(complete_subject, exact);
+		auto second_certificate = cxxlens::sdk::make_closure_certificate(complete_subject, exact);
+		const auto writer_accepts = [&](cxxlens::sdk::closure_candidate candidate)
+		{
+			auto isolated_store = cxxlens::sdk::make_in_memory_snapshot_store(relation_engine);
+			require(isolated_store.has_value(), "closure parity store unavailable");
+			auto writer = isolated_store->begin(snapshot_draft(relation_engine));
+			require(writer && writer->stage(complete) && writer->add_closure(std::move(candidate)),
+					"closure parity writer setup failed");
+			return writer->validate().has_value();
+		};
+		require(first_certificate && second_certificate &&
+					first_certificate->id == second_certificate->id && writer_accepts(exact),
+				"exact closure certificate identity was not deterministic");
+		const auto reject_mutation =
+			[&](cxxlens::sdk::closure_candidate forged, const std::string& label)
+		{
+			const auto standalone =
+				cxxlens::sdk::make_closure_certificate(complete_subject, forged);
+			require(!standalone && !writer_accepts(std::move(forged)),
+					"closure subject mismatch was accepted: " + label);
+		};
+		auto forged = exact;
+		forged.condition.fragments = {"release"};
+		reject_mutation(std::move(forged), "condition");
+		forged = exact;
+		forged.interpretation = "company.test.other-domain";
+		reject_mutation(std::move(forged), "interpretation");
+		forged = exact;
+		forged.assumption_set_id = "assumptions-other";
+		reject_mutation(std::move(forged), "assumption-set");
+		forged = exact;
+		forged.producer_semantics =
+			"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+		reject_mutation(std::move(forged), "producer-semantics");
+		forged = exact;
+		forged.key_domain_digest = "not-a-digest";
+		reject_mutation(std::move(forged), "key-domain");
+		forged = exact;
+		forged.closure_kind = "unsupported-kind";
+		reject_mutation(std::move(forged), "closure-kind");
+		forged = exact;
+		forged.evidence_digest = "not-a-digest";
+		reject_mutation(std::move(forged), "evidence");
 
 		const auto generations_before = sqlite->retained_generation_count();
 		require(sqlite->compact().has_value(), "SQLite compaction failed");

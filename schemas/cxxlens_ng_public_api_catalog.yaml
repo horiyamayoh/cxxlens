@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.20.0
+document_version: 1.21.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -190,7 +190,7 @@ entries:
 
   - id: public.snapshot-store
     status: implemented
-    owner_issue: '#90'
+    owner_issue: '#91'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/sdk/store.hpp]
@@ -203,7 +203,10 @@ entries:
         signature: 'stage(partition_draft); add_closure(closure_candidate); validate(); publish(); cancel()'
       - name: snapshot identity values
         kind: value
-        signature: 'snapshot_series_selector; partition_draft; snapshot_partition_binding; partition_manifest; closure_candidate; closure_certificate; snapshot_manifest; publication_record'
+        signature: 'snapshot_series_selector; partition_draft; snapshot_partition_binding; partition_manifest; partition_certificate_subject; closure_candidate; closure_certificate; snapshot_manifest; publication_record'
+      - name: complete closure validator
+        kind: function
+        signature: 'make_partition_certificate_subject(partition_manifest, snapshot_partition_binding); make_closure_certificate(const partition_certificate_subject&, closure_candidate)'
       - name: snapshot_handle closure proof projection
         kind: class
         signature: 'span<const snapshot_partition_binding> partition_bindings() const; span<const closure_certificate> closure_certificates() const'
@@ -213,12 +216,12 @@ entries:
       - name: claim_annotation_cursor
         kind: class
         signature: 'snapshot_handle::open_claims(relation_descriptor_id); result<optional<claim_annotation_view>> next(); copy()'
-    errors: [sdk.snapshot-unknown-relation, sdk.snapshot-relation-mismatch, sdk.snapshot-empty, sdk.row-descriptor-mismatch, sdk.row-view-expired, sdk.cursor-thread-violation, sdk.query-annotations-unavailable, sdk.claim-annotation-view-expired, sdk.claim-annotation-cursor-thread-violation, store.backend-unavailable, store.claim-invalid, store.closure-binding-mismatch, store.closure-duplicate, store.closure-invalid, store.closure-subject-missing, store.compact-validation-failed, store.condition-universe-mismatch, store.corrupt, store.coverage-duplicate, store.coverage-invalid, store.current-ambiguous, store.current-corrupt, store.current-not-found, store.derived-basis-not-prior, store.draft-authority-mismatch, store.format-incompatible, store.hash-collision, store.partial-partition-closure, store.partition-basis-mismatch, store.partition-claim-duplicate, store.partition-claim-mismatch, store.partition-duplicate, store.partition-invalid, store.partition-relation-unknown, store.publication-corrupt, store.publication-not-found, store.publish-stale-parent, store.registry-mismatch, store.selection-authority-incomplete, store.snapshot-not-found, store.sqlite-failure, store.sqlite-path-empty, store.transaction-state]
+    errors: [sdk.snapshot-unknown-relation, sdk.snapshot-relation-mismatch, sdk.snapshot-empty, sdk.row-descriptor-mismatch, sdk.row-view-expired, sdk.cursor-thread-violation, sdk.query-annotations-unavailable, sdk.claim-annotation-view-expired, sdk.claim-annotation-cursor-thread-violation, store.backend-unavailable, store.claim-invalid, store.closure-binding-mismatch, store.closure-duplicate, store.closure-invalid, store.closure-subject-invalid, store.closure-subject-missing, store.compact-validation-failed, store.condition-universe-mismatch, store.corrupt, store.coverage-duplicate, store.coverage-invalid, store.current-ambiguous, store.current-corrupt, store.current-not-found, store.derived-basis-not-prior, store.draft-authority-mismatch, store.format-incompatible, store.hash-collision, store.partial-partition-closure, store.partition-basis-mismatch, store.partition-claim-duplicate, store.partition-claim-mismatch, store.partition-duplicate, store.partition-invalid, store.partition-relation-unknown, store.publication-corrupt, store.publication-not-found, store.publish-stale-parent, store.registry-mismatch, store.selection-authority-incomplete, store.snapshot-not-found, store.sqlite-failure, store.sqlite-path-empty, store.transaction-state]
     lifetime: [snapshot-handle-pins-immutable-physical-generation, row-and-claim-annotation-views-expire-on-cursor-advance, owned-copy-outlives-cursor]
     threading: [snapshot-store-and-handles-concurrent-readable, writer-row-cursor-and-claim-annotation-cursor-thread-confined, publication-head-update-is-serialized]
     versioning: [snapshot-identity-v1-excludes-publication-and-physical-format, sqlite-physical-format-v2.4-with-semantic-object-graph-payload-v5, payload-v1-query-rejected-without-synthesis, payload-v2-read-with-explicit-legacy-unknown-producer, payload-v1-through-v3-never-imply-closed-world-from-id-only-closures, payload-v5-reconstructs-complete-partition-envelopes]
-    invariants: [exact-seven-field-series-selector, stage-validate-publish-order, staged-data-invisible, stale-parent-rejected, failed-publish-preserves-head, partial-partition-never-closed, partition-binding-and-full-closure-subject-recompute-manifest-identities, payload-v5-reconstructs-claim-partition-and-query-projections-bottom-up, annotation-row-coverage-envelope-and-manifest-mismatch-is-corrupt, duplicate-snapshot-comparison-includes-all-semantic-projections, memory-and-sqlite-semantic-parity, canonical-export-ordered, corruption-never-falls-back, compaction-rejects-corrupt-records-before-copy, compaction-defers-pinned-generation-reclamation]
-    implementation_evidence: [src/sdk/store.cpp, examples/sdk/snapshot_store.cpp, tests/unit/sdk/store_test.cpp, tests/unit/sdk/query_runtime_test.cpp, schemas/cxxlens_ng_snapshot_manifest.schema.yaml, schemas/cxxlens_ng_sqlite_store_contract.yaml, docs/design/adr/0013-ng-sqlite-physical-store.md, docs/design/adr/0021-query-closure-applicability.md, docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md]
+    invariants: [exact-seven-field-series-selector, stage-validate-publish-order, staged-data-invisible, stale-parent-rejected, failed-publish-preserves-head, partial-partition-never-closed, complete-partition-certificate-subject-recomputes-manifest-and-binding, standalone-writer-and-reopen-closure-validation-sets-are-identical, closure-condition-interpretation-assumption-and-producer-exactly-match-subject, closure-key-domain-and-evidence-are-digests-and-kind-is-relation-key-enumeration, payload-v5-reconstructs-claim-partition-and-query-projections-bottom-up, annotation-row-coverage-envelope-and-manifest-mismatch-is-corrupt, duplicate-snapshot-comparison-includes-all-semantic-projections, memory-and-sqlite-semantic-parity, canonical-export-ordered, corruption-never-falls-back, compaction-rejects-corrupt-records-before-copy, compaction-defers-pinned-generation-reclamation]
+    implementation_evidence: [src/sdk/store.cpp, examples/sdk/snapshot_store.cpp, tests/unit/sdk/store_test.cpp, tests/unit/sdk/query_runtime_test.cpp, schemas/cxxlens_ng_snapshot_manifest.schema.yaml, schemas/cxxlens_ng_sqlite_store_contract.yaml, docs/design/adr/0013-ng-sqlite-physical-store.md, docs/design/adr/0021-query-closure-applicability.md, docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md, docs/design/adr/0034-complete-partition-closure-subject.md]
 
   - id: public.logical-query
     status: implemented
