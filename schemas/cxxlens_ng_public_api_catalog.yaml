@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.27.0
+document_version: 1.28.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -277,7 +277,7 @@ entries:
 
   - id: public.provider-sdk
     status: implemented
-    owner_issue: '#97'
+    owner_issue: '#98'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/sdk/provider.hpp, include/cxxlens/sdk/testing.hpp]
@@ -293,7 +293,7 @@ entries:
         signature: 'protocol_writer(frame_sink&, protocol_limits); void grant_credit(protocol_credit); result<void> send(message_type, span<const byte> control, span<const byte> payload, uint16_t flags = 0)'
       - name: provider frame codec
         kind: function-family
-        signature: 'frame{message_type, stream_id, sequence, control, payload, protocol_major, protocol_minor, flags}; protocol_limits{byte limits, protocol major, minor range, supported flags}; encode_frame; decode_frame; decode_frame_stream'
+        signature: 'frame{message_type, stream_id, sequence, control, payload, protocol_major, protocol_minor, flags}; protocol_limits{byte limits, protocol major, minor range, supported flags}; encode_frame; decode_frame; decode_frame_stream; result<vector<byte>> encode_control_text(string_view); result<string> decode_control_text(span<const byte>)'
       - name: run_worker
         kind: function
         signature: 'result<void> run_worker(portable_provider&, const task&, protocol_writer&, execution_context)'
@@ -310,12 +310,12 @@ entries:
     lifetime: [provider-context-and-relation-sink-are-callback-scoped, protocol-writer-borrows-frame-sink]
     threading: [worker-callback-is-synchronous-and-thread-confined, cancellation-is-stop-token-based]
     versioning: [frame-binds-exact-negotiated-provider-protocol-major-minor-and-flags, manifest-binds-provider-binary-and-semantic-digests]
-    invariants: [provider-author-does-not-construct-frames-or-checksums, decoded-frame-retains-major-minor-and-flags, unknown-required-and-reserved-flags-fail-closed, unknown-optional-message-is-preserved-for-accounting-before-skip, compressed-payload-requires-negotiated-codec, credit-and-sequence-fail-closed, coverage-unresolved-evidence-not-omitted, cxxlens-provider-manifest-v1-schema-exact]
-    implementation_evidence: [src/sdk/provider.cpp, src/sdk/testing.cpp, examples/sdk/portable_provider.cpp, tools/sdk/provider_scaffold_main.cpp, tests/unit/sdk/sdk_test.cpp, schemas/cxxlens_ng_provider_protocol.yaml, docs/design/adr/0040-provider-frame-version-and-flags.md]
+    invariants: [provider-author-does-not-construct-frames-or-checksums, decoded-frame-retains-major-minor-and-flags, unknown-required-and-reserved-flags-fail-closed, unknown-optional-message-is-preserved-for-accounting-before-skip, compressed-payload-requires-negotiated-codec, control-text-encoder-and-decoder-share-strict-utf8-scalar-validation, valid-utf8-control-bytes-are-not-normalized-or-replaced, nul-is-codec-valid-and-typed-schema-owned, credit-and-sequence-fail-closed, coverage-unresolved-evidence-not-omitted, cxxlens-provider-manifest-v1-schema-exact]
+    implementation_evidence: [src/sdk/provider.cpp, src/sdk/testing.cpp, examples/sdk/portable_provider.cpp, tools/sdk/provider_scaffold_main.cpp, tests/unit/sdk/sdk_test.cpp, schemas/cxxlens_ng_provider_protocol.yaml, schemas/cxxlens_ng_provider_fuzz_corpus.yaml, docs/design/adr/0040-provider-frame-version-and-flags.md, docs/design/adr/0041-provider-control-text-utf8.md]
 
   - id: public.provider-runtime
     status: implemented
-    owner_issue: '#97'
+    owner_issue: '#98'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/sdk/provider.hpp]
@@ -339,8 +339,8 @@ entries:
     lifetime: [process-input-output-report-and-frames-are-value-owned, process-port-is-synchronously-borrowed-by-runtime, native-compiler-objects-never-enter-this-api]
     threading: [runtime-is-concurrent-readable-when-port-is, each-process-task-has-independent-stop-token-and-budget, provider-worker-output-is-detached-before-process-exit]
     versioning: [selection-requires-exact-provider-version-binary-and-semantic-digests, adjacent-fallback-is-explicit-only, every-process-frame-binds-exact-negotiated-major-and-minor, process-report-schema-is-independent-from-provider-protocol]
-    invariants: [argv-only-no-shell, executable-content-digest-verified-before-launch, effective-sandbox-minimum-fail-closed, fallback-is-named-exact-tuple-policy-not-boolean, certified-qualification-not-manifest-self-claim, unique-policy-priority-defines-canonical-fallback-selection, selection-binds-fallback-policy-semantic-digest, exact-output-descriptor-set-required, typed-handshake-task-direction-credit-batch-side-channel-terminal-state-machine, optional-extension-length-checksum-and-credit-account-before-semantic-skip, eos-only-on-final-task-terminal, transcript-semantic-identity-includes-major-minor-and-flags, sealed-schema-and-digest-validated-batches-only, logical-wire-state-transition-parity, crash-timeout-cancel-malformed-distinct, failed-worker-does-not-publish-snapshot]
-    implementation_evidence: [src/sdk/provider.cpp, src/runtime/provider_process_adapter.cpp, src/sdk/provider_runtime.cpp, src/llvm/clang22/provider_worker.cpp, tests/unit/sdk/provider_runtime_test.cpp, tests/adapter/clang22/provider_worker_protocol_test.cpp, tests/link/provider_sdk_link_closure.py, schemas/cxxlens_ng_provider_runtime_contract.yaml, schemas/cxxlens_ng_provider_execution_report.schema.yaml, docs/design/adr/0015-process-provider-runtime-clang22-normalizer.md, docs/design/adr/0038-provider-runtime-protocol-state-validation.md, docs/design/adr/0039-exact-provider-fallback-policy.md, docs/design/adr/0040-provider-frame-version-and-flags.md]
+    invariants: [argv-only-no-shell, executable-content-digest-verified-before-launch, effective-sandbox-minimum-fail-closed, fallback-is-named-exact-tuple-policy-not-boolean, certified-qualification-not-manifest-self-claim, unique-policy-priority-defines-canonical-fallback-selection, selection-binds-fallback-policy-semantic-digest, exact-output-descriptor-set-required, typed-handshake-task-direction-credit-batch-side-channel-terminal-state-machine, optional-extension-length-checksum-and-credit-account-before-semantic-skip, eos-only-on-final-task-terminal, transcript-semantic-identity-includes-major-minor-and-flags, control-text-strict-utf8-validation-precedes-typed-parse-identity-digest-and-report, delimiter-based-control-fields-reject-nul-after-codec-validation, sealed-schema-and-digest-validated-batches-only, logical-wire-state-transition-parity, crash-timeout-cancel-malformed-distinct, failed-worker-does-not-publish-snapshot]
+    implementation_evidence: [src/sdk/provider.cpp, src/runtime/provider_process_adapter.cpp, src/sdk/provider_runtime.cpp, src/llvm/clang22/provider_worker.cpp, tests/unit/sdk/provider_runtime_test.cpp, tests/adapter/clang22/provider_worker_protocol_test.cpp, tests/link/provider_sdk_link_closure.py, schemas/cxxlens_ng_provider_runtime_contract.yaml, schemas/cxxlens_ng_provider_execution_report.schema.yaml, docs/design/adr/0015-process-provider-runtime-clang22-normalizer.md, docs/design/adr/0038-provider-runtime-protocol-state-validation.md, docs/design/adr/0039-exact-provider-fallback-policy.md, docs/design/adr/0040-provider-frame-version-and-flags.md, docs/design/adr/0041-provider-control-text-utf8.md]
 
   - id: public.native-provider-sdk
     status: implemented

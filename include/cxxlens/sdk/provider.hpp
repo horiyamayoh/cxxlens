@@ -95,7 +95,15 @@ namespace cxxlens::sdk::provider
 	decode_frame_stream(std::span<const std::byte> input,
 						protocol_limits limits = {},
 						std::uint64_t maximum_frames = 65536U);
-	/** @brief Decode one deterministic-CBOR text control value. */
+	/**
+	 * @brief Encode one strictly valid UTF-8 string as deterministic CBOR text.
+	 * @details Valid Unicode scalar bytes, including NUL, are preserved without normalization.
+	 */
+	[[nodiscard]] result<std::vector<std::byte>> encode_control_text(std::string_view text);
+	/**
+	 * @brief Decode one deterministic-CBOR text control value after strict UTF-8 validation.
+	 * @details Typed control schemas decide whether valid code points such as NUL are permitted.
+	 */
 	[[nodiscard]] result<std::string> decode_control_text(std::span<const std::byte> control);
 
 	/** @brief Streaming byte destination implemented by process or in-memory transports. */

@@ -47,18 +47,31 @@ class NgProviderProtocolTest(unittest.TestCase):
         self.assertEqual(contract["maturity"], "accepted")
         self.assertEqual(len(results), 34)
         self.assertEqual(comparisons, 6)
-        self.assertEqual(fuzz_cases, 12)
+        self.assertEqual(fuzz_cases, 19)
 
     def test_fixed_header_is_exactly_104_bytes(self) -> None:
         self.assertEqual(FRAME.size, 104)
         self.assertEqual(self.contract["wire"]["fixed_header_bytes"], 104)
 
     def test_cbor_round_trip_and_map_order_are_deterministic(self) -> None:
-        value = {"z": [1, True, None], "a": b"bytes", "longer": -2}
+        value = {"z": [1, True, None], "a": b"bytes", "longer": -2, "unicode": "\0€😀"}
         encoded = cbor_encode(value)
         self.assertEqual(cbor_decode(encoded), value)
         for permutation in itertools.permutations(value.items()):
             self.assertEqual(cbor_encode(dict(permutation)), encoded)
+
+    def test_cbor_text_utf8_differential_corpus_is_strict(self) -> None:
+        for invalid in (
+            b"\x61\x80",
+            b"\x61\xc2",
+            b"\x62\xc0\x80",
+            b"\x63\xe0\x80\x80",
+            b"\x64\xf0\x80\x80\x80",
+            b"\x63\xed\xa0\x80",
+            b"\x64\xf4\x90\x80\x80",
+        ):
+            with self.assertRaisesRegex(ProviderContractError, "malformed-frame"):
+                cbor_decode(invalid)
 
     def test_frame_round_trip_preserves_control_and_payload(self) -> None:
         frame = encode_frame({"task": "t1"}, b"payload", message_type=9, stream_id=2, sequence=3)

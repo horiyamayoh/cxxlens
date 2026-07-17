@@ -2317,6 +2317,11 @@ Issue #64 / ADR 0010 で exact wire を確定した。machine-readable authority
 - bulk data は validity bitset、fixed-width、offset、dictionary index、blob reference の binary column chunk
 - native struct layout、pointer、ABI-dependent payload は禁止
 
+ADR 0041 により、CBOR text encoder/decoder は overlong encoding、isolated/invalid continuation、truncation、surrogate、
+U+10FFFF 超過を同じ strict UTF-8 scalar validator で reject する。validated bytes は normalization や replacement を行わず
+byte-preserving とする。U+0000 は codec 上 valid として保持し、許可可否は decode 後の typed control schema が決める。
+現行 delimiter-based provider session control は NUL を reject し、identity comparison、digest、JSON report へ渡さない。
+
 ADR 0040 により、decoder は major/minor/flags を public frame に保持し、session negotiation で選んだ exact
 major/minor と全 frame を照合する。reserved bit と unknown required extension は reject し、codec 未交渉の
 compressed payload を上位へ渡さない。unknown optional message は length/checksum/sequence/byte-and-frame credit を

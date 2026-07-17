@@ -1,8 +1,8 @@
 schema: cxxlens.provider-fuzz-corpus.v1
-document_version: 1.0.0
+document_version: 1.1.0
 authority:
-  owner_issue: '#64'
-  decision_adr: docs/design/adr/0010-provider-wire-streaming-atomicity.md
+  owner_issue: '#98'
+  decision_adr: docs/design/adr/0041-provider-control-text-utf8.md
 cases:
   - {id: truncated-fixed-header, mutation: truncate-fixed-header, expected_reason: provider.truncated-stream}
   - {id: bad-magic, mutation: replace-magic, expected_reason: provider.malformed-frame}
@@ -16,3 +16,10 @@ cases:
   - {id: duplicate-cbor-key, mutation: duplicate-cbor-key, expected_reason: provider.malformed-frame}
   - {id: indefinite-cbor, mutation: indefinite-cbor, expected_reason: provider.malformed-frame}
   - {id: unknown-required-message, mutation: unknown-required-message, expected_reason: provider.unknown-required-extension}
+  - {id: utf8-isolated-continuation, mutation: utf8-isolated-continuation, expected_reason: provider.malformed-frame}
+  - {id: utf8-truncated-sequence, mutation: utf8-truncated-sequence, expected_reason: provider.malformed-frame}
+  - {id: utf8-overlong-2, mutation: utf8-overlong-2, expected_reason: provider.malformed-frame}
+  - {id: utf8-overlong-3, mutation: utf8-overlong-3, expected_reason: provider.malformed-frame}
+  - {id: utf8-overlong-4, mutation: utf8-overlong-4, expected_reason: provider.malformed-frame}
+  - {id: utf8-surrogate, mutation: utf8-surrogate, expected_reason: provider.malformed-frame}
+  - {id: utf8-out-of-range, mutation: utf8-out-of-range, expected_reason: provider.malformed-frame}

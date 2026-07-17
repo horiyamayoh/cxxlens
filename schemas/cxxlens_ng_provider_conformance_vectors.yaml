@@ -1,8 +1,8 @@
 schema: cxxlens.provider-conformance-vectors.v1
-document_version: 1.0.0
+document_version: 1.1.0
 authority:
-  owner_issue: '#64'
-  decision_adr: docs/design/adr/0010-provider-wire-streaming-atomicity.md
+  owner_issue: '#98'
+  decision_adr: docs/design/adr/0041-provider-control-text-utf8.md
 contract: schemas/cxxlens_ng_provider_protocol.yaml
 vectors:
   - id: wire-round-trip
@@ -361,4 +361,4 @@ vectors:
     expected:
       decision: accepted
       reason_code: provider.fuzz-valid
-      value: {cases: 12, stable_rejections: 12, crashes: 0, hangs: 0, unbounded_allocations: 0}
+      value: {cases: 19, stable_rejections: 19, crashes: 0, hangs: 0, unbounded_allocations: 0}

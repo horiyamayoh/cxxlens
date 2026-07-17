@@ -284,6 +284,8 @@ namespace cxxlens::sdk::provider
 				auto control = decode_control_text(value.control);
 				if (!control)
 					return fail("provider.protocol-state-invalid", request.task_id, "control");
+				if (control->contains('\0'))
+					return fail("provider.protocol-state-invalid", request.task_id, "control-nul");
 				switch (value.type)
 				{
 					case message_type::hello:
@@ -456,64 +458,29 @@ namespace cxxlens::sdk::provider
 			return terminal;
 		}
 
-		template <std::unsigned_integral T>
-		void append_big_endian(std::vector<std::byte>& output, const T value)
-		{
-			for (std::size_t index = sizeof(T); index > 0U; --index)
-				output.push_back(static_cast<std::byte>(value >> ((index - 1U) * 8U)));
-		}
-
-		[[nodiscard]] std::vector<std::byte> cbor_text(const std::string_view text)
-		{
-			std::vector<std::byte> output;
-			if (text.size() < 24U)
-				output.push_back(static_cast<std::byte>(0x60U | text.size()));
-			else if (text.size() <= std::numeric_limits<std::uint8_t>::max())
-			{
-				output.push_back(std::byte{0x78});
-				output.push_back(static_cast<std::byte>(text.size()));
-			}
-			else if (text.size() <= std::numeric_limits<std::uint16_t>::max())
-			{
-				output.push_back(std::byte{0x79});
-				append_big_endian(output, static_cast<std::uint16_t>(text.size()));
-			}
-			else
-			{
-				output.push_back(std::byte{0x7a});
-				append_big_endian(output, static_cast<std::uint32_t>(text.size()));
-			}
-			for (const auto byte : text)
-				output.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
-			return output;
-		}
-
 		[[nodiscard]] result<std::vector<std::byte>>
 		host_transcript(const process_task_request& request, const protocol_limits session_limits)
 		{
 			const auto& manifest = request.selection.candidate.description;
+			auto hello = encode_control_text(manifest.canonical_json());
+			auto schema = encode_control_text(std::string{"cxxlens.provider-protocol.v1|minor="} +
+											  std::to_string(session_limits.maximum_minor));
+			auto open =
+				encode_control_text(request.task_id + "|" + request.task_input_digest + "|" +
+									request.normalized_invocation_digest + "|" +
+									request.toolchain_digest + "|" + request.environment_digest);
+			auto credit = encode_control_text(std::to_string(request.output_credit.bytes) + "|" +
+											  std::to_string(request.output_credit.frames));
+			auto close = encode_control_text(request.task_id);
+			if (!hello || !schema || !open || !credit || !close)
+				return cxxlens::sdk::unexpected(runtime_error(
+					"provider.process-request-invalid", request.task_id, "control-utf8"));
 			std::array values{
-				frame{message_type::hello_ack, 1U, 0U, cbor_text(manifest.canonical_json()), {}},
-				frame{message_type::schema_negotiate,
-					  1U,
-					  1U,
-					  cbor_text(std::string{"cxxlens.provider-protocol.v1|minor="} +
-								std::to_string(session_limits.maximum_minor)),
-					  {}},
-				frame{message_type::open_task,
-					  1U,
-					  2U,
-					  cbor_text(request.task_id + "|" + request.task_input_digest + "|" +
-								request.normalized_invocation_digest + "|" +
-								request.toolchain_digest + "|" + request.environment_digest),
-					  request.payload},
-				frame{message_type::credit,
-					  1U,
-					  3U,
-					  cbor_text(std::to_string(request.output_credit.bytes) + "|" +
-								std::to_string(request.output_credit.frames)),
-					  {}},
-				frame{message_type::close, 1U, 4U, cbor_text(request.task_id), {}},
+				frame{message_type::hello_ack, 1U, 0U, std::move(*hello), {}},
+				frame{message_type::schema_negotiate, 1U, 1U, std::move(*schema), {}},
+				frame{message_type::open_task, 1U, 2U, std::move(*open), request.payload},
+				frame{message_type::credit, 1U, 3U, std::move(*credit), {}},
+				frame{message_type::close, 1U, 4U, std::move(*close), {}},
 			};
 			for (auto& value : values)
 			{

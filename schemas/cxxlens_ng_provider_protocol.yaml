@@ -1,11 +1,11 @@
 schema: cxxlens.provider-protocol.v1
-document_version: 1.2.0
+document_version: 1.3.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#18-provider-protocol
   index: docs/design/catalogs/README.md
-  decision_adr: docs/design/adr/0040-provider-frame-version-and-flags.md
-  owner_issue: '#97'
+  decision_adr: docs/design/adr/0041-provider-control-text-utf8.md
+  owner_issue: '#98'
   owner: steward.ng-provider-protocol
 compatibility:
   version_axis: provider-protocol
@@ -68,6 +68,11 @@ wire:
     floats: reject
     tags: reject
     invalid_utf8: reject
+    text_representation: validated-unicode-scalar-strict-utf8-bytes
+    encoder_validation: same-strict-utf8-validator-before-cbor
+    normalization: forbidden-byte-preserving
+    nul: valid-code-point-typed-schema-decides
+    differential_corpus: schemas/cxxlens_ng_provider_fuzz_corpus.yaml
   flags:
     required_extension: 1
     optional_extension: 2

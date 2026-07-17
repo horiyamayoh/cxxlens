@@ -525,6 +525,8 @@ namespace
 				 std::pair{"unknown-descriptor", "provider.relation-incompatible"},
 				 std::pair{"incomplete-coverage", "provider.coverage-incomplete"},
 				 std::pair{"bad-eos", "provider.protocol-state-invalid"},
+				 std::pair{"invalid-utf8", "provider.protocol-state-invalid"},
+				 std::pair{"nul-control", "provider.protocol-state-invalid"},
 			 })
 		{
 			auto rejected = runtime.execute(task(select(executable, mode)));

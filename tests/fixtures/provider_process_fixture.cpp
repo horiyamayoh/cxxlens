@@ -1,3 +1,4 @@
+#include <array>
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
@@ -145,6 +146,15 @@ int main(const int argument_count, const char* const* arguments)
 		return writer.send(message_type::task_failed, control("provider.schema-invalid|fixture"))
 			? EXIT_SUCCESS
 			: EXIT_FAILURE;
+	if (mode == "invalid-utf8")
+	{
+		const std::array invalid_control{std::byte{0x61}, std::byte{0x80}};
+		if (!writer.send(message_type::task_accepted, invalid_control))
+			return EXIT_FAILURE;
+		return writer.send(message_type::task_failed, control("provider.schema-invalid|fixture"))
+			? EXIT_SUCCESS
+			: EXIT_FAILURE;
+	}
 	if (mode != "missing-accepted" &&
 		!writer.send(message_type::task_accepted,
 					 control(std::string{provider_id} + "|1.0.0|" +
@@ -153,6 +163,11 @@ int main(const int argument_count, const char* const* arguments)
 	if (mode == "missing-accepted")
 		return writer.send(message_type::task_complete, control("task-1|complete")) ? EXIT_SUCCESS
 																					: EXIT_FAILURE;
+	if (mode == "nul-control")
+		return writer.send(message_type::task_failed,
+						   control(std::string_view{"provider.schema-invalid\0|fixture", 32U}))
+			? EXIT_SUCCESS
+			: EXIT_FAILURE;
 	if (mode == "provider-credit" || mode == "provider-open-task" || mode == "provider-batch-ack")
 	{
 		const auto type = mode == "provider-credit"

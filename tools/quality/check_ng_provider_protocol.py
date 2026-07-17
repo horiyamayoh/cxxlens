@@ -357,6 +357,17 @@ def mutate_frame(mutation: str) -> bytes:
         return _frame_with_raw_control(b"\x9f\x01\xff")
     if mutation == "unknown-required-message":
         return encode_frame({}, message_type=65000, flags=1)
+    invalid_utf8 = {
+        "utf8-isolated-continuation": b"\x61\x80",
+        "utf8-truncated-sequence": b"\x61\xc2",
+        "utf8-overlong-2": b"\x62\xc0\x80",
+        "utf8-overlong-3": b"\x63\xe0\x80\x80",
+        "utf8-overlong-4": b"\x64\xf0\x80\x80\x80",
+        "utf8-surrogate": b"\x63\xed\xa0\x80",
+        "utf8-out-of-range": b"\x64\xf4\x90\x80\x80",
+    }
+    if mutation in invalid_utf8:
+        return _frame_with_raw_control(invalid_utf8[mutation])
     fail("provider.fuzz-mutation-unknown", mutation)
 
 

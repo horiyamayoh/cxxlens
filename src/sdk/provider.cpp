@@ -80,31 +80,6 @@ namespace cxxlens::sdk::provider
 			return output;
 		}
 
-		[[nodiscard]] std::vector<std::byte> cbor_text(const std::string_view text)
-		{
-			std::vector<std::byte> output;
-			if (text.size() < 24U)
-				output.push_back(static_cast<std::byte>(0x60U | text.size()));
-			else if (text.size() <= std::numeric_limits<std::uint8_t>::max())
-			{
-				output.push_back(std::byte{0x78});
-				output.push_back(static_cast<std::byte>(text.size()));
-			}
-			else if (text.size() <= std::numeric_limits<std::uint16_t>::max())
-			{
-				output.push_back(std::byte{0x79});
-				append_big_endian(output, static_cast<std::uint16_t>(text.size()));
-			}
-			else
-			{
-				output.push_back(std::byte{0x7a});
-				append_big_endian(output, static_cast<std::uint32_t>(text.size()));
-			}
-			const auto encoded = bytes(text);
-			output.insert(output.end(), encoded.begin(), encoded.end());
-			return output;
-		}
-
 		[[nodiscard]] bool canonical_digest(const std::string_view value)
 		{
 			const auto hex = value.starts_with("sha256:")  ? value.substr(7U)
@@ -477,13 +452,38 @@ namespace cxxlens::sdk::provider
 		std::string output;
 		output.reserve(static_cast<std::size_t>(length));
 		for (const auto value : control.subspan(offset))
+			output.push_back(static_cast<char>(std::to_integer<unsigned char>(value)));
+		if (!cxxlens::sdk::detail::valid_utf8(output))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.malformed-frame", "control-utf8"));
+		return output;
+	}
+
+	result<std::vector<std::byte>> encode_control_text(const std::string_view text)
+	{
+		if (!cxxlens::sdk::detail::valid_utf8(text))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.malformed-frame", "control-utf8"));
+		std::vector<std::byte> output;
+		if (text.size() < 24U)
+			output.push_back(static_cast<std::byte>(0x60U | text.size()));
+		else if (text.size() <= std::numeric_limits<std::uint8_t>::max())
 		{
-			const auto byte = std::to_integer<unsigned char>(value);
-			if (byte == 0U)
-				return cxxlens::sdk::unexpected(
-					provider_error("provider.malformed-frame", "control-utf8"));
-			output.push_back(static_cast<char>(byte));
+			output.push_back(std::byte{0x78});
+			output.push_back(static_cast<std::byte>(text.size()));
 		}
+		else if (text.size() <= std::numeric_limits<std::uint16_t>::max())
+		{
+			output.push_back(std::byte{0x79});
+			append_big_endian(output, static_cast<std::uint16_t>(text.size()));
+		}
+		else
+		{
+			output.push_back(std::byte{0x7a});
+			append_big_endian(output, static_cast<std::uint32_t>(text.size()));
+		}
+		const auto encoded = bytes(text);
+		output.insert(output.end(), encoded.begin(), encoded.end());
 		return output;
 	}
 
@@ -651,10 +651,12 @@ namespace cxxlens::sdk::provider
 		dependency_group_ = std::move(dependency_group);
 		atomic_output_group_ = std::move(atomic_output_group);
 		batch_id_ = std::move(batch_id);
-		const auto control =
-			cbor_text(descriptor_.id + "|" + descriptor_.descriptor_digest + "|" +
-					  dependency_group_ + "|" + atomic_output_group_ + "|" + batch_id_);
-		if (auto sent = writer_->send(message_type::batch_begin, control); !sent)
+		auto control =
+			encode_control_text(descriptor_.id + "|" + descriptor_.descriptor_digest + "|" +
+								dependency_group_ + "|" + atomic_output_group_ + "|" + batch_id_);
+		if (!control)
+			return cxxlens::sdk::unexpected(std::move(control.error()));
+		if (auto sent = writer_->send(message_type::batch_begin, *control); !sent)
 			return sent;
 		rolling_digest_ =
 			*semantic_digest("cxxlens.provider-batch.v1", descriptor_.descriptor_digest);
@@ -671,9 +673,11 @@ namespace cxxlens::sdk::provider
 		if (auto valid = validate_row(descriptor_, row); !valid)
 			return valid;
 		const auto canonical = row.canonical_form();
-		const auto control = cbor_text(batch_id_ + "|row|" + std::to_string(row_count_));
+		auto control = encode_control_text(batch_id_ + "|row|" + std::to_string(row_count_));
+		if (!control)
+			return cxxlens::sdk::unexpected(std::move(control.error()));
 		const auto payload = bytes(canonical);
-		if (auto sent = writer_->send(message_type::column_chunk, control, payload); !sent)
+		if (auto sent = writer_->send(message_type::column_chunk, *control, payload); !sent)
 			return sent;
 		rolling_digest_ =
 			*semantic_digest("cxxlens.provider-batch.v1", rolling_digest_ + "\n" + canonical);
@@ -686,9 +690,11 @@ namespace cxxlens::sdk::provider
 	{
 		if (!open_)
 			return cxxlens::sdk::unexpected(provider_error("provider.batch-state-invalid", "end"));
-		const auto control =
-			cbor_text(batch_id_ + "|" + std::to_string(row_count_) + "|" + rolling_digest_);
-		if (auto sent = writer_->send(message_type::batch_end, control); !sent)
+		auto control = encode_control_text(batch_id_ + "|" + std::to_string(row_count_) + "|" +
+										   rolling_digest_);
+		if (!control)
+			return cxxlens::sdk::unexpected(std::move(control.error()));
+		if (auto sent = writer_->send(message_type::batch_end, *control); !sent)
 			return sent;
 		open_ = false;
 		return {};
@@ -1222,9 +1228,11 @@ namespace cxxlens::sdk::provider
 			budget.output_bytes == 0U || budget.rows == 0U || budget.diagnostics == 0U ||
 			budget.open_files == 0U || budget.created_files == 0U || budget.subprocesses == 0U)
 			return cxxlens::sdk::unexpected(provider_error("provider.task-invalid", "budget"));
-		const auto accepted = cbor_text(std::string{provider.id()} + "|" +
-										provider.version().string() + "|" + task_value.task_id);
-		if (auto sent = writer.send(message_type::task_accepted, accepted); !sent)
+		auto accepted = encode_control_text(std::string{provider.id()} + "|" +
+											provider.version().string() + "|" + task_value.task_id);
+		if (!accepted)
+			return cxxlens::sdk::unexpected(std::move(accepted.error()));
+		if (auto sent = writer.send(message_type::task_accepted, *accepted); !sent)
 			return sent;
 		context callback_context{writer, std::move(execution)};
 		if (callback_context.stop_requested())
@@ -1232,8 +1240,10 @@ namespace cxxlens::sdk::provider
 		auto outcome = provider.run(task_value, callback_context);
 		if (!outcome)
 		{
-			const auto failed = cbor_text(outcome.error().code + "|" + outcome.error().field);
-			if (auto sent = writer.send(message_type::task_failed, failed); !sent)
+			auto failed = encode_control_text(outcome.error().code + "|" + outcome.error().field);
+			if (!failed)
+				return cxxlens::sdk::unexpected(std::move(failed.error()));
+			if (auto sent = writer.send(message_type::task_failed, *failed); !sent)
 				return sent;
 			return cxxlens::sdk::unexpected(std::move(outcome.error()));
 		}
@@ -1262,11 +1272,15 @@ namespace cxxlens::sdk::provider
 				 std::pair{message_type::progress, join_lines(evidence_lines)},
 			 })
 		{
-			const auto control = cbor_text(text);
-			if (auto sent = writer.send(type, control); !sent)
+			auto control = encode_control_text(text);
+			if (!control)
+				return cxxlens::sdk::unexpected(std::move(control.error()));
+			if (auto sent = writer.send(type, *control); !sent)
 				return sent;
 		}
-		const auto complete = cbor_text(task_value.task_id + "|complete");
-		return writer.send(message_type::task_complete, complete);
+		auto complete = encode_control_text(task_value.task_id + "|complete");
+		if (!complete)
+			return cxxlens::sdk::unexpected(std::move(complete.error()));
+		return writer.send(message_type::task_complete, *complete);
 	}
 } // namespace cxxlens::sdk::provider

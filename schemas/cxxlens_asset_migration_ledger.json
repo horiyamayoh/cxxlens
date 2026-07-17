@@ -1,5 +1,5 @@
 {
-  "asset_count": 287,
+  "asset_count": 288,
   "assets": [
     {
       "authority": "active",
@@ -690,6 +690,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0040-provider-frame-version-and-flags.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0041-provider-control-text-utf8.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2012,7 +2019,7 @@
     }
   ],
   "classifications": {
-    "active": 251,
+    "active": 252,
     "archived": 35,
     "generated": 1
   },

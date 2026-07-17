@@ -9,8 +9,8 @@ properties:
   authority: {type: object, required: [owner_issue, decision_adr]}
   cases:
     type: array
-    minItems: 12
-    maxItems: 12
+    minItems: 19
+    maxItems: 19
     items:
       type: object
       additionalProperties: false

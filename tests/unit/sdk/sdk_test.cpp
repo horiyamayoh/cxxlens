@@ -497,6 +497,35 @@ namespace
 		require(decoded && decoded->type == frame.type && decoded->protocol_major == 1U &&
 					decoded->protocol_minor == 0U && decoded->flags == 0U,
 				"protocol frame header did not round-trip");
+		std::string valid_control{"ASCII|"};
+		valid_control += "\xe2\x82\xac|";
+		valid_control += "\xf0\x9f\x98\x80|";
+		valid_control.push_back('\0');
+		auto encoded_control = cxxlens::sdk::provider::encode_control_text(valid_control);
+		require(encoded_control.has_value(), "valid UTF-8 CBOR text encoding failed");
+		auto decoded_control = cxxlens::sdk::provider::decode_control_text(*encoded_control);
+		require(decoded_control && *decoded_control == valid_control,
+				"valid ASCII/BMP/non-BMP/NUL CBOR text did not round-trip");
+		for (const auto invalid : std::array{
+				 std::string_view{"\x80", 1U},
+				 std::string_view{"\xc2", 1U},
+				 std::string_view{"\xc0\x80", 2U},
+				 std::string_view{"\xe0\x80\x80", 3U},
+				 std::string_view{"\xf0\x80\x80\x80", 4U},
+				 std::string_view{"\xed\xa0\x80", 3U},
+				 std::string_view{"\xf4\x90\x80\x80", 4U},
+			 })
+		{
+			std::vector<std::byte> invalid_control{static_cast<std::byte>(0x60U | invalid.size())};
+			for (const auto byte : invalid)
+				invalid_control.push_back(static_cast<std::byte>(static_cast<unsigned char>(byte)));
+			auto rejected_decode = cxxlens::sdk::provider::decode_control_text(invalid_control);
+			auto rejected_encode = cxxlens::sdk::provider::encode_control_text(invalid);
+			require(
+				!rejected_decode && rejected_decode.error().code == "provider.malformed-frame" &&
+					!rejected_encode && rejected_encode.error().code == "provider.malformed-frame",
+				"invalid UTF-8 CBOR control text was accepted");
+		}
 		auto future_minor = *encoded;
 		future_minor.at(7U) = std::byte{0x01};
 		auto unsupported_minor = cxxlens::sdk::provider::decode_frame(future_minor);
