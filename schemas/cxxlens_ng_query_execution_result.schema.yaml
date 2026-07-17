@@ -37,6 +37,7 @@ properties:
     type: array
     items: {$ref: '#/$defs/coverage'}
   closure_ids:
+    description: Sorted unique certificates applied to every required query input range.
     type: array
     uniqueItems: true
     items: {$ref: '#/$defs/typed_digest'}

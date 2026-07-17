@@ -1,12 +1,12 @@
 schema: cxxlens.query-runtime-contract.v1
-document_version: 1.0.0
+document_version: 1.1.0
 maturity: implemented
 authority:
   logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
   guarantee_contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
   snapshot_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
-  decision_adr: docs/design/adr/0014-deterministic-reference-query-runtime.md
-  owner_issue: '#69'
+  decision_adr: docs/design/adr/0021-query-closure-applicability.md
+  owner_issue: '#78'
   owner: steward.ng-query-runtime
 compatibility:
   version_axis: query-runtime-result
@@ -27,6 +27,8 @@ input:
       - producer-semantic-contract
       - provenance-root
       - guarantee
+      - exact-partition-identity-binding
+      - validated-closure-certificate-subject
     annotationless_payload: reject-query-not-synthesize
   logical_ir:
     version: 1.0.0
@@ -134,6 +136,25 @@ result:
     - physical_explanation
   success_implies_input_complete: false
   success_implies_closed: false
+  closure_applicability:
+    required_kind: relation-key-enumeration
+    proof_scope: every-reachable-scan-input-range
+    exact_binding_fields:
+      - relation-descriptor
+      - partition-id
+      - partition-content
+      - coverage
+      - condition
+      - interpretation
+      - assumption-set
+      - producer-semantics
+      - closure-kind
+    condition_rule: exact-partition-certificate-may-cover-explicit-query-subset
+    interpretation_rule: exact-match
+    join_rule: every-input-relation-proved
+    unrelated_certificate: ignored
+    legacy-id-only-payload: never-closed
+    result_closure_ids: applied-certificates-only
   canonical_order:
     ordered_query: declared-total-order
     unordered_query: canonical-annotated-row-order

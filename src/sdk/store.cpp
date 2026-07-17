@@ -77,6 +77,34 @@ namespace cxxlens::sdk
 			return canonical_identity_digest("partition", fields);
 		}
 
+		[[nodiscard]] snapshot_partition_binding partition_binding(const std::string& partition_id,
+																   const partition_draft& draft)
+		{
+			return {partition_id,
+					draft.relation_descriptor_id,
+					draft.scope,
+					draft.condition,
+					draft.interpretation,
+					draft.producer_semantics,
+					draft.producer_input_basis_digest,
+					draft.precision_profile,
+					draft.assumption_set_id};
+		}
+
+		[[nodiscard]] partition_draft identity_draft(const snapshot_partition_binding& binding)
+		{
+			partition_draft draft;
+			draft.relation_descriptor_id = binding.relation_descriptor_id;
+			draft.scope = binding.scope;
+			draft.condition = binding.condition;
+			draft.interpretation = binding.interpretation;
+			draft.producer_semantics = binding.producer_semantics;
+			draft.producer_input_basis_digest = binding.producer_input_basis_digest;
+			draft.precision_profile = binding.precision_profile;
+			draft.assumption_set_id = binding.assumption_set_id;
+			return draft;
+		}
+
 		[[nodiscard]] std::vector<std::string> claim_content_ids(const partition_draft& draft)
 		{
 			std::vector<std::string> output;
@@ -585,6 +613,8 @@ namespace cxxlens::sdk
 		std::map<std::string, std::vector<detached_row>, std::less<>> rows;
 		std::map<std::string, std::vector<snapshot_claim_annotation>, std::less<>> annotations;
 		std::vector<snapshot_query_coverage> coverage;
+		std::vector<snapshot_partition_binding> partition_bindings;
+		std::vector<closure_certificate> closure_certificates;
 		std::vector<std::string> claim_contents;
 		std::vector<unresolved_reference> unresolved;
 		std::string physical_backend;
@@ -627,7 +657,7 @@ namespace cxxlens::sdk
 		[[nodiscard]] std::vector<std::byte> encode_snapshot(const snapshot_handle::data& value)
 		{
 			binary_writer writer;
-			writer.string("cxxlens.ng-snapshot-payload.v3");
+			writer.string("cxxlens.ng-snapshot-payload.v4");
 			const auto& manifest = value.semantic_manifest;
 			writer.string(manifest.schema);
 			writer.string(manifest.id);
@@ -704,6 +734,36 @@ namespace cxxlens::sdk
 				writer.string(coverage.unit.state);
 				writer.string(coverage.unit.reason);
 			}
+			writer.unsigned_value(value.partition_bindings.size());
+			for (const auto& binding : value.partition_bindings)
+			{
+				writer.string(binding.partition_id);
+				writer.string(binding.relation_descriptor_id);
+				writer.string(binding.scope);
+				encode_condition(writer, binding.condition);
+				writer.string(binding.interpretation);
+				writer.string(binding.producer_semantics);
+				writer.string(binding.producer_input_basis_digest);
+				writer.string(binding.precision_profile);
+				writer.string(binding.assumption_set_id);
+			}
+			writer.unsigned_value(value.closure_certificates.size());
+			for (const auto& certificate : value.closure_certificates)
+			{
+				writer.string(certificate.id);
+				const auto& subject = certificate.subject;
+				writer.string(subject.relation_descriptor_id);
+				writer.string(subject.subject_partition_id);
+				writer.string(subject.partition_content_digest);
+				writer.string(subject.coverage_digest);
+				writer.string(subject.key_domain_digest);
+				encode_condition(writer, subject.condition);
+				writer.string(subject.interpretation);
+				writer.string(subject.assumption_set_id);
+				writer.string(subject.closure_kind);
+				writer.string(subject.producer_semantics);
+				writer.string(subject.evidence_digest);
+			}
 			return std::move(writer).finish();
 		}
 
@@ -715,11 +775,15 @@ namespace cxxlens::sdk
 			if (!magic ||
 				(*magic != "cxxlens.ng-snapshot-payload.v1" &&
 				 *magic != "cxxlens.ng-snapshot-payload.v2" &&
-				 *magic != "cxxlens.ng-snapshot-payload.v3"))
+				 *magic != "cxxlens.ng-snapshot-payload.v3" &&
+				 *magic != "cxxlens.ng-snapshot-payload.v4"))
 				return unexpected(store_error("store.corrupt", "payload", "format"));
 			const bool payload_has_annotations = *magic == "cxxlens.ng-snapshot-payload.v2" ||
-				*magic == "cxxlens.ng-snapshot-payload.v3";
-			const bool payload_has_producer = *magic == "cxxlens.ng-snapshot-payload.v3";
+				*magic == "cxxlens.ng-snapshot-payload.v3" ||
+				*magic == "cxxlens.ng-snapshot-payload.v4";
+			const bool payload_has_producer = *magic == "cxxlens.ng-snapshot-payload.v3" ||
+				*magic == "cxxlens.ng-snapshot-payload.v4";
+			const bool payload_has_closure_subjects = *magic == "cxxlens.ng-snapshot-payload.v4";
 			auto value = std::make_shared<snapshot_handle::data>();
 			auto& manifest = value->semantic_manifest;
 			auto schema = reader.string();
@@ -930,6 +994,125 @@ namespace cxxlens::sdk
 					return unexpected(
 						store_error("store.corrupt", "claim-annotations", "content-set"));
 			}
+			if (payload_has_closure_subjects)
+			{
+				auto binding_count = reader.unsigned_value();
+				if (!binding_count || *binding_count != manifest.partitions.size())
+					return unexpected(store_error("store.corrupt", "partition-bindings", "count"));
+				for (std::uint64_t index = 0U; index < *binding_count; ++index)
+				{
+					auto partition_id = reader.string();
+					auto descriptor = reader.string();
+					auto scope = reader.string();
+					auto condition = decode_condition(reader);
+					auto interpretation = reader.string();
+					auto producer = reader.string();
+					auto basis = reader.string();
+					auto precision = reader.string();
+					auto assumptions = reader.string();
+					if (!partition_id || !descriptor || !scope || !condition || !interpretation ||
+						!producer || !basis || !precision || !assumptions)
+						return unexpected(
+							store_error("store.corrupt", "partition-bindings", "value"));
+					snapshot_partition_binding binding{std::move(*partition_id),
+													   std::move(*descriptor),
+													   std::move(*scope),
+													   std::move(*condition),
+													   std::move(*interpretation),
+													   std::move(*producer),
+													   std::move(*basis),
+													   std::move(*precision),
+													   std::move(*assumptions)};
+					const auto partition = std::ranges::find(manifest.partitions,
+															 binding.partition_id,
+															 &partition_manifest::partition_id);
+					const auto identity = identity_draft(binding);
+					if (partition == manifest.partitions.end() ||
+						partition->relation_descriptor_id != binding.relation_descriptor_id ||
+						partition_identity(identity) != binding.partition_id ||
+						binding.scope.empty() || binding.interpretation.empty() ||
+						!digest(binding.producer_semantics) ||
+						!digest(binding.producer_input_basis_digest) ||
+						binding.precision_profile.empty() || binding.assumption_set_id.empty())
+						return unexpected(
+							store_error("store.corrupt", "partition-bindings", "identity"));
+					value->partition_bindings.push_back(std::move(binding));
+				}
+				std::ranges::sort(
+					value->partition_bindings, {}, &snapshot_partition_binding::partition_id);
+				if (std::ranges::adjacent_find(
+						value->partition_bindings, {}, &snapshot_partition_binding::partition_id) !=
+					value->partition_bindings.end())
+					return unexpected(
+						store_error("store.corrupt", "partition-bindings", "duplicate"));
+
+				auto certificate_count = reader.unsigned_value();
+				if (!certificate_count || *certificate_count != manifest.closure_ids.size())
+					return unexpected(
+						store_error("store.corrupt", "closure-certificates", "count"));
+				for (std::uint64_t index = 0U; index < *certificate_count; ++index)
+				{
+					auto id_value = reader.string();
+					auto descriptor = reader.string();
+					auto partition_id = reader.string();
+					auto content = reader.string();
+					auto coverage = reader.string();
+					auto key_domain = reader.string();
+					auto condition = decode_condition(reader);
+					auto interpretation = reader.string();
+					auto assumptions = reader.string();
+					auto kind = reader.string();
+					auto producer = reader.string();
+					auto evidence = reader.string();
+					if (!id_value || !descriptor || !partition_id || !content || !coverage ||
+						!key_domain || !condition || !interpretation || !assumptions || !kind ||
+						!producer || !evidence)
+						return unexpected(
+							store_error("store.corrupt", "closure-certificates", "value"));
+					closure_candidate subject{std::move(*descriptor),
+											  std::move(*partition_id),
+											  std::move(*content),
+											  std::move(*coverage),
+											  std::move(*key_domain),
+											  std::move(*condition),
+											  std::move(*interpretation),
+											  std::move(*assumptions),
+											  std::move(*kind),
+											  std::move(*producer),
+											  std::move(*evidence)};
+					const auto partition = std::ranges::find(manifest.partitions,
+															 subject.subject_partition_id,
+															 &partition_manifest::partition_id);
+					const auto binding =
+						std::ranges::find(value->partition_bindings,
+										  subject.subject_partition_id,
+										  &snapshot_partition_binding::partition_id);
+					if (partition == manifest.partitions.end() ||
+						binding == value->partition_bindings.end() ||
+						subject.condition != binding->condition ||
+						subject.interpretation != binding->interpretation ||
+						subject.assumption_set_id != binding->assumption_set_id ||
+						subject.producer_semantics != binding->producer_semantics)
+						return unexpected(
+							store_error("store.corrupt", "closure-certificates", "binding"));
+					auto certificate = make_closure_certificate(*partition, std::move(subject));
+					if (!certificate || certificate->id != *id_value)
+						return unexpected(
+							store_error("store.corrupt", "closure-certificates", "identity"));
+					value->closure_certificates.push_back(std::move(*certificate));
+				}
+				std::ranges::sort(value->closure_certificates, {}, &closure_certificate::id);
+				if (std::ranges::adjacent_find(
+						value->closure_certificates, {}, &closure_certificate::id) !=
+						value->closure_certificates.end() ||
+					!std::ranges::equal(value->closure_certificates,
+										manifest.closure_ids,
+										{},
+										&closure_certificate::id,
+										std::identity{}))
+					return unexpected(
+						store_error("store.corrupt", "closure-certificates", "manifest"));
+			}
 			if (!reader.finished() || manifest.schema != "cxxlens.snapshot-manifest.v1" ||
 				manifest.id != snapshot_identity(manifest) ||
 				publication.snapshot_id != manifest.id)
@@ -1111,6 +1294,16 @@ namespace cxxlens::sdk
 	{
 		return data_ ? std::span<const snapshot_query_coverage>{data_->coverage}
 					 : std::span<const snapshot_query_coverage>{};
+	}
+	std::span<const snapshot_partition_binding> snapshot_handle::partition_bindings() const noexcept
+	{
+		return data_ ? std::span<const snapshot_partition_binding>{data_->partition_bindings}
+					 : std::span<const snapshot_partition_binding>{};
+	}
+	std::span<const closure_certificate> snapshot_handle::closure_certificates() const noexcept
+	{
+		return data_ ? std::span<const closure_certificate>{data_->closure_certificates}
+					 : std::span<const closure_certificate>{};
 	}
 	std::span<const unresolved_reference> snapshot_handle::unresolved_items() const noexcept
 	{
@@ -1571,7 +1764,7 @@ namespace cxxlens::sdk
 
 	store_compatibility snapshot_store::compatibility() const
 	{
-		return {implementation_->backend, {2U, 2U, 0U}, true, false};
+		return {implementation_->backend, {2U, 3U, 0U}, true, false};
 	}
 
 	result<void> snapshot_store::compact()
@@ -1675,6 +1868,8 @@ namespace cxxlens::sdk
 			if (!drafts.emplace(built->partition_id, &partition).second)
 				return unexpected(store_error("store.partition-duplicate", built->partition_id));
 			manifest.partitions.push_back(*built);
+			candidate->partition_bindings.push_back(
+				partition_binding(built->partition_id, partition));
 			auto relation = data_->store->engine.require_id(partition.relation_descriptor_id);
 			if (!relation)
 				return unexpected(std::move(relation.error()));
@@ -1719,6 +1914,8 @@ namespace cxxlens::sdk
 										 partition.unresolved.end());
 		}
 		std::ranges::sort(manifest.partitions, {}, &partition_manifest::partition_id);
+		std::ranges::sort(
+			candidate->partition_bindings, {}, &snapshot_partition_binding::partition_id);
 		for (const auto& closure : data_->closures)
 		{
 			const auto subject = std::ranges::find(manifest.partitions,
@@ -1738,8 +1935,10 @@ namespace cxxlens::sdk
 			if (!certificate)
 				return unexpected(std::move(certificate.error()));
 			manifest.closure_ids.push_back(certificate->id);
+			candidate->closure_certificates.push_back(std::move(*certificate));
 		}
 		std::ranges::sort(manifest.closure_ids);
+		std::ranges::sort(candidate->closure_certificates, {}, &closure_certificate::id);
 		if (std::ranges::adjacent_find(manifest.closure_ids) != manifest.closure_ids.end())
 			return unexpected(store_error("store.closure-duplicate", "closures"));
 		std::ranges::sort(candidate->claim_contents);

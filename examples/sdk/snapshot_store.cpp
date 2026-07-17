@@ -88,6 +88,21 @@ int main()
 	partition.assumption_set_id = "assumptions-empty";
 	partition.claims = {*assertion};
 	partition.coverage = {{"compile-unit", "compile-unit:1", "covered", {}}};
+	auto partition_manifest = cxxlens::sdk::make_partition_manifest(*engine, partition);
+	if (!partition_manifest)
+		return EXIT_FAILURE;
+	const cxxlens::sdk::closure_candidate closure{
+		descriptor.id,
+		partition_manifest->partition_id,
+		partition_manifest->content_digest,
+		partition_manifest->coverage_digest,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		partition.condition,
+		partition.interpretation,
+		partition.assumption_set_id,
+		"relation-key-enumeration",
+		partition.producer_semantics,
+		"sha256:2222222222222222222222222222222222222222222222222222222222222222"};
 
 	const cxxlens::sdk::snapshot_series_selector selector{
 		"catalog:example",
@@ -111,7 +126,8 @@ int main()
 	for (auto* store : {&*memory, &*sqlite})
 	{
 		auto writer = store->begin(draft);
-		if (!writer || !writer->stage(partition) || !writer->validate())
+		if (!writer || !writer->stage(partition) || !writer->add_closure(closure) ||
+			!writer->validate())
 			return EXIT_FAILURE;
 		auto published = writer->publish();
 		if (!published)
@@ -119,6 +135,9 @@ int main()
 		if (expected.empty())
 			expected = published->id();
 		if (published->id() != expected)
+			return EXIT_FAILURE;
+		if (published->partition_bindings().size() != 1U ||
+			published->closure_certificates().size() != 1U)
 			return EXIT_FAILURE;
 	}
 	return EXIT_SUCCESS;

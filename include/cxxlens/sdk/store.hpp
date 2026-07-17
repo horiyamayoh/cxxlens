@@ -59,6 +59,21 @@ namespace cxxlens::sdk
 		std::vector<unresolved_reference> unresolved;
 	};
 
+	/** @brief Persisted exact partition identity fields used to scope closure proofs. */
+	struct snapshot_partition_binding
+	{
+		std::string partition_id;
+		std::string relation_descriptor_id;
+		std::string scope;
+		claim_condition condition;
+		std::string interpretation;
+		std::string producer_semantics;
+		std::string producer_input_basis_digest;
+		std::string precision_profile;
+		std::string assumption_set_id;
+		[[nodiscard]] bool operator==(const snapshot_partition_binding&) const = default;
+	};
+
 	/** @brief Immutable identity-bearing projection of one published partition. */
 	struct partition_manifest
 	{
@@ -206,6 +221,12 @@ namespace cxxlens::sdk
 		descriptor(std::string_view relation_descriptor_id) const;
 		/** @brief Publication-scoped coverage retained independently from semantic identity. */
 		[[nodiscard]] std::span<const snapshot_query_coverage> input_coverage() const noexcept;
+		/** @brief Exact persisted partition identity bindings available for closure applicability.
+		 */
+		[[nodiscard]] std::span<const snapshot_partition_binding>
+		partition_bindings() const noexcept;
+		/** @brief Independently validated closure certificates, not merely manifest IDs. */
+		[[nodiscard]] std::span<const closure_certificate> closure_certificates() const noexcept;
 		/** @brief Publication-scoped unresolved inputs; never synthesized as empty coverage. */
 		[[nodiscard]] std::span<const unresolved_reference> unresolved_items() const noexcept;
 		/** @brief Physical backend label for non-authoritative physical explanation only. */

@@ -1948,6 +1948,10 @@ guarantee を推測して query を実行してはならず、`sdk.query-annotat
 Issue #73 は physical minor 2.2.0 / payload v3 に producer ID と semantic contract を追加した。payload v2 を
 読む場合は producer を推測せず explicit legacy-unknown として保持する。
 
+Issue #78 / ADR 0021 は physical minor 2.3.0 / payload v4 に partition の exact identity binding と validated
+closure certificate subject を追加した。open 時に partition/certificate ID を再計算して manifest と照合する。
+payload v1〜v3 の closure ID だけから subject を推測してはならず、これらは query の closed-world proof に使わない。
+
 ---
 
 ## 16. Incremental Materialization
@@ -2746,6 +2750,13 @@ coverage の complete や closure certificate を意味しない。coverage、cl
 conservative summary guarantee、logical/physical explanation を落としてはならない。physical backend と reference
 strategy は physical explanation にのみ現れ、logical explanation、IR digest、semantic row equality の authority
 ではない。
+
+Issue #78 / ADR 0021 により `closed` は snapshot 内の closure ID の存在では判定しない。IR root から到達する各
+scan path へ condition/interpretation restriction を伝播し、交差する全 partition が relation、partition content、
+coverage、condition、interpretation、assumption、producer semantics、closure kind に exact bind した certificate を
+持つ場合だけ closed-world とする。join の全 input は個別に証明する。exact partition certificate は明示された
+condition subset を覆えるが、unrelated relation/condition/interpretation の certificate は数えない。result の
+closure ID は適用した certificate だけを canonical order で返す。
 
 ---
 

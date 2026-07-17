@@ -1,5 +1,5 @@
 schema: cxxlens.snapshot-store-contract.v1
-document_version: 1.0.0
+document_version: 1.1.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#15-immutable-snapshot-and-store
@@ -192,6 +192,10 @@ closure:
     - evidence_digest
   forbidden_fields: [containing_snapshot_id, input_snapshot]
   mutation_of_any_identity_field_changes_id: true
+  query_projection:
+    partition_identity_fields_persisted: true
+    full_validated_certificate_subject_persisted: true
+    id_only_legacy_payload_is_closure_proof: false
 snapshot:
   manifest_schema: schemas/cxxlens_ng_snapshot_manifest.schema.yaml
   identity_fields:

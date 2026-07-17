@@ -5,6 +5,7 @@
 #include <iostream>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -275,6 +276,43 @@ namespace
 		return std::move(*snapshot);
 	}
 
+	[[nodiscard]] closure_candidate closure_for(const relation_engine& engine,
+												const partition_draft& value)
+	{
+		auto manifest = make_partition_manifest(engine, value);
+		require(manifest.has_value(), "closure fixture partition manifest failed");
+		return {value.relation_descriptor_id,
+				manifest->partition_id,
+				manifest->content_digest,
+				manifest->coverage_digest,
+				"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+				value.condition,
+				value.interpretation,
+				value.assumption_set_id,
+				"relation-key-enumeration",
+				value.producer_semantics,
+				"sha256:2222222222222222222222222222222222222222222222222222222222222222"};
+	}
+
+	[[nodiscard]] snapshot_handle
+	publish_with_closures(snapshot_store& store,
+						  const relation_engine& engine,
+						  const std::vector<partition_draft>& partitions,
+						  const std::span<const std::size_t> closed_partitions)
+	{
+		auto writer = store.begin(draft(engine));
+		require(writer.has_value(), "closure snapshot writer failed");
+		for (const auto& value : partitions)
+			require(writer->stage(value).has_value(), "closure partition stage failed");
+		for (const auto index : closed_partitions)
+			require(writer->add_closure(closure_for(engine, partitions.at(index))).has_value(),
+					"closure candidate stage failed");
+		require(writer->validate().has_value(), "closure snapshot validation failed");
+		auto snapshot = writer->publish();
+		require(snapshot.has_value(), "closure snapshot publication failed");
+		return std::move(*snapshot);
+	}
+
 	[[nodiscard]] std::vector<std::string> rows(const query::query_result& result)
 	{
 		auto cursor = result.rows();
@@ -297,6 +335,23 @@ namespace
 		auto builder = query::builder::from(descriptor);
 		require(builder.has_value(), "scan builder failed");
 		return std::move(*builder).finish();
+	}
+
+	[[nodiscard]] query::logical_query_ir
+	condition_query(const relation_descriptor& descriptor,
+					const std::span<const std::string> alternatives,
+					const std::optional<std::string_view> interpretation = std::nullopt)
+	{
+		auto source = query::builder::from(descriptor);
+		require(source.has_value(), "closure condition source failed");
+		auto restricted =
+			std::move(*source).condition_restrict("company.query.universe", alternatives);
+		require(restricted.has_value(), "closure condition restriction failed");
+		if (!interpretation)
+			return std::move(*restricted).finish();
+		auto interpreted = std::move(*restricted).interpretation_restrict(*interpretation);
+		require(interpreted.has_value(), "closure interpretation restriction failed");
+		return std::move(*interpreted).finish();
 	}
 
 	class ordinal_cancel final : public query::cancellation_probe
@@ -567,6 +622,123 @@ namespace
 					query_differential.overlap_fragments == kernel_differential.overlap_fragments,
 				"claim kernel and query differential classification diverged");
 	}
+
+	void check_closure_applicability(const fixture& data)
+	{
+		const auto execute =
+			[](const snapshot_handle& snapshot, const query::logical_query_ir& logical)
+		{
+			auto engine = query::reference_engine::bind(snapshot);
+			require(engine.has_value(), "closure reference engine bind failed");
+			auto result = engine->execute(logical);
+			require(result.has_value(), "closure query execution failed");
+			return std::move(*result);
+		};
+
+		{
+			auto store = make_in_memory_snapshot_store(data.engine);
+			require(store.has_value(), "unrelated closure store failed");
+			const std::vector partitions{partition(data.claims[0], 100U),
+										 partition(data.claims[3], 101U)};
+			const std::array<std::size_t, 1U> closed{0U};
+			auto snapshot = publish_with_closures(*store, data.engine, partitions, closed);
+			auto result = execute(snapshot, scan_query(data.right));
+			require(result.inputs_complete() && !result.closed() && result.closure_ids().empty(),
+					"unrelated relation closure made a query closed-world");
+		}
+
+		std::string exact_snapshot_id;
+		const auto database =
+			std::filesystem::temp_directory_path() / "cxxlens-ng-query-closure.sqlite";
+		std::filesystem::remove(database);
+		std::filesystem::remove(database.string() + "-wal");
+		std::filesystem::remove(database.string() + "-shm");
+		{
+			auto store = open_sqlite_snapshot_store(database.string(), data.engine);
+			require(store.has_value(), "exact SQLite closure store failed");
+			const std::vector partitions{partition(data.claims[0], 110U),
+										 partition(data.claims[3], 111U)};
+			const std::array<std::size_t, 2U> closed{0U, 1U};
+			auto snapshot = publish_with_closures(*store, data.engine, partitions, closed);
+			exact_snapshot_id = snapshot.id();
+		}
+		{
+			auto reopened = open_sqlite_snapshot_store(database.string(), data.engine);
+			require(reopened.has_value(), "exact SQLite closure reopen failed");
+			auto snapshot = reopened->open(exact_snapshot_id);
+			require(snapshot.has_value(), "exact SQLite closure snapshot missing");
+			auto result = execute(*snapshot, scan_query(data.right));
+			require(result.inputs_complete() && result.closed() &&
+						result.closure_ids().size() == 1U &&
+						snapshot->closure_certificates().size() == 2U,
+					"exact partition closure was not persisted or applied selectively");
+		}
+		std::filesystem::remove(database);
+		std::filesystem::remove(database.string() + "-wal");
+		std::filesystem::remove(database.string() + "-shm");
+
+		{
+			auto store = make_in_memory_snapshot_store(data.engine);
+			require(store.has_value(), "condition mismatch closure store failed");
+			const std::vector partitions{partition(data.claims[4], 120U),
+										 partition(data.claims[3], 121U)};
+			const std::array<std::size_t, 1U> closed{0U};
+			auto snapshot = publish_with_closures(*store, data.engine, partitions, closed);
+			const std::array alternatives{std::string{"release"}};
+			auto result = execute(snapshot, condition_query(data.right, alternatives));
+			require(result.inputs_complete() && !result.closed(),
+					"closure for a different condition proved the requested condition");
+		}
+
+		{
+			auto store = make_in_memory_snapshot_store(data.engine);
+			require(store.has_value(), "interpretation mismatch closure store failed");
+			const std::vector partitions{partition(data.claims[5], 130U),
+										 partition(data.claims[4], 131U)};
+			const std::array<std::size_t, 1U> closed{0U};
+			auto snapshot = publish_with_closures(*store, data.engine, partitions, closed);
+			const std::array alternatives{std::string{"debug"}};
+			auto result = execute(
+				snapshot, condition_query(data.right, alternatives, "company.query.domain"));
+			require(result.inputs_complete() && !result.closed(),
+					"closure for a different interpretation proved the requested domain");
+		}
+
+		{
+			auto store = make_in_memory_snapshot_store(data.engine);
+			require(store.has_value(), "join closure store failed");
+			const std::vector partitions{partition(data.claims[2], 140U),
+										 partition(data.claims[3], 141U)};
+			const std::array<std::size_t, 1U> closed{0U};
+			auto snapshot = publish_with_closures(*store, data.engine, partitions, closed);
+			const auto left_key =
+				column_ref{data.left.id, data.left.columns[0].id, data.left.columns[0].type};
+			const auto right_key =
+				column_ref{data.right.id, data.right.columns[0].id, data.right.columns[0].type};
+			auto left = query::builder::from(data.left);
+			auto right = query::builder::from(data.right);
+			auto predicate = query::equals_present(left_key, right_key);
+			require(left && right && predicate, "closure join setup failed");
+			auto joined = std::move(*left).inner_join(std::move(*right), std::move(*predicate));
+			require(joined.has_value(), "closure join construction failed");
+			auto result = execute(snapshot, std::move(*joined).finish());
+			require(result.inputs_complete() && !result.closed(),
+					"one closed join input proved both required relations");
+		}
+
+		{
+			auto store = make_in_memory_snapshot_store(data.engine);
+			require(store.has_value(), "subset closure store failed");
+			const std::vector partitions{partition(data.claims[0], 150U)};
+			const std::array<std::size_t, 1U> closed{0U};
+			auto snapshot = publish_with_closures(*store, data.engine, partitions, closed);
+			const std::array alternatives{std::string{"release"}};
+			auto result = execute(snapshot, condition_query(data.left, alternatives));
+			require(result.inputs_complete() && result.closed() &&
+						result.closure_ids().size() == 1U,
+					"exact superset partition closure did not prove an explicit subset query");
+		}
+	}
 } // namespace
 
 int main()
@@ -597,6 +769,7 @@ int main()
 	check_runtime_matrix(data, memory_snapshot, *sqlite_snapshot);
 	check_partiality(data, memory_snapshot);
 	check_side_channel_parity(make_side_channel_fixture());
+	check_closure_applicability(data);
 
 	auto incomplete_store = make_in_memory_snapshot_store(data.engine);
 	require(incomplete_store.has_value(), "incomplete query store failed");

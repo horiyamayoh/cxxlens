@@ -7,7 +7,7 @@ authority:
   owner_issue: '#68'
 physical_format:
   id: cxxlens.sqlite-semantic-store.v2
-  current: 2.2.0
+  current: 2.3.0
   semantic_snapshot_id_excludes_format: true
 runtime:
   discovery: explicit-runtime-library
@@ -35,11 +35,12 @@ indexes:
   - name: cxxlens_ng_publication_series
     columns: [series_id, sequence]
 payload:
-  write_schema: cxxlens.ng-snapshot-payload.v3
+  write_schema: cxxlens.ng-snapshot-payload.v4
   readable_schemas:
     - cxxlens.ng-snapshot-payload.v1
     - cxxlens.ng-snapshot-payload.v2
     - cxxlens.ng-snapshot-payload.v3
+    - cxxlens.ng-snapshot-payload.v4
   encoding: versioned-length-prefixed-binary
   checksum: sha256-full-256
   canonical_semantics_revalidated_on_open: true
@@ -57,6 +58,10 @@ payload:
       - guarantee
       - relation_coverage
     annotationless_payload_query: reject-with-sdk.query-annotations-unavailable
+  closure_proof_projection:
+    introduced: cxxlens.ng-snapshot-payload.v4
+    fields: [partition_identity_binding, validated_closure_certificate_subject]
+    legacy_id_only_payload_closed_world: forbidden
 transaction:
   journal_mode: WAL
   synchronous: FULL

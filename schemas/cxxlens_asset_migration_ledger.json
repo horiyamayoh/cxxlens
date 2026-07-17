@@ -1,5 +1,5 @@
 {
-  "asset_count": 263,
+  "asset_count": 266,
   "assets": [
     {
       "authority": "active",
@@ -543,6 +543,20 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0019-incremental-claim-conflict-classification.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0020-query-functional-payload-parity.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0021-query-closure-applicability.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1389,6 +1403,13 @@
     },
     {
       "authority": "active",
+      "path": "src/sdk/claim_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/sdk/common.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -1844,7 +1865,7 @@
     }
   ],
   "classifications": {
-    "active": 227,
+    "active": 230,
     "archived": 35,
     "generated": 1
   },

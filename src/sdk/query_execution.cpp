@@ -772,6 +772,133 @@ namespace cxxlens::sdk::query
 			}
 			return "failed_before_result";
 		}
+
+		struct closure_selector
+		{
+			std::optional<claim_condition> condition;
+			std::optional<std::string> interpretation;
+		};
+
+		using closure_selectors = std::map<std::string, std::vector<closure_selector>, std::less<>>;
+
+		[[nodiscard]] result<void>
+		collect_closure_selectors(const std::string_view node_id,
+								  closure_selector selector,
+								  const std::map<std::string, const ir_node*, std::less<>>& nodes,
+								  closure_selectors& output)
+		{
+			const auto& node = *nodes.find(node_id)->second;
+			auto arguments = decode_arguments(node);
+			if (!arguments)
+				return unexpected(std::move(arguments.error()));
+			if (node.operator_id == "query.condition_restrict.v1")
+			{
+				const auto& restriction = std::get<condition_arguments>(*arguments);
+				claim_condition requested{restriction.universe, restriction.alternatives};
+				if (selector.condition)
+				{
+					auto intersection = intersect_condition(*selector.condition, requested);
+					if (!intersection)
+						return unexpected(std::move(intersection.error()));
+					if (!*intersection)
+						return {};
+					selector.condition = std::move(**intersection);
+				}
+				else
+					selector.condition = std::move(requested);
+			}
+			else if (node.operator_id == "query.interpretation_restrict.v1")
+			{
+				const auto& restriction = std::get<interpretation_arguments>(*arguments);
+				if (selector.interpretation &&
+					*selector.interpretation != restriction.interpretation)
+					return {};
+				selector.interpretation = restriction.interpretation;
+			}
+			else if (node.operator_id == "query.scan.v1")
+			{
+				const auto& scan = std::get<scan_arguments>(*arguments);
+				output[scan.descriptor_id].push_back(std::move(selector));
+				return {};
+			}
+			for (const auto& input : node.inputs)
+				if (auto collected = collect_closure_selectors(input, selector, nodes, output);
+					!collected)
+					return unexpected(std::move(collected.error()));
+			return {};
+		}
+
+		[[nodiscard]] result<std::pair<bool, std::vector<std::string>>>
+		applicable_closures(const logical_query_ir& query,
+							const snapshot_handle& snapshot,
+							const std::set<std::string, std::less<>>& requirements)
+		{
+			std::map<std::string, const ir_node*, std::less<>> nodes;
+			for (const auto& node : query.nodes)
+				nodes.emplace(node.id, &node);
+			closure_selectors selectors;
+			if (auto collected = collect_closure_selectors(query.root, {}, nodes, selectors);
+				!collected)
+				return unexpected(std::move(collected.error()));
+
+			std::vector<std::string> applied;
+			for (const auto& relation : requirements)
+			{
+				const auto relation_selectors = selectors.find(relation);
+				if (relation_selectors == selectors.end() || relation_selectors->second.empty())
+					return std::pair{false, std::vector<std::string>{}};
+				for (const auto& selector : relation_selectors->second)
+				{
+					std::size_t relevant{};
+					std::vector<std::string> covered_fragments;
+					for (const auto& binding : snapshot.partition_bindings())
+					{
+						if (binding.relation_descriptor_id != relation ||
+							(selector.interpretation &&
+							 binding.interpretation != *selector.interpretation))
+							continue;
+						if (selector.condition)
+						{
+							auto overlap = binding.condition.overlap(*selector.condition);
+							if (!overlap)
+								return unexpected(std::move(overlap.error()));
+							if (overlap->empty())
+								continue;
+							covered_fragments.insert(
+								covered_fragments.end(), overlap->begin(), overlap->end());
+						}
+						++relevant;
+						const auto certificate = std::ranges::find_if(
+							snapshot.closure_certificates(),
+							[&](const closure_certificate& value)
+							{
+								return value.subject.subject_partition_id == binding.partition_id &&
+									value.subject.relation_descriptor_id == relation &&
+									value.subject.condition == binding.condition &&
+									value.subject.interpretation == binding.interpretation &&
+									value.subject.assumption_set_id == binding.assumption_set_id &&
+									value.subject.producer_semantics ==
+									binding.producer_semantics &&
+									value.subject.closure_kind == "relation-key-enumeration";
+							});
+						if (certificate == snapshot.closure_certificates().end())
+							return std::pair{false, std::vector<std::string>{}};
+						applied.push_back(certificate->id);
+					}
+					if (relevant == 0U)
+						return std::pair{false, std::vector<std::string>{}};
+					if (selector.condition)
+					{
+						canonical_set(covered_fragments);
+						if (!std::ranges::includes(covered_fragments,
+												   selector.condition->fragments))
+							return std::pair{false, std::vector<std::string>{}};
+					}
+				}
+			}
+			canonical_set(applied);
+			return std::pair{true, std::move(applied)};
+		}
 	} // namespace
 
 	struct query_result::data
@@ -1121,8 +1248,6 @@ namespace cxxlens::sdk::query
 			if (requirements.contains(unresolved.source_relation))
 				result_data->unresolved.push_back(
 					{"sdk.query-input-unresolved", unresolved.source_assertion, unresolved.reason});
-		result_data->closures = snapshot_.manifest().closure_ids;
-
 		result_data->input_complete = !requirements.empty() &&
 			std::ranges::all_of(
 				requirements,
@@ -1142,7 +1267,12 @@ namespace cxxlens::sdk::query
 											});
 				}) &&
 			result_data->unresolved.empty();
-		result_data->closed_world = result_data->input_complete && !result_data->closures.empty();
+		auto closure_proof = applicable_closures(query, snapshot_, requirements);
+		if (!closure_proof)
+			return unexpected(std::move(closure_proof.error()));
+		result_data->closed_world = result_data->input_complete && closure_proof->first;
+		if (closure_proof->first)
+			result_data->closures = std::move(closure_proof->second);
 
 		if (request.cancellation != nullptr &&
 			request.cancellation->stop_requested(

@@ -356,6 +356,7 @@ namespace cxxlens::sdk::query
 		[[nodiscard]] bool inputs_complete() const noexcept;
 		[[nodiscard]] bool closed() const noexcept;
 		[[nodiscard]] std::span<const snapshot_query_coverage> input_coverage() const noexcept;
+		/** @brief Exact certificates applied to every required query input range. */
 		[[nodiscard]] std::span<const std::string> closure_ids() const noexcept;
 		[[nodiscard]] std::span<const query_unresolved> unresolved_items() const noexcept;
 		/** @brief Same-domain functional payload conflicts classified by descriptor projection. */

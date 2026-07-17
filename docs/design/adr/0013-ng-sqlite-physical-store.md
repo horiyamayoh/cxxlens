@@ -17,6 +17,8 @@ SQLite の物理 schema は未決定だった。relation claim、condition、clo
 NG SQLite format は `cxxlens.sqlite-semantic-store.v2` とし、次の hybrid を採用する。Issue #69 で physical
 minor を 2.1.0 へ進め、payload v2 に query annotation projection を追加した。Issue #73 で minor 2.2.0 /
 payload v3 とし、query row/report が exact producer ID と semantic contract を保持できるようにした。
+Issue #78 / ADR 0021 で minor 2.3.0 / payload v4 に exact partition identity binding と validated closure
+certificate subject を追加し、v1〜v3 の ID-only closure は closed-world proof に使用しない。
 
 - `cxxlens_ng_metadata` は physical format version を保持する。
 - `cxxlens_ng_publication` は publication ID、exact series ID、semantic snapshot ID、monotonic sequence、physical

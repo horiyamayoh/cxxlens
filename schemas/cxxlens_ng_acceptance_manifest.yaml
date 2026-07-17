@@ -47,6 +47,7 @@ entries:
       - tests/unit/sdk/store_test.cpp
       - tools/quality/check_ng_snapshot_store_contract.py
       - tests/install/sdk_consumer/main.cpp
+      - docs/design/adr/0021-query-closure-applicability.md
     summary: Immutable publication and memory/SQLite semantic parity.
   - id: gate.g3
     status: implemented
@@ -59,6 +60,7 @@ entries:
       - tests/integration/r2_vertical_slice_test.cpp
       - examples/sdk/recipe.cpp
       - docs/design/adr/0020-query-functional-payload-parity.md
+      - docs/design/adr/0021-query-closure-applicability.md
     summary: Logical query, standard/custom join, budgets, explicit partiality, and flagship recipe.
   - id: gate.g4
     status: implemented
