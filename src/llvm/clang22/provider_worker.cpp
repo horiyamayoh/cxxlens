@@ -636,7 +636,8 @@ namespace cxxlens::detail::clang22
 		constraint_identity(provider::clang22::borrowed_translation_unit& unit,
 							const clang::FunctionDecl& declaration)
 		{
-			const auto* constraint = declaration.getTrailingRequiresClause();
+			const auto& associated_constraint = declaration.getTrailingRequiresClause();
+			const auto* constraint = associated_constraint.ConstraintExpr;
 			if (constraint == nullptr)
 				return {};
 			const auto text = clang::Lexer::getSourceText(
