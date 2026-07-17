@@ -16,6 +16,8 @@
 
 #include <cxxlens/sdk/query.hpp>
 
+#include "claim_internal.hpp"
+
 namespace cxxlens::sdk::query
 {
 	namespace
@@ -416,7 +418,21 @@ namespace cxxlens::sdk::query
 			return output;
 		}
 
-		[[nodiscard]] std::vector<differential_disagreement> disagreements_for(
+		[[nodiscard]] bool annotation_order(const snapshot_claim_annotation* left,
+											const snapshot_claim_annotation* right)
+		{
+			return std::tie(left->row.descriptor_id,
+							left->semantic_key,
+							left->interpretation,
+							left->assertion,
+							left->content) < std::tie(right->row.descriptor_id,
+													  right->semantic_key,
+													  right->interpretation,
+													  right->assertion,
+													  right->content);
+		}
+
+		[[nodiscard]] result<std::vector<differential_disagreement>> disagreements_for(
 			const std::vector<snapshot_claim_annotation>& annotations,
 			const std::map<std::string, relation_descriptor, std::less<>>& descriptors)
 		{
@@ -425,30 +441,38 @@ namespace cxxlens::sdk::query
 			for (const auto& annotation : annotations)
 			{
 				const auto descriptor = descriptors.find(annotation.row.descriptor_id);
-				if (descriptor == descriptors.end())
+				if (descriptor == descriptors.end() ||
+					descriptor->second.merge != merge_mode::functional_assertion)
 					continue;
 				groups[annotation.row.descriptor_id + "\n" + annotation.semantic_key].push_back(
 					&annotation);
 			}
 			std::vector<differential_disagreement> output;
-			for (const auto& [key, values] : groups)
+			for (auto& [key, values] : groups)
 			{
 				(void)key;
+				std::ranges::sort(values, annotation_order);
+				const auto descriptor = descriptors.find(values.front()->row.descriptor_id);
 				for (std::size_t left = 0U; left < values.size(); ++left)
 					for (std::size_t right = left + 1U; right < values.size(); ++right)
 					{
-						if (values[left]->interpretation == values[right]->interpretation ||
-							values[left]->content == values[right]->content)
+						if (values[left]->interpretation == values[right]->interpretation)
+							continue;
+						auto left_payload = detail::functional_payload_digest(descriptor->second,
+																			  values[left]->row);
+						auto right_payload = detail::functional_payload_digest(descriptor->second,
+																			   values[right]->row);
+						if (!left_payload || !right_payload)
+							return unexpected(!left_payload ? std::move(left_payload.error())
+															: std::move(right_payload.error()));
+						if (*left_payload == *right_payload)
 							continue;
 						auto overlap = values[left]->presence.overlap(values[right]->presence);
 						if (!overlap || overlap->empty())
 							continue;
 						const auto* first = values[left];
 						const auto* second = values[right];
-						if (std::tie(second->interpretation, second->content) <
-							std::tie(first->interpretation, first->content))
-							std::swap(first, second);
-						output.push_back({first->row.descriptor_id,
+						output.push_back({descriptor->second.name,
 										  first->semantic_key,
 										  first->interpretation,
 										  second->interpretation,
@@ -592,7 +616,7 @@ namespace cxxlens::sdk::query
 			return strategies.find(operator_id)->second;
 		}
 
-		[[nodiscard]] std::vector<claim_conflict>
+		[[nodiscard]] result<std::vector<claim_conflict>>
 		conflicts_for(const std::vector<snapshot_claim_annotation>& annotations,
 					  const std::map<std::string, relation_descriptor, std::less<>>& descriptors)
 		{
@@ -609,26 +633,33 @@ namespace cxxlens::sdk::query
 					.push_back(&annotation);
 			}
 			std::vector<claim_conflict> output;
-			for (const auto& [key, values] : groups)
+			for (auto& [key, values] : groups)
 			{
 				(void)key;
+				std::ranges::sort(values, annotation_order);
+				const auto descriptor = descriptors.find(values.front()->row.descriptor_id);
 				for (std::size_t left = 0U; left < values.size(); ++left)
 					for (std::size_t right = left + 1U; right < values.size(); ++right)
 					{
-						if (values[left]->content == values[right]->content)
+						auto left_payload = detail::functional_payload_digest(descriptor->second,
+																			  values[left]->row);
+						auto right_payload = detail::functional_payload_digest(descriptor->second,
+																			   values[right]->row);
+						if (!left_payload || !right_payload)
+							return unexpected(!left_payload ? std::move(left_payload.error())
+															: std::move(right_payload.error()));
+						if (*left_payload == *right_payload)
 							continue;
 						auto overlap = values[left]->presence.overlap(values[right]->presence);
 						if (!overlap || overlap->empty())
 							continue;
 						claim_conflict conflict;
-						conflict.relation = values[left]->row.descriptor_id;
+						conflict.relation = descriptor->second.name;
 						conflict.semantic_key = values[left]->semantic_key;
 						conflict.interpretation = values[left]->interpretation;
 						conflict.overlap_fragments = std::move(*overlap);
 						conflict.assertions = {values[left]->assertion, values[right]->assertion};
 						conflict.contents = {values[left]->content, values[right]->content};
-						canonical_set(conflict.assertions);
-						canonical_set(conflict.contents);
 						output.push_back(std::move(conflict));
 					}
 			}
@@ -638,11 +669,27 @@ namespace cxxlens::sdk::query
 								  return std::tie(left.relation,
 												  left.semantic_key,
 												  left.interpretation,
-												  left.assertions) < std::tie(right.relation,
-																			  right.semantic_key,
-																			  right.interpretation,
-																			  right.assertions);
+												  left.overlap_fragments,
+												  left.assertions,
+												  left.contents) < std::tie(right.relation,
+																			right.semantic_key,
+																			right.interpretation,
+																			right.overlap_fragments,
+																			right.assertions,
+																			right.contents);
 							  });
+			output.erase(std::unique(output.begin(),
+									 output.end(),
+									 [](const claim_conflict& left, const claim_conflict& right)
+									 {
+										 return left.relation == right.relation &&
+											 left.semantic_key == right.semantic_key &&
+											 left.interpretation == right.interpretation &&
+											 left.overlap_fragments == right.overlap_fragments &&
+											 left.assertions == right.assertions &&
+											 left.contents == right.contents;
+									 }),
+						 output.end());
 			return output;
 		}
 
@@ -1338,8 +1385,14 @@ namespace cxxlens::sdk::query
 		}
 
 		result_data->physical = {"cxxlens.reference-query-planner.v1", physical.str()};
-		result_data->conflict_values = conflicts_for(state.source_annotations, descriptors);
-		result_data->disagreement_values = disagreements_for(state.source_annotations, descriptors);
+		auto conflicts = conflicts_for(state.source_annotations, descriptors);
+		if (!conflicts)
+			return unexpected(std::move(conflicts.error()));
+		result_data->conflict_values = std::move(*conflicts);
+		auto disagreements = disagreements_for(state.source_annotations, descriptors);
+		if (!disagreements)
+			return unexpected(std::move(disagreements.error()));
+		result_data->disagreement_values = std::move(*disagreements);
 		for (const auto& annotation : state.source_annotations)
 			result_data->producers.push_back(annotation.producer);
 		canonical_producers(result_data->producers);

@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.8.0
+document_version: 1.9.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -242,7 +242,7 @@ entries:
 
   - id: public.query-runtime
     status: implemented
-    owner_issue: '#69'
+    owner_issue: '#77'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/sdk/query.hpp, include/cxxlens/sdk/store.hpp]
@@ -266,8 +266,8 @@ entries:
     lifetime: [reference-engine-owns-snapshot-pin, query-result-owns-rows-producer-contracts-and-side-channels, result-row-view-expires-on-cursor-advance, cancellation-probe-is-synchronously-borrowed]
     threading: [reference-engine-and-query-result-are-concurrent-readable, execution-is-logically-immutable, result-row-cursor-is-thread-confined, cancellation-probe-must-be-noexcept]
     versioning: [query-runtime-result-v1-independent-from-logical-ir-v1, reference-physical-plan-is-internal, runtime-budget-and-cancellation-excluded-from-ir-digest]
-    invariants: [all-11-ng0-operators-use-accepted-annotated-multiset-algebra, memory-and-sqlite-semantic-parity, physical-scan-order-unobservable, sql-null-unknown-conflict-not-coerced, budget-and-cancellation-return-canonical-sealed-prefix-only, success-input-complete-and-closed-are-distinct, producer-contracts-conflicts-and-differential-disagreements-survive-query, logical-explain-excludes-physical-authority]
-    implementation_evidence: [src/sdk/query_execution.cpp, src/sdk/query_ir_decoder.cpp, examples/sdk/query_execution.cpp, tests/unit/sdk/query_runtime_test.cpp, tests/integration/r2_vertical_slice_test.cpp, schemas/cxxlens_ng_query_runtime_contract.yaml, schemas/cxxlens_ng_query_execution_result.schema.yaml, docs/design/adr/0014-deterministic-reference-query-runtime.md]
+    invariants: [all-11-ng0-operators-use-accepted-annotated-multiset-algebra, memory-and-sqlite-semantic-parity, physical-scan-order-unobservable, sql-null-unknown-conflict-not-coerced, budget-and-cancellation-return-canonical-sealed-prefix-only, success-input-complete-and-closed-are-distinct, producer-contracts-conflicts-and-differential-disagreements-survive-query, query-and-claim-kernel-share-functional-payload-projection-and-classification, claim-content-identity-is-not-functional-payload-identity, logical-explain-excludes-physical-authority]
+    implementation_evidence: [src/sdk/query_execution.cpp, src/sdk/claim.cpp, src/sdk/claim_internal.hpp, examples/sdk/query_execution.cpp, tests/unit/sdk/query_runtime_test.cpp, tests/integration/r2_vertical_slice_test.cpp, schemas/cxxlens_ng_query_runtime_contract.yaml, schemas/cxxlens_ng_query_execution_result.schema.yaml, docs/design/adr/0014-deterministic-reference-query-runtime.md, docs/design/adr/0020-query-functional-payload-parity.md]
 
   - id: public.provider-sdk
     status: implemented

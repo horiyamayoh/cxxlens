@@ -1,5 +1,5 @@
 {
-  "asset_count": 262,
+  "asset_count": 263,
   "assets": [
     {
       "authority": "active",
@@ -536,6 +536,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0018-runtime-relation-schema-parity.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0019-incremental-claim-conflict-classification.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1837,7 +1844,7 @@
     }
   ],
   "classifications": {
-    "active": 226,
+    "active": 227,
     "archived": 35,
     "generated": 1
   },

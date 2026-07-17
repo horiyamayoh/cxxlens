@@ -358,7 +358,9 @@ namespace cxxlens::sdk::query
 		[[nodiscard]] std::span<const snapshot_query_coverage> input_coverage() const noexcept;
 		[[nodiscard]] std::span<const std::string> closure_ids() const noexcept;
 		[[nodiscard]] std::span<const query_unresolved> unresolved_items() const noexcept;
+		/** @brief Same-domain functional payload conflicts classified by descriptor projection. */
 		[[nodiscard]] std::span<const claim_conflict> conflicts() const noexcept;
+		/** @brief Cross-domain payload disagreements classified by the same claim-kernel law. */
 		[[nodiscard]] std::span<const differential_disagreement>
 		differential_disagreements() const noexcept;
 		[[nodiscard]] std::span<const claim_producer> producer_contracts() const noexcept;

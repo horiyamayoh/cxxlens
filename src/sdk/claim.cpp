@@ -9,6 +9,8 @@
 
 #include <cxxlens/sdk/claim.hpp>
 
+#include "claim_internal.hpp"
+
 namespace cxxlens::sdk
 {
 	namespace
@@ -100,16 +102,6 @@ namespace cxxlens::sdk
 				output.push_back(cell_value(found->second));
 			}
 			return canonical_value::from_tuple(std::move(output));
-		}
-
-		[[nodiscard]] result<std::string> conflict_payload(const relation_descriptor& descriptor,
-														   const detached_row& row)
-		{
-			auto tuple = row_tuple(row, descriptor.conflict_columns);
-			if (!tuple)
-				return unexpected(std::move(tuple.error()));
-			const std::array fields{*tuple};
-			return canonical_identity_digest("conflict-payload", fields);
 		}
 
 		[[nodiscard]] result<void> validate_basis(const claim_input_basis& basis,
@@ -253,6 +245,19 @@ namespace cxxlens::sdk
 													 right.content);
 		}
 	} // namespace
+
+	namespace detail
+	{
+		result<std::string> functional_payload_digest(const relation_descriptor& descriptor,
+													  const detached_row& row)
+		{
+			auto tuple = row_tuple(row, descriptor.conflict_columns);
+			if (!tuple)
+				return unexpected(std::move(tuple.error()));
+			const std::array fields{*tuple};
+			return canonical_identity_digest("conflict-payload", fields);
+		}
+	} // namespace detail
 
 	result<void> claim_condition::validate() const
 	{
@@ -514,8 +519,8 @@ namespace cxxlens::sdk
 				return unexpected(std::move(descriptor.error()));
 			if (descriptor->merge != merge_mode::functional_assertion)
 				return {};
-			auto first_payload = conflict_payload(*descriptor, first->row);
-			auto second_payload = conflict_payload(*descriptor, second->row);
+			auto first_payload = detail::functional_payload_digest(*descriptor, first->row);
+			auto second_payload = detail::functional_payload_digest(*descriptor, second->row);
 			if (!first_payload || !second_payload)
 				return unexpected(!first_payload ? std::move(first_payload.error())
 												 : std::move(second_payload.error()));

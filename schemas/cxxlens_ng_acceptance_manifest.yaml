@@ -58,6 +58,7 @@ entries:
       - tests/unit/sdk/query_runtime_test.cpp
       - tests/integration/r2_vertical_slice_test.cpp
       - examples/sdk/recipe.cpp
+      - docs/design/adr/0020-query-functional-payload-parity.md
     summary: Logical query, standard/custom join, budgets, explicit partiality, and flagship recipe.
   - id: gate.g4
     status: implemented

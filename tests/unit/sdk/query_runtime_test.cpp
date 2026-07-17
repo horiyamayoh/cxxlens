@@ -52,6 +52,8 @@ namespace
 			 column_role::auxiliary},
 		};
 		value.key_columns = {value.columns[0].id};
+		value.merge = merge_mode::functional_assertion;
+		value.conflict_columns = {value.columns[1].id};
 		value.descriptor_digest =
 			*semantic_digest("cxxlens.relation-descriptor-binding.v2",
 							 value.contract_digest + "\n" + value.canonical_form());
@@ -80,6 +82,8 @@ namespace
 			 column_role::authoritative_payload},
 		};
 		value.key_columns = {value.columns[0].id};
+		value.merge = merge_mode::functional_assertion;
+		value.conflict_columns = {value.columns[1].id};
 		value.descriptor_digest =
 			*semantic_digest("cxxlens.relation-descriptor-binding.v2",
 							 value.contract_digest + "\n" + value.canonical_form());
@@ -181,6 +185,37 @@ namespace
 		claims.push_back(assertion(*engine, right_row(right, "key:b", "beta"), {"debug"}));
 		claims.push_back(assertion(
 			*engine, right_row(right, "key:a", "other"), {"debug"}, "company.query.other-domain"));
+		return {std::move(left), std::move(right), std::move(*engine), std::move(claims)};
+	}
+
+	[[nodiscard]] fixture make_side_channel_fixture()
+	{
+		auto left = left_relation();
+		auto right = right_relation();
+		relation_registry registry;
+		require(registry.add(left).has_value(), "side-channel left relation rejected");
+		require(registry.add(right).has_value(), "side-channel right relation rejected");
+		auto engine = registry.build("query-side-channel-generation");
+		require(engine.has_value(), "side-channel relation engine failed");
+		std::vector<claim> claims;
+		claims.push_back(
+			assertion(*engine, left_row(left, "key:same-domain", 1, false), {"debug", "release"}));
+		claims.push_back(
+			assertion(*engine, left_row(left, "key:same-domain", 1, false), {"release"}));
+		claims.push_back(
+			assertion(*engine, left_row(left, "key:same-cross-domain", 2, false), {"release"}));
+		claims.push_back(assertion(*engine,
+								   left_row(left, "key:same-cross-domain", 2, false),
+								   {"release"},
+								   "company.query.other-domain"));
+		claims.push_back(assertion(*engine, left_row(left, "key:conflict", 3, false), {"release"}));
+		claims.push_back(assertion(*engine, left_row(left, "key:conflict", 4, false), {"release"}));
+		claims.push_back(
+			assertion(*engine, left_row(left, "key:differential", 5, false), {"release"}));
+		claims.push_back(assertion(*engine,
+								   left_row(left, "key:differential", 6, false),
+								   {"release"},
+								   "company.query.other-domain"));
 		return {std::move(left), std::move(right), std::move(*engine), std::move(claims)};
 	}
 
@@ -488,6 +523,50 @@ namespace
 		require(!expired && expired.error().code == "sdk.query-row-view-expired",
 				"advanced query cursor left prior row view live");
 	}
+
+	void check_side_channel_parity(const fixture& data)
+	{
+		auto store = make_in_memory_snapshot_store(data.engine);
+		require(store.has_value(), "side-channel query store failed");
+		auto snapshot = publish(*store, data, false, false);
+		auto query_engine = query::reference_engine::bind(snapshot);
+		require(query_engine.has_value(), "side-channel query engine bind failed");
+		auto queried = query_engine->execute(scan_query(data.left));
+		require(queried && queried->conflicts().size() == 1U &&
+					queried->differential_disagreements().size() == 1U,
+				"query side channel used claim content identity as functional payload identity");
+
+		claim_batch batch;
+		for (const auto& value : data.claims)
+			require(batch.add(value).has_value(), "side-channel kernel claim rejected");
+		auto committed = std::move(batch).commit(data.engine);
+		require(committed && committed->conflicts.size() == 1U &&
+					committed->differential_disagreements.size() == 1U,
+				"claim kernel side-channel fixture did not classify exact disagreements");
+
+		const auto& query_conflict = queried->conflicts().front();
+		const auto& kernel_conflict = committed->conflicts.front();
+		require(query_conflict.relation == kernel_conflict.relation &&
+					query_conflict.semantic_key == kernel_conflict.semantic_key &&
+					query_conflict.interpretation == kernel_conflict.interpretation &&
+					query_conflict.overlap_fragments == kernel_conflict.overlap_fragments &&
+					query_conflict.assertions == kernel_conflict.assertions &&
+					query_conflict.contents == kernel_conflict.contents,
+				"claim kernel and query conflict classification diverged");
+
+		const auto& query_differential = queried->differential_disagreements().front();
+		const auto& kernel_differential = committed->differential_disagreements.front();
+		require(query_differential.relation == kernel_differential.relation &&
+					query_differential.semantic_key == kernel_differential.semantic_key &&
+					query_differential.left_interpretation ==
+						kernel_differential.left_interpretation &&
+					query_differential.right_interpretation ==
+						kernel_differential.right_interpretation &&
+					query_differential.left_content == kernel_differential.left_content &&
+					query_differential.right_content == kernel_differential.right_content &&
+					query_differential.overlap_fragments == kernel_differential.overlap_fragments,
+				"claim kernel and query differential classification diverged");
+	}
 } // namespace
 
 int main()
@@ -517,6 +596,7 @@ int main()
 	check_ir_validation(data);
 	check_runtime_matrix(data, memory_snapshot, *sqlite_snapshot);
 	check_partiality(data, memory_snapshot);
+	check_side_channel_parity(make_side_channel_fixture());
 
 	auto incomplete_store = make_in_memory_snapshot_store(data.engine);
 	require(incomplete_store.has_value(), "incomplete query store failed");

@@ -1431,6 +1431,12 @@ existing-existingの既知 disagreementは再掲しない。pairの左右、conf
 canonical orderで固定し、同じclaim集合をone-shot ingestionしても複数publicationへ分割しても、new claimが
 関与する最終classificationは一致しなければならない。exact duplicateとsame payloadはconflictではない。
 
+Issue #77 / ADR 0020 により query runtime が snapshot annotation から再構成する conflict/differential side
+channelもclaim kernelと同じdescriptor `conflict_columns` canonical tuple digestを使用する。claim `content` IDは
+condition、interpretation、producer contractを含むoccurrence identityであり、functional payload equalityへ使用して
+はならない。queryとingestionは同じannotation集合についてrelation name、semantic key、pair orientation、overlap
+fragments、assertion/content pairを含む同一classificationを返す。
+
 ### 12.4 Differential disagreement
 
 異なる interpretation domain の結果差は `core.differential_disagreement` とする。
