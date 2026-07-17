@@ -2192,19 +2192,32 @@ namespace cxxlens::sdk
 	result<snapshot_handle> snapshot_store::open(const std::string_view snapshot_id) const
 	{
 		std::scoped_lock lock{implementation_->mutex};
-		std::shared_ptr<snapshot_handle::data> selected;
-		for (const auto& [publication_id, value] : implementation_->publications)
+		const publication_record* selected{};
+		for (const auto& [publication_id, record] : implementation_->records)
 		{
 			(void)publication_id;
-			if (value->semantic_manifest.id == snapshot_id &&
-				(!selected ||
-				 selected->publication_record_value.physical_generation <
-					 value->publication_record_value.physical_generation))
-				selected = value;
+			if (record.state != publication_state::committed || record.snapshot_id != snapshot_id)
+				continue;
+			if (selected != nullptr && selected->sequence == record.sequence &&
+				selected->physical_generation == record.physical_generation &&
+				selected->publication_id != record.publication_id)
+				return unexpected(
+					store_error("store.snapshot-ambiguous", std::string{snapshot_id}));
+			if (selected == nullptr ||
+				std::tie(selected->sequence, selected->physical_generation) <
+					std::tie(record.sequence, record.physical_generation))
+				selected = &record;
 		}
-		if (!selected)
+		if (selected == nullptr)
 			return unexpected(store_error("store.snapshot-not-found", std::string{snapshot_id}));
-		return snapshot_handle{std::move(selected)};
+		if (selected->corrupt)
+			return unexpected(store_error("store.snapshot-corrupt", selected->publication_id));
+		const auto publication = implementation_->publications.find(selected->publication_id);
+		if (publication == implementation_->publications.end() ||
+			publication->second->publication_record_value != *selected ||
+			publication->second->semantic_manifest.id != snapshot_id)
+			return unexpected(store_error("store.snapshot-corrupt", selected->publication_id));
+		return snapshot_handle{publication->second};
 	}
 
 	result<snapshot_handle>
@@ -2219,7 +2232,12 @@ namespace cxxlens::sdk
 		if (record->second.corrupt)
 			return unexpected(
 				store_error("store.publication-corrupt", std::string{publication_id}));
-		return snapshot_handle{implementation_->publications.at(std::string{publication_id})};
+		const auto publication = implementation_->publications.find(publication_id);
+		if (publication == implementation_->publications.end() ||
+			publication->second->publication_record_value != record->second)
+			return unexpected(
+				store_error("store.publication-corrupt", std::string{publication_id}));
+		return snapshot_handle{publication->second};
 	}
 
 	result<snapshot_writer> snapshot_store::begin(snapshot_draft draft)

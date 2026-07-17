@@ -467,6 +467,15 @@ namespace
 		auto corrupt_current = sqlite->current(selector(relation_engine));
 		require(!corrupt_current && corrupt_current.error().code == "store.current-corrupt",
 				"corrupt current silently fell back to a prior publication");
+		auto corrupt_semantic = sqlite->open(expected_id);
+		require(!corrupt_semantic && corrupt_semantic.error().code == "store.snapshot-corrupt",
+				"semantic snapshot open admitted corrupt latest publication");
+		auto corrupt_export = sqlite->canonical_export(expected_id);
+		require(!corrupt_export && corrupt_export.error().code == "store.snapshot-corrupt",
+				"canonical export admitted corrupt latest publication");
+		auto corrupt_explicit = sqlite->open_publication(reopened->publication().publication_id);
+		require(!corrupt_explicit && corrupt_explicit.error().code == "store.publication-corrupt",
+				"explicit publication open admitted corruption");
 		auto intact_prior = sqlite->open_publication(prior_publication);
 		require(intact_prior && intact_prior->id() == expected_id,
 				"corrupt current made an explicit intact prior unreadable");
@@ -477,8 +486,59 @@ namespace
 		auto diagnosed = reopened_corrupt->current(selector(relation_engine));
 		require(!diagnosed && diagnosed.error().code == "store.current-corrupt",
 				"reopen lost corrupt-current state");
+		auto diagnosed_semantic = reopened_corrupt->open(expected_id);
+		require(!diagnosed_semantic && diagnosed_semantic.error().code == "store.snapshot-corrupt",
+				"SQLite reopen silently fell back to an older semantic publication");
 		require(reopened_corrupt->open_publication(prior_publication).has_value(),
 				"reopen lost an explicit intact prior publication");
+		auto compact_corrupt = reopened_corrupt->compact();
+		require(!compact_corrupt &&
+					compact_corrupt.error().code == "store.compact-validation-failed",
+				"compaction erased the corruption verdict");
+
+		auto corruption_memory = cxxlens::sdk::make_in_memory_snapshot_store(relation_engine);
+		require(corruption_memory.has_value(), "memory corruption parity store unavailable");
+		auto memory_first = publish(*corruption_memory, relation_engine, false);
+		auto memory_second = publish(
+			*corruption_memory, relation_engine, true, memory_first.publication().publication_id);
+		require(memory_first.id() == memory_second.id(),
+				"memory duplicate semantic snapshot setup diverged");
+		require(cxxlens::sdk::mark_publication_corrupt_for_testing(
+					*corruption_memory, memory_second.publication().publication_id)
+					.has_value(),
+				"memory corruption injection failed");
+		auto memory_current = corruption_memory->current(selector(relation_engine));
+		auto memory_semantic = corruption_memory->open(memory_second.id());
+		auto memory_explicit =
+			corruption_memory->open_publication(memory_second.publication().publication_id);
+		auto corrupt_memory_export = corruption_memory->canonical_export(memory_second.id());
+		require(!memory_current && memory_current.error().code == "store.current-corrupt" &&
+					!memory_semantic && memory_semantic.error().code == "store.snapshot-corrupt" &&
+					!memory_explicit &&
+					memory_explicit.error().code == "store.publication-corrupt" &&
+					!corrupt_memory_export &&
+					corrupt_memory_export.error().code == "store.snapshot-corrupt",
+				"memory and SQLite corruption read paths diverged");
+		require(corruption_memory->open_publication(memory_first.publication().publication_id)
+					.has_value(),
+				"intact prior publication became unreadable");
+
+		auto non_latest = cxxlens::sdk::make_in_memory_snapshot_store(relation_engine);
+		require(non_latest.has_value(), "non-latest corruption store unavailable");
+		auto non_latest_first = publish(*non_latest, relation_engine, false);
+		auto non_latest_second = publish(
+			*non_latest, relation_engine, true, non_latest_first.publication().publication_id);
+		require(cxxlens::sdk::mark_publication_corrupt_for_testing(
+					*non_latest, non_latest_first.publication().publication_id)
+					.has_value(),
+				"non-latest corruption injection failed");
+		require(non_latest->open(non_latest_second.id()).has_value(),
+				"corrupt non-latest publication shadowed the intact latest publication");
+		auto rejected_non_latest =
+			non_latest->open_publication(non_latest_first.publication().publication_id);
+		require(!rejected_non_latest &&
+					rejected_non_latest.error().code == "store.publication-corrupt",
+				"explicit corrupt non-latest publication open succeeded");
 		std::filesystem::remove(path);
 	}
 

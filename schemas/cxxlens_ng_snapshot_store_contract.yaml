@@ -294,6 +294,14 @@ corruption:
     projections: [detached-rows, annotations, claim-contents, coverage, unresolved]
     mismatch: corrupt-fail-closed
   corrupt_current: structured-failure-no-fallback
+  semantic_snapshot_resolution:
+    candidate_state: committed-only
+    authority: publication-records-not-decoded-payload-map
+    order: [publication-sequence, physical-generation]
+    selected_corrupt: store.snapshot-corrupt
+    selected_payload_missing_or_mismatched: store.snapshot-corrupt
+    older_same-snapshot-fallback: forbidden
+    consumers: [open, canonical-export, query-bind, derived-basis-lookup]
   explicit_intact_prior_open: allowed
   repair: new-validated-physical-generation
 backend_authority:
