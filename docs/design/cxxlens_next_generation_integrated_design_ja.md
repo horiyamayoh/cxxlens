@@ -3339,9 +3339,12 @@ provenance references
 ```
 
 公開 surface は `recipes::calls_to_function(qualified_name)`、`call_search_recipe::lower/run`、
-`call_search_report` とする。report は exact plan と query result を所有し、`matched`、
-`empty_complete`、`empty_incomplete`、`ambiguous` を distinct state として返す。ambiguous は diagnostic prose
-ではなく、match row に含まれる distinct target semantic ID により判定する。
+`call_search_report` とする。report は exact plan と query result を所有する。query execution が `complete` の
+場合だけ `matched`、`empty_complete`、`empty_incomplete`、`ambiguous` を確定し、`truncated` と
+`cancelled_with_partial` は `partial`、`failed_before_result` は `failed` とする。partial row の件数や target
+集合から matched、ambiguity 不在、absence を推論してはならない。`empty_complete` は execution complete かつ
+input coverage complete の場合だけ返す。ambiguous は diagnostic prose ではなく、complete result の match row に
+含まれる distinct target semantic ID により判定する。
 
 NG0 は call search を end-to-end proof とし、recipe catalog を広げすぎない。
 

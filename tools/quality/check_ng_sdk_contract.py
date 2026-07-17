@@ -99,8 +99,19 @@ def validate_catalog(root: pathlib.Path, catalog: dict[str, Any]) -> None:
             "implemented SDK entry set is incomplete: "
             f"{sorted(EXPECTED_IMPLEMENTED_ENTRIES - implemented)}"
         )
-    if entries.get("public.recipe", {}).get("owner_issue") != "#73":
-        fail("flagship recipe ownership must remain with Issue #73")
+    if entries.get("public.recipe", {}).get("owner_issue") != "#104":
+        fail("flagship recipe execution-completeness ownership must remain with Issue #104")
+    recipe_source = (root / "src/sdk/recipe.cpp").read_text(encoding="utf-8")
+    for marker in (
+        "execution_status::complete",
+        "execution_status::truncated",
+        "execution_status::cancelled_with_partial",
+        "execution_status::failed_before_result",
+        "call_search_state::partial",
+        "call_search_state::failed",
+    ):
+        if marker not in recipe_source:
+            fail(f"recipe execution-completeness marker is missing: {marker}")
     for path in paths.values():
         if path["entry"] not in entries:
             fail(f"author path references unknown entry: {path['entry']}")

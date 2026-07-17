@@ -1,5 +1,5 @@
 {
-  "asset_count": 294,
+  "asset_count": 295,
   "assets": [
     {
       "authority": "active",
@@ -732,6 +732,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0046-resolved-sandbox-policy-enforcement.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0047-recipe-execution-completeness-classification.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2061,7 +2068,7 @@
     }
   ],
   "classifications": {
-    "active": 258,
+    "active": 259,
     "archived": 35,
     "generated": 1
   },

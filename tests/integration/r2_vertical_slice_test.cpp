@@ -3,11 +3,13 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <optional>
 #include <ranges>
 #include <set>
 #include <sstream>
+#include <stop_token>
 #include <string>
 #include <utility>
 #include <vector>
@@ -376,6 +378,17 @@ namespace
 		return *semantic_digest("cxxlens.r2-query-result.v1", output.str());
 	}
 
+	class cancel_after_first_row final : public query::cancellation_probe
+	{
+	  public:
+		[[nodiscard]] bool
+		stop_requested(const query::execution_checkpoint& checkpoint) const noexcept override
+		{
+			return checkpoint.current == query::execution_checkpoint::phase::before_publish_row &&
+				checkpoint.ordinal == 1U;
+		}
+	};
+
 	[[nodiscard]] query::logical_query_ir typed_custom_query()
 	{
 		using call = cc::relations::call_site;
@@ -524,7 +537,9 @@ int main()
 	auto recipe = recipes::calls_to_function("ns::target");
 	require(recipe.has_value(), "calls_to_function recipe creation failed");
 	auto plan = recipe->lower();
-	require(plan && plan->requirements().size() == 3U, "recipe lowering requirements differ");
+	require(plan && plan->descriptor().version == semantic_version{1U, 1U, 0U} &&
+				plan->requirements().size() == 3U,
+			"recipe lowering requirements or semantics version differ");
 	auto memory_report = recipe->run(memory_snapshot);
 	auto cold_report = recipe->run(*sqlite_snapshot);
 	require(memory_report && cold_report &&
@@ -564,6 +579,53 @@ int main()
 	auto ambiguous_report = recipe->run(ambiguous_snapshot);
 	require(ambiguous_report && ambiguous_report->state() == recipes::call_search_state::ambiguous,
 			"ambiguous recipe state collapsed");
+
+	std::stop_source stopped;
+	stopped.request_stop();
+	query::stop_token_cancellation before_execution{stopped.get_token()};
+	query::execution_request cancelled_before_execution;
+	cancelled_before_execution.cancellation = &before_execution;
+	auto cancelled_empty = recipe->run(memory_snapshot, cancelled_before_execution);
+	require(cancelled_empty &&
+				cancelled_empty->result().execution() ==
+					query::execution_status::failed_before_result &&
+				cancelled_empty->result().inputs_complete() &&
+				cancelled_empty->state() == recipes::call_search_state::failed,
+			"execution-before-cancel was promoted to a complete empty recipe state");
+
+	for (auto budget : {query::execution_budget{0U},
+						query::execution_budget{std::numeric_limits<std::uint64_t>::max(),
+												std::numeric_limits<std::uint64_t>::max(),
+												0U,
+												std::numeric_limits<std::uint64_t>::max()}})
+	{
+		query::execution_request failed_request;
+		failed_request.budget = budget;
+		auto failed_report = recipe->run(memory_snapshot, failed_request);
+		require(failed_report &&
+					failed_report->result().execution() ==
+						query::execution_status::failed_before_result &&
+					failed_report->state() == recipes::call_search_state::failed,
+				"scan/intermediate budget failure was promoted to a complete recipe state");
+	}
+
+	query::execution_request output_limited_request;
+	output_limited_request.budget.max_rows_output = 1U;
+	auto truncated_report = recipe->run(ambiguous_snapshot, output_limited_request);
+	require(truncated_report &&
+				truncated_report->result().execution() == query::execution_status::truncated &&
+				truncated_report->state() == recipes::call_search_state::partial,
+			"truncated ambiguous result was promoted to a definitive recipe state");
+
+	cancel_after_first_row cancel_partial;
+	query::execution_request partial_request;
+	partial_request.cancellation = &cancel_partial;
+	auto partial_report = recipe->run(ambiguous_snapshot, partial_request);
+	require(partial_report &&
+				partial_report->result().execution() ==
+					query::execution_status::cancelled_with_partial &&
+				partial_report->state() == recipes::call_search_state::partial,
+			"cancelled sealed prefix was promoted to a definitive recipe state");
 
 	check_provider_fault_preserves_snapshot(memory_snapshot, lock);
 

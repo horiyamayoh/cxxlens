@@ -119,7 +119,7 @@ def validate_versions(root: pathlib.Path, expected: dict[str, str]) -> None:
         "snapshot_identity": snapshot["compatibility"]["current"],
         "snapshot_payload": sqlite["payload"]["write_schema"],
         "sqlite_physical_format": sqlite["physical_format"]["current"],
-        "recipe_semantics": "cxxlens.recipes.calls_to_function-1.0.0",
+        "recipe_semantics": "cxxlens.recipes.calls_to_function-1.1.0",
     }
     if actual != expected:
         fail(f"foundation version contract differs: expected={expected}, actual={actual}")

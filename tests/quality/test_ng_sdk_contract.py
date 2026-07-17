@@ -47,11 +47,11 @@ class NgSdkContractTest(unittest.TestCase):
         with self.assertRaisesRegex(SdkContractError, "schema validation"):
             validate_catalog(ROOT, catalog)
 
-    def test_flagship_recipe_ownership_cannot_be_claimed_early(self) -> None:
+    def test_flagship_recipe_execution_completeness_ownership_is_exact(self) -> None:
         catalog = copy.deepcopy(self.catalog)
         recipe = next(row for row in catalog["entries"] if row["id"] == "public.recipe")
-        recipe["owner_issue"] = "#66"
-        with self.assertRaisesRegex(SdkContractError, "Issue #73"):
+        recipe["owner_issue"] = "#73"
+        with self.assertRaisesRegex(SdkContractError, "Issue #104"):
             validate_catalog(ROOT, catalog)
 
     def test_implemented_error_code_cannot_be_omitted(self) -> None:

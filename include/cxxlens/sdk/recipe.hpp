@@ -39,13 +39,21 @@ namespace cxxlens::sdk
 
 namespace cxxlens::recipes
 {
-	/** @brief Semantic classification that does not collapse empty or ambiguous call search. */
+	/** @brief Semantic classification that preserves execution and input partiality. */
 	enum class call_search_state : std::uint8_t
 	{
+		/** @brief Complete execution found calls to exactly one target entity. */
 		matched,
+		/** @brief Complete execution and complete inputs proved there were no matches. */
 		empty_complete,
+		/** @brief Complete execution found no matches but its inputs were incomplete. */
 		empty_incomplete,
+		/** @brief Complete execution found calls to multiple distinct target entities. */
 		ambiguous,
+		/** @brief Truncation or cancellation returned only a sealed result prefix. */
+		partial,
+		/** @brief Execution failed before any sealed result could be classified. */
+		failed,
 	};
 
 	/** @brief Flagship call-search report owning both its exact plan and query result. */

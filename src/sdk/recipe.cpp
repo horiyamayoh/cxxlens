@@ -71,13 +71,27 @@ namespace cxxlens::recipes
 					return "empty_incomplete";
 				case call_search_state::ambiguous:
 					return "ambiguous";
+				case call_search_state::partial:
+					return "partial";
+				case call_search_state::failed:
+					return "failed";
 			}
-			return "empty_incomplete";
+			return "failed";
 		}
 
 		[[nodiscard]] sdk::result<call_search_state>
 		classify(const sdk::query::query_result& result)
 		{
+			switch (result.execution())
+			{
+				case sdk::query::execution_status::truncated:
+				case sdk::query::execution_status::cancelled_with_partial:
+					return call_search_state::partial;
+				case sdk::query::execution_status::failed_before_result:
+					return call_search_state::failed;
+				case sdk::query::execution_status::complete:
+					break;
+			}
 			std::set<std::string, std::less<>> targets;
 			auto cursor = result.rows();
 			std::size_t matches{};
@@ -155,7 +169,7 @@ namespace cxxlens::recipes
 	call_search_recipe::call_search_recipe(std::string qualified_name)
 		: qualified_name_{std::move(qualified_name)},
 		  descriptor_{"cxxlens.recipes.calls_to_function",
-					  {1U, 0U, 0U},
+					  {1U, 1U, 0U},
 					  "Find direct C/C++ call sites by exact qualified function name"}
 	{
 	}

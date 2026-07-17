@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.33.0
+document_version: 1.34.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -396,7 +396,7 @@ entries:
 
   - id: public.recipe
     status: implemented
-    owner_issue: '#73'
+    owner_issue: '#104'
     profile: NG0
     target: cxxlens::recipes
     headers: [include/cxxlens/sdk/recipe.hpp]
@@ -413,6 +413,6 @@ entries:
     errors: [sdk.recipe-invalid]
     lifetime: [recipe-owns-qualified-name, report-owns-lowered-plan-query-result-and-snapshot-pin]
     threading: [recipe-and-report-are-concurrent-readable, match-cursor-remains-thread-confined]
-    versioning: [recipe-semantics-axis-independent-at-cxxlens.recipes.calls_to_function-1.0.0]
-    invariants: [exact-qualified-name-only, lower-uses-cc-entity-call-direct-target-and-call-site, empty-complete-empty-incomplete-and-ambiguous-remain-distinct, evidence-coverage-closure-unresolved-conflict-differential-producer-guarantee-and-explanations-are-preserved]
-    implementation_evidence: [src/sdk/recipe.cpp, examples/sdk/recipe.cpp, tests/integration/r2_vertical_slice_test.cpp, tests/install/examples_consumer/CMakeLists.txt, docs/design/cxxlens_next_generation_integrated_design_ja.md]
+    versioning: [recipe-semantics-axis-independent-at-cxxlens.recipes.calls_to_function-1.1.0]
+    invariants: [exact-qualified-name-only, lower-uses-cc-entity-call-direct-target-and-call-site, definitive-states-require-complete-query-execution, truncated-and-cancelled-with-partial-map-to-partial, failed-before-result-maps-to-failed, empty-complete-requires-complete-execution-and-complete-inputs, partial-rows-never-prove-match-ambiguity-absence, evidence-coverage-closure-unresolved-conflict-differential-producer-guarantee-and-explanations-are-preserved]
+    implementation_evidence: [src/sdk/recipe.cpp, examples/sdk/recipe.cpp, tests/integration/r2_vertical_slice_test.cpp, tests/install/examples_consumer/CMakeLists.txt, docs/design/adr/0047-recipe-execution-completeness-classification.md, docs/design/cxxlens_next_generation_integrated_design_ja.md]
