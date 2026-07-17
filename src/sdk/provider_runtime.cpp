@@ -48,21 +48,6 @@ namespace cxxlens::sdk::provider
 			return cxxlens::sdk::detail::canonical_json_string(value);
 		}
 
-		[[nodiscard]] std::vector<std::string_view> split_fields(const std::string_view value,
-																 const char separator)
-		{
-			std::vector<std::string_view> output;
-			std::size_t begin{};
-			while (true)
-			{
-				const auto end = value.find(separator, begin);
-				output.push_back(value.substr(begin, end - begin));
-				if (end == std::string_view::npos)
-					return output;
-				begin = end + 1U;
-			}
-		}
-
 		[[nodiscard]] bool namespaced(const std::string_view value)
 		{
 			const auto separator = value.find('.');
@@ -204,11 +189,6 @@ namespace cxxlens::sdk::provider
 			const auto expected_hello = request.provider_manifest == nullptr
 				? std::string{}
 				: request.provider_manifest->canonical_json();
-			const auto expected_schema = std::string{"cxxlens.provider-protocol.v1|minor="} +
-				std::to_string(session_limits.maximum_minor);
-			const auto expected_accepted = request.provider_id + "|" +
-				request.provider_version.string() + "|" + request.task_id;
-
 			for (std::size_t index = 0U; index < frames.size(); ++index)
 			{
 				const auto& value = frames[index];
@@ -233,8 +213,7 @@ namespace cxxlens::sdk::provider
 				if (optional_extension)
 					continue;
 				std::optional<std::string> control;
-				if (value.type != message_type::column_chunk &&
-					value.type != message_type::batch_end)
+				if (value.type == message_type::hello)
 				{
 					auto decoded = decode_control_text(value.control);
 					if (!decoded)
@@ -254,46 +233,60 @@ namespace cxxlens::sdk::provider
 						hello_seen = true;
 						break;
 					case message_type::schema_negotiate:
-						if (!hello_seen || schema_seen || accepted || *control != expected_schema ||
+					{
+						auto metadata = decode_schema_negotiate_metadata(value.control);
+						if (!hello_seen || schema_seen || accepted || !metadata ||
+							metadata->protocol_schema != "cxxlens.provider-protocol.v1" ||
+							metadata->protocol_minor != session_limits.maximum_minor ||
 							!value.payload.empty())
 							return fail(
 								"provider.protocol-state-invalid", request.task_id, "schema");
 						schema_seen = true;
 						break;
+					}
 					case message_type::task_accepted:
-						if (!schema_seen || accepted || *control != expected_accepted ||
-							!value.payload.empty())
+					{
+						auto metadata = decode_task_accepted_metadata(value.control);
+						if (!metadata)
+							return fail("provider.protocol-state-invalid",
+										request.task_id,
+										"control-metadata");
+						if (!schema_seen || accepted ||
+							metadata->provider_id != request.provider_id ||
+							metadata->provider_version != request.provider_version.string() ||
+							metadata->task_id != request.task_id || !value.payload.empty())
 							return fail(
 								"provider.task-binding-mismatch", request.task_id, "accepted");
 						accepted = true;
 						break;
+					}
 					case message_type::batch_begin:
 					{
-						const auto fields = split_fields(*control, '|');
-						if (!accepted || batch || fields.size() != 6U ||
-							fields[0U] != request.task_id ||
-							std::ranges::any_of(fields,
-												[](const std::string_view field)
-												{
-													return field.empty();
-												}) ||
-							!protocol_digest(fields[2U]) || !value.payload.empty() ||
-							!batches.insert(std::string{fields[5U]}).second)
+						auto metadata = decode_batch_begin_metadata(value.control);
+						if (!accepted || batch || !metadata ||
+							metadata->task_id != request.task_id ||
+							metadata->descriptor_id.empty() ||
+							metadata->dependency_group_id.empty() ||
+							metadata->atomic_output_group_id.empty() ||
+							metadata->batch_id.empty() ||
+							!protocol_digest(metadata->descriptor_digest) ||
+							!value.payload.empty() || !batches.insert(metadata->batch_id).second)
 							return fail("provider.batch-invalid", request.task_id, "begin");
 						if (request.provider_manifest != nullptr &&
-							!offered_relation(*request.provider_manifest, fields[1U]))
+							!offered_relation(*request.provider_manifest, metadata->descriptor_id))
 							return fail(
-								"provider.relation-incompatible", std::string{fields[1U]}, "offer");
+								"provider.relation-incompatible", metadata->descriptor_id, "offer");
 						const auto* descriptor =
-							output_descriptor(request.output_descriptors, fields[1U]);
-						if (descriptor == nullptr || descriptor->descriptor_digest != fields[2U])
+							output_descriptor(request.output_descriptors, metadata->descriptor_id);
+						if (descriptor == nullptr ||
+							descriptor->descriptor_digest != metadata->descriptor_digest)
 							return fail("provider.relation-incompatible",
-										std::string{fields[1U]},
+										metadata->descriptor_id,
 										"descriptor-digest");
 						open_batch opened{descriptor,
-										  std::string{fields[3U]},
-										  std::string{fields[4U]},
-										  std::string{fields[5U]},
+										  std::move(metadata->dependency_group_id),
+										  std::move(metadata->atomic_output_group_id),
+										  std::move(metadata->batch_id),
 										  {},
 										  {},
 										  {},
@@ -374,76 +367,91 @@ namespace cxxlens::sdk::provider
 					}
 					case message_type::coverage_chunk:
 					{
-						if (!accepted || batch || coverage_seen || !value.payload.empty())
+						auto records = decode_coverage_metadata(value.control);
+						if (!accepted || batch || coverage_seen || !records ||
+							!value.payload.empty())
 							return fail(
 								"provider.protocol-state-invalid", request.task_id, "coverage");
 						coverage_seen = true;
 						bool task_covered{};
 						std::set<std::pair<std::string, std::string>> seen;
-						for (const auto line : split_fields(*control, '\n'))
+						for (const auto& record : *records)
 						{
-							if (line.empty())
-								continue;
-							const auto fields = split_fields(line, '|');
 							static const std::set<std::string_view> states{
 								"covered", "excluded", "failed", "not_applicable", "unresolved"};
-							if (fields.size() != 4U || fields[0U].empty() || fields[1U].empty() ||
-								!states.contains(fields[2U]) ||
-								!seen.emplace(fields[0U], fields[1U]).second)
+							if (record.kind.empty() || record.id.empty() ||
+								!states.contains(record.state) ||
+								!seen.emplace(record.kind, record.id).second)
 								return fail(
 									"provider.coverage-incomplete", request.task_id, "coverage");
 							task_covered = task_covered ||
-								(fields[0U] == "task" && fields[1U] == request.task_id &&
-								 fields[2U] == "covered");
+								(record.kind == "task" && record.id == request.task_id &&
+								 record.state == "covered");
 						}
 						if (!task_covered)
 							return fail("provider.coverage-incomplete", request.task_id, "task");
 						break;
 					}
 					case message_type::unresolved_chunk:
-					case message_type::progress:
 					{
-						bool& seen = value.type == message_type::unresolved_chunk ? unresolved_seen
-																				  : progress_seen;
-						if (!accepted || batch || seen || !value.payload.empty())
+						auto records = decode_unresolved_metadata(value.control);
+						if (!accepted || batch || unresolved_seen || !records ||
+							!value.payload.empty())
 							return fail(
 								"provider.protocol-state-invalid", request.task_id, "side-channel");
-						seen = true;
-						if (!control->empty())
-							for (const auto line : split_fields(*control, '\n'))
-							{
-								if (line.empty())
-									continue;
-								const auto fields = split_fields(line, '|');
-								if (fields.size() != 3U || !namespaced(fields[0U]) ||
-									fields[1U].empty())
-									return fail("provider.protocol-state-invalid",
-												request.task_id,
-												"side-channel-value");
-							}
+						unresolved_seen = true;
+						for (const auto& record : *records)
+							if (!namespaced(record.code) || record.code.contains('\0') ||
+								record.subject.empty())
+								return fail("provider.protocol-state-invalid",
+											request.task_id,
+											"side-channel-value");
+						break;
+					}
+					case message_type::progress:
+					{
+						auto records = decode_evidence_metadata(value.control);
+						if (!accepted || batch || progress_seen || !records ||
+							!value.payload.empty())
+							return fail(
+								"provider.protocol-state-invalid", request.task_id, "side-channel");
+						progress_seen = true;
+						for (const auto& record : *records)
+							if (!namespaced(record.kind) || record.kind.contains('\0') ||
+								record.subject.empty() || record.producer.empty())
+								return fail("provider.protocol-state-invalid",
+											request.task_id,
+											"side-channel-value");
 						break;
 					}
 					case message_type::task_complete:
+					{
+						auto metadata = decode_task_complete_metadata(value.control);
 						if (!accepted || batch || !coverage_seen || !unresolved_seen ||
-							!progress_seen || *control != request.task_id + "|complete" ||
+							!progress_seen || !metadata || metadata->task_id != request.task_id ||
 							!value.payload.empty())
 							return fail(
 								"provider.protocol-state-invalid", request.task_id, "complete");
 						terminal = {transcript_terminal_kind::complete, "provider.success"};
 						terminal_seen = true;
 						break;
+					}
 					case message_type::task_failed:
 					{
-						const auto fields = split_fields(*control, '|');
-						if (!schema_seen || fields.size() < 3U || !namespaced(fields[0U]) ||
-							fields[1U] != request.task_id || fields[2U].empty() ||
-							!value.payload.empty())
+						auto metadata = decode_task_failed_metadata(value.control);
+						if (!metadata || metadata->error_code.contains('\0'))
+							return fail("provider.protocol-state-invalid",
+										request.task_id,
+										"control-metadata");
+						if (!schema_seen || !namespaced(metadata->error_code) ||
+							metadata->task_id != request.task_id || !value.payload.empty())
 							return fail(
 								"provider.task-binding-mismatch", request.task_id, "failed");
-						if (!allowed_failure_terminal(fields[0U]))
+						if (!allowed_failure_terminal(metadata->error_code))
 							return fail(
 								"provider.schema-invalid", request.task_id, "failure-reason");
-						terminal = {transcript_terminal_kind::failed, std::string{fields[0U]}};
+						terminal = {transcript_terminal_kind::failed,
+									std::move(metadata->error_code)};
 						terminal_seen = true;
 						break;
 					}
@@ -478,15 +486,16 @@ namespace cxxlens::sdk::provider
 		{
 			const auto& manifest = request.selection.selected_candidate().description;
 			auto hello = encode_control_text(manifest.canonical_json());
-			auto schema = encode_control_text(std::string{"cxxlens.provider-protocol.v1|minor="} +
-											  std::to_string(session_limits.maximum_minor));
-			auto open =
-				encode_control_text(request.task_id + "|" + request.task_input_digest + "|" +
-									request.normalized_invocation_digest + "|" +
-									request.toolchain_digest + "|" + request.environment_digest);
-			auto credit = encode_control_text(std::to_string(request.output_credit.bytes) + "|" +
-											  std::to_string(request.output_credit.frames));
-			auto close = encode_control_text(request.task_id);
+			auto schema = encode_schema_negotiate_metadata(
+				{"cxxlens.provider-protocol.v1", session_limits.maximum_minor});
+			auto open = encode_open_task_metadata({request.task_id,
+												   request.task_input_digest,
+												   request.normalized_invocation_digest,
+												   request.toolchain_digest,
+												   request.environment_digest});
+			auto credit =
+				encode_credit_metadata({request.output_credit.bytes, request.output_credit.frames});
+			auto close = encode_close_metadata({request.task_id});
 			if (!hello || !schema || !open || !credit || !close)
 				return cxxlens::sdk::unexpected(runtime_error(
 					"provider.process-request-invalid", request.task_id, "control-utf8"));
@@ -685,7 +694,7 @@ namespace cxxlens::sdk::provider
 				runtime_error("provider.runtime-unavailable", "process-port"));
 		if (auto valid = request.selection.validate(); !valid)
 			return cxxlens::sdk::unexpected(std::move(valid.error()));
-		if (request.task_id.empty() || request.task_id.contains('|') ||
+		if (request.task_id.empty() || request.task_id.contains('\0') ||
 			request.selection.selected_candidate().executable_argv.empty() ||
 			request.selection.selected_candidate().executable_argv.front().empty() ||
 			!canonical_digest(request.task_input_digest) ||

@@ -558,24 +558,6 @@ namespace cxxlens::detail::clang22
 			std::ostream* output_;
 		};
 
-		[[nodiscard]] std::optional<std::uint64_t> unsigned_field(const std::string_view text,
-																  const std::size_t separator)
-		{
-			if (separator == std::string_view::npos || separator + 1U >= text.size())
-				return std::nullopt;
-			std::uint64_t output{};
-			for (const auto byte : text.substr(separator + 1U))
-			{
-				if (byte < '0' || byte > '9')
-					return std::nullopt;
-				const auto digit = static_cast<std::uint64_t>(byte - '0');
-				if (output > (std::numeric_limits<std::uint64_t>::max() - digit) / 10U)
-					return std::nullopt;
-				output = output * 10U + digit;
-			}
-			return output;
-		}
-
 #if CXXLENS_HAS_CLANG22
 		[[nodiscard]] std::string declaration_key(const clang::NamedDecl& declaration)
 		{
@@ -1274,29 +1256,20 @@ namespace cxxlens::detail::clang22
 	{
 		auto frames = sdk::provider::decode_frame_stream(input);
 		if (!frames || frames->size() != 5U || frames->at(0U).type != message_type::hello_ack ||
+			frames->at(1U).type != message_type::schema_negotiate ||
 			frames->at(2U).type != message_type::open_task ||
-			frames->at(3U).type != message_type::credit)
+			frames->at(3U).type != message_type::credit ||
+			frames->at(4U).type != message_type::close)
 			return EXIT_FAILURE;
 		auto hello = sdk::provider::decode_control_text(frames->at(0U).control);
-		auto task_control = sdk::provider::decode_control_text(frames->at(2U).control);
-		auto credit = sdk::provider::decode_control_text(frames->at(3U).control);
-		if (!hello || !task_control || !credit)
-			return EXIT_FAILURE;
-		const auto first_credit_separator = credit->find('|');
-		auto byte_credit = unsigned_field(*credit, std::string_view::npos);
-		if (first_credit_separator != std::string::npos)
-		{
-			std::uint64_t parsed{};
-			for (const auto byte : std::string_view{*credit}.substr(0U, first_credit_separator))
-			{
-				if (byte < '0' || byte > '9')
-					return EXIT_FAILURE;
-				parsed = parsed * 10U + static_cast<std::uint64_t>(byte - '0');
-			}
-			byte_credit = parsed;
-		}
-		const auto frame_credit = unsigned_field(*credit, first_credit_separator);
-		if (!byte_credit || !frame_credit || *byte_credit == 0U || *frame_credit == 0U)
+		auto schema = sdk::provider::decode_schema_negotiate_metadata(frames->at(1U).control);
+		auto task_control = sdk::provider::decode_open_task_metadata(frames->at(2U).control);
+		auto credit = sdk::provider::decode_credit_metadata(frames->at(3U).control);
+		auto close = sdk::provider::decode_close_metadata(frames->at(4U).control);
+		if (!hello || !schema || !task_control || !credit || !close ||
+			schema->protocol_schema != "cxxlens.provider-protocol.v1" ||
+			schema->protocol_minor != frames->at(1U).protocol_minor || credit->bytes == 0U ||
+			credit->frames == 0U || close->task_id != task_control->task_id)
 			return EXIT_FAILURE;
 		if (!std::string_view{*hello}.contains(std::string{R"("provider_id":")"} +
 											   std::string{provider_id} + "\"") ||
@@ -1305,68 +1278,47 @@ namespace cxxlens::detail::clang22
 
 		stream_sink sink{output};
 		sdk::provider::protocol_writer writer{sink};
-		writer.grant_credit({*byte_credit, *frame_credit});
+		writer.grant_credit({credit->bytes, credit->frames});
 		if (!writer.send(message_type::hello, frames->at(0U).control))
 			return EXIT_FAILURE;
 		if (!writer.send(message_type::schema_negotiate, frames->at(1U).control))
 			return EXIT_FAILURE;
-		const auto control_parts = std::string_view{*task_control};
-		std::array<std::string_view, 5U> task_fields;
-		std::size_t field_begin{};
-		for (std::size_t index = 0U; index < task_fields.size(); ++index)
-		{
-			const auto separator = control_parts.find('|', field_begin);
-			if ((index + 1U < task_fields.size() && separator == std::string_view::npos) ||
-				(index + 1U == task_fields.size() && separator != std::string_view::npos))
-				return EXIT_FAILURE;
-			const auto field_end =
-				separator == std::string_view::npos ? control_parts.size() : separator;
-			task_fields.at(index) = control_parts.substr(field_begin, field_end - field_begin);
-			field_begin = field_end + 1U;
-		}
-		if (std::ranges::any_of(task_fields,
-								[](const std::string_view field)
-								{
-									return field.empty();
-								}))
+		if (task_control->task_id.empty() || task_control->task_input_digest.empty() ||
+			task_control->normalized_invocation_digest.empty() ||
+			task_control->toolchain_digest.empty() || task_control->environment_digest.empty())
 			return EXIT_FAILURE;
-		const std::string task_id{task_fields[0U]};
+		const std::string task_id{task_control->task_id};
+		const auto send_frontend_failure = [&](const std::string_view field)
+		{
+			auto control = sdk::provider::encode_task_failed_metadata(
+				{"provider.frontend-request-invalid", task_id, std::string{field}});
+			if (control)
+				(void)writer.send(message_type::task_failed, *control);
+		};
 
 		auto request = decode_task_input(frames->at(2U).payload);
 		if (!request)
 		{
-			const auto failed = bytes("provider.frontend-request-invalid|" + task_id + "|payload");
-			std::vector<std::byte> control{static_cast<std::byte>(0x78U),
-										   static_cast<std::byte>(failed.size())};
-			control.insert(control.end(), failed.begin(), failed.end());
-			(void)writer.send(message_type::task_failed, control);
+			send_frontend_failure("payload");
 			return EXIT_SUCCESS;
 		}
-		if (sdk::content_digest(frames->at(2U).payload) != task_fields[1U])
+		if (sdk::content_digest(frames->at(2U).payload) != task_control->task_input_digest)
 		{
-			const auto failed = bytes("provider.frontend-request-invalid|" + task_id + "|digest");
-			std::vector<std::byte> control{static_cast<std::byte>(0x78U),
-										   static_cast<std::byte>(failed.size())};
-			control.insert(control.end(), failed.begin(), failed.end());
-			(void)writer.send(message_type::task_failed, control);
+			send_frontend_failure("digest");
 			return EXIT_SUCCESS;
 		}
-		const std::string toolchain_digest{task_fields[3U]};
-		const std::string environment_digest{task_fields[4U]};
+		const std::string toolchain_digest{task_control->toolchain_digest};
+		const std::string environment_digest{task_control->environment_digest};
 		const auto source_digest = sdk::content_digest(std::as_bytes(std::span{request->source}));
 		auto catalog = sdk::project_catalog::make(".",
 												  environment_digest,
 												  {{request->compile_unit,
-													std::string{task_fields[2U]},
+													task_control->normalized_invocation_digest,
 													source_digest,
 													environment_digest}});
 		if (!catalog)
 		{
-			const auto failed = bytes("provider.frontend-request-invalid|" + task_id + "|project");
-			std::vector<std::byte> control{static_cast<std::byte>(0x78U),
-										   static_cast<std::byte>(failed.size())};
-			control.insert(control.end(), failed.begin(), failed.end());
-			(void)writer.send(message_type::task_failed, control);
+			send_frontend_failure("project");
 			return EXIT_SUCCESS;
 		}
 		std::vector outputs{entity_observation_descriptor(),
@@ -1391,11 +1343,7 @@ namespace cxxlens::detail::clang22
 											  {"canonical", "observation"});
 		if (!task || task->task_id != task_id)
 		{
-			const auto failed = bytes("provider.frontend-request-invalid|" + task_id + "|task-id");
-			std::vector<std::byte> control{static_cast<std::byte>(0x78U),
-										   static_cast<std::byte>(failed.size())};
-			control.insert(control.end(), failed.begin(), failed.end());
-			(void)writer.send(message_type::task_failed, control);
+			send_frontend_failure("task-id");
 			return EXIT_SUCCESS;
 		}
 		canonical_provider provider{std::move(*request), toolchain_digest};

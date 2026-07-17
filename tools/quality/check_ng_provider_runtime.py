@@ -125,6 +125,17 @@ def validate(root: pathlib.Path) -> None:
             "validate_provider_transcript",
             "allowed_failure_terminal",
             "validated_success_",
+            "decode_task_accepted_metadata",
+            "decode_batch_begin_metadata",
+            "decode_coverage_metadata",
+            "decode_unresolved_metadata",
+            "decode_evidence_metadata",
+            "decode_task_complete_metadata",
+            "decode_task_failed_metadata",
+            "encode_schema_negotiate_metadata",
+            "encode_open_task_metadata",
+            "encode_credit_metadata",
+            "encode_close_metadata",
         ),
         "src/sdk/provider_validation_internal.hpp": (
             "transcript_validation_request",
@@ -137,6 +148,16 @@ def validate(root: pathlib.Path) -> None:
             "provider.invalid-frame-flags",
             "provider.unsupported-compression",
             "encode_control_text",
+            "encode_task_accepted_metadata",
+            "encode_batch_begin_metadata",
+            "encode_coverage_metadata",
+            "encode_unresolved_metadata",
+            "encode_evidence_metadata",
+            "decode_schema_negotiate_metadata",
+            "decode_open_task_metadata",
+            "decode_credit_metadata",
+            "decode_close_metadata",
+            "value.summary",
             "encode_column_chunk",
             "decode_columnar_batch_end",
             "valid_utf8",
@@ -186,8 +207,8 @@ def validate(root: pathlib.Path) -> None:
     catalog = load(root / "schemas/cxxlens_ng_public_api_catalog.yaml")
     entries = {entry["id"]: entry for entry in catalog["entries"]}
     runtime = entries.get("public.provider-runtime")
-    if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#137":
-        raise ContractError("public.provider-runtime is not an implemented Issue #137 entry")
+    if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#138":
+        raise ContractError("public.provider-runtime is not an implemented Issue #138 entry")
 
     namespaces = load(root / "schemas/cxxlens_ng_namespace_registry.yaml")
     if not any(

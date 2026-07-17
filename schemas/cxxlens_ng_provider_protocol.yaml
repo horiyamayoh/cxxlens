@@ -1,11 +1,11 @@
 schema: cxxlens.provider-protocol.v1
-document_version: 1.7.0
+document_version: 1.8.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#18-provider-protocol
   index: docs/design/catalogs/README.md
-  decision_adr: docs/design/adr/0045-typed-provider-terminal-verdict.md
-  owner_issue: '#102'
+  decision_adr: docs/design/adr/0069-structured-provider-control-metadata.md
+  owner_issue: '#138'
   owner: steward.ng-provider-protocol
 compatibility:
   version_axis: provider-protocol
@@ -159,6 +159,30 @@ state_machine_validation:
     - provider.batch-state-invalid
     - provider.relation-incompatible
     - provider.coverage-incomplete
+structured_control_metadata:
+  encoding: deterministic-typed-cbor-map
+  delimiter_parsing: forbidden
+  common: [schema-discriminator, exact-field-set, text-type-and-byte-length, canonical-key-order, canonical-record-order, shortest-length, duplicate-key-reject, duplicate-record-reject, trailing-byte-reject]
+  single_records:
+    schema_negotiate: [protocol_schema, protocol_minor]
+    open_task: [task_id, task_input_digest, normalized_invocation_digest, toolchain_digest, environment_digest]
+    credit: [bytes, frames]
+    close: [task_id]
+    task_accepted: [provider_id, provider_version, task_id]
+    batch_begin: [task_id, descriptor_id, descriptor_digest, dependency_group_id, atomic_output_group_id, batch_id]
+    task_complete: [task_id, status]
+    task_failed: [error_code, task_id, error_field]
+  unsigned_fields: [schema_negotiate.protocol_minor, credit.bytes, credit.frames]
+  record_sets:
+    common: [schema, record_count, indexed-exact-fields]
+    coverage: [kind, id, state, reason]
+    unresolved: [code, subject, detail]
+    evidence: [kind, subject, producer, summary]
+  text_policy:
+    codec: strict-utf8-byte-preserving
+    schema-allowed: [pipe, lf, cr, nul, multi-byte-utf8]
+    semantic-identifiers: validate-after-decode
+  evidence_identity: summary-is-required-and-bound-by-control-digest
 handshake:
   hello_required:
     - provider_id

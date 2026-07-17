@@ -2455,7 +2455,14 @@ Issue #64 / ADR 0010 で exact wire を確定した。machine-readable authority
 ADR 0041 により、CBOR text encoder/decoder は overlong encoding、isolated/invalid continuation、truncation、surrogate、
 U+10FFFF 超過を同じ strict UTF-8 scalar validator で reject する。validated bytes は normalization や replacement を行わず
 byte-preserving とする。U+0000 は codec 上 valid として保持し、許可可否は decode 後の typed control schema が決める。
-現行 delimiter-based provider session control は NUL を reject し、identity comparison、digest、JSON report へ渡さない。
+
+Issue #138 / ADR 0069 により schema negotiate、open task、credit、close、task accepted、batch begin、coverage、unresolved、
+evidence、task complete、task failed は
+schema discriminator、exact named field、record count を持つ deterministic typed CBOR map とする。delimiter split は使用しない。
+reason/detail/summary 等の schema が許す text は `|`、LF、CR、U+0000、multi-byte UTF-8 を lossless に保持し、semantic ID の
+grammar は decode 後に検証する。evidence は summary を含む4 fieldを wire と transcript control digest に bind し、summary の差を
+execution report identity から落としてはならない。portable worker、process fixture、testing harness、shared host validator は同じ
+typed encoder/decoder を使用する。
 
 ADR 0040 により、decoder は major/minor/flags を public frame に保持し、session negotiation で選んだ exact
 major/minor と全 frame を照合する。reserved bit と unknown required extension は reject し、codec 未交渉の

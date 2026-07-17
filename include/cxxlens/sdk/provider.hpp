@@ -278,7 +278,7 @@ namespace cxxlens::sdk::provider
 		std::vector<unresolved_item> items_;
 	};
 
-	/** @brief Structured evidence item; prose is not an identity input. */
+	/** @brief Structured evidence item whose summary is retained in transcript identity. */
 	struct evidence_item
 	{
 		std::string kind;
@@ -299,6 +299,152 @@ namespace cxxlens::sdk::provider
 	  private:
 		std::vector<evidence_item> items_;
 	};
+
+	/** @brief Exact provider identity and task binding carried by task_accepted. */
+	struct task_accepted_metadata
+	{
+		std::string provider_id;
+		std::string provider_version;
+		std::string task_id;
+		[[nodiscard]] bool operator==(const task_accepted_metadata&) const = default;
+	};
+
+	/** @brief Exact relation and group binding carried by batch_begin. */
+	struct batch_begin_metadata
+	{
+		std::string task_id;
+		std::string descriptor_id;
+		std::string descriptor_digest;
+		std::string dependency_group_id;
+		std::string atomic_output_group_id;
+		std::string batch_id;
+		[[nodiscard]] bool operator==(const batch_begin_metadata&) const = default;
+	};
+
+	/** @brief Exact successful terminal binding carried by task_complete. */
+	struct task_complete_metadata
+	{
+		std::string task_id;
+		[[nodiscard]] bool operator==(const task_complete_metadata&) const = default;
+	};
+
+	/** @brief Exact failed terminal binding carried by task_failed. */
+	struct task_failed_metadata
+	{
+		std::string error_code;
+		std::string task_id;
+		std::string error_field;
+		[[nodiscard]] bool operator==(const task_failed_metadata&) const = default;
+	};
+
+	/** @brief Exact protocol schema and minor carried by schema_negotiate. */
+	struct schema_negotiate_metadata
+	{
+		std::string protocol_schema;
+		std::uint64_t protocol_minor{};
+		[[nodiscard]] bool operator==(const schema_negotiate_metadata&) const = default;
+	};
+
+	/** @brief Exact task input and environment binding carried by open_task. */
+	struct open_task_metadata
+	{
+		std::string task_id;
+		std::string task_input_digest;
+		std::string normalized_invocation_digest;
+		std::string toolchain_digest;
+		std::string environment_digest;
+		[[nodiscard]] bool operator==(const open_task_metadata&) const = default;
+	};
+
+	/** @brief Exact host-granted byte and frame credit. */
+	struct credit_metadata
+	{
+		std::uint64_t bytes{};
+		std::uint64_t frames{};
+		[[nodiscard]] bool operator==(const credit_metadata&) const = default;
+	};
+
+	/** @brief Exact task binding carried by close. */
+	struct close_metadata
+	{
+		std::string task_id;
+		[[nodiscard]] bool operator==(const close_metadata&) const = default;
+	};
+
+	/** @brief Encode/decode exact deterministic CBOR metadata for task_accepted. */
+	[[nodiscard]] result<std::vector<std::byte>>
+	encode_task_accepted_metadata(const task_accepted_metadata& value);
+	/** @brief Decode and validate exact task_accepted CBOR metadata. */
+	[[nodiscard]] result<task_accepted_metadata>
+	decode_task_accepted_metadata(std::span<const std::byte> control);
+
+	/** @brief Encode/decode exact deterministic CBOR metadata for batch_begin. */
+	[[nodiscard]] result<std::vector<std::byte>>
+	encode_batch_begin_metadata(const batch_begin_metadata& value);
+	/** @brief Decode and validate exact batch_begin CBOR metadata. */
+	[[nodiscard]] result<batch_begin_metadata>
+	decode_batch_begin_metadata(std::span<const std::byte> control);
+
+	/** @brief Encode/decode a canonical coverage record set with explicit record count. */
+	[[nodiscard]] result<std::vector<std::byte>>
+	encode_coverage_metadata(std::span<const coverage_unit> values);
+	/** @brief Decode canonical coverage records without losing text bytes. */
+	[[nodiscard]] result<std::vector<coverage_unit>>
+	decode_coverage_metadata(std::span<const std::byte> control);
+
+	/** @brief Encode/decode a canonical unresolved record set with explicit record count. */
+	[[nodiscard]] result<std::vector<std::byte>>
+	encode_unresolved_metadata(std::span<const unresolved_item> values);
+	/** @brief Decode canonical unresolved records without losing detail. */
+	[[nodiscard]] result<std::vector<unresolved_item>>
+	decode_unresolved_metadata(std::span<const std::byte> control);
+
+	/** @brief Encode/decode a canonical evidence record set, including every summary. */
+	[[nodiscard]] result<std::vector<std::byte>>
+	encode_evidence_metadata(std::span<const evidence_item> values);
+	/** @brief Decode canonical evidence records including every summary. */
+	[[nodiscard]] result<std::vector<evidence_item>>
+	decode_evidence_metadata(std::span<const std::byte> control);
+
+	/** @brief Encode/decode exact deterministic CBOR metadata for task_complete. */
+	[[nodiscard]] result<std::vector<std::byte>>
+	encode_task_complete_metadata(const task_complete_metadata& value);
+	/** @brief Decode and validate exact task_complete CBOR metadata. */
+	[[nodiscard]] result<task_complete_metadata>
+	decode_task_complete_metadata(std::span<const std::byte> control);
+
+	/** @brief Encode/decode exact deterministic CBOR metadata for task_failed. */
+	[[nodiscard]] result<std::vector<std::byte>>
+	encode_task_failed_metadata(const task_failed_metadata& value);
+	/** @brief Decode and validate exact task_failed CBOR metadata. */
+	[[nodiscard]] result<task_failed_metadata>
+	decode_task_failed_metadata(std::span<const std::byte> control);
+
+	/** @brief Encode/decode exact deterministic CBOR metadata for schema_negotiate. */
+	[[nodiscard]] result<std::vector<std::byte>>
+	encode_schema_negotiate_metadata(const schema_negotiate_metadata& value);
+	/** @brief Decode and validate exact schema_negotiate CBOR metadata. */
+	[[nodiscard]] result<schema_negotiate_metadata>
+	decode_schema_negotiate_metadata(std::span<const std::byte> control);
+
+	/** @brief Encode/decode exact deterministic CBOR metadata for open_task. */
+	[[nodiscard]] result<std::vector<std::byte>>
+	encode_open_task_metadata(const open_task_metadata& value);
+	/** @brief Decode and validate exact open_task CBOR metadata. */
+	[[nodiscard]] result<open_task_metadata>
+	decode_open_task_metadata(std::span<const std::byte> control);
+
+	/** @brief Encode/decode exact deterministic CBOR metadata for credit. */
+	[[nodiscard]] result<std::vector<std::byte>>
+	encode_credit_metadata(const credit_metadata& value);
+	/** @brief Decode and validate exact credit CBOR metadata. */
+	[[nodiscard]] result<credit_metadata>
+	decode_credit_metadata(std::span<const std::byte> control);
+
+	/** @brief Encode/decode exact deterministic CBOR metadata for close. */
+	[[nodiscard]] result<std::vector<std::byte>> encode_close_metadata(const close_metadata& value);
+	/** @brief Decode and validate exact close CBOR metadata. */
+	[[nodiscard]] result<close_metadata> decode_close_metadata(std::span<const std::byte> control);
 
 	/** @brief Exact provider identity, relation offer, interpretation, and stage authority. */
 	struct provider_session

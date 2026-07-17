@@ -146,8 +146,8 @@ def validate_provider_task_contract(
     contract = load_yaml(root / PROVIDER_TASK_CONTRACT)
     schema_validate(contract, load_yaml(root / PROVIDER_TASK_SCHEMA))
     public_entry = entries.get("public.provider-sdk", {})
-    if public_entry.get("owner_issue") != "#122":
-        fail("portable provider task ownership must remain with Issue #122")
+    if public_entry.get("owner_issue") != "#138":
+        fail("portable provider SDK ownership must remain with Issue #138")
     signatures = "\n".join(
         symbol.get("signature", "") for symbol in public_entry.get("symbols", [])
     )
@@ -175,7 +175,10 @@ def validate_provider_task_contract(
     ):
         if marker not in provider_source:
             fail(f"portable provider task implementation marker is missing: {marker}")
-    for marker in ("fields.size() != 6U", "fields[0U] != request.task_id"):
+    for marker in (
+        "decode_batch_begin_metadata(value.control)",
+        "metadata->task_id != request.task_id",
+    ):
         if marker not in runtime_source:
             fail(f"batch_begin task binding marker is missing: {marker}")
     protocol = load_yaml(root / "schemas/cxxlens_ng_provider_protocol.yaml")

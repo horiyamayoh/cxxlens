@@ -97,7 +97,8 @@ namespace
 					   cxxlens::sdk::project_catalog project,
 					   std::vector<cxxlens::sdk::relation_descriptor> outputs,
 					   std::string condition = "condition:all",
-					   std::string interpretation = "company.test")
+					   std::string interpretation = "company.test",
+					   std::vector<std::string> dependency_groups = {"dependency-1"})
 	{
 		auto task =
 			cxxlens::sdk::provider::task::make({std::string{provider.id()},
@@ -112,7 +113,7 @@ namespace
 											   std::move(outputs),
 											   std::move(condition),
 											   std::move(interpretation),
-											   {"dependency-1"});
+											   std::move(dependency_groups));
 		require(task.has_value(), "valid provider task was rejected");
 		return std::move(*task);
 	}
@@ -161,6 +162,64 @@ namespace
 		require(row.has_value(), "row did not finish");
 		return std::move(*row);
 	}
+
+	[[nodiscard]] std::string structured_control_text()
+	{
+		std::string value{"pipe|line\nreturn\r"};
+		value.push_back('\0');
+		value += "雪";
+		return value;
+	}
+
+	class structured_metadata_provider final : public cxxlens::sdk::provider::portable_provider
+	{
+	  public:
+		explicit structured_metadata_provider(const bool alternate_summary)
+			: alternate_summary_{alternate_summary}
+		{
+		}
+
+		[[nodiscard]] std::string_view id() const noexcept override
+		{
+			return "company.test.structured-metadata-provider";
+		}
+		[[nodiscard]] cxxlens::sdk::semantic_version version() const noexcept override
+		{
+			return {1U, 0U, 0U};
+		}
+		[[nodiscard]] std::string_view semantic_contract_digest() const noexcept override
+		{
+			return provider_contract_digest;
+		}
+		cxxlens::sdk::result<void> run(const cxxlens::sdk::provider::task& task,
+									   cxxlens::sdk::provider::context& context) override
+		{
+			const auto special = structured_control_text();
+			auto output = context.relation(cxxlens::cc::relations::call_site::descriptor());
+			if (auto begun = output.begin(task.dependency_groups.front(), special, special); !begun)
+				return begun;
+			if (auto pushed = output.push(make_call_row()); !pushed)
+				return pushed;
+			if (auto ended = output.end(); !ended)
+				return ended;
+			context.coverage().request("task", task.task_id);
+			if (auto classified =
+					context.coverage().classify({"task", task.task_id, "covered", special});
+				!classified)
+				return classified;
+			context.unresolved().add({"provider.delimiter", special, special});
+			context.evidence().add(
+				{"provider.evidence", special, std::string{id()}, "summary-A" + special});
+			context.evidence().add({"provider.evidence",
+									special,
+									std::string{id()},
+									(alternate_summary_ ? "summary-C" : "summary-B") + special});
+			return {};
+		}
+
+	  private:
+		bool alternate_summary_{};
+	};
 
 	[[nodiscard]] cxxlens::sdk::detached_row make_lock_row()
 	{
@@ -1823,6 +1882,195 @@ namespace
 			: reference;
 		require(accepted && accepted->accepted && reference && reference->accepted,
 				"exact provider task/session was rejected");
+
+		using namespace cxxlens::sdk::provider;
+		const auto special = structured_control_text();
+		const task_accepted_metadata accepted_metadata{special, special, special};
+		auto accepted_control = encode_task_accepted_metadata(accepted_metadata);
+		auto accepted_round_trip = accepted_control
+			? decode_task_accepted_metadata(*accepted_control)
+			: cxxlens::sdk::result<task_accepted_metadata>{
+				  cxxlens::sdk::unexpected(accepted_control.error())};
+		const batch_begin_metadata begin_metadata{
+			special, special, special, special, special, special};
+		auto begin_control = encode_batch_begin_metadata(begin_metadata);
+		auto begin_round_trip = begin_control
+			? decode_batch_begin_metadata(*begin_control)
+			: cxxlens::sdk::result<batch_begin_metadata>{
+				  cxxlens::sdk::unexpected(begin_control.error())};
+		const std::array coverage_values{coverage_unit{special, special, special, special}};
+		const std::array unresolved_values{unresolved_item{special, special, special}};
+		const std::array evidence_values{evidence_item{special, special, special, special}};
+		auto coverage_control = encode_coverage_metadata(coverage_values);
+		auto unresolved_control = encode_unresolved_metadata(unresolved_values);
+		auto evidence_control = encode_evidence_metadata(evidence_values);
+		const std::array evidence_order_a{
+			evidence_item{"provider.evidence", "subject-b", "producer", "summary-b"},
+			evidence_item{"provider.evidence", "subject-a", "producer", "summary-a"}};
+		auto evidence_order_b = evidence_order_a;
+		std::ranges::reverse(evidence_order_b);
+		auto canonical_evidence_a = encode_evidence_metadata(evidence_order_a);
+		auto canonical_evidence_b = encode_evidence_metadata(evidence_order_b);
+		const std::array duplicate_evidence{evidence_order_a.front(), evidence_order_a.front()};
+		auto rejected_duplicate_evidence = encode_evidence_metadata(duplicate_evidence);
+		auto coverage_round_trip = coverage_control
+			? decode_coverage_metadata(*coverage_control)
+			: cxxlens::sdk::result<std::vector<coverage_unit>>{
+				  cxxlens::sdk::unexpected(coverage_control.error())};
+		auto unresolved_round_trip = unresolved_control
+			? decode_unresolved_metadata(*unresolved_control)
+			: cxxlens::sdk::result<std::vector<unresolved_item>>{
+				  cxxlens::sdk::unexpected(unresolved_control.error())};
+		auto evidence_round_trip = evidence_control
+			? decode_evidence_metadata(*evidence_control)
+			: cxxlens::sdk::result<std::vector<evidence_item>>{
+				  cxxlens::sdk::unexpected(evidence_control.error())};
+		const task_complete_metadata complete_metadata{special};
+		const task_failed_metadata failed_metadata{special, special, special};
+		auto complete_control = encode_task_complete_metadata(complete_metadata);
+		auto failed_control = encode_task_failed_metadata(failed_metadata);
+		auto complete_round_trip = complete_control
+			? decode_task_complete_metadata(*complete_control)
+			: cxxlens::sdk::result<task_complete_metadata>{
+				  cxxlens::sdk::unexpected(complete_control.error())};
+		auto failed_round_trip = failed_control
+			? decode_task_failed_metadata(*failed_control)
+			: cxxlens::sdk::result<task_failed_metadata>{
+				  cxxlens::sdk::unexpected(failed_control.error())};
+		const schema_negotiate_metadata schema_metadata{special,
+														std::numeric_limits<std::uint64_t>::max()};
+		const open_task_metadata open_metadata{special, special, special, special, special};
+		const credit_metadata credit_metadata_value{std::numeric_limits<std::uint64_t>::max(), 42U};
+		const close_metadata close_metadata_value{special};
+		auto schema_control = encode_schema_negotiate_metadata(schema_metadata);
+		auto open_control = encode_open_task_metadata(open_metadata);
+		auto credit_control = encode_credit_metadata(credit_metadata_value);
+		auto close_control = encode_close_metadata(close_metadata_value);
+		auto schema_round_trip = schema_control
+			? decode_schema_negotiate_metadata(*schema_control)
+			: cxxlens::sdk::result<schema_negotiate_metadata>{
+				  cxxlens::sdk::unexpected(schema_control.error())};
+		auto open_round_trip = open_control ? decode_open_task_metadata(*open_control)
+											: cxxlens::sdk::result<open_task_metadata>{
+												  cxxlens::sdk::unexpected(open_control.error())};
+		auto credit_round_trip = credit_control
+			? decode_credit_metadata(*credit_control)
+			: cxxlens::sdk::result<credit_metadata>{
+				  cxxlens::sdk::unexpected(credit_control.error())};
+		auto close_round_trip = close_control
+			? decode_close_metadata(*close_control)
+			: cxxlens::sdk::result<close_metadata>{cxxlens::sdk::unexpected(close_control.error())};
+		require(
+			accepted_round_trip && *accepted_round_trip == accepted_metadata && begin_round_trip &&
+				*begin_round_trip == begin_metadata && coverage_round_trip &&
+				coverage_round_trip->size() == 1U && coverage_round_trip->front().kind == special &&
+				coverage_round_trip->front().id == special &&
+				coverage_round_trip->front().state == special &&
+				coverage_round_trip->front().reason == special && unresolved_round_trip &&
+				*unresolved_round_trip ==
+					std::vector<unresolved_item>{unresolved_values.begin(),
+												 unresolved_values.end()} &&
+				evidence_round_trip &&
+				*evidence_round_trip ==
+					std::vector<evidence_item>{evidence_values.begin(), evidence_values.end()} &&
+				canonical_evidence_a && canonical_evidence_b &&
+				*canonical_evidence_a == *canonical_evidence_b && !rejected_duplicate_evidence &&
+				complete_round_trip && *complete_round_trip == complete_metadata &&
+				failed_round_trip && *failed_round_trip == failed_metadata && schema_round_trip &&
+				*schema_round_trip == schema_metadata && open_round_trip &&
+				*open_round_trip == open_metadata && credit_round_trip &&
+				*credit_round_trip == credit_metadata_value && close_round_trip &&
+				*close_round_trip == close_metadata_value,
+			"structured control metadata did not preserve delimiter, NUL, or UTF-8 fields");
+
+		auto short_map = *accepted_control;
+		short_map.front() = std::byte{0xa3};
+		auto trailing = *accepted_control;
+		trailing.push_back(std::byte{});
+		std::vector<std::byte> duplicate_key{std::byte{0xa2}};
+		for (std::size_t index = 0U; index < 2U; ++index)
+		{
+			duplicate_key.push_back(std::byte{0x66});
+			for (const auto value : std::string_view{"schema"})
+				duplicate_key.push_back(static_cast<std::byte>(value));
+			duplicate_key.push_back(std::byte{0x61});
+			duplicate_key.push_back(static_cast<std::byte>('x'));
+		}
+		std::span<const coverage_unit> no_coverage;
+		auto invalid_count = encode_coverage_metadata(no_coverage);
+		require(invalid_count.has_value(), "empty structured coverage fixture did not encode");
+		const std::string_view count_key{"record_count"};
+		auto count_key_position = std::ranges::search(
+			*invalid_count, std::as_bytes(std::span{count_key.data(), count_key.size()}));
+		if (count_key_position.end() != invalid_count->end())
+			*count_key_position.end() = std::byte{1U};
+		require(!decode_task_accepted_metadata(short_map) &&
+					!decode_task_accepted_metadata(trailing) &&
+					!decode_task_accepted_metadata(duplicate_key) && invalid_count &&
+					!decode_coverage_metadata(*invalid_count),
+				"structured control accepted field count, duplicate key, trailing bytes, or bad "
+				"record count");
+
+		structured_metadata_provider metadata_a{false};
+		structured_metadata_provider metadata_b{true};
+		const std::string dependency_special{"dependency|雪"};
+		auto metadata_task = make_provider_task(metadata_a,
+												task.project,
+												{cxxlens::cc::relations::call_site::descriptor()},
+												"condition:all",
+												"company.test",
+												{dependency_special});
+		auto metadata_report_a = harness.run(metadata_a, metadata_task);
+		auto metadata_report_b = harness.run(metadata_b, metadata_task);
+		const auto metadata_frame = [&](const message_type type) -> const frame*
+		{
+			if (!metadata_report_a)
+				return nullptr;
+			const auto found = std::ranges::find(metadata_report_a->frames, type, &frame::type);
+			return found == metadata_report_a->frames.end() ? nullptr : &*found;
+		};
+		const auto* begin_frame = metadata_frame(message_type::batch_begin);
+		const auto* coverage_frame = metadata_frame(message_type::coverage_chunk);
+		const auto* unresolved_frame = metadata_frame(message_type::unresolved_chunk);
+		const auto* evidence_frame = metadata_frame(message_type::progress);
+		auto decoded_begin = begin_frame
+			? decode_batch_begin_metadata(begin_frame->control)
+			: cxxlens::sdk::result<batch_begin_metadata>{
+				  cxxlens::sdk::unexpected(cxxlens::sdk::error{"sdk.test-setup", "begin", {}})};
+		auto decoded_coverage = coverage_frame
+			? decode_coverage_metadata(coverage_frame->control)
+			: cxxlens::sdk::result<std::vector<coverage_unit>>{
+				  cxxlens::sdk::unexpected(cxxlens::sdk::error{"sdk.test-setup", "coverage", {}})};
+		auto decoded_unresolved = unresolved_frame
+			? decode_unresolved_metadata(unresolved_frame->control)
+			: cxxlens::sdk::result<std::vector<unresolved_item>>{cxxlens::sdk::unexpected(
+				  cxxlens::sdk::error{"sdk.test-setup", "unresolved", {}})};
+		auto decoded_evidence = evidence_frame
+			? decode_evidence_metadata(evidence_frame->control)
+			: cxxlens::sdk::result<std::vector<evidence_item>>{
+				  cxxlens::sdk::unexpected(cxxlens::sdk::error{"sdk.test-setup", "evidence", {}})};
+		process_execution_report process_identity_a;
+		process_execution_report process_identity_b;
+		if (metadata_report_a && metadata_report_b)
+		{
+			process_identity_a.frames = metadata_report_a->frames;
+			process_identity_b.frames = metadata_report_b->frames;
+		}
+		require(metadata_report_a && metadata_report_a->accepted && metadata_report_b &&
+					metadata_report_b->accepted &&
+					metadata_report_a->semantic_transcript !=
+						metadata_report_b->semantic_transcript &&
+					process_identity_a.canonical_form() != process_identity_b.canonical_form() &&
+					decoded_begin && decoded_begin->dependency_group_id == dependency_special &&
+					decoded_begin->atomic_output_group_id == special &&
+					decoded_begin->batch_id == special && decoded_coverage &&
+					decoded_coverage->front().reason == special && decoded_unresolved &&
+					decoded_unresolved->front().subject == special &&
+					decoded_unresolved->front().detail == special && decoded_evidence &&
+					decoded_evidence->size() == 2U &&
+					decoded_evidence->front().summary != decoded_evidence->back().summary,
+				"SDK-generated structured transcript lost delimiters, evidence summary, or digest "
+				"identity");
 		require(forged && !forged->accepted && forged->reason_code == "provider.task-invalid" &&
 					forged->frames.empty() && mutated && !mutated->accepted &&
 					mutated->frames.empty() && mismatched_shape && !mismatched_shape->accepted &&

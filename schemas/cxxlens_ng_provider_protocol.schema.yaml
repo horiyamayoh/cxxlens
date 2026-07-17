@@ -12,6 +12,7 @@ required:
   - wire
   - message_types
   - state_machine_validation
+  - structured_control_metadata
   - handshake
   - columnar_chunks
   - flow_control
@@ -24,7 +25,7 @@ required:
   - backend_authority
 properties:
   schema: {const: cxxlens.provider-protocol.v1}
-  document_version: {const: 1.7.0}
+  document_version: {const: 1.8.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -34,8 +35,8 @@ properties:
       design:
         const: docs/design/cxxlens_next_generation_integrated_design_ja.md#18-provider-protocol
       index: {const: docs/design/catalogs/README.md}
-      decision_adr: {const: docs/design/adr/0045-typed-provider-terminal-verdict.md}
-      owner_issue: {const: '#102'}
+      decision_adr: {const: docs/design/adr/0069-structured-provider-control-metadata.md}
+      owner_issue: {const: '#138'}
       owner: {const: steward.ng-provider-protocol}
   compatibility:
     const:
@@ -175,6 +176,31 @@ properties:
     type: object
     minProperties: 1
     additionalProperties: true
+  structured_control_metadata:
+    const:
+      encoding: deterministic-typed-cbor-map
+      delimiter_parsing: forbidden
+      common: [schema-discriminator, exact-field-set, text-type-and-byte-length, canonical-key-order, canonical-record-order, shortest-length, duplicate-key-reject, duplicate-record-reject, trailing-byte-reject]
+      single_records:
+        schema_negotiate: [protocol_schema, protocol_minor]
+        open_task: [task_id, task_input_digest, normalized_invocation_digest, toolchain_digest, environment_digest]
+        credit: [bytes, frames]
+        close: [task_id]
+        task_accepted: [provider_id, provider_version, task_id]
+        batch_begin: [task_id, descriptor_id, descriptor_digest, dependency_group_id, atomic_output_group_id, batch_id]
+        task_complete: [task_id, status]
+        task_failed: [error_code, task_id, error_field]
+      unsigned_fields: [schema_negotiate.protocol_minor, credit.bytes, credit.frames]
+      record_sets:
+        common: [schema, record_count, indexed-exact-fields]
+        coverage: [kind, id, state, reason]
+        unresolved: [code, subject, detail]
+        evidence: [kind, subject, producer, summary]
+      text_policy:
+        codec: strict-utf8-byte-preserving
+        schema-allowed: [pipe, lf, cr, nul, multi-byte-utf8]
+        semantic-identifiers: validate-after-decode
+      evidence_identity: summary-is-required-and-bound-by-control-digest
   handshake:
     const:
       hello_required:

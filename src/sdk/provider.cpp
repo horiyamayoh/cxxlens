@@ -476,12 +476,118 @@ namespace cxxlens::sdk::provider
 			return output.str();
 		}
 
-		[[nodiscard]] std::string join_lines(const auto& values)
+		[[nodiscard]] error control_metadata_error(std::string detail)
 		{
-			std::ostringstream output;
-			for (const auto& value : values)
-				output << value << '\n';
-			return output.str();
+			return provider_error(
+				"provider.protocol-state-invalid", "control-metadata", std::move(detail));
+		}
+
+		[[nodiscard]] result<std::vector<std::byte>> encode_control_metadata_record(
+			const std::string_view schema,
+			const std::span<const std::pair<std::string_view, std::string_view>> fields)
+		{
+			std::vector<std::pair<std::string, cbor_scalar>> values;
+			values.reserve(fields.size() + 1U);
+			values.emplace_back("schema", std::string{schema});
+			for (const auto& [name, value] : fields)
+				values.emplace_back(std::string{name}, std::string{value});
+			auto encoded = encode_cbor_map(values);
+			if (!encoded)
+				return cxxlens::sdk::unexpected(control_metadata_error(encoded.error().detail));
+			return encoded;
+		}
+
+		[[nodiscard]] result<std::vector<std::string>>
+		decode_control_metadata_record(const std::span<const std::byte> control,
+									   const std::string_view schema,
+									   const std::span<const std::string_view> field_names)
+		{
+			auto fields = decode_cbor_map(control);
+			if (!fields || fields->size() != field_names.size() + 1U)
+				return cxxlens::sdk::unexpected(control_metadata_error("record-shape"));
+			const auto* actual_schema = cbor_field<std::string>(*fields, "schema");
+			if (actual_schema == nullptr || *actual_schema != schema)
+				return cxxlens::sdk::unexpected(control_metadata_error("record-schema"));
+			std::vector<std::string> output;
+			output.reserve(field_names.size());
+			for (const auto name : field_names)
+			{
+				const auto* value = cbor_field<std::string>(*fields, name);
+				if (value == nullptr)
+					return cxxlens::sdk::unexpected(control_metadata_error("record-field"));
+				output.push_back(*value);
+			}
+			return output;
+		}
+
+		[[nodiscard]] result<std::vector<std::byte>>
+		encode_control_metadata_records(const std::string_view schema,
+										const std::span<const std::string_view> field_names,
+										const std::span<const std::vector<std::string>> records)
+		{
+			if (field_names.empty() ||
+				records.size() >
+					(std::numeric_limits<std::size_t>::max() - 2U) / field_names.size())
+				return cxxlens::sdk::unexpected(control_metadata_error("records-size"));
+			std::vector<std::vector<std::string>> canonical_records{records.begin(), records.end()};
+			std::ranges::sort(canonical_records);
+			if (std::ranges::adjacent_find(canonical_records) != canonical_records.end())
+				return cxxlens::sdk::unexpected(control_metadata_error("records-duplicate"));
+			std::vector<std::pair<std::string, cbor_scalar>> fields;
+			fields.reserve(2U + canonical_records.size() * field_names.size());
+			fields.emplace_back("schema", std::string{schema});
+			fields.emplace_back("record_count",
+								static_cast<std::uint64_t>(canonical_records.size()));
+			for (std::size_t record = 0U; record < canonical_records.size(); ++record)
+			{
+				if (canonical_records[record].size() != field_names.size())
+					return cxxlens::sdk::unexpected(control_metadata_error("record-width"));
+				for (std::size_t field = 0U; field < field_names.size(); ++field)
+					fields.emplace_back(std::to_string(record) + "." +
+											std::string{field_names[field]},
+										canonical_records[record][field]);
+			}
+			auto encoded = encode_cbor_map(fields);
+			if (!encoded)
+				return cxxlens::sdk::unexpected(control_metadata_error(encoded.error().detail));
+			return encoded;
+		}
+
+		[[nodiscard]] result<std::vector<std::vector<std::string>>>
+		decode_control_metadata_records(const std::span<const std::byte> control,
+										const std::string_view schema,
+										const std::span<const std::string_view> field_names)
+		{
+			auto fields = decode_cbor_map(control);
+			if (!fields || fields->size() < 2U || field_names.empty())
+				return cxxlens::sdk::unexpected(control_metadata_error("records-shape"));
+			const auto* actual_schema = cbor_field<std::string>(*fields, "schema");
+			const auto* count = cbor_field<std::uint64_t>(*fields, "record_count");
+			const auto available = fields->size() - 2U;
+			if (actual_schema == nullptr || *actual_schema != schema || count == nullptr ||
+				available % field_names.size() != 0U || *count != available / field_names.size())
+				return cxxlens::sdk::unexpected(control_metadata_error("records-schema-or-count"));
+			std::vector<std::vector<std::string>> output;
+			output.reserve(static_cast<std::size_t>(*count));
+			for (std::uint64_t record = 0U; record < *count; ++record)
+			{
+				std::vector<std::string> row;
+				row.reserve(field_names.size());
+				for (const auto name : field_names)
+				{
+					const auto key = std::to_string(record) + "." + std::string{name};
+					const auto* value = cbor_field<std::string>(*fields, key);
+					if (value == nullptr)
+						return cxxlens::sdk::unexpected(control_metadata_error("records-field"));
+					row.push_back(*value);
+				}
+				output.push_back(std::move(row));
+			}
+			if (!std::ranges::is_sorted(output) ||
+				std::ranges::adjacent_find(output) != output.end())
+				return cxxlens::sdk::unexpected(
+					control_metadata_error("records-order-or-duplicate"));
+			return output;
 		}
 
 		[[nodiscard]] std::string_view sandbox_name(const sandbox_assurance value) noexcept
@@ -820,6 +926,321 @@ namespace cxxlens::sdk::provider
 		const auto encoded = bytes(text);
 		output.insert(output.end(), encoded.begin(), encoded.end());
 		return output;
+	}
+
+	result<std::vector<std::byte>>
+	encode_task_accepted_metadata(const task_accepted_metadata& value)
+	{
+		const std::array fields{
+			std::pair<std::string_view, std::string_view>{"provider_id", value.provider_id},
+			std::pair<std::string_view, std::string_view>{"provider_version",
+														  value.provider_version},
+			std::pair<std::string_view, std::string_view>{"task_id", value.task_id},
+		};
+		return encode_control_metadata_record("cxxlens.provider-control.task-accepted.v1", fields);
+	}
+
+	result<task_accepted_metadata>
+	decode_task_accepted_metadata(const std::span<const std::byte> control)
+	{
+		constexpr std::array fields{std::string_view{"provider_id"},
+									std::string_view{"provider_version"},
+									std::string_view{"task_id"}};
+		auto values = decode_control_metadata_record(
+			control, "cxxlens.provider-control.task-accepted.v1", fields);
+		if (!values)
+			return cxxlens::sdk::unexpected(std::move(values.error()));
+		return task_accepted_metadata{
+			std::move(values->at(0U)), std::move(values->at(1U)), std::move(values->at(2U))};
+	}
+
+	result<std::vector<std::byte>> encode_batch_begin_metadata(const batch_begin_metadata& value)
+	{
+		const std::array fields{
+			std::pair<std::string_view, std::string_view>{"task_id", value.task_id},
+			std::pair<std::string_view, std::string_view>{"descriptor_id", value.descriptor_id},
+			std::pair<std::string_view, std::string_view>{"descriptor_digest",
+														  value.descriptor_digest},
+			std::pair<std::string_view, std::string_view>{"dependency_group_id",
+														  value.dependency_group_id},
+			std::pair<std::string_view, std::string_view>{"atomic_output_group_id",
+														  value.atomic_output_group_id},
+			std::pair<std::string_view, std::string_view>{"batch_id", value.batch_id},
+		};
+		return encode_control_metadata_record("cxxlens.provider-control.batch-begin.v1", fields);
+	}
+
+	result<batch_begin_metadata>
+	decode_batch_begin_metadata(const std::span<const std::byte> control)
+	{
+		constexpr std::array fields{std::string_view{"task_id"},
+									std::string_view{"descriptor_id"},
+									std::string_view{"descriptor_digest"},
+									std::string_view{"dependency_group_id"},
+									std::string_view{"atomic_output_group_id"},
+									std::string_view{"batch_id"}};
+		auto values = decode_control_metadata_record(
+			control, "cxxlens.provider-control.batch-begin.v1", fields);
+		if (!values)
+			return cxxlens::sdk::unexpected(std::move(values.error()));
+		return batch_begin_metadata{std::move(values->at(0U)),
+									std::move(values->at(1U)),
+									std::move(values->at(2U)),
+									std::move(values->at(3U)),
+									std::move(values->at(4U)),
+									std::move(values->at(5U))};
+	}
+
+	result<std::vector<std::byte>>
+	encode_coverage_metadata(const std::span<const coverage_unit> values)
+	{
+		constexpr std::array fields{std::string_view{"kind"},
+									std::string_view{"id"},
+									std::string_view{"state"},
+									std::string_view{"reason"}};
+		std::vector<std::vector<std::string>> records;
+		records.reserve(values.size());
+		for (const auto& value : values)
+			records.push_back({value.kind, value.id, value.state, value.reason});
+		return encode_control_metadata_records(
+			"cxxlens.provider-control.coverage.v1", fields, records);
+	}
+
+	result<std::vector<coverage_unit>>
+	decode_coverage_metadata(const std::span<const std::byte> control)
+	{
+		constexpr std::array fields{std::string_view{"kind"},
+									std::string_view{"id"},
+									std::string_view{"state"},
+									std::string_view{"reason"}};
+		auto records = decode_control_metadata_records(
+			control, "cxxlens.provider-control.coverage.v1", fields);
+		if (!records)
+			return cxxlens::sdk::unexpected(std::move(records.error()));
+		std::vector<coverage_unit> output;
+		output.reserve(records->size());
+		for (auto& record : *records)
+			output.push_back({std::move(record[0U]),
+							  std::move(record[1U]),
+							  std::move(record[2U]),
+							  std::move(record[3U])});
+		return output;
+	}
+
+	result<std::vector<std::byte>>
+	encode_unresolved_metadata(const std::span<const unresolved_item> values)
+	{
+		constexpr std::array fields{
+			std::string_view{"code"}, std::string_view{"subject"}, std::string_view{"detail"}};
+		std::vector<std::vector<std::string>> records;
+		records.reserve(values.size());
+		for (const auto& value : values)
+			records.push_back({value.code, value.subject, value.detail});
+		return encode_control_metadata_records(
+			"cxxlens.provider-control.unresolved.v1", fields, records);
+	}
+
+	result<std::vector<unresolved_item>>
+	decode_unresolved_metadata(const std::span<const std::byte> control)
+	{
+		constexpr std::array fields{
+			std::string_view{"code"}, std::string_view{"subject"}, std::string_view{"detail"}};
+		auto records = decode_control_metadata_records(
+			control, "cxxlens.provider-control.unresolved.v1", fields);
+		if (!records)
+			return cxxlens::sdk::unexpected(std::move(records.error()));
+		std::vector<unresolved_item> output;
+		output.reserve(records->size());
+		for (auto& record : *records)
+			output.push_back({std::move(record[0U]), std::move(record[1U]), std::move(record[2U])});
+		return output;
+	}
+
+	result<std::vector<std::byte>>
+	encode_evidence_metadata(const std::span<const evidence_item> values)
+	{
+		constexpr std::array fields{std::string_view{"kind"},
+									std::string_view{"subject"},
+									std::string_view{"producer"},
+									std::string_view{"summary"}};
+		std::vector<std::vector<std::string>> records;
+		records.reserve(values.size());
+		for (const auto& value : values)
+			records.push_back({value.kind, value.subject, value.producer, value.summary});
+		return encode_control_metadata_records(
+			"cxxlens.provider-control.evidence.v1", fields, records);
+	}
+
+	result<std::vector<evidence_item>>
+	decode_evidence_metadata(const std::span<const std::byte> control)
+	{
+		constexpr std::array fields{std::string_view{"kind"},
+									std::string_view{"subject"},
+									std::string_view{"producer"},
+									std::string_view{"summary"}};
+		auto records = decode_control_metadata_records(
+			control, "cxxlens.provider-control.evidence.v1", fields);
+		if (!records)
+			return cxxlens::sdk::unexpected(std::move(records.error()));
+		std::vector<evidence_item> output;
+		output.reserve(records->size());
+		for (auto& record : *records)
+			output.push_back({std::move(record[0U]),
+							  std::move(record[1U]),
+							  std::move(record[2U]),
+							  std::move(record[3U])});
+		return output;
+	}
+
+	result<std::vector<std::byte>>
+	encode_task_complete_metadata(const task_complete_metadata& value)
+	{
+		const std::array fields{
+			std::pair<std::string_view, std::string_view>{"task_id", value.task_id},
+			std::pair<std::string_view, std::string_view>{"status", "complete"},
+		};
+		return encode_control_metadata_record("cxxlens.provider-control.task-complete.v1", fields);
+	}
+
+	result<task_complete_metadata>
+	decode_task_complete_metadata(const std::span<const std::byte> control)
+	{
+		constexpr std::array fields{std::string_view{"task_id"}, std::string_view{"status"}};
+		auto values = decode_control_metadata_record(
+			control, "cxxlens.provider-control.task-complete.v1", fields);
+		if (!values || values->at(1U) != "complete")
+			return cxxlens::sdk::unexpected(values ? control_metadata_error("complete-status")
+												   : std::move(values.error()));
+		return task_complete_metadata{std::move(values->at(0U))};
+	}
+
+	result<std::vector<std::byte>> encode_task_failed_metadata(const task_failed_metadata& value)
+	{
+		const std::array fields{
+			std::pair<std::string_view, std::string_view>{"error_code", value.error_code},
+			std::pair<std::string_view, std::string_view>{"task_id", value.task_id},
+			std::pair<std::string_view, std::string_view>{"error_field", value.error_field},
+		};
+		return encode_control_metadata_record("cxxlens.provider-control.task-failed.v1", fields);
+	}
+
+	result<task_failed_metadata>
+	decode_task_failed_metadata(const std::span<const std::byte> control)
+	{
+		constexpr std::array fields{std::string_view{"error_code"},
+									std::string_view{"task_id"},
+									std::string_view{"error_field"}};
+		auto values = decode_control_metadata_record(
+			control, "cxxlens.provider-control.task-failed.v1", fields);
+		if (!values)
+			return cxxlens::sdk::unexpected(std::move(values.error()));
+		return task_failed_metadata{
+			std::move(values->at(0U)), std::move(values->at(1U)), std::move(values->at(2U))};
+	}
+
+	result<std::vector<std::byte>>
+	encode_schema_negotiate_metadata(const schema_negotiate_metadata& value)
+	{
+		auto encoded = encode_cbor_map({
+			{"schema", std::string{"cxxlens.provider-control.schema-negotiate.v1"}},
+			{"protocol_schema", value.protocol_schema},
+			{"protocol_minor", value.protocol_minor},
+		});
+		if (!encoded)
+			return cxxlens::sdk::unexpected(control_metadata_error(encoded.error().detail));
+		return encoded;
+	}
+
+	result<schema_negotiate_metadata>
+	decode_schema_negotiate_metadata(const std::span<const std::byte> control)
+	{
+		auto fields = decode_cbor_map(control);
+		if (!fields || fields->size() != 3U)
+			return cxxlens::sdk::unexpected(control_metadata_error("schema-negotiate-shape"));
+		const auto* schema = cbor_field<std::string>(*fields, "schema");
+		const auto* protocol_schema = cbor_field<std::string>(*fields, "protocol_schema");
+		const auto* protocol_minor = cbor_field<std::uint64_t>(*fields, "protocol_minor");
+		if (schema == nullptr || *schema != "cxxlens.provider-control.schema-negotiate.v1" ||
+			protocol_schema == nullptr || protocol_minor == nullptr)
+			return cxxlens::sdk::unexpected(control_metadata_error("schema-negotiate-fields"));
+		return schema_negotiate_metadata{*protocol_schema, *protocol_minor};
+	}
+
+	result<std::vector<std::byte>> encode_open_task_metadata(const open_task_metadata& value)
+	{
+		const std::array fields{
+			std::pair<std::string_view, std::string_view>{"task_id", value.task_id},
+			std::pair<std::string_view, std::string_view>{"task_input_digest",
+														  value.task_input_digest},
+			std::pair<std::string_view, std::string_view>{"normalized_invocation_digest",
+														  value.normalized_invocation_digest},
+			std::pair<std::string_view, std::string_view>{"toolchain_digest",
+														  value.toolchain_digest},
+			std::pair<std::string_view, std::string_view>{"environment_digest",
+														  value.environment_digest},
+		};
+		return encode_control_metadata_record("cxxlens.provider-control.open-task.v1", fields);
+	}
+
+	result<open_task_metadata> decode_open_task_metadata(const std::span<const std::byte> control)
+	{
+		constexpr std::array fields{std::string_view{"task_id"},
+									std::string_view{"task_input_digest"},
+									std::string_view{"normalized_invocation_digest"},
+									std::string_view{"toolchain_digest"},
+									std::string_view{"environment_digest"}};
+		auto values = decode_control_metadata_record(
+			control, "cxxlens.provider-control.open-task.v1", fields);
+		if (!values)
+			return cxxlens::sdk::unexpected(std::move(values.error()));
+		return open_task_metadata{std::move(values->at(0U)),
+								  std::move(values->at(1U)),
+								  std::move(values->at(2U)),
+								  std::move(values->at(3U)),
+								  std::move(values->at(4U))};
+	}
+
+	result<std::vector<std::byte>> encode_credit_metadata(const credit_metadata& value)
+	{
+		auto encoded = encode_cbor_map({
+			{"schema", std::string{"cxxlens.provider-control.credit.v1"}},
+			{"bytes", value.bytes},
+			{"frames", value.frames},
+		});
+		if (!encoded)
+			return cxxlens::sdk::unexpected(control_metadata_error(encoded.error().detail));
+		return encoded;
+	}
+
+	result<credit_metadata> decode_credit_metadata(const std::span<const std::byte> control)
+	{
+		auto fields = decode_cbor_map(control);
+		if (!fields || fields->size() != 3U)
+			return cxxlens::sdk::unexpected(control_metadata_error("credit-shape"));
+		const auto* schema = cbor_field<std::string>(*fields, "schema");
+		const auto* bytes_value = cbor_field<std::uint64_t>(*fields, "bytes");
+		const auto* frames_value = cbor_field<std::uint64_t>(*fields, "frames");
+		if (schema == nullptr || *schema != "cxxlens.provider-control.credit.v1" ||
+			bytes_value == nullptr || frames_value == nullptr)
+			return cxxlens::sdk::unexpected(control_metadata_error("credit-fields"));
+		return credit_metadata{*bytes_value, *frames_value};
+	}
+
+	result<std::vector<std::byte>> encode_close_metadata(const close_metadata& value)
+	{
+		const std::array fields{
+			std::pair<std::string_view, std::string_view>{"task_id", value.task_id}};
+		return encode_control_metadata_record("cxxlens.provider-control.close.v1", fields);
+	}
+
+	result<close_metadata> decode_close_metadata(const std::span<const std::byte> control)
+	{
+		constexpr std::array fields{std::string_view{"task_id"}};
+		auto values =
+			decode_control_metadata_record(control, "cxxlens.provider-control.close.v1", fields);
+		if (!values)
+			return cxxlens::sdk::unexpected(std::move(values.error()));
+		return close_metadata{std::move(values->front())};
 	}
 
 	result<encoded_column_chunk> encode_column_chunk(const column_chunk_record& value,
@@ -1805,9 +2226,12 @@ namespace cxxlens::sdk::provider
 		fresh_summaries.reserve(descriptor_.columns.size());
 		for (const auto& column : descriptor_.columns)
 			fresh_summaries.push_back({column.id, 0U, 0U});
-		auto control = encode_control_text(task_id_ + "|" + descriptor_.id + "|" +
-										   descriptor_.descriptor_digest + "|" + dependency_group +
-										   "|" + atomic_output_group + "|" + batch_id);
+		auto control = encode_batch_begin_metadata({task_id_,
+													descriptor_.id,
+													descriptor_.descriptor_digest,
+													dependency_group,
+													atomic_output_group,
+													batch_id});
 		if (!control)
 			return cxxlens::sdk::unexpected(std::move(control.error()));
 		if (registry_->active_batch || registry_->seen_batch_ids.contains(batch_id))
@@ -2751,8 +3175,8 @@ namespace cxxlens::sdk::provider
 			budget.output_bytes == 0U || budget.rows == 0U || budget.diagnostics == 0U ||
 			budget.open_files == 0U || budget.created_files == 0U || budget.subprocesses == 0U)
 			return cxxlens::sdk::unexpected(provider_error("provider.task-invalid", "budget"));
-		auto accepted = encode_control_text(std::string{provider_id} + "|" +
-											provider_version.string() + "|" + task_value.task_id);
+		auto accepted = encode_task_accepted_metadata(
+			{std::string{provider_id}, provider_version.string(), task_value.task_id});
 		if (!accepted)
 			return cxxlens::sdk::unexpected(std::move(accepted.error()));
 		if (auto sent = writer.send(message_type::task_accepted, *accepted); !sent)
@@ -2765,7 +3189,7 @@ namespace cxxlens::sdk::provider
 		const auto send_failed = [&](error failure) -> result<void>
 		{
 			auto failed =
-				encode_control_text(failure.code + "|" + task_value.task_id + "|" + failure.field);
+				encode_task_failed_metadata({failure.code, task_value.task_id, failure.field});
 			if (!failed)
 				return cxxlens::sdk::unexpected(std::move(failed.error()));
 			if (auto sent = writer.send(message_type::task_failed, *failed); !sent)
@@ -2788,29 +3212,23 @@ namespace cxxlens::sdk::provider
 			return send_failed(std::move(unresolved.error()));
 		if (!evidence)
 			return send_failed(std::move(evidence.error()));
-		std::vector<std::string> coverage_lines;
-		for (const auto& item : *coverage)
-			coverage_lines.push_back(item.kind + "|" + item.id + "|" + item.state + "|" +
-									 item.reason);
-		std::vector<std::string> unresolved_lines;
-		for (const auto& item : *unresolved)
-			unresolved_lines.push_back(item.code + "|" + item.subject + "|" + item.detail);
-		std::vector<std::string> evidence_lines;
-		for (const auto& item : *evidence)
-			evidence_lines.push_back(item.kind + "|" + item.subject + "|" + item.producer);
-		for (const auto& [type, text] : {
-				 std::pair{message_type::coverage_chunk, join_lines(coverage_lines)},
-				 std::pair{message_type::unresolved_chunk, join_lines(unresolved_lines)},
-				 std::pair{message_type::progress, join_lines(evidence_lines)},
+		auto coverage_control = encode_coverage_metadata(*coverage);
+		auto unresolved_control = encode_unresolved_metadata(*unresolved);
+		auto evidence_control = encode_evidence_metadata(*evidence);
+		if (!coverage_control)
+			return cxxlens::sdk::unexpected(std::move(coverage_control.error()));
+		if (!unresolved_control)
+			return cxxlens::sdk::unexpected(std::move(unresolved_control.error()));
+		if (!evidence_control)
+			return cxxlens::sdk::unexpected(std::move(evidence_control.error()));
+		for (const auto& [type, control] : {
+				 std::pair{message_type::coverage_chunk, &*coverage_control},
+				 std::pair{message_type::unresolved_chunk, &*unresolved_control},
+				 std::pair{message_type::progress, &*evidence_control},
 			 })
-		{
-			auto control = encode_control_text(text);
-			if (!control)
-				return cxxlens::sdk::unexpected(std::move(control.error()));
 			if (auto sent = writer.send(type, *control); !sent)
 				return sent;
-		}
-		auto complete = encode_control_text(task_value.task_id + "|complete");
+		auto complete = encode_task_complete_metadata({task_value.task_id});
 		if (!complete)
 			return cxxlens::sdk::unexpected(std::move(complete.error()));
 		return writer.send(message_type::task_complete, *complete);

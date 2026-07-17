@@ -92,9 +92,9 @@ entries:
     summary: Logical query, standard/custom join, budgets, explicit partiality, and flagship recipe absence bound to applicable closed-world proof.
   - id: gate.g4
     status: implemented
-    owner_issue: '#137'
+    owner_issue: '#138'
     profile: NG0
-    contract_issue: '#137'
+    contract_issue: '#138'
     depends_on: [gate.g1]
     evidence:
       - tests/unit/sdk/provider_runtime_test.cpp
@@ -120,6 +120,7 @@ entries:
       - docs/design/adr/0063-project-catalog-bottom-up-identity.md
       - docs/design/adr/0064-portable-provider-task-session-binding.md
       - docs/design/adr/0068-sandbox-assurance-closed-enum-boundary.md
+      - docs/design/adr/0069-structured-provider-control-metadata.md
       - src/sdk/provider_validation_internal.hpp
       - src/runtime/provider_process_adapter.cpp
       - schemas/cxxlens_ng_provider_protocol.yaml
@@ -128,7 +129,7 @@ entries:
       - schemas/cxxlens_ng_portable_provider_task_contract.yaml
       - schemas/cxxlens_ng_provider_execution_report.schema.yaml
       - schemas/cxxlens_ng_security_profile.yaml
-    summary: Provider runtime with closed-enum sandbox assurance, fail-closed child FD/ABI isolation, and AST-consistent source-stable Clang output.
+    summary: Provider runtime with lossless typed CBOR control metadata, closed-enum sandbox assurance, fail-closed child FD/ABI isolation, and AST-consistent source-stable Clang output.
   - id: gate.g5
     status: deferred
     owner_issue: '#69'

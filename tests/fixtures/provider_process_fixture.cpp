@@ -101,12 +101,17 @@ int main(const int argument_count, const char* const* arguments)
 	if (!frames || frames->size() != 5U || frames->at(0U).type != message_type::hello_ack ||
 		frames->at(1U).type != message_type::schema_negotiate ||
 		frames->at(2U).type != message_type::open_task ||
-		frames->at(3U).type != message_type::credit)
+		frames->at(3U).type != message_type::credit || frames->at(4U).type != message_type::close)
 		return EXIT_FAILURE;
-	auto task_control = decode_control_text(frames->at(2U).control);
-	if (!task_control || task_control->find('|') == std::string::npos)
+	auto schema_control = decode_schema_negotiate_metadata(frames->at(1U).control);
+	auto task_control = decode_open_task_metadata(frames->at(2U).control);
+	auto credit_control = decode_credit_metadata(frames->at(3U).control);
+	auto close_control = decode_close_metadata(frames->at(4U).control);
+	if (!schema_control || !task_control || !credit_control || !close_control ||
+		schema_control->protocol_schema.empty() || credit_control->bytes == 0U ||
+		credit_control->frames == 0U || close_control->task_id != task_control->task_id)
 		return EXIT_FAILURE;
-	const std::string task_id{task_control->substr(0U, task_control->find('|'))};
+	const std::string task_id{task_control->task_id};
 
 	if (mode == "crash")
 		(void)::raise(SIGSEGV);
@@ -138,9 +143,11 @@ int main(const int argument_count, const char* const* arguments)
 	if (!writer.send(message_type::hello, control(identity), {}, hello_flags))
 		return EXIT_FAILURE;
 	if (mode == "minimal")
-		return writer.send(message_type::task_complete, control(task_id + "|complete"))
-			? EXIT_SUCCESS
-			: EXIT_FAILURE;
+	{
+		auto complete = encode_task_complete_metadata({task_id});
+		return complete && writer.send(message_type::task_complete, *complete) ? EXIT_SUCCESS
+																			   : EXIT_FAILURE;
+	}
 	if (!writer.send(message_type::schema_negotiate, frames->at(1U).control))
 		return EXIT_FAILURE;
 	if (mode == "failed" || mode == "failure-success" || mode == "failure-unknown")
@@ -148,37 +155,39 @@ int main(const int argument_count, const char* const* arguments)
 		const auto reason = mode == "failure-success"
 			? "provider.success"
 			: (mode == "failure-unknown" ? "provider.unknown-reason" : "provider.schema-invalid");
-		return writer.send(message_type::task_failed,
-						   control(std::string{reason} + "|" + task_id + "|fixture"))
-			? EXIT_SUCCESS
-			: EXIT_FAILURE;
+		auto failed = encode_task_failed_metadata({reason, task_id, "fixture"});
+		return failed && writer.send(message_type::task_failed, *failed) ? EXIT_SUCCESS
+																		 : EXIT_FAILURE;
 	}
 	if (mode == "invalid-utf8")
 	{
 		const std::array invalid_control{std::byte{0x61}, std::byte{0x80}};
 		if (!writer.send(message_type::task_accepted, invalid_control))
 			return EXIT_FAILURE;
-		return writer.send(message_type::task_failed,
-						   control("provider.schema-invalid|" + task_id + "|fixture"))
-			? EXIT_SUCCESS
-			: EXIT_FAILURE;
+		auto failed = encode_task_failed_metadata({"provider.schema-invalid", task_id, "fixture"});
+		return failed && writer.send(message_type::task_failed, *failed) ? EXIT_SUCCESS
+																		 : EXIT_FAILURE;
 	}
-	if (mode != "missing-accepted" &&
-		!writer.send(message_type::task_accepted,
-					 control(std::string{provider_id} + "|1.0.0|" +
-							 (mode == "wrong-task" ? "other-task" : task_id))))
-		return EXIT_FAILURE;
+	if (mode != "missing-accepted")
+	{
+		auto accepted = encode_task_accepted_metadata(
+			{std::string{provider_id}, "1.0.0", mode == "wrong-task" ? "other-task" : task_id});
+		if (!accepted || !writer.send(message_type::task_accepted, *accepted))
+			return EXIT_FAILURE;
+	}
 	if (mode == "missing-accepted")
-		return writer.send(message_type::task_complete, control(task_id + "|complete"))
-			? EXIT_SUCCESS
-			: EXIT_FAILURE;
+	{
+		auto complete = encode_task_complete_metadata({task_id});
+		return complete && writer.send(message_type::task_complete, *complete) ? EXIT_SUCCESS
+																			   : EXIT_FAILURE;
+	}
 	if (mode == "nul-control")
 	{
-		constexpr char nul_failed[]{"provider.schema-invalid\0|task-1|fixture"};
-		return writer.send(message_type::task_failed,
-						   control(std::string_view{nul_failed, sizeof(nul_failed) - 1U}))
-			? EXIT_SUCCESS
-			: EXIT_FAILURE;
+		constexpr char nul_code[]{"provider.schema-invalid\0suffix"};
+		auto failed = encode_task_failed_metadata(
+			{std::string{nul_code, sizeof(nul_code) - 1U}, task_id, "fixture"});
+		return failed && writer.send(message_type::task_failed, *failed) ? EXIT_SUCCESS
+																		 : EXIT_FAILURE;
 	}
 	if (mode == "provider-credit" || mode == "provider-open-task" || mode == "provider-batch-ack")
 	{
@@ -187,9 +196,9 @@ int main(const int argument_count, const char* const* arguments)
 			: (mode == "provider-open-task" ? message_type::open_task : message_type::batch_ack);
 		if (!writer.send(type, control("provider-forbidden")))
 			return EXIT_FAILURE;
-		return writer.send(message_type::task_complete, control(task_id + "|complete"))
-			? EXIT_SUCCESS
-			: EXIT_FAILURE;
+		auto complete = encode_task_complete_metadata({task_id});
+		return complete && writer.send(message_type::task_complete, *complete) ? EXIT_SUCCESS
+																			   : EXIT_FAILURE;
 	}
 	if (mode == "optional-extension" &&
 		!writer.send(static_cast<message_type>(65000U),
@@ -217,14 +226,16 @@ int main(const int argument_count, const char* const* arguments)
 	const auto descriptor_digest = mode == "unknown-descriptor"
 		? std::string{"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}
 		: schema.descriptor_digest;
-	if (!writer.send(message_type::batch_begin,
-					 control(task_id + "|" + descriptor + "|" + descriptor_digest +
-							 "|dependency-1|atomic-1|batch-1")))
+	auto begin = encode_batch_begin_metadata(
+		{task_id, descriptor, descriptor_digest, "dependency-1", "atomic-1", "batch-1"});
+	if (!begin || !writer.send(message_type::batch_begin, *begin))
 		return EXIT_FAILURE;
 	if (mode == "unsealed-batch")
-		return writer.send(message_type::task_complete, control(task_id + "|complete"))
-			? EXIT_SUCCESS
-			: EXIT_FAILURE;
+	{
+		auto complete = encode_task_complete_metadata({task_id});
+		return complete && writer.send(message_type::task_complete, *complete) ? EXIT_SUCCESS
+																			   : EXIT_FAILURE;
+	}
 	const auto row = output_row();
 	std::vector<batch_column_summary> summaries;
 	std::vector<std::string> chunk_digests;
@@ -294,18 +305,28 @@ int main(const int argument_count, const char* const* arguments)
 		encoded_terminal->payload[10U + schema.columns.front().id.size()] ^= std::byte{1U};
 	if (!writer.send(message_type::batch_end, encoded_terminal->control, encoded_terminal->payload))
 		return EXIT_FAILURE;
-	const auto coverage = mode == "incomplete-coverage" ? std::string{"project|catalog|covered|"}
-														: "task|" + task_id + "|covered|";
+	const std::array coverage{coverage_unit{mode == "incomplete-coverage" ? "project" : "task",
+											mode == "incomplete-coverage" ? "catalog" : task_id,
+											"covered",
+											{}}};
+	const std::span<const unresolved_item> unresolved;
+	const std::span<const evidence_item> evidence;
+	auto coverage_control = encode_coverage_metadata(coverage);
+	auto unresolved_control = encode_unresolved_metadata(unresolved);
+	auto evidence_control = encode_evidence_metadata(evidence);
 	const auto terminal_flags = mode == "success-eos"
 		? static_cast<std::uint16_t>(frame_flag::end_of_stream)
 		: std::uint16_t{};
-	const auto complete_control = mode == "wrong-complete-task"
-		? std::string{"other-task|complete"}
-		: (mode == "missing-complete-control" ? std::string{} : task_id + "|complete");
-	if (!writer.send(message_type::coverage_chunk, control(coverage)) ||
-		!writer.send(message_type::unresolved_chunk, control("")) ||
-		!writer.send(message_type::progress, control("")) ||
-		!writer.send(message_type::task_complete, control(complete_control), {}, terminal_flags))
+	auto complete_control =
+		encode_task_complete_metadata({mode == "wrong-complete-task" ? "other-task" : task_id});
+	const std::span<const std::byte> final_control = mode == "missing-complete-control"
+		? std::span<const std::byte>{}
+		: std::span<const std::byte>{*complete_control};
+	if (!coverage_control || !unresolved_control || !evidence_control || !complete_control ||
+		!writer.send(message_type::coverage_chunk, *coverage_control) ||
+		!writer.send(message_type::unresolved_chunk, *unresolved_control) ||
+		!writer.send(message_type::progress, *evidence_control) ||
+		!writer.send(message_type::task_complete, final_control, {}, terminal_flags))
 		return EXIT_FAILURE;
 	return EXIT_SUCCESS;
 }

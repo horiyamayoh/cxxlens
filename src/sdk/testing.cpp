@@ -143,7 +143,7 @@ namespace cxxlens::sdk::testing
 		else if (fault == provider_fault::wrong_terminal_task)
 		{
 			auto terminal = provider::decode_frame(sink.frames.back());
-			auto control = provider::encode_control_text("foreign-task|complete");
+			auto control = provider::encode_task_complete_metadata({"foreign-task"});
 			if (!terminal || !control)
 				return cxxlens::sdk::unexpected(
 					error{"sdk.harness-fault-not-observed", "wrong_terminal_task", {}});

@@ -1,10 +1,10 @@
 schema: cxxlens.provider-runtime-contract.v1
-document_version: 1.11.0
+document_version: 1.12.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#17-provider-model
-  decision_adr: docs/design/adr/0046-resolved-sandbox-policy-enforcement.md
-  owner_issue: '#103'
+  decision_adr: docs/design/adr/0069-structured-provider-control-metadata.md
+  owner_issue: '#138'
   owner: steward.ng-provider-runtime
 dependencies:
   - schemas/cxxlens_ng_provider_protocol.yaml
@@ -145,8 +145,12 @@ protocol_session:
     unknown_required_extension: reject
     compressed_payload_without_negotiated_codec: reject
     end_of_stream: final-terminal-frame-only
-    control_text: strict-utf8-scalar-byte-preserving-before-typed-parse
-    typed_control_nul: reject-before-identity-digest-or-report
+    structured_control: exact-schema-deterministic-cbor-map-shared-encoder-decoder
+    structured_record_sets: explicit-count-indexed-exact-fields
+    delimiter_parsing: forbidden
+    control_text: strict-utf8-scalar-byte-preserving
+    typed_control_text: schema-allowed-pipe-lf-cr-nul-and-multibyte-preserved
+    evidence_summary: required-wire-field-bound-by-transcript-control-digest
     validator_bypass: forbidden
     harness_acceptance: complete-success-terminal-only
     callback_failure_cleanup: task-failed-terminal-for-provider-and-side-channel-finalization-errors
@@ -249,4 +253,5 @@ acceptance:
   - process-transcript-typed-state-machine-and-logical-wire-parity
   - protocol-version-flags-and-extension-semantics-fail-closed
   - control-text-strict-utf8-and-typed-nul-policy
+  - structured-control-metadata-lossless-and-delimiter-independent
   - immutable-selection-token-revalidated-before-process-effect

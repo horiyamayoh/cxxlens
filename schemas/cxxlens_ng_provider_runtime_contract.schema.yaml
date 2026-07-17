@@ -18,7 +18,7 @@ required:
   - acceptance
 properties:
   schema: {const: cxxlens.provider-runtime-contract.v1}
-  document_version: {const: 1.11.0}
+  document_version: {const: 1.12.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -27,7 +27,7 @@ properties:
     properties:
       design: {type: string, minLength: 1}
       decision_adr: {type: string, minLength: 1}
-      owner_issue: {const: '#103'}
+      owner_issue: {const: '#138'}
       owner: {const: steward.ng-provider-runtime}
   dependencies:
     type: array

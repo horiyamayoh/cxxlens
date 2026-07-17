@@ -619,6 +619,8 @@ namespace
 		for (const auto mode : {"success", "network-check", "fd-clean"})
 		{
 			auto request = task(select(executable, mode));
+			if (std::string_view{mode} == "success")
+				request.task_id = "task|delimiter-雪";
 			auto report = runtime.execute(request);
 			cxxlens::sdk::provider::task reference_task;
 			reference_task.task_id = request.task_id;

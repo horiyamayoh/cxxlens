@@ -1,5 +1,5 @@
 {
-  "asset_count": 341,
+  "asset_count": 342,
   "assets": [
     {
       "authority": "active",
@@ -900,6 +900,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0068-sandbox-assurance-closed-enum-boundary.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0069-structured-provider-control-metadata.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2390,7 +2397,7 @@
     }
   ],
   "classifications": {
-    "active": 305,
+    "active": 306,
     "archived": 35,
     "generated": 1
   },
