@@ -395,6 +395,54 @@ namespace cxxlens::sdk::provider
 			return true;
 		}
 
+		[[nodiscard]] bool semantic_text(const std::string_view value)
+		{
+			return !value.empty() && cxxlens::sdk::detail::valid_utf8(value) &&
+				std::ranges::none_of(value,
+									 [](const char byte)
+									 {
+										 const auto code = static_cast<unsigned char>(byte);
+										 return code < 0x20U || code == 0x7fU;
+									 });
+		}
+
+		[[nodiscard]] bool stable_token(const std::string_view value)
+		{
+			return !value.empty() && value.front() >= 'a' && value.front() <= 'z' &&
+				std::ranges::all_of(value.substr(1U),
+									[](const char byte)
+									{
+										return (byte >= 'a' && byte <= 'z') ||
+											(byte >= '0' && byte <= '9') || byte == '_' ||
+											byte == '.' || byte == '-';
+									});
+		}
+
+		[[nodiscard]] result<void>
+		validate_descriptor_set(const std::span<const relation_descriptor> descriptors,
+								const bool require_value,
+								const std::string_view field)
+		{
+			if (require_value && descriptors.empty())
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.task-invalid", std::string{field}, "empty"));
+			const relation_descriptor* previous{};
+			for (const auto& descriptor : descriptors)
+			{
+				if (auto valid = descriptor.validate(); !valid)
+					return cxxlens::sdk::unexpected(std::move(valid.error()));
+				if (previous != nullptr &&
+					(previous->id == descriptor.id ||
+					 std::tie(previous->id, previous->descriptor_digest) >=
+						 std::tie(descriptor.id, descriptor.descriptor_digest)))
+					return cxxlens::sdk::unexpected(provider_error("provider.task-invalid",
+																   std::string{field},
+																   "duplicate-conflict-or-order"));
+				previous = &descriptor;
+			}
+			return {};
+		}
+
 		[[nodiscard]] std::string canonical_array(std::vector<std::string> values)
 		{
 			std::ranges::sort(values);
@@ -1455,6 +1503,140 @@ namespace cxxlens::sdk::provider
 		return credit_frames_;
 	}
 
+	result<void> provider_session::validate() const
+	{
+		if (!namespaced(provider_id) || provider_version.major == 0U ||
+			!canonical_digest(provider_semantic_contract_digest) || !stable_token(input_stage) ||
+			!stable_token(output_stage) || !unique_nonempty(interpretation_domains, true) ||
+			!std::ranges::is_sorted(interpretation_domains) ||
+			!std::ranges::all_of(interpretation_domains, namespaced))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.task-invalid", "provider-session", "identity"));
+		if (auto valid = validate_descriptor_set(offered_outputs, true, "offered_outputs"); !valid)
+			return valid;
+		return validate_descriptor_set(required_relations, false, "required_relations");
+	}
+
+	result<std::vector<std::byte>> task::canonical_projection() const
+	{
+		if (auto valid = session.validate(); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		if (auto valid = project.validate(); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		if (auto valid = validate_descriptor_set(outputs, true, "outputs"); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		if (!semantic_text(condition) || !namespaced(interpretation) ||
+			!std::ranges::binary_search(session.interpretation_domains, interpretation) ||
+			!unique_nonempty(dependency_groups, true) ||
+			!std::ranges::is_sorted(dependency_groups) ||
+			!std::ranges::all_of(dependency_groups, semantic_text))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.task-invalid", "task-authority", "grammar-or-order"));
+
+		const auto descriptor_values = [](const std::span<const relation_descriptor> descriptors)
+		{
+			std::vector<canonical_value> values;
+			values.reserve(descriptors.size());
+			for (const auto& descriptor : descriptors)
+				values.push_back(canonical_value::from_tuple({
+					canonical_value::from_string(descriptor.id),
+					canonical_value::from_string(descriptor.descriptor_digest),
+				}));
+			return canonical_value::from_tuple(std::move(values));
+		};
+		const auto string_values = [](const std::span<const std::string> strings)
+		{
+			std::vector<canonical_value> values;
+			values.reserve(strings.size());
+			for (const auto& value : strings)
+				values.push_back(canonical_value::from_string(value));
+			return canonical_value::from_tuple(std::move(values));
+		};
+		return canonical_binary(canonical_value::from_tuple({
+			canonical_value::from_string("cxxlens.provider-task.v1"),
+			canonical_value::from_string(session.provider_id),
+			canonical_value::from_string(session.provider_version.string()),
+			canonical_value::from_string(session.provider_semantic_contract_digest),
+			canonical_value::from_string(project.catalog_id),
+			canonical_value::from_string(project.catalog_digest),
+			descriptor_values(outputs),
+			canonical_value::from_string(condition),
+			canonical_value::from_string(interpretation),
+			descriptor_values(session.offered_outputs),
+			descriptor_values(session.required_relations),
+			string_values(session.interpretation_domains),
+			canonical_value::from_string(session.input_stage),
+			canonical_value::from_string(session.output_stage),
+			string_values(dependency_groups),
+		}));
+	}
+
+	result<task> task::make(provider_session session_value,
+							project_catalog project_value,
+							std::vector<relation_descriptor> output_values,
+							std::string condition_value,
+							std::string interpretation_value,
+							std::vector<std::string> dependency_group_values)
+	{
+		const auto descriptor_order =
+			[](const relation_descriptor& left, const relation_descriptor& right)
+		{
+			return std::tie(left.id, left.descriptor_digest) <
+				std::tie(right.id, right.descriptor_digest);
+		};
+		std::ranges::sort(session_value.offered_outputs, descriptor_order);
+		std::ranges::sort(session_value.required_relations, descriptor_order);
+		std::ranges::sort(session_value.interpretation_domains);
+		std::ranges::sort(output_values, descriptor_order);
+		std::ranges::sort(dependency_group_values);
+		task output{{},
+					std::move(session_value),
+					std::move(project_value),
+					std::move(output_values),
+					std::move(condition_value),
+					std::move(interpretation_value),
+					std::move(dependency_group_values)};
+		auto projection = output.canonical_projection();
+		if (!projection)
+			return cxxlens::sdk::unexpected(std::move(projection.error()));
+		std::string projection_bytes;
+		projection_bytes.reserve(projection->size());
+		for (const auto byte : *projection)
+			projection_bytes.push_back(static_cast<char>(std::to_integer<unsigned char>(byte)));
+		auto digest = semantic_digest("cxxlens.provider-task.v1", projection_bytes);
+		if (!digest)
+			return cxxlens::sdk::unexpected(std::move(digest.error()));
+		output.task_id = "task:" + *digest;
+		if (auto valid = output.validate(); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		return output;
+	}
+
+	result<void> task::validate() const
+	{
+		auto projection = canonical_projection();
+		if (!projection)
+			return cxxlens::sdk::unexpected(std::move(projection.error()));
+		std::string projection_bytes;
+		projection_bytes.reserve(projection->size());
+		for (const auto byte : *projection)
+			projection_bytes.push_back(static_cast<char>(std::to_integer<unsigned char>(byte)));
+		auto digest = semantic_digest("cxxlens.provider-task.v1", projection_bytes);
+		if (!digest || task_id != "task:" + *digest)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.task-invalid", "task_id", "identity-mismatch"));
+		for (const auto& descriptor : outputs)
+		{
+			const auto offered =
+				std::ranges::find(session.offered_outputs, descriptor.id, &relation_descriptor::id);
+			if (offered == session.offered_outputs.end() ||
+				offered->descriptor_digest != descriptor.descriptor_digest)
+				return cxxlens::sdk::unexpected(
+					provider_error("provider.relation-incompatible", descriptor.id, "not-offered"));
+		}
+		return {};
+	}
+
 	coverage_builder& coverage_builder::request(std::string kind, std::string id)
 	{
 		requested_.emplace_back(std::move(kind), std::move(id));
@@ -1552,9 +1734,14 @@ namespace cxxlens::sdk::provider
 								 relation_descriptor descriptor,
 								 std::string task_id,
 								 std::uint64_t& total_rows,
-								 const std::uint64_t maximum_rows)
+								 const std::uint64_t maximum_rows,
+								 const bool authorized,
+								 const std::span<const std::string> dependency_groups,
+								 std::optional<error>& relation_violation)
 		: writer_{&writer}, descriptor_{std::move(descriptor)}, task_id_{std::move(task_id)},
-		  total_rows_{&total_rows}, maximum_rows_{maximum_rows}
+		  total_rows_{&total_rows}, maximum_rows_{maximum_rows},
+		  dependency_groups_{dependency_groups.begin(), dependency_groups.end()},
+		  relation_violation_{&relation_violation}, authorized_{authorized}
 	{
 	}
 
@@ -1562,6 +1749,14 @@ namespace cxxlens::sdk::provider
 									  std::string atomic_output_group,
 									  std::string batch_id)
 	{
+		if (!authorized_ || !std::ranges::binary_search(dependency_groups_, dependency_group))
+		{
+			auto failure = provider_error(
+				"provider.relation-incompatible", descriptor_.id, "task-output-or-dependency");
+			if (relation_violation_ != nullptr && !*relation_violation_)
+				*relation_violation_ = failure;
+			return cxxlens::sdk::unexpected(std::move(failure));
+		}
 		if (open_ || task_id_.empty() || dependency_group.empty() || atomic_output_group.empty() ||
 			batch_id.empty())
 			return cxxlens::sdk::unexpected(
@@ -1574,9 +1769,9 @@ namespace cxxlens::sdk::provider
 		if (column_summaries_.empty())
 			for (const auto& column : descriptor_.columns)
 				column_summaries_.push_back({column.id, 0U, 0U});
-		auto control =
-			encode_control_text(descriptor_.id + "|" + descriptor_.descriptor_digest + "|" +
-								dependency_group_ + "|" + atomic_output_group_ + "|" + batch_id_);
+		auto control = encode_control_text(task_id_ + "|" + descriptor_.id + "|" +
+										   descriptor_.descriptor_digest + "|" + dependency_group_ +
+										   "|" + atomic_output_group_ + "|" + batch_id_);
 		if (!control)
 			return cxxlens::sdk::unexpected(std::move(control.error()));
 		if (auto sent = writer_->send(message_type::batch_begin, *control); !sent)
@@ -1695,15 +1890,34 @@ namespace cxxlens::sdk::provider
 		return row_count_;
 	}
 
-	context::context(protocol_writer& writer, execution_context execution, std::string task_id)
-		: writer_{&writer}, execution_{std::move(execution)}, task_id_{std::move(task_id)}
+	context::context(protocol_writer& writer,
+					 execution_context execution,
+					 std::string task_id,
+					 const std::span<const relation_descriptor> outputs,
+					 const std::span<const std::string> dependency_groups)
+		: writer_{&writer}, execution_{std::move(execution)}, task_id_{std::move(task_id)},
+		  outputs_{outputs.begin(), outputs.end()},
+		  dependency_groups_{dependency_groups.begin(), dependency_groups.end()}
 	{
 	}
 
 	relation_sink context::relation(relation_descriptor descriptor)
 	{
-		return relation_sink{
-			*writer_, std::move(descriptor), task_id_, output_rows_, execution_.budget.rows};
+		const auto requested = std::ranges::find(outputs_, descriptor.id, &relation_descriptor::id);
+		const bool authorized = requested != outputs_.end() &&
+			requested->descriptor_digest == descriptor.descriptor_digest &&
+			requested->canonical_form() == descriptor.canonical_form();
+		if (!authorized && !relation_violation_)
+			relation_violation_ = provider_error(
+				"provider.relation-incompatible", descriptor.id, "task-output-whitelist");
+		return relation_sink{*writer_,
+							 std::move(descriptor),
+							 task_id_,
+							 output_rows_,
+							 execution_.budget.rows,
+							 authorized,
+							 dependency_groups_,
+							 relation_violation_};
 	}
 	coverage_builder& context::coverage() noexcept
 	{
@@ -1720,6 +1934,13 @@ namespace cxxlens::sdk::provider
 	bool context::stop_requested() const noexcept
 	{
 		return execution_.cancellation.stop_requested();
+	}
+
+	result<void> context::validate() const
+	{
+		if (relation_violation_)
+			return cxxlens::sdk::unexpected(*relation_violation_);
+		return {};
 	}
 
 	result<void> manifest::validate() const
@@ -2373,19 +2594,33 @@ namespace cxxlens::sdk::provider
 							execution_context execution)
 	{
 		const auto& budget = execution.budget;
-		if (task_value.task_id.empty() || !task_value.project.validate())
-			return cxxlens::sdk::unexpected(provider_error("provider.task-invalid", "task"));
+		if (auto valid = task_value.validate(); !valid)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.task-invalid", valid.error().field, valid.error().code));
+		const auto provider_id = provider.id();
+		const auto provider_version = provider.version();
+		const auto provider_contract = provider.semantic_contract_digest();
+		if (!namespaced(provider_id) || provider_version.major == 0U ||
+			!canonical_digest(provider_contract) || provider_id != task_value.session.provider_id ||
+			provider_version != task_value.session.provider_version ||
+			provider_contract != task_value.session.provider_semantic_contract_digest)
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.task-invalid", "provider-session", "identity-mismatch"));
 		if (budget.wall_ms == 0U || budget.cpu_ms == 0U || budget.rss_bytes == 0U ||
 			budget.output_bytes == 0U || budget.rows == 0U || budget.diagnostics == 0U ||
 			budget.open_files == 0U || budget.created_files == 0U || budget.subprocesses == 0U)
 			return cxxlens::sdk::unexpected(provider_error("provider.task-invalid", "budget"));
-		auto accepted = encode_control_text(std::string{provider.id()} + "|" +
-											provider.version().string() + "|" + task_value.task_id);
+		auto accepted = encode_control_text(std::string{provider_id} + "|" +
+											provider_version.string() + "|" + task_value.task_id);
 		if (!accepted)
 			return cxxlens::sdk::unexpected(std::move(accepted.error()));
 		if (auto sent = writer.send(message_type::task_accepted, *accepted); !sent)
 			return sent;
-		context callback_context{writer, std::move(execution), task_value.task_id};
+		context callback_context{writer,
+								 std::move(execution),
+								 task_value.task_id,
+								 task_value.outputs,
+								 task_value.dependency_groups};
 		const auto send_failed = [&](error failure) -> result<void>
 		{
 			auto failed =
@@ -2401,6 +2636,8 @@ namespace cxxlens::sdk::provider
 		auto outcome = provider.run(task_value, callback_context);
 		if (!outcome)
 			return send_failed(std::move(outcome.error()));
+		if (auto valid = callback_context.validate(); !valid)
+			return send_failed(std::move(valid.error()));
 		auto coverage = std::move(callback_context.coverage()).finish();
 		auto unresolved = std::move(callback_context.unresolved()).finish();
 		auto evidence = std::move(callback_context.evidence()).finish();

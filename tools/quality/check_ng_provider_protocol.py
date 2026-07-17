@@ -723,7 +723,7 @@ def sample_task() -> dict[str, Any]:
     positive = {key: 1 for key in ("wall_ms", "cpu_ms", "rss_bytes", "output_bytes", "rows", "diagnostics", "open_files", "created_files", "subprocesses", "minimum_progress_bytes_per_second")}
     return {
         "schema": "cxxlens.provider-task.v1",
-        "task_id": "task-1",
+        "task_id": "task:semantic-v2:sha256:" + "a" * 64,
         "provider": {"id": "provider.cc.clang22", "version": "1.0.0", "binary_digest": "sha256:" + "a" * 64, "semantic_contract_digest": "sha256:" + "b" * 64},
         "outputs": ["cc.entity.v1"],
         "input_partitions": [],

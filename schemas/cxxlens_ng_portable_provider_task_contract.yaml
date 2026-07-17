@@ -1,0 +1,43 @@
+schema: cxxlens.portable-provider-task-contract.v1
+document_version: 1.0.0
+maturity: accepted
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md#174-provider-task
+  decision_adr: docs/design/adr/0064-portable-provider-task-session-binding.md
+  owner_issue: '#122'
+  owner: steward.ng-provider-runtime
+session:
+  identity: [provider_id, provider_version, provider_semantic_contract_digest]
+  relation_authority: [offered_outputs, required_relations]
+  semantic_authority: [interpretation_domains, input_stage, output_stage]
+  provider_callback_binding: exact-id-version-semantic-contract-before-task-accepted
+task_projection:
+  codec: cxxlens-canonical-tuple-v1
+  domain: cxxlens.provider-task.v1
+  fields: [contract_tag, provider_identity, project_catalog_id, project_catalog_digest, requested_outputs, condition, interpretation, offered_outputs, required_relations, interpretation_domains, input_stage, output_stage, dependency_groups]
+  descriptor_identity: [descriptor_id, descriptor_digest]
+  ordering: canonical-byte-order
+  task_id: task-prefix-plus-semantic-digest-v2
+validation:
+  timing: before-task-accepted
+  requested_outputs: nonempty-valid-sorted-unique-exact-subset-of-offers
+  condition: nonempty-control-free-strict-utf8
+  interpretation: namespaced-and-exact-session-domain
+  dependency_groups: nonempty-sorted-unique-control-free
+  mutation: recompute-and-exact-compare
+context:
+  relation: exact-requested-descriptor-id-digest-and-shape-only
+  dependency_group: exact-task-declared-only
+  ignored-rejection: remembered-and-fails-task
+protocol:
+  batch_begin: [task_id, descriptor_id, descriptor_digest, dependency_group_id, atomic_output_group_id, batch_id]
+  logical_process_validator: shared
+acceptance:
+  - unrequested-relation-rejected
+  - descriptor-shape-mismatch-rejected
+  - duplicate-conflicting-output-rejected
+  - invalid-condition-interpretation-rejected
+  - task-mutation-identity-mismatch
+  - invalid-provider-identity-rejected-before-acceptance
+  - exact-session-task-succeeds
+  - logical-process-verdict-parity

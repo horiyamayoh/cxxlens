@@ -24,6 +24,10 @@ CATALOG = pathlib.Path("schemas/cxxlens_ng_public_api_catalog.yaml")
 SCHEMA = pathlib.Path("schemas/cxxlens_ng_public_api_catalog.schema.yaml")
 PROJECT_CATALOG_CONTRACT = pathlib.Path("schemas/cxxlens_ng_project_catalog_contract.yaml")
 PROJECT_CATALOG_SCHEMA = pathlib.Path("schemas/cxxlens_ng_project_catalog_contract.schema.yaml")
+PROVIDER_TASK_CONTRACT = pathlib.Path("schemas/cxxlens_ng_portable_provider_task_contract.yaml")
+PROVIDER_TASK_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_portable_provider_task_contract.schema.yaml"
+)
 EXPECTED_PATHS = {
     "generated-typed-query",
     "runtime-dynamic-query",
@@ -125,12 +129,55 @@ def validate_project_catalog_contract(
     for marker in ("catalog_compile_unit", "project_catalog::make", "canonical_projection"):
         if marker not in header + relation_source:
             fail(f"project catalog implementation marker is missing: {marker}")
-    validation = provider_source.find("task_value.project.validate()")
+    validation = provider_source.find("task_value.validate()")
     acceptance = provider_source.find("message_type::task_accepted", validation)
     if validation < 0 or acceptance < 0 or validation > acceptance:
         fail("provider task catalog is not validated before task_accepted")
     if "sdk::project_catalog::make(" not in worker_source:
         fail("native provider worker bypasses the shared project catalog loader")
+
+
+def validate_provider_task_contract(
+    root: pathlib.Path, entries: dict[str, dict[str, Any]]
+) -> None:
+    contract = load_yaml(root / PROVIDER_TASK_CONTRACT)
+    schema_validate(contract, load_yaml(root / PROVIDER_TASK_SCHEMA))
+    public_entry = entries.get("public.provider-sdk", {})
+    if public_entry.get("owner_issue") != "#122":
+        fail("portable provider task ownership must remain with Issue #122")
+    signatures = "\n".join(
+        symbol.get("signature", "") for symbol in public_entry.get("symbols", [])
+    )
+    for marker in (
+        "semantic_contract_digest",
+        "provider_session",
+        "task::make",
+        "canonical_projection",
+        "dependency_groups",
+    ):
+        if marker not in signatures:
+            fail(f"portable provider task public marker is missing: {marker}")
+
+    provider_source = (root / "src/sdk/provider.cpp").read_text(encoding="utf-8")
+    runtime_source = (root / "src/sdk/provider_runtime.cpp").read_text(encoding="utf-8")
+    validation = provider_source.find("task_value.validate()")
+    acceptance = provider_source.find("message_type::task_accepted", validation)
+    if validation < 0 or acceptance < 0 or validation > acceptance:
+        fail("portable provider task validation does not precede task_accepted")
+    for marker in (
+        "task-output-or-dependency",
+        "task-output-whitelist",
+        "provider.semantic_contract_digest()",
+        "task_value.dependency_groups",
+    ):
+        if marker not in provider_source:
+            fail(f"portable provider task implementation marker is missing: {marker}")
+    for marker in ("fields.size() != 6U", "fields[0U] != request.task_id"):
+        if marker not in runtime_source:
+            fail(f"batch_begin task binding marker is missing: {marker}")
+    protocol = load_yaml(root / "schemas/cxxlens_ng_provider_protocol.yaml")
+    if protocol["state_machine_validation"]["exact_bindings"]["batch_begin"][0] != "task-id":
+        fail("provider protocol batch_begin omits task ID")
 
 
 def validate_catalog(root: pathlib.Path, catalog: dict[str, Any]) -> None:
@@ -152,6 +199,7 @@ def validate_catalog(root: pathlib.Path, catalog: dict[str, Any]) -> None:
     if entries.get("public.recipe", {}).get("owner_issue") != "#104":
         fail("flagship recipe execution-completeness ownership must remain with Issue #104")
     validate_project_catalog_contract(root, entries)
+    validate_provider_task_contract(root, entries)
     recipe_source = (root / "src/sdk/recipe.cpp").read_text(encoding="utf-8")
     for marker in (
         "execution_status::complete",

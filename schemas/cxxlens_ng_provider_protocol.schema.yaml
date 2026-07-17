@@ -24,7 +24,7 @@ required:
   - backend_authority
 properties:
   schema: {const: cxxlens.provider-protocol.v1}
-  document_version: {const: 1.6.0}
+  document_version: {const: 1.7.0}
   maturity: {const: accepted}
   authority:
     type: object

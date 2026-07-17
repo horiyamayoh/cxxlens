@@ -1,5 +1,5 @@
 schema: cxxlens.provider-protocol.v1
-document_version: 1.6.0
+document_version: 1.7.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#18-provider-protocol
@@ -132,7 +132,7 @@ state_machine_validation:
   exact_bindings:
     hello: [canonical-provider-manifest-v1]
     task_accepted: [provider-id, provider-version, task-id]
-    batch_begin: [relation-descriptor-id, relation-descriptor-digest, dependency-group-id, atomic-output-group-id, batch-id]
+    batch_begin: [task-id, relation-descriptor-id, relation-descriptor-digest, dependency-group-id, atomic-output-group-id, batch-id]
     column_chunk: [task-id, dependency-group-id, atomic-output-group-id, batch-id, relation-descriptor-id, relation-descriptor-digest, column-id, row-offset, row-count, chunk-index, encoding, payload-digest, chunk-digest]
     batch_end: [task-id, dependency-group-id, atomic-output-group-id, batch-id, relation-descriptor-id, relation-descriptor-digest, declared-row-count, every-column-length, canonical-column-order, ordered-chunk-digests, batch-digest]
     task_complete: [task-id, complete]

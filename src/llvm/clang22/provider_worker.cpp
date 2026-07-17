@@ -38,6 +38,8 @@ namespace cxxlens::detail::clang22
 		constexpr std::string_view provider_id = "cxxlens.clang22.reference";
 		constexpr std::string_view task_magic = "cxxlens.clang22.task.v2";
 		const sdk::semantic_version provider_version{1U, 0U, 0U};
+		constexpr std::string_view provider_semantic_contract{
+			"sha256:1111111111111111111111111111111111111111111111111111111111111111"};
 		constexpr std::uint32_t maximum_string_bytes = 64U * 1024U * 1024U;
 		constexpr std::uint32_t maximum_arguments = 1024U;
 
@@ -827,6 +829,11 @@ namespace cxxlens::detail::clang22
 				return provider_version;
 			}
 
+			[[nodiscard]] std::string_view semantic_contract_digest() const noexcept override
+			{
+				return provider_semantic_contract;
+			}
+
 			sdk::result<void> run(const sdk::provider::task& task,
 								  sdk::provider::context& context) override
 			{
@@ -1362,20 +1369,37 @@ namespace cxxlens::detail::clang22
 			(void)writer.send(message_type::task_failed, control);
 			return EXIT_SUCCESS;
 		}
-		sdk::provider::task task{
-			task_id,
-			std::move(*catalog),
-			{entity_observation_descriptor(),
-			 type_observation_descriptor(),
-			 call_observation_descriptor(),
-			 cc::relations::entity::descriptor(),
-			 cc::relations::call_site::descriptor(),
-			 cc::relations::call_direct_target::descriptor()},
-			"all",
-			"cc.clang22-canonical-1",
-		};
+		std::vector outputs{entity_observation_descriptor(),
+							type_observation_descriptor(),
+							call_observation_descriptor(),
+							cc::relations::entity::descriptor(),
+							cc::relations::call_site::descriptor(),
+							cc::relations::call_direct_target::descriptor()};
+		auto session = sdk::provider::provider_session{std::string{provider_id},
+													   provider_version,
+													   std::string{provider_semantic_contract},
+													   outputs,
+													   {},
+													   {"cc.clang22-canonical-1"},
+													   "observation",
+													   "assertion"};
+		auto task = sdk::provider::task::make(std::move(session),
+											  std::move(*catalog),
+											  std::move(outputs),
+											  "condition:all",
+											  "cc.clang22-canonical-1",
+											  {"canonical", "observation"});
+		if (!task || task->task_id != task_id)
+		{
+			const auto failed = bytes("provider.frontend-request-invalid|" + task_id + "|task-id");
+			std::vector<std::byte> control{static_cast<std::byte>(0x78U),
+										   static_cast<std::byte>(failed.size())};
+			control.insert(control.end(), failed.begin(), failed.end());
+			(void)writer.send(message_type::task_failed, control);
+			return EXIT_SUCCESS;
+		}
 		canonical_provider provider{std::move(*request), toolchain_digest};
-		(void)sdk::provider::run_worker(provider, task, writer);
+		(void)sdk::provider::run_worker(provider, *task, writer);
 		return EXIT_SUCCESS;
 	}
 } // namespace cxxlens::detail::clang22

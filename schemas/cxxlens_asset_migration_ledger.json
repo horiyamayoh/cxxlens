@@ -1,5 +1,5 @@
 {
-  "asset_count": 320,
+  "asset_count": 323,
   "assets": [
     {
       "authority": "active",
@@ -857,6 +857,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/design/adr/0063-project-catalog-bottom-up-identity.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/design/adr/README.md",
       "removal_issue": null,
       "replacement": null,
@@ -1306,6 +1313,20 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_namespace_registry.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_project_catalog_contract.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_project_catalog_contract.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2243,7 +2264,7 @@
     }
   ],
   "classifications": {
-    "active": 284,
+    "active": 287,
     "archived": 35,
     "generated": 1
   },

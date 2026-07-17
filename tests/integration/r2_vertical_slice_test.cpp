@@ -194,12 +194,17 @@ namespace
 
 		[[nodiscard]] std::string_view id() const noexcept override
 		{
-			return "company.lock.provider@1.0.0";
+			return "company.lock.provider";
 		}
 
 		[[nodiscard]] semantic_version version() const noexcept override
 		{
 			return {1U, 0U, 0U};
+		}
+
+		[[nodiscard]] std::string_view semantic_contract_digest() const noexcept override
+		{
+			return lock_contract;
 		}
 
 		[[nodiscard]] result<void> run(const provider::task& task,
@@ -233,6 +238,27 @@ namespace
 	  private:
 		detached_row row_;
 	};
+
+	[[nodiscard]] provider::task make_lock_task(lock_provider& implementation,
+												project_catalog project)
+	{
+		const auto descriptor = company::relations::lock_acquire::descriptor();
+		auto task = provider::task::make({std::string{implementation.id()},
+										  implementation.version(),
+										  std::string{implementation.semantic_contract_digest()},
+										  {descriptor},
+										  {},
+										  {"cxxlens.clang22"},
+										  "observation",
+										  "assertion"},
+										 std::move(project),
+										 {descriptor},
+										 "condition:all",
+										 "cxxlens.clang22",
+										 {"calls"});
+		require(task.has_value(), "vertical-slice provider task was rejected");
+		return std::move(*task);
+	}
 
 	struct fixture
 	{
@@ -484,13 +510,10 @@ namespace
 								 const std::string& root,
 								 const std::uint64_t jobs)
 	{
+		(void)jobs;
 		lock_provider implementation{row};
-		provider::task task;
-		task.task_id = "r2-task-jobs-" + std::to_string(jobs);
-		task.project = make_project_catalog(root, "cu-" + std::string(64U, 'a'));
-		task.outputs = {company::relations::lock_acquire::descriptor()};
-		task.condition = "condition:all";
-		task.interpretation = "cxxlens.clang22";
+		auto task = make_lock_task(implementation,
+								   make_project_catalog(root, "cu-" + std::string(64U, 'a')));
 		testing::provider_harness harness;
 		auto report = harness.run(implementation, task);
 		require(report && report->accepted && report->frames.size() >= 7U,
@@ -502,12 +525,8 @@ namespace
 												 const detached_row& row)
 	{
 		lock_provider implementation{row};
-		provider::task task;
-		task.task_id = "r2-fault";
-		task.project = make_project_catalog(".", "cu-" + std::string(64U, 'a'));
-		task.outputs = {company::relations::lock_acquire::descriptor()};
-		task.condition = "condition:all";
-		task.interpretation = "cxxlens.clang22";
+		auto task = make_lock_task(implementation,
+								   make_project_catalog(".", "cu-" + std::string(64U, 'a')));
 		testing::provider_harness harness;
 		auto failed =
 			harness.run(implementation, task, testing::provider_fault::truncate_last_frame);

@@ -20,6 +20,9 @@
 
 namespace
 {
+	constexpr std::string_view provider_contract_digest{
+		"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"};
+
 	class coverage_provider final : public cxxlens::sdk::provider::portable_provider
 	{
 	  public:
@@ -31,6 +34,10 @@ namespace
 		cxxlens::sdk::semantic_version version() const noexcept override
 		{
 			return {1U, 0U, 0U};
+		}
+		std::string_view semantic_contract_digest() const noexcept override
+		{
+			return provider_contract_digest;
 		}
 
 		cxxlens::sdk::result<void> run(const cxxlens::sdk::provider::task& task,
@@ -77,6 +84,31 @@ namespace
 			cxxlens::sdk::project_catalog::make(std::move(root), digest('d'), std::move(units));
 		require(catalog.has_value(), "valid project catalog was rejected");
 		return std::move(*catalog);
+	}
+
+	[[nodiscard]] cxxlens::sdk::provider::task
+	make_provider_task(cxxlens::sdk::provider::portable_provider& provider,
+					   cxxlens::sdk::project_catalog project,
+					   std::vector<cxxlens::sdk::relation_descriptor> outputs,
+					   std::string condition = "condition:all",
+					   std::string interpretation = "company.test")
+	{
+		auto task =
+			cxxlens::sdk::provider::task::make({std::string{provider.id()},
+												provider.version(),
+												std::string{provider.semantic_contract_digest()},
+												outputs,
+												{},
+												{interpretation},
+												"observation",
+												"assertion"},
+											   std::move(project),
+											   std::move(outputs),
+											   std::move(condition),
+											   std::move(interpretation),
+											   {"dependency-1"});
+		require(task.has_value(), "valid provider task was rejected");
+		return std::move(*task);
 	}
 
 	[[nodiscard]] cxxlens::sdk::detached_cell string_cell(cxxlens::sdk::value_type type,
@@ -156,6 +188,10 @@ namespace
 		{
 			return {1U, 0U, 0U};
 		}
+		std::string_view semantic_contract_digest() const noexcept override
+		{
+			return provider_contract_digest;
+		}
 		cxxlens::sdk::result<void> run(const cxxlens::sdk::provider::task& task,
 									   cxxlens::sdk::provider::context& context) override
 		{
@@ -179,6 +215,10 @@ namespace
 		[[nodiscard]] cxxlens::sdk::semantic_version version() const noexcept override
 		{
 			return {1U, 0U, 0U};
+		}
+		std::string_view semantic_contract_digest() const noexcept override
+		{
+			return provider_contract_digest;
 		}
 		cxxlens::sdk::result<void> run(const cxxlens::sdk::provider::task& task,
 									   cxxlens::sdk::provider::context& context) override
@@ -206,12 +246,46 @@ namespace
 		{
 			return {1U, 0U, 0U};
 		}
+		std::string_view semantic_contract_digest() const noexcept override
+		{
+			return provider_contract_digest;
+		}
 		cxxlens::sdk::result<void> run(const cxxlens::sdk::provider::task& task,
 									   cxxlens::sdk::provider::context& context) override
 		{
 			context.coverage().request("task", task.task_id);
 			return {};
 		}
+	};
+
+	class invalid_identity_provider final : public cxxlens::sdk::provider::portable_provider
+	{
+	  public:
+		explicit invalid_identity_provider(const bool invalid_version)
+			: invalid_version_{invalid_version}
+		{
+		}
+		std::string_view id() const noexcept override
+		{
+			return invalid_version_ ? "company.test.invalid-version" : "";
+		}
+		cxxlens::sdk::semantic_version version() const noexcept override
+		{
+			return invalid_version_ ? cxxlens::sdk::semantic_version{}
+									: cxxlens::sdk::semantic_version{1U, 0U, 0U};
+		}
+		std::string_view semantic_contract_digest() const noexcept override
+		{
+			return provider_contract_digest;
+		}
+		cxxlens::sdk::result<void> run(const cxxlens::sdk::provider::task&,
+									   cxxlens::sdk::provider::context&) override
+		{
+			return {};
+		}
+
+	  private:
+		bool invalid_version_{};
 	};
 
 	[[nodiscard]] cxxlens::sdk::relation_descriptor
@@ -1060,12 +1134,9 @@ namespace
 				"provider scaffold package/manifest contract diverged");
 
 		coverage_provider implementation;
-		cxxlens::sdk::provider::task task;
-		task.task_id = "task-1";
-		task.project = make_catalog(".", {catalog_unit("unit-1", '1')});
-		task.outputs = {cxxlens::cc::relations::call_site::descriptor()};
-		task.condition = "condition:all";
-		task.interpretation = "company.test";
+		auto task = make_provider_task(implementation,
+									   make_catalog(".", {catalog_unit("unit-1", '1')}),
+									   {cxxlens::cc::relations::call_site::descriptor()});
 		cxxlens::sdk::testing::provider_harness harness;
 		auto accepted = harness.run(implementation, task);
 		auto corrupt = harness.run(
@@ -1085,6 +1156,35 @@ namespace
 		auto forged_task = task;
 		forged_task.project.logical_root = "forged-root";
 		auto forged = harness.run(implementation, forged_task);
+		auto mutated_task = task;
+		mutated_task.condition = "condition:other";
+		auto mutated = harness.run(implementation, mutated_task);
+		auto shape_mismatch = task;
+		shape_mismatch.outputs.front().columns.front().required = false;
+		auto mismatched_shape = harness.run(implementation, shape_mismatch);
+		const auto& output_descriptor = cxxlens::cc::relations::call_site::descriptor();
+		auto duplicate_outputs =
+			cxxlens::sdk::provider::task::make(task.session,
+											   task.project,
+											   {output_descriptor, output_descriptor},
+											   task.condition,
+											   task.interpretation);
+		auto conflicting_descriptor = output_descriptor;
+		conflicting_descriptor.descriptor_digest = digest('e');
+		auto conflicting_outputs =
+			cxxlens::sdk::provider::task::make(task.session,
+											   task.project,
+											   {output_descriptor, conflicting_descriptor},
+											   task.condition,
+											   task.interpretation);
+		auto empty_condition = cxxlens::sdk::provider::task::make(
+			task.session, task.project, task.outputs, "", task.interpretation);
+		auto invalid_interpretation = cxxlens::sdk::provider::task::make(
+			task.session, task.project, task.outputs, task.condition, "invalid");
+		invalid_identity_provider invalid_id{false};
+		invalid_identity_provider invalid_version{true};
+		auto invalid_id_report = harness.run(invalid_id, task);
+		auto invalid_version_report = harness.run(invalid_version, task);
 		auto reference = accepted
 			? cxxlens::sdk::testing::validate_logical_transcript(
 				  task,
@@ -1102,9 +1202,18 @@ namespace
 				  wrong_direction->frames,
 				  {std::numeric_limits<std::uint64_t>::max(), 4096U})
 			: reference;
-		require(accepted && accepted->accepted && forged && !forged->accepted &&
-					forged->reason_code == "provider.task-invalid" && forged->frames.empty() &&
-					corrupt && !corrupt->accepted &&
+		require(accepted && accepted->accepted && reference && reference->accepted,
+				"exact provider task/session was rejected");
+		require(forged && !forged->accepted && forged->reason_code == "provider.task-invalid" &&
+					forged->frames.empty() && mutated && !mutated->accepted &&
+					mutated->frames.empty() && mismatched_shape && !mismatched_shape->accepted &&
+					mismatched_shape->frames.empty() && !duplicate_outputs &&
+					!conflicting_outputs && !empty_condition && !invalid_interpretation &&
+					invalid_id_report && !invalid_id_report->accepted &&
+					invalid_id_report->frames.empty() && invalid_version_report &&
+					!invalid_version_report->accepted && invalid_version_report->frames.empty(),
+				"invalid task/output/session reached task_accepted");
+		require(corrupt && !corrupt->accepted &&
 					corrupt->reason_code == "provider.checksum-mismatch" && truncated &&
 					!truncated->accepted && truncated->reason_code == "provider.truncated-stream" &&
 					cancelled && !cancelled->accepted &&
@@ -1113,17 +1222,28 @@ namespace
 					wrong_direction->reason_code == "provider.protocol-state-invalid" &&
 					missing_terminal && !missing_terminal->accepted && wrong_terminal &&
 					!wrong_terminal->accepted && credit_exceeded && !credit_exceeded->accepted &&
-					credit_exceeded->reason_code == "provider.credit-exceeded" && reference &&
-					reference->accepted && invalid_reference && !invalid_reference->accepted &&
+					credit_exceeded->reason_code == "provider.credit-exceeded" &&
+					invalid_reference && !invalid_reference->accepted &&
 					invalid_reference->reason_code == wrong_direction->reason_code,
 				"provider harness fault matrix diverged");
 
 		unsealed_provider unsealed_implementation;
 		unrequested_descriptor_provider unrequested_implementation;
 		incomplete_coverage_provider incomplete_implementation;
-		auto unsealed = harness.run(unsealed_implementation, task);
-		auto unrequested = harness.run(unrequested_implementation, task);
-		auto incomplete_coverage = harness.run(incomplete_implementation, task);
+		auto unsealed_task = make_provider_task(unsealed_implementation,
+												task.project,
+												{cxxlens::cc::relations::call_site::descriptor()});
+		auto unrequested_task =
+			make_provider_task(unrequested_implementation,
+							   task.project,
+							   {cxxlens::cc::relations::call_site::descriptor()});
+		auto incomplete_task =
+			make_provider_task(incomplete_implementation,
+							   task.project,
+							   {cxxlens::cc::relations::call_site::descriptor()});
+		auto unsealed = harness.run(unsealed_implementation, unsealed_task);
+		auto unrequested = harness.run(unrequested_implementation, unrequested_task);
+		auto incomplete_coverage = harness.run(incomplete_implementation, incomplete_task);
 		require(unsealed && !unsealed->accepted && unrequested && !unrequested->accepted &&
 					unrequested->reason_code == "provider.relation-incompatible" &&
 					incomplete_coverage && !incomplete_coverage->accepted &&

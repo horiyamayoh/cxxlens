@@ -32,6 +32,12 @@ class NgSdkContractTest(unittest.TestCase):
         cls.project_catalog_schema = load_yaml(
             ROOT / "schemas/cxxlens_ng_project_catalog_contract.schema.yaml"
         )
+        cls.provider_task_contract = load_yaml(
+            ROOT / "schemas/cxxlens_ng_portable_provider_task_contract.yaml"
+        )
+        cls.provider_task_schema = load_yaml(
+            ROOT / "schemas/cxxlens_ng_portable_provider_task_contract.schema.yaml"
+        )
 
     def test_exact_catalog_and_ordinary_boundary_are_valid(self) -> None:
         validate_catalog(ROOT, self.catalog)
@@ -73,6 +79,18 @@ class NgSdkContractTest(unittest.TestCase):
         contract["canonical_projection"]["duplicate_policy"] = "first-wins"
         with self.assertRaises(jsonschema.ValidationError):
             jsonschema.Draft202012Validator(self.project_catalog_schema).validate(contract)
+
+    def test_provider_task_projection_cannot_drop_condition(self) -> None:
+        contract = copy.deepcopy(self.provider_task_contract)
+        contract["task_projection"]["fields"].remove("condition")
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(self.provider_task_schema).validate(contract)
+
+    def test_provider_batch_begin_cannot_drop_task_id(self) -> None:
+        contract = copy.deepcopy(self.provider_task_contract)
+        contract["protocol"]["batch_begin"].remove("task_id")
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(self.provider_task_schema).validate(contract)
 
     def test_implemented_error_code_cannot_be_omitted(self) -> None:
         catalog = copy.deepcopy(self.catalog)

@@ -23,7 +23,9 @@ entries:
       - tools/quality/check_ng_semantic_guarantee.py
       - docs/design/adr/0016-semantic-digest-v2.md
       - docs/design/adr/0063-project-catalog-bottom-up-identity.md
+      - docs/design/adr/0064-portable-provider-task-session-binding.md
       - schemas/cxxlens_ng_project_catalog_contract.yaml
+      - schemas/cxxlens_ng_portable_provider_task_contract.yaml
     summary: Base identity, source, condition, coverage, truth, and header invariants.
   - id: gate.g1
     status: implemented
@@ -115,11 +117,13 @@ entries:
       - docs/design/adr/0054-source-local-call-ordinal.md
       - docs/design/adr/0055-provider-child-fd-and-audit-architecture.md
       - docs/design/adr/0063-project-catalog-bottom-up-identity.md
+      - docs/design/adr/0064-portable-provider-task-session-binding.md
       - src/sdk/provider_validation_internal.hpp
       - src/runtime/provider_process_adapter.cpp
       - schemas/cxxlens_ng_provider_protocol.yaml
       - schemas/cxxlens_ng_provider_runtime_contract.yaml
       - schemas/cxxlens_ng_project_catalog_contract.yaml
+      - schemas/cxxlens_ng_portable_provider_task_contract.yaml
       - schemas/cxxlens_ng_provider_execution_report.schema.yaml
       - schemas/cxxlens_ng_security_profile.yaml
     summary: Provider runtime with fail-closed child FD/ABI isolation plus AST-consistent, source-stable Clang output.

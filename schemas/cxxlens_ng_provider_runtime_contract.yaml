@@ -1,5 +1,5 @@
 schema: cxxlens.provider-runtime-contract.v1
-document_version: 1.10.0
+document_version: 1.11.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#17-provider-model
@@ -12,6 +12,7 @@ dependencies:
   - schemas/cxxlens_ng_provider_manifest.schema.yaml
   - schemas/cxxlens_ng_snapshot_store_contract.yaml
   - schemas/cxxlens_ng_project_catalog_contract.yaml
+  - schemas/cxxlens_ng_portable_provider_task_contract.yaml
 runtime:
   process_effect_boundary: provider-process-port
   supported_platform:
@@ -127,7 +128,7 @@ protocol_session:
     task_failed_allowlist: stable-non-success-provider-terminals-only
     task_failed_success_or_unknown: provider.schema-invalid
     handshake: exact-identity-schema-feature-order
-    task_acceptance: exact-provider-version-task-id-binding
+    task_acceptance: canonical-task-and-exact-provider-session-validation-before-acceptance
     project_catalog: shared-bottom-up-validator-before-task-accepted
     direction: reject-host-only-provider-output
     credit: account-encoded-byte-and-frame-before-adoption

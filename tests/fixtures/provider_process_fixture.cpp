@@ -103,6 +103,10 @@ int main(const int argument_count, const char* const* arguments)
 		frames->at(2U).type != message_type::open_task ||
 		frames->at(3U).type != message_type::credit)
 		return EXIT_FAILURE;
+	auto task_control = decode_control_text(frames->at(2U).control);
+	if (!task_control || task_control->find('|') == std::string::npos)
+		return EXIT_FAILURE;
+	const std::string task_id{task_control->substr(0U, task_control->find('|'))};
 
 	if (mode == "crash")
 		(void)::raise(SIGSEGV);
@@ -134,8 +138,9 @@ int main(const int argument_count, const char* const* arguments)
 	if (!writer.send(message_type::hello, control(identity), {}, hello_flags))
 		return EXIT_FAILURE;
 	if (mode == "minimal")
-		return writer.send(message_type::task_complete, control("task-1|complete")) ? EXIT_SUCCESS
-																					: EXIT_FAILURE;
+		return writer.send(message_type::task_complete, control(task_id + "|complete"))
+			? EXIT_SUCCESS
+			: EXIT_FAILURE;
 	if (!writer.send(message_type::schema_negotiate, frames->at(1U).control))
 		return EXIT_FAILURE;
 	if (mode == "failed" || mode == "failure-success" || mode == "failure-unknown")
@@ -144,7 +149,7 @@ int main(const int argument_count, const char* const* arguments)
 			? "provider.success"
 			: (mode == "failure-unknown" ? "provider.unknown-reason" : "provider.schema-invalid");
 		return writer.send(message_type::task_failed,
-						   control(std::string{reason} + "|task-1|fixture"))
+						   control(std::string{reason} + "|" + task_id + "|fixture"))
 			? EXIT_SUCCESS
 			: EXIT_FAILURE;
 	}
@@ -154,18 +159,19 @@ int main(const int argument_count, const char* const* arguments)
 		if (!writer.send(message_type::task_accepted, invalid_control))
 			return EXIT_FAILURE;
 		return writer.send(message_type::task_failed,
-						   control("provider.schema-invalid|task-1|fixture"))
+						   control("provider.schema-invalid|" + task_id + "|fixture"))
 			? EXIT_SUCCESS
 			: EXIT_FAILURE;
 	}
 	if (mode != "missing-accepted" &&
 		!writer.send(message_type::task_accepted,
 					 control(std::string{provider_id} + "|1.0.0|" +
-							 (mode == "wrong-task" ? "other-task" : "task-1"))))
+							 (mode == "wrong-task" ? "other-task" : task_id))))
 		return EXIT_FAILURE;
 	if (mode == "missing-accepted")
-		return writer.send(message_type::task_complete, control("task-1|complete")) ? EXIT_SUCCESS
-																					: EXIT_FAILURE;
+		return writer.send(message_type::task_complete, control(task_id + "|complete"))
+			? EXIT_SUCCESS
+			: EXIT_FAILURE;
 	if (mode == "nul-control")
 	{
 		constexpr char nul_failed[]{"provider.schema-invalid\0|task-1|fixture"};
@@ -181,8 +187,9 @@ int main(const int argument_count, const char* const* arguments)
 			: (mode == "provider-open-task" ? message_type::open_task : message_type::batch_ack);
 		if (!writer.send(type, control("provider-forbidden")))
 			return EXIT_FAILURE;
-		return writer.send(message_type::task_complete, control("task-1|complete")) ? EXIT_SUCCESS
-																					: EXIT_FAILURE;
+		return writer.send(message_type::task_complete, control(task_id + "|complete"))
+			? EXIT_SUCCESS
+			: EXIT_FAILURE;
 	}
 	if (mode == "optional-extension" &&
 		!writer.send(static_cast<message_type>(65000U),
@@ -210,13 +217,14 @@ int main(const int argument_count, const char* const* arguments)
 	const auto descriptor_digest = mode == "unknown-descriptor"
 		? std::string{"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}
 		: schema.descriptor_digest;
-	if (!writer.send(
-			message_type::batch_begin,
-			control(descriptor + "|" + descriptor_digest + "|dependency-1|atomic-1|batch-1")))
+	if (!writer.send(message_type::batch_begin,
+					 control(task_id + "|" + descriptor + "|" + descriptor_digest +
+							 "|dependency-1|atomic-1|batch-1")))
 		return EXIT_FAILURE;
 	if (mode == "unsealed-batch")
-		return writer.send(message_type::task_complete, control("task-1|complete")) ? EXIT_SUCCESS
-																					: EXIT_FAILURE;
+		return writer.send(message_type::task_complete, control(task_id + "|complete"))
+			? EXIT_SUCCESS
+			: EXIT_FAILURE;
 	const auto row = output_row();
 	std::vector<batch_column_summary> summaries;
 	std::vector<std::string> chunk_digests;
@@ -239,7 +247,7 @@ int main(const int argument_count, const char* const* arguments)
 										: "utf8-offsets-u32-le"))));
 		const auto cell = row.cells.contains(column.id) ? row.cells.at(column.id)
 														: detached_cell::absent(column.type);
-		column_chunk_record chunk{"task-1",
+		column_chunk_record chunk{task_id,
 								  "dependency-1",
 								  "atomic-1",
 								  "batch-1",
@@ -266,7 +274,7 @@ int main(const int argument_count, const char* const* arguments)
 	for (const auto& encoded : encoded_chunks)
 		if (!writer.send(message_type::column_chunk, encoded.control, encoded.payload))
 			return EXIT_FAILURE;
-	columnar_batch_end terminal{"task-1",
+	columnar_batch_end terminal{task_id,
 								"dependency-1",
 								"atomic-1",
 								"batch-1",
@@ -286,14 +294,14 @@ int main(const int argument_count, const char* const* arguments)
 		encoded_terminal->payload[10U + schema.columns.front().id.size()] ^= std::byte{1U};
 	if (!writer.send(message_type::batch_end, encoded_terminal->control, encoded_terminal->payload))
 		return EXIT_FAILURE;
-	const auto coverage =
-		mode == "incomplete-coverage" ? "project|catalog|covered|" : "task|task-1|covered|";
+	const auto coverage = mode == "incomplete-coverage" ? std::string{"project|catalog|covered|"}
+														: "task|" + task_id + "|covered|";
 	const auto terminal_flags = mode == "success-eos"
 		? static_cast<std::uint16_t>(frame_flag::end_of_stream)
 		: std::uint16_t{};
 	const auto complete_control = mode == "wrong-complete-task"
-		? "other-task|complete"
-		: (mode == "missing-complete-control" ? "" : "task-1|complete");
+		? std::string{"other-task|complete"}
+		: (mode == "missing-complete-control" ? std::string{} : task_id + "|complete");
 	if (!writer.send(message_type::coverage_chunk, control(coverage)) ||
 		!writer.send(message_type::unresolved_chunk, control("")) ||
 		!writer.send(message_type::progress, control("")) ||

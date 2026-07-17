@@ -2135,6 +2135,14 @@ struct provider_task {
 };
 ```
 
+portable C++ surface の exact authority は ADR 0064 と
+`schemas/cxxlens_ng_portable_provider_task_contract.yaml` とする。`provider_session` は provider ID/version/semantic contract、
+offered/required descriptor、interpretation domain、input/output stage を保持する。task ID は validated project catalog、requested output
+descriptor ID/digest、condition、interpretation、session authority、dependency group の canonical tuple から導出し、任意 caller ID を受理しない。
+`run_worker` は task と callback provider identity を `task_accepted` 前に再検証する。context は exact requested descriptor と declared
+dependency group だけを許可し、provider が rejection を無視しても task を failure にする。`batch_begin` は task ID と descriptor digest を
+含み、logical/process surface は同じ typed transcript validator で判定する。
+
 ### 17.5 Output
 
 ```cpp

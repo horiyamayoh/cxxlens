@@ -289,14 +289,58 @@ namespace cxxlens::sdk::provider
 		std::vector<evidence_item> items_;
 	};
 
-	/** @brief Exact portable provider task; all values are detached. */
+	/** @brief Exact provider identity, relation offer, interpretation, and stage authority. */
+	struct provider_session
+	{
+		/** @brief Namespaced provider implementation identity. */
+		std::string provider_id;
+		/** @brief Exact accepted provider semantic version. */
+		semantic_version provider_version;
+		/** @brief Exact semantic contract digest implemented by the callback. */
+		std::string provider_semantic_contract_digest;
+		/** @brief Canonical exact relation descriptors the session may offer. */
+		std::vector<relation_descriptor> offered_outputs;
+		/** @brief Canonical exact relation descriptors required as input. */
+		std::vector<relation_descriptor> required_relations;
+		/** @brief Canonical interpretation domains authorized by the session. */
+		std::vector<std::string> interpretation_domains;
+		/** @brief Stable input-stage identifier. */
+		std::string input_stage;
+		/** @brief Stable output-stage identifier. */
+		std::string output_stage;
+		/** @brief Validate identity, descriptor sets, domains, and stages. */
+		[[nodiscard]] result<void> validate() const;
+	};
+
+	/** @brief Exact portable provider task; all values and identity inputs are detached. */
 	struct task
 	{
+		/** @brief Content identity derived from canonical_projection(). */
 		std::string task_id;
+		/** @brief Exact provider session authorized for this task. */
+		provider_session session;
+		/** @brief Validated exact project input catalog. */
 		project_catalog project;
+		/** @brief Canonical requested output descriptor subset. */
 		std::vector<relation_descriptor> outputs;
+		/** @brief Nonempty canonical condition authority. */
 		std::string condition;
+		/** @brief Exact authorized interpretation domain. */
 		std::string interpretation;
+		/** @brief Canonical dependency groups authorized for output. */
+		std::vector<std::string> dependency_groups;
+		/** @brief Canonicalize task sets and derive its content identity. */
+		[[nodiscard]] static result<task> make(provider_session session_value,
+											   project_catalog project_value,
+											   std::vector<relation_descriptor> output_values,
+											   std::string condition_value,
+											   std::string interpretation_value,
+											   std::vector<std::string> dependency_group_values = {
+												   "default"});
+		/** @brief Encode every semantic task and session field in exact order. */
+		[[nodiscard]] result<std::vector<std::byte>> canonical_projection() const;
+		/** @brief Revalidate the complete task and recompute task_id. */
+		[[nodiscard]] result<void> validate() const;
 	};
 
 	/** @brief Host-enforced provider budget; zero is never an implicit unlimited value. */
@@ -337,7 +381,10 @@ namespace cxxlens::sdk::provider
 					  relation_descriptor descriptor,
 					  std::string task_id,
 					  std::uint64_t& total_rows,
-					  std::uint64_t maximum_rows);
+					  std::uint64_t maximum_rows,
+					  bool authorized,
+					  std::span<const std::string> dependency_groups,
+					  std::optional<error>& relation_violation);
 		[[nodiscard]] result<void> flush_chunk();
 		protocol_writer* writer_{};
 		relation_descriptor descriptor_;
@@ -352,6 +399,9 @@ namespace cxxlens::sdk::provider
 		std::uint64_t emitted_rows_{};
 		std::uint64_t* total_rows_{};
 		std::uint64_t maximum_rows_{};
+		std::vector<std::string> dependency_groups_;
+		std::optional<error>* relation_violation_{};
+		bool authorized_{};
 		bool open_{};
 		friend class context;
 	};
@@ -360,17 +410,26 @@ namespace cxxlens::sdk::provider
 	class context
 	{
 	  public:
-		context(protocol_writer& writer, execution_context execution, std::string task_id = {});
+		context(protocol_writer& writer,
+				execution_context execution,
+				std::string task_id = {},
+				std::span<const relation_descriptor> outputs = {},
+				std::span<const std::string> dependency_groups = {});
 		[[nodiscard]] relation_sink relation(relation_descriptor descriptor);
 		[[nodiscard]] coverage_builder& coverage() noexcept;
 		[[nodiscard]] unresolved_builder& unresolved() noexcept;
 		[[nodiscard]] evidence_builder& evidence() noexcept;
 		[[nodiscard]] bool stop_requested() const noexcept;
+		/** @brief Reject any attempted relation outside the exact task output whitelist. */
+		[[nodiscard]] result<void> validate() const;
 
 	  private:
 		protocol_writer* writer_{};
 		execution_context execution_;
 		std::string task_id_;
+		std::vector<relation_descriptor> outputs_;
+		std::vector<std::string> dependency_groups_;
+		std::optional<error> relation_violation_;
 		coverage_builder coverage_;
 		unresolved_builder unresolved_;
 		evidence_builder evidence_;
@@ -384,6 +443,8 @@ namespace cxxlens::sdk::provider
 		virtual ~portable_provider() = default;
 		[[nodiscard]] virtual std::string_view id() const noexcept = 0;
 		[[nodiscard]] virtual semantic_version version() const noexcept = 0;
+		/** @brief Return the exact semantic contract digest bound to accepted tasks. */
+		[[nodiscard]] virtual std::string_view semantic_contract_digest() const noexcept = 0;
 		[[nodiscard]] virtual result<void> run(const task& task, context& context) = 0;
 	};
 

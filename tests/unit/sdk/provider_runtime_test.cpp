@@ -28,7 +28,7 @@ namespace
 
 	constexpr std::string_view binary_digest =
 		"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-	constexpr std::string_view semantic_contract_digest =
+	constexpr std::string_view fixture_contract_digest =
 		"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 #if defined(CXXLENS_SANITIZER_INSTRUMENTED)
 	constexpr std::uint64_t provider_rss_budget = std::numeric_limits<std::uint64_t>::max();
@@ -106,6 +106,10 @@ namespace
 		[[nodiscard]] semantic_version version() const noexcept override
 		{
 			return {1U, 0U, 0U};
+		}
+		[[nodiscard]] std::string_view semantic_contract_digest() const noexcept override
+		{
+			return fixture_contract_digest;
 		}
 		result<void> run(const cxxlens::sdk::provider::task& task_value,
 						 cxxlens::sdk::provider::context& context) override
@@ -215,7 +219,7 @@ namespace
 		value.protocol = {1U, 0U, 0U, {"credit-backpressure"}, {}};
 		value.platform_tuples = {"linux-glibc"};
 		value.provider_binary_digest = std::move(binary);
-		value.provider_semantic_contract_digest = semantic_contract_digest;
+		value.provider_semantic_contract_digest = fixture_contract_digest;
 		value.offered_relations = {"company.lock.acquire@1"};
 		value.interpretation_domains = {"provider.company.test.process-provider"};
 		value.invalidation_contract =
@@ -270,7 +274,7 @@ namespace
 		return {"company.test.process-provider",
 				{1U, 0U, 0U},
 				executable_digest(executable),
-				std::string{semantic_contract_digest},
+				std::string{fixture_contract_digest},
 				{sandbox_assurance::enforced, baseline_policy().policy_digest()},
 				true,
 				std::nullopt};
@@ -516,8 +520,9 @@ namespace
 		{
 			auto request = task(select(executable, mode));
 			auto report = runtime.execute(request);
-			const cxxlens::sdk::provider::task reference_task{
-				request.task_id, {}, request.output_descriptors, {}, {}};
+			cxxlens::sdk::provider::task reference_task;
+			reference_task.task_id = request.task_id;
+			reference_task.outputs = request.output_descriptors;
 			auto reference = report
 				? cxxlens::sdk::testing::validate_process_transcript(reference_task,
 																	 report->provider,
@@ -723,8 +728,9 @@ namespace
 					std::string{"invalid provider transcript was accepted: "} + mode);
 			if (std::string_view{mode} == "bad-column")
 			{
-				const cxxlens::sdk::provider::task reference_task{
-					invalid_request.task_id, {}, invalid_request.output_descriptors, {}, {}};
+				cxxlens::sdk::provider::task reference_task;
+				reference_task.task_id = invalid_request.task_id;
+				reference_task.outputs = invalid_request.output_descriptors;
 				auto reference = cxxlens::sdk::testing::validate_process_transcript(
 					reference_task,
 					rejected->provider,
@@ -753,8 +759,6 @@ namespace
 		require(!feature && feature.error().code == "provider.required-feature-missing",
 				"unsupported required provider feature was negotiated");
 
-		auto process = runtime.execute(task(select(executable, "success")));
-		require(process && process->succeeded(), "process parity transcript failed");
 		transcript_sink sink;
 		protocol_writer writer{sink};
 		writer.grant_credit({64U * 1024U * 1024U, 65536U});
@@ -768,13 +772,26 @@ namespace
 			  std::string{binary_digest},
 			  "sha256:3333333333333333333333333333333333333333333333333333333333333333"}});
 		require(logical_catalog.has_value(), "logical parity catalog failed");
-		const cxxlens::sdk::provider::task logical_task{
-			"task-1",
-			std::move(*logical_catalog),
-			{descriptor},
-			"all",
-			"company.test.canonical-1",
-		};
+		auto logical_task_value =
+			cxxlens::sdk::provider::task::make({std::string{provider.id()},
+												provider.version(),
+												std::string{provider.semantic_contract_digest()},
+												{descriptor},
+												{},
+												{"company.test.canonical-1"},
+												"observation",
+												"assertion"},
+											   std::move(*logical_catalog),
+											   {descriptor},
+											   "condition:all",
+											   "company.test.canonical-1",
+											   {"dependency-1"});
+		require(logical_task_value.has_value(), "logical parity task failed");
+		const auto logical_task = std::move(*logical_task_value);
+		auto process_request = task(select(executable, "success"));
+		process_request.task_id = logical_task.task_id;
+		auto process = runtime.execute(process_request);
+		require(process && process->succeeded(), "process parity transcript failed");
 		auto logical = run_worker(provider, logical_task, writer);
 		require(logical.has_value(), "in-process logical provider stream failed");
 		auto logical_frames = decode_frame_stream(sink.transcript);
@@ -787,6 +804,22 @@ namespace
 		for (std::size_t index = 0U; index < logical_frames->size(); ++index)
 			require(logical_frames->at(index).type == process->frames.at(index + 2U).type,
 					"logical/wire provider state transition diverged");
+		auto logical_verdict =
+			cxxlens::sdk::testing::validate_logical_transcript(logical_task,
+															   provider.id(),
+															   provider.version(),
+															   *logical_frames,
+															   {64U * 1024U * 1024U, 65536U});
+		auto process_verdict =
+			cxxlens::sdk::testing::validate_process_transcript(logical_task,
+															   process->provider,
+															   process->frames,
+															   process_request.output_credit,
+															   process_request.limits);
+		require(logical_verdict && process_verdict && logical_verdict->accepted &&
+					process_verdict->accepted &&
+					logical_verdict->reason_code == process_verdict->reason_code,
+				"logical/wire provider semantic verdict diverged");
 	}
 
 	void check_prior_snapshot_preserved(const std::string& executable)

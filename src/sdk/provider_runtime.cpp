@@ -268,29 +268,30 @@ namespace cxxlens::sdk::provider
 					case message_type::batch_begin:
 					{
 						const auto fields = split_fields(*control, '|');
-						if (!accepted || batch || fields.size() != 5U ||
+						if (!accepted || batch || fields.size() != 6U ||
+							fields[0U] != request.task_id ||
 							std::ranges::any_of(fields,
 												[](const std::string_view field)
 												{
 													return field.empty();
 												}) ||
-							!protocol_digest(fields[1U]) || !value.payload.empty() ||
-							!batches.insert(std::string{fields[4U]}).second)
+							!protocol_digest(fields[2U]) || !value.payload.empty() ||
+							!batches.insert(std::string{fields[5U]}).second)
 							return fail("provider.batch-invalid", request.task_id, "begin");
 						if (request.provider_manifest != nullptr &&
-							!offered_relation(*request.provider_manifest, fields[0U]))
+							!offered_relation(*request.provider_manifest, fields[1U]))
 							return fail(
-								"provider.relation-incompatible", std::string{fields[0U]}, "offer");
+								"provider.relation-incompatible", std::string{fields[1U]}, "offer");
 						const auto* descriptor =
-							output_descriptor(request.output_descriptors, fields[0U]);
-						if (descriptor == nullptr || descriptor->descriptor_digest != fields[1U])
+							output_descriptor(request.output_descriptors, fields[1U]);
+						if (descriptor == nullptr || descriptor->descriptor_digest != fields[2U])
 							return fail("provider.relation-incompatible",
-										std::string{fields[0U]},
+										std::string{fields[1U]},
 										"descriptor-digest");
 						open_batch opened{descriptor,
-										  std::string{fields[2U]},
 										  std::string{fields[3U]},
 										  std::string{fields[4U]},
+										  std::string{fields[5U]},
 										  {},
 										  {},
 										  {},

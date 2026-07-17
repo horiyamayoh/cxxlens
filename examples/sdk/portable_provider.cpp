@@ -7,6 +7,8 @@
 
 namespace
 {
+	constexpr std::string_view provider_contract{
+		"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"};
 	[[nodiscard]] cxxlens::sdk::detached_cell optional_typed(std::string parameter,
 															 std::string value)
 	{
@@ -28,12 +30,17 @@ namespace
 	  public:
 		std::string_view id() const noexcept override
 		{
-			return "company.example.lock-provider@1.0.0";
+			return "company.example.lock-provider";
 		}
 
 		cxxlens::sdk::semantic_version version() const noexcept override
 		{
 			return {1U, 0U, 0U};
+		}
+
+		std::string_view semantic_contract_digest() const noexcept override
+		{
+			return provider_contract;
 		}
 
 		cxxlens::sdk::result<void> run(const cxxlens::sdk::provider::task& task,
@@ -80,8 +87,6 @@ namespace
 int main()
 {
 	lock_provider implementation;
-	cxxlens::sdk::provider::task task;
-	task.task_id = "task-1";
 	auto catalog = cxxlens::sdk::project_catalog::make(
 		".",
 		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -91,11 +96,24 @@ int main()
 		  "sha256:1111111111111111111111111111111111111111111111111111111111111111"}});
 	if (!catalog)
 		return 1;
-	task.project = std::move(*catalog);
-	task.outputs = {cxxlens::company::relations::lock_acquire::descriptor()};
-	task.condition = "condition:all";
-	task.interpretation = "provider.company.example";
+	const auto descriptor = cxxlens::company::relations::lock_acquire::descriptor();
+	auto task =
+		cxxlens::sdk::provider::task::make({std::string{implementation.id()},
+											implementation.version(),
+											std::string{implementation.semantic_contract_digest()},
+											{descriptor},
+											{},
+											{"provider.company.example"},
+											"observation",
+											"assertion"},
+										   std::move(*catalog),
+										   {descriptor},
+										   "condition:all",
+										   "provider.company.example",
+										   {"calls"});
+	if (!task)
+		return 1;
 	cxxlens::sdk::testing::provider_harness harness;
-	auto report = harness.run(implementation, task);
+	auto report = harness.run(implementation, *task);
 	return report && report->accepted && report->frames.size() >= 7U ? 0 : 1;
 }
