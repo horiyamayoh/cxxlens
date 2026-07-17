@@ -1,5 +1,5 @@
 schema: cxxlens.snapshot-store-contract.v1
-document_version: 1.5.0
+document_version: 1.6.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#15-immutable-snapshot-and-store
@@ -266,6 +266,12 @@ publication_transaction:
   stale_parent: reject
   failed_publish_preserves_head: true
   recovery: committed-journal-record-only
+  sqlite_head_cas:
+    table: cxxlens_ng_series_head
+    transaction: begin-immediate
+    steps: [recheck-expected-parent-and-sequence, immutable-publication-insert, head-update]
+    conflict: store.publication-conflict
+    memory_update: after-commit-only
 reader_pin:
   handle_pins: physical-publication-generation
   semantic_snapshot_immutable: true

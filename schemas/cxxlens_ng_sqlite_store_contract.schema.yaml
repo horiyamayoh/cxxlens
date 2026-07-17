@@ -34,7 +34,7 @@ properties:
     required: [id, current, semantic_snapshot_id_excludes_format]
     properties:
       id: {const: cxxlens.sqlite-semantic-store.v2}
-      current: {const: 2.4.0}
+      current: {const: 2.5.0}
       semantic_snapshot_id_excludes_format: {const: true}
   runtime: {$ref: '#/$defs/open_object'}
   tables:

@@ -1,5 +1,5 @@
 schema: cxxlens.ng-sqlite-store-contract.v1
-document_version: 1.2.0
+document_version: 1.3.0
 maturity: implemented
 authority:
   semantic_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
@@ -7,7 +7,7 @@ authority:
   owner_issue: '#68'
 physical_format:
   id: cxxlens.sqlite-semantic-store.v2
-  current: 2.4.0
+  current: 2.5.0
   semantic_snapshot_id_excludes_format: true
 runtime:
   discovery: explicit-runtime-library
@@ -31,6 +31,9 @@ tables:
       - state
       - checksum
       - payload
+  - name: cxxlens_ng_series_head
+    primary_key: [series_id]
+    columns: [series_id, current_publication, sequence]
 indexes:
   - name: cxxlens_ng_publication_series
     columns: [series_id, sequence]
@@ -76,9 +79,19 @@ payload:
 transaction:
   journal_mode: WAL
   synchronous: FULL
-  write: begin-immediate-insert-or-replace-commit
+  publish:
+    boundary: begin-immediate-to-commit
+    head_authority: cxxlens_ng_series_head
+    compare: [current_publication, sequence]
+    expected_parent_mismatch: store.publication-conflict
+    publication_row: immutable-insert
+    publication_insert_or_replace: forbidden
+    atomic_steps: [recheck-head, insert-publication, update-head]
+    memory_update: after-database-commit
+    failure: rollback-without-visible-candidate
+  maintenance_write: begin-immediate-update-existing-physical-payload-commit
   publication_visibility: committed-record-only
-  stale_parent: reject-before-write
+  stale_parent: reject-inside-database-transaction
 compaction:
   algorithm: copy-on-write-physical-generation
   reader_pin: shared-generation-token

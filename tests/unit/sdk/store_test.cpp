@@ -701,6 +701,64 @@ namespace
 		}
 	}
 
+	void check_sqlite_multi_instance_cas()
+	{
+		const auto relation_engine = engine();
+		const auto path =
+			std::filesystem::temp_directory_path() / "cxxlens-ng-store-multi-instance-cas.sqlite";
+		std::filesystem::remove(path);
+		auto seed = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+		require(seed.has_value(), "SQLite CAS seed store unavailable");
+		auto base = publish(*seed, relation_engine, false);
+		seed = cxxlens::sdk::result<cxxlens::sdk::snapshot_store>{
+			cxxlens::sdk::unexpected(cxxlens::sdk::error{"test.release", "seed", {}})};
+
+		auto first_store = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+		auto second_store =
+			cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+		require(first_store && second_store, "independent SQLite CAS stores unavailable");
+		const auto prepare_writer =
+			[&](cxxlens::sdk::result<cxxlens::sdk::snapshot_writer>& writer, std::string scope)
+		{
+			auto staged = partition(relation_engine, false);
+			staged.scope = std::move(scope);
+			staged.coverage.front().key = staged.scope;
+			require(writer && writer->stage(std::move(staged)) && writer->validate(),
+					"independent SQLite CAS writer setup failed");
+		};
+		auto first_writer =
+			first_store->begin(snapshot_draft(relation_engine, base.publication().publication_id));
+		auto second_writer =
+			second_store->begin(snapshot_draft(relation_engine, base.publication().publication_id));
+		prepare_writer(first_writer, "compile-unit-cas-a");
+		prepare_writer(second_writer, "compile-unit-cas-b");
+		auto winner = first_writer->publish();
+		auto loser = second_writer->publish();
+		require(winner && !loser && loser.error().code == "store.publication-conflict",
+				"two SQLite instances committed forked heads or returned an unstable conflict");
+
+		auto reopened = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+		require(reopened.has_value(), "SQLite CAS result reopened as an ambiguous head");
+		auto head = reopened->current(selector(relation_engine));
+		require(head && head->publication().publication_id == winner->publication().publication_id,
+				"SQLite CAS winner was not the durable series head");
+		auto retry =
+			reopened->begin(snapshot_draft(relation_engine, head->publication().publication_id));
+		prepare_writer(retry, "compile-unit-cas-retry");
+		auto retried = retry->publish();
+		require(retried && retried->publication().sequence == head->publication().sequence + 1U,
+				"CAS loser could not retry from the durable head");
+		auto final = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+		auto final_head = final
+			? final->current(selector(relation_engine))
+			: cxxlens::sdk::result<cxxlens::sdk::snapshot_handle>{final.error()};
+		require(final && final_head &&
+					final_head->publication().publication_id ==
+						retried->publication().publication_id,
+				"SQLite CAS retry did not remain unambiguous after reopen");
+		std::filesystem::remove(path);
+	}
+
 	void check_derived_basis_membership()
 	{
 		const auto relation_engine = engine();
@@ -798,6 +856,7 @@ int main()
 	check_canonical_vectors();
 	check_backend_parity();
 	check_occurrence_round_trip();
+	check_sqlite_multi_instance_cas();
 	check_sqlite_semantic_graph_tamper();
 	check_derived_basis_membership();
 	return 0;

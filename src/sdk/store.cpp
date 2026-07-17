@@ -2017,6 +2017,9 @@ namespace cxxlens::sdk
 					"snapshot_id TEXT NOT NULL,sequence INTEGER NOT NULL,"
 					"generation INTEGER NOT NULL,parent TEXT,state INTEGER NOT NULL,"
 					"checksum TEXT NOT NULL,payload BLOB NOT NULL);"
+					"CREATE TABLE IF NOT EXISTS cxxlens_ng_series_head("
+					"series_id TEXT PRIMARY KEY,current_publication TEXT NOT NULL,"
+					"sequence INTEGER NOT NULL);"
 					"CREATE INDEX IF NOT EXISTS cxxlens_ng_publication_series "
 					"ON cxxlens_ng_publication(series_id,sequence);");
 				!configured)
@@ -2075,6 +2078,97 @@ namespace cxxlens::sdk
 			if (!persisted)
 				(void)database->execute("ROLLBACK;");
 			return persisted;
+		}
+
+		[[nodiscard]] result<void>
+		persist_new(const snapshot_handle::data& value,
+					const std::optional<std::string>& expected_parent) const
+		{
+			if (database == nullptr)
+				return {};
+			if (auto begun = database->execute("BEGIN IMMEDIATE;"); !begun)
+				return begun;
+			const auto rollback = [&]()
+			{
+				(void)database->execute("ROLLBACK;");
+			};
+			const auto& record = value.publication_record_value;
+			auto head = database->query(
+				"SELECT current_publication,sequence FROM cxxlens_ng_series_head WHERE series_id=" +
+				sql_quote(record.series_id));
+			if (!head)
+			{
+				rollback();
+				return unexpected(std::move(head.error()));
+			}
+			if (head->size() > 1U || (!head->empty() && head->front().size() != 2U))
+			{
+				rollback();
+				return unexpected(store_error("store.corrupt", record.series_id, "series-head"));
+			}
+			const std::optional<std::string> actual_parent = head->empty()
+				? std::optional<std::string>{}
+				: std::optional<std::string>{head->front().front()};
+			auto prior_sequence = head->empty() ? result<std::uint64_t>{std::uint64_t{0U}}
+												: parse_unsigned(head->front()[1U]);
+			if (!prior_sequence)
+			{
+				rollback();
+				return unexpected(std::move(prior_sequence.error()));
+			}
+			if (actual_parent != expected_parent || record.parent_publication != expected_parent ||
+				record.sequence != *prior_sequence + 1U)
+			{
+				rollback();
+				return unexpected(store_error("store.publication-conflict", record.series_id));
+			}
+			auto duplicate = database->query(
+				"SELECT publication_id FROM cxxlens_ng_publication WHERE publication_id=" +
+				sql_quote(record.publication_id));
+			if (!duplicate)
+			{
+				rollback();
+				return unexpected(std::move(duplicate.error()));
+			}
+			if (!duplicate->empty())
+			{
+				rollback();
+				return unexpected(store_error("store.publication-conflict", record.publication_id));
+			}
+			const auto payload = encode_snapshot(value);
+			const auto checksum = content_digest(payload);
+			std::ostringstream insert;
+			insert << "INSERT INTO cxxlens_ng_publication VALUES("
+				   << sql_quote(record.publication_id) << ',' << sql_quote(record.series_id) << ','
+				   << sql_quote(record.snapshot_id) << ',' << record.sequence << ','
+				   << record.physical_generation << ','
+				   << (record.parent_publication ? sql_quote(*record.parent_publication) : "NULL")
+				   << ',' << static_cast<unsigned>(record.state) << ',' << sql_quote(checksum)
+				   << ",X'" << bytes_hex(payload) << "');";
+			if (auto inserted = database->execute(insert.str()); !inserted)
+			{
+				rollback();
+				return inserted;
+			}
+			const auto head_sql = actual_parent
+				? "UPDATE cxxlens_ng_series_head SET current_publication=" +
+					sql_quote(record.publication_id) +
+					",sequence=" + std::to_string(record.sequence) +
+					" WHERE series_id=" + sql_quote(record.series_id) +
+					" AND current_publication=" + sql_quote(*actual_parent) + ';'
+				: "INSERT INTO cxxlens_ng_series_head VALUES(" + sql_quote(record.series_id) + ',' +
+					sql_quote(record.publication_id) + ',' + std::to_string(record.sequence) + ");";
+			if (auto updated = database->execute(head_sql); !updated)
+			{
+				rollback();
+				return updated;
+			}
+			if (auto committed = database->execute("COMMIT;"); !committed)
+			{
+				rollback();
+				return committed;
+			}
+			return {};
 		}
 
 		[[nodiscard]] result<void> load()
@@ -2152,6 +2246,31 @@ namespace cxxlens::sdk
 					heads[record.series_id] = id;
 				else if (records.at(current->second).sequence == record.sequence)
 					return unexpected(store_error("store.current-ambiguous", record.series_id));
+			}
+			for (const auto& [series, publication] : heads)
+			{
+				const auto& record = records.at(publication);
+				if (auto initialized =
+						database->execute("INSERT OR IGNORE INTO cxxlens_ng_series_head VALUES(" +
+										  sql_quote(series) + ',' + sql_quote(publication) + ',' +
+										  std::to_string(record.sequence) + ");");
+					!initialized)
+					return initialized;
+			}
+			auto persisted_heads = database->query(
+				"SELECT series_id,current_publication,sequence FROM cxxlens_ng_series_head");
+			if (!persisted_heads)
+				return unexpected(std::move(persisted_heads.error()));
+			if (persisted_heads->size() != heads.size())
+				return unexpected(store_error("store.corrupt", "sqlite", "series-head-count"));
+			for (const auto& row : *persisted_heads)
+			{
+				if (row.size() != 3U || !heads.contains(row[0U]) || heads.at(row[0U]) != row[1U])
+					return unexpected(store_error("store.corrupt", "sqlite", "series-head"));
+				auto sequence = parse_unsigned(row[2U]);
+				if (!sequence || records.at(row[1U]).sequence != *sequence)
+					return unexpected(
+						store_error("store.corrupt", "sqlite", "series-head-sequence"));
 			}
 			return {};
 		}
@@ -2256,7 +2375,7 @@ namespace cxxlens::sdk
 
 	store_compatibility snapshot_store::compatibility() const
 	{
-		return {implementation_->backend, {2U, 4U, 0U}, true, false};
+		return {implementation_->backend, {2U, 5U, 0U}, true, false};
 	}
 
 	result<void> snapshot_store::compact()
@@ -2559,7 +2678,7 @@ namespace cxxlens::sdk
 		}
 		auto token = std::make_shared<const std::uint64_t>(generation);
 		data_->candidate->generation_pin = token;
-		if (auto persisted = store.persist(*data_->candidate); !persisted)
+		if (auto persisted = store.persist_new(*data_->candidate, current_parent); !persisted)
 		{
 			data_->current_state = publication_state::rolled_back;
 			return unexpected(std::move(persisted.error()));

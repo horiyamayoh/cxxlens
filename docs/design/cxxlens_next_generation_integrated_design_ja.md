@@ -2032,6 +2032,12 @@ row/annotation projection を bottom-up に再構成し、manifest と byte-exac
 semantic integrity を宣言してはならない。duplicate snapshot 比較は annotation、coverage、partition binding、partition envelope
 を含み、physical generation/root relocation は除外する。
 
+Issue #132 は SQLite physical minor 2.5.0 に durable `cxxlens_ng_series_head` を追加する。publish は
+`BEGIN IMMEDIATE` transaction 内で DB head の current publication/sequence と expected parentを再照合し、immutable publication
+`INSERT` と head updateを同一 commitに含める。別 store instance が先に commitした場合、後続 writerは
+`store.publication-conflict` で rollbackし、memory record/headは更新しない。publish path の `INSERT OR REPLACE` は禁止し、同一
+publication ID の異 payloadによる上書きを許さない。
+
 Issue #91 / ADR 0034 により closure certificate の独立 validator は `partition_manifest` 単体を subject にしてはならない。
 manifest と exact `snapshot_partition_binding` を検証済みの `partition_certificate_subject` に結合し、condition、interpretation、
 assumption set、producer semantics を candidate と exact match する。key-domain/evidence は digest を要求し、NG0 closure kind は
