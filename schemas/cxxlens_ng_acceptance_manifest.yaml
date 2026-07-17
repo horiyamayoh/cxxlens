@@ -60,9 +60,9 @@ entries:
     summary: Immutable publication and memory/SQLite semantic parity.
   - id: gate.g3
     status: implemented
-    owner_issue: '#117'
+    owner_issue: '#136'
     profile: NG0
-    contract_issue: '#104'
+    contract_issue: '#136'
     depends_on: [gate.g2]
     evidence:
       - tests/unit/sdk/query_runtime_test.cpp
@@ -85,10 +85,11 @@ entries:
       - docs/design/adr/0034-complete-partition-closure-subject.md
       - docs/design/adr/0035-derived-basis-partition-membership.md
       - docs/design/adr/0047-recipe-execution-completeness-classification.md
+      - docs/design/adr/0067-recipe-closed-world-absence-classification.md
       - docs/design/adr/0058-query-scan-occurrence-column-identity.md
       - docs/design/adr/0059-query-row-guarantee-canonical-projection.md
       - docs/design/adr/0060-query-summary-guarantee-fragment-algebra.md
-    summary: Logical query, standard/custom join, budgets, explicit partiality, and flagship recipe states bound to complete execution.
+    summary: Logical query, standard/custom join, budgets, explicit partiality, and flagship recipe absence bound to applicable closed-world proof.
   - id: gate.g4
     status: implemented
     owner_issue: '#112'

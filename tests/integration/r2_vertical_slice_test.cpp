@@ -380,8 +380,36 @@ namespace
 		return output;
 	}
 
-	[[nodiscard]] snapshot_handle
-	publish(snapshot_store& store, const fixture& data, const bool reverse, const bool incomplete)
+	[[nodiscard]] closure_candidate closure_for(const relation_engine& engine,
+												const partition_draft& value)
+	{
+		auto manifest = make_partition_manifest(engine, value);
+		require(manifest.has_value(), "recipe closure partition manifest failed");
+		return {value.relation_descriptor_id,
+				manifest->partition_id,
+				manifest->content_digest,
+				manifest->coverage_digest,
+				"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+				value.condition,
+				value.interpretation,
+				value.assumption_set_id,
+				"relation-key-enumeration",
+				value.producer_semantics,
+				"sha256:2222222222222222222222222222222222222222222222222222222222222222"};
+	}
+
+	enum class closure_mode : std::uint8_t
+	{
+		none,
+		all,
+		unrelated_relation_only,
+	};
+
+	[[nodiscard]] snapshot_handle publish(snapshot_store& store,
+										  const fixture& data,
+										  const bool reverse,
+										  const bool incomplete,
+										  const closure_mode closures = closure_mode::none)
 	{
 		auto writer = store.begin(draft(data.engine));
 		require(writer.has_value(), "snapshot writer failed");
@@ -390,15 +418,27 @@ namespace
 			order[index] = index;
 		if (reverse)
 			std::ranges::reverse(order);
+		std::vector<partition_draft> partitions;
+		partitions.reserve(order.size());
 		for (const auto index : order)
-			require(writer
-						->stage(partition(data.claims[index],
-										  incomplete &&
-											  data.claims[index].descriptor ==
-												  cc::relations::entity::descriptor().id,
-										  index))
-						.has_value(),
+		{
+			partitions.push_back(partition(data.claims[index],
+										   incomplete &&
+											   data.claims[index].descriptor ==
+												   cc::relations::entity::descriptor().id,
+										   index));
+			require(writer->stage(partitions.back()).has_value(),
 					"snapshot partition stage failed");
+		}
+		for (const auto& value : partitions)
+		{
+			const bool unrelated =
+				value.relation_descriptor_id == company::relations::lock_acquire::descriptor().id;
+			if (closures == closure_mode::all ||
+				(closures == closure_mode::unrelated_relation_only && unrelated))
+				require(writer->add_closure(closure_for(data.engine, value)).has_value(),
+						"recipe closure candidate rejected");
+		}
 		require(writer->validate().has_value(), "snapshot validation failed");
 		auto snapshot = writer->publish();
 		require(snapshot.has_value(), "snapshot publication failed");
@@ -594,13 +634,14 @@ int main()
 	auto recipe = recipes::calls_to_function("ns::target");
 	require(recipe.has_value(), "calls_to_function recipe creation failed");
 	auto plan = recipe->lower();
-	require(plan && plan->descriptor().version == semantic_version{1U, 1U, 0U} &&
+	require(plan && plan->descriptor().version == semantic_version{1U, 2U, 0U} &&
 				plan->requirements().size() == 3U,
 			"recipe lowering requirements or semantics version differ");
 	auto memory_report = recipe->run(memory_snapshot);
 	auto cold_report = recipe->run(*sqlite_snapshot);
 	require(memory_report && cold_report &&
 				memory_report->state() == recipes::call_search_state::matched &&
+				!memory_report->result().closed() &&
 				semantic_result(memory_report->result()) == semantic_result(cold_report->result()),
 			"recipe memory/cold-SQLite result diverged");
 	auto warm_report = recipe->run(*sqlite_snapshot);
@@ -617,8 +658,34 @@ int main()
 	require(empty_store.has_value(), "empty store failed");
 	auto empty_snapshot = publish(*empty_store, empty_data, false, false);
 	auto empty_report = recipe->run(empty_snapshot);
-	require(empty_report && empty_report->state() == recipes::call_search_state::empty_complete,
-			"empty-complete recipe state collapsed");
+	require(empty_report && empty_report->state() == recipes::call_search_state::empty_incomplete &&
+				empty_report->result().inputs_complete() && !empty_report->result().closed() &&
+				empty_report->result().closure_ids().empty() &&
+				empty_report->result().summary_guarantee().approximation != "exact",
+			"open-world empty recipe result was promoted to an absence proof");
+
+	auto closed_empty_store = make_in_memory_snapshot_store(empty_data.engine);
+	require(closed_empty_store.has_value(), "closed empty store failed");
+	auto closed_empty_snapshot =
+		publish(*closed_empty_store, empty_data, false, false, closure_mode::all);
+	auto closed_empty_report = recipe->run(closed_empty_snapshot);
+	require(closed_empty_report &&
+				closed_empty_report->state() == recipes::call_search_state::empty_complete &&
+				closed_empty_report->result().closed() &&
+				!closed_empty_report->result().closure_ids().empty() &&
+				closed_empty_report->result().summary_guarantee().approximation == "exact",
+			"closure-bound exact absence was not classified as empty-complete");
+
+	auto unrelated_store = make_in_memory_snapshot_store(empty_data.engine);
+	require(unrelated_store.has_value(), "unrelated closure store failed");
+	auto unrelated_snapshot =
+		publish(*unrelated_store, empty_data, false, false, closure_mode::unrelated_relation_only);
+	auto unrelated_report = recipe->run(unrelated_snapshot);
+	require(unrelated_report &&
+				unrelated_report->state() == recipes::call_search_state::empty_incomplete &&
+				!unrelated_report->result().closed() &&
+				unrelated_report->result().summary_guarantee().approximation != "exact",
+			"closure for an unrelated relation proved recipe absence");
 
 	auto incomplete_store = make_in_memory_snapshot_store(empty_data.engine);
 	require(incomplete_store.has_value(), "incomplete store failed");
@@ -634,7 +701,9 @@ int main()
 	require(ambiguous_store.has_value(), "ambiguous store failed");
 	auto ambiguous_snapshot = publish(*ambiguous_store, ambiguous_data, true, false);
 	auto ambiguous_report = recipe->run(ambiguous_snapshot);
-	require(ambiguous_report && ambiguous_report->state() == recipes::call_search_state::ambiguous,
+	require(ambiguous_report &&
+				ambiguous_report->state() == recipes::call_search_state::ambiguous &&
+				!ambiguous_report->result().closed(),
 			"ambiguous recipe state collapsed");
 
 	std::stop_source stopped;
@@ -649,6 +718,10 @@ int main()
 				cancelled_empty->result().inputs_complete() &&
 				cancelled_empty->state() == recipes::call_search_state::failed,
 			"execution-before-cancel was promoted to a complete empty recipe state");
+	auto closed_cancelled_empty = recipe->run(closed_empty_snapshot, cancelled_before_execution);
+	require(closed_cancelled_empty && closed_cancelled_empty->result().closed() &&
+				closed_cancelled_empty->state() == recipes::call_search_state::failed,
+			"closed-world evidence promoted a failed execution to empty-complete");
 
 	for (auto budget : {query::execution_budget{0U},
 						query::execution_budget{std::numeric_limits<std::uint64_t>::max(),
@@ -673,6 +746,16 @@ int main()
 				truncated_report->result().execution() == query::execution_status::truncated &&
 				truncated_report->state() == recipes::call_search_state::partial,
 			"truncated ambiguous result was promoted to a definitive recipe state");
+	auto closed_ambiguous_store = make_in_memory_snapshot_store(ambiguous_data.engine);
+	require(closed_ambiguous_store.has_value(), "closed ambiguous store failed");
+	auto closed_ambiguous_snapshot =
+		publish(*closed_ambiguous_store, ambiguous_data, false, false, closure_mode::all);
+	auto closed_truncated_report = recipe->run(closed_ambiguous_snapshot, output_limited_request);
+	require(closed_truncated_report && closed_truncated_report->result().closed() &&
+				closed_truncated_report->result().execution() ==
+					query::execution_status::truncated &&
+				closed_truncated_report->state() == recipes::call_search_state::partial,
+			"closed-world evidence promoted a truncated execution to a definitive state");
 
 	cancel_after_first_row cancel_partial;
 	query::execution_request partial_request;

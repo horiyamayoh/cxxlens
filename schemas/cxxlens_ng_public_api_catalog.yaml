@@ -423,7 +423,7 @@ entries:
 
   - id: public.recipe
     status: implemented
-    owner_issue: '#104'
+    owner_issue: '#136'
     profile: NG0
     target: cxxlens::recipes
     headers: [include/cxxlens/sdk/recipe.hpp]
@@ -440,6 +440,6 @@ entries:
     errors: [sdk.recipe-invalid]
     lifetime: [recipe-owns-qualified-name, report-owns-lowered-plan-query-result-and-snapshot-pin]
     threading: [recipe-and-report-are-concurrent-readable, match-cursor-remains-thread-confined]
-    versioning: [recipe-semantics-axis-independent-at-cxxlens.recipes.calls_to_function-1.1.0]
-    invariants: [exact-qualified-name-only, lower-uses-cc-entity-call-direct-target-and-call-site, definitive-states-require-complete-query-execution, truncated-and-cancelled-with-partial-map-to-partial, failed-before-result-maps-to-failed, empty-complete-requires-complete-execution-and-complete-inputs, partial-rows-never-prove-match-ambiguity-absence, evidence-coverage-closure-unresolved-conflict-differential-producer-guarantee-and-explanations-are-preserved]
-    implementation_evidence: [src/sdk/recipe.cpp, examples/sdk/recipe.cpp, tests/integration/r2_vertical_slice_test.cpp, tests/install/examples_consumer/CMakeLists.txt, docs/design/adr/0047-recipe-execution-completeness-classification.md, docs/design/cxxlens_next_generation_integrated_design_ja.md]
+    versioning: [recipe-semantics-axis-independent-at-cxxlens.recipes.calls_to_function-1.2.0]
+    invariants: [exact-qualified-name-only, lower-uses-cc-entity-call-direct-target-and-call-site, definitive-states-require-complete-query-execution, truncated-and-cancelled-with-partial-map-to-partial, failed-before-result-maps-to-failed, empty-complete-requires-complete-execution-complete-inputs-closed-world-nonempty-applicable-closures-and-exact-summary, empty-without-applicable-closure-is-empty-incomplete, matched-and-ambiguous-are-existential-witness-states-independent-of-closure, partial-rows-never-prove-match-ambiguity-absence, evidence-coverage-closure-unresolved-conflict-differential-producer-guarantee-and-explanations-are-preserved]
+    implementation_evidence: [src/sdk/recipe.cpp, examples/sdk/recipe.cpp, tests/integration/r2_vertical_slice_test.cpp, tests/install/examples_consumer/CMakeLists.txt, docs/design/adr/0047-recipe-execution-completeness-classification.md, docs/design/adr/0067-recipe-closed-world-absence-classification.md, docs/design/cxxlens_next_generation_integrated_design_ja.md]

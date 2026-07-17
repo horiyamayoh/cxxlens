@@ -115,8 +115,11 @@ namespace cxxlens::recipes
 				return call_search_state::ambiguous;
 			if (matches != 0U)
 				return call_search_state::matched;
-			return result.inputs_complete() ? call_search_state::empty_complete
-											: call_search_state::empty_incomplete;
+			const bool absence_proved = result.inputs_complete() && result.closed() &&
+				!result.closure_ids().empty() &&
+				result.summary_guarantee().approximation == "exact";
+			return absence_proved ? call_search_state::empty_complete
+								  : call_search_state::empty_incomplete;
 		}
 	} // namespace
 
@@ -169,7 +172,7 @@ namespace cxxlens::recipes
 	call_search_recipe::call_search_recipe(std::string qualified_name)
 		: qualified_name_{std::move(qualified_name)},
 		  descriptor_{"cxxlens.recipes.calls_to_function",
-					  {1U, 1U, 0U},
+					  {1U, 2U, 0U},
 					  "Find direct C/C++ call sites by exact qualified function name"}
 	{
 	}

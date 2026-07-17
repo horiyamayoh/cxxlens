@@ -65,11 +65,11 @@ class NgSdkContractTest(unittest.TestCase):
         with self.assertRaisesRegex(SdkContractError, "schema validation"):
             validate_catalog(ROOT, catalog)
 
-    def test_flagship_recipe_execution_completeness_ownership_is_exact(self) -> None:
+    def test_flagship_recipe_closed_world_ownership_is_exact(self) -> None:
         catalog = copy.deepcopy(self.catalog)
         recipe = next(row for row in catalog["entries"] if row["id"] == "public.recipe")
-        recipe["owner_issue"] = "#73"
-        with self.assertRaisesRegex(SdkContractError, "Issue #104"):
+        recipe["owner_issue"] = "#104"
+        with self.assertRaisesRegex(SdkContractError, "Issue #136"):
             validate_catalog(ROOT, catalog)
 
     def test_project_catalog_projection_cannot_drop_source_digest(self) -> None:

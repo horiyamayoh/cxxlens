@@ -44,9 +44,9 @@ namespace cxxlens::recipes
 	{
 		/** @brief Complete execution found calls to exactly one target entity. */
 		matched,
-		/** @brief Complete execution and complete inputs proved there were no matches. */
+		/** @brief Complete closed-world execution with applicable closures proved no matches. */
 		empty_complete,
-		/** @brief Complete execution found no matches but its inputs were incomplete. */
+		/** @brief Complete execution found no matches without a closed-world absence proof. */
 		empty_incomplete,
 		/** @brief Complete execution found calls to multiple distinct target entities. */
 		ambiguous,

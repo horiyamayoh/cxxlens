@@ -3508,8 +3508,10 @@ provenance references
 `call_search_report` とする。report は exact plan と query result を所有する。query execution が `complete` の
 場合だけ `matched`、`empty_complete`、`empty_incomplete`、`ambiguous` を確定し、`truncated` と
 `cancelled_with_partial` は `partial`、`failed_before_result` は `failed` とする。partial row の件数や target
-集合から matched、ambiguity 不在、absence を推論してはならない。`empty_complete` は execution complete かつ
-input coverage complete の場合だけ返す。ambiguous は diagnostic prose ではなく、complete result の match row に
+集合から matched、ambiguity 不在、absence を推論してはならない。Issue #136 / ADR 0067 により `empty_complete` は execution complete、
+input coverage complete、`closed()`、nonempty applicable closure IDs、exact summary guarantee をすべて満たす場合だけ返す。
+closure なし、または relation / condition / interpretation に適用できない closure だけの zero row は `empty_incomplete` とする。
+実在 row の `matched` / `ambiguous` は existential witness のため closure 非依存である。ambiguous は diagnostic prose ではなく、complete result の match row に
 含まれる distinct target semantic ID により判定する。
 
 NG0 は call search を end-to-end proof とし、recipe catalog を広げすぎない。

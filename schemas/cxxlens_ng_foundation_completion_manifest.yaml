@@ -27,7 +27,7 @@ version_contracts:
   snapshot_identity: 1.0.0
   snapshot_payload: cxxlens.ng-snapshot-payload.v5
   sqlite_physical_format: 2.5.0
-  recipe_semantics: cxxlens.recipes.calls_to_function-1.1.0
+  recipe_semantics: cxxlens.recipes.calls_to_function-1.2.0
 authority_documents:
   - docs/design/cxxlens_next_generation_integrated_design_ja.md
   - docs/design/adr/0002-semantic-relation-platform.md
@@ -46,6 +46,7 @@ authority_documents:
   - docs/design/adr/0021-query-closure-applicability.md
   - docs/design/adr/0033-sqlite-semantic-object-graph-revalidation.md
   - docs/design/adr/0047-recipe-execution-completeness-classification.md
+  - docs/design/adr/0067-recipe-closed-world-absence-classification.md
   - docs/design/adr/0061-relocatable-static-shared-install-package.md
   - docs/design/adr/0062-first-party-sanitizer-closure.md
   - schemas/cxxlens_ng_relation_registry.yaml

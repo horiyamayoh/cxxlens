@@ -199,8 +199,8 @@ def validate_catalog(root: pathlib.Path, catalog: dict[str, Any]) -> None:
             "implemented SDK entry set is incomplete: "
             f"{sorted(EXPECTED_IMPLEMENTED_ENTRIES - implemented)}"
         )
-    if entries.get("public.recipe", {}).get("owner_issue") != "#104":
-        fail("flagship recipe execution-completeness ownership must remain with Issue #104")
+    if entries.get("public.recipe", {}).get("owner_issue") != "#136":
+        fail("flagship recipe closed-world ownership must remain with Issue #136")
     validate_project_catalog_contract(root, entries)
     validate_provider_task_contract(root, entries)
     recipe_source = (root / "src/sdk/recipe.cpp").read_text(encoding="utf-8")
@@ -211,6 +211,9 @@ def validate_catalog(root: pathlib.Path, catalog: dict[str, Any]) -> None:
         "execution_status::failed_before_result",
         "call_search_state::partial",
         "call_search_state::failed",
+        "result.closed()",
+        "result.closure_ids().empty()",
+        'result.summary_guarantee().approximation == "exact"',
     ):
         if marker not in recipe_source:
             fail(f"recipe execution-completeness marker is missing: {marker}")
