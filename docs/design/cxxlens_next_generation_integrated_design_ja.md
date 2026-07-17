@@ -2893,6 +2893,12 @@ query result は scanned claim の exact producer semantic contract、same-domai
 disagreement を side channel と row provenance の双方に保持する。backend、scan order、projection によりこれらを
 脱落させてはならない。
 
+Issue #116 / ADR 0059 により各 `annotated_row` の canonical projection は `contributor_guarantees` を required nonempty
+structured set として含む。各 entry は approximation、scope、assumptions、verification modalities を lossless に保持し、
+canonical JSON key で sort/deduplicate する。result-wide `summary_guarantee` は conservative meet の別軸であり row attribution の
+代用にしない。cursor で観測できる guarantee、canonical export、unordered row tie-break、backend parity comparison は同じ
+row field set を使用する。
+
 ### 20.11 Execution status and deterministic partiality
 
 ```text

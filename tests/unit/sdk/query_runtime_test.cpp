@@ -1797,6 +1797,82 @@ namespace
 					aggregated->provenance.size() == 2U &&
 					aggregated->contributor_guarantees.size() == 2U && end && !*end,
 				"query scan duplicated semantic content or dropped occurrence metadata");
+
+		auto exact_row = *aggregated;
+		exact_row.contributor_guarantees = {base.guarantee};
+		auto under_row = exact_row;
+		under_row.contributor_guarantees = {guarantee.guarantee};
+		require(exact_row.validate() && under_row.validate() &&
+					exact_row.canonical_form() != under_row.canonical_form(),
+				"row-level guarantee did not affect canonical identity");
+		auto forward = exact_row;
+		forward.contributor_guarantees = {base.guarantee, guarantee.guarantee};
+		auto reverse = exact_row;
+		reverse.contributor_guarantees = {guarantee.guarantee, base.guarantee};
+		require(forward.validate() && reverse.validate() &&
+					forward.canonical_form() == reverse.canonical_form(),
+				"guarantee insertion order changed canonical row identity");
+
+		auto second_exact = exact_row;
+		second_exact.values.at("output.value") = detached_cell::signed_integer(3);
+		auto second_under = under_row;
+		second_under.values.at("output.value") = detached_cell::signed_integer(3);
+		const auto canonical_rows = [](std::vector<query::annotated_row> values)
+		{
+			std::vector<std::string> forms;
+			forms.reserve(values.size());
+			for (const auto& value : values)
+				forms.push_back(value.canonical_form());
+			std::ranges::sort(forms);
+			return forms;
+		};
+		require(canonical_rows({exact_row, second_under}) !=
+					canonical_rows({under_row, second_exact}),
+				"swapping guarantees between result rows preserved canonical identity");
+
+		const auto canonical_result = result->canonical_form();
+		require(canonical_result.contains("\"contributor_guarantees\":[{") &&
+					canonical_result.contains("\"approximation\":\"exact\"") &&
+					canonical_result.contains("\"approximation\":\"under_approximation\"") &&
+					canonical_result.contains("\"verification_modalities\":["),
+				"query result canonical form lost structured row guarantees");
+
+		const auto key =
+			column_ref{data.left.id, data.left.columns[0].id, data.left.columns[0].type};
+		auto left_key = query::qualify(key, "left");
+		auto right_key = query::qualify(key, "right");
+		require(left_key && right_key, "guarantee operator qualification failed");
+		auto predicate = query::equals_present(*left_key, *right_key);
+		require(predicate.has_value(), "guarantee operator predicate failed");
+		for (const bool semi : {false, true})
+		{
+			auto left = query::builder::from(data.left, "left");
+			auto right = query::builder::from(data.left, "right");
+			require(left && right, "guarantee join source failed");
+			auto joined = semi ? std::move(*left).semi_join(std::move(*right), *predicate)
+							   : std::move(*left).inner_join(std::move(*right), *predicate);
+			require(joined.has_value(), "guarantee join construction failed");
+			auto joined_result = engine->execute(std::move(*joined).finish());
+			require(joined_result.has_value(), "guarantee join execution failed");
+			auto joined_rows = annotated_rows(*joined_result);
+			require(
+				joined_rows.size() == 1U &&
+					joined_rows.front().contributor_guarantees.size() == 2U &&
+					joined_rows.front().canonical_form().contains("\"contributor_guarantees\":[{"),
+				"join/semi-join lost row-level guarantee attribution");
+		}
+		auto distinct_source = query::builder::from(data.left);
+		require(distinct_source.has_value(), "guarantee distinct source failed");
+		auto distinct = std::move(*distinct_source).distinct();
+		require(distinct.has_value(), "guarantee distinct construction failed");
+		auto distinct_result = engine->execute(std::move(*distinct).finish());
+		require(distinct_result.has_value(), "guarantee distinct execution failed");
+		auto distinct_rows = annotated_rows(*distinct_result);
+		require(
+			distinct_rows.size() == 1U &&
+				distinct_rows.front().contributor_guarantees.size() == 2U &&
+				distinct_rows.front().canonical_form().contains("\"contributor_guarantees\":[{"),
+			"distinct lost row-level guarantee attribution");
 	}
 
 	void check_closure_applicability(const fixture& data)

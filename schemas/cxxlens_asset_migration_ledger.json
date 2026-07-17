@@ -1,5 +1,5 @@
 {
-  "asset_count": 308,
+  "asset_count": 309,
   "assets": [
     {
       "authority": "active",
@@ -816,6 +816,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0058-query-scan-occurrence-column-identity.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0059-query-row-guarantee-canonical-projection.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2159,7 +2166,7 @@
     }
   ],
   "classifications": {
-    "active": 272,
+    "active": 273,
     "archived": 35,
     "generated": 1
   },

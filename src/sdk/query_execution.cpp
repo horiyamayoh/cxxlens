@@ -246,10 +246,17 @@ namespace cxxlens::sdk::query
 			return plan;
 		}
 
+		[[nodiscard]] std::string guarantee_json(const claim_guarantee& value)
+		{
+			return "{\"approximation\":" + json_string(value.approximation) +
+				",\"assumptions\":" + json_string(value.assumptions) +
+				",\"scope\":" + json_string(value.scope) +
+				",\"verification_modalities\":" + strings_json(value.verification_modalities) + "}";
+		}
+
 		[[nodiscard]] std::string guarantee_key(const claim_guarantee& value)
 		{
-			return value.approximation + "\n" + value.scope + "\n" + value.assumptions + "\n" +
-				strings_json(value.verification_modalities);
+			return guarantee_json(value);
 		}
 
 		void canonical_guarantees(std::vector<claim_guarantee>& values)
@@ -1153,7 +1160,7 @@ namespace cxxlens::sdk::query
 	result<void> annotated_row::validate() const
 	{
 		if (multiplicity == 0U || interpretation.empty() || claim_contributors.empty() ||
-			producer_contracts.empty() || provenance.empty() ||
+			producer_contracts.empty() || provenance.empty() || contributor_guarantees.empty() ||
 			!sorted_unique(claim_contributors) || !producers_are_canonical(producer_contracts) ||
 			!sorted_unique(provenance))
 			return unexpected(query_error("sdk.query-row-invalid", "annotation"));
@@ -1177,11 +1184,20 @@ namespace cxxlens::sdk::query
 
 	std::string annotated_row::canonical_form() const
 	{
+		auto guarantees = contributor_guarantees;
+		canonical_guarantees(guarantees);
 		std::ostringstream output;
 		output << "{\"claim_contributors\":" << strings_json(claim_contributors)
 			   << ",\"condition_fragments\":" << strings_json(presence.fragments)
 			   << ",\"condition_universe\":" << json_string(presence.universe)
-			   << ",\"interpretation\":" << json_string(interpretation)
+			   << ",\"contributor_guarantees\":[";
+		for (std::size_t index = 0U; index < guarantees.size(); ++index)
+		{
+			if (index != 0U)
+				output << ',';
+			output << guarantee_json(guarantees[index]);
+		}
+		output << ']' << ",\"interpretation\":" << json_string(interpretation)
 			   << ",\"multiplicity\":" << multiplicity << ",\"producer_contracts\":[";
 		for (std::size_t producer = 0U; producer < producer_contracts.size(); ++producer)
 		{

@@ -531,6 +531,7 @@ def validate_query_runtime_implementation(root: pathlib.Path) -> None:
         "sdk.query-cancelled",
         "inputs_complete",
         "explain_physical",
+        "contributor_guarantees",
     ):
         if marker not in source:
             fail(f"query runtime implementation marker is missing: {marker}")

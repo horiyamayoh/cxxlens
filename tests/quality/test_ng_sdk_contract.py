@@ -8,6 +8,8 @@ import pathlib
 import sys
 import unittest
 
+import jsonschema
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "quality"))
@@ -62,6 +64,44 @@ class NgSdkContractTest(unittest.TestCase):
         provider["errors"].remove("provider.manifest-invalid")
         with self.assertRaisesRegex(SdkContractError, "error codes are absent"):
             validate_catalog(ROOT, catalog)
+
+    def test_query_result_row_requires_structured_contributor_guarantees(self) -> None:
+        schema = load_yaml(
+            ROOT / "schemas/cxxlens_ng_query_execution_result.schema.yaml"
+        )
+        row_schema = {
+            "$schema": schema["$schema"],
+            "$defs": schema["$defs"],
+            "$ref": "#/$defs/row",
+        }
+        row = {
+            "values": {},
+            "multiplicity": 1,
+            "condition_universe": "build-matrix",
+            "condition_fragments": ["debug"],
+            "contributor_guarantees": [
+                {
+                    "approximation": "exact",
+                    "scope": "project",
+                    "assumptions": "assumptions:none",
+                    "verification_modalities": ["schema_validated"],
+                }
+            ],
+            "interpretation": "cc.canonical-1",
+            "claim_contributors": ["assertion:one"],
+            "producer_contracts": [
+                {
+                    "id": "provider.one",
+                    "semantic_contract": "sha256:" + "a" * 64,
+                }
+            ],
+            "provenance": ["evidence:one"],
+        }
+        jsonschema.Draft202012Validator(row_schema).validate(row)
+        missing = copy.deepcopy(row)
+        missing.pop("contributor_guarantees")
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(row_schema).validate(missing)
 
 
 if __name__ == "__main__":

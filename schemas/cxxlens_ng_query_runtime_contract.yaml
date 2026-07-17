@@ -1,12 +1,12 @@
 schema: cxxlens.query-runtime-contract.v1
-document_version: 1.12.0
+document_version: 1.13.0
 maturity: implemented
 authority:
   logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
   guarantee_contract: schemas/cxxlens_ng_semantic_guarantee_contract.yaml
   snapshot_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
   decision_adr: docs/design/adr/0037-lossless-claim-evidence-occurrences.md
-  owner_issue: '#115'
+  owner_issue: '#116'
   owner: steward.ng-query-runtime
 compatibility:
   version_axis: query-runtime-result
@@ -201,6 +201,15 @@ result:
     thread_affine: true
     view_lifetime: until-next-advance
     owned_copy: detached
+    observable_fields:
+      - values
+      - multiplicity
+      - condition
+      - interpretation
+      - claim_contributors
+      - producer_contracts
+      - provenance
+      - contributor_guarantees
   execution_statuses:
     - complete
     - truncated
@@ -240,6 +249,11 @@ result:
   canonical_order:
     ordered_query: declared-total-order
     unordered_query: canonical-annotated-row-order
+    row_projection:
+      contributor_guarantees: canonical-structured-set
+      guarantee_fields: [approximation, scope, assumptions, verification_modalities]
+      guarantee_order: canonical-json-lexical
+      lossless_against_row_cursor: true
     conflict_projection:
       shape: structured-exact-object
       fields: [assertions, contents, interpretation, overlap_fragments, relation, semantic_key]
@@ -261,6 +275,7 @@ qualification:
     - differential_disagreements
     - producer_contracts
     - summary_guarantee
+    - row-contributor-guarantees
   static_dynamic_digest_equal: required
   root_relocation: required
   installed_consumers: [static, shared]
