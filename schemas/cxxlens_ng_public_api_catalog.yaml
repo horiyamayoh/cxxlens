@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.6.0
+document_version: 1.7.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -118,7 +118,7 @@ entries:
 
   - id: public.relation-static
     status: implemented
-    owner_issue: '#74'
+    owner_issue: '#75'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/sdk/relation.hpp]
@@ -139,12 +139,12 @@ entries:
     lifetime: [generated-tags-are-static-metadata, rows-are-value-owned-and-detached]
     threading: [generated-descriptor-is-immutable, builders-are-thread-confined]
     versioning: [tag-binds-exact-descriptor-id-semantic-major-authority-digest-and-runtime-projection]
-    invariants: [generated-from-accepted-relation-registry, descriptor-digest-binds-authority-and-runtime-semantic-projection, committed-generated-source-is-reproducible, external-idl-requires-zero-core-source-diff, native-pointers-not-representable]
-    implementation_evidence: [tools/sdk/relation_idl_compiler.py, src/sdk/relation.cpp, examples/sdk/typed_query.cpp]
+    invariants: [generated-from-accepted-relation-registry, descriptor-digest-binds-authority-and-runtime-semantic-projection, runtime-projection-revalidates-idl-pattern-minimum-unique-key-reference-and-merge-contracts, committed-generated-source-is-reproducible, external-idl-requires-zero-core-source-diff, native-pointers-not-representable]
+    implementation_evidence: [tools/sdk/relation_idl_compiler.py, src/sdk/relation.cpp, examples/sdk/typed_query.cpp, tests/unit/sdk/sdk_test.cpp, schemas/cxxlens_ng_relation_registry.schema.yaml, docs/design/adr/0018-runtime-relation-schema-parity.md]
 
   - id: public.relation-dynamic
     status: implemented
-    owner_issue: '#74'
+    owner_issue: '#75'
     profile: NG0
     target: cxxlens::provider_sdk
     headers: [include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
@@ -162,8 +162,8 @@ entries:
     lifetime: [dynamic-relation-shares-immutable-descriptor-ownership]
     threading: [published-dynamic-relations-and-engines-are-immutable]
     versioning: [lookup-requires-explicit-semantic-major, registry-digest-binds-exact-authority-and-runtime-projections, engine-generation-is-explicit, no-adjacent-version-fallback]
-    invariants: [duplicate-and-conflict-reject, registry-mutation-after-engine-build-rejects, same-descriptor-model-as-generated-tags, stale-trusted-descriptor-digest-rejects-runtime-field-mutation]
-    implementation_evidence: [src/sdk/relation.cpp, examples/sdk/dynamic_query.cpp, tests/unit/sdk/sdk_test.cpp]
+    invariants: [duplicate-and-conflict-reject, registry-mutation-after-engine-build-rejects, same-descriptor-model-and-validation-projection-as-generated-tags, schema-invalid-runtime-descriptor-rejects-before-adoption, stale-trusted-descriptor-digest-rejects-runtime-field-mutation]
+    implementation_evidence: [src/sdk/relation.cpp, examples/sdk/dynamic_query.cpp, tests/unit/sdk/sdk_test.cpp, schemas/cxxlens_ng_relation_registry.schema.yaml, docs/design/adr/0018-runtime-relation-schema-parity.md]
 
   - id: public.claim-kernel
     status: implemented

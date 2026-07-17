@@ -15,6 +15,9 @@
 | [0013](0013-ng-sqlite-physical-store.md) | SQLite physical store |
 | [0014](0014-deterministic-reference-query-runtime.md) | reference query runtime |
 | [0015](0015-process-provider-runtime-clang22-normalizer.md) | process runtime and Clang 22 normalizer |
+| [0016](0016-semantic-digest-v2.md) | prefix-free semantic digest v2 |
+| [0017](0017-relation-descriptor-binding.md) | relation authority/runtime descriptor binding |
+| [0018](0018-runtime-relation-schema-parity.md) | runtime relation schema parity |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

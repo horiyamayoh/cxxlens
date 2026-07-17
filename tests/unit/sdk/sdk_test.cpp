@@ -121,7 +121,8 @@ namespace
 		};
 		descriptor.key_columns = {descriptor.id + ".key"};
 		descriptor.merge = mode;
-		descriptor.conflict_columns = {descriptor.id + ".value"};
+		if (mode == cxxlens::sdk::merge_mode::functional_assertion)
+			descriptor.conflict_columns = {descriptor.id + ".value"};
 		descriptor.descriptor_digest = *cxxlens::sdk::semantic_digest(
 			"cxxlens.relation-descriptor-binding.v2",
 			descriptor.contract_digest + "\n" + descriptor.canonical_form());
@@ -305,6 +306,119 @@ namespace
 		require(set_engine && multiset_engine &&
 					set_engine->registry_digest() != multiset_engine->registry_digest(),
 				"different runtime descriptors produced the same registry digest");
+	}
+
+	void check_relation_schema_parity()
+	{
+		using cxxlens::sdk::merge_mode;
+		using cxxlens::sdk::reference_strength;
+		const auto rejects = [](cxxlens::sdk::relation_descriptor candidate,
+								const std::string_view code,
+								const std::string_view field,
+								const std::string_view subject)
+		{
+			auto valid = candidate.validate();
+			require(!valid && valid.error().code == code && valid.error().field == field,
+					"schema-invalid runtime descriptor was accepted or misclassified: " +
+						std::string{subject});
+		};
+
+		auto valid = make_merge_descriptor("company.schema.valid", merge_mode::set);
+		require(valid.validate().has_value(), "schema-valid dynamic descriptor was rejected");
+		require(cxxlens::cc::relations::call_site::descriptor().validate().has_value(),
+				"schema-valid generated descriptor was rejected");
+
+		for (const auto name : {"", "company..item", "company.1item", "company.bad-item"})
+		{
+			auto candidate = valid;
+			candidate.name = name;
+			rejects(std::move(candidate), "sdk.relation-invalid", "name", name);
+		}
+
+		auto zero_major = valid;
+		zero_major.semantic_major = 0U;
+		zero_major.version.major = 0U;
+		zero_major.id = zero_major.name + ".v0";
+		rejects(
+			std::move(zero_major), "sdk.relation-invalid", "semantic_major", "semantic major 0");
+
+		auto owner = valid;
+		owner.owner_namespace = "!";
+		rejects(std::move(owner), "sdk.relation-invalid", "owner_namespace", "owner namespace");
+
+		auto semantics = valid;
+		semantics.semantics = "not/a/valid/schema/value";
+		rejects(std::move(semantics), "sdk.relation-invalid", "semantics", "semantics");
+
+		auto column_name = valid;
+		column_name.columns.front().name = "Invalid-Column";
+		rejects(std::move(column_name), "sdk.column-invalid", "Invalid-Column", "column name");
+
+		auto duplicate_key = valid;
+		duplicate_key.key_columns.push_back(duplicate_key.key_columns.front());
+		rejects(
+			std::move(duplicate_key), "sdk.relation-invalid", "key_columns", "duplicate claim key");
+
+		auto missing_role_key = valid;
+		missing_role_key.columns.back().role = cxxlens::sdk::column_role::claim_key;
+		rejects(std::move(missing_role_key),
+				"sdk.relation-invalid",
+				"key_columns",
+				"claim key role parity");
+
+		auto duplicate_source = valid;
+		duplicate_source.references = {
+			{{valid.columns.front().id, valid.columns.front().id},
+			 "company.schema.target",
+			 {"company.schema.target.v1.first", "company.schema.target.v1.second"},
+			 reference_strength::soft_semantic}};
+		rejects(std::move(duplicate_source),
+				"sdk.reference-invalid",
+				valid.name,
+				"duplicate reference source columns");
+
+		auto duplicate_target = valid;
+		duplicate_target.references = {
+			{{valid.columns.front().id, valid.columns.back().id},
+			 "company.schema.target",
+			 {"company.schema.target.v1.key", "company.schema.target.v1.key"},
+			 reference_strength::hard}};
+		rejects(std::move(duplicate_target),
+				"sdk.reference-invalid",
+				valid.name,
+				"duplicate reference target columns");
+
+		auto missing_reference_shape = valid;
+		missing_reference_shape.references = {
+			{{}, "company.schema.target", {}, reference_strength::hard}};
+		rejects(std::move(missing_reference_shape),
+				"sdk.reference-invalid",
+				valid.name,
+				"missing reference columns");
+
+		auto functional =
+			make_merge_descriptor("company.schema.functional", merge_mode::functional_assertion);
+		functional.conflict_columns.clear();
+		rejects(std::move(functional),
+				"sdk.relation-invalid",
+				"conflict_columns",
+				"functional conflict projection");
+
+		auto nonfunctional = valid;
+		nonfunctional.conflict_columns = {nonfunctional.columns.back().id};
+		rejects(std::move(nonfunctional),
+				"sdk.relation-invalid",
+				"conflict_columns",
+				"nonfunctional conflict projection");
+
+		auto registry_invalid = valid;
+		registry_invalid.name = "company..item";
+		registry_invalid.descriptor_digest.clear();
+		cxxlens::sdk::relation_registry registry;
+		auto added = registry.add(std::move(registry_invalid));
+		require(!added && added.error().code == "sdk.relation-invalid" &&
+					added.error().field == "name",
+				"relation registry admitted a schema-invalid dynamic descriptor");
 	}
 
 	void check_static_dynamic_query()
@@ -653,6 +767,7 @@ int main()
 {
 	check_digest();
 	check_descriptor_binding();
+	check_relation_schema_parity();
 	check_static_dynamic_query();
 	check_snapshot_lifetime();
 	check_frame_and_native_escape();

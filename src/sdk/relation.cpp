@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <cctype>
 #include <functional>
 #include <iomanip>
 #include <limits>
@@ -19,24 +18,73 @@ namespace cxxlens::sdk
 			return {std::move(code), std::move(field), std::move(detail)};
 		}
 
-		[[nodiscard]] bool namespaced(const std::string_view value)
+		[[nodiscard]] bool lower_identifier(const std::string_view value)
 		{
-			if (value.empty() || value.front() == '.' || value.back() == '.')
+			if (value.empty() || value.front() < 'a' || value.front() > 'z')
 				return false;
-			bool saw_dot = false;
-			for (const auto byte : value)
+			for (const auto byte : value.substr(1U))
 			{
-				if (byte == '.')
-				{
-					saw_dot = true;
-					continue;
-				}
-				if (std::islower(static_cast<unsigned char>(byte)) == 0 &&
-					std::isdigit(static_cast<unsigned char>(byte)) == 0 && byte != '_' &&
-					byte != '-')
+				const bool valid =
+					(byte >= 'a' && byte <= 'z') || (byte >= '0' && byte <= '9') || byte == '_';
+				if (!valid)
 					return false;
 			}
+			return true;
+		}
+
+		[[nodiscard]] bool relation_name(const std::string_view value)
+		{
+			std::size_t begin = 0U;
+			bool saw_dot = false;
+			while (begin <= value.size())
+			{
+				const auto end = value.find('.', begin);
+				const auto segment = value.substr(
+					begin, end == std::string_view::npos ? value.size() - begin : end - begin);
+				if (!lower_identifier(segment))
+					return false;
+				if (end == std::string_view::npos)
+					break;
+				saw_dot = true;
+				begin = end + 1U;
+			}
 			return saw_dot;
+		}
+
+		[[nodiscard]] bool stable_id(const std::string_view value)
+		{
+			if (value.empty() || value.front() < 'a' || value.front() > 'z')
+				return false;
+			for (const auto byte : value.substr(1U))
+			{
+				const bool valid = (byte >= 'a' && byte <= 'z') || (byte >= '0' && byte <= '9') ||
+					byte == '_' || byte == '.' || byte == '-';
+				if (!valid)
+					return false;
+			}
+			return true;
+		}
+
+		[[nodiscard]] bool semantics_id(const std::string_view value)
+		{
+			const auto slash = value.find('/');
+			if (slash == std::string_view::npos || slash < 2U || slash + 1U >= value.size() ||
+				value.find('/', slash + 1U) != std::string_view::npos)
+				return false;
+			if (!stable_id(value.substr(0U, slash)))
+				return false;
+			return std::ranges::all_of(value.substr(slash + 1U),
+									   [](const char byte)
+									   {
+										   return byte >= '0' && byte <= '9';
+									   });
+		}
+
+		[[nodiscard]] bool unique_strings(const std::vector<std::string>& values)
+		{
+			auto ordered = values;
+			std::ranges::sort(ordered);
+			return std::ranges::adjacent_find(ordered) == ordered.end();
 		}
 
 		[[nodiscard]] std::string escape(const std::string_view input)
@@ -196,9 +244,25 @@ namespace cxxlens::sdk
 
 	result<void> relation_descriptor::validate() const
 	{
-		if (!namespaced(name))
+		if (contract_canonical.empty() != contract_digest.empty())
 			return cxxlens::sdk::unexpected(
-				relation_error("sdk.relation-invalid", "name", "namespaced"));
+				relation_error("sdk.descriptor-digest-mismatch", "contract_digest"));
+		if (!contract_canonical.empty())
+		{
+			if (contract_digest != content_digest(std::as_bytes(std::span{contract_canonical})))
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.descriptor-digest-mismatch", "contract_digest"));
+			auto expected = descriptor_binding(*this);
+			if (!expected || descriptor_digest != *expected)
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.descriptor-digest-mismatch", "descriptor_digest"));
+		}
+		if (!relation_name(name))
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.relation-invalid", "name", "relation-name-pattern"));
+		if (semantic_major == 0U)
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.relation-invalid", "semantic_major", "minimum-1"));
 		if (id != name + ".v" + std::to_string(semantic_major))
 			return cxxlens::sdk::unexpected(
 				relation_error("sdk.relation-invalid", "id", "semantic-major"));
@@ -208,16 +272,25 @@ namespace cxxlens::sdk
 		if (columns.empty())
 			return cxxlens::sdk::unexpected(
 				relation_error("sdk.relation-invalid", "columns", "empty"));
-		if (semantics.empty() || owner_namespace.empty() || key_columns.empty())
+		if (!semantics_id(semantics))
 			return cxxlens::sdk::unexpected(
-				relation_error("sdk.relation-invalid", "semantics", "claim-contract"));
+				relation_error("sdk.relation-invalid", "semantics", "semantics-pattern"));
+		if (!stable_id(owner_namespace))
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.relation-invalid", "owner_namespace", "namespace-pattern"));
+		if (key_columns.empty() || !unique_strings(key_columns))
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.relation-invalid", "key_columns", "unique-nonempty"));
 		std::vector<std::string> ids;
 		std::vector<std::string> names;
 		for (const auto& value : columns)
 		{
-			if (value.id.empty() || value.name.empty() || !value.id.starts_with(id + "."))
+			if (!stable_id(value.id) || !value.id.starts_with(id + "."))
 				return cxxlens::sdk::unexpected(
 					relation_error("sdk.column-invalid", value.id, "identity"));
+			if (!lower_identifier(value.name))
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.column-invalid", value.name, "name-pattern"));
 			if (!value.required && !value.type.optional)
 				return cxxlens::sdk::unexpected(
 					relation_error("sdk.column-invalid", value.id, "optional-contract"));
@@ -233,40 +306,79 @@ namespace cxxlens::sdk
 		if (std::ranges::adjacent_find(ids) != ids.end() ||
 			std::ranges::adjacent_find(names) != names.end())
 			return cxxlens::sdk::unexpected(relation_error("sdk.duplicate-column", "columns"));
+		std::vector<std::string> role_keys;
+		std::vector<std::string> authoritative_payload;
+		for (const auto& value : columns)
+		{
+			if (value.role == column_role::claim_key)
+				role_keys.push_back(value.id);
+			if (value.role == column_role::authoritative_payload)
+				authoritative_payload.push_back(value.id);
+		}
 		for (const auto& key : key_columns)
 		{
+			if (!stable_id(key))
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.relation-invalid", key, "claim-key-pattern"));
 			auto found = column(key);
 			if (!found || found->role != column_role::claim_key || !found->required)
 				return cxxlens::sdk::unexpected(
 					relation_error("sdk.relation-invalid", key, "claim-key"));
 		}
+		std::ranges::sort(role_keys);
+		auto ordered_keys = key_columns;
+		std::ranges::sort(ordered_keys);
+		if (role_keys != ordered_keys)
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.relation-invalid", "key_columns", "claim-key-role-parity"));
+		if (!unique_strings(conflict_columns))
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.relation-invalid", "conflict_columns", "unique"));
 		for (const auto& conflict : conflict_columns)
-			if (!column(conflict))
+			if (!stable_id(conflict) || !column(conflict))
 				return cxxlens::sdk::unexpected(
 					relation_error("sdk.relation-invalid", conflict, "conflict-column"));
+		std::ranges::sort(authoritative_payload);
+		auto ordered_conflicts = conflict_columns;
+		std::ranges::sort(ordered_conflicts);
+		if (merge == merge_mode::functional_assertion && authoritative_payload != ordered_conflicts)
+			return cxxlens::sdk::unexpected(relation_error(
+				"sdk.relation-invalid", "conflict_columns", "functional-payload-projection"));
+		if (merge != merge_mode::functional_assertion && !conflict_columns.empty())
+			return cxxlens::sdk::unexpected(
+				relation_error("sdk.relation-invalid", "conflict_columns", "nonfunctional-empty"));
 		for (const auto& reference : references)
 		{
 			if (reference.source_columns.empty() ||
 				reference.source_columns.size() != reference.target_columns.size() ||
-				reference.target_relation.empty())
+				!relation_name(reference.target_relation))
 				return cxxlens::sdk::unexpected(
 					relation_error("sdk.reference-invalid", name, "shape"));
+			if (!unique_strings(reference.source_columns))
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.reference-invalid", name, "source-columns-unique"));
+			if (!unique_strings(reference.target_columns))
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.reference-invalid", name, "target-columns-unique"));
 			for (const auto& source : reference.source_columns)
-				if (!column(source))
+				if (!stable_id(source) || !column(source))
 					return cxxlens::sdk::unexpected(
 						relation_error("sdk.reference-invalid", source, "source-column"));
+			if (std::ranges::any_of(reference.target_columns,
+									[](const std::string& target)
+									{
+										return !stable_id(target);
+									}))
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.reference-invalid", name, "target-column-pattern"));
 		}
-		if (contract_canonical.empty() != contract_digest.empty())
-			return cxxlens::sdk::unexpected(
-				relation_error("sdk.descriptor-digest-mismatch", "contract_digest"));
-		if (!contract_canonical.empty() &&
-			contract_digest != content_digest(std::as_bytes(std::span{contract_canonical})))
-			return cxxlens::sdk::unexpected(
-				relation_error("sdk.descriptor-digest-mismatch", "contract_digest"));
-		auto expected = descriptor_binding(*this);
-		if (!expected || descriptor_digest != *expected)
-			return cxxlens::sdk::unexpected(
-				relation_error("sdk.descriptor-digest-mismatch", "descriptor_digest"));
+		if (contract_canonical.empty())
+		{
+			auto expected = descriptor_binding(*this);
+			if (!expected || descriptor_digest != *expected)
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.descriptor-digest-mismatch", "descriptor_digest"));
+		}
 		return {};
 	}
 

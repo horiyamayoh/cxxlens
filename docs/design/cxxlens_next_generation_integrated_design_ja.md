@@ -1200,6 +1200,13 @@ Issue #74 / ADR 0017 により descriptor identity は authority contract digest
 authority digestを保持したまま column/key/reference/merge/conflict/semanticsを改変した場合は
 `sdk.descriptor-digest-mismatch` で拒否し、registry digest はこの bound descriptor digest 集合から構成する。
 
+Issue #75 / ADR 0018 により runtime descriptor validator は relation IDL の runtime projection と同じ ASCII
+pattern、`semantic_major >= 1`、unique key/reference/conflict list、claim-key role parity、merge/cardinality conflict
+projectionを検査する。functional assertion の conflict columns は全 authoritative payload と exact一致し、
+非 functional mergeでは空とする。reference の `hard` は `on_missing: reject_batch`、`soft_semantic` は
+`on_missing: unresolved` の型付き projectionであり、runtimeで別の silent policyを選択できない。schema-invalid
+dynamic descriptorは digest計算済みであっても registry adoption 前に stable `sdk.*-invalid` categoryで拒否する。
+
 registry の build-time generation は descriptor document または installation manifest を探索する。external
 relation の追加に中央 enum、switch、source list の変更を要求してはならない。hard reference は staged/base
 snapshot で解決できなければ batch reject、soft semantic reference は row と `core.unresolved` をともに保持する。

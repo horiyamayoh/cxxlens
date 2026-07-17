@@ -110,6 +110,7 @@ namespace cxxlens::sdk
 		merge_mode merge{merge_mode::set};
 		std::vector<std::string> conflict_columns;
 
+		/** @brief Validate the exact runtime projection of the accepted relation IDL schema. */
 		[[nodiscard]] result<void> validate() const;
 		[[nodiscard]] result<column_descriptor> column(std::string_view name_or_id) const;
 		[[nodiscard]] std::string canonical_form() const;
