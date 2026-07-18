@@ -60,7 +60,7 @@ jobs:
             --evidence-output "build/ci-quick/build-test-${{ matrix.shared }}.evidence.json"
       - name: Preserve build/test timing evidence
         if: success() && (github.event_name != 'pull_request' || !github.event.pull_request.draft || matrix.shared == 'OFF')
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: cxxlens-build-test-${{ matrix.shared }}-${{ github.sha }}
           path: |
@@ -110,7 +110,7 @@ jobs:
             --checker cmake/CxxlensDeveloperTools.cmake \
             --output build/ci-quick/quality-production.log \
             --evidence-output build/ci-quick/quality-production.evidence.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: cxxlens-quality-${{ github.sha }}
           path: |
@@ -162,7 +162,7 @@ jobs:
             --output build/install-check/tests/install-consumer/install-artifact-manifest.json \
             --evidence-output "build/install-check/install-${{ matrix.shared }}.evidence.json"
       - name: Preserve the qualified release-layout artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: cxxlens-install-${{ matrix.shared == 'ON' && 'shared' || 'static' }}-${{ github.sha }}
           path: |
@@ -199,7 +199,7 @@ jobs:
             --checker tests/public_headers/cxxlens_header_test.cpp \
             --checker tests/public_headers/sdk_header_test.cpp \
             --evidence-output build/gcc-public-headers/gcc.evidence.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: cxxlens-gcc-public-headers-${{ github.sha }}
           path: |
@@ -226,7 +226,7 @@ jobs:
           python tools/quality/check_quality_ownership.py aggregate \
             --mode full --evidence-dir build/quality-evidence-input \
             --report build/quality-evidence-set.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: cxxlens-quality-evidence-${{ github.sha }}
           path: build/quality-evidence-set.json
@@ -266,7 +266,7 @@ jobs:
             --ci-job install-consumer \
             --ci-job gcc-public-headers \
             --ci-job quality-evidence
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: cxxlens-ng-foundation-completion-${{ github.sha }}
           path: ${{ runner.temp }}/cxxlens-ng-foundation-completion-report.json
@@ -303,7 +303,7 @@ jobs:
             --ci-job quality-contracts \
             --ci-job quality-evidence \
             --ci-job foundation-completion
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: cxxlens-ng-api-development-readiness-${{ github.sha }}
           path: ${{ runner.temp }}/cxxlens-ng-api-development-readiness-report.json
@@ -335,7 +335,7 @@ jobs:
             --output "${RUNNER_TEMP}/cxxlens-ng-g5-qualification-report.json" \
             --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
             --expected-revision "${GITHUB_SHA}"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: cxxlens-ng-g5-qualification-${{ github.sha }}
           path: |
@@ -370,7 +370,7 @@ jobs:
             --output "${RUNNER_TEMP}/cxxlens-ng-release-qualification-report.json" \
             --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
             --expected-revision "${GITHUB_SHA}"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: cxxlens-ng-release-qualification-${{ github.sha }}
           path: |

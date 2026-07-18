@@ -51,7 +51,7 @@ jobs:
             --output build/asan-ubsan/ctest.xml \
             --output build/asan-ubsan/sanitizer-coverage.log \
             --evidence-output build/asan-ubsan/asan-ubsan.evidence.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: cxxlens-nightly-asan-ubsan-${{ github.sha }}
           path: |
@@ -93,7 +93,7 @@ jobs:
             --output build/tsan/ctest.xml \
             --output build/tsan/sanitizer-coverage.log \
             --evidence-output build/tsan/tsan.evidence.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: cxxlens-nightly-tsan-${{ github.sha }}
           path: |
@@ -129,7 +129,7 @@ jobs:
             --checker .clang-tidy \
             --output build/ci-quick/clang-tidy.log \
             --evidence-output build/ci-quick/clang-tidy.evidence.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: cxxlens-nightly-clang-tidy-${{ github.sha }}
           path: |
@@ -155,7 +155,7 @@ jobs:
           python tools/quality/check_quality_ownership.py aggregate \
             --owner nightly --evidence-dir build/nightly-evidence-input \
             --report build/nightly-evidence-set.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: cxxlens-nightly-evidence-${{ github.sha }}
           path: build/nightly-evidence-set.json
@@ -181,7 +181,7 @@ jobs:
           python tools/quality/collect_toolchain_provenance.py \
             --compiler clang++-22 --configuration "ci-quick;clean-no-cache;stress" \
             --output "${RUNNER_TEMP}/cxxlens-clean-full-toolchain.json"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: cxxlens-clean-full-${{ github.sha }}
           path: |
