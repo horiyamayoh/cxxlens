@@ -44,6 +44,9 @@ namespace cxxlens::detail::clang22
 		[[nodiscard]] sdk::result<void> validate() const;
 	};
 
+	/** @brief Canonical pre-normalization dedup key retaining macro spelling occurrences. */
+	[[nodiscard]] std::string observation_dedup_key(const detached_observation& observation);
+
 	struct clang22_task_input
 	{
 		std::string compile_unit;

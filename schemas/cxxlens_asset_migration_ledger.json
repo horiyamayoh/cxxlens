@@ -1,5 +1,5 @@
 {
-  "asset_count": 366,
+  "asset_count": 367,
   "assets": [
     {
       "authority": "active",
@@ -1012,6 +1012,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0083-cross-tu-semantic-entity-identity.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0084-macro-call-occurrence-discriminator.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2565,7 +2572,7 @@
     }
   ],
   "classifications": {
-    "active": 330,
+    "active": 331,
     "archived": 35,
     "generated": 1
   },

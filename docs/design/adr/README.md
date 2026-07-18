@@ -58,6 +58,7 @@
 | [0081](0081-provider-candidate-canonical-identity.md) | provider candidate canonical identity |
 | [0082](0082-verified-executable-fd-binding.md) | verified executable FD binding |
 | [0083](0083-cross-tu-semantic-entity-identity.md) | cross-TU semantic entity identity |
+| [0084](0084-macro-call-occurrence-discriminator.md) | macro call occurrence discriminator |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

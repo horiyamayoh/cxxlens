@@ -262,6 +262,8 @@ def validate(root: pathlib.Path) -> None:
             "virtual_member",
             "provider.call-kind-target-inconsistent",
             "source_origin_chain",
+            "observation_dedup_key",
+            "const auto key = observation_dedup_key(observation);",
             "call_occurrence_class",
             "ordered_observations",
             "cxxlens.clang22.task.v2",
@@ -289,6 +291,11 @@ def validate(root: pathlib.Path) -> None:
             "verified-old",
             "measured and executed as one image",
         ),
+        "tests/adapter/clang22/provider_normalizer_test.cpp": (
+            "one TWICE macro expansion collapsed its two same-callee calls",
+            "two TWICE macro expansions did not preserve four call occurrences",
+            "same-expansion macro call IDs depend on observation input order",
+        ),
     }
     for relative, markers in required.items():
         path = root / relative
@@ -312,8 +319,8 @@ def validate(root: pathlib.Path) -> None:
     if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#151":
         raise ContractError("public.provider-runtime is not an implemented Issue #151 entry")
     native = entries.get("public.native-provider-sdk")
-    if native is None or native["status"] != "implemented" or native["owner_issue"] != "#152":
-        raise ContractError("public.native-provider-sdk is not an implemented Issue #152 entry")
+    if native is None or native["status"] != "implemented" or native["owner_issue"] != "#153":
+        raise ContractError("public.native-provider-sdk is not an implemented Issue #153 entry")
 
     namespaces = load(root / "schemas/cxxlens_ng_namespace_registry.yaml")
     if not any(

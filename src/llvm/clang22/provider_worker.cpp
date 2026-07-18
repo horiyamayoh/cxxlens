@@ -850,9 +850,7 @@ namespace cxxlens::detail::clang22
 		  private:
 			void insert(detached_observation observation)
 			{
-				const auto key = std::to_string(static_cast<unsigned>(observation.kind)) + "\n" +
-					observation.semantic_key + "\n" +
-					observation.source_span_id.value_or(std::string{});
+				const auto key = observation_dedup_key(observation);
 				if (seen_.emplace(key, output_->observations.size()).second)
 					output_->observations.push_back(std::move(observation));
 			}
@@ -1074,6 +1072,22 @@ namespace cxxlens::detail::clang22
 		output << '\n'
 			   << source_span_id.value_or(std::string{}) << '\n'
 			   << origin_chain_canonical(source_origin_chain);
+		return output.str();
+	}
+
+	std::string observation_dedup_key(const detached_observation& observation)
+	{
+		std::ostringstream output;
+		const auto append = [&output](const std::string_view value)
+		{
+			output << value.size() << ':' << value;
+		};
+		const auto kind = std::to_string(static_cast<unsigned>(observation.kind));
+		const auto origin = origin_chain_canonical(observation.source_origin_chain);
+		append(kind);
+		append(observation.semantic_key);
+		append(observation.source_span_id.value_or(std::string{}));
+		append(origin);
 		return output.str();
 	}
 

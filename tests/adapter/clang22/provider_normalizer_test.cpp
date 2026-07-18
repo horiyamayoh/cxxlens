@@ -724,6 +724,83 @@ int main()
 				string_cell(macro_result->call_sites.front(), "cc.call_site.v1.call") !=
 					string_cell(macro_result->call_sites.back(), "cc.call_site.v1.call"),
 			"distinct macro expansion offsets were deduplicated or lost their origin chain");
+	auto repeated_macro = cross_tu;
+	repeated_macro.observations.front().semantic_key = "call:macro-twice";
+	repeated_macro.observations.front().source_origin_chain = {
+		"macro-spelling:/checkout/include/macros.hpp:10:18"};
+	auto second_spelling_call = repeated_macro.observations.front();
+	second_spelling_call.source_origin_chain = {
+		"macro-spelling:/checkout/include/macros.hpp:28:36"};
+	require(observation_dedup_key(repeated_macro.observations.front()) !=
+				observation_dedup_key(second_spelling_call),
+			"distinct macro spelling occurrences share the pre-normalization dedup key");
+	repeated_macro.observations.push_back(std::move(second_spelling_call));
+	auto repeated_macro_result = canonicalize_provider_batch(
+		repeated_macro,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(repeated_macro_result && repeated_macro_result->call_observations.size() == 2U &&
+				repeated_macro_result->call_sites.size() == 2U &&
+				repeated_macro_result->direct_targets.size() == 2U &&
+				string_cell(repeated_macro_result->call_sites.front(), "cc.call_site.v1.call") !=
+					string_cell(repeated_macro_result->call_sites.back(), "cc.call_site.v1.call"),
+			"one TWICE macro expansion collapsed its two same-callee calls");
+	auto reversed_repeated_macro = repeated_macro;
+	std::ranges::reverse(reversed_repeated_macro.observations);
+	auto reversed_repeated_result = canonicalize_provider_batch(
+		reversed_repeated_macro,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(reversed_repeated_result &&
+				canonical_batch(*reversed_repeated_result) ==
+					canonical_batch(*repeated_macro_result),
+			"same-expansion macro call IDs depend on observation input order");
+
+	auto whitespace_shifted = repeated_macro;
+	whitespace_shifted.observations.front().source_origin_chain.front() =
+		"macro-spelling:/checkout/include/macros.hpp:14:22";
+	whitespace_shifted.observations.back().source_origin_chain.front() =
+		"macro-spelling:/checkout/include/macros.hpp:42:50";
+	auto whitespace_shifted_result = canonicalize_provider_batch(
+		whitespace_shifted,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(
+		whitespace_shifted_result && whitespace_shifted_result->call_sites.size() == 2U &&
+			string_cell(whitespace_shifted_result->call_sites.front(), "cc.call_site.v1.call") ==
+				string_cell(repeated_macro_result->call_sites.front(), "cc.call_site.v1.call") &&
+			string_cell(whitespace_shifted_result->call_sites.back(), "cc.call_site.v1.call") ==
+				string_cell(repeated_macro_result->call_sites.back(), "cc.call_site.v1.call"),
+		"whitespace/comment spelling offset shift changed stable macro call ordinals");
+
+	auto two_twice_expansions = repeated_macro;
+	const auto second_invocation_source =
+		*sdk::source_span_identity("source-snapshot:one", "file:stable", 50U, 62U, "expression");
+	for (const auto& call : repeated_macro.observations)
+	{
+		auto second_invocation_call = call;
+		second_invocation_call.source_span_id = second_invocation_source;
+		two_twice_expansions.observations.push_back(std::move(second_invocation_call));
+	}
+	auto two_twice_result = canonicalize_provider_batch(
+		two_twice_expansions,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(two_twice_result && two_twice_result->call_sites.size() == 4U &&
+				two_twice_result->direct_targets.size() == 4U,
+			"two TWICE macro expansions did not preserve four call occurrences");
+
+	auto distinct_callees = repeated_macro;
+	distinct_callees.observations.back().semantic_key = "call:macro-other-callee";
+	distinct_callees.observations.back().payload.insert_or_assign("call.direct_callee",
+																  "clang-usr:other-target");
+	auto distinct_callee_result = canonicalize_provider_batch(
+		distinct_callees,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(distinct_callee_result && distinct_callee_result->call_sites.size() == 2U &&
+				distinct_callee_result->direct_targets.size() == 2U,
+			"same-expansion distinct callees were not preserved once each");
 	auto relocated_macro = macro_calls;
 	for (auto& call : relocated_macro.observations)
 		call.source_origin_chain.front() = "macro-spelling:/relocated/include/macros.hpp:10:18";
