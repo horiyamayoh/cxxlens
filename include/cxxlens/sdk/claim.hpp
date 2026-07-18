@@ -89,7 +89,12 @@ namespace cxxlens::sdk
 		claim_guarantee guarantee;
 	};
 
-	/** @brief System claim envelope v2 paired with its detached semantic row. */
+	/**
+	 * @brief System claim envelope v2 paired with its detached semantic row.
+	 *
+	 * The complete envelope is one evidence occurrence and its semantic subject. There is no
+	 * detached evidence-ID reference collection to reconcile.
+	 */
 	struct claim
 	{
 		detached_row row;
@@ -161,7 +166,9 @@ namespace cxxlens::sdk
 	/** @brief Atomic batch result with accepted claims and explicit partiality records. */
 	struct claim_batch_result
 	{
-		/** @brief Canonical semantic claims with every distinct evidence occurrence preserved. */
+		/**
+		 * @brief Canonical semantic claims with every distinct self-contained occurrence preserved.
+		 */
 		std::vector<claim> claims;
 		std::vector<unresolved_reference> unresolved;
 		std::vector<claim_conflict> conflicts;

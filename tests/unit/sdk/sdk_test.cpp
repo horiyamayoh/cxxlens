@@ -25,6 +25,12 @@ namespace
 	static_assert(!std::is_copy_constructible_v<cxxlens::sdk::provider::relation_sink>);
 	static_assert(std::is_nothrow_move_constructible_v<cxxlens::sdk::provider::relation_sink>);
 	static_assert(!std::is_move_assignable_v<cxxlens::sdk::provider::relation_sink>);
+	template <typename Value>
+	concept has_detached_evidence_references = requires(Value value) { value.evidence; };
+	static_assert(!has_detached_evidence_references<cxxlens::sdk::claim>,
+				  "claim evidence occurrence must remain structurally self-contained");
+	static_assert(!has_detached_evidence_references<cxxlens::sdk::claim_batch_result>,
+				  "claim batch must not expose orphanable detached evidence records");
 
 	constexpr std::string_view provider_contract_digest{
 		"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"};
@@ -2624,6 +2630,16 @@ namespace
 		auto call = cxxlens::sdk::make_assertion(
 			*engine, observe(make_call_row(), {"all", "asan", "debug", "release"}));
 		require(call.has_value(), "call-site assertion rejected");
+		auto rebound_subject = *first;
+		rebound_subject.semantic_key = call->semantic_key;
+		auto rebound_subject_result = cxxlens::sdk::validate_claim(*engine, rebound_subject);
+		require(!rebound_subject_result &&
+					rebound_subject_result.error().code == "sdk.claim-identity-mismatch",
+				"evidence occurrence subject repoint was accepted");
+		rebound_subject = *first;
+		rebound_subject.content = call->content;
+		require(!cxxlens::sdk::validate_claim(*engine, rebound_subject),
+				"evidence occurrence content repoint was accepted");
 		const std::array existing_call{*call};
 		{
 			auto provenance_occurrence = *first;

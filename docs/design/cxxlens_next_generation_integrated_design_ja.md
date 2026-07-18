@@ -1427,6 +1427,14 @@ prose 連結にも依存しない。公開 `canonical_binary_decode()` は一つ
 encode→decode→encode の byte-for-byte 一致を検証できる。
 multiset relation の multiplicity law は変更しない。
 
+Issue #155 / ADR 0086 により、evidence occurrence の subject と cardinality を明確化する。public/persisted claim model の occurrence は
+別 record への occurrence ID reference ではなく、descriptor、semantic key、assertion、content、row、producer、basis、provenance、
+guarantee、stage を同じ record に持つ self-contained claim envelope である。subject kind は closed な `claim-envelope` 一種類で、
+row-only detached evidence record は存在しない。一 occurrence はちょうど一 semantic claim content に属し、複数 occurrence が同じ content
+を支持できるが、一 occurrence を異なる content 間で共有しない。従って reference union と evidence record set は構造上同一であり、
+missing、orphan、ambiguous resolution は表現不能である。builder、Store adoption、persisted partition-envelope load は同じ
+`validate_claim()` により subject identities と row を再計算し、別 claim への付け替えを拒否する。
+
 ### 11.7 Evidence graph
 
 node kinds:

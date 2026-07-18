@@ -239,6 +239,52 @@ def validate_static_row_view_contract(
             fail(f"static_row_view acceptance marker is missing: {marker}")
 
 
+def validate_claim_evidence_occurrence_contract(
+    root: pathlib.Path, entries: dict[str, dict[str, Any]]
+) -> None:
+    public_entry = entries.get("public.claim-kernel", {})
+    required_invariants = {
+        "evidence-occurrence-is-one-self-contained-claim-envelope-with-no-detached-reference-or-record-collection",
+        "occurrence-subject-is-structurally-bound-by-descriptor-semantic-key-assertion-content-and-row",
+        "one-occurrence-belongs-to-exactly-one-semantic-claim-content-and-is-never-shared-across-contents",
+        "missing-orphan-and-ambiguous-evidence-resolution-are-unrepresentable",
+    }
+    if not required_invariants.issubset(public_entry.get("invariants", [])):
+        fail("claim evidence occurrence catalog omits its structural binding law")
+    if "docs/design/adr/0086-self-contained-claim-evidence-occurrences.md" not in public_entry.get(
+        "implementation_evidence", []
+    ):
+        fail("claim evidence occurrence catalog omits Issue #155 evidence")
+
+    header = (root / "include/cxxlens/sdk/claim.hpp").read_text(encoding="utf-8")
+    if "detached evidence-ID reference collection" not in header:
+        fail("public claim documentation omits self-contained evidence occurrence ownership")
+    claim_source = (root / "src/sdk/claim.cpp").read_text(encoding="utf-8")
+    for marker in (
+        "value.descriptor",
+        "value.semantic_key",
+        "value.assertion",
+        "value.content",
+        "value.row.canonical_form()",
+        "if (auto valid = validate_claim(engine, value); !valid)",
+    ):
+        if marker not in claim_source:
+            fail(f"claim occurrence subject binding marker is missing: {marker}")
+    store_source = (root / "src/sdk/store.cpp").read_text(encoding="utf-8")
+    if "if (auto valid = validate_claim(engine, output); !valid)" not in store_source:
+        fail("persisted claim decoder does not share claim identity validation")
+    test = (root / "tests/unit/sdk/sdk_test.cpp").read_text(encoding="utf-8")
+    for marker in (
+        "has_detached_evidence_references<cxxlens::sdk::claim>",
+        "has_detached_evidence_references<cxxlens::sdk::claim_batch_result>",
+        "evidence occurrence subject repoint was accepted",
+        "evidence occurrence content repoint was accepted",
+        "claim occurrence law lost metadata or retained an exact duplicate",
+    ):
+        if marker not in test:
+            fail(f"claim evidence occurrence acceptance marker is missing: {marker}")
+
+
 def validate_catalog(root: pathlib.Path, catalog: dict[str, Any]) -> None:
     schema_validate(catalog, load_yaml(root / SCHEMA))
     paths = unique_rows(catalog["author_paths"], "author path")
@@ -260,6 +306,7 @@ def validate_catalog(root: pathlib.Path, catalog: dict[str, Any]) -> None:
     validate_project_catalog_contract(root, entries)
     validate_provider_task_contract(root, entries)
     validate_static_row_view_contract(root, entries)
+    validate_claim_evidence_occurrence_contract(root, entries)
     recipe_source = (root / "src/sdk/recipe.cpp").read_text(encoding="utf-8")
     for marker in (
         "execution_status::complete",

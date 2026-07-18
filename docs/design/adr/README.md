@@ -60,6 +60,7 @@
 | [0083](0083-cross-tu-semantic-entity-identity.md) | cross-TU semantic entity identity |
 | [0084](0084-macro-call-occurrence-discriminator.md) | macro call occurrence discriminator |
 | [0085](0085-static-row-view-exact-validation.md) | static row view exact validation |
+| [0086](0086-self-contained-claim-evidence-occurrences.md) | self-contained claim evidence occurrences |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

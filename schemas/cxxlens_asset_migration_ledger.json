@@ -1,5 +1,5 @@
 {
-  "asset_count": 368,
+  "asset_count": 369,
   "assets": [
     {
       "authority": "active",
@@ -1026,6 +1026,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0085-static-row-view-exact-validation.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0086-self-contained-claim-evidence-occurrences.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2579,7 +2586,7 @@
     }
   ],
   "classifications": {
-    "active": 332,
+    "active": 333,
     "archived": 35,
     "generated": 1
   },
