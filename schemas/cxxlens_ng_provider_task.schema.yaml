@@ -32,16 +32,16 @@ properties:
   budget:
     type: object
     additionalProperties: false
-    required: [wall_ms, cpu_ms, rss_bytes, output_bytes, rows, diagnostics, open_files, created_files, subprocesses, minimum_progress_bytes_per_second]
+    required: [wall_ms, cpu_ms, address_space_bytes, transport_bytes, output_bytes, rows, diagnostics, open_files, subprocesses, minimum_progress_bytes_per_second]
     properties:
       wall_ms: {$ref: '#/$defs/positive'}
       cpu_ms: {$ref: '#/$defs/positive'}
-      rss_bytes: {$ref: '#/$defs/positive'}
+      address_space_bytes: {$ref: '#/$defs/positive'}
+      transport_bytes: {$ref: '#/$defs/positive'}
       output_bytes: {$ref: '#/$defs/positive'}
       rows: {$ref: '#/$defs/positive'}
       diagnostics: {$ref: '#/$defs/positive'}
       open_files: {$ref: '#/$defs/positive'}
-      created_files: {$ref: '#/$defs/positive'}
       subprocesses: {$ref: '#/$defs/positive'}
       minimum_progress_bytes_per_second: {$ref: '#/$defs/positive'}
   dependency_groups:

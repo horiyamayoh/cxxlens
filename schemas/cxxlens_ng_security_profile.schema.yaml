@@ -21,7 +21,7 @@ required:
 properties:
   schema: {const: cxxlens.security-profile.v1}
   kind: {const: security-profile}
-  document_version: {const: 1.6.0}
+  document_version: {const: 1.7.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -30,7 +30,7 @@ properties:
     properties:
       design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
       index: {const: docs/design/catalogs/README.md}
-      decision_adr: {const: docs/design/adr/0082-verified-executable-fd-binding.md}
+      decision_adr: {const: docs/design/adr/0087-provider-budget-surface-parity.md}
       owner_issue: {const: '#151'}
       owner: {const: steward.ng-security}
   registries:
@@ -107,7 +107,7 @@ properties:
   sandbox:
     type: object
     additionalProperties: false
-    required: [assurance_order, membership_validation, ordinal_comparison, unknown_value, stable_errors, effective_minimum, insufficient, executable_binding, evidence_required, policy_registry, applied_evidence, profiles]
+    required: [assurance_order, membership_validation, ordinal_comparison, unknown_value, stable_errors, effective_minimum, insufficient, executable_binding, evidence_required, policy_registry, applied_evidence, execution_budget, profiles]
     properties:
       assurance_order: {const: [none, best_effort, enforced, certified]}
       membership_validation: {const: [requirement, report, selection, effective-minimum, process-output, evidence-digest]}
@@ -128,6 +128,14 @@ properties:
         type: object
         minProperties: 5
         additionalProperties: true
+      execution_budget:
+        const:
+          logical: [output_bytes, rows, diagnostics]
+          process_resources: [wall_ms, cpu_ms, address_space_bytes, transport_bytes, open_files, subprocesses]
+          address_space_is_not_rss: true
+          transport_is_combined_stdout_stderr: true
+          created_file_count_claimed: false
+          direct_callback_resource_preemption: false
       profiles:
         type: array
         minItems: 4

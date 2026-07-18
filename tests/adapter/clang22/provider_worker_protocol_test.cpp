@@ -20,10 +20,11 @@ namespace
 	constexpr std::string_view semantic_contract_digest =
 		"sha256:1212121212121212121212121212121212121212121212121212121212121212";
 #if defined(CXXLENS_SANITIZER_INSTRUMENTED)
-	constexpr std::uint64_t provider_rss_budget = std::numeric_limits<std::uint64_t>::max();
+	constexpr std::uint64_t provider_address_space_budget =
+		std::numeric_limits<std::uint64_t>::max();
 	constexpr std::uint64_t provider_subprocess_budget = 1024U;
 #else
-	constexpr std::uint64_t provider_rss_budget = 512U * 1024U * 1024U;
+	constexpr std::uint64_t provider_address_space_budget = 512U * 1024U * 1024U;
 	constexpr std::uint64_t provider_subprocess_budget = 1U;
 #endif
 	void require(const bool condition, const std::string& message)
@@ -139,7 +140,7 @@ int main(const int argument_count, const char* const* arguments)
 	request.sandbox = {sandbox_assurance::enforced, sandbox_policy.policy_digest()};
 	request.budget.wall_ms = 2000U;
 	request.budget.cpu_ms = 2000U;
-	request.budget.rss_bytes = provider_rss_budget;
+	request.budget.address_space_bytes = provider_address_space_budget;
 	request.budget.output_bytes = 8U * 1024U * 1024U;
 	request.budget.open_files = 128U;
 	request.budget.subprocesses = provider_subprocess_budget;

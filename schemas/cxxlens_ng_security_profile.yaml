@@ -1,11 +1,11 @@
 schema: cxxlens.security-profile.v1
 kind: security-profile
-document_version: 1.6.0
+document_version: 1.7.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
   index: docs/design/catalogs/README.md
-  decision_adr: docs/design/adr/0082-verified-executable-fd-binding.md
+  decision_adr: docs/design/adr/0087-provider-budget-surface-parity.md
   owner_issue: '#151'
   owner: steward.ng-security
 registries:
@@ -113,6 +113,13 @@ sandbox:
     runtime_recompute: required-before-report-adoption
     request_digest_echo: forbidden
     mechanism_install_failure: achieved-none-and-security.sandbox-insufficient
+  execution_budget:
+    logical: [output_bytes, rows, diagnostics]
+    process_resources: [wall_ms, cpu_ms, address_space_bytes, transport_bytes, open_files, subprocesses]
+    address_space_is_not_rss: true
+    transport_is_combined_stdout_stderr: true
+    created_file_count_claimed: false
+    direct_callback_resource_preemption: false
   profiles:
     - id: trust.kernel-in-process
       minimum: certified

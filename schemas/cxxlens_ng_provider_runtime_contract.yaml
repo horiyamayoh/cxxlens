@@ -1,9 +1,9 @@
 schema: cxxlens.provider-runtime-contract.v1
-document_version: 1.15.0
+document_version: 1.16.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#17-provider-model
-  decision_adr: docs/design/adr/0082-verified-executable-fd-binding.md
+  decision_adr: docs/design/adr/0087-provider-budget-surface-parity.md
   owner_issue: '#151'
   owner: steward.ng-provider-runtime
 dependencies:
@@ -35,6 +35,23 @@ runtime:
     timeout_kills_process_group: true
     cancellation_kills_process_group: true
     stdout_stderr_combined_limit: required
+  budget:
+    logical_surface_independent:
+      output_bytes: sum-control-and-payload-for-non-lifecycle-provider-output-frames
+      rows: task-global-sum-of-validated-batch-end-row-count
+      diagnostics: task-global-decoded-unresolved-record-count
+      validator: shared-logical-process-production-validator
+      exhaustion: provider.output-limit-without-success-adoption
+    process_isolation_only:
+      wall_ms: monotonic-deadline-process-group-kill
+      cpu_ms: rlimit-cpu-rounded-up-to-seconds
+      address_space_bytes: rlimit-as-not-rss
+      transport_bytes: combined-stdout-stderr-drain-and-rlimit-fsize
+      open_files: rlimit-nofile
+      subprocesses: rlimit-nproc
+    wire_credit: independent-from-logical-and-transport-byte-budgets
+    direct_run_worker: trusted-callback-logical-limits-and-cooperative-cancellation-only
+    unsupported_created_file_count: omitted-not-claimed
   sandbox:
     assurance_order: [none, best_effort, enforced, certified]
     effective_minimum: max(manifest, request, security-profile)

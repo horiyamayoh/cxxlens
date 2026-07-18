@@ -34,6 +34,28 @@ def validate(root: pathlib.Path) -> None:
     )
     jsonschema.Draft202012Validator.check_schema(contract_schema)
     jsonschema.Draft202012Validator(contract_schema).validate(contract)
+    budget = contract["runtime"]["budget"]
+    if budget != {
+        "logical_surface_independent": {
+            "output_bytes": "sum-control-and-payload-for-non-lifecycle-provider-output-frames",
+            "rows": "task-global-sum-of-validated-batch-end-row-count",
+            "diagnostics": "task-global-decoded-unresolved-record-count",
+            "validator": "shared-logical-process-production-validator",
+            "exhaustion": "provider.output-limit-without-success-adoption",
+        },
+        "process_isolation_only": {
+            "wall_ms": "monotonic-deadline-process-group-kill",
+            "cpu_ms": "rlimit-cpu-rounded-up-to-seconds",
+            "address_space_bytes": "rlimit-as-not-rss",
+            "transport_bytes": "combined-stdout-stderr-drain-and-rlimit-fsize",
+            "open_files": "rlimit-nofile",
+            "subprocesses": "rlimit-nproc",
+        },
+        "wire_credit": "independent-from-logical-and-transport-byte-budgets",
+        "direct_run_worker": "trusted-callback-logical-limits-and-cooperative-cancellation-only",
+        "unsupported_created_file_count": "omitted-not-claimed",
+    }:
+        raise ContractError("provider execution budget surface contract is not exact")
     selection = contract["selection"]
     if selection["candidate_identity"] != {
         "schema": "cxxlens.provider-candidate.v1",
@@ -318,6 +340,67 @@ def validate(root: pathlib.Path) -> None:
     runtime = entries.get("public.provider-runtime")
     if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#151":
         raise ContractError("public.provider-runtime is not an implemented Issue #151 entry")
+    required_budget_invariants = {
+        "shared-validator-enforces-logical-output-bytes-rows-and-diagnostic-records-before-success-adoption",
+        "process-port-separately-enforces-wall-cpu-address-space-transport-open-file-and-subprocess-resources",
+        "address-space-budget-is-rlimit-as-not-rss",
+        "created-file-count-is-not-claimed",
+    }
+    if not required_budget_invariants.issubset(runtime.get("invariants", [])):
+        raise ContractError("provider runtime catalog omits Issue #123 budget invariants")
+    if "docs/design/adr/0087-provider-budget-surface-parity.md" not in runtime.get(
+        "implementation_evidence", []
+    ):
+        raise ContractError("provider runtime catalog omits Issue #123 evidence")
+
+    header = (root / "include/cxxlens/sdk/provider.hpp").read_text(encoding="utf-8")
+    for marker in (
+        "address_space_bytes",
+        "transport_bytes",
+        "result<void> validate() const",
+        "set_output_budget",
+        "counts_toward_output_budget",
+        "Resource preemption is provided only",
+    ):
+        if marker not in header:
+            raise ContractError(f"provider budget public marker is missing: {marker}")
+    if "rss_bytes" in header or "created_files" in header:
+        raise ContractError("provider budget still claims RSS or created-file count enforcement")
+    process_source = (root / "src/runtime/provider_process_adapter.cpp").read_text(
+        encoding="utf-8"
+    )
+    for marker in (
+        "RLIMIT_AS, invocation.budget.address_space_bytes",
+        "RLIMIT_FSIZE, invocation.budget.transport_bytes",
+        "invocation.budget.open_files",
+        "invocation.budget.subprocesses",
+        "invocation.budget.wall_ms",
+    ):
+        if marker not in process_source:
+            raise ContractError(f"provider process resource marker is missing: {marker}")
+    validator_source = (root / "src/sdk/provider_runtime.cpp").read_text(encoding="utf-8")
+    for marker in (
+        "logical_output_bytes",
+        "batch_terminal->row_count > request.budget->rows - output_rows",
+        "records->size() > request.budget->diagnostics - diagnostics",
+        'return fail("provider.output-limit", request.task_id, "output_bytes")',
+    ):
+        if marker not in validator_source:
+            raise ContractError(f"shared logical budget marker is missing: {marker}")
+    budget_test = (root / "tests/unit/sdk/provider_runtime_test.cpp").read_text(
+        encoding="utf-8"
+    )
+    for marker in (
+        "logical output-byte limit diverged by execution surface",
+        "row budget could be bypassed by column chunks or execution surface",
+        "diagnostic record budget diverged by framing or execution surface",
+        "run_worker did not enforce logical output bytes before success",
+        "one execution budget dimension accepted zero",
+        "exact process transport byte budget was rejected",
+        "worker output limit was not distinguished",
+    ):
+        if marker not in budget_test:
+            raise ContractError(f"provider budget acceptance marker is missing: {marker}")
     native = entries.get("public.native-provider-sdk")
     if native is None or native["status"] != "implemented" or native["owner_issue"] != "#153":
         raise ContractError("public.native-provider-sdk is not an implemented Issue #153 entry")

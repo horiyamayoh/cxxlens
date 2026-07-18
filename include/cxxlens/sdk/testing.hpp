@@ -46,7 +46,8 @@ namespace cxxlens::sdk::testing
 								std::string_view provider_id,
 								semantic_version provider_version,
 								std::span<const provider::frame> frames,
-								provider::protocol_credit credit);
+								provider::protocol_credit credit,
+								provider::execution_budget budget = {});
 
 	/** @brief Apply the same validator to a full provider-to-host process transcript. */
 	[[nodiscard]] result<conformance_report>
@@ -54,7 +55,8 @@ namespace cxxlens::sdk::testing
 								const provider::manifest& manifest,
 								std::span<const provider::frame> frames,
 								provider::protocol_credit credit,
-								provider::protocol_limits limits = {});
+								provider::protocol_limits limits = {},
+								provider::execution_budget budget = {});
 
 	/** @brief Deterministic in-memory client/server harness using production frame codecs. */
 	class provider_harness

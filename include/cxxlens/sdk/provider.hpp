@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <span>
@@ -51,6 +52,25 @@ namespace cxxlens::sdk::provider
 		task_failed = 21,
 		close = 22,
 	};
+
+	namespace detail
+	{
+		/** @brief Whether control+payload bytes belong to the logical output budget. */
+		[[nodiscard]] constexpr bool counts_toward_output_budget(const message_type type) noexcept
+		{
+			switch (type)
+			{
+				case message_type::hello:
+				case message_type::schema_negotiate:
+				case message_type::task_accepted:
+				case message_type::task_complete:
+				case message_type::task_failed:
+					return false;
+				default:
+					return true;
+			}
+		}
+	} // namespace detail
 
 	/** @brief Closed provider frame flag bits from the protocol v1 header. */
 	enum class frame_flag : std::uint8_t
@@ -219,12 +239,15 @@ namespace cxxlens::sdk::provider
 	  public:
 		explicit protocol_writer(frame_sink& sink, protocol_limits limits = {});
 		void grant_credit(protocol_credit amount) noexcept;
+		/** @brief Set the decoded logical-output byte limit; lifecycle frames are excluded. */
+		void set_output_budget(std::uint64_t bytes) noexcept;
 		[[nodiscard]] result<void> send(message_type type,
 										std::span<const std::byte> control = {},
 										std::span<const std::byte> payload = {},
 										std::uint16_t flags = 0U);
 		[[nodiscard]] std::uint64_t remaining_bytes() const noexcept;
 		[[nodiscard]] std::uint64_t remaining_frames() const noexcept;
+		[[nodiscard]] std::uint64_t output_bytes() const noexcept;
 
 	  private:
 		frame_sink* sink_{};
@@ -233,6 +256,8 @@ namespace cxxlens::sdk::provider
 		std::uint64_t sequence_{};
 		std::uint64_t credit_bytes_{};
 		std::uint64_t credit_frames_{};
+		std::uint64_t output_bytes_{};
+		std::uint64_t maximum_output_bytes_{std::numeric_limits<std::uint64_t>::max()};
 	};
 
 	/** @brief One requested coverage unit. */
@@ -532,18 +557,29 @@ namespace cxxlens::sdk::provider
 		[[nodiscard]] result<void> validate() const;
 	};
 
-	/** @brief Host-enforced provider budget; zero is never an implicit unlimited value. */
+	/**
+	 * @brief Provider budget with surface-independent logical limits and process-only resources.
+	 *
+	 * `output_bytes`, `rows`, and `diagnostics` are measured from the decoded logical stream on
+	 * every surface. `wall_ms`, `cpu_ms`, `address_space_bytes`, `transport_bytes`, `open_files`,
+	 * and `subprocesses` require the process port isolation boundary. Zero is never unlimited.
+	 */
 	struct execution_budget
 	{
 		std::uint64_t wall_ms{60000U};
 		std::uint64_t cpu_ms{60000U};
-		std::uint64_t rss_bytes{536870912U};
+		std::uint64_t address_space_bytes{536870912U};
+		/** @brief Combined process stdout/stderr bytes, distinct from logical output. */
+		std::uint64_t transport_bytes{33554432U};
+		/** @brief Sum of control and payload bytes in logical data/side-channel frames. */
 		std::uint64_t output_bytes{16777216U};
 		std::uint64_t rows{100000U};
+		/** @brief Number of structured unresolved diagnostic records. */
 		std::uint64_t diagnostics{10000U};
 		std::uint64_t open_files{1024U};
-		std::uint64_t created_files{1024U};
 		std::uint64_t subprocesses{1U};
+		/** @brief Reject zero in every logical and process resource dimension. */
+		[[nodiscard]] result<void> validate() const;
 	};
 
 	/** @brief Task execution controls owned by the host. */
@@ -1026,7 +1062,11 @@ namespace cxxlens::sdk::provider
 	 */
 	[[nodiscard]] result<std::vector<scaffold_file>> make_scaffold(const scaffold_options& options);
 
-	/** @brief Run one task through the protocol server; framing and terminal messages are owned. */
+	/**
+	 * @brief Run one trusted worker callback through the logical protocol adapter.
+	 * @details Logical output limits are enforced here. Resource preemption is provided only when
+	 * this adapter itself runs behind `provider_process_port`; cancellation is cooperative here.
+	 */
 	[[nodiscard]] result<void> run_worker(portable_provider& provider,
 										  const task& task,
 										  protocol_writer& writer,

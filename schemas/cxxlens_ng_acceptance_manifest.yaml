@@ -1,6 +1,6 @@
 schema: cxxlens.ng-acceptance-manifest.v1
 kind: acceptance-manifest
-document_version: 1.14.0
+document_version: 1.15.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -137,6 +137,7 @@ entries:
       - docs/design/adr/0082-verified-executable-fd-binding.md
       - docs/design/adr/0083-cross-tu-semantic-entity-identity.md
       - docs/design/adr/0084-macro-call-occurrence-discriminator.md
+      - docs/design/adr/0087-provider-budget-surface-parity.md
       - src/sdk/provider_validation_internal.hpp
       - src/runtime/provider_process_adapter.cpp
       - schemas/cxxlens_ng_provider_protocol.yaml

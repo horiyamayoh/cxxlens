@@ -18,7 +18,7 @@ required:
   - acceptance
 properties:
   schema: {const: cxxlens.provider-runtime-contract.v1}
-  document_version: {const: 1.15.0}
+  document_version: {const: 1.16.0}
   maturity: {const: accepted}
   authority:
     type: object

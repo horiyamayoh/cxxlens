@@ -29,6 +29,7 @@ namespace cxxlens::sdk::provider::detail
 		const manifest* provider_manifest{};
 		std::span<const relation_descriptor> output_descriptors;
 		protocol_credit output_credit;
+		const execution_budget* budget{};
 		bool require_handshake{};
 	};
 

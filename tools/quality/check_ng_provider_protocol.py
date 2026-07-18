@@ -720,7 +720,7 @@ def sample_manifest() -> dict[str, Any]:
 
 
 def sample_task() -> dict[str, Any]:
-    positive = {key: 1 for key in ("wall_ms", "cpu_ms", "rss_bytes", "output_bytes", "rows", "diagnostics", "open_files", "created_files", "subprocesses", "minimum_progress_bytes_per_second")}
+    positive = {key: 1 for key in ("wall_ms", "cpu_ms", "address_space_bytes", "transport_bytes", "output_bytes", "rows", "diagnostics", "open_files", "subprocesses", "minimum_progress_bytes_per_second")}
     return {
         "schema": "cxxlens.provider-task.v1",
         "task_id": "task:semantic-v2:sha256:" + "a" * 64,

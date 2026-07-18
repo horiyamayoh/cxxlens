@@ -39,7 +39,8 @@ namespace cxxlens::sdk::testing
 								const std::string_view provider_id,
 								const semantic_version provider_version,
 								const std::span<const provider::frame> frames,
-								const provider::protocol_credit credit)
+								const provider::protocol_credit credit,
+								const provider::execution_budget budget)
 	{
 		conformance_report report;
 		report.frames.assign(frames.begin(), frames.end());
@@ -51,6 +52,7 @@ namespace cxxlens::sdk::testing
 			nullptr,
 			task.outputs,
 			credit,
+			&budget,
 			false,
 		};
 		auto terminal = provider::detail::validate_provider_transcript(
@@ -70,7 +72,8 @@ namespace cxxlens::sdk::testing
 								const provider::manifest& manifest,
 								const std::span<const provider::frame> frames,
 								const provider::protocol_credit credit,
-								const provider::protocol_limits limits)
+								const provider::protocol_limits limits,
+								const provider::execution_budget budget)
 	{
 		conformance_report report;
 		report.frames.assign(frames.begin(), frames.end());
@@ -82,6 +85,7 @@ namespace cxxlens::sdk::testing
 			&manifest,
 			task.outputs,
 			credit,
+			&budget,
 			true,
 		};
 		auto terminal =

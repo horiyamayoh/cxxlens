@@ -2138,11 +2138,22 @@ namespace cxxlens::sdk::provider
 			: credit_frames_ + amount.frames;
 	}
 
+	void protocol_writer::set_output_budget(const std::uint64_t bytes) noexcept
+	{
+		maximum_output_bytes_ = bytes;
+	}
+
 	result<void> protocol_writer::send(const message_type type,
 									   const std::span<const std::byte> control,
 									   const std::span<const std::byte> payload,
 									   const std::uint16_t flags)
 	{
+		const auto logical_bytes = control.size() + payload.size();
+		if (detail::counts_toward_output_budget(type) &&
+			(output_bytes_ > maximum_output_bytes_ ||
+			 logical_bytes > maximum_output_bytes_ - output_bytes_))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.output-limit", "output_bytes"));
 		frame value{type,
 					stream_id_,
 					sequence_,
@@ -2160,6 +2171,8 @@ namespace cxxlens::sdk::provider
 			return written;
 		credit_bytes_ -= encoded->size();
 		--credit_frames_;
+		if (detail::counts_toward_output_budget(type))
+			output_bytes_ += logical_bytes;
 		++sequence_;
 		return {};
 	}
@@ -2171,6 +2184,10 @@ namespace cxxlens::sdk::provider
 	std::uint64_t protocol_writer::remaining_frames() const noexcept
 	{
 		return credit_frames_;
+	}
+	std::uint64_t protocol_writer::output_bytes() const noexcept
+	{
+		return output_bytes_;
 	}
 
 	result<void> provider_session::validate() const
@@ -2865,6 +2882,8 @@ namespace cxxlens::sdk::provider
 				provider_error("provider.sandbox-report-invalid", "achieved", "closed-enum"));
 		if (auto valid = policy.validate(); !valid)
 			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		if (auto valid = budget.validate(); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
 		if (!canonical_digest(measured_executable_digest))
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.sandbox-report-invalid", "measured_executable_digest"));
@@ -2873,13 +2892,24 @@ namespace cxxlens::sdk::provider
 		projection << policy.canonical_form() << "\npolicy-digest=" << policy.policy_digest()
 				   << "\nmeasured-executable-digest=" << measured_executable_digest
 				   << "\nachieved=" << sandbox_name(achieved) << "\nwall-ms=" << budget.wall_ms
-				   << "\ncpu-ms=" << budget.cpu_ms << "\nrss-bytes=" << budget.rss_bytes
-				   << "\noutput-bytes=" << budget.output_bytes
-				   << "\nopen-files=" << budget.open_files
+				   << "\ncpu-ms=" << budget.cpu_ms
+				   << "\naddress-space-bytes=" << budget.address_space_bytes
+				   << "\ntransport-bytes=" << budget.transport_bytes
+				   << "\noutput-bytes=" << budget.output_bytes << "\nrows=" << budget.rows
+				   << "\ndiagnostics=" << budget.diagnostics << "\nopen-files=" << budget.open_files
 				   << "\nsubprocesses=" << budget.subprocesses
 				   << "\nmechanisms=" << canonical_array(std::move(mechanisms));
 		return cxxlens::sdk::semantic_digest("cxxlens.provider-sandbox-evidence.v3",
 											 projection.str());
+	}
+
+	result<void> execution_budget::validate() const
+	{
+		if (wall_ms == 0U || cpu_ms == 0U || address_space_bytes == 0U || transport_bytes == 0U ||
+			output_bytes == 0U || rows == 0U || diagnostics == 0U || open_files == 0U ||
+			subprocesses == 0U)
+			return cxxlens::sdk::unexpected(provider_error("provider.task-invalid", "budget"));
+		return {};
 	}
 
 	result<void> sandbox_report::validate() const
@@ -3460,10 +3490,9 @@ namespace cxxlens::sdk::provider
 			provider_contract != task_value.session.provider_semantic_contract_digest)
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.task-invalid", "provider-session", "identity-mismatch"));
-		if (budget.wall_ms == 0U || budget.cpu_ms == 0U || budget.rss_bytes == 0U ||
-			budget.output_bytes == 0U || budget.rows == 0U || budget.diagnostics == 0U ||
-			budget.open_files == 0U || budget.created_files == 0U || budget.subprocesses == 0U)
-			return cxxlens::sdk::unexpected(provider_error("provider.task-invalid", "budget"));
+		if (auto valid = budget.validate(); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		writer.set_output_budget(budget.output_bytes);
 		auto accepted = encode_task_accepted_metadata(
 			{std::string{provider_id}, provider_version.string(), task_value.task_id});
 		if (!accepted)
@@ -3501,6 +3530,8 @@ namespace cxxlens::sdk::provider
 			return send_failed(std::move(unresolved.error()));
 		if (!evidence)
 			return send_failed(std::move(evidence.error()));
+		if (unresolved->size() > budget.diagnostics)
+			return send_failed(provider_error("provider.output-limit", "diagnostics"));
 		auto coverage_control = encode_coverage_metadata(*coverage);
 		auto unresolved_control = encode_unresolved_metadata(*unresolved);
 		auto evidence_control = encode_evidence_metadata(*evidence);
@@ -3516,7 +3547,7 @@ namespace cxxlens::sdk::provider
 				 std::pair{message_type::progress, &*evidence_control},
 			 })
 			if (auto sent = writer.send(type, *control); !sent)
-				return sent;
+				return send_failed(std::move(sent.error()));
 		auto complete = encode_task_complete_metadata({task_value.task_id});
 		if (!complete)
 			return cxxlens::sdk::unexpected(std::move(complete.error()));

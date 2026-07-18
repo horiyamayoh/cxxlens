@@ -36,10 +36,11 @@ namespace
 	constexpr std::string_view fixture_contract_digest =
 		"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 #if defined(CXXLENS_SANITIZER_INSTRUMENTED)
-	constexpr std::uint64_t provider_rss_budget = std::numeric_limits<std::uint64_t>::max();
+	constexpr std::uint64_t provider_address_space_budget =
+		std::numeric_limits<std::uint64_t>::max();
 	constexpr std::uint64_t provider_subprocess_budget = 1024U;
 #else
-	constexpr std::uint64_t provider_rss_budget = 256U * 1024U * 1024U;
+	constexpr std::uint64_t provider_address_space_budget = 256U * 1024U * 1024U;
 	constexpr std::uint64_t provider_subprocess_budget = 1U;
 #endif
 	void require(const bool condition, const std::string& message)
@@ -100,6 +101,15 @@ namespace
 
 		std::vector<std::byte> transcript;
 	};
+
+	[[nodiscard]] std::uint64_t logical_output_size(const std::span<const frame> frames)
+	{
+		std::uint64_t output{};
+		for (const auto& value : frames)
+			if (cxxlens::sdk::provider::detail::counts_toward_output_budget(value.type))
+				output += value.control.size() + value.payload.size();
+		return output;
+	}
 
 	class parity_provider final : public portable_provider
 	{
@@ -348,7 +358,7 @@ namespace
 		request.sandbox = {sandbox_assurance::enforced, baseline_policy().policy_digest()};
 		request.budget.wall_ms = 2000U;
 		request.budget.cpu_ms = 2000U;
-		request.budget.rss_bytes = provider_rss_budget;
+		request.budget.address_space_bytes = provider_address_space_budget;
 		request.budget.output_bytes = 4U * 1024U * 1024U;
 		request.budget.open_files = 64U;
 		request.budget.subprocesses = provider_subprocess_budget;
@@ -611,7 +621,7 @@ namespace
 		invocation.working_directory = working_target.parent_path().string();
 		invocation.budget.wall_ms = 2000U;
 		invocation.budget.cpu_ms = 2000U;
-		invocation.budget.rss_bytes = provider_rss_budget;
+		invocation.budget.address_space_bytes = provider_address_space_budget;
 		invocation.budget.output_bytes = 1024U * 1024U;
 		invocation.budget.open_files = 64U;
 		invocation.budget.subprocesses = provider_subprocess_budget;
@@ -707,6 +717,32 @@ namespace
 
 	void check_sandbox_closed_enum(const std::string& executable)
 	{
+		execution_budget minimum_budget;
+		minimum_budget.wall_ms = minimum_budget.cpu_ms = minimum_budget.address_space_bytes =
+			minimum_budget.transport_bytes = minimum_budget.output_bytes = minimum_budget.rows =
+				minimum_budget.diagnostics = minimum_budget.open_files =
+					minimum_budget.subprocesses = 1U;
+		require(minimum_budget.validate().has_value(),
+				"equal positive minimum execution budget was rejected");
+		constexpr std::array budget_fields{
+			&execution_budget::wall_ms,
+			&execution_budget::cpu_ms,
+			&execution_budget::address_space_bytes,
+			&execution_budget::transport_bytes,
+			&execution_budget::output_bytes,
+			&execution_budget::rows,
+			&execution_budget::diagnostics,
+			&execution_budget::open_files,
+			&execution_budget::subprocesses,
+		};
+		for (const auto field : budget_fields)
+		{
+			auto invalid = minimum_budget;
+			invalid.*field = 0U;
+			auto validation = invalid.validate();
+			require(!validation && validation.error().code == "provider.task-invalid",
+					"one execution budget dimension accepted zero");
+		}
 		constexpr std::array levels{sandbox_assurance::none,
 									sandbox_assurance::best_effort,
 									sandbox_assurance::enforced,
@@ -728,7 +764,7 @@ namespace
 
 		const auto policy = baseline_policy();
 		execution_budget budget;
-		budget.wall_ms = budget.cpu_ms = budget.rss_bytes = budget.output_bytes =
+		budget.wall_ms = budget.cpu_ms = budget.address_space_bytes = budget.output_bytes =
 			budget.open_files = budget.subprocesses = 1U;
 		for (const auto raw : {4U, 255U})
 		{
@@ -1076,8 +1112,13 @@ namespace
 		require(malformed && malformed->terminal == "provider.truncated-stream",
 				"malformed worker output was not distinguished");
 
+		auto exact_transport_request = task(select(executable, "output-limit"));
+		exact_transport_request.budget.transport_bytes = 1024U * 1024U;
+		auto exact_transport = runtime.execute(exact_transport_request);
+		require(exact_transport && exact_transport->terminal != "provider.output-limit",
+				"exact process transport byte budget was rejected");
 		auto limited_request = task(select(executable, "output-limit"));
-		limited_request.budget.output_bytes = 4096U;
+		limited_request.budget.transport_bytes = 1024U * 1024U - 1U;
 		auto limited = runtime.execute(limited_request);
 		require(limited && limited->terminal == "provider.output-limit",
 				"worker output limit was not distinguished");
@@ -1205,6 +1246,167 @@ namespace
 					process_verdict->accepted &&
 					logical_verdict->reason_code == process_verdict->reason_code,
 				"logical/wire provider semantic verdict diverged");
+
+		std::vector<frame> process_budget_frames{process->frames.begin(),
+												 process->frames.begin() + 2};
+		for (auto value : *logical_frames)
+		{
+			value.sequence += 2U;
+			process_budget_frames.push_back(std::move(value));
+		}
+		const auto logical_bytes = logical_output_size(*logical_frames);
+		const auto process_bytes = logical_output_size(process_budget_frames);
+		require(logical_bytes == process_bytes && logical_bytes > 1U,
+				"logical output-byte accounting included process handshake or framing bytes");
+		transcript_sink exact_sink;
+		protocol_writer exact_writer{exact_sink};
+		exact_writer.grant_credit({64U * 1024U * 1024U, 65536U});
+		execution_context exact_execution;
+		exact_execution.budget.output_bytes = logical_bytes;
+		exact_execution.budget.rows = 2U;
+		require(run_worker(provider, logical_task, exact_writer, exact_execution).has_value() &&
+					exact_writer.output_bytes() == logical_bytes,
+				"run_worker rejected the exact logical output budget");
+		transcript_sink limited_sink;
+		protocol_writer limited_writer{limited_sink};
+		limited_writer.grant_credit({64U * 1024U * 1024U, 65536U});
+		auto limited_execution = exact_execution;
+		--limited_execution.budget.output_bytes;
+		auto limited_logical =
+			run_worker(provider, logical_task, limited_writer, limited_execution);
+		require(!limited_logical && limited_logical.error().code == "provider.output-limit" &&
+					limited_logical.error().field == "output_bytes",
+				"run_worker did not enforce logical output bytes before success");
+		transcript_sink row_limited_sink;
+		protocol_writer row_limited_writer{row_limited_sink};
+		row_limited_writer.grant_credit({64U * 1024U * 1024U, 65536U});
+		auto row_limited_execution = exact_execution;
+		row_limited_execution.budget.rows = 1U;
+		auto limited_rows =
+			run_worker(provider, logical_task, row_limited_writer, row_limited_execution);
+		require(!limited_rows && limited_rows.error().code == "provider.output-limit" &&
+					limited_rows.error().field == "rows",
+				"run_worker did not enforce the task-global row budget");
+		execution_budget exact_budget;
+		exact_budget.output_bytes = logical_bytes;
+		exact_budget.rows = 2U;
+		auto exact_logical =
+			cxxlens::sdk::testing::validate_logical_transcript(logical_task,
+															   provider.id(),
+															   provider.version(),
+															   *logical_frames,
+															   {64U * 1024U * 1024U, 65536U},
+															   exact_budget);
+		auto exact_process =
+			cxxlens::sdk::testing::validate_process_transcript(logical_task,
+															   process->provider,
+															   process_budget_frames,
+															   process_request.output_credit,
+															   process_request.limits,
+															   exact_budget);
+		require(exact_logical && exact_process && exact_logical->accepted &&
+					exact_process->accepted,
+				"equal logical output and row budget was rejected");
+
+		auto under_output = exact_budget;
+		--under_output.output_bytes;
+		auto output_logical =
+			cxxlens::sdk::testing::validate_logical_transcript(logical_task,
+															   provider.id(),
+															   provider.version(),
+															   *logical_frames,
+															   {64U * 1024U * 1024U, 65536U},
+															   under_output);
+		auto output_process =
+			cxxlens::sdk::testing::validate_process_transcript(logical_task,
+															   process->provider,
+															   process_budget_frames,
+															   process_request.output_credit,
+															   process_request.limits,
+															   under_output);
+		require(output_logical && output_process && !output_logical->accepted &&
+					!output_process->accepted &&
+					output_logical->reason_code == "provider.output-limit" &&
+					output_logical->reason_code == output_process->reason_code,
+				"logical output-byte limit diverged by execution surface");
+
+		auto under_rows = exact_budget;
+		under_rows.rows = 1U;
+		auto rows_logical =
+			cxxlens::sdk::testing::validate_logical_transcript(logical_task,
+															   provider.id(),
+															   provider.version(),
+															   *logical_frames,
+															   {64U * 1024U * 1024U, 65536U},
+															   under_rows);
+		auto rows_process =
+			cxxlens::sdk::testing::validate_process_transcript(logical_task,
+															   process->provider,
+															   process_budget_frames,
+															   process_request.output_credit,
+															   process_request.limits,
+															   under_rows);
+		require(rows_logical && rows_process && !rows_logical->accepted &&
+					!rows_process->accepted &&
+					rows_logical->reason_code == "provider.output-limit" &&
+					rows_logical->reason_code == rows_process->reason_code,
+				"row budget could be bypassed by column chunks or execution surface");
+
+		const std::array diagnostic_records{
+			unresolved_item{"company.test.first", "subject:1", "first"},
+			unresolved_item{"company.test.second", "subject:2", "second"}};
+		auto diagnostic_logical_frames = *logical_frames;
+		auto diagnostic_process_frames = process_budget_frames;
+		const auto diagnostic_control = encode_unresolved_metadata(diagnostic_records);
+		require(diagnostic_control.has_value(), "diagnostic budget fixture encoding failed");
+		const auto replace_diagnostics = [&](std::vector<frame>& frames)
+		{
+			auto found = std::ranges::find(frames, message_type::unresolved_chunk, &frame::type);
+			require(found != frames.end(), "diagnostic side-channel frame missing");
+			found->control = *diagnostic_control;
+		};
+		replace_diagnostics(diagnostic_logical_frames);
+		replace_diagnostics(diagnostic_process_frames);
+		auto diagnostic_budget = exact_budget;
+		diagnostic_budget.output_bytes = std::numeric_limits<std::uint64_t>::max();
+		diagnostic_budget.diagnostics = 2U;
+		auto exact_diagnostics_logical =
+			cxxlens::sdk::testing::validate_logical_transcript(logical_task,
+															   provider.id(),
+															   provider.version(),
+															   diagnostic_logical_frames,
+															   {64U * 1024U * 1024U, 65536U},
+															   diagnostic_budget);
+		auto exact_diagnostics_process =
+			cxxlens::sdk::testing::validate_process_transcript(logical_task,
+															   process->provider,
+															   diagnostic_process_frames,
+															   process_request.output_credit,
+															   process_request.limits,
+															   diagnostic_budget);
+		require(exact_diagnostics_logical && exact_diagnostics_process &&
+					exact_diagnostics_logical->accepted && exact_diagnostics_process->accepted,
+				"exact diagnostic record budget was rejected");
+		diagnostic_budget.diagnostics = 1U;
+		auto diagnostics_logical =
+			cxxlens::sdk::testing::validate_logical_transcript(logical_task,
+															   provider.id(),
+															   provider.version(),
+															   diagnostic_logical_frames,
+															   {64U * 1024U * 1024U, 65536U},
+															   diagnostic_budget);
+		auto diagnostics_process =
+			cxxlens::sdk::testing::validate_process_transcript(logical_task,
+															   process->provider,
+															   diagnostic_process_frames,
+															   process_request.output_credit,
+															   process_request.limits,
+															   diagnostic_budget);
+		require(diagnostics_logical && diagnostics_process && !diagnostics_logical->accepted &&
+					!diagnostics_process->accepted &&
+					diagnostics_logical->reason_code == "provider.output-limit" &&
+					diagnostics_logical->reason_code == diagnostics_process->reason_code,
+				"diagnostic record budget diverged by framing or execution surface");
 	}
 
 	void check_prior_snapshot_preserved(const std::string& executable)

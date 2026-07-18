@@ -1,5 +1,5 @@
 {
-  "asset_count": 369,
+  "asset_count": 370,
   "assets": [
     {
       "authority": "active",
@@ -1033,6 +1033,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0086-self-contained-claim-evidence-occurrences.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0087-provider-budget-surface-parity.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2586,7 +2593,7 @@
     }
   ],
   "classifications": {
-    "active": 333,
+    "active": 334,
     "archived": 35,
     "generated": 1
   },

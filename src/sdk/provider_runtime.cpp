@@ -153,8 +153,19 @@ namespace cxxlens::sdk::provider
 					runtime_error(std::move(code), std::move(field), std::move(detail)))};
 			};
 			std::uint64_t consumed_bytes{};
+			std::uint64_t logical_output_bytes{};
 			for (const auto& value : frames)
 			{
+				if (request.budget != nullptr && detail::counts_toward_output_budget(value.type))
+				{
+					const auto control_bytes = static_cast<std::uint64_t>(value.control.size());
+					const auto payload_bytes = static_cast<std::uint64_t>(value.payload.size());
+					if (control_bytes > request.budget->output_bytes - logical_output_bytes ||
+						payload_bytes >
+							request.budget->output_bytes - logical_output_bytes - control_bytes)
+						return fail("provider.output-limit", request.task_id, "output_bytes");
+					logical_output_bytes += control_bytes + payload_bytes;
+				}
 				auto encoded = encode_frame(value, session_limits);
 				if (!encoded || consumed_bytes > request.output_credit.bytes ||
 					encoded->size() > request.output_credit.bytes - consumed_bytes)
@@ -172,6 +183,8 @@ namespace cxxlens::sdk::provider
 			bool unresolved_seen{};
 			bool progress_seen{};
 			bool terminal_seen{};
+			std::uint64_t output_rows{};
+			std::uint64_t diagnostics{};
 			transcript_terminal terminal;
 			std::set<std::string, std::less<>> batches;
 			struct open_batch
@@ -362,6 +375,10 @@ namespace cxxlens::sdk::provider
 							batch_terminal->ordered_chunk_digests != batch->ordered_chunk_digests ||
 							!all_rows_match)
 							return fail("provider.batch-invalid", request.task_id, "end");
+						if (request.budget != nullptr &&
+							batch_terminal->row_count > request.budget->rows - output_rows)
+							return fail("provider.output-limit", request.task_id, "rows");
+						output_rows += batch_terminal->row_count;
 						batch.reset();
 						break;
 					}
@@ -400,6 +417,10 @@ namespace cxxlens::sdk::provider
 							return fail(
 								"provider.protocol-state-invalid", request.task_id, "side-channel");
 						unresolved_seen = true;
+						if (request.budget != nullptr &&
+							records->size() > request.budget->diagnostics - diagnostics)
+							return fail("provider.output-limit", request.task_id, "diagnostics");
+						diagnostics += records->size();
 						for (const auto& record : *records)
 							if (!namespaced(record.code) || record.code.contains('\0') ||
 								record.subject.empty())
@@ -713,12 +734,9 @@ namespace cxxlens::sdk::provider
 		auto sandbox = effective_sandbox(request);
 		if (!sandbox)
 			return cxxlens::sdk::unexpected(std::move(sandbox.error()));
-		if (request.budget.wall_ms == 0U || request.budget.cpu_ms == 0U ||
-			request.budget.rss_bytes == 0U || request.budget.output_bytes == 0U ||
-			request.budget.rows == 0U || request.budget.diagnostics == 0U ||
-			request.budget.open_files == 0U || request.budget.created_files == 0U ||
-			request.budget.subprocesses == 0U || request.output_credit.bytes == 0U ||
-			request.output_credit.frames == 0U)
+		if (auto valid = request.budget.validate(); !valid)
+			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		if (request.output_credit.bytes == 0U || request.output_credit.frames == 0U)
 			return cxxlens::sdk::unexpected(runtime_error("provider.task-invalid", "budget"));
 
 		auto session_limits = negotiated_limits(request);
@@ -816,6 +834,7 @@ namespace cxxlens::sdk::provider
 			&selected_manifest,
 			request.output_descriptors,
 			request.output_credit,
+			&request.budget,
 			true,
 		};
 		auto terminal = detail::validate_provider_transcript(validation, *frames, *session_limits);

@@ -326,8 +326,8 @@ namespace cxxlens::sdk::provider
 			const auto cpu_seconds =
 				std::max<std::uint64_t>(1U, (invocation.budget.cpu_ms + 999U) / 1000U);
 			const bool baseline = set_limit({RLIMIT_CPU, cpu_seconds}) &&
-				set_limit({RLIMIT_AS, invocation.budget.rss_bytes}) &&
-				set_limit({RLIMIT_FSIZE, invocation.budget.output_bytes}) &&
+				set_limit({RLIMIT_AS, invocation.budget.address_space_bytes}) &&
+				set_limit({RLIMIT_FSIZE, invocation.budget.transport_bytes}) &&
 				set_limit({RLIMIT_NOFILE, invocation.budget.open_files}) &&
 				set_limit({RLIMIT_NPROC, invocation.budget.subprocesses});
 			if (!baseline || (policy.zero_core_dump && !set_limit({RLIMIT_CORE, 0U})) ||
@@ -393,13 +393,13 @@ namespace cxxlens::sdk::provider
 			run(const process_invocation& invocation,
 				const std::stop_token cancellation) const override
 			{
+				if (auto valid = invocation.budget.validate(); !valid)
+					return cxxlens::sdk::unexpected(
+						process_error("provider.process-request-invalid", "budget"));
 				if (invocation.argv.empty() || invocation.argv.front().empty() ||
 					!invocation.argv.front().contains('/') ||
 					std::ranges::any_of(invocation.argv, contains_nul) ||
-					contains_nul(invocation.working_directory) || invocation.budget.wall_ms == 0U ||
-					invocation.budget.cpu_ms == 0U || invocation.budget.rss_bytes == 0U ||
-					invocation.budget.output_bytes == 0U || invocation.budget.open_files == 0U ||
-					invocation.budget.subprocesses == 0U)
+					contains_nul(invocation.working_directory))
 					return cxxlens::sdk::unexpected(
 						process_error("provider.process-request-invalid", "invocation"));
 				if (auto valid = invocation.sandbox.validate(); !valid)
@@ -558,7 +558,7 @@ namespace cxxlens::sdk::provider
 							   output.standard_error,
 							   true,
 							   total,
-							   static_cast<std::size_t>(invocation.budget.output_bytes),
+							   static_cast<std::size_t>(invocation.budget.transport_bytes),
 							   stdout_ended))
 					{
 						terminate(process_status::output_limit);
@@ -570,7 +570,7 @@ namespace cxxlens::sdk::provider
 							   output.standard_error,
 							   false,
 							   total,
-							   static_cast<std::size_t>(invocation.budget.output_bytes),
+							   static_cast<std::size_t>(invocation.budget.transport_bytes),
 							   stderr_ended))
 					{
 						terminate(process_status::output_limit);
