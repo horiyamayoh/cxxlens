@@ -8,6 +8,7 @@ required:
   - terminal
   - provider
   - input_binding
+  - measured_executable_digest
   - sandbox
   - frames
   - diagnostics
@@ -61,6 +62,10 @@ properties:
       invocation: {$ref: '#/$defs/digest'}
       toolchain: {$ref: '#/$defs/digest'}
       environment: {$ref: '#/$defs/digest'}
+  measured_executable_digest:
+    oneOf:
+      - {$ref: '#/$defs/digest'}
+      - {type: 'null'}
   sandbox:
     type: object
     additionalProperties: false

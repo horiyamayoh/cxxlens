@@ -2857,23 +2857,28 @@ namespace cxxlens::sdk::provider
 	sandbox_evidence_digest(const sandbox_policy& policy,
 							const execution_budget& budget,
 							const sandbox_assurance achieved,
-							const std::span<const std::string> applied_mechanisms)
+							const std::span<const std::string> applied_mechanisms,
+							const std::string_view measured_executable_digest)
 	{
 		if (!is_valid(achieved))
 			return cxxlens::sdk::unexpected(
 				provider_error("provider.sandbox-report-invalid", "achieved", "closed-enum"));
 		if (auto valid = policy.validate(); !valid)
 			return cxxlens::sdk::unexpected(std::move(valid.error()));
+		if (!canonical_digest(measured_executable_digest))
+			return cxxlens::sdk::unexpected(
+				provider_error("provider.sandbox-report-invalid", "measured_executable_digest"));
 		std::vector<std::string> mechanisms{applied_mechanisms.begin(), applied_mechanisms.end()};
 		std::ostringstream projection;
 		projection << policy.canonical_form() << "\npolicy-digest=" << policy.policy_digest()
+				   << "\nmeasured-executable-digest=" << measured_executable_digest
 				   << "\nachieved=" << sandbox_name(achieved) << "\nwall-ms=" << budget.wall_ms
 				   << "\ncpu-ms=" << budget.cpu_ms << "\nrss-bytes=" << budget.rss_bytes
 				   << "\noutput-bytes=" << budget.output_bytes
 				   << "\nopen-files=" << budget.open_files
 				   << "\nsubprocesses=" << budget.subprocesses
 				   << "\nmechanisms=" << canonical_array(std::move(mechanisms));
-		return cxxlens::sdk::semantic_digest("cxxlens.provider-sandbox-evidence.v2",
+		return cxxlens::sdk::semantic_digest("cxxlens.provider-sandbox-evidence.v3",
 											 projection.str());
 	}
 

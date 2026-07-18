@@ -21,7 +21,7 @@ required:
 properties:
   schema: {const: cxxlens.security-profile.v1}
   kind: {const: security-profile}
-  document_version: {const: 1.5.0}
+  document_version: {const: 1.6.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -30,8 +30,8 @@ properties:
     properties:
       design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
       index: {const: docs/design/catalogs/README.md}
-      decision_adr: {const: docs/design/adr/0081-provider-candidate-canonical-identity.md}
-      owner_issue: {const: '#150'}
+      decision_adr: {const: docs/design/adr/0082-verified-executable-fd-binding.md}
+      owner_issue: {const: '#151'}
       owner: {const: steward.ng-security}
   registries:
     type: object
@@ -107,7 +107,7 @@ properties:
   sandbox:
     type: object
     additionalProperties: false
-    required: [assurance_order, membership_validation, ordinal_comparison, unknown_value, stable_errors, effective_minimum, insufficient, evidence_required, policy_registry, applied_evidence, profiles]
+    required: [assurance_order, membership_validation, ordinal_comparison, unknown_value, stable_errors, effective_minimum, insufficient, executable_binding, evidence_required, policy_registry, applied_evidence, profiles]
     properties:
       assurance_order: {const: [none, best_effort, enforced, certified]}
       membership_validation: {const: [requirement, report, selection, effective-minimum, process-output, evidence-digest]}
@@ -117,6 +117,8 @@ properties:
         const: {required: provider.sandbox-requirement-invalid, achieved: provider.sandbox-report-invalid}
       effective_minimum: {const: max-of-manifest-request-security-profile}
       insufficient: {const: provider-unavailable-no-degradation}
+      executable_binding:
+        const: {resolve: working-directory-aware-single-open, measure: exact-sealed-memfd-bytes, execute: verified-fd-without-path-reresolution, enforced_without_binding: forbidden}
       evidence_required: {const: [platform, mechanism, achieved, policy_digest, evidence_digest]}
       policy_registry:
         type: object

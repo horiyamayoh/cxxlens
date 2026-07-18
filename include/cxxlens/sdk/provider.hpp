@@ -722,15 +722,16 @@ namespace cxxlens::sdk::provider
 	[[nodiscard]] result<sandbox_policy> resolve_sandbox_policy(std::string_view policy_digest);
 
 	/**
-	 * @brief Recompute evidence identity from the resolved policy, applied plan, and result.
-	 * @return The digest, or `provider.sandbox-report-invalid` when `achieved` is outside
-	 * the closed assurance enum.
+	 * @brief Recompute evidence identity from the measured executable, policy, plan, and result.
+	 * @return The digest, or `provider.sandbox-report-invalid` when `achieved` or the measured
+	 * executable digest is invalid.
 	 */
 	[[nodiscard]] result<std::string>
 	sandbox_evidence_digest(const sandbox_policy& policy,
 							const execution_budget& budget,
 							sandbox_assurance achieved,
-							std::span<const std::string> applied_mechanisms);
+							std::span<const std::string> applied_mechanisms,
+							std::string_view measured_executable_digest);
 
 	/** @brief Effective sandbox minimum and its versioned policy identity. */
 	struct sandbox_requirement
@@ -927,6 +928,8 @@ namespace cxxlens::sdk::provider
 		std::string standard_error;
 		sandbox_report sandbox;
 		std::string failure_code;
+		/** @brief Digest of the immutable executable image measured by the process port. */
+		std::string measured_executable_digest;
 	};
 
 	/** @brief Port isolating filesystem/process/platform effects from provider semantics. */
@@ -969,6 +972,7 @@ namespace cxxlens::sdk::provider
 		std::string normalized_invocation_digest;
 		std::string toolchain_digest;
 		std::string environment_digest;
+		std::string measured_executable_digest;
 		sandbox_report sandbox;
 		std::vector<frame> frames;
 		std::vector<unresolved_item> diagnostics;

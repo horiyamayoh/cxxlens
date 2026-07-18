@@ -585,6 +585,7 @@ namespace cxxlens::sdk::provider
 			report.normalized_invocation_digest = request.normalized_invocation_digest;
 			report.toolchain_digest = request.toolchain_digest;
 			report.environment_digest = request.environment_digest;
+			report.measured_executable_digest = std::move(output.measured_executable_digest);
 			report.sandbox = std::move(output.sandbox);
 			report.exit_code = output.exit_code;
 			report.termination_signal = output.termination_signal;
@@ -626,8 +627,12 @@ namespace cxxlens::sdk::provider
 			   << R"(},"input_binding":{"environment":)" << json_string(environment_digest)
 			   << R"(,"invocation":)" << json_string(normalized_invocation_digest) << R"(,"task":)"
 			   << json_string(task_input_digest) << R"(,"toolchain":)"
-			   << json_string(toolchain_digest) << R"(},"provider":{"binary_digest":)"
-			   << json_string(provider.provider_binary_digest)
+			   << json_string(toolchain_digest) << R"(},"measured_executable_digest":)";
+		if (measured_executable_digest.empty())
+			output << "null";
+		else
+			output << json_string(measured_executable_digest);
+		output << R"(,"provider":{"binary_digest":)" << json_string(provider.provider_binary_digest)
 			   << ",\"id\":" << json_string(provider.provider_id)
 			   << ",\"semantic_contract_digest\":"
 			   << json_string(provider.provider_semantic_contract_digest)
@@ -646,8 +651,8 @@ namespace cxxlens::sdk::provider
 				   << provider.provider_version.string() << '|' << provider.provider_binary_digest
 				   << '|' << provider.provider_semantic_contract_digest << '|' << task_input_digest
 				   << '|' << normalized_invocation_digest << '|' << toolchain_digest << '|'
-				   << environment_digest << '|' << sandbox.canonical_form() << '|'
-				   << transcript_projection(frames);
+				   << environment_digest << '|' << measured_executable_digest << '|'
+				   << sandbox.canonical_form() << '|' << transcript_projection(frames);
 		for (const auto& diagnostic : diagnostics)
 			projection << diagnostic.code << '|' << diagnostic.subject << '|' << diagnostic.detail
 					   << '\n';
@@ -755,16 +760,26 @@ namespace cxxlens::sdk::provider
 			return transport_failure_report(
 				request, std::move(output), "security.sandbox-policy-mismatch");
 		auto applied_policy = resolve_sandbox_policy(output.sandbox.policy_digest);
+		const auto& selected_binary_digest =
+			request.selection.selected_candidate().description.provider_binary_digest;
+		const auto evidence_binary_digest = canonical_digest(output.measured_executable_digest)
+			? std::string_view{output.measured_executable_digest}
+			: std::string_view{selected_binary_digest};
 		auto evidence = applied_policy
 			? sandbox_evidence_digest(*applied_policy,
 									  request.budget,
 									  output.sandbox.achieved,
-									  output.sandbox.mechanisms)
+									  output.sandbox.mechanisms,
+									  evidence_binary_digest)
 			: result<std::string>{
 				  unexpected(runtime_error("security.sandbox-policy-mismatch", "unknown-policy"))};
 		if (!evidence || output.sandbox.evidence_digest != *evidence)
 			return transport_failure_report(
 				request, std::move(output), "security.sandbox-policy-mismatch");
+		if (sandbox_satisfies(output.sandbox.achieved, sandbox_assurance::enforced) &&
+			output.measured_executable_digest != selected_binary_digest)
+			return transport_failure_report(
+				request, std::move(output), "provider.binary-identity-mismatch");
 		if (sandbox_satisfies(output.sandbox.achieved, sandbox_assurance::enforced))
 		{
 			auto actual_mechanisms = output.sandbox.mechanisms;
@@ -824,6 +839,7 @@ namespace cxxlens::sdk::provider
 		report.normalized_invocation_digest = request.normalized_invocation_digest;
 		report.toolchain_digest = request.toolchain_digest;
 		report.environment_digest = request.environment_digest;
+		report.measured_executable_digest = std::move(output.measured_executable_digest);
 		report.sandbox = std::move(output.sandbox);
 		report.frames = std::move(*frames);
 		report.exit_code = output.exit_code;

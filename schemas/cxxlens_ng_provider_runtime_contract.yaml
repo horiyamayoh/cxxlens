@@ -1,10 +1,10 @@
 schema: cxxlens.provider-runtime-contract.v1
-document_version: 1.14.0
+document_version: 1.15.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#17-provider-model
-  decision_adr: docs/design/adr/0081-provider-candidate-canonical-identity.md
-  owner_issue: '#150'
+  decision_adr: docs/design/adr/0082-verified-executable-fd-binding.md
+  owner_issue: '#151'
   owner: steward.ng-provider-runtime
 dependencies:
   - schemas/cxxlens_ng_provider_protocol.yaml
@@ -21,6 +21,14 @@ runtime:
   launch:
     shell: forbidden
     argv: required
+    relative_target_base: working-directory-or-parent-cwd-when-empty
+    executable_binding:
+      source_resolution: single-open-or-working-directory-openat
+      measured_image: copied-sealed-executable-memfd
+      digest_subject: exact-sealed-image-bytes
+      execution: execveat-verified-fd-at-empty-path
+      path_reopen_after_measurement: forbidden
+      rename_symlink_in_place_mutation: verified-image-or-reject
     environment: explicit-allowlist
     standard_input: anonymous-bounded-object
     process_group: required
@@ -35,7 +43,8 @@ runtime:
     policy_resolution: exact-built-in-registry-before-selection-and-process-effect
     unknown_policy_digest: security.sandbox-policy-mismatch
     policy_digest_source: recomputed-applied-canonical-policy-not-request-echo
-    evidence_digest_v2: [resolved-policy-canonical-form, recomputed-policy-digest, achieved-assurance, invocation-budget-limits, exact-applied-mechanisms]
+    evidence_digest_v3: [resolved-policy-canonical-form, recomputed-policy-digest, measured-executable-digest, achieved-assurance, invocation-budget-limits, exact-applied-mechanisms]
+    enforced_precondition: measured-digest-equals-selected-manifest-and-exec-uses-sealed-image-fd
     report_validation: runtime-recompute-evidence-and-exact-enforced-mechanism-set
     mechanism_install_failure: achieved-none-and-security.sandbox-insufficient
     linux_enforced_mechanisms:
@@ -254,6 +263,7 @@ clang22:
       - observation_arrival_order
 report:
   schema: schemas/cxxlens_ng_provider_execution_report.schema.yaml
+  measured_executable_digest: exact-sealed-image-digest-or-null-before-measurement
 acceptance:
   - kernel-query-store-link-closure-is-llvm-free
   - native-object-never-crosses-callback-thread-process

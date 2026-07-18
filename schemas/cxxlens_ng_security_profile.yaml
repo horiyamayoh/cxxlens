@@ -1,12 +1,12 @@
 schema: cxxlens.security-profile.v1
 kind: security-profile
-document_version: 1.5.0
+document_version: 1.6.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
   index: docs/design/catalogs/README.md
-  decision_adr: docs/design/adr/0081-provider-candidate-canonical-identity.md
-  owner_issue: '#150'
+  decision_adr: docs/design/adr/0082-verified-executable-fd-binding.md
+  owner_issue: '#151'
   owner: steward.ng-security
 registries:
   namespace: schemas/cxxlens_ng_namespace_registry.yaml
@@ -85,6 +85,11 @@ sandbox:
   stable_errors: {required: provider.sandbox-requirement-invalid, achieved: provider.sandbox-report-invalid}
   effective_minimum: max-of-manifest-request-security-profile
   insufficient: provider-unavailable-no-degradation
+  executable_binding:
+    resolve: working-directory-aware-single-open
+    measure: exact-sealed-memfd-bytes
+    execute: verified-fd-without-path-reresolution
+    enforced_without_binding: forbidden
   evidence_required: [platform, mechanism, achieved, policy_digest, evidence_digest]
   policy_registry:
     schema: cxxlens.provider-sandbox-policy.v1
@@ -103,8 +108,8 @@ sandbox:
         mechanisms: [address-space-limit, anonymous-readonly-input, core-dump-limit, cpu-limit, explicit-environment, inherited-fd-close-range, locked-memory-limit, network-syscall-deny, no-new-privileges, no-shell-argv-exec, open-file-limit, output-file-size-limit, process-group-cleanup, seccomp-audit-arch, subprocess-limit]
         controls: {deny_network: true, zero_core_dump: true, zero_locked_memory: true}
   applied_evidence:
-    digest_domain: cxxlens.provider-sandbox-evidence.v2
-    binds: [resolved-policy-canonical-form, recomputed-policy-digest, achieved-assurance, invocation-budget-limits, exact-applied-mechanisms]
+    digest_domain: cxxlens.provider-sandbox-evidence.v3
+    binds: [resolved-policy-canonical-form, recomputed-policy-digest, measured-executable-digest, achieved-assurance, invocation-budget-limits, exact-applied-mechanisms]
     runtime_recompute: required-before-report-adoption
     request_digest_echo: forbidden
     mechanism_install_failure: achieved-none-and-security.sandbox-insufficient

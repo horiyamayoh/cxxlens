@@ -6,8 +6,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <fstream>
-#include <iterator>
 #include <limits>
 #include <memory>
 #include <ranges>
@@ -26,6 +24,7 @@
 #include <sys/mman.h>
 #include <sys/prctl.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -49,27 +48,15 @@ namespace cxxlens::sdk::provider
 			return value.contains('\0');
 		}
 
-		[[nodiscard]] result<std::string> executable_digest(const std::string& path)
-		{
-			std::ifstream input{path, std::ios::binary};
-			if (!input)
-				return cxxlens::sdk::unexpected(
-					process_error("provider.process-launch-failed", "executable-open", path));
-			const std::string bytes{std::istreambuf_iterator<char>{input},
-									std::istreambuf_iterator<char>{}};
-			if (input.bad())
-				return cxxlens::sdk::unexpected(
-					process_error("provider.process-launch-failed", "executable-read", path));
-			return cxxlens::sdk::content_digest(std::as_bytes(std::span{bytes}));
-		}
-
 		[[nodiscard]] sandbox_report sandbox_evidence(const sandbox_policy& policy,
 													  const execution_budget& budget,
 													  const sandbox_assurance achieved,
-													  const bool installed)
+													  const bool installed,
+													  const std::string_view executable_digest)
 		{
 			auto applied = installed ? policy.mechanisms : std::vector<std::string>{};
-			auto evidence = sandbox_evidence_digest(policy, budget, achieved, applied);
+			auto evidence =
+				sandbox_evidence_digest(policy, budget, achieved, applied, executable_digest);
 			return {"linux-glibc",
 					applied,
 					achieved,
@@ -113,6 +100,92 @@ namespace cxxlens::sdk::provider
 		  private:
 			int value_;
 		};
+
+		struct verified_executable
+		{
+			descriptor image;
+			std::string digest;
+		};
+
+		[[nodiscard]] result<verified_executable>
+		make_verified_executable(const process_invocation& invocation)
+		{
+			descriptor directory;
+			int source_value{-1};
+			const bool relative = invocation.argv.front().front() != '/';
+			if (relative && !invocation.working_directory.empty())
+			{
+				directory.reset(
+					::open(invocation.working_directory.c_str(), O_PATH | O_DIRECTORY | O_CLOEXEC));
+				if (directory.get() < 0)
+					return cxxlens::sdk::unexpected(process_error("provider.process-launch-failed",
+																  "working-directory-open",
+																  std::to_string(errno)));
+				source_value = ::openat(
+					directory.get(), invocation.argv.front().c_str(), O_RDONLY | O_CLOEXEC);
+			}
+			else
+				source_value = ::open(invocation.argv.front().c_str(), O_RDONLY | O_CLOEXEC);
+			if (source_value < 0)
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-launch-failed", "executable-open", std::to_string(errno)));
+			descriptor source{source_value};
+			struct stat metadata
+			{
+			};
+			if (::fstat(source.get(), &metadata) != 0 || !S_ISREG(metadata.st_mode) ||
+				(metadata.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) == 0)
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-launch-failed", "executable-type", std::to_string(errno)));
+
+			const int image_value =
+				::memfd_create("cxxlens-provider-executable", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+			if (image_value < 0)
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-launch-failed", "executable-memfd", std::to_string(errno)));
+			descriptor image{image_value};
+			std::vector<std::byte> measured;
+			std::array<std::byte, 65536U> buffer{};
+			for (;;)
+			{
+				const auto count = ::read(source.get(), buffer.data(), buffer.size());
+				if (count == 0)
+					break;
+				if (count < 0)
+				{
+					if (errno == EINTR)
+						continue;
+					return cxxlens::sdk::unexpected(process_error("provider.process-launch-failed",
+																  "executable-read",
+																  std::to_string(errno)));
+				}
+				const auto received = static_cast<std::size_t>(count);
+				measured.insert(measured.end(), buffer.begin(), buffer.begin() + received);
+				std::size_t offset{};
+				while (offset < received)
+				{
+					const auto written =
+						::write(image.get(), buffer.data() + offset, received - offset);
+					if (written > 0)
+					{
+						offset += static_cast<std::size_t>(written);
+						continue;
+					}
+					if (written < 0 && errno == EINTR)
+						continue;
+					return cxxlens::sdk::unexpected(process_error("provider.process-launch-failed",
+																  "executable-copy",
+																  std::to_string(errno)));
+				}
+			}
+			if (::fchmod(image.get(), S_IRUSR | S_IXUSR) != 0 ||
+				::fcntl(image.get(),
+						F_ADD_SEALS,
+						F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL) != 0)
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-launch-failed", "executable-seal", std::to_string(errno)));
+			return verified_executable{std::move(image), cxxlens::sdk::content_digest(measured)};
+		}
 
 		struct pipe_pair
 		{
@@ -239,7 +312,7 @@ namespace cxxlens::sdk::provider
 		{
 #if defined(SYS_close_range)
 			return ::syscall(SYS_close_range,
-							 3U,
+							 4U,
 							 std::numeric_limits<unsigned int>::max(),
 							 CLOSE_RANGE_UNSHARE) == 0;
 #else
@@ -334,30 +407,37 @@ namespace cxxlens::sdk::provider
 				auto policy = resolve_sandbox_policy(invocation.sandbox.policy_digest);
 				if (!policy)
 					return cxxlens::sdk::unexpected(std::move(policy.error()));
-				auto actual_binary_digest = executable_digest(invocation.argv.front());
-				if (!actual_binary_digest)
-					return cxxlens::sdk::unexpected(std::move(actual_binary_digest.error()));
+				auto verified = make_verified_executable(invocation);
+				if (!verified)
+					return cxxlens::sdk::unexpected(std::move(verified.error()));
 				if (invocation.expected_binary_digest.empty() ||
-					*actual_binary_digest != invocation.expected_binary_digest)
+					verified->digest != invocation.expected_binary_digest)
 					return process_output{
 						process_status::launch_failed,
 						0,
 						0,
 						{},
 						"selected provider executable digest does not match its manifest",
-						sandbox_evidence(
-							*policy, invocation.budget, sandbox_assurance::none, false),
-						"provider.binary-identity-mismatch"};
+						sandbox_evidence(*policy,
+										 invocation.budget,
+										 sandbox_assurance::none,
+										 false,
+										 verified->digest),
+						"provider.binary-identity-mismatch",
+						verified->digest};
 				if (cancellation.stop_requested())
-					return process_output{
-						process_status::cancelled,
-						0,
-						0,
-						{},
-						{},
-						sandbox_evidence(
-							*policy, invocation.budget, sandbox_assurance::none, false),
-						{}};
+					return process_output{process_status::cancelled,
+										  0,
+										  0,
+										  {},
+										  {},
+										  sandbox_evidence(*policy,
+														   invocation.budget,
+														   sandbox_assurance::none,
+														   false,
+														   verified->digest),
+										  {},
+										  verified->digest};
 
 				auto input = make_input(invocation.standard_input);
 				auto output_pipe = make_pipe();
@@ -390,21 +470,28 @@ namespace cxxlens::sdk::provider
 
 				const auto child = ::fork();
 				if (child < 0)
-					return process_output{
-						process_status::launch_failed,
-						0,
-						0,
-						{},
-						std::strerror(errno),
-						sandbox_evidence(
-							*policy, invocation.budget, sandbox_assurance::none, false),
-						"provider.runtime-unavailable"};
+					return process_output{process_status::launch_failed,
+										  0,
+										  0,
+										  {},
+										  std::strerror(errno),
+										  sandbox_evidence(*policy,
+														   invocation.budget,
+														   sandbox_assurance::none,
+														   false,
+														   verified->digest),
+										  "provider.runtime-unavailable",
+										  verified->digest};
 				if (child == 0)
 				{
 					(void)::setpgid(0, 0);
 					if (::dup2(input->get(), STDIN_FILENO) < 0 ||
 						::dup2(output_pipe->write.get(), STDOUT_FILENO) < 0 ||
-						::dup2(error_pipe->write.get(), STDERR_FILENO) < 0 ||
+						::dup2(error_pipe->write.get(), STDERR_FILENO) < 0)
+						::_exit(126);
+					if ((verified->image.get() == 3
+							 ? ::fcntl(verified->image.get(), F_SETFD, FD_CLOEXEC)
+							 : ::dup3(verified->image.get(), 3, O_CLOEXEC)) < 0 ||
 						!close_inherited_descriptors())
 						::_exit(126);
 					if (!invocation.working_directory.empty() &&
@@ -412,8 +499,10 @@ namespace cxxlens::sdk::provider
 						::_exit(125);
 					if (!configure_child(invocation, *policy))
 						::_exit(126);
-					::execve(
-						arguments_storage.front().c_str(), arguments.data(), environment.data());
+#if defined(SYS_execveat)
+					(void)::syscall(
+						SYS_execveat, 3, "", arguments.data(), environment.data(), AT_EMPTY_PATH);
+#endif
 					::_exit(127);
 				}
 
@@ -425,8 +514,12 @@ namespace cxxlens::sdk::provider
 				const auto deadline =
 					started + std::chrono::milliseconds{invocation.budget.wall_ms};
 				process_output output;
-				output.sandbox =
-					sandbox_evidence(*policy, invocation.budget, sandbox_assurance::enforced, true);
+				output.measured_executable_digest = verified->digest;
+				output.sandbox = sandbox_evidence(*policy,
+												  invocation.budget,
+												  sandbox_assurance::enforced,
+												  true,
+												  verified->digest);
 				std::size_t total{};
 				bool stdout_ended{};
 				bool stderr_ended{};
@@ -511,8 +604,11 @@ namespace cxxlens::sdk::provider
 					if (output.exit_code == 126)
 					{
 						output.failure_code = "security.sandbox-insufficient";
-						output.sandbox = sandbox_evidence(
-							*policy, invocation.budget, sandbox_assurance::none, false);
+						output.sandbox = sandbox_evidence(*policy,
+														  invocation.budget,
+														  sandbox_assurance::none,
+														  false,
+														  verified->digest);
 					}
 					else
 						output.status = process_status::exited;
@@ -531,14 +627,18 @@ namespace cxxlens::sdk::provider
 				if (!policy)
 					return cxxlens::sdk::unexpected(std::move(policy.error()));
 				const std::vector<std::string> applied;
-				return process_output{
-					process_status::unavailable,
-					0,
-					0,
-					{},
-					"linux-glibc-required",
-					sandbox_evidence(*policy, invocation.budget, sandbox_assurance::none, false),
-					"provider.runtime-unavailable"};
+				return process_output{process_status::unavailable,
+									  0,
+									  0,
+									  {},
+									  "linux-glibc-required",
+									  sandbox_evidence(*policy,
+													   invocation.budget,
+													   sandbox_assurance::none,
+													   false,
+													   invocation.expected_binary_digest),
+									  "provider.runtime-unavailable",
+									  {}};
 			}
 		};
 #endif

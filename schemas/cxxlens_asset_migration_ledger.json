@@ -1,5 +1,5 @@
 {
-  "asset_count": 364,
+  "asset_count": 365,
   "assets": [
     {
       "authority": "active",
@@ -998,6 +998,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0081-provider-candidate-canonical-identity.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0082-verified-executable-fd-binding.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2551,7 +2558,7 @@
     }
   ],
   "classifications": {
-    "active": 328,
+    "active": 329,
     "archived": 35,
     "generated": 1
   },

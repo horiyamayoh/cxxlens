@@ -55,6 +55,9 @@ def main() -> int:
         "provider.binary-identity-mismatch",
         "resolve_sandbox_policy",
         "configure_child(invocation, *policy)",
+        "make_verified_executable",
+        "SYS_execveat",
+        "AT_EMPTY_PATH",
     ):
         if marker not in process:
             failures.append(f"provider process adapter marker missing: {marker}")

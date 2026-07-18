@@ -59,6 +59,25 @@ def validate(root: pathlib.Path) -> None:
         "candidate-digest",
     ]:
         raise ContractError("provider candidate order is not a strict canonical total order")
+    executable_binding = contract["runtime"]["launch"]["executable_binding"]
+    if executable_binding != {
+        "source_resolution": "single-open-or-working-directory-openat",
+        "measured_image": "copied-sealed-executable-memfd",
+        "digest_subject": "exact-sealed-image-bytes",
+        "execution": "execveat-verified-fd-at-empty-path",
+        "path_reopen_after_measurement": "forbidden",
+        "rename_symlink_in_place_mutation": "verified-image-or-reject",
+    }:
+        raise ContractError("provider executable measurement is not bound to executed bytes")
+    if contract["runtime"]["sandbox"]["evidence_digest_v3"] != [
+        "resolved-policy-canonical-form",
+        "recomputed-policy-digest",
+        "measured-executable-digest",
+        "achieved-assurance",
+        "invocation-budget-limits",
+        "exact-applied-mechanisms",
+    ]:
+        raise ContractError("sandbox evidence v3 omits measured executable identity")
     jsonschema.Draft202012Validator.check_schema(report_schema)
     fallback_identity = load(
         root / "schemas/cxxlens_ng_clang22_fallback_identity.yaml"
@@ -98,6 +117,7 @@ def validate(root: pathlib.Path) -> None:
             "toolchain": "sha256:" + "e" * 64,
             "environment": "sha256:" + "f" * 64,
         },
+        "measured_executable_digest": "sha256:" + "a" * 64,
         "sandbox": {
             "platform": "linux-glibc",
             "mechanisms": ["no-shell-argv-exec"],
@@ -150,6 +170,12 @@ def validate(root: pathlib.Path) -> None:
         ),
         "src/runtime/provider_process_adapter.cpp": (
             "provider.binary-identity-mismatch",
+            "make_verified_executable",
+            "working-directory-open",
+            "MFD_ALLOW_SEALING",
+            "F_SEAL_WRITE",
+            "SYS_execveat",
+            "AT_EMPTY_PATH",
             "resolve_sandbox_policy",
             "sandbox_evidence_digest",
             "security.sandbox-insufficient",
@@ -258,6 +284,11 @@ def validate(root: pathlib.Path) -> None:
             "CXXLENS_PROVIDER_MANIFEST",
             "CXXLENS_PROVIDER_PROTOCOL_MINOR",
         ),
+        "tests/unit/sdk/provider_runtime_test.cpp": (
+            "check_verified_executable_binding",
+            "verified-old",
+            "measured and executed as one image",
+        ),
     }
     for relative, markers in required.items():
         path = root / relative
@@ -271,8 +302,8 @@ def validate(root: pathlib.Path) -> None:
     catalog = load(root / "schemas/cxxlens_ng_public_api_catalog.yaml")
     entries = {entry["id"]: entry for entry in catalog["entries"]}
     runtime = entries.get("public.provider-runtime")
-    if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#150":
-        raise ContractError("public.provider-runtime is not an implemented Issue #150 entry")
+    if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#151":
+        raise ContractError("public.provider-runtime is not an implemented Issue #151 entry")
     native = entries.get("public.native-provider-sdk")
     if native is None or native["status"] != "implemented" or native["owner_issue"] != "#139":
         raise ContractError("public.native-provider-sdk is not an implemented Issue #139 entry")

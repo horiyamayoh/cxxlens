@@ -524,6 +524,26 @@ def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any
     ]
     for value, schema_path, label in documents:
         schema_validate(value, load_yaml(root / schema_path), label)
+    if profile["sandbox"]["executable_binding"] != {
+        "resolve": "working-directory-aware-single-open",
+        "measure": "exact-sealed-memfd-bytes",
+        "execute": "verified-fd-without-path-reresolution",
+        "enforced_without_binding": "forbidden",
+    } or profile["sandbox"]["applied_evidence"] != {
+        "digest_domain": "cxxlens.provider-sandbox-evidence.v3",
+        "binds": [
+            "resolved-policy-canonical-form",
+            "recomputed-policy-digest",
+            "measured-executable-digest",
+            "achieved-assurance",
+            "invocation-budget-limits",
+            "exact-applied-mechanisms",
+        ],
+        "runtime_recompute": "required-before-report-adoption",
+        "request_digest_echo": "forbidden",
+        "mechanism_install_failure": "achieved-none-and-security.sandbox-insufficient",
+    }:
+        fail("security.sandbox-policy-mismatch", "verified executable evidence contract")
     policies = profile["sandbox"]["policy_registry"]["policies"]
     policy_ids = [policy["id"] for policy in policies]
     policy_digests = [policy["digest"] for policy in policies]
@@ -554,6 +574,7 @@ def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any
             "struct sandbox_policy",
             "resolve_sandbox_policy",
             "sandbox_evidence_digest",
+            "measured_executable_digest",
         ),
         "src/sdk/provider.cpp": (
             "provider_selection::validate() const",
@@ -604,7 +625,7 @@ def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any
         fail("security.untrusted-input-invalid", f"undeclared reason codes: {sorted(referenced - declared)}")
     results = [execute_vector(row, profile, namespaces, certifications, support) for row in vectors["vectors"]]
     design = (root / "docs/design/cxxlens_next_generation_integrated_design_ja.md").read_text(encoding="utf-8")
-    for marker in ("1.0.0-normative", "cxxlens.security-profile.v1", "security.provider-shadowing", "ADR 0011", "Issue #150", "ADR 0081"):
+    for marker in ("1.0.0-normative", "cxxlens.security-profile.v1", "security.provider-shadowing", "ADR 0011", "Issue #151", "ADR 0082"):
         if marker not in design:
             fail("security.untrusted-input-invalid", f"design marker missing: {marker}")
     counts = {

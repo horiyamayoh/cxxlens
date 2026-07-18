@@ -1,14 +1,19 @@
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <csignal>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <limits>
+#include <optional>
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -147,6 +152,7 @@ namespace
 				 achieved_,
 				 invocation.sandbox.policy_digest,
 				 "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"},
+				{},
 				{}};
 		}
 
@@ -587,6 +593,118 @@ namespace
 				"fallback policy identity depended on tuple input order");
 	}
 
+	void check_verified_executable_binding()
+	{
+#if defined(__linux__) && defined(__GLIBC__)
+		namespace fs = std::filesystem;
+		const auto root = fs::temp_directory_path() /
+			("cxxlens-verified-executable-" + std::to_string(::getpid()));
+		const auto parent_target = root / "parent" / "provider";
+		const auto working_target = root / "working" / "provider";
+		fs::create_directories(parent_target.parent_path());
+		fs::create_directories(working_target.parent_path());
+		fs::copy_file("/bin/true", parent_target, fs::copy_options::overwrite_existing);
+		fs::copy_file("/bin/false", working_target, fs::copy_options::overwrite_existing);
+
+		process_invocation invocation;
+		invocation.argv = {"./provider"};
+		invocation.working_directory = working_target.parent_path().string();
+		invocation.budget.wall_ms = 2000U;
+		invocation.budget.cpu_ms = 2000U;
+		invocation.budget.rss_bytes = provider_rss_budget;
+		invocation.budget.output_bytes = 1024U * 1024U;
+		invocation.budget.open_files = 64U;
+		invocation.budget.subprocesses = provider_subprocess_budget;
+		const auto policy = baseline_policy();
+		invocation.sandbox = {sandbox_assurance::enforced, policy.policy_digest()};
+		auto processes = make_system_provider_process_port();
+		const auto original_directory = fs::current_path();
+		fs::current_path(parent_target.parent_path());
+		invocation.expected_binary_digest = executable_digest(parent_target.string());
+		auto parent_digest = processes->run(invocation, {});
+		invocation.expected_binary_digest = executable_digest(working_target.string());
+		auto working_digest = processes->run(invocation, {});
+		fs::current_path(original_directory);
+		const auto measured_digest = invocation.expected_binary_digest;
+		const std::vector<std::string> no_mechanisms;
+		auto rejected_evidence = sandbox_evidence_digest(
+			policy, invocation.budget, sandbox_assurance::none, no_mechanisms, measured_digest);
+		auto executed_evidence = sandbox_evidence_digest(policy,
+														 invocation.budget,
+														 sandbox_assurance::enforced,
+														 policy.mechanisms,
+														 measured_digest);
+
+		const auto race_target = root / "race" / "provider";
+		const auto verified_old = root / "race" / "verified-old";
+		fs::create_directories(race_target.parent_path());
+		fs::copy_file("/bin/true", race_target, fs::copy_options::overwrite_existing);
+		{
+			std::ofstream padding{race_target, std::ios::binary | std::ios::app};
+			const std::array<char, 1024U * 1024U> zeros{};
+			for (std::size_t block = 0U; block < 64U; ++block)
+				padding.write(zeros.data(), zeros.size());
+		}
+		invocation.argv = {race_target.string()};
+		invocation.working_directory.clear();
+		invocation.budget.wall_ms = 5000U;
+		invocation.expected_binary_digest = executable_digest(race_target.string());
+		std::optional<result<process_output>> race_result;
+		std::atomic_bool race_finished{};
+		std::thread runner{[&]
+						   {
+							   race_result.emplace(processes->run(invocation, {}));
+							   race_finished.store(true);
+						   }};
+		bool source_opened{};
+		const auto open_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
+		while (!race_finished.load() && std::chrono::steady_clock::now() < open_deadline)
+		{
+			std::error_code error;
+			for (const auto& entry : fs::directory_iterator{"/proc/self/fd", error})
+			{
+				const auto target = fs::read_symlink(entry.path(), error);
+				if (!error && target == race_target)
+				{
+					source_opened = true;
+					break;
+				}
+				error.clear();
+			}
+			if (source_opened)
+				break;
+			std::this_thread::yield();
+		}
+		if (source_opened)
+		{
+			fs::rename(race_target, verified_old);
+			fs::copy_file("/bin/false", race_target, fs::copy_options::overwrite_existing);
+		}
+		runner.join();
+		const bool rename_bound = source_opened && race_result && race_result->has_value() &&
+			race_result->value().status == process_status::exited &&
+			race_result->value().exit_code == 0 &&
+			race_result->value().measured_executable_digest == invocation.expected_binary_digest;
+		fs::remove_all(root);
+
+		require(
+			parent_digest && parent_digest->status == process_status::launch_failed &&
+				parent_digest->failure_code == "provider.binary-identity-mismatch" &&
+				parent_digest->measured_executable_digest == measured_digest && rejected_evidence &&
+				parent_digest->sandbox.evidence_digest == *rejected_evidence,
+			"relative executable was measured against the parent cwd instead of working directory");
+		require(working_digest && working_digest->status == process_status::exited &&
+					working_digest->exit_code == 1 &&
+					working_digest->measured_executable_digest == measured_digest &&
+					working_digest->sandbox.achieved == sandbox_assurance::enforced &&
+					executed_evidence &&
+					working_digest->sandbox.evidence_digest == *executed_evidence,
+				"working-directory executable bytes were not measured and executed as one image");
+		require(rename_bound,
+				"path replacement changed the executable after its verified descriptor was opened");
+#endif
+	}
+
 	void check_sandbox_closed_enum(const std::string& executable)
 	{
 		constexpr std::array levels{sandbox_assurance::none,
@@ -643,7 +761,8 @@ namespace
 						replay.error().field == "achieved",
 					"selection token replay accepted invalid sandbox assurance");
 
-			auto evidence = sandbox_evidence_digest(policy, budget, invalid, policy.mechanisms);
+			auto evidence = sandbox_evidence_digest(
+				policy, budget, invalid, policy.mechanisms, executable_digest(executable));
 			require(!evidence && evidence.error().code == "provider.sandbox-report-invalid" &&
 						evidence.error().field == "achieved",
 					"evidence digest canonicalized an invalid sandbox assurance");
@@ -656,9 +775,15 @@ namespace
 					"custom process port bypassed runtime sandbox enum validation");
 		}
 		for (const auto achieved : levels)
-			require(
-				sandbox_evidence_digest(policy, budget, achieved, policy.mechanisms).has_value(),
-				"valid sandbox assurance failed evidence binding");
+			require(sandbox_evidence_digest(
+						policy, budget, achieved, policy.mechanisms, executable_digest(executable))
+						.has_value(),
+					"valid sandbox assurance failed evidence binding");
+		auto unmeasured = sandbox_evidence_digest(
+			policy, budget, sandbox_assurance::enforced, policy.mechanisms, {});
+		require(!unmeasured && unmeasured.error().code == "provider.sandbox-report-invalid" &&
+					unmeasured.error().field == "measured_executable_digest",
+				"enforced sandbox evidence omitted the measured executable binding");
 	}
 
 	void check_host_transcript_validator(const std::string& executable)
@@ -795,27 +920,29 @@ namespace
 				? sandbox_evidence_digest(*applied_policy,
 										  request.budget,
 										  report->sandbox.achieved,
-										  report->sandbox.mechanisms)
+										  report->sandbox.mechanisms,
+										  report->provider.provider_binary_digest)
 				: result<std::string>{unexpected(error{"sdk.test-setup", "evidence", {}})};
-			require(report && report->succeeded() &&
-						report->frames.front().type == message_type::hello &&
-						report->frames.size() == 15U &&
-						report->frames.at(1U).type == message_type::schema_negotiate &&
-						report->frames.at(2U).type == message_type::task_accepted &&
-						report->frames.at(3U).type == message_type::batch_begin &&
-						report->frames.at(10U).type == message_type::batch_end &&
-						report->frames.at(11U).type == message_type::coverage_chunk &&
-						report->frames.back().type == message_type::task_complete &&
-						report->sandbox.achieved == sandbox_assurance::enforced &&
-						report->sandbox.policy_digest ==
-							request.selection.authority_request().sandbox.policy_digest &&
-						applied_policy &&
-						report->sandbox.mechanisms == applied_policy->mechanisms && evidence &&
-						report->sandbox.evidence_digest == *evidence &&
-						report->canonical_form().contains("cxxlens.provider-execution-report.v1") &&
-						reference && reference->accepted,
-					std::string{"successful process provider failed: "} + mode +
-						" terminal=" + (report ? report->terminal : report.error().code));
+			require(
+				report && report->succeeded() &&
+					report->measured_executable_digest == report->provider.provider_binary_digest &&
+					report->frames.front().type == message_type::hello &&
+					report->frames.size() == 15U &&
+					report->frames.at(1U).type == message_type::schema_negotiate &&
+					report->frames.at(2U).type == message_type::task_accepted &&
+					report->frames.at(3U).type == message_type::batch_begin &&
+					report->frames.at(10U).type == message_type::batch_end &&
+					report->frames.at(11U).type == message_type::coverage_chunk &&
+					report->frames.back().type == message_type::task_complete &&
+					report->sandbox.achieved == sandbox_assurance::enforced &&
+					report->sandbox.policy_digest ==
+						request.selection.authority_request().sandbox.policy_digest &&
+					applied_policy && report->sandbox.mechanisms == applied_policy->mechanisms &&
+					evidence && report->sandbox.evidence_digest == *evidence &&
+					report->canonical_form().contains("cxxlens.provider-execution-report.v1") &&
+					reference && reference->accepted,
+				std::string{"successful process provider failed: "} + mode +
+					" terminal=" + (report ? report->terminal : report.error().code));
 		}
 		(void)::close(inherited_descriptors[0]);
 		(void)::close(inherited_descriptors[1]);
@@ -1127,6 +1254,7 @@ int main(const int argument_count, const char* const* arguments)
 	require(argument_count == 2, "provider process fixture path missing");
 	const std::string executable{arguments[1]};
 	check_selection(executable);
+	check_verified_executable_binding();
 	check_sandbox_closed_enum(executable);
 	check_host_transcript_validator(executable);
 	check_process_faults(executable);

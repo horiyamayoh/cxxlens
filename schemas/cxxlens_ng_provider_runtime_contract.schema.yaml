@@ -18,7 +18,7 @@ required:
   - acceptance
 properties:
   schema: {const: cxxlens.provider-runtime-contract.v1}
-  document_version: {const: 1.14.0}
+  document_version: {const: 1.15.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -27,7 +27,7 @@ properties:
     properties:
       design: {type: string, minLength: 1}
       decision_adr: {type: string, minLength: 1}
-      owner_issue: {const: '#150'}
+      owner_issue: {const: '#151'}
       owner: {const: steward.ng-provider-runtime}
   dependencies:
     type: array
@@ -42,9 +42,10 @@ properties:
   report:
     type: object
     additionalProperties: false
-    required: [schema]
+    required: [schema, measured_executable_digest]
     properties:
       schema: {const: schemas/cxxlens_ng_provider_execution_report.schema.yaml}
+      measured_executable_digest: {const: exact-sealed-image-digest-or-null-before-measurement}
   acceptance:
     type: array
     minItems: 8
