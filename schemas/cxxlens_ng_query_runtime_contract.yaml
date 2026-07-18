@@ -1,5 +1,5 @@
 schema: cxxlens.query-runtime-contract.v1
-document_version: 1.18.0
+document_version: 1.19.0
 maturity: implemented
 authority:
   logical_contract: schemas/cxxlens_ng_logical_query_contract.yaml
@@ -107,6 +107,7 @@ execution:
     - query.project.v1
     - query.inner_join.v1
     - query.semi_join.v1
+    - query.anti_join.v1
     - query.union.v1
     - query.distinct.v1
     - query.order_by.v1
@@ -131,6 +132,8 @@ execution:
     join: canonical-set-union
     semi_join: left-plus-all-compatible-witnesses
     semi_join_order: preserve-left-total-order-keys-and-filtered-subsequence
+    anti_join: preserve-left-plus-applicable-right-closure-id
+    anti_join_without_closure: no-absence-rows-plus-sdk.query-closure-missing
     distinct: canonical-set-union
   guarantees:
     composition: conservative-componentwise-meet

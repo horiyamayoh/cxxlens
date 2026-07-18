@@ -945,6 +945,7 @@ namespace cxxlens::sdk::query
 				{"query.project.v1", "lossless-column-projection"},
 				{"query.scan.v1", "canonical-claim-content-scan"},
 				{"query.semi_join.v1", "all-compatible-witness-reduction"},
+				{"query.anti_join.v1", "closure-proven-absence-filter"},
 				{"query.union.v1", "bag-addition"},
 			};
 			return strategies.find(operator_id)->second;
@@ -1380,13 +1381,14 @@ namespace cxxlens::sdk::query
 		[[nodiscard]] result<std::pair<bool, std::vector<std::string>>>
 		applicable_closures(const logical_query_ir& query,
 							const snapshot_handle& snapshot,
-							const std::set<std::string, std::less<>>& requirements)
+							const std::set<std::string, std::less<>>& requirements,
+							const std::string_view root)
 		{
 			std::map<std::string, const ir_node*, std::less<>> nodes;
 			for (const auto& node : query.nodes)
 				nodes.emplace(node.id, &node);
 			closure_selectors selectors;
-			if (auto collected = collect_closure_selectors(query.root, {}, nodes, selectors);
+			if (auto collected = collect_closure_selectors(std::string{root}, {}, nodes, selectors);
 				!collected)
 				return unexpected(std::move(collected.error()));
 
@@ -1447,6 +1449,23 @@ namespace cxxlens::sdk::query
 			}
 			canonical_set(applied);
 			return std::pair{true, std::move(applied)};
+		}
+
+		[[nodiscard]] result<std::set<std::string, std::less<>>>
+		subtree_requirements(const logical_query_ir& query, const std::string_view root)
+		{
+			std::map<std::string, const ir_node*, std::less<>> nodes;
+			for (const auto& node : query.nodes)
+				nodes.emplace(node.id, &node);
+			closure_selectors selectors;
+			if (auto collected = collect_closure_selectors(std::string{root}, {}, nodes, selectors);
+				!collected)
+				return unexpected(std::move(collected.error()));
+			std::set<std::string, std::less<>> output;
+			for (const auto& [relation, values] : selectors)
+				if (!values.empty())
+					output.insert(relation);
+			return output;
 		}
 	} // namespace
 
@@ -1851,6 +1870,8 @@ namespace cxxlens::sdk::query
 		result_data->snapshot = snapshot_.id();
 		result_data->publication = snapshot_.publication().publication_id;
 		result_data->logical = {result_data->ir_digest, query.canonical_form()};
+		const auto execution_plan = make_canonical_execution_plan(query);
+		const auto& normalized_root = execution_plan.stable_ids.at(query.root);
 
 		std::map<std::string, relation_descriptor, std::less<>> descriptors;
 		std::map<std::string, value_type, std::less<>> column_types;
@@ -1941,12 +1962,62 @@ namespace cxxlens::sdk::query
 											});
 				}) &&
 			result_data->unresolved.empty();
-		auto closure_proof = applicable_closures(query, snapshot_, requirements);
+		auto closure_proof = applicable_closures(query, snapshot_, requirements, query.root);
 		if (!closure_proof)
 			return unexpected(std::move(closure_proof.error()));
 		result_data->closed_world = result_data->input_complete && closure_proof->first;
 		if (closure_proof->first)
 			result_data->closures = std::move(closure_proof->second);
+		std::set<std::string, std::less<>> ready_anti_joins;
+		for (const auto& node : query.nodes)
+		{
+			if (node.operator_id != "query.anti_join.v1")
+				continue;
+			const auto& stable_id = execution_plan.stable_ids.at(node.id);
+			auto right_requirements = subtree_requirements(query, node.inputs[1]);
+			if (!right_requirements)
+				return unexpected(std::move(right_requirements.error()));
+			const bool right_complete = !right_requirements->empty() &&
+				std::ranges::all_of(
+					*right_requirements,
+					[&](const std::string& relation)
+					{
+						const auto covered = std::ranges::count_if(
+							snapshot_.input_coverage(),
+							[&](const snapshot_query_coverage& coverage)
+							{
+								return coverage.relation_descriptor_id == relation &&
+									coverage.unit.state == "covered";
+							});
+						const auto total =
+							std::ranges::count(snapshot_.input_coverage(),
+											   relation,
+											   &snapshot_query_coverage::relation_descriptor_id);
+						return covered > 0 && covered == total &&
+							std::ranges::none_of(snapshot_.unresolved_items(),
+												 [&](const unresolved_reference& unresolved)
+												 {
+													 return unresolved.source_relation == relation;
+												 });
+					});
+			auto right_closure =
+				applicable_closures(query, snapshot_, *right_requirements, node.inputs[1]);
+			if (!right_closure)
+				return unexpected(std::move(right_closure.error()));
+			if (right_complete && right_closure->first)
+			{
+				ready_anti_joins.insert(stable_id);
+				result_data->closures.insert(result_data->closures.end(),
+											 right_closure->second.begin(),
+											 right_closure->second.end());
+			}
+			else
+				result_data->unresolved.push_back(
+					{"sdk.query-closure-missing",
+					 stable_id,
+					 right_complete ? "right closure unavailable" : "right coverage incomplete"});
+		}
+		canonical_set(result_data->closures);
 		auto zero_row_proofs = empty_result_proofs(query);
 		if (!zero_row_proofs)
 			return unexpected(std::move(zero_row_proofs.error()));
@@ -1976,8 +2047,6 @@ namespace cxxlens::sdk::query
 
 		runtime_state state;
 		state.budget = request.budget;
-		const auto execution_plan = make_canonical_execution_plan(query);
-		const auto& normalized_root = execution_plan.stable_ids.at(query.root);
 		std::map<std::string, evaluation, std::less<>> evaluations;
 		std::ostringstream physical;
 		physical << "backend=" << snapshot_.physical_backend();
@@ -2194,6 +2263,34 @@ namespace cxxlens::sdk::query
 					canonicalize_contributor_edges(*selected);
 					if (!append_row(state, stable_id, output, std::move(*selected)))
 						break;
+				}
+				output.ordered = inputs[0]->ordered;
+				output.order_keys = inputs[0]->order_keys;
+				output.limited = inputs[0]->limited || inputs[1]->limited;
+			}
+			else if (node.operator_id == "query.anti_join.v1")
+			{
+				if (ready_anti_joins.contains(stable_id))
+				{
+					const auto& predicate = std::get<predicate_arguments>(*arguments).predicate;
+					for (const auto& left : inputs[0]->rows)
+					{
+						bool witnessed{};
+						for (const auto& right : inputs[1]->rows)
+						{
+							auto combined = combine(left, right);
+							if (!combined)
+								return unexpected(std::move(combined.error()));
+							if (*combined &&
+								evaluate_predicate(**combined, predicate, column_types))
+							{
+								witnessed = true;
+								break;
+							}
+						}
+						if (!witnessed && !append_row(state, stable_id, output, left))
+							break;
+					}
 				}
 				output.ordered = inputs[0]->ordered;
 				output.order_keys = inputs[0]->order_keys;

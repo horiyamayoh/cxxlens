@@ -56,6 +56,12 @@ NG0_OPERATORS = {
     ),
 }
 
+NG1_OPERATORS = {
+    "query.anti_join.v1": ("anti_join", 2, {"predicate"}),
+}
+
+ACTIVE_OPERATORS = {**NG0_OPERATORS, **NG1_OPERATORS}
+
 OPERATOR_NEGATIVE_CASES = {
     "query.scan.v1": ("missing-descriptor", "query.scan-descriptor-missing"),
     "query.filter.v1": ("implicit-sql-null", "query.sql-null-forbidden"),
@@ -67,6 +73,10 @@ OPERATOR_NEGATIVE_CASES = {
     "query.semi_join.v1": (
         "right-multiplicity-leak",
         "query.semi-join-left-multiplicity-required",
+    ),
+    "query.anti_join.v1": (
+        "missing-right-closure",
+        "query.anti-join-closure-required",
     ),
     "query.union.v1": ("mismatched-schema", "query.union-schema-mismatch"),
     "query.distinct.v1": (
@@ -95,6 +105,7 @@ REQUIRED_VECTOR_IDS = {
     "project-implicit-distinct",
     "inner-join-implicit-null-equality",
     "semi-join-right-multiplicity",
+    "anti-join-without-closure",
     "union-schema-mismatch",
     "distinct-condition-in-key",
     "order-by-without-total-tie-break",
@@ -195,9 +206,9 @@ def validate_contract(
 ) -> dict[str, dict[str, Any]]:
     schema_validate(contract, contract_schema, "logical query contract")
     operators = _rows_by(contract["operator_profiles"], "id", "operator ID")
-    if set(operators) != set(NG0_OPERATORS):
-        fail("query.operator-set-invalid", "NG0 operator set differs")
-    for identifier, (name, arity, arguments) in NG0_OPERATORS.items():
+    if set(operators) != set(ACTIVE_OPERATORS):
+        fail("query.operator-set-invalid", "active operator set differs")
+    for identifier, (name, arity, arguments) in ACTIVE_OPERATORS.items():
         row = operators[identifier]
         if (
             row["name"] != name
@@ -384,9 +395,11 @@ def validate_ir(
 
     def visit(node: dict[str, Any]) -> NodeShape:
         identifier = node["operator"]
-        if identifier not in NG0_OPERATORS:
+        if identifier not in ACTIVE_OPERATORS:
             fail("query.operator-unknown", identifier)
-        name, arity, required_arguments = NG0_OPERATORS[identifier]
+        name, arity, required_arguments = ACTIVE_OPERATORS[identifier]
+        if identifier in NG1_OPERATORS and ir["ir_version"] == "1.0.0":
+            fail("query.operator-version", identifier)
         if len(node["inputs"]) != arity:
             fail("query.operator-arity", identifier)
         if set(node["arguments"]) != required_arguments:
@@ -414,7 +427,7 @@ def validate_ir(
         available = frozenset().union(*(row.columns for row in inputs))
         if "predicate" in arguments:
             predicate = arguments["predicate"]
-            if name in {"inner_join", "semi_join"} and predicate["kind"] != "column_equals_present":
+            if name in {"inner_join", "semi_join", "anti_join"} and predicate["kind"] != "column_equals_present":
                 fail("query.join-present-equality-required", identifier)
             if name == "filter" and predicate["kind"] == "column_equals_present":
                 fail("query.filter-join-predicate", identifier)
@@ -447,9 +460,9 @@ def validate_ir(
             if inputs[0].columns != inputs[1].columns:
                 fail("query.union-schema-mismatch", "union inputs differ")
             return NodeShape(inputs[0].columns, False)
-        if name in {"inner_join", "semi_join"}:
+        if name in {"inner_join", "semi_join", "anti_join"}:
             output = available if name == "inner_join" else inputs[0].columns
-            return NodeShape(output, inputs[0].ordered if name == "semi_join" else False)
+            return NodeShape(output, inputs[0].ordered if name != "inner_join" else False)
         if name == "order_by":
             keys: list[str] = []
             for item in arguments["keys"]:
@@ -787,6 +800,18 @@ def evaluate_ir(ir: dict[str, Any], source: SourceBackend) -> dict[str, Any]:
                 )
                 rows.append(result)
             return Evaluation(rows, inputs[0].ordered, inputs[0].order_keys)
+        if operator == "query.anti_join.v1":
+            rows = []
+            for left in inputs[0].rows:
+                witnessed = False
+                for right in inputs[1].rows:
+                    combined = _combine(left, right)
+                    if combined is not None and _predicate(combined, arguments["predicate"]):
+                        witnessed = True
+                        break
+                if not witnessed:
+                    rows.append(copy.deepcopy(left))
+            return Evaluation(rows, inputs[0].ordered, inputs[0].order_keys)
         if operator == "query.union.v1":
             return Evaluation(copy.deepcopy(inputs[0].rows + inputs[1].rows))
         if operator == "query.distinct.v1":
@@ -914,6 +939,7 @@ def validate_bound_contributor_fragments(value: dict[str, Any]) -> None:
     if value.get("operator") not in {
         "query.inner_join.v1",
         "query.semi_join.v1",
+        "query.anti_join.v1",
         "query.distinct.v1",
     }:
         fail("query.bound-contributor-operator", "unsupported composition operator")
@@ -1073,8 +1099,8 @@ def validate_vectors(
         for row in vectors["vectors"]
         if row["operation"] == "validate_operator_use"
     }
-    if negative_operators != set(NG0_OPERATORS):
-        fail("query.operator-negative-coverage", "not every NG0 operator has a negative vector")
+    if negative_operators != set(ACTIVE_OPERATORS):
+        fail("query.operator-negative-coverage", "not every active operator has a negative vector")
     results = []
     for vector in vectors["vectors"]:
         actual = execute_vector(
@@ -1182,7 +1208,7 @@ def main() -> int:
         else:
             print(rendered, end="")
     print(
-        f"verified {len(contract['operator_profiles'])} NG0 query operators, "
+        f"verified {len(contract['operator_profiles'])} active query operators, "
         f"{len(results)} vectors, contract {report['contract_digest']}"
     )
     return 0

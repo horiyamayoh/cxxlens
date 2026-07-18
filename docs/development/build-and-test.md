@@ -83,3 +83,15 @@ header admission、Relation Registry による generated header binding、gate o
 mode でこの集合を要求し、実装 commit は同一 SHA を non-main branch で先に成功させます。main へ同一 SHA が入った後だけ
 `foundation-completion` と `wave0-readiness` が実行され、後者は全 artifact、JUnit、install manifest、toolchain provenance、
 Foundation report、authority/header digest を clean main revision/tree に bind した baseline report を生成します。
+
+G5 のローカル再現は次です。
+
+```sh
+cmake --build --preset dev-clang --target cxxlens-g5-runtime
+python3 tools/quality/check_ng_g5_qualification.py check --root . \
+  --runtime build/dev-clang/tests/cxxlens-g5-runtime
+```
+
+checker は correctness を再実行した後、2048 partition / 512 edge、`steady_clock`、5 回 median、明示 recursion budget の
+performance report に compiler、OS、architecture を保存して envelope を検証します。main の `g5-qualification` job は同じ測定を clean exact SHA と
+authority digest に bind します。G5 artifact は R4 の根拠ですが、`gate.release` の代替ではありません。

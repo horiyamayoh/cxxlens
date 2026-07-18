@@ -16,6 +16,7 @@ from check_ng_query_contract import (  # noqa: E402
     CONTRACT,
     CONTRACT_SCHEMA,
     IR_SCHEMA,
+    ACTIVE_OPERATORS,
     NG0_OPERATORS,
     RELATION_REGISTRY,
     VECTORS,
@@ -53,22 +54,22 @@ class NgQueryContractTests(unittest.TestCase):
     def vector(self, identifier: str) -> dict:
         return next(row for row in self.vectors["vectors"] if row["id"] == identifier)
 
-    def test_contract_has_exact_eleven_ng0_operators_and_thirty_five_vectors(self) -> None:
+    def test_contract_has_exact_twelve_active_operators_and_thirty_six_vectors(self) -> None:
         contract, results = validate_all(ROOT)
-        self.assertEqual(len(contract["operator_profiles"]), 11)
-        self.assertEqual(len(results), 35)
+        self.assertEqual(len(contract["operator_profiles"]), 12)
+        self.assertEqual(len(results), 36)
         self.assertEqual(
             {row["id"] for row in contract["operator_profiles"]},
-            set(NG0_OPERATORS),
+            set(ACTIVE_OPERATORS),
         )
 
-    def test_every_ng0_operator_has_a_negative_vector(self) -> None:
+    def test_every_active_operator_has_a_negative_vector(self) -> None:
         covered = {
             row["input"]["operator"]
             for row in self.vectors["vectors"]
             if row["operation"] == "validate_operator_use"
         }
-        self.assertEqual(covered, set(NG0_OPERATORS))
+        self.assertEqual(covered, set(ACTIVE_OPERATORS))
         for row in self.vectors["vectors"]:
             if row["operation"] == "validate_operator_use":
                 actual = execute_vector(
@@ -278,8 +279,8 @@ class NgQueryContractTests(unittest.TestCase):
         contract, results = validate_all(ROOT)
         report = make_report(contract, results)
         self.assertEqual(report["status"], "green")
-        self.assertEqual(len(report["operator_digests"]), 11)
-        self.assertEqual(len({row["digest"] for row in report["operator_digests"]}), 11)
+        self.assertEqual(len(report["operator_digests"]), 12)
+        self.assertEqual(len({row["digest"] for row in report["operator_digests"]}), 12)
         self.assertEqual(report["backend_matrix"]["comparisons"], 12)
 
     def test_contract_rejects_enabling_implicit_sql_null(self) -> None:

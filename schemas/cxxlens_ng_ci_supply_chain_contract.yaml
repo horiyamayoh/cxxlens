@@ -1,6 +1,6 @@
 schema: cxxlens.ng-ci-supply-chain-contract.v1
 kind: ci-supply-chain-contract
-document_version: 1.0.0
+document_version: 1.1.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md

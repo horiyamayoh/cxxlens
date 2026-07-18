@@ -15,7 +15,7 @@ properties:
   schema:
     const: cxxlens.logical-query-ir.v1
   ir_version:
-    const: 1.0.0
+    enum: [1.0.0, 1.1.0]
   surface:
     enum: [static, dynamic, normalized]
   relation_requirements:
@@ -231,6 +231,7 @@ $defs:
         - query.project.v1
         - query.inner_join.v1
         - query.semi_join.v1
+        - query.anti_join.v1
         - query.union.v1
         - query.distinct.v1
         - query.order_by.v1

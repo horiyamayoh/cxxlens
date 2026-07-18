@@ -1,6 +1,6 @@
 $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens.logical-query-contract.v1
-title: cxxlens NG0 logical query algebra contract
+title: cxxlens versioned logical query algebra contract
 type: object
 additionalProperties: false
 required:
@@ -37,9 +37,9 @@ properties:
       design:
         const: docs/design/cxxlens_next_generation_integrated_design_ja.md#20-logical-query
       decision_adr:
-        const: docs/design/adr/0076-query-relation-requirement-reconciliation.md
+        const: docs/design/adr/0090-g5-closure-incrementality-qualification.md
       owner_issue:
-        const: '#145'
+        const: '#166'
       owner:
         const: steward.ng-query
   compatibility:
@@ -125,6 +125,7 @@ properties:
     - filter_project
     - inner_join
     - semi_join
+    - anti_join
     - union
     - distinct
   interpretation_algebra:
@@ -141,6 +142,7 @@ properties:
     - filter_project_restrictions
     - join
     - semi_join
+    - anti_join
     - union
     - distinct
   ordering:
@@ -188,8 +190,8 @@ properties:
     - physical_information_in_digest
   operator_profiles:
     type: array
-    minItems: 11
-    maxItems: 11
+    minItems: 12
+    maxItems: 12
     items:
       $ref: '#/$defs/operator_profile'
   deferred_operators:
@@ -281,7 +283,7 @@ $defs:
         type: string
         pattern: ^[a-z][a-z0-9_]*$
       profile:
-        const: NG0
+        enum: [NG0, NG1]
       arity:
         type: integer
         minimum: 0

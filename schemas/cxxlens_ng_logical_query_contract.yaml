@@ -1,14 +1,14 @@
 schema: cxxlens.logical-query-contract.v1
-document_version: 1.11.0
+document_version: 1.12.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#20-logical-query
-  decision_adr: docs/design/adr/0076-query-relation-requirement-reconciliation.md
-  owner_issue: '#145'
+  decision_adr: docs/design/adr/0090-g5-closure-incrementality-qualification.md
+  owner_issue: '#166'
   owner: steward.ng-query
 compatibility:
   version_axis: logical-query-ir
-  current: 1.0.0
+  current: 1.1.0
   semantic_major: 1
   minor_policy: additive-optional-preserving
   unknown_operator: reject
@@ -106,6 +106,7 @@ condition_algebra:
   filter_project: preserve
   inner_join: intersection
   semi_join: union-of-compatible-intersections-per-left-occurrence
+  anti_join: preserve-left-under-exact-right-closure
   union: preserve-per-occurrence
   distinct: union-for-same-values-universe-interpretation
 interpretation_algebra:
@@ -120,6 +121,7 @@ evidence_algebra:
   filter_project_restrictions: preserve
   join: canonical-set-union
   semi_join: canonical-set-union-of-all-witnesses
+  anti_join: preserve-left-with-result-side-channel-closure
   union: preserve-per-occurrence
   distinct: canonical-set-union
   empty_result:
@@ -315,6 +317,20 @@ operator_profiles:
   ordering: preserve-left
   partial: left-prefix-after-right-complete-and-left-prefix-sealed
   required_arguments: [predicate]
+- id: query.anti_join.v1
+  name: anti_join
+  profile: NG1
+  arity: 2
+  input_collection: annotated-multiset-plus-right-closure
+  output_collection: annotated-multiset
+  monotonicity: non-monotone-boundary
+  multiplicity: preserve-unwitnessed-left-occurrence
+  condition: preserve-left-under-exact-right-closure
+  interpretation: exact-equality
+  evidence: preserve-left-and-bind-right-closure-side-channel
+  ordering: preserve-left
+  partial: forbid-absence-without-complete-right-and-applicable-closure
+  required_arguments: [predicate]
 - id: query.union.v1
   name: union
   profile: NG0
@@ -406,9 +422,6 @@ deferred_operators:
 - id: query.aggregate.v1
   earliest_profile: NG1
   reason: aggregate values are invalid before group closure and cannot publish partial NG0 values
-- id: query.anti_join.v1
-  earliest_profile: NG1
-  reason: absence requires closure certificates
 - id: query.difference.v1
   earliest_profile: NG1
   reason: absence requires closure certificates

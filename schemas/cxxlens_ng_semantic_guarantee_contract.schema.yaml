@@ -28,8 +28,8 @@ properties:
   summary_guarantee: {type: object, required: [operation, required_fields, approximation, verification, assumptions, exact_requires, drill_down]}
   operator_composition:
     type: array
-    minItems: 12
-    maxItems: 12
+    minItems: 13
+    maxItems: 13
     items:
       type: object
       additionalProperties: false

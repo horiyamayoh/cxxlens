@@ -192,7 +192,7 @@ namespace cxxlens::sdk::query
 	 */
 	struct logical_query_ir
 	{
-		semantic_version version{1U, 0U, 0U};
+		semantic_version version{1U, 1U, 0U};
 		std::vector<relation_descriptor> relation_requirements;
 		std::vector<ir_node> nodes;
 		std::string root;
@@ -214,6 +214,9 @@ namespace cxxlens::sdk::query
 		[[nodiscard]] result<builder> project(std::span<const column_ref> columns) &&;
 		[[nodiscard]] result<builder> inner_join(builder right, expression predicate) &&;
 		[[nodiscard]] result<builder> semi_join(builder right, expression predicate) &&;
+		/** @brief Emit left rows without a compatible right witness only under proven right
+		 * closure. */
+		[[nodiscard]] result<builder> anti_join(builder right, expression predicate) &&;
 		[[nodiscard]] result<builder> union_with(const builder& right) &&;
 		[[nodiscard]] result<builder> distinct() &&;
 		[[nodiscard]] result<builder> order_by(std::span<const column_ref> columns) &&;

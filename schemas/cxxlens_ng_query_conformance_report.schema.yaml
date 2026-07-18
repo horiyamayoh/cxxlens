@@ -17,8 +17,8 @@ properties:
     $ref: '#/$defs/digest'
   operator_digests:
     type: array
-    minItems: 11
-    maxItems: 11
+    minItems: 12
+    maxItems: 12
     items:
       type: object
       additionalProperties: false

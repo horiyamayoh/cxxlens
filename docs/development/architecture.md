@@ -36,6 +36,10 @@ project catalog
 
 query result は row だけでなく coverage、closure、unresolved、conflict、guarantee を保持します。
 closure certificate のない absence は unknown であり、empty と unresolved を混同しません。
+NG1 の `anti_join` は right coverage と applicable closure が揃った場合だけ absence row を返します。
+incremental materialization は source/dependency/invocation/toolchain/provider/descriptor/model/precision を含む exact input
+fingerprint で partition 単位に再利用を決め、全件 exact reuse の場合だけ warm-zero を宣言します。bounded closure は
+budget 超過時も positive row/evidence を保持しますが closure を認定しません。
 
 ## Invariants
 

@@ -1,0 +1,56 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-g5-qualification-report.v1
+title: cxxlens exact-SHA G5 qualification report
+type: object
+additionalProperties: false
+required: [schema, result, generated_at, run_url, git, authority_digests, runtime_test, performance]
+properties:
+  schema: {const: cxxlens.ng-g5-qualification-report.v1}
+  result: {const: passed}
+  generated_at: {type: string, format: date-time}
+  run_url: {type: string, format: uri}
+  git:
+    type: object
+    additionalProperties: false
+    required: [revision, tree, branch, clean]
+    properties:
+      revision: {type: string, pattern: '^[0-9a-f]{40}$'}
+      tree: {type: string, pattern: '^[0-9a-f]{40}$'}
+      branch: {const: main}
+      clean: {const: true}
+  authority_digests:
+    type: array
+    minItems: 4
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [path, digest]
+      properties:
+        path: {type: string, minLength: 1}
+        digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  runtime_test: {const: passed}
+  performance:
+    type: object
+    additionalProperties: false
+    required: [schema, fixture, method, budgets, metrics_us, environment]
+    properties:
+      schema: {const: cxxlens.g5-performance.v1}
+      fixture: {const: {partitions: 2048, edges: 512}}
+      method: {const: {clock: steady_clock, repetitions: 5, statistic: median}}
+      budgets: {const: {max_iterations: 513, max_edges: 512}}
+      metrics_us:
+        type: object
+        additionalProperties: false
+        required: [warm_zero_plan_median, bounded_closure_median]
+        properties:
+          warm_zero_plan_median: {type: integer, minimum: 0}
+          bounded_closure_median: {type: integer, minimum: 0}
+      environment:
+        type: object
+        additionalProperties: false
+        required: [compiler, operating_system, architecture]
+        properties:
+          compiler: {type: string, minLength: 1}
+          operating_system: {type: string, minLength: 1}
+          architecture: {type: string, minLength: 1}

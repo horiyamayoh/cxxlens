@@ -1,5 +1,5 @@
 {
-  "asset_count": 378,
+  "asset_count": 388,
   "assets": [
     {
       "authority": "active",
@@ -1060,6 +1060,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/design/adr/0090-g5-closure-incrementality-qualification.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/design/adr/README.md",
       "removal_issue": null,
       "replacement": null,
@@ -1152,6 +1159,13 @@
     {
       "authority": "active",
       "path": "examples/sdk/dynamic_query.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "examples/sdk/incremental_materialization.cpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1354,6 +1368,13 @@
     },
     {
       "authority": "active",
+      "path": "include/cxxlens/sdk/incremental.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "include/cxxlens/sdk/provider.hpp",
       "removal_issue": null,
       "replacement": null,
@@ -1530,6 +1551,27 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_foundation_completion_report.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_g5_qualification.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_g5_qualification.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_g5_qualification_report.schema.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2047,6 +2089,13 @@
     },
     {
       "authority": "active",
+      "path": "src/sdk/incremental.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/sdk/json_internal.hpp",
       "removal_issue": null,
       "replacement": null,
@@ -2292,6 +2341,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_g5_qualification.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_ng_migration_completion.py",
       "removal_issue": null,
       "replacement": null,
@@ -2383,6 +2439,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/unit/sdk/g5_runtime_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/unit/sdk/provider_runtime_test.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -2468,6 +2531,13 @@
     {
       "authority": "active",
       "path": "tools/quality/check_ng_foundation_completion.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tools/quality/check_ng_g5_qualification.py",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2649,7 +2719,7 @@
     }
   ],
   "classifications": {
-    "active": 342,
+    "active": 352,
     "archived": 35,
     "generated": 1
   },

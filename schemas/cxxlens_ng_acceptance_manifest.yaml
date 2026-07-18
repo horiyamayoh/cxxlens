@@ -1,6 +1,6 @@
 schema: cxxlens.ng-acceptance-manifest.v1
 kind: acceptance-manifest
-document_version: 1.16.0
+document_version: 1.17.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -149,13 +149,38 @@ entries:
       - schemas/cxxlens_ng_clang22_fallback_identity.yaml
     summary: Provider runtime and Clang normalizer with lossless same-expansion macro call occurrences, stable source-local ordinals, cross-TU entity joins, and fail-closed isolation.
   - id: gate.g5
-    status: deferred
+    status: implemented
     owner_issue: '#166'
     profile: NG1
     contract_issue: '#166'
     depends_on: [gate.g2, gate.g3, gate.g4]
-    evidence: []
-    summary: Closure, incomplete absence, invalidation, warm-zero, and bounded recursion.
+    evidence:
+      - include/cxxlens/sdk/incremental.hpp
+      - src/sdk/incremental.cpp
+      - include/cxxlens/sdk/query.hpp
+      - src/sdk/query.cpp
+      - src/sdk/query_execution.cpp
+      - src/sdk/store.cpp
+      - schemas/cxxlens_ng_g5_qualification.yaml
+      - schemas/cxxlens_ng_g5_qualification.schema.yaml
+      - schemas/cxxlens_ng_g5_qualification_report.schema.yaml
+      - schemas/cxxlens_ng_logical_query_contract.yaml
+      - schemas/cxxlens_ng_snapshot_store_contract.yaml
+      - schemas/cxxlens_ng_provider_protocol.yaml
+      - schemas/cxxlens_ng_provider_runtime_contract.yaml
+      - schemas/cxxlens_ng_security_profile.yaml
+      - schemas/cxxlens_ng_project_catalog_contract.yaml
+      - tests/unit/sdk/g5_runtime_test.cpp
+      - tests/unit/sdk/query_runtime_test.cpp
+      - tests/unit/sdk/store_test.cpp
+      - tests/unit/sdk/provider_runtime_test.cpp
+      - tests/adapter/clang22/provider_worker_protocol_test.cpp
+      - src/sdk/provider_runtime.cpp
+      - tools/quality/check_ng_g5_qualification.py
+      - docs/design/adr/0090-g5-closure-incrementality-qualification.md
+      - examples/sdk/incremental_materialization.cpp
+      - .github/workflows/quality.yml
+    summary: Exact closure-bound absence, affected-partition invalidation, warm-zero, bounded recursion, provider hardening, and reproducible R4 performance qualification.
   - id: gate.foundation
     status: implemented
     owner_issue: '#113'

@@ -90,6 +90,18 @@ add_custom_target(
     check --root "${CMAKE_CURRENT_SOURCE_DIR}"
   VERBATIM)
 
+if(TARGET cxxlens-g5-runtime)
+  add_custom_target(
+    cxxlens-ng-g5-qualification-check
+    COMMAND
+      "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_g5_qualification.py"
+      check --root "${CMAKE_CURRENT_SOURCE_DIR}" --runtime
+      "$<TARGET_FILE:cxxlens-g5-runtime>"
+    DEPENDS cxxlens-g5-runtime
+    VERBATIM)
+endif()
+
 add_custom_target(
   cxxlens-sanitizer-coverage-check
   COMMAND
@@ -172,6 +184,9 @@ add_dependencies(
   cxxlens-text-lint)
 if(TARGET cxxlens-format-check)
   add_dependencies(cxxlens-quality cxxlens-format-check)
+endif()
+if(TARGET cxxlens-ng-g5-qualification-check)
+  add_dependencies(cxxlens-quality cxxlens-ng-g5-qualification-check)
 endif()
 if(CXXLENS_BUILD_DOCS)
   find_package(Doxygen 1.9.8 REQUIRED)

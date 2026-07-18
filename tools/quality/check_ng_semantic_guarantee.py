@@ -138,7 +138,7 @@ def validate_all(root:pathlib.Path)->tuple[dict[str,Any],list[dict[str,Any]],int
     except jsonschema.SchemaError as error: fail('semantic.schema-invalid',f'metadata: {error.message}')
     if contract['verification']['ordinal_comparison']!='forbidden': fail('semantic.verification-ordinal-forbidden','contract')
     if contract['truth']['coercions']['unknown_to_false']!='forbidden' or contract['truth']['filtering']['mutates_truth']: fail('semantic.truth-coercion-forbidden','contract')
-    expected={'query.scan.v1','query.filter.v1','query.project.v1','query.inner_join.v1','query.semi_join.v1','query.union.v1','query.distinct.v1','query.order_by.v1','query.limit.v1','query.condition_restrict.v1','query.interpretation_restrict.v1','derivation'}
+    expected={'query.scan.v1','query.filter.v1','query.project.v1','query.inner_join.v1','query.semi_join.v1','query.anti_join.v1','query.union.v1','query.distinct.v1','query.order_by.v1','query.limit.v1','query.condition_restrict.v1','query.interpretation_restrict.v1','derivation'}
     if {row['operator'] for row in contract['operator_composition']}!=expected: fail('semantic.operator-table-incomplete','operators')
     design=(root/'docs/design/cxxlens_next_generation_integrated_design_ja.md').read_text()
     for marker in ('1.0.0-normative','cxxlens_ng_semantic_guarantee_contract.yaml','knowledge order','modality set','summary_guarantee()','Issue #62'):
@@ -146,7 +146,7 @@ def validate_all(root:pathlib.Path)->tuple[dict[str,Any],list[dict[str,Any]],int
     index=(root/'docs/design/catalogs/README.md').read_text()
     if 'Semantic Guarantee Contract' not in index or '#62' not in index: fail('semantic.catalog-index-stale','index')
     vectors=load(root/VECTORS); validate_schema(vectors,load(root/VECTORS_SCHEMA),'vectors')
-    if len(contract['operator_composition'])!=12: fail('semantic.operator-table-incomplete','operators')
+    if len(contract['operator_composition'])!=13: fail('semantic.operator-table-incomplete','operators')
     results=[]; comparisons=0
     for vector in vectors['vectors']:
         actual=execute(contract,vector); expected=vector['expected']

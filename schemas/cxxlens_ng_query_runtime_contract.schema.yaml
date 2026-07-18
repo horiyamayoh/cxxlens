@@ -18,7 +18,7 @@ required:
   - qualification
 properties:
   schema: {const: cxxlens.query-runtime-contract.v1}
-  document_version: {const: 1.18.0}
+  document_version: {const: 1.19.0}
   maturity: {const: implemented}
   authority: {$ref: '#/$defs/nonempty_object'}
   compatibility: {$ref: '#/$defs/nonempty_object'}
@@ -65,8 +65,8 @@ properties:
     properties:
       operators:
         type: array
-        minItems: 11
-        maxItems: 11
+        minItems: 12
+        maxItems: 12
         uniqueItems: true
         items: {type: string, pattern: '^query\.[a-z_]+\.v1$'}
       source_backends:

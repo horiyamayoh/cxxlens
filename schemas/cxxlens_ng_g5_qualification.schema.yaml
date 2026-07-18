@@ -1,0 +1,70 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-g5-qualification.v1
+title: cxxlens G5 closure and incrementality qualification
+type: object
+additionalProperties: false
+required: [schema, document_version, maturity, authority, binding, closure, absence, incrementality, recursion, provider_hardening, performance, required_artifacts]
+properties:
+  schema: {const: cxxlens.ng-g5-qualification.v1}
+  document_version: {const: 1.0.0}
+  maturity: {const: implemented}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, adr, owner_issue]
+    properties:
+      design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
+      adr: {const: docs/design/adr/0090-g5-closure-incrementality-qualification.md}
+      owner_issue: {const: '#166'}
+  binding:
+    type: object
+    additionalProperties: false
+    required: [acceptance_gate, release_migration, branch, report_schema, report_artifact]
+    properties:
+      acceptance_gate: {const: gate.g5}
+      release_migration: {const: R4}
+      branch: {const: main}
+      report_schema: {const: cxxlens.ng-g5-qualification-report.v1}
+      report_artifact: {const: 'cxxlens-ng-g5-qualification-${revision}'}
+  closure:
+    type: object
+    additionalProperties: false
+    required: [registered_kinds, persisted_partition_kinds, bounded_derived_kinds, certificate_binding, incomplete_certification]
+    properties:
+      registered_kinds:
+        const: [relation-key-enumeration, call-target-set, inheritance-subtype-set, include-provider-set]
+      persisted_partition_kinds: {const: [relation-key-enumeration]}
+      bounded_derived_kinds: {const: [call-target-set, inheritance-subtype-set, include-provider-set]}
+      certificate_binding:
+        const: [relation, partition-content, coverage, key-domain, condition, interpretation, assumption-set, producer-semantics, evidence]
+      incomplete_certification: {const: forbidden}
+  absence: {$ref: '#/$defs/nonempty_object'}
+  incrementality: {$ref: '#/$defs/nonempty_object'}
+  recursion: {$ref: '#/$defs/nonempty_object'}
+  provider_hardening: {$ref: '#/$defs/nonempty_object'}
+  performance:
+    type: object
+    additionalProperties: false
+    required: [executable, fixture, method, budgets, environment_fields, envelope_us]
+    properties:
+      executable: {const: cxxlens-g5-runtime}
+      fixture: {const: {partitions: 2048, edges: 512}}
+      method: {const: {clock: steady_clock, repetitions: 5, statistic: median}}
+      budgets: {const: {max_iterations: 513, max_edges: 512}}
+      environment_fields: {const: [compiler, operating_system, architecture]}
+      envelope_us:
+        type: object
+        additionalProperties: false
+        required: [warm_zero_plan_median, bounded_closure_median]
+        properties:
+          warm_zero_plan_median: {type: integer, minimum: 1}
+          bounded_closure_median: {type: integer, minimum: 1}
+  required_artifacts:
+    type: array
+    minItems: 16
+    uniqueItems: true
+    items: {type: string, minLength: 1}
+$defs:
+  nonempty_object:
+    type: object
+    minProperties: 1

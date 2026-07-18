@@ -1,5 +1,5 @@
 schema: cxxlens.semantic-guarantee-contract.v1
-document_version: 1.0.0
+document_version: 1.1.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#13-truth-and-guarantee
@@ -63,6 +63,7 @@ approximation:
     project: input-meet-projection-guarantee
     inner_join: all-inputs-and-operator
     semi_join: all-inputs-and-operator
+    anti_join: all-inputs-operator-and-right-closure
     union: all-inputs-and-operator
     condition_restrict: preserve-on-restricted-condition
     interpretation_restrict: preserve-on-restricted-domain
@@ -156,6 +157,7 @@ provenance:
     filter_project_restrict: preserve-all
     join: canonical-set-union
     semi_join: left-plus-all-compatible-witnesses
+    anti_join: preserve-left-plus-right-closure-side-channel
     union: preserve-occurrences
     distinct: canonical-set-union
     derivation: all-inputs-plus-transformer
@@ -202,6 +204,7 @@ operator_composition:
 - {operator: query.project.v1, approximation: meet-input-projection, condition: preserve, provenance: preserve, exact_precondition: lossless-declared-projection}
 - {operator: query.inner_join.v1, approximation: meet-all, condition: intersection, provenance: union-all, exact_precondition: exact-inputs-compatible-scope}
 - {operator: query.semi_join.v1, approximation: meet-all, condition: union-compatible-intersections, provenance: left-plus-witnesses, exact_precondition: exact-right-existence-domain}
+- {operator: query.anti_join.v1, approximation: meet-all, condition: preserve-left, provenance: left-plus-right-closure-side-channel, exact_precondition: complete-right-domain-and-applicable-closure}
 - {operator: query.union.v1, approximation: meet-all, condition: preserve, provenance: preserve-occurrences, exact_precondition: complete-compatible-scopes}
 - {operator: query.distinct.v1, approximation: preserve, condition: union-by-partition, provenance: union-all, exact_precondition: lossless-contributor-union}
 - {operator: query.order_by.v1, approximation: preserve, condition: preserve, provenance: preserve, exact_precondition: total-order-does-not-upgrade}

@@ -6,6 +6,7 @@
 
 #include <cxxlens/sdk/claim.hpp>
 #include <cxxlens/sdk/common.hpp>
+#include <cxxlens/sdk/incremental.hpp>
 #include <cxxlens/sdk/provider.hpp>
 #include <cxxlens/sdk/query.hpp>
 #include <cxxlens/sdk/recipe.hpp>

@@ -704,8 +704,8 @@ namespace cxxlens::sdk::query
 
 	result<void> logical_query_ir::validate() const
 	{
-		if (version != semantic_version{1U, 0U, 0U} || relation_requirements.empty() ||
-			nodes.empty() || root.empty() || output_schema.empty())
+		if (version.major != 1U || version.minor > 1U || version.patch != 0U ||
+			relation_requirements.empty() || nodes.empty() || root.empty() || output_schema.empty())
 			return cxxlens::sdk::unexpected(query_error("sdk.query-ir-invalid", "structure"));
 		std::map<std::string, const relation_descriptor*, std::less<>> descriptors;
 		for (const auto& descriptor : relation_requirements)
@@ -722,6 +722,7 @@ namespace cxxlens::sdk::query
 			{"query.project.v1", 1U},
 			{"query.inner_join.v1", 2U},
 			{"query.semi_join.v1", 2U},
+			{"query.anti_join.v1", 2U},
 			{"query.union.v1", 2U},
 			{"query.distinct.v1", 1U},
 			{"query.order_by.v1", 1U},
@@ -734,6 +735,9 @@ namespace cxxlens::sdk::query
 		std::map<std::string, const ir_node*, std::less<>> structural_node_index;
 		for (const auto& node : nodes)
 		{
+			if (node.operator_id == "query.anti_join.v1" && version.minor < 1U)
+				return cxxlens::sdk::unexpected(
+					query_error("sdk.query-operator-version", node.operator_id, version.string()));
 			for (const auto& input : node.inputs)
 				if (!structural_node_ids.contains(input))
 					return cxxlens::sdk::unexpected(
@@ -820,7 +824,8 @@ namespace cxxlens::sdk::query
 				if (const auto* predicate = std::get_if<predicate_arguments>(&*arguments))
 				{
 					if ((node.operator_id == "query.inner_join.v1" ||
-						 node.operator_id == "query.semi_join.v1") &&
+						 node.operator_id == "query.semi_join.v1" ||
+						 node.operator_id == "query.anti_join.v1") &&
 						predicate->predicate.kind != predicate_kind::column_equals_present)
 						return cxxlens::sdk::unexpected(
 							query_error("sdk.query-join-present-equality-required", node.id));
@@ -858,12 +863,13 @@ namespace cxxlens::sdk::query
 					}
 				}
 				if (node.operator_id == "query.inner_join.v1" ||
-					node.operator_id == "query.semi_join.v1")
+					node.operator_id == "query.semi_join.v1" ||
+					node.operator_id == "query.anti_join.v1")
 				{
 					if (node.operator_id == "query.inner_join.v1")
 						shape.columns.insert(inputs[1].columns.begin(), inputs[1].columns.end());
 					shape.ordered =
-						node.operator_id == "query.semi_join.v1" && inputs.front().ordered;
+						node.operator_id != "query.inner_join.v1" && inputs.front().ordered;
 					if (shape.ordered)
 						shape.order_keys = inputs.front().order_keys;
 					else
@@ -1231,6 +1237,15 @@ namespace cxxlens::sdk::query
 					  });
 		joined->total_ordered_ = left_total_ordered;
 		joined->order_keys_ = left_order_keys;
+		return joined;
+	}
+
+	result<builder> builder::anti_join(builder right, expression predicate) &&
+	{
+		auto joined = std::move(*this).semi_join(std::move(right), std::move(predicate));
+		if (!joined)
+			return joined;
+		joined->ir_.nodes.back().operator_id = "query.anti_join.v1";
 		return joined;
 	}
 

@@ -16,9 +16,9 @@ properties:
     required: [owner_issue, decision_adr]
     properties:
       owner_issue:
-        const: '#61'
+        const: '#166'
       decision_adr:
-        const: docs/design/adr/0007-logical-query-algebra.md
+        const: docs/design/adr/0090-g5-closure-incrementality-qualification.md
   contract:
     const: schemas/cxxlens_ng_logical_query_contract.yaml
   vectors:

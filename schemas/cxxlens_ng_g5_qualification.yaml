@@ -1,0 +1,109 @@
+schema: cxxlens.ng-g5-qualification.v1
+document_version: 1.0.0
+maturity: implemented
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md
+  adr: docs/design/adr/0090-g5-closure-incrementality-qualification.md
+  owner_issue: '#166'
+binding:
+  acceptance_gate: gate.g5
+  release_migration: R4
+  branch: main
+  report_schema: cxxlens.ng-g5-qualification-report.v1
+  report_artifact: cxxlens-ng-g5-qualification-${revision}
+closure:
+  registered_kinds:
+    - relation-key-enumeration
+    - call-target-set
+    - inheritance-subtype-set
+    - include-provider-set
+  persisted_partition_kinds: [relation-key-enumeration]
+  bounded_derived_kinds: [call-target-set, inheritance-subtype-set, include-provider-set]
+  certificate_binding:
+    - relation
+    - partition-content
+    - coverage
+    - key-domain
+    - condition
+    - interpretation
+    - assumption-set
+    - producer-semantics
+    - evidence
+  incomplete_certification: forbidden
+absence:
+  operator: query.anti_join.v1
+  right_preconditions: [coverage-complete, no-blocking-unresolved, applicable-relation-key-enumeration-closure]
+  missing_precondition: no-rows-plus-sdk.query-closure-missing
+  backend_matrix: [memory, sqlite]
+incrementality:
+  exact_inputs:
+    - source-digest
+    - dependency-digest
+    - invocation-digest
+    - toolchain-digest
+    - condition-universe-digest
+    - variant-digest
+    - provider-set-digest
+    - registry-digest
+    - interpretation-policy-digest
+    - refresh-policy-digest
+    - environment-digest
+    - provider-binary-digest
+    - provider-semantics-digest
+    - relation-descriptor-digest
+    - normalizer-version
+    - model-digest
+    - assumption-digest
+    - precision-profile
+  affected_partition_only: required
+  corruption_reuse: forbidden
+  full_recompute_equivalence: required
+  warm_zero:
+    unchanged_exact_inputs: required
+    frontend_provider_executions: 0
+recursion:
+  algorithm: deterministic-least-fixpoint
+  budgets: [max-iterations, max-edges]
+  positive_rows_on_exhaustion: retained
+  closure_on_exhaustion: forbidden
+  unresolved_codes: [sdk.closure-iteration-budget, sdk.closure-edge-budget]
+provider_hardening:
+  protocol: schemas/cxxlens_ng_provider_protocol.yaml
+  runtime: schemas/cxxlens_ng_provider_runtime_contract.yaml
+  security: schemas/cxxlens_ng_security_profile.yaml
+  required_properties: [snapshot-binding, variant-binding, refresh-binding, structured-errors, budget-enforcement, process-isolation]
+performance:
+  executable: cxxlens-g5-runtime
+  fixture: {partitions: 2048, edges: 512}
+  method: {clock: steady_clock, repetitions: 5, statistic: median}
+  budgets: {max_iterations: 513, max_edges: 512}
+  environment_fields: [compiler, operating_system, architecture]
+  envelope_us:
+    warm_zero_plan_median: 250000
+    bounded_closure_median: 5000000
+required_artifacts:
+  - include/cxxlens/sdk/incremental.hpp
+  - src/sdk/incremental.cpp
+  - include/cxxlens/sdk/query.hpp
+  - src/sdk/query.cpp
+  - src/sdk/query_execution.cpp
+  - src/sdk/store.cpp
+  - schemas/cxxlens_ng_g5_qualification.yaml
+  - schemas/cxxlens_ng_g5_qualification.schema.yaml
+  - schemas/cxxlens_ng_g5_qualification_report.schema.yaml
+  - schemas/cxxlens_ng_logical_query_contract.yaml
+  - schemas/cxxlens_ng_snapshot_store_contract.yaml
+  - schemas/cxxlens_ng_provider_protocol.yaml
+  - schemas/cxxlens_ng_provider_runtime_contract.yaml
+  - schemas/cxxlens_ng_security_profile.yaml
+  - schemas/cxxlens_ng_project_catalog_contract.yaml
+  - tests/unit/sdk/g5_runtime_test.cpp
+  - tests/unit/sdk/query_runtime_test.cpp
+  - tests/unit/sdk/store_test.cpp
+  - tests/unit/sdk/provider_runtime_test.cpp
+  - tests/adapter/clang22/provider_worker_protocol_test.cpp
+  - src/sdk/provider_runtime.cpp
+  - tools/quality/check_ng_g5_qualification.py
+  - docs/design/adr/0090-g5-closure-incrementality-qualification.md
+  - examples/sdk/incremental_materialization.cpp
+  - .github/workflows/quality.yml

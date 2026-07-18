@@ -9,7 +9,7 @@ class SemanticGuaranteeTests(unittest.TestCase):
  @classmethod
  def setUpClass(cls): cls.contract=load(ROOT/CONTRACT)
  def test_contract_and_vectors(self):
-  contract,results,comparisons=validate_all(ROOT); self.assertEqual(len(contract['operator_composition']),12); self.assertEqual(len(results),24); self.assertEqual(comparisons,6)
+        contract,results,comparisons=validate_all(ROOT); self.assertEqual(len(contract['operator_composition']),13); self.assertEqual(len(results),24); self.assertEqual(comparisons,6)
  def test_truth_not_involution(self):
   for value in ('unknown','true','false','conflict'): self.assertEqual(truth('not',[truth('not',[value])]),value)
  def test_truth_and_or_are_commutative(self):

@@ -126,7 +126,7 @@ set_target_properties(cxxlens PROPERTIES EXPORT_NAME cxxlens)
 
 add_library(
   cxxlens_provider_sdk
-  ${CXXLENS_LIBRARY_TYPE} src/sdk/provider.cpp
+  ${CXXLENS_LIBRARY_TYPE} src/sdk/provider.cpp src/sdk/incremental.cpp
   src/runtime/provider_process_adapter.cpp src/sdk/provider_runtime.cpp
   src/sdk/testing.cpp)
 add_library(cxxlens::provider_sdk ALIAS cxxlens_provider_sdk)

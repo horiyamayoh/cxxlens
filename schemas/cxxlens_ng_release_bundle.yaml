@@ -1,5 +1,5 @@
 schema: cxxlens.ng-release-bundle.v1
-document_version: 1.2.0
+document_version: 1.3.0
 maturity: accepted-contract
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -186,6 +186,13 @@ releases:
 non_blocking_migrations:
   distribution-1.0: [R5, R6, R7]
   distribution-1.x: [R5, R6, R7]
+
+g5_qualification:
+  migration: R4
+  gate: gate.g5
+  authority: schemas/cxxlens_ng_g5_qualification.yaml
+  ci_job: g5-qualification
+  status: implemented
 
 provider_protocol_boundary:
   NG0:

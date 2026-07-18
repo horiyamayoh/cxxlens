@@ -27,10 +27,10 @@ checks:
     dimensions: [linkage-independent]
     configurations: [linkage-independent]
   - id: quality.production-contracts
-    version: 2
+    version: 3
     owner: quality-target
     command: cmake --build --target cxxlens-quality
-    inputs: [tools/quality, tools/ci, schemas, docs, .github/workflows]
+    inputs: [CMakeLists.txt, cmake, include, src, tests, tools/quality, tools/ci, schemas, docs, .github/workflows]
     dimensions: [linkage-independent]
     configurations: [linkage-independent]
   - id: cpp.runtime-tests

@@ -155,6 +155,7 @@ def validate_target_contract(root: pathlib.Path, manifest: dict[str, Any]) -> No
     for header in (
         "claim.hpp",
         "common.hpp",
+        "incremental.hpp",
         "provider.hpp",
         "query.hpp",
         "recipe.hpp",

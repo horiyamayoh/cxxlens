@@ -14,6 +14,7 @@ required:
   - profiles
   - releases
   - non_blocking_migrations
+  - g5_qualification
   - provider_protocol_boundary
   - version_axes
   - compatibility_contexts
@@ -299,6 +300,16 @@ properties:
         $ref: '#/$defs/migration_array'
       distribution-1.x:
         $ref: '#/$defs/migration_array'
+  g5_qualification:
+    type: object
+    additionalProperties: false
+    required: [migration, gate, authority, ci_job, status]
+    properties:
+      migration: {const: R4}
+      gate: {const: gate.g5}
+      authority: {const: schemas/cxxlens_ng_g5_qualification.yaml}
+      ci_job: {const: g5-qualification}
+      status: {const: implemented}
   provider_protocol_boundary:
     type: object
     additionalProperties: false

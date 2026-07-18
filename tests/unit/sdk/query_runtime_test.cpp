@@ -2781,6 +2781,98 @@ namespace
 					"exact superset partition closure did not prove an explicit subset query");
 		}
 	}
+
+	void check_anti_join_closure(const fixture& data)
+	{
+		const auto left_key =
+			column_ref{data.left.id, data.left.columns[0].id, data.left.columns[0].type};
+		const auto right_key =
+			column_ref{data.right.id, data.right.columns[0].id, data.right.columns[0].type};
+		auto left = query::builder::from(data.left, "left");
+		auto right = query::builder::from(data.right, "right");
+		auto qualified_left = query::qualify(left_key, "left");
+		auto qualified_right = query::qualify(right_key, "right");
+		require(left && right && qualified_left && qualified_right,
+				"anti_join fixture construction failed");
+		auto predicate = query::equals_present(*qualified_left, *qualified_right);
+		require(predicate.has_value(), "anti_join predicate construction failed");
+		auto anti = std::move(*left).anti_join(std::move(*right), std::move(*predicate));
+		require(anti.has_value(), "anti_join builder rejected a present equality");
+		auto logical = std::move(*anti).finish();
+		require(logical.validate().has_value(), "anti_join logical IR did not validate");
+		auto old_version = logical;
+		old_version.version = {1U, 0U, 0U};
+		auto old_version_result = old_version.validate();
+		require(!old_version_result &&
+					old_version_result.error().code == "sdk.query-operator-version",
+				"NG1 anti_join was admitted by Logical Query IR 1.0");
+
+		const std::vector complete_partitions{partition(data.claims[0], 160U),
+											  partition(data.claims[1], 161U),
+											  partition(data.claims[3], 162U)};
+		const auto execute = [&](const snapshot_handle& snapshot)
+		{
+			auto engine = query::reference_engine::bind(snapshot);
+			require(engine.has_value(), "anti_join engine bind failed");
+			auto result = engine->execute(logical);
+			require(result.has_value(), "anti_join execution failed");
+			return std::move(*result);
+		};
+
+		auto missing_store = make_in_memory_snapshot_store(data.engine);
+		require(missing_store.has_value(), "anti_join missing-closure store failed");
+		const std::array<std::size_t, 0U> no_closures{};
+		auto missing_snapshot =
+			publish_with_closures(*missing_store, data.engine, complete_partitions, no_closures);
+		auto missing = execute(missing_snapshot);
+		require(rows(missing).empty() &&
+					std::ranges::any_of(missing.unresolved_items(),
+										[](const query::query_unresolved& item)
+										{
+											return item.code == "sdk.query-closure-missing";
+										}),
+				"anti_join without right closure emitted an absence row");
+
+		auto incomplete_store = make_in_memory_snapshot_store(data.engine);
+		require(incomplete_store.has_value(), "anti_join incomplete store failed");
+		auto incomplete_partitions = complete_partitions;
+		incomplete_partitions.back() = partition(data.claims[3], 162U, true);
+		auto incomplete_snapshot = publish_with_closures(
+			*incomplete_store, data.engine, incomplete_partitions, no_closures);
+		auto incomplete = execute(incomplete_snapshot);
+		require(rows(incomplete).empty() && !incomplete.inputs_complete() &&
+					!incomplete.unresolved_items().empty(),
+				"incomplete right input was collapsed into anti_join absence");
+
+		const std::array<std::size_t, 1U> right_closed{2U};
+		auto memory_store = make_in_memory_snapshot_store(data.engine);
+		require(memory_store.has_value(), "anti_join closed memory store failed");
+		auto memory_snapshot =
+			publish_with_closures(*memory_store, data.engine, complete_partitions, right_closed);
+		auto memory = execute(memory_snapshot);
+		require(rows(memory).size() == 1U && memory.closure_ids().size() == 1U &&
+					std::ranges::none_of(memory.unresolved_items(),
+										 [](const query::query_unresolved& item)
+										 {
+											 return item.code == "sdk.query-closure-missing";
+										 }),
+				"closed anti_join did not emit exactly the proven absence row");
+
+		const auto database =
+			std::filesystem::temp_directory_path() / "cxxlens-ng-query-anti-join.sqlite";
+		std::filesystem::remove(database);
+		std::filesystem::remove(database.string() + "-wal");
+		std::filesystem::remove(database.string() + "-shm");
+		auto sqlite_store = open_sqlite_snapshot_store(database.string(), data.engine);
+		require(sqlite_store.has_value(), "anti_join SQLite store failed");
+		auto sqlite_snapshot =
+			publish_with_closures(*sqlite_store, data.engine, complete_partitions, right_closed);
+		auto sqlite = execute(sqlite_snapshot);
+		require(rows(memory) == rows(sqlite), "anti_join memory/SQLite semantic rows diverged");
+		std::filesystem::remove(database);
+		std::filesystem::remove(database.string() + "-wal");
+		std::filesystem::remove(database.string() + "-shm");
+	}
 } // namespace
 
 int main()
@@ -2823,6 +2915,7 @@ int main()
 	check_bound_contributor_edges(data);
 	check_empty_result_guarantee(data);
 	check_closure_applicability(data);
+	check_anti_join_closure(data);
 
 	auto incomplete_store = make_in_memory_snapshot_store(data.engine);
 	require(incomplete_store.has_value(), "incomplete query store failed");

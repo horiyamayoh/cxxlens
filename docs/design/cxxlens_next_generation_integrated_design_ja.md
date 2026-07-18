@@ -2921,6 +2921,7 @@ operator ごとの規範規則:
 | `project` | 保存、implicit distinct 禁止 | 保存 | 保存 | order key を残す場合だけ order 保存 |
 | `inner_join` | compatible multiplicity の積 | intersection、empty は破棄 | interpretation exact equality、evidence union | unordered、right complete + left sealed prefix |
 | `semi_join` | left occurrence を一度だけ保存 | compatible intersection の union | 全 witness evidence を union | left order/prefix を条件付き保存 |
+| `anti_join` (NG1) | unwitnessed left occurrence を保存 | complete right domain の下で left を保存 | left evidence + result side-channel closure ID | right coverage/closure 必須、left order を保存 |
 | `union` | bag addition | occurrence ごとに保存 | occurrence ごとに保存 | unordered、全 input head seal 後だけ merge prefix |
 | `distinct` | values + universe + interpretation ごとに1 | union | contributor/provenance union | unordered、同一 key source seal 後だけ group |
 | `order_by` | 保存 | 保存 | 保存 | explicit key + canonical row tie-break の total order |
@@ -2930,14 +2931,15 @@ operator ごとの規範規則:
 
 Issue #133 により `semi_join` の「条件付き保存」は left input の total order metadata、order keys、filtered row subsequenceを
 そのまま伝播することを意味する。typed builder、IR validator、executor は同じ operator propertyを使用し、ordered left に対する
-semi join直後の `limit` を受理する。unordered left は orderを獲得せず、inner join は orderを保存しない。
+semi join直後の `limit` を受理する。Issue #166 により同じ left order law を `anti_join` にも適用するが、right subtree の
+complete coverage と applicable closure がなければ absence row を返さず structured unresolved とする。unordered left は
+orderを獲得せず、inner join は orderを保存しない。
 
 ### 20.5 Deferred operators
 
 ```text
 group
 aggregate
-anti_join
 difference
 exists_check
 absence_check
@@ -2946,9 +2948,9 @@ transitive_closure
 ```
 
 `group` / `aggregate` は sealed group と partial publication の contract が未成立のため NG1 以降へ移す。
-aggregate は group input が complete になる前に値を publish してはならない。absence-dependent operator は
-closure requirement を持つ。recursive operator は fixpoint、iteration budget、partial closure を別 contract で
-固定するまで NG0 に入れない。
+aggregate は group input が complete になる前に値を publish してはならない。`anti_join` は NG1 IR 1.1 で closure-bound
+operator として実装済みだが、difference/absence_check は引き続き deferred である。recursive query operator は deferred のまま、
+G5 の standalone bounded closure value API が fixpoint、iteration/edge budget、partial closure を先に固定する。
 
 ### 20.6 Static DSL
 
@@ -4084,6 +4086,13 @@ group-level table だけで complete を宣言しない。
 - affected partition invalidation
 - bounded recursion
 
+Issue #166 / ADR 0090 はこの gate を `schemas/cxxlens_ng_g5_qualification.yaml` に具体化する。absence を返す
+`query.anti_join.v1` は右 subtree の complete coverage、blocking unresolved 不在、applicable
+`relation-key-enumeration` certificate を同時に要求する。exact invalidation input、affected partition only、warm-zero、
+condition/interpretation-aware bounded fixpoint、budget exhaustion 時の positive/evidence 保持と closure 非認定を public
+contract とする。R4 performance は固定 fixture、clock、反復数、budget、compiler/OS/architecture、envelope と clean main exact-SHA report で認定し、
+distribution 1.0 support は GR が完了するまで宣言しない。
+
 #### G6 — Standard semantics expansion
 
 - reference/inheritance/templates/macros
@@ -4604,8 +4613,9 @@ NG1 default:
 - [ ] README/support state matches acceptance manifest
 
 foundation gate は上記のうち G0–G4/R0–R3 に属する実装済み evidence、install consumer、legacy-zero、
-documentation drift zero を machine validation する。closure/incrementality、cold/warm production qualification、
-GR 全項目は G5/GR の deferred state として保持し、foundation 完了を production 1.0 完了へ読み替えない。
+documentation drift zero を machine validation する。G5 は Issue #166 の独立した exact-SHA qualification が所有し、
+Foundation の再認定条件にはしない。GR は Issue #167 の deferred state として保持し、Foundation または G5 完了を
+production 1.0 完了へ読み替えない。
 
 ---
 

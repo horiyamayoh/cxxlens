@@ -608,7 +608,7 @@ namespace cxxlens::sdk::query
 			return operator_arguments{scan_arguments{std::move(*descriptor), std::move(*alias)}};
 		}
 		if (node.operator_id == "query.filter.v1" || node.operator_id == "query.inner_join.v1" ||
-			node.operator_id == "query.semi_join.v1")
+			node.operator_id == "query.semi_join.v1" || node.operator_id == "query.anti_join.v1")
 		{
 			if (!exact_keys(object, {"predicate"}, "predicate-arguments"))
 				return unexpected(decode_error("predicate", "shape"));

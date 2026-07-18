@@ -55,6 +55,14 @@ set_tests_properties(
   unit.sdk-query-runtime PROPERTIES LABELS
                                     "unit;sdk;query;store;budget;cancellation")
 
+cxxlens_add_test_executable(cxxlens-g5-runtime unit/sdk/g5_runtime_test.cpp)
+target_link_libraries(cxxlens-g5-runtime PRIVATE cxxlens::provider_sdk)
+add_test(NAME acceptance.g5-runtime COMMAND cxxlens-g5-runtime)
+set_tests_properties(
+  acceptance.g5-runtime
+  PROPERTIES LABELS
+             "unit;sdk;g5;closure;incremental;warm-zero;determinism;acceptance")
+
 cxxlens_add_test_executable(cxxlens-provider-process-fixture
                             fixtures/provider_process_fixture.cpp)
 target_link_libraries(cxxlens-provider-process-fixture
@@ -155,7 +163,8 @@ foreach(
         recipe
         relation_claim_batch
         snapshot_store
-        query_execution)
+        query_execution
+        incremental_materialization)
   set(target_name "cxxlens-sdk-example-${example}")
   cxxlens_add_test_executable(
     ${target_name} "${PROJECT_SOURCE_DIR}/examples/sdk/${example}.cpp")
@@ -240,7 +249,8 @@ foreach(
         ci_supply_chain
         migration_completion
         foundation_completion
-        api_development_readiness)
+        api_development_readiness
+        g5_qualification)
   add_test(NAME "quality.ng-${contract}"
            COMMAND "${Python3_EXECUTABLE}"
                    "${PROJECT_SOURCE_DIR}/tests/quality/test_ng_${contract}.py")
@@ -302,4 +312,5 @@ add_dependencies(
   cxxlens-unit-sdk
   cxxlens-unit-sdk-provider-runtime
   cxxlens-unit-sdk-query-runtime
-  cxxlens-unit-sdk-store)
+  cxxlens-unit-sdk-store
+  cxxlens-g5-runtime)
