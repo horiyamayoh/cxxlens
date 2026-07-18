@@ -1,5 +1,5 @@
 schema: cxxlens.ng-release-bundle.v1
-document_version: 1.1.0
+document_version: 1.2.0
 maturity: accepted-contract
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -24,14 +24,14 @@ product_boundary:
       depends_on: [relation-kernel, logical-query]
       forbidden_dependencies: [native-provider]
       exported_values: [cc-relation-descriptor, cc-semantic-service]
-    - id: portable-provider-sdk
-      domain: language-neutral
-      depends_on: [relation-kernel]
-      forbidden_dependencies: [cc-cpp-semantics, native-provider]
-      exported_values: [provider-manifest, provider-task, relation-batch]
+    - id: author-sdk
+      domain: application
+      depends_on: [relation-kernel, logical-query, cc-cpp-semantics, recipes]
+      forbidden_dependencies: [native-provider]
+      exported_values: [provider-manifest, provider-task, relation-batch, logical-query-ir, recipe-result]
     - id: native-provider
       domain: native-major-specific
-      depends_on: [cc-cpp-semantics, portable-provider-sdk]
+      depends_on: [cc-cpp-semantics, author-sdk]
       forbidden_dependencies: []
       exported_values: [detached-observation, provider-certificate]
     - id: recipes
@@ -61,19 +61,19 @@ distribution_surface:
       stability: stable-at-1.0
     - name: cxxlens::query
       component: logical-query
-      direct_dependencies: [cxxlens::base, cxxlens::kernel]
+      direct_dependencies: [cxxlens::kernel]
       stability: stable-at-1.0
     - name: cxxlens::cpp
       component: cc-cpp-semantics
-      direct_dependencies: [cxxlens::base, cxxlens::kernel, cxxlens::query]
+      direct_dependencies: [cxxlens::query]
       stability: stable-at-1.0
     - name: cxxlens::provider_sdk
-      component: portable-provider-sdk
-      direct_dependencies: [cxxlens::base, cxxlens::kernel]
+      component: author-sdk
+      direct_dependencies: [cxxlens::cxxlens, cxxlens::recipes]
       stability: versioned
     - name: cxxlens::recipes
       component: recipes
-      direct_dependencies: [cxxlens::base, cxxlens::kernel, cxxlens::query, cxxlens::cpp]
+      direct_dependencies: [cxxlens::query]
       stability: versioned
     - name: cxxlens::cxxlens
       component: cc-cpp-semantics

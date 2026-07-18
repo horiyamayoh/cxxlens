@@ -13,10 +13,11 @@ cxxlens::cpp
 
 cxxlens::query → cxxlens::recipes
 cxxlens::cxxlens = base + kernel + query + cpp
-cxxlens::base + cxxlens::kernel → cxxlens::provider_sdk
+cxxlens::cxxlens + cxxlens::recipes → cxxlens::provider_sdk
 cxxlens::provider_sdk + exact Clang 22 → cxxlens::clang22_provider_sdk
 ```
 
+`cxxlens::provider_sdk` は relation、snapshot、query、provider、testing、recipe を束ねる高水準 author SDK です。
 `base/kernel/query/cpp/recipes/provider_sdk` は compiler-native type を public surface に露出しません。
 native target だけが Clang major に opt-in します。
 

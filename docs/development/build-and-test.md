@@ -75,3 +75,11 @@ legacy-zero を静的に検証します。main への push では build/test、i
 `required_closed_issues`、gate issue、tracking issue の状態を結合した JSON report を artifact として生成します。
 宣言 issue の取得失敗や未 close は fail closed です。G5、GR、roadmap など宣言集合外の issue は各 gate が所有し、
 Foundation 完了を遡及的に失敗させません。tracked manifest 自身に tree hash を埋め込む自己参照は行いません。
+
+`cxxlens-ng-api-development-readiness-check` は release bundle、実 CMake の public target edge、Public API Catalog による
+header admission、Relation Registry による generated header binding、gate owner、workflow job 名、同時 active write unit 数を
+検証します。required status check は `build-test (OFF)`、`build-test (ON)`、`gcc-public-headers`、
+`install-consumer (OFF)`、`install-consumer (ON)`、`quality-contracts`、`quality-evidence` の exact set です。main 保護は strict
+mode でこの集合を要求し、実装 commit は同一 SHA を non-main branch で先に成功させます。main へ同一 SHA が入った後だけ
+`foundation-completion` と `wave0-readiness` が実行され、後者は全 artifact、JUnit、install manifest、toolchain provenance、
+Foundation report、authority/header digest を clean main revision/tree に bind した baseline report を生成します。

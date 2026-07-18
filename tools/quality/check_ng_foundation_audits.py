@@ -191,13 +191,22 @@ def legacy_schema_findings(relatives: list[str]) -> tuple[list[str], list[str]]:
     return targets, [f"legacy.schema:{path}" for path in invalid]
 
 
-def legacy_public_header_findings(relatives: list[str]) -> tuple[list[str], list[str]]:
+def legacy_public_header_findings(
+    root: pathlib.Path, relatives: list[str]
+) -> tuple[list[str], list[str]]:
     headers = {path for path in relatives if path.startswith("include/cxxlens/")}
+    catalog = load_document(root / "schemas/cxxlens_ng_public_api_catalog.yaml")
+    expected = {
+        header
+        for collection in (catalog["packages"], catalog["entries"])
+        for row in collection
+        for header in row["headers"]
+    }
     findings = [
-        *(f"legacy.public-header.missing:{path}" for path in migration.ALLOWED_PUBLIC_HEADERS - headers),
-        *(f"legacy.public-header.extra:{path}" for path in headers - migration.ALLOWED_PUBLIC_HEADERS),
+        *(f"legacy.public-header.missing:{path}" for path in expected - headers),
+        *(f"legacy.public-header.extra:{path}" for path in headers - expected),
     ]
-    return sorted(headers | migration.ALLOWED_PUBLIC_HEADERS), findings
+    return sorted(headers | expected), findings
 
 
 def legacy_ci_findings(relatives: list[str]) -> tuple[list[str], list[str]]:
@@ -297,7 +306,7 @@ def build_report(
         ),
         "legacy_public_headers": (
             "foundation-audit.legacy-public-headers/v1",
-            legacy_public_header_findings(relatives),
+            legacy_public_header_findings(root, relatives),
         ),
         "legacy_ci_gates": (
             "foundation-audit.legacy-ci-gates/v1",

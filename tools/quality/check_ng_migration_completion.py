@@ -10,30 +10,6 @@ import re
 import sys
 
 
-ALLOWED_PUBLIC_HEADERS = {
-    "include/cxxlens/cxxlens.hpp",
-    "include/cxxlens/sdk.hpp",
-    "include/cxxlens/provider/clang22.hpp",
-    "include/cxxlens/sdk/claim.hpp",
-    "include/cxxlens/sdk/common.hpp",
-    "include/cxxlens/sdk/provider.hpp",
-    "include/cxxlens/sdk/query.hpp",
-    "include/cxxlens/sdk/recipe.hpp",
-    "include/cxxlens/sdk/relation.hpp",
-    "include/cxxlens/sdk/store.hpp",
-    "include/cxxlens/sdk/testing.hpp",
-    "include/cxxlens/relations/build_compile_unit.hpp",
-    "include/cxxlens/relations/build_project.hpp",
-    "include/cxxlens/relations/build_toolchain_context.hpp",
-    "include/cxxlens/relations/build_variant.hpp",
-    "include/cxxlens/relations/cc_call_direct_target.hpp",
-    "include/cxxlens/relations/cc_call_site.hpp",
-    "include/cxxlens/relations/cc_entity.hpp",
-    "include/cxxlens/relations/cc_type.hpp",
-    "include/cxxlens/relations/company_lock_acquire.hpp",
-    "include/cxxlens/relations/source_file.hpp",
-    "include/cxxlens/relations/source_span.hpp",
-}
 FORBIDDEN_PREFIXES = (
     "contracts/",
     "examples/packages/",
@@ -98,16 +74,6 @@ def validate(root: pathlib.Path) -> None:
     )
     if returned:
         fail(f"superseded assets returned: {returned}")
-
-    public_headers = {
-        relative for relative in relatives if relative.startswith("include/cxxlens/")
-    }
-    if public_headers != ALLOWED_PUBLIC_HEADERS:
-        fail(
-            "public header set differs: "
-            f"missing={sorted(ALLOWED_PUBLIC_HEADERS - public_headers)}, "
-            f"extra={sorted(public_headers - ALLOWED_PUBLIC_HEADERS)}"
-        )
 
     schemas = {
         relative

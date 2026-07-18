@@ -1,6 +1,7 @@
 #pragma once
 
-/** @file sdk.hpp @brief LLVM-free umbrella for relation, query, provider, recipe, and test authors.
+/** @file sdk.hpp @brief LLVM-free high-level author SDK for relation, query, provider, recipe, and
+ * test authors.
  */
 
 #include <cxxlens/sdk/claim.hpp>

@@ -7,6 +7,7 @@
 - [ADR index](design/adr/README.md)
 - [Development architecture](development/architecture.md)
 - [Extending the platform](development/extending-platform.md)
+- [Agent-driven public API development goal](development/agent-api-development-goal.md)
 - [Build and test](development/build-and-test.md)
 - [Support matrix](support-matrix.md)
 - [Tutorials](tutorials/README.md)

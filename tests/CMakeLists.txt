@@ -239,7 +239,8 @@ foreach(
         sdk_contract
         ci_supply_chain
         migration_completion
-        foundation_completion)
+        foundation_completion
+        api_development_readiness)
   add_test(NAME "quality.ng-${contract}"
            COMMAND "${Python3_EXECUTABLE}"
                    "${PROJECT_SOURCE_DIR}/tests/quality/test_ng_${contract}.py")

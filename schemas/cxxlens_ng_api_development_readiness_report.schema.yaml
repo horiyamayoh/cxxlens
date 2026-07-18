@@ -1,0 +1,69 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-api-development-readiness-report.v1
+title: cxxlens API development Wave 0 exact-SHA baseline report
+type: object
+additionalProperties: false
+required: [schema, result, generated_at, run_url, git, required_ci_jobs, branch_protection, authorities, public_headers, generated_relation_headers, toolchain_provenance, evidence_artifacts, install_manifests, test_inventory, foundation_completion]
+properties:
+  schema: {const: cxxlens.ng-api-development-readiness-report.v1}
+  result: {const: passed}
+  generated_at: {type: string, format: date-time}
+  run_url: {type: string, format: uri}
+  git:
+    type: object
+    additionalProperties: false
+    required: [revision, tree, branch, clean]
+    properties:
+      revision: {type: string, pattern: '^[0-9a-f]{40}$'}
+      tree: {type: string, pattern: '^[0-9a-f]{40}$'}
+      branch: {const: main}
+      clean: {const: true}
+  required_ci_jobs:
+    type: array
+    minItems: 8
+    uniqueItems: true
+    items: {type: string, minLength: 1}
+  branch_protection:
+    type: object
+    additionalProperties: false
+    required: [strict, required_statuses, settings_evidence]
+    properties:
+      strict: {const: true}
+      required_statuses: {type: array, minItems: 7, uniqueItems: true, items: {type: string, minLength: 1}}
+      settings_evidence: {const: github-api-issue-168}
+  authorities: {$ref: '#/$defs/files'}
+  public_headers: {$ref: '#/$defs/files'}
+  generated_relation_headers: {$ref: '#/$defs/files'}
+  toolchain_provenance: {$ref: '#/$defs/files'}
+  evidence_artifacts: {$ref: '#/$defs/files'}
+  install_manifests: {$ref: '#/$defs/files'}
+  test_inventory:
+    type: object
+    additionalProperties: false
+    required: [junit_files, test_cases]
+    properties:
+      junit_files: {type: integer, minimum: 1}
+      test_cases: {type: integer, minimum: 1}
+  foundation_completion:
+    type: object
+    additionalProperties: false
+    required: [path, digest, result, revision, tree]
+    properties:
+      path: {type: string, minLength: 1}
+      digest: {$ref: '#/$defs/digest'}
+      result: {const: passed}
+      revision: {type: string, pattern: '^[0-9a-f]{40}$'}
+      tree: {type: string, pattern: '^[0-9a-f]{40}$'}
+$defs:
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  files:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [path, digest]
+      properties:
+        path: {type: string, minLength: 1}
+        digest: {$ref: '#/$defs/digest'}

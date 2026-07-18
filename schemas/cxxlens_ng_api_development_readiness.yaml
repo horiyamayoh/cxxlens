@@ -1,0 +1,87 @@
+schema: cxxlens.ng-api-development-readiness.v1
+document_version: 1.0.0
+maturity: implemented
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md
+  adr: docs/design/adr/0089-high-level-author-sdk-and-wave0-readiness.md
+  owner_issue: '#168'
+  foundation_issue: '#165'
+binding:
+  branch: main
+  report_schema: cxxlens.ng-api-development-readiness-report.v1
+  report_artifact: cxxlens-ng-api-development-readiness-${revision}
+target_contract:
+  authority: schemas/cxxlens_ng_release_bundle.yaml
+  provider_sdk_role: high-level-author-sdk
+  direct_dependencies:
+    cxxlens::base: []
+    cxxlens::kernel: [cxxlens::base]
+    cxxlens::query: [cxxlens::kernel]
+    cxxlens::cpp: [cxxlens::query]
+    cxxlens::recipes: [cxxlens::query]
+    cxxlens::cxxlens: [cxxlens::base, cxxlens::kernel, cxxlens::query, cxxlens::cpp]
+    cxxlens::provider_sdk: [cxxlens::cxxlens, cxxlens::recipes]
+public_header_authority:
+  admission: schemas/cxxlens_ng_public_api_catalog.yaml
+  generated_relation_binding: schemas/cxxlens_ng_relation_registry.yaml
+  migration_checker_role: superseded-asset-denylist-only
+  extra_header: reject
+  missing_header: reject
+required_status_checks:
+  strict: true
+  contexts:
+    - build-test (OFF)
+    - build-test (ON)
+    - gcc-public-headers
+    - install-consumer (OFF)
+    - install-consumer (ON)
+    - quality-contracts
+    - quality-evidence
+merged_main_checks:
+  - foundation-completion
+  - wave0-readiness
+baseline:
+  exact_revision_tree: required
+  clean_main_checkout: required
+  required_evidence:
+    - toolchain-provenance
+    - static-shared-build-test
+    - static-shared-install-manifest
+    - public-header-inventory
+    - authority-digests
+    - test-inventory
+    - generated-header-inventory
+    - foundation-completion-report
+    - branch-protection-status-names
+api_unit_workflow:
+  maximum_active_write_units: 1
+  active_write_units: []
+  required_stages:
+    - semantics-identity-partiality
+    - registry-schema-catalog
+    - generated-static-dynamic-parity
+    - production-implementation
+    - memory-sqlite-parity
+    - typed-dynamic-ir-parity
+    - positive-negative-boundary-determinism-tests
+    - doxygen-example-install-consumer
+    - support-stability-evidence
+    - exact-sha-ci
+  completion_evidence:
+    - public-header-signature-ownership-lifetime
+    - error-unresolved-coverage-closure-guarantee
+    - identity-version-ordering-unknown-handling
+    - registry-schema-catalog
+    - reproducible-generation
+    - correct-target-layer
+    - memory-sqlite-reason-code-parity
+    - static-dynamic-descriptor-ir-result-parity
+    - positive-negative-malformed-boundary-permutation-tests
+    - doxygen-example-install-consumer
+    - support-claim
+    - pre-main-required-checks
+    - merged-main-required-checks
+gate_ownership:
+  foundation: '#113'
+  g5: '#166'
+  release: '#167'

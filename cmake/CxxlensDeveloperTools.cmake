@@ -83,6 +83,14 @@ add_custom_target(
   VERBATIM)
 
 add_custom_target(
+  cxxlens-ng-api-development-readiness-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_api_development_readiness.py"
+    check --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM)
+
+add_custom_target(
   cxxlens-sanitizer-coverage-check
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -147,6 +155,7 @@ add_dependencies(
   cxxlens-documentation-consistency-check
   cxxlens-ng-provider-protocol-check
   cxxlens-ng-provider-runtime-check
+  cxxlens-ng-api-development-readiness-check
   cxxlens-ng-ci-supply-chain-check
   cxxlens-ng-migration-completion-check
   cxxlens-ng-query-contract-check

@@ -498,6 +498,9 @@ cxxlens-provider-clang22-sdk
 ```
 
 `cxxlens::cxxlens` は provider executable、native SDK、recipes を強制 link してはならない。
+`cxxlens::provider_sdk` は ADR 0089 により relation、snapshot、Logical Query、provider、testing、recipe を束ねる
+高水準 author SDK とし、direct public dependency は `cxxlens::cxxlens` と `cxxlens::recipes` とする。
+compiler-native surface は引き続き major-specific native SDK だけに隔離する。
 
 1.0 の source compatibility authority は installed public header とする。C++ module は 1.0 の installed
 stable surface に含めない。module surface を提供する場合は `experimental` とし、header authority と同値で
@@ -4136,6 +4139,13 @@ supply-chain lock digest を一つの toolchain provenance に記録する。fou
 provenance を再検証して runner/toolchain/action/package の集合を bind し、artifact と evidence は source SHA と
 toolchain digest を独立に差し替えられない。
 
+Wave 0 readiness は `schemas/cxxlens_ng_api_development_readiness.yaml` を authority とする。Public API target の direct edge は
+release bundle と実 CMake の `PUBLIC` / `INTERFACE` edge に一致し、public header の admission は Public API Catalog、generated
+relation header の導出可能性は Relation Registry が所有する。migration checker は superseded asset denylist に限定し、新 header
+allowlist を二重管理しない。同時 active write unit は一つ以下とする。main の required status check は exact name set を strict mode で
+要求し、同一 SHA の non-main 成功を先行させる。main へ入った SHA は全 required artifact、JUnit、install manifest、toolchain provenance、
+Foundation completion report、authority/header digest を clean revision/tree に bind した readiness report が passed の場合だけ基準線になる。
+
 ### 26.4 Test classes
 
 - unit
@@ -4173,7 +4183,7 @@ semantic comparison は unordered relation digest と canonical export の両方
 
 static と shared は同じ `install-consumer` CI job の matrix とし、各 configuration で検査した prefix 自体を
 release-layout artifact とする。installed tool は `LD_LIBRARY_PATH` / `DYLD_LIBRARY_PATH` なしで直接実行し、prefix 全体を移設した後も
-同じ結果でなければならない。consumer は core、portable provider SDK、Clang 22 provider SDK、installed example の全 package を build、
+同じ結果でなければならない。consumer は core、高水準 author SDK、Clang 22 provider SDK、installed example の全 package を build、
 install、clean-environment run する。
 
 shared package は Linux で tool に `$ORIGIN/../<install-libdir>`、library に `$ORIGIN`、macOS で対応する

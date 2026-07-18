@@ -24,7 +24,7 @@ EXPECTED_COMPONENTS = {
     "relation-kernel",
     "logical-query",
     "cc-cpp-semantics",
-    "portable-provider-sdk",
+    "author-sdk",
     "native-provider",
     "recipes",
 }

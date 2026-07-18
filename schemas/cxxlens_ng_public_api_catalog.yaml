@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.63.0
+document_version: 1.64.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -16,6 +16,12 @@ compatibility:
   provider_protocol_axis: provider-protocol
 
 packages:
+  - id: core-sdk
+    cmake_package: cxxlens
+    target: cxxlens::cxxlens
+    headers: [include/cxxlens/cxxlens.hpp]
+    llvm_clang_dependency: forbidden
+    link_dependencies: [cxxlens::base, cxxlens::kernel, cxxlens::query, cxxlens::cpp]
   - id: author-sdk
     cmake_package: cxxlensProviderSDK
     target: cxxlens::provider_sdk
@@ -30,7 +36,7 @@ packages:
       - include/cxxlens/sdk/testing.hpp
       - include/cxxlens/sdk/recipe.hpp
     llvm_clang_dependency: forbidden
-    link_dependencies: [cxx-standard-library]
+    link_dependencies: [cxxlens::cxxlens, cxxlens::recipes]
   - id: clang22-native-author-sdk
     cmake_package: cxxlensClang22ProviderSDK
     target: cxxlens::clang22_provider_sdk
