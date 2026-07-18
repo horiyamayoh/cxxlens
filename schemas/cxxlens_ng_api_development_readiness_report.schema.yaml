@@ -3,7 +3,7 @@ $id: https://cxxlens.dev/schemas/cxxlens.ng-api-development-readiness-report.v1
 title: cxxlens API development Wave 0 exact-SHA baseline report
 type: object
 additionalProperties: false
-required: [schema, result, generated_at, run_url, git, required_ci_jobs, branch_protection, authorities, public_headers, generated_relation_headers, toolchain_provenance, evidence_artifacts, install_manifests, test_inventory, foundation_completion]
+required: [schema, result, generated_at, run_url, git, required_ci_jobs, branch_protection, authorities, public_headers, generated_relation_headers, toolchain_provenance, evidence_artifacts, install_manifests, test_inventory, foundation_completion, public_callable_inventory]
 properties:
   schema: {const: cxxlens.ng-api-development-readiness-report.v1}
   result: {const: passed}
@@ -51,6 +51,22 @@ properties:
     properties:
       path: {type: string, minLength: 1}
       digest: {$ref: '#/$defs/digest'}
+      result: {const: passed}
+      revision: {type: string, pattern: '^[0-9a-f]{40}$'}
+      tree: {type: string, pattern: '^[0-9a-f]{40}$'}
+  public_callable_inventory:
+    type: object
+    additionalProperties: false
+    required: [path, report_digest, inventory_file_digest, inventory_semantic_digest, review_path, review_digest, callable_count, doxygen_count, result, revision, tree]
+    properties:
+      path: {type: string, minLength: 1}
+      report_digest: {$ref: '#/$defs/digest'}
+      inventory_file_digest: {$ref: '#/$defs/digest'}
+      inventory_semantic_digest: {$ref: '#/$defs/digest'}
+      review_path: {type: string, minLength: 1}
+      review_digest: {$ref: '#/$defs/digest'}
+      callable_count: {type: integer, minimum: 1}
+      doxygen_count: {type: integer, minimum: 1}
       result: {const: passed}
       revision: {type: string, pattern: '^[0-9a-f]{40}$'}
       tree: {type: string, pattern: '^[0-9a-f]{40}$'}

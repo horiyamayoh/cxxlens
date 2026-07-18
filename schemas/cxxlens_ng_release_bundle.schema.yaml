@@ -324,7 +324,7 @@ properties:
       claim_scope: {const: exact-gr-report-tuples-only}
       report_artifact: {const: 'cxxlens-ng-release-qualification-${revision}'}
       required_evidence:
-        const: [same-sha-foundation-report, same-sha-wave0-readiness-report, same-sha-g5-report, static-relocated-install-artifact, shared-relocated-install-artifact, static-shared-runtime-junit, real-project-memory-sqlite-and-major-rejection, security-conformance-and-negative-paths, doxygen-contract-and-support-matrix, license-and-notice]
+        const: [same-sha-foundation-report, same-sha-wave0-readiness-report, same-sha-public-callable-report-and-review, same-sha-g5-report, static-relocated-install-artifact, shared-relocated-install-artifact, static-shared-runtime-junit, real-project-memory-sqlite-and-major-rejection, security-conformance-and-negative-paths, doxygen-contract-and-support-matrix, license-and-notice]
   provider_protocol_boundary:
     type: object
     additionalProperties: false

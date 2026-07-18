@@ -1,6 +1,6 @@
 schema: cxxlens.ng-public-api-catalog.v1
 kind: public-cpp-api-catalog
-document_version: 1.65.0
+document_version: 1.66.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -151,7 +151,7 @@ entries:
     owner_issue: '#154'
     profile: NG0
     target: cxxlens::provider_sdk
-    headers: [include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/sdk/relation.hpp]
+    headers: [include/cxxlens/relations/build_compile_unit.hpp, include/cxxlens/relations/build_project.hpp, include/cxxlens/relations/build_toolchain_context.hpp, include/cxxlens/relations/build_variant.hpp, include/cxxlens/relations/cc_entity.hpp, include/cxxlens/relations/cc_type.hpp, include/cxxlens/relations/cc_call_site.hpp, include/cxxlens/relations/cc_call_direct_target.hpp, include/cxxlens/relations/company_lock_acquire.hpp, include/cxxlens/relations/source_file.hpp, include/cxxlens/relations/source_span.hpp, include/cxxlens/sdk/relation.hpp, include/cxxlens/sdk/query.hpp]
     symbols:
       - name: query.from
         kind: template

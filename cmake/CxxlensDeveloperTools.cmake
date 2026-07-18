@@ -1,4 +1,5 @@
 find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
+find_program(CXXLENS_PUBLIC_CALLABLE_CLANG NAMES clang++-22 REQUIRED)
 
 find_program(CXXLENS_CLANG_FORMAT NAMES clang-format-22 clang-format)
 if(CXXLENS_CLANG_FORMAT)
@@ -91,6 +92,15 @@ add_custom_target(
     check --root "${CMAKE_CURRENT_SOURCE_DIR}"
   VERBATIM)
 
+add_custom_target(
+  cxxlens-ng-public-callable-inventory-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/public_callable_inventory.py"
+    check --root "${CMAKE_CURRENT_SOURCE_DIR}" --compiler
+    "${CXXLENS_PUBLIC_CALLABLE_CLANG}"
+  VERBATIM)
+
 if(TARGET cxxlens-g5-runtime)
   add_custom_target(
     cxxlens-ng-g5-qualification-check
@@ -173,6 +183,7 @@ add_dependencies(
   cxxlens-ng-migration-completion-check
   cxxlens-ng-query-contract-check
   cxxlens-ng-relation-contract-check
+  cxxlens-ng-public-callable-inventory-check
   cxxlens-ng-release-contract-check
   cxxlens-ng-release-qualification-check
   cxxlens-ng-sdk-contract-check
@@ -208,6 +219,11 @@ if(CXXLENS_BUILD_DOCS)
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/verify_doxygen.py"
       "${CMAKE_CURRENT_BINARY_DIR}/doxygen/xml" --ng-catalog
       "${CMAKE_CURRENT_SOURCE_DIR}/schemas/cxxlens_ng_public_api_catalog.yaml"
+    COMMAND
+      "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/public_callable_inventory.py"
+      check-doxygen --root "${CMAKE_CURRENT_SOURCE_DIR}" --doxygen-xml
+      "${CMAKE_CURRENT_BINARY_DIR}/doxygen/xml"
     DEPENDS docs
     VERBATIM)
   add_dependencies(cxxlens-quality cxxlens-doxygen-contract)

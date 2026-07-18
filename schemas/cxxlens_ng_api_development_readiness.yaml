@@ -1,11 +1,12 @@
 schema: cxxlens.ng-api-development-readiness.v1
-document_version: 1.0.0
+document_version: 1.1.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
   adr: docs/design/adr/0089-high-level-author-sdk-and-wave0-readiness.md
   owner_issue: '#168'
   foundation_issue: '#165'
+  callable_inventory_issue: '#169'
 binding:
   branch: main
   report_schema: cxxlens.ng-api-development-readiness-report.v1
@@ -27,6 +28,17 @@ public_header_authority:
   migration_checker_role: superseded-asset-denylist-only
   extra_header: reject
   missing_header: reject
+public_callable_authority:
+  decision_adr: docs/design/adr/0092-exact-public-callable-inventory.md
+  inventory: schemas/cxxlens_ng_public_callable_inventory.yaml
+  inventory_schema: schemas/cxxlens_ng_public_callable_inventory.schema.yaml
+  report_schema: schemas/cxxlens_ng_public_callable_inventory_report.schema.yaml
+  checker: tools/quality/public_callable_inventory.py
+  report_filename: cxxlens-ng-public-callable-inventory-report.json
+  review_filename: cxxlens-ng-public-callable-inventory-review.md
+  extractor: clang-ast-json-22
+  doxygen_correspondence: exact-bidirectional
+  required_result: passed
 required_status_checks:
   strict: true
   contexts:
@@ -51,6 +63,8 @@ baseline:
     - authority-digests
     - test-inventory
     - generated-header-inventory
+    - public-callable-inventory-report
+    - public-callable-review
     - foundation-completion-report
     - branch-protection-status-names
 api_unit_workflow:
@@ -64,6 +78,7 @@ api_unit_workflow:
     - memory-sqlite-parity
     - typed-dynamic-ir-parity
     - positive-negative-boundary-determinism-tests
+    - exact-callable-ast-doxygen-correspondence
     - doxygen-example-install-consumer
     - support-stability-evidence
     - exact-sha-ci
@@ -77,6 +92,7 @@ api_unit_workflow:
     - memory-sqlite-reason-code-parity
     - static-dynamic-descriptor-ir-result-parity
     - positive-negative-malformed-boundary-permutation-tests
+    - public-callable-inventory-review-binding
     - doxygen-example-install-consumer
     - support-claim
     - pre-main-required-checks

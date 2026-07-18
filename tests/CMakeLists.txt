@@ -251,6 +251,7 @@ foreach(
         migration_completion
         foundation_completion
         api_development_readiness
+        public_callable_inventory
         g5_qualification)
   add_test(NAME "quality.ng-${contract}"
            COMMAND "${Python3_EXECUTABLE}"

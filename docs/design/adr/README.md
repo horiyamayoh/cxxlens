@@ -66,6 +66,7 @@
 | [0089](0089-high-level-author-sdk-and-wave0-readiness.md) | high-level author SDK and Wave 0 readiness |
 | [0090](0090-g5-closure-incrementality-qualification.md) | G5 closure, incrementality, and R4 qualification |
 | [0091](0091-distribution-1-production-qualification.md) | distribution 1.0 exact-SHA production qualification |
+| [0092](0092-exact-public-callable-inventory.md) | exact one-callable-per-row public C++ inventory |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

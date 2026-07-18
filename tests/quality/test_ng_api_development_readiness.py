@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import pathlib
 import shutil
 import sys
@@ -21,25 +22,36 @@ from check_ng_api_development_readiness import (  # noqa: E402
     ReadinessError,
     build_report,
     load_document,
+    public_callable_evidence,
+    sha256,
     validate_documents,
+    validate_schema,
 )
+import public_callable_inventory as callable_inventory  # noqa: E402
 
 
 REQUIRED_FILES = (
     ".github/workflows/quality.yml",
     "CMakeLists.txt",
+    "docs/design/adr/0092-exact-public-callable-inventory.md",
     "docs/development/agent-api-development-goal.md",
     "schemas/cxxlens_ng_acceptance_manifest.yaml",
     "schemas/cxxlens_ng_api_development_readiness.schema.yaml",
     "schemas/cxxlens_ng_api_development_readiness.yaml",
+    "schemas/cxxlens_ng_public_callable_inventory.schema.yaml",
+    "schemas/cxxlens_ng_public_callable_inventory.yaml",
+    "schemas/cxxlens_ng_public_callable_inventory_report.schema.yaml",
     "schemas/cxxlens_ng_public_api_catalog.yaml",
     "schemas/cxxlens_ng_relation_registry.yaml",
     "schemas/cxxlens_ng_release_bundle.yaml",
+    "tools/quality/public_callable_inventory.py",
     "tools/quality/check_ng_migration_completion.py",
 )
 
 
 class NgApiDevelopmentReadinessTest(unittest.TestCase):
+    CALLABLE_RUN_URL = "https://github.com/horiyamayoh/cxxlens/actions/runs/2"
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.manifest = validate_documents(ROOT)
@@ -59,6 +71,99 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             yaml.safe_dump(document, sort_keys=False, allow_unicode=True),
             encoding="utf-8",
         )
+
+    @staticmethod
+    def write_json(path: pathlib.Path, document: dict) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+    def callable_report(
+        self, evidence_dir: pathlib.Path, git_state: dict[str, object]
+    ) -> pathlib.Path:
+        inventory = load_document(
+            ROOT / "schemas/cxxlens_ng_public_callable_inventory.yaml"
+        )
+        doxygen_digest = callable_inventory.semantic_digest(["doxygen-fixture"])
+        review_path = (
+            evidence_dir / "cxxlens-ng-public-callable-inventory-review.md"
+        )
+        review_path.write_text(
+            callable_inventory.review_markdown(
+                inventory,
+                git_state,
+                self.CALLABLE_RUN_URL,
+                doxygen_digest,
+            ),
+            encoding="utf-8",
+        )
+        headers = callable_inventory.admitted_public_headers(ROOT)
+        report = {
+            "schema": "cxxlens.ng-public-callable-inventory-report.v1",
+            "result": "passed",
+            "generated_at": "2026-07-19T00:00:00Z",
+            "run_url": self.CALLABLE_RUN_URL,
+            "git": git_state,
+            "inventory": {
+                "path": "schemas/cxxlens_ng_public_callable_inventory.yaml",
+                "file_digest": sha256(
+                    ROOT / "schemas/cxxlens_ng_public_callable_inventory.yaml"
+                ),
+                "semantic_digest": inventory["inventory_digest"],
+                "callable_count": len(inventory["callables"]),
+            },
+            "extractor": inventory["extractor"],
+            "headers": {
+                "count": len(headers),
+                "digest": callable_inventory.semantic_digest(headers),
+            },
+            "doxygen": {
+                "count": len(inventory["callables"]),
+                "digest": doxygen_digest,
+            },
+            "review": {
+                "path": review_path.name,
+                "digest": sha256(review_path),
+            },
+        }
+        report_path = (
+            evidence_dir / "cxxlens-ng-public-callable-inventory-report.json"
+        )
+        self.write_json(report_path, report)
+        return report_path
+
+    def complete_evidence(
+        self, evidence_dir: pathlib.Path, git_state: dict[str, object]
+    ) -> pathlib.Path:
+        self.write_json(
+            evidence_dir / "toolchain-quality.json",
+            {
+                "source": {
+                    "revision": git_state["revision"],
+                    "tree": git_state["tree"],
+                }
+            },
+        )
+        self.write_json(evidence_dir / "quality.evidence.json", {"result": "passed"})
+        self.write_json(
+            evidence_dir / "static" / "install-artifact-manifest.json",
+            {"configuration": "static"},
+        )
+        self.write_json(
+            evidence_dir / "shared" / "install-artifact-manifest.json",
+            {"configuration": "shared"},
+        )
+        (evidence_dir / "ctest-quality.xml").write_text(
+            '<testsuite><testcase name="quality"/></testsuite>\n',
+            encoding="utf-8",
+        )
+        self.write_json(
+            evidence_dir / "cxxlens-ng-foundation-completion-report.json",
+            {"result": "passed", "git": git_state},
+        )
+        return self.callable_report(evidence_dir, git_state)
 
     def test_repository_is_wave0_ready(self) -> None:
         self.assertEqual(self.manifest["maturity"], "implemented")
@@ -140,6 +245,169 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             self.write_yaml(acceptance_path, acceptance)
             with self.assertRaisesRegex(ReadinessError, "G5 gate owner differs"):
                 validate_documents(root)
+
+    def test_callable_inventory_semantic_digest_drift_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            inventory_path = (
+                root / "schemas/cxxlens_ng_public_callable_inventory.yaml"
+            )
+            inventory = load_document(inventory_path)
+            inventory["inventory_digest"] = "sha256:" + "0" * 64
+            self.write_yaml(inventory_path, inventory)
+            with self.assertRaisesRegex(ReadinessError, "semantic digest differs"):
+                validate_documents(root)
+
+    def test_public_callable_evidence_is_bound_into_report(self) -> None:
+        git_state = {
+            "revision": "1" * 40,
+            "tree": "2" * 40,
+            "branch": "main",
+            "clean": True,
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence_dir = pathlib.Path(temporary)
+            self.complete_evidence(evidence_dir, git_state)
+            required_jobs = [
+                *self.manifest["required_status_checks"]["contexts"],
+                "foundation-completion",
+            ]
+            with mock.patch(
+                "check_ng_api_development_readiness.current_git_state",
+                return_value=git_state,
+            ):
+                report = build_report(
+                    ROOT,
+                    self.manifest,
+                    evidence_dir,
+                    "https://github.com/horiyamayoh/cxxlens/actions/runs/1",
+                    required_jobs,
+                    "2026-07-19T00:00:00Z",
+                    git_state["revision"],
+                )
+            validate_schema(
+                report,
+                load_document(
+                    ROOT
+                    / "schemas/cxxlens_ng_api_development_readiness_report.schema.yaml"
+                ),
+                "API development readiness report test fixture",
+            )
+            binding = report["public_callable_inventory"]
+            inventory = load_document(
+                ROOT / "schemas/cxxlens_ng_public_callable_inventory.yaml"
+            )
+            self.assertEqual(binding["result"], "passed")
+            self.assertEqual(binding["revision"], git_state["revision"])
+            self.assertEqual(binding["tree"], git_state["tree"])
+            self.assertEqual(binding["callable_count"], len(inventory["callables"]))
+            self.assertEqual(binding["doxygen_count"], binding["callable_count"])
+
+    def test_duplicate_public_callable_evidence_pair_is_rejected(self) -> None:
+        git_state = {
+            "revision": "1" * 40,
+            "tree": "2" * 40,
+            "branch": "main",
+            "clean": True,
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence_dir = pathlib.Path(temporary)
+            report_path = self.callable_report(evidence_dir, git_state)
+            duplicate = evidence_dir / "duplicate"
+            duplicate.mkdir()
+            shutil.copy2(report_path, duplicate / report_path.name)
+            shutil.copy2(
+                evidence_dir / "cxxlens-ng-public-callable-inventory-review.md",
+                duplicate / "cxxlens-ng-public-callable-inventory-review.md",
+            )
+            with self.assertRaisesRegex(ReadinessError, "exactly one"):
+                public_callable_evidence(
+                    ROOT, self.manifest, evidence_dir, git_state
+                )
+
+    def test_public_callable_report_schema_drift_is_rejected(self) -> None:
+        git_state = {
+            "revision": "1" * 40,
+            "tree": "2" * 40,
+            "branch": "main",
+            "clean": True,
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence_dir = pathlib.Path(temporary)
+            report_path = self.callable_report(evidence_dir, git_state)
+            report = load_document(report_path)
+            del report["doxygen"]
+            self.write_json(report_path, report)
+            with self.assertRaisesRegex(ReadinessError, "schema validation failed"):
+                public_callable_evidence(
+                    ROOT, self.manifest, evidence_dir, git_state
+                )
+
+    def test_public_callable_review_digest_drift_is_rejected(self) -> None:
+        git_state = {
+            "revision": "1" * 40,
+            "tree": "2" * 40,
+            "branch": "main",
+            "clean": True,
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence_dir = pathlib.Path(temporary)
+            self.callable_report(evidence_dir, git_state)
+            review = evidence_dir / "cxxlens-ng-public-callable-inventory-review.md"
+            review.write_text(
+                review.read_text(encoding="utf-8") + "manual edit\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ReadinessError, "Markdown digest differs"):
+                public_callable_evidence(
+                    ROOT, self.manifest, evidence_dir, git_state
+                )
+            report_path = (
+                evidence_dir / "cxxlens-ng-public-callable-inventory-report.json"
+            )
+            report = load_document(report_path)
+            report["review"]["digest"] = sha256(review)
+            self.write_json(report_path, report)
+            with self.assertRaisesRegex(ReadinessError, "current inventory"):
+                public_callable_evidence(
+                    ROOT, self.manifest, evidence_dir, git_state
+                )
+
+    def test_public_callable_git_and_count_drift_are_rejected(self) -> None:
+        git_state = {
+            "revision": "1" * 40,
+            "tree": "2" * 40,
+            "branch": "main",
+            "clean": True,
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence_dir = pathlib.Path(temporary)
+            report_path = self.callable_report(evidence_dir, git_state)
+            report = load_document(report_path)
+            report["git"]["revision"] = "3" * 40
+            self.write_json(report_path, report)
+            with self.assertRaisesRegex(ReadinessError, "git source"):
+                public_callable_evidence(
+                    ROOT, self.manifest, evidence_dir, git_state
+                )
+
+            self.callable_report(evidence_dir, git_state)
+            report = load_document(report_path)
+            report["inventory"]["file_digest"] = "sha256:" + "0" * 64
+            self.write_json(report_path, report)
+            with self.assertRaisesRegex(ReadinessError, "inventory binding differs"):
+                public_callable_evidence(
+                    ROOT, self.manifest, evidence_dir, git_state
+                )
+
+            self.callable_report(evidence_dir, git_state)
+            report = load_document(report_path)
+            report["doxygen"]["count"] += 1
+            self.write_json(report_path, report)
+            with self.assertRaisesRegex(ReadinessError, "Doxygen count differs"):
+                public_callable_evidence(
+                    ROOT, self.manifest, evidence_dir, git_state
+                )
 
     def test_report_requires_exact_ci_job_set(self) -> None:
         git_state = {
