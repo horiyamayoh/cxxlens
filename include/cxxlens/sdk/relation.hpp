@@ -304,19 +304,31 @@ namespace cxxlens::sdk
 		row_builder builder_;
 	};
 
-	/** @brief Typed read façade that still returns detached, value-owned cells. */
+	/** @brief Typed read façade that validates every row against the exact static descriptor. */
 	template <class Relation>
 	class static_row_view
 	{
 	  public:
+		/** @brief Borrow a row; each get performs exact descriptor and scalar validation. */
 		explicit static_row_view(const detached_row& row) : row_{row} {}
+		/** @brief Read one cell only after validating the Column binding and complete row. */
 		template <class Column>
 		[[nodiscard]] result<detached_cell> get() const
 		{
-			if (row_.descriptor_id != Relation::descriptor().id)
+			const auto descriptor = Relation::descriptor();
+			if (row_.descriptor_id != descriptor.id)
 				return unexpected(
 					{"sdk.row-descriptor-mismatch", "descriptor_id", row_.descriptor_id});
 			const auto reference = Column::ref();
+			if (reference.descriptor_id != descriptor.id)
+				return unexpected({"sdk.foreign-column", reference.column_id, {}});
+			auto expected = descriptor.column(reference.column_id);
+			if (!expected)
+				return unexpected(std::move(expected.error()));
+			if (!(reference.type == expected->type))
+				return unexpected({"sdk.cell-type-mismatch", reference.column_id, {}});
+			if (auto valid = validate_row(descriptor, row_); !valid)
+				return unexpected(std::move(valid.error()));
 			const auto found = row_.cells.find(reference.column_id);
 			if (found == row_.cells.end())
 			{

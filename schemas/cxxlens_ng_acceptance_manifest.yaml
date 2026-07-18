@@ -1,6 +1,6 @@
 schema: cxxlens.ng-acceptance-manifest.v1
 kind: acceptance-manifest
-document_version: 1.12.0
+document_version: 1.13.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -29,9 +29,9 @@ entries:
     summary: Base identity, source, condition, coverage, truth, and header invariants.
   - id: gate.g1
     status: implemented
-    owner_issue: '#114'
+    owner_issue: '#154'
     profile: NG0
-    contract_issue: '#114'
+    contract_issue: '#154'
     depends_on: [gate.g0]
     evidence:
       - schemas/cxxlens_ng_relation_registry.yaml
@@ -44,7 +44,8 @@ entries:
       - docs/design/adr/0037-lossless-claim-evidence-occurrences.md
       - docs/design/adr/0050-relation-domain-identity-runtime.md
       - docs/design/adr/0057-detached-scalar-value-validation.md
-    summary: Relation extension, scalar values, references, static/dynamic parity, and runtime domain identity projection.
+      - docs/design/adr/0085-static-row-view-exact-validation.md
+    summary: Relation extension and exact static/dynamic row parity with complete typed-read scalar, shape, descriptor, and identity validation.
   - id: gate.g2
     status: implemented
     owner_issue: '#148'

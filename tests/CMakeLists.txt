@@ -17,6 +17,7 @@ set(cxxlens_sdk_cases
     descriptor-canonical-collections
     claim-batch-digest-framing
     relation-schema-parity
+    static-row-view-validation
     static-dynamic-query
     snapshot-lifetime
     frame-native-escape

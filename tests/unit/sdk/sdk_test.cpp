@@ -1269,6 +1269,85 @@ namespace
 				"relation registry admitted a schema-invalid dynamic descriptor");
 	}
 
+	void check_static_row_view_validation()
+	{
+		using call = cxxlens::cc::relations::call_site;
+		auto valid_call = make_call_row();
+		call::view valid_view{valid_call};
+		auto static_ordinal = valid_view.get<call::ordinal>();
+		auto optional_caller = valid_view.get<call::caller>();
+		require(static_ordinal &&
+					static_ordinal->canonical_form() ==
+						valid_call.cells.at(call::ordinal::ref().column_id).canonical_form() &&
+					optional_caller && optional_caller->state == cxxlens::sdk::cell_state::absent &&
+					optional_caller->type == call::caller::ref().type,
+				"validated dynamic/static read parity or typed optional absence failed");
+
+		auto wrong_type = valid_call;
+		wrong_type.cells.at(call::ordinal::ref().column_id) =
+			cxxlens::sdk::detached_cell::utf8("not-an-integer");
+		auto wrong_type_result = call::view{wrong_type}.get<call::ordinal>();
+		require(!wrong_type_result && wrong_type_result.error().code == "sdk.cell-type-mismatch" &&
+					wrong_type_result.error().field == call::ordinal::ref().column_id,
+				"static typed read accepted a wrong-type integer cell");
+
+		auto invalid_utf8 = valid_call;
+		invalid_utf8.cells.at(call::source::ref().column_id) =
+			cxxlens::sdk::detached_cell::typed("source_span_id", std::string{"bad\xff", 4U});
+		auto invalid_utf8_result = call::view{invalid_utf8}.get<call::source>();
+		require(!invalid_utf8_result && invalid_utf8_result.error().code == "sdk.cell-invalid",
+				"static typed read accepted invalid UTF-8");
+
+		auto different_minor_shape = valid_call;
+		different_minor_shape.cells.emplace(call::descriptor().id + ".future_optional",
+											cxxlens::sdk::detached_cell::utf8("future"));
+		auto different_shape_result = call::view{different_minor_shape}.get<call::ordinal>();
+		require(!different_shape_result &&
+					different_shape_result.error().code == "sdk.unknown-cell",
+				"static typed read accepted a row with a different descriptor shape");
+
+		auto foreign_column = valid_view.get<cxxlens::cc::relations::entity::entity_column>();
+		require(!foreign_column && foreign_column.error().code == "sdk.foreign-column",
+				"static typed read accepted a foreign Column tag");
+
+		using entity = cxxlens::cc::relations::entity;
+		entity::builder entity_builder;
+		for (auto result : {
+				 entity_builder.set<entity::entity_column>(
+					 cxxlens::sdk::detached_cell::typed("cc_entity_id", "entity:typed-view")),
+				 entity_builder.set<entity::canonicalization>(
+					 string_cell({cxxlens::sdk::scalar_kind::closed_symbol,
+								  "cc.canonicalization-state/1",
+								  false},
+								 "canonicalized")),
+				 entity_builder.set<entity::kind>(string_cell(
+					 {cxxlens::sdk::scalar_kind::open_symbol, "cc.entity-kind/1", false},
+					 "function")),
+				 entity_builder.set<entity::structural_signature_digest>(
+					 string_cell({cxxlens::sdk::scalar_kind::digest, {}, false}, digest('a'))),
+			 })
+			require(result.has_value(), "static view entity fixture cell rejected");
+		auto valid_entity = std::move(entity_builder).finish();
+		require(valid_entity.has_value(), "static view entity fixture row rejected");
+
+		auto invalid_digest = *valid_entity;
+		invalid_digest.cells.at(entity::structural_signature_digest::ref().column_id) =
+			string_cell({cxxlens::sdk::scalar_kind::digest, {}, false}, "sha256:not-canonical");
+		auto invalid_digest_result =
+			entity::view{invalid_digest}.get<entity::structural_signature_digest>();
+		require(!invalid_digest_result && invalid_digest_result.error().code == "sdk.cell-invalid",
+				"static typed read accepted an invalid digest");
+
+		auto invalid_closed_symbol = *valid_entity;
+		invalid_closed_symbol.cells.at(entity::canonicalization::ref().column_id) = string_cell(
+			{cxxlens::sdk::scalar_kind::closed_symbol, "cc.canonicalization-state/1", false},
+			"forged-state");
+		auto invalid_closed_result =
+			entity::view{invalid_closed_symbol}.get<entity::canonicalization>();
+		require(!invalid_closed_result && invalid_closed_result.error().code == "sdk.cell-invalid",
+				"static typed read accepted an invalid closed symbol");
+	}
+
 	void check_static_dynamic_query()
 	{
 		using relation = cxxlens::cc::relations::call_site;
@@ -2759,6 +2838,7 @@ int main(const int argc, const char* const argv[])
 		test_case{"descriptor-canonical-collections", check_descriptor_canonical_collections},
 		test_case{"claim-batch-digest-framing", check_claim_batch_digest_framing},
 		test_case{"relation-schema-parity", check_relation_schema_parity},
+		test_case{"static-row-view-validation", check_static_row_view_validation},
 		test_case{"static-dynamic-query", check_static_dynamic_query},
 		test_case{"snapshot-lifetime", check_snapshot_lifetime},
 		test_case{"frame-native-escape", check_frame_and_native_escape},

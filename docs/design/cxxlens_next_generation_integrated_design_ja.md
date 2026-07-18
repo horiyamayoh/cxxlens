@@ -1242,6 +1242,12 @@ operand とする。descriptor digest は exact descriptor の canonical project
 minor optional column は保持し、unknown closed symbol、minor required column、key/cardinality/condition/identity の
 変更は fail closed または semantic major change とする。
 
+Issue #154 / ADR 0085 により `static_row_view<Relation>::get<Column>()` は descriptor IDだけをtrusted preconditionにしない。
+Columnのdescriptor/存在/exact typeを検証し、`validate_row(Relation::descriptor(), row)` でrow全体のrequired/unknown columnと
+全cell scalar/state/typeを再検証した後だけvalue-owned cellを返す。optional column欠落だけはexact optional typeのabsentを返す。
+wrong type、invalid digest/closed symbol/UTF-8、同一majorの別descriptor shape、foreign Columnはdynamic validationと同じstable errorで
+fail closedにし、validated rowではdynamic/static readのcanonical valueが一致しなければならない。
+
 Issue #74 / ADR 0017 により descriptor identity は authority contract digest と runtime が実際に使用する
 `canonical_form()` の双方を `cxxlens.relation-descriptor-binding.v2` で bind する。generated descriptor の
 authority digestを保持したまま column/key/reference/merge/conflict/semanticsを改変した場合は

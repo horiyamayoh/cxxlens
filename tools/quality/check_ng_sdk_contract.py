@@ -188,6 +188,57 @@ def validate_provider_task_contract(
         fail("provider protocol batch_begin omits task ID")
 
 
+def validate_static_row_view_contract(
+    root: pathlib.Path, entries: dict[str, dict[str, Any]]
+) -> None:
+    public_entry = entries.get("public.relation-static", {})
+    if public_entry.get("owner_issue") != "#154":
+        fail("static row view exact validation ownership must remain with Issue #154")
+    required_errors = {
+        "sdk.row-descriptor-mismatch",
+        "sdk.foreign-column",
+        "sdk.column-not-found",
+        "sdk.cell-type-mismatch",
+        "sdk.cell-invalid",
+        "sdk.unknown-cell",
+    }
+    if not required_errors.issubset(public_entry.get("errors", [])):
+        fail("static row view catalog omits exact validation errors")
+
+    header = (root / "include/cxxlens/sdk/relation.hpp").read_text(encoding="utf-8")
+    begin = header.find("class static_row_view")
+    end = header.find("\n\t};", begin)
+    if begin < 0 or end < 0:
+        fail("static_row_view public implementation is missing")
+    view = header[begin:end]
+    for marker in (
+        "reference.descriptor_id != descriptor.id",
+        "descriptor.column(reference.column_id)",
+        "reference.type == expected->type",
+        "validate_row(descriptor, row_)",
+        "detached_cell::absent(reference.type)",
+    ):
+        if marker not in view:
+            fail(f"static_row_view exact validation marker is missing: {marker}")
+    if view.find("validate_row(descriptor, row_)") > view.find(
+        "row_.cells.find(reference.column_id)"
+    ):
+        fail("static_row_view reads the cell before complete row validation")
+
+    test = (root / "tests/unit/sdk/sdk_test.cpp").read_text(encoding="utf-8")
+    for marker in (
+        "static-row-view-validation",
+        "static typed read accepted a wrong-type integer cell",
+        "static typed read accepted an invalid digest",
+        "static typed read accepted an invalid closed symbol",
+        "static typed read accepted invalid UTF-8",
+        "static typed read accepted a row with a different descriptor shape",
+        "validated dynamic/static read parity or typed optional absence failed",
+    ):
+        if marker not in test:
+            fail(f"static_row_view acceptance marker is missing: {marker}")
+
+
 def validate_catalog(root: pathlib.Path, catalog: dict[str, Any]) -> None:
     schema_validate(catalog, load_yaml(root / SCHEMA))
     paths = unique_rows(catalog["author_paths"], "author path")
@@ -208,6 +259,7 @@ def validate_catalog(root: pathlib.Path, catalog: dict[str, Any]) -> None:
         fail("flagship recipe closed-world ownership must remain with Issue #136")
     validate_project_catalog_contract(root, entries)
     validate_provider_task_contract(root, entries)
+    validate_static_row_view_contract(root, entries)
     recipe_source = (root / "src/sdk/recipe.cpp").read_text(encoding="utf-8")
     for marker in (
         "execution_status::complete",
