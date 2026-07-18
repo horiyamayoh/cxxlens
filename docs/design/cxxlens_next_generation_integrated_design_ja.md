@@ -3985,10 +3985,13 @@ commit/tree に対する clean checkout、CI job、child issue 状態は
 zero audit は completion checker が件数を仮定してはならない。`check_ng_foundation_audits.py` は各 audit について checker ID、
 検査対象の canonical set と digest、finding ID、実測 count、revision/tree を
 `cxxlens.ng-foundation-audit-report.v1` として生成する。completion checker は専用 schema を検証し、report 全体と各 entry の
-revision/tree が対象 commit に一致し、`count == len(finding_ids) == 0` の場合だけ passed report へ取り込む。GitHub migration
-blocker の authority set は report 時点の repository の全 open issue とし、新規 issue を未分類のまま zero から除外できない。
-network failure、不正 JSON/schema、checker 未実行、ownership 欠落、checksum drift は fail closed とする。gate/tracking issue を含む
-既知 issue state は対象 digest に含め、passed completion report では gate と tracking issue 自身も closed でなければならない。
+revision/tree が対象 commit に一致し、`count == len(finding_ids) == 0` の場合だけ passed report へ取り込む。Foundation 固有の
+GitHub migration blocker authority set は completion manifest の `required_closed_issues`、`authority.gate_issue`、
+`authority.tracking_issue` が宣言する exact set とする。この集合にない G5、GR、roadmap、通常の継続開発 issue は各 gate の
+authority で扱い、Foundation 判定へ遡及的に混入させない。新しく発見した Foundation blocker は未分類のまま除外せず、認定前に
+manifest の宣言集合へ追加する。宣言 issue の network/API failure、不正 JSON/state、checker 未実行、ownership 欠落、checksum drift は
+fail closed とする。宣言した issue state は対象 digest に含め、passed completion report では required、gate、tracking issue の
+すべてが closed でなければならない。この issue-scope contract は ADR 0088 が所有する。
 
 ### 26.2 Machine-readable traceability
 

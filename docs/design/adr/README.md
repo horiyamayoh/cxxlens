@@ -62,6 +62,7 @@
 | [0085](0085-static-row-view-exact-validation.md) | static row view exact validation |
 | [0086](0086-self-contained-claim-evidence-occurrences.md) | self-contained claim evidence occurrences |
 | [0087](0087-provider-budget-surface-parity.md) | provider budget surface parity |
+| [0088](0088-foundation-declared-github-issue-scope.md) | manifest-declared Foundation GitHub issue scope |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

@@ -9,6 +9,7 @@ required:
   - maturity
   - authority
   - binding
+  - github_issue_scope
   - required_closed_issues
   - version_contracts
   - authority_documents
@@ -17,7 +18,7 @@ required:
   - handoff_documents
 properties:
   schema: {const: cxxlens.ng-foundation-completion-manifest.v1}
-  document_version: {const: 1.4.0}
+  document_version: {const: 1.5.0}
   maturity: {const: implemented}
   authority:
     type: object
@@ -48,6 +49,16 @@ properties:
       tree: {const: git-head-tree}
       clean_worktree: {const: required}
       branch: {const: main}
+  github_issue_scope:
+    type: object
+    additionalProperties: false
+    required: [authority, required_sets, undeclared_open_issues, lookup_failure]
+    properties:
+      authority: {const: manifest-declared-foundation-issues}
+      required_sets:
+        const: [required_closed_issues, authority.gate_issue, authority.tracking_issue]
+      undeclared_open_issues: {const: excluded}
+      lookup_failure: {const: fail-closed}
   required_closed_issues:
     type: array
     minItems: 16

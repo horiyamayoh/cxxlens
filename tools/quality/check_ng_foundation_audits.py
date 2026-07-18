@@ -208,12 +208,36 @@ def legacy_ci_findings(relatives: list[str]) -> tuple[list[str], list[str]]:
 
 def blocker_findings(issue_states: dict[int, str]) -> tuple[list[str], list[str]]:
     targets = [f"github.issue:{number}:{state}" for number, state in sorted(issue_states.items())]
-    findings = [
-        f"github.issue.open:{number}"
-        for number, state in sorted(issue_states.items())
-        if state == "open" and number not in (56, 71)
-    ]
+    findings = []
+    for number, state in sorted(issue_states.items()):
+        if state == "open":
+            findings.append(f"github.issue.open:{number}")
+        elif state != "closed":
+            findings.append(f"github.issue.unresolved:{number}:{state}")
     return targets, findings
+
+
+def issue_reference_number(reference: Any, label: str) -> int:
+    if (
+        not isinstance(reference, str)
+        or not reference.startswith("#")
+        or not reference[1:].isdigit()
+    ):
+        fail(f"invalid {label} issue reference: {reference!r}")
+    return int(reference[1:])
+
+
+def declared_issue_states(
+    manifest: dict[str, Any], issue_states: dict[int, str]
+) -> dict[int, str]:
+    numbers = list(manifest["required_closed_issues"])
+    numbers.extend(
+        issue_reference_number(manifest["authority"][key], key)
+        for key in ("gate_issue", "tracking_issue")
+    )
+    return {
+        number: issue_states.get(number, "missing") for number in sorted(set(numbers))
+    }
 
 
 def unowned_contract_findings(
@@ -253,6 +277,7 @@ def build_report(
 ) -> dict[str, Any]:
     files, relatives = relative_files(root)
     authorities = sorted(manifest["authority_documents"])
+    scoped_issue_states = declared_issue_states(manifest, issue_states)
     measurements: dict[str, tuple[str, tuple[list[str], list[str]]]] = {
         "legacy_assets": (
             "foundation-audit.legacy-assets/v1",
@@ -279,8 +304,8 @@ def build_report(
             legacy_ci_findings(relatives),
         ),
         "migration_blockers": (
-            "foundation-audit.current-github-blockers/v1",
-            blocker_findings(issue_states),
+            "foundation-audit.declared-github-blockers/v2",
+            blocker_findings(scoped_issue_states),
         ),
         "unowned_contracts": (
             "foundation-audit.authority-ownership/v1",

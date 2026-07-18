@@ -246,6 +246,30 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
         fail("G0-G4 and gate.foundation must be implemented")
     if gates["gate.g5"]["status"] != "deferred" or gates["gate.release"]["status"] != "deferred":
         fail("G5 and distribution release must remain explicitly deferred")
+    deferred_gate_ids = ("gate.g5", "gate.release")
+    for identifier in deferred_gate_ids:
+        if gates[identifier]["owner_issue"] != gates[identifier]["contract_issue"]:
+            fail(f"deferred gate owner/contract issue differs: {identifier}")
+    deferred_issue_refs = {
+        gates[identifier]["owner_issue"] for identifier in deferred_gate_ids
+    }
+    if len(deferred_issue_refs) != len(deferred_gate_ids):
+        fail("G5 and distribution release require distinct tracking issues")
+    completed_issue_refs = {
+        reference
+        for entry in gates.values()
+        if entry["status"] == "implemented"
+        for reference in (entry["owner_issue"], entry["contract_issue"])
+    }
+    completed_issue_refs.update(
+        f"#{number}" for number in manifest["required_closed_issues"]
+    )
+    completed_issue_refs.update(
+        (manifest["authority"]["gate_issue"], manifest["authority"]["tracking_issue"])
+    )
+    reused_issue_refs = sorted(deferred_issue_refs & completed_issue_refs)
+    if reused_issue_refs:
+        fail(f"deferred gates reuse completed issue contracts: {reused_issue_refs}")
 
     release = load_document(root / RELEASE_BUNDLE)
     if release["distribution_surface"]["implementation_state"] != "implemented":
@@ -357,38 +381,42 @@ def github_issue_states(repository: str, issue_numbers: list[int], token: str) -
                 document = json.load(response)
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
             fail(f"could not read GitHub issue #{number}: {error}")
+        if (
+            not isinstance(document, dict)
+            or "pull_request" in document
+            or document.get("state") not in ("open", "closed")
+        ):
+            fail(f"GitHub issue #{number} response is not a valid issue state")
         result[number] = document["state"]
     return result
 
 
-def github_open_issue_states(repository: str, token: str) -> dict[int, str]:
-    result: dict[int, str] = {}
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "User-Agent": "cxxlens-foundation-completion",
-        "X-GitHub-Api-Version": "2022-11-28",
+def issue_reference_number(reference: Any, label: str) -> int:
+    if (
+        not isinstance(reference, str)
+        or not reference.startswith("#")
+        or not reference[1:].isdigit()
+    ):
+        fail(f"invalid {label} issue reference: {reference!r}")
+    return int(reference[1:])
+
+
+def declared_issue_numbers(manifest: dict[str, Any]) -> list[int]:
+    numbers = list(manifest["required_closed_issues"])
+    numbers.extend(
+        issue_reference_number(manifest["authority"][key], key)
+        for key in ("gate_issue", "tracking_issue")
+    )
+    return sorted(set(numbers))
+
+
+def declared_issue_states(
+    manifest: dict[str, Any], issue_states: dict[int, str]
+) -> dict[int, str]:
+    return {
+        number: issue_states.get(number, "missing")
+        for number in declared_issue_numbers(manifest)
     }
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    page = 1
-    while True:
-        request = urllib.request.Request(
-            f"https://api.github.com/repos/{repository}/issues?state=open&per_page=100&page={page}",
-            headers=headers,
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=20) as response:
-                documents = json.load(response)
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
-            fail(f"could not read current open GitHub issues: {error}")
-        if not isinstance(documents, list):
-            fail("current open GitHub issue response is not a list")
-        for document in documents:
-            if "pull_request" not in document:
-                result[int(document["number"])] = "open"
-        if len(documents) < 100:
-            return result
-        page += 1
 
 
 def validate_audit_report(
@@ -510,16 +538,18 @@ def build_report(
     ]
     if missing_closed:
         fail(f"required issues are not closed: {missing_closed}")
-    if issue_states.get(71) != "closed" or issue_states.get(56) != "closed":
-        fail("gate and tracking issues must be closed for a passed completion report")
-    current_open = sorted(
-        number for number, state in issue_states.items() if state == "open"
+    gate_number = issue_reference_number(
+        manifest["authority"]["gate_issue"], "gate_issue"
     )
-    if current_open:
-        fail(
-            "foundation audit findings are nonzero: "
-            + str([f"github.issue.open:{number}" for number in current_open])
-        )
+    tracking_number = issue_reference_number(
+        manifest["authority"]["tracking_issue"], "tracking_issue"
+    )
+    if (
+        issue_states.get(gate_number) != "closed"
+        or issue_states.get(tracking_number) != "closed"
+    ):
+        fail("gate and tracking issues must be closed for a passed completion report")
+    scoped_issue_states = declared_issue_states(manifest, issue_states)
 
     ledger = load_document(root / LEDGER)
     authority_digests = {
@@ -545,7 +575,7 @@ def build_report(
             git_state,
         )
         if audit_entries is not None
-        else run_audit_checker(root, manifest, git_state, issue_states)
+        else run_audit_checker(root, manifest, git_state, scoped_issue_states)
     )
     if not provenance_records:
         fail("foundation completion requires supply-chain provenance")
@@ -619,14 +649,11 @@ def main() -> int:
             return 0
         if not args.output or not args.repository or not args.run_url or not args.provenance_dir:
             fail("report requires --output, --repository, --run-url, and --provenance-dir")
-        numbers = [*manifest["required_closed_issues"], 71, 56]
+        numbers = declared_issue_numbers(manifest)
         issue_states = github_issue_states(
             args.repository,
             sorted(set(numbers)),
             os.environ.get("GITHUB_TOKEN", ""),
-        )
-        issue_states.update(
-            github_open_issue_states(args.repository, os.environ.get("GITHUB_TOKEN", ""))
         )
         generated_at = (
             datetime.datetime.now(datetime.timezone.utc)

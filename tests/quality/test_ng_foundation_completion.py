@@ -8,6 +8,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
+import urllib.error
 from unittest import mock
 
 
@@ -17,6 +18,9 @@ sys.path.insert(0, str(ROOT / "tools" / "quality"))
 from check_ng_foundation_completion import (  # noqa: E402
     CompletionError,
     build_report,
+    declared_issue_numbers,
+    github_issue_states,
+    issue_reference_number,
     load_document,
     run_audit_checker,
     validate_audit_report,
@@ -35,9 +39,8 @@ class NgFoundationCompletionTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.manifest = validate_documents(ROOT)
         cls.closed = {
-            number: "closed" for number in cls.manifest["required_closed_issues"]
+            number: "closed" for number in declared_issue_numbers(cls.manifest)
         }
-        cls.closed.update({71: "closed", 56: "closed"})
         cls.git_state = {
             "revision": "1" * 40,
             "tree": "2" * 40,
@@ -141,11 +144,46 @@ class NgFoundationCompletionTest(unittest.TestCase):
         with self.assertRaisesRegex(CompletionError, "not closed"):
             self.report(issue_states=states)
 
-    def test_synthetic_current_blocker_is_measured_and_rejected(self) -> None:
+    def test_undeclared_open_issue_does_not_change_foundation_result(self) -> None:
         states = dict(self.closed)
         states[999] = "open"
-        with self.assertRaisesRegex(CompletionError, "github.issue.open:999"):
+        report = self.report(issue_states=states, audit_entries=None)
+        self.assertEqual(report["result"], "passed")
+        self.assertNotIn(
+            "github.issue:999:open",
+            report["audits"]["migration_blockers"]["targets"],
+        )
+
+    def test_open_gate_issue_is_rejected(self) -> None:
+        states = dict(self.closed)
+        gate_number = issue_reference_number(
+            self.manifest["authority"]["gate_issue"], "gate_issue"
+        )
+        states[gate_number] = "open"
+        with self.assertRaisesRegex(CompletionError, "gate and tracking"):
             self.report(issue_states=states)
+
+    def test_missing_declared_issue_is_a_fail_closed_audit_finding(self) -> None:
+        states = dict(self.closed)
+        states.pop(73)
+        _, findings = foundation_audits.blocker_findings(
+            foundation_audits.declared_issue_states(self.manifest, states)
+        )
+        self.assertIn("github.issue.unresolved:73:missing", findings)
+
+    def test_missing_required_issue_is_rejected(self) -> None:
+        states = dict(self.closed)
+        states.pop(73)
+        with self.assertRaisesRegex(CompletionError, "not closed"):
+            self.report(issue_states=states)
+
+    def test_github_issue_lookup_failure_is_rejected(self) -> None:
+        with mock.patch(
+            "check_ng_foundation_completion.urllib.request.urlopen",
+            side_effect=urllib.error.URLError("synthetic unavailable"),
+        ):
+            with self.assertRaisesRegex(CompletionError, "could not read GitHub issue"):
+                github_issue_states("horiyamayoh/cxxlens", [73], "")
 
     def test_missing_ci_job_is_rejected(self) -> None:
         with self.assertRaisesRegex(CompletionError, "CI job evidence differs"):

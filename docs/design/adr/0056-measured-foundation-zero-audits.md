@@ -1,6 +1,6 @@
 # ADR 0056: foundation zero audit は finding-bound subreport からのみ証明する
 
-- Status: Accepted
+- Status: Accepted; GitHub issue-scope clause superseded by ADR 0088
 - Date: 2026-07-17
 - Issue: #113
 

@@ -1,6 +1,6 @@
 schema: cxxlens.ng-acceptance-manifest.v1
 kind: acceptance-manifest
-document_version: 1.15.0
+document_version: 1.16.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -150,9 +150,9 @@ entries:
     summary: Provider runtime and Clang normalizer with lossless same-expansion macro call occurrences, stable source-local ordinals, cross-TU entity joins, and fail-closed isolation.
   - id: gate.g5
     status: deferred
-    owner_issue: '#69'
+    owner_issue: '#166'
     profile: NG1
-    contract_issue: '#69'
+    contract_issue: '#166'
     depends_on: [gate.g2, gate.g3, gate.g4]
     evidence: []
     summary: Closure, incomplete absence, invalidation, warm-zero, and bounded recursion.
@@ -210,9 +210,9 @@ entries:
     summary: Single-owner logical evidence, bound provenance, resource-aware parallel gates, and selectable install/SDK tests.
   - id: gate.release
     status: deferred
-    owner_issue: '#71'
+    owner_issue: '#167'
     profile: release
-    contract_issue: '#71'
+    contract_issue: '#167'
     depends_on: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4, gate.g5]
     evidence:
       - schemas/cxxlens_ng_release_bundle.yaml
