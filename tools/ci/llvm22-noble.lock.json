@@ -10,7 +10,15 @@
     "issue": "#141",
     "owner": "steward.ci-supply-chain"
   },
-  "document_version": "1.0.0",
+  "document_version": "1.1.0",
+  "documentation": {
+    "architecture": "amd64",
+    "expected_release": "1.9.8",
+    "package": "doxygen",
+    "sha256": "f8de94f8ed364adfffebc2a9a88129fe73eac3f049f69add2ac3d4e0e2c2fab2",
+    "url": "https://archive.ubuntu.com/ubuntu/pool/universe/d/doxygen/doxygen_1.9.8%2Bds-2build5_amd64.deb",
+    "version": "1.9.8+ds-2build5"
+  },
   "llvm": {
     "architecture": "amd64",
     "component": "main",

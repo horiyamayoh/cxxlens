@@ -155,6 +155,7 @@ def validate_repository(root: pathlib.Path) -> None:
         "--profile developer": 5,
         "--profile compiler": 2,
         "--profile static-analysis": 1,
+        "--profile documentation": 1,
     }
     for marker, expected in expected_profiles.items():
         if workflow_text.count(marker) != expected:
@@ -171,6 +172,7 @@ def validate_repository(root: pathlib.Path) -> None:
         "requirements.lock",
         "ImageVersion",
         "python_distributions",
+        'command_identity("doxygen")',
     ):
         if marker not in collector:
             raise CiSupplyChainError(f"provenance collector lacks supply-chain binding: {marker}")

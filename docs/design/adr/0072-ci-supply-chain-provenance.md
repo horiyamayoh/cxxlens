@@ -23,6 +23,11 @@ only then installed. Missing packages, versions, or bytes fail; no alternate
 suite, major, or first candidate is selected. CI never downloads or executes a
 remote bootstrap script.
 
+The documentation profile uses the same fail-closed order for the exact Ubuntu
+24.04 Doxygen package: download without root, verify the locked SHA-256 and
+Debian package/version/architecture fields, install, then assert the executable
+release. Doxygen is recorded in tool and package provenance when installed.
+
 Python 3.12 is patch-pinned by the workflow. Direct and transitive quality
 dependencies are exact, binary-only, and hash-bound in
 `tools/quality/requirements.lock`; CI always uses `--require-hashes` and

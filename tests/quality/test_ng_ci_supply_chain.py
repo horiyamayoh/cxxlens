@@ -9,13 +9,19 @@ import pathlib
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools/quality"))
 sys.path.insert(0, str(ROOT / "tools/ci"))
 
-from bootstrap_supply_chain import SupplyChainError, load_lock, verify_bytes  # noqa: E402
+from bootstrap_supply_chain import (  # noqa: E402
+    SupplyChainError,
+    install_documentation,
+    load_lock,
+    verify_bytes,
+)
 from check_ci_supply_chain import (  # noqa: E402
     CiSupplyChainError,
     parse_hash_lock,
@@ -35,6 +41,21 @@ class NgCiSupplyChainTest(unittest.TestCase):
     def test_checksum_mismatch_is_rejected_before_effect(self) -> None:
         with self.assertRaisesRegex(SupplyChainError, "checksum mismatch"):
             verify_bytes(b"substituted", "0" * 64, "fixture")
+
+    def test_documentation_package_is_exactly_locked(self) -> None:
+        self.assertEqual(self.lock["documentation"]["package"], "doxygen")
+        self.assertEqual(
+            self.lock["documentation"]["version"], "1.9.8+ds-2build5"
+        )
+        self.assertEqual(len(self.lock["documentation"]["sha256"]), 64)
+
+    def test_documentation_checksum_rejects_before_root_effect(self) -> None:
+        with mock.patch(
+            "bootstrap_supply_chain.download", return_value=b"substituted"
+        ), mock.patch("bootstrap_supply_chain.run") as run:
+            with self.assertRaisesRegex(SupplyChainError, "checksum mismatch"):
+                install_documentation(self.lock)
+            run.assert_not_called()
 
     def test_mutable_or_unknown_action_is_rejected(self) -> None:
         for action_line in (

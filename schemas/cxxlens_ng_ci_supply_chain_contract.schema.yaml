@@ -31,13 +31,14 @@ properties:
   bootstrap:
     type: object
     additionalProperties: false
-    required: [script, lock, remote_script_execution, signing_key, package_versions, fallback]
+    required: [script, lock, remote_script_execution, signing_key, documentation_package, package_versions, fallback]
     properties:
       script: {const: tools/ci/bootstrap_supply_chain.py}
       lock: {const: tools/ci/llvm22-noble.lock.json}
       remote_script_execution: {const: forbidden}
       signing_key: {const: checksum-and-primary-fingerprint-before-root-install}
-      package_versions: {const: exact-epoch-qualified}
+      documentation_package: {const: checksum-and-dpkg-identity-before-root-install}
+      package_versions: {const: exact-version-and-sha256}
       fallback: {const: forbidden}
   dependency_lock:
     type: object
@@ -62,7 +63,7 @@ properties:
       runner_label: {const: ubuntu-24.04}
       bootstrap_profiles:
         type: array
-        const: [compiler, developer, static-analysis]
+        const: [compiler, developer, documentation, static-analysis]
   provenance:
     type: object
     additionalProperties: false

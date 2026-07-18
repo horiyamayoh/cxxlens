@@ -55,6 +55,16 @@ def run(
     return completed.stdout.strip() if capture else ""
 
 
+def installed_package_version(package: str) -> str:
+    completed = subprocess.run(
+        ["dpkg-query", "--showformat=${Version}", "--show", package],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return completed.stdout.strip() if completed.returncode == 0 else ""
+
+
 def load_lock(root: pathlib.Path = ROOT) -> dict[str, Any]:
     path = root / LOCK
     try:
@@ -64,11 +74,37 @@ def load_lock(root: pathlib.Path = ROOT) -> dict[str, Any]:
     if lock.get("schema") != "cxxlens.ci-supply-chain-lock.v1":
         raise SupplyChainError("unknown supply-chain lock schema")
     llvm = lock.get("llvm")
+    documentation = lock.get("documentation")
     python = lock.get("python")
     runner = lock.get("runner")
     actions = lock.get("actions")
-    if not all(isinstance(value, dict) for value in (llvm, python, runner, actions)):
+    if not all(
+        isinstance(value, dict)
+        for value in (llvm, documentation, python, runner, actions)
+    ):
         raise SupplyChainError("supply-chain lock sections are missing")
+    if any(
+        not isinstance(documentation.get(field), str) or not documentation[field]
+        for field in (
+            "package",
+            "version",
+            "architecture",
+            "expected_release",
+            "url",
+            "sha256",
+        )
+    ):
+        raise SupplyChainError("documentation package authority is incomplete")
+    if (
+        documentation["package"] != "doxygen"
+        or documentation["architecture"] != "amd64"
+        or len(documentation["sha256"]) != 64
+        or any(
+            character not in "0123456789abcdef"
+            for character in documentation["sha256"]
+        )
+    ):
+        raise SupplyChainError("documentation package identity is invalid")
     packages = llvm.get("packages")
     package_sha256 = llvm.get("package_sha256")
     profiles = llvm.get("profiles")
@@ -158,9 +194,57 @@ def assert_runner(lock: dict[str, Any]) -> None:
         raise SupplyChainError("runner architecture lock is inconsistent")
 
 
+def install_documentation(lock: dict[str, Any]) -> None:
+    documentation = lock["documentation"]
+    content = download(documentation["url"])
+    verify_bytes(content, documentation["sha256"], "Doxygen package")
+    with tempfile.TemporaryDirectory(prefix="cxxlens-documentation-package-") as temporary:
+        archive = pathlib.Path(temporary) / "doxygen.deb"
+        archive.write_bytes(content)
+        fields = {
+            field: run(
+                ["dpkg-deb", "--field", str(archive), field], capture=True
+            )
+            for field in ("Package", "Version", "Architecture")
+        }
+        expected = {
+            "Package": documentation["package"],
+            "Version": documentation["version"],
+            "Architecture": documentation["architecture"],
+        }
+        if fields != expected:
+            raise SupplyChainError(
+                f"Doxygen package metadata mismatch: expected {expected}, received {fields}"
+            )
+        if (
+            installed_package_version(documentation["package"])
+            != documentation["version"]
+        ):
+            run(
+                [
+                    "sudo",
+                    "apt-get",
+                    "install",
+                    "--yes",
+                    "--no-install-recommends",
+                    "--no-upgrade",
+                    str(archive),
+                ]
+            )
+    actual = installed_package_version(documentation["package"])
+    if actual != documentation["version"]:
+        raise SupplyChainError(f"installed Doxygen version mismatch: {actual}")
+    version = run(["doxygen", "--version"], capture=True)
+    if version != documentation["expected_release"]:
+        raise SupplyChainError(f"Doxygen release mismatch: {version}")
+
+
 def install(root: pathlib.Path, profile_name: str) -> None:
     lock = load_lock(root)
     assert_runner(lock)
+    if profile_name == "documentation":
+        install_documentation(lock)
+        return
     llvm = lock["llvm"]
     if profile_name not in llvm["profiles"]:
         raise SupplyChainError(f"unknown LLVM install profile: {profile_name}")

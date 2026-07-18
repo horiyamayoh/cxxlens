@@ -53,19 +53,29 @@ def command_identity(command: str) -> dict[str, str]:
 
 
 def package_versions(lock: dict[str, Any]) -> list[dict[str, str]]:
-    packages = sorted(lock["llvm"]["packages"])
+    packages = {
+        package: {
+            "version": version,
+            "digest": lock["llvm"]["package_sha256"][package],
+        }
+        for package, version in lock["llvm"]["packages"].items()
+    }
+    documentation = lock["documentation"]
+    packages[documentation["package"]] = {
+        "version": documentation["version"],
+        "digest": documentation["sha256"],
+    }
     result = []
-    for package in packages:
+    for package, authority in sorted(packages.items()):
         version = run("dpkg-query", "--showformat=${Version}", "--show", package)
         if version:
-            if version != lock["llvm"]["packages"][package]:
-                raise ValueError(f"installed LLVM package differs from lock: {package}")
+            if version != authority["version"]:
+                raise ValueError(f"installed package differs from lock: {package}")
             result.append(
                 {
                     "package": package,
                     "version": version,
-                    "package_digest": "sha256:"
-                    + lock["llvm"]["package_sha256"][package],
+                    "package_digest": "sha256:" + authority["digest"],
                 }
             )
     return result
@@ -174,6 +184,7 @@ def main() -> int:
         "tools": [
             command_identity(args.compiler),
             command_identity("clang-tidy-22"),
+            command_identity("doxygen"),
             command_identity("ninja"),
             command_identity("python3"),
         ],
