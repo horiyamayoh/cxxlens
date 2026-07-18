@@ -193,6 +193,16 @@ class NgReleaseContractTest(unittest.TestCase):
         self.assertIn("compat.release-not-qualified", report["reason_codes"])
         self.assertEqual(report["environment_findings"][0]["severity"], "blocker")
 
+    def test_doctor_accepts_commit_bound_runtime_qualification(self) -> None:
+        document = request(SNAPSHOT_AXES, context="snapshot-open", operation="doctor")
+        document["environment"] = {
+            "runtime_qualified": True,
+            "evidence_refs": ["cxxlens-ng-release-qualification-exact-sha"],
+        }
+        report = decide(self.bundle, document, ROOT)
+        self.assertEqual(report["decision"], "supported")
+        self.assertEqual(report["environment_findings"], [])
+
     def test_language_neutral_kernel_cannot_depend_on_cxx_semantics(self) -> None:
         bundle = copy.deepcopy(self.bundle)
         kernel = next(

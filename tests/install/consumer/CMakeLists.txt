@@ -4,7 +4,7 @@ project(cxxlens_consumer LANGUAGES CXX)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 include("${CMAKE_CURRENT_LIST_DIR}/../consumer_sanitizers.cmake")
 
-find_package(cxxlens 0.1 CONFIG REQUIRED)
+find_package(cxxlens 1.0 CONFIG REQUIRED)
 
 add_executable(cxxlens-consumer main.cpp)
 target_link_libraries(cxxlens-consumer PRIVATE cxxlens::cxxlens)

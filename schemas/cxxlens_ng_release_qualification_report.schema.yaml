@@ -1,0 +1,108 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-release-qualification-report.v1
+type: object
+additionalProperties: false
+required: [schema, result, generated_at, run_url, git, release, prerequisites, packages, production_support, security, performance, documentation, negative_evidence, authority_digests]
+properties:
+  schema: {const: cxxlens.ng-release-qualification-report.v1}
+  result: {const: passed}
+  generated_at: {type: string, format: date-time}
+  run_url: {type: string, format: uri}
+  git:
+    type: object
+    additionalProperties: false
+    required: [revision, tree, branch, clean]
+    properties:
+      revision: {$ref: '#/$defs/revision'}
+      tree: {$ref: '#/$defs/revision'}
+      branch: {const: main}
+      clean: {const: true}
+  release: {const: {id: distribution-1.0, version: 1.0.0, state: qualified}}
+  prerequisites:
+    type: object
+    additionalProperties: false
+    required: [gates, migrations, foundation_report_digest, readiness_report_digest, g5_report_digest, same_revision]
+    properties:
+      gates: {const: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4, gate.g5, gate.release]}
+      migrations: {const: [R0, R1, R2, R3, R4]}
+      foundation_report_digest: {$ref: '#/$defs/digest'}
+      readiness_report_digest: {$ref: '#/$defs/digest'}
+      g5_report_digest: {$ref: '#/$defs/digest'}
+      same_revision: {const: true}
+  packages:
+    type: array
+    minItems: 2
+    maxItems: 2
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [configuration, prefix_digest, manifest_digest, toolchain_digest, real_project, storage_backends, relocated, license, notice]
+      properties:
+        configuration: {enum: [static, shared]}
+        prefix_digest: {$ref: '#/$defs/digest'}
+        manifest_digest: {$ref: '#/$defs/digest'}
+        toolchain_digest: {$ref: '#/$defs/digest'}
+        real_project: {const: passed}
+        storage_backends: {const: [memory, sqlite]}
+        relocated: {const: true}
+        license: {$ref: '#/$defs/digest'}
+        notice: {$ref: '#/$defs/digest'}
+  production_support:
+    type: array
+    minItems: 6
+    maxItems: 6
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [provider_id, provider_version, binary_digest, relation, interpretation, toolchain, platform, status, capabilities, guarantee, security_profile_digest, evidence_digest]
+      properties:
+        provider_id: {const: cxxlens.clang22.reference}
+        provider_version: {const: 1.0.0}
+        binary_digest: {$ref: '#/$defs/digest'}
+        relation: {enum: [cc.entity@1, cc.call_site@1, cc.call_direct_target@1]}
+        interpretation: {const: cc.clang22-canonical-1}
+        toolchain: {type: string, minLength: 1, not: {enum: [pending, '*']}}
+        platform: {type: string, pattern: '^linux-[A-Za-z0-9_.-]+-(static|shared)$'}
+        status: {const: production-supported}
+        capabilities: {const: [canonical-entity, call-site, direct-target, process-isolation]}
+        guarantee: {const: exact-claims-with-coverage-unresolved-and-provenance}
+        security_profile_digest: {$ref: '#/$defs/digest'}
+        evidence_digest: {$ref: '#/$defs/digest'}
+  security:
+    type: object
+    additionalProperties: false
+    required: [status, contract_digest, vector_count]
+    properties:
+      status: {const: green}
+      contract_digest: {$ref: '#/$defs/digest'}
+      vector_count: {type: integer, minimum: 1}
+  performance:
+    type: object
+    additionalProperties: false
+    required: [report_digest, warm_zero_plan_median_us, bounded_closure_median_us]
+    properties:
+      report_digest: {$ref: '#/$defs/digest'}
+      warm_zero_plan_median_us: {type: integer, minimum: 0, maximum: 250000}
+      bounded_closure_median_us: {type: integer, minimum: 0, maximum: 5000000}
+  documentation: {const: {doxygen_contract: passed, support_matrix: exact-report-only}}
+  negative_evidence:
+    type: array
+    minItems: 4
+    uniqueItems: true
+    items: {type: string, minLength: 1}
+  authority_digests:
+    type: array
+    minItems: 6
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [path, digest]
+      properties:
+        path: {type: string, minLength: 1}
+        digest: {$ref: '#/$defs/digest'}
+$defs:
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  revision: {type: string, pattern: '^[0-9a-f]{40}$'}

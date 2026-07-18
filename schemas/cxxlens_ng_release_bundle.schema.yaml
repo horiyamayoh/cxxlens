@@ -15,6 +15,7 @@ required:
   - releases
   - non_blocking_migrations
   - g5_qualification
+  - release_qualification
   - provider_protocol_boundary
   - version_axes
   - compatibility_contexts
@@ -182,7 +183,7 @@ properties:
           direct_installed_tools:
             const: [cxxlens-provider-scaffold, cxxlens-sdk-doctor, cxxlens-clang-worker-22]
           installed_consumers:
-            const: [core, provider-sdk, clang22-provider-sdk, examples]
+            const: [core, provider-sdk, clang22-provider-sdk, real-project, examples]
           prefix_relocation:
             const: required
           exported_transitive_dependencies:
@@ -310,6 +311,20 @@ properties:
       authority: {const: schemas/cxxlens_ng_g5_qualification.yaml}
       ci_job: {const: g5-qualification}
       status: {const: implemented}
+  release_qualification:
+    type: object
+    additionalProperties: false
+    required: [gate, authority, checker, ci_job, status, claim_scope, report_artifact, required_evidence]
+    properties:
+      gate: {const: gate.release}
+      authority: {const: schemas/cxxlens_ng_release_qualification.yaml}
+      checker: {const: tools/quality/check_ng_release_qualification.py}
+      ci_job: {const: release-qualification}
+      status: {const: implemented}
+      claim_scope: {const: exact-gr-report-tuples-only}
+      report_artifact: {const: 'cxxlens-ng-release-qualification-${revision}'}
+      required_evidence:
+        const: [same-sha-foundation-report, same-sha-wave0-readiness-report, same-sha-g5-report, static-relocated-install-artifact, shared-relocated-install-artifact, static-shared-runtime-junit, real-project-memory-sqlite-and-major-rejection, security-conformance-and-negative-paths, doxygen-contract-and-support-matrix, license-and-notice]
   provider_protocol_boundary:
     type: object
     additionalProperties: false

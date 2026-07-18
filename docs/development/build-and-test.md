@@ -95,3 +95,13 @@ python3 tools/quality/check_ng_g5_qualification.py check --root . \
 checker は correctness を再実行した後、2048 partition / 512 edge、`steady_clock`、5 回 median、明示 recursion budget の
 performance report に compiler、OS、architecture を保存して envelope を検証します。main の `g5-qualification` job は同じ測定を clean exact SHA と
 authority digest に bind します。G5 artifact は R4 の根拠ですが、`gate.release` の代替ではありません。
+
+Distribution 1.0 の GR は main CI の `release-qualification` job が行います。job は同一 SHA の G5、static/shared install、
+runtime、security、Doxygen evidence を集約し、次の checker で exact tuple report を生成します。
+
+```sh
+python3 tools/quality/check_ng_release_qualification.py check --root .
+```
+
+report mode は CI artifact の relocated prefix と manifest を byte digest まで再検証します。production support は report に
+列挙された provider/relation/interpretation/toolchain/platform tuple に限られ、source matrix の pending 行は authority ではありません。

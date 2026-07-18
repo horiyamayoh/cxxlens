@@ -250,6 +250,8 @@ def validate_release_mapping(bundle: dict[str, Any], root: pathlib.Path) -> None
     }:
         fail("distribution release set differs")
     one = releases["distribution-1.0"]
+    if one["state"] != "qualified" or one["production_supported"] is not True:
+        fail("distribution 1.0 must be qualified by the independent GR gate")
     if one["required_profiles"] != ["NG0", "NG1"]:
         fail("distribution 1.0 must require NG0 and NG1")
     if one["blocker_migrations"] != ["R0", "R1", "R2", "R3", "R4"]:
@@ -267,6 +269,28 @@ def validate_release_mapping(bundle: dict[str, Any], root: pathlib.Path) -> None
         fail("distribution 1.0 blocker gate set differs")
     if bundle["non_blocking_migrations"]["distribution-1.0"] != ["R5", "R6", "R7"]:
         fail("distribution 1.0 optional migration branches differ")
+    if bundle.get("release_qualification") != {
+        "gate": "gate.release",
+        "authority": "schemas/cxxlens_ng_release_qualification.yaml",
+        "checker": "tools/quality/check_ng_release_qualification.py",
+        "ci_job": "release-qualification",
+        "status": "implemented",
+        "claim_scope": "exact-gr-report-tuples-only",
+        "report_artifact": "cxxlens-ng-release-qualification-${revision}",
+        "required_evidence": [
+            "same-sha-foundation-report",
+            "same-sha-wave0-readiness-report",
+            "same-sha-g5-report",
+            "static-relocated-install-artifact",
+            "shared-relocated-install-artifact",
+            "static-shared-runtime-junit",
+            "real-project-memory-sqlite-and-major-rejection",
+            "security-conformance-and-negative-paths",
+            "doxygen-contract-and-support-matrix",
+            "license-and-notice",
+        ],
+    }:
+        fail("distribution 1.0 GR binding differs")
     if releases["future-major"].get("activation_rule") != (
         "breaking-change-to-an-accepted-stable-version-axis"
     ):
@@ -526,6 +550,7 @@ def decide(bundle: dict[str, Any], request: dict[str, Any], root: pathlib.Path) 
     findings: list[dict[str, str]] = []
     if request["operation"] == "doctor" and (
         not request["environment"]["runtime_qualified"]
+        or not request["environment"]["evidence_refs"]
         or not release["production_supported"]
     ):
         decision = "unsupported"

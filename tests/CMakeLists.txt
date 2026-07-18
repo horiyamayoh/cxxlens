@@ -245,6 +245,7 @@ foreach(
         provider_runtime
         security_contract
         release_contract
+        release_qualification
         sdk_contract
         ci_supply_chain
         migration_completion
@@ -285,8 +286,16 @@ set_tests_properties(
              installed_prefix
              PROCESSORS
              2)
-foreach(phase IN ITEMS core-consumer sdk-consumer clang22-sdk-consumer
-                       examples-consumer shared-runtime-layout legacy-zero)
+foreach(
+  phase IN
+  ITEMS core-consumer
+        sdk-consumer
+        clang22-sdk-consumer
+        real-project-consumer
+        real-project-incompatible-version
+        examples-consumer
+        shared-runtime-layout
+        legacy-zero)
   add_test(NAME "install.${phase}"
            COMMAND "${CMAKE_COMMAND}" "-DPHASE=${phase}" -P
                    "${cxxlens_install_script}")

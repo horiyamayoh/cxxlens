@@ -55,6 +55,8 @@ if(PHASE STREQUAL "prepare")
       "${install_prefix}/${install_libdir}/cmake/cxxlensProviderSDK/cxxlensProviderSDKConfig.cmake"
       "${install_prefix}/${install_libdir}/cmake/cxxlensClang22ProviderSDK/cxxlensClang22ProviderSDKConfig.cmake"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_public_api_catalog.yaml"
+      "${install_prefix}/share/doc/cxxlens/LICENSE"
+      "${install_prefix}/share/doc/cxxlens/NOTICE"
       "${install_prefix}/bin/cxxlens-provider-scaffold"
       "${install_prefix}/bin/cxxlens-sdk-doctor"
       "${install_prefix}/bin/cxxlens-clang-worker-22")
@@ -128,7 +130,7 @@ if(PHASE STREQUAL "shared-runtime-layout"
   execute_process(
     COMMAND "${CXXLENS_READELF}" -d "${base_library}"
     OUTPUT_VARIABLE library_dynamic_section COMMAND_ERROR_IS_FATAL ANY)
-  if(NOT library_dynamic_section MATCHES "SONAME.*libcxxlens_base.so.0")
+  if(NOT library_dynamic_section MATCHES "SONAME.*libcxxlens_base.so.1")
     message(FATAL_ERROR "shared library SONAME does not bind project major")
   endif()
   if(NOT library_dynamic_section MATCHES "RUNPATH.*\\$ORIGIN")
@@ -139,7 +141,7 @@ if(PHASE STREQUAL "shared-runtime-layout"
     message(FATAL_ERROR "installed library retains build-tree path")
   endif()
 
-  set(base_soname "${install_prefix}/${install_libdir}/libcxxlens_base.so.0")
+  set(base_soname "${install_prefix}/${install_libdir}/libcxxlens_base.so.1")
   set(base_soname_unavailable "${base_soname}.unavailable")
   if(NOT EXISTS "${base_soname}")
     message(FATAL_ERROR "shared package lacks the cxxlens base SONAME link")
@@ -156,7 +158,7 @@ if(PHASE STREQUAL "shared-runtime-layout"
   if(missing_dependency_result EQUAL 0)
     message(FATAL_ERROR "installed tool ignored a missing shared dependency")
   endif()
-  if(NOT missing_dependency_error MATCHES "libcxxlens_base\\.so\\.0")
+  if(NOT missing_dependency_error MATCHES "libcxxlens_base\\.so\\.1")
     message(
       FATAL_ERROR
         "missing shared dependency diagnostic lacks the SONAME: ${missing_dependency_error}"
@@ -186,11 +188,32 @@ if(PHASE STREQUAL "legacy-zero")
   return()
 endif()
 
-if(PHASE MATCHES "^(core|sdk|clang22-sdk)-consumer$")
+if(PHASE STREQUAL "real-project-incompatible-version")
+  set(negative_build_dir "${test_root}/real-project-incompatible-build")
+  file(REMOVE_RECURSE "${negative_build_dir}")
+  execute_process(
+    COMMAND
+      "@CMAKE_COMMAND@" -S
+      "@CMAKE_CURRENT_SOURCE_DIR@/install/real_project_consumer" -B
+      "${negative_build_dir}" "-DCMAKE_PREFIX_PATH=${install_prefix}"
+      "-DCMAKE_CXX_COMPILER=@CMAKE_CXX_COMPILER@"
+      "-DCXXLENS_REQUIRE_INCOMPATIBLE_VERSION=ON"
+    RESULT_VARIABLE incompatible_result
+    OUTPUT_QUIET ERROR_QUIET)
+  if(incompatible_result EQUAL 0)
+    message(
+      FATAL_ERROR "real project accepted an incompatible distribution major")
+  endif()
+  return()
+endif()
+
+if(PHASE MATCHES "^(core|sdk|clang22-sdk|real-project)-consumer$")
   if(PHASE STREQUAL "core-consumer")
     set(consumer consumer)
   elseif(PHASE STREQUAL "sdk-consumer")
     set(consumer sdk_consumer)
+  elseif(PHASE STREQUAL "real-project-consumer")
+    set(consumer real_project_consumer)
   else()
     set(consumer clang22_sdk_consumer)
   endif()

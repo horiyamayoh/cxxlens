@@ -1,0 +1,95 @@
+schema: cxxlens.ng-release-qualification.v1
+document_version: 1.0.0
+maturity: implemented
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md
+  adr: docs/design/adr/0091-distribution-1-production-qualification.md
+  owner_issue: '#167'
+binding:
+  release: distribution-1.0
+  package_version: 1.0.0
+  acceptance_gate: gate.release
+  branch: main
+  ci_job: release-qualification
+  report_schema: cxxlens.ng-release-qualification-report.v1
+  report_artifact: cxxlens-ng-release-qualification-${revision}
+prerequisites:
+  gates: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4, gate.g5]
+  migrations: [R0, R1, R2, R3, R4]
+  r0_r3_evidence: cxxlens.ng-foundation-completion-report.v1
+  readiness_evidence: cxxlens.ng-api-development-readiness-report.v1
+  r4_evidence: cxxlens.ng-g5-qualification-report.v1
+  same_revision: required
+package:
+  configurations:
+    - {id: static, build_shared: 'OFF'}
+    - {id: shared, build_shared: 'ON'}
+  prefix_relocation: required
+  real_project_consumer: install.real-project-consumer
+  storage_backends: [memory, sqlite]
+  required_files:
+    - bin/cxxlens-clang-worker-22
+    - share/doc/cxxlens/LICENSE
+    - share/doc/cxxlens/NOTICE
+    - share/cxxlens/schemas/cxxlens_ng_release_qualification.yaml
+provider:
+  provider_id: cxxlens.clang22.reference
+  provider_version: 1.0.0
+  relations: [cc.entity@1, cc.call_site@1, cc.call_direct_target@1]
+  relation_descriptors: [cc.entity.v1, cc.call_site.v1, cc.call_direct_target.v1]
+  interpretation: cc.clang22-canonical-1
+  qualification: production-supported
+  capabilities: [canonical-entity, call-site, direct-target, process-isolation]
+  guarantee: exact-claims-with-coverage-unresolved-and-provenance
+  binary_digest_source: installed-worker-file
+  static_pending_tuple_is_production: forbidden
+  required_positive_evidence:
+    - adapter.clang22-provider-normalizer
+    - sdk.example-clang22-native
+security:
+  profile: schemas/cxxlens_ng_security_profile.yaml
+  conformance_report_schema: cxxlens.security-conformance-report.v1
+  required_negative_evidence:
+    - unit.sdk-provider-runtime
+    - adapter.clang22-provider-worker-protocol
+    - install.shared-runtime-layout
+    - install.legacy-zero
+    - install.real-project-incompatible-version
+performance:
+  authority: schemas/cxxlens_ng_g5_qualification.yaml
+  report_schema: cxxlens.ng-g5-qualification-report.v1
+  exact_revision: required
+documentation:
+  doxygen_contract: required
+  support_matrix: docs/support-matrix.md
+claim_policy:
+  production_authority: exact-gr-report-tuple-only
+  required_tuple_fields: [provider_id, provider_version, binary_digest, relation, interpretation, toolchain, platform]
+  required_claim_fields: [capabilities, guarantee, security_profile_digest, evidence_digest]
+  pending_or_wildcard: forbidden
+  unlisted_surface: unsupported
+required_artifacts:
+  - LICENSE
+  - NOTICE
+  - schemas/cxxlens_ng_release_qualification.yaml
+  - schemas/cxxlens_ng_release_qualification.schema.yaml
+  - schemas/cxxlens_ng_release_qualification_report.schema.yaml
+  - schemas/cxxlens_ng_foundation_completion_report.schema.yaml
+  - schemas/cxxlens_ng_api_development_readiness_report.schema.yaml
+  - schemas/cxxlens_ng_g5_qualification_report.schema.yaml
+  - schemas/cxxlens_ng_release_bundle.yaml
+  - schemas/cxxlens_ng_acceptance_manifest.yaml
+  - schemas/cxxlens_ng_provider_support_matrix.yaml
+  - tests/install/real_project_consumer/CMakeLists.txt
+  - tests/install/real_project_consumer/model.hpp
+  - tests/install/real_project_consumer/model.cpp
+  - tests/install/real_project_consumer/main.cpp
+  - src/llvm/clang22/provider_worker.cpp
+  - tests/adapter/clang22/provider_normalizer_test.cpp
+  - tests/adapter/clang22/provider_worker_protocol_test.cpp
+  - tests/unit/sdk/provider_runtime_test.cpp
+  - examples/sdk/clang22_native_provider.cpp
+  - tools/quality/check_ng_release_qualification.py
+  - docs/design/adr/0091-distribution-1-production-qualification.md
+  - docs/support-matrix.md
+  - .github/workflows/quality.yml

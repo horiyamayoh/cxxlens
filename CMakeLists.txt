@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project(
   cxxlens
-  VERSION 0.1.0
+  VERSION 1.0.0
   DESCRIPTION "C and C++ Semantic Relation Platform"
   LANGUAGES CXX)
 
@@ -246,7 +246,7 @@ install(
         schemas/cxxlens_ng_provider_runtime_contract.schema.yaml
         schemas/cxxlens_ng_provider_execution_report.schema.yaml
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
-install(FILES README.md SECURITY.md
+install(FILES README.md SECURITY.md LICENSE NOTICE
         DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cxxlens")
 install(DIRECTORY examples/sdk
         DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cxxlens/examples")

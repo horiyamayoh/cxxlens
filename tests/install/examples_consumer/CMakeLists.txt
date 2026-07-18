@@ -4,8 +4,8 @@ project(cxxlens_installed_examples LANGUAGES CXX)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 include("${CMAKE_CURRENT_LIST_DIR}/../consumer_sanitizers.cmake")
 
-find_package(cxxlensProviderSDK 0.1 CONFIG REQUIRED)
-find_package(cxxlensClang22ProviderSDK 0.1 CONFIG REQUIRED)
+find_package(cxxlensProviderSDK 1.0 CONFIG REQUIRED)
+find_package(cxxlensClang22ProviderSDK 1.0 CONFIG REQUIRED)
 
 if(NOT IS_DIRECTORY "${CXXLENS_EXAMPLE_ROOT}")
   message(FATAL_ERROR "installed SDK example root is missing")

@@ -1,11 +1,18 @@
 schema: cxxlens.provider-support-matrix.v1
-document_version: 1.0.0
+document_version: 1.1.0
 maturity: accepted
 authority:
   owner_issue: '#65'
   decision_adr: docs/design/adr/0011-provider-trust-certification-discovery.md
   owner: steward.ng-security
 tuple_identity: [provider_id, provider_version, binary_digest, relation, interpretation, toolchain, platform]
+production_claim_policy:
+  authority: exact-gr-report-tuple-only
+  report_schema: cxxlens.ng-release-qualification-report.v1
+  required_tuple_fields: [provider_id, provider_version, binary_digest, relation, interpretation, toolchain, platform]
+  required_claim_fields: [capabilities, guarantee, security_profile_digest, evidence_digest]
+  pending_or_wildcard: forbidden
+  unlisted_surface: unsupported
 entries:
   - id: support.kernel-build-project-linux
     provider_id: cxxlens.kernel.builtin
@@ -19,16 +26,40 @@ entries:
     qualification: canonical-semantic-qualified
     evidence: pending
     blocker_issue: null
+  - id: support.clang22-entity-linux
+    provider_id: cxxlens.clang22.reference
+    provider_version: 1.0.0
+    binary_digest: pending
+    relation: cc.entity@1
+    interpretation: cc.clang22-canonical-1
+    toolchain: clang-22
+    platform: linux
+    status: conformance-only
+    qualification: canonical-semantic-qualified
+    evidence: sha256:1f8c081840f48cd321d683845fd34d8ce600288076d77c27e8e5e5d6c4b27c52
+    blocker_issue: null
   - id: support.clang22-call-site-linux
     provider_id: cxxlens.clang22.reference
     provider_version: 1.0.0
     binary_digest: pending
     relation: cc.call_site@1
-    interpretation: cc.clang22-canonical@1
+    interpretation: cc.clang22-canonical-1
     toolchain: clang-22
     platform: linux
     status: conformance-only
-    qualification: schema-conformant
+    qualification: canonical-semantic-qualified
+    evidence: sha256:1f8c081840f48cd321d683845fd34d8ce600288076d77c27e8e5e5d6c4b27c52
+    blocker_issue: null
+  - id: support.clang22-call-direct-target-linux
+    provider_id: cxxlens.clang22.reference
+    provider_version: 1.0.0
+    binary_digest: pending
+    relation: cc.call_direct_target@1
+    interpretation: cc.clang22-canonical-1
+    toolchain: clang-22
+    platform: linux
+    status: conformance-only
+    qualification: canonical-semantic-qualified
     evidence: sha256:1f8c081840f48cd321d683845fd34d8ce600288076d77c27e8e5e5d6c4b27c52
     blocker_issue: null
   - id: support.company-lock-conformance

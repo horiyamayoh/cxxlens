@@ -4128,6 +4128,15 @@ distribution 1.0 support は GR が完了するまで宣言しない。
 - docs/support matrix
 - license/notice
 
+Issue #167 / ADR 0091 は GR を `schemas/cxxlens_ng_release_qualification.yaml` に具体化する。GR は clean `main` の
+同一 revision/tree について G0–G5、R0–R4、static/shared relocated prefix、multi-TU real-project consumer の
+memory/SQLite parity、actual-source Clang 22 provider、security negative evidence、G5 performance、Doxygen、license/notice を
+独立 validator で再検証する。production support の authority は生成された
+`cxxlens.ng-release-qualification-report.v1` の exact tuple に限る。tuple は provider ID/version、installed binary byte digest、
+relation、interpretation、toolchain、platform/configuration と capability、guarantee、security profile digest、evidence digest を
+保持する。source support matrix の `pending` または wildcard、report にない surface、別 rebuild を production-supported と
+推測してはならない。
+
 Issue #156 は gate の logical evidence ownership を
 `schemas/cxxlens_ng_quality_ownership.yaml` に固定する。linkage 非依存の quality unit test は CTest、production
 checker は `cxxlens-quality`、installed consumer は install job、instrumented execution は nightly が所有し、同じ
@@ -4614,7 +4623,7 @@ NG1 default:
 
 foundation gate は上記のうち G0–G4/R0–R3 に属する実装済み evidence、install consumer、legacy-zero、
 documentation drift zero を machine validation する。G5 は Issue #166 の独立した exact-SHA qualification が所有し、
-Foundation の再認定条件にはしない。GR は Issue #167 の deferred state として保持し、Foundation または G5 完了を
+Foundation の再認定条件にはしない。GR は Issue #167 の独立 exact-SHA qualification として保持し、Foundation または G5 完了を
 production 1.0 完了へ読み替えない。
 
 ---

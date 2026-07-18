@@ -1,0 +1,118 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-release-qualification.v1
+type: object
+additionalProperties: false
+required: [schema, document_version, maturity, authority, binding, prerequisites, package, provider, security, performance, documentation, claim_policy, required_artifacts]
+properties:
+  schema: {const: cxxlens.ng-release-qualification.v1}
+  document_version: {const: 1.0.0}
+  maturity: {const: implemented}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, adr, owner_issue]
+    properties:
+      design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
+      adr: {const: docs/design/adr/0091-distribution-1-production-qualification.md}
+      owner_issue: {const: '#167'}
+  binding:
+    type: object
+    additionalProperties: false
+    required: [release, package_version, acceptance_gate, branch, ci_job, report_schema, report_artifact]
+    properties:
+      release: {const: distribution-1.0}
+      package_version: {const: 1.0.0}
+      acceptance_gate: {const: gate.release}
+      branch: {const: main}
+      ci_job: {const: release-qualification}
+      report_schema: {const: cxxlens.ng-release-qualification-report.v1}
+      report_artifact: {const: 'cxxlens-ng-release-qualification-${revision}'}
+  prerequisites:
+    type: object
+    additionalProperties: false
+    required: [gates, migrations, r0_r3_evidence, readiness_evidence, r4_evidence, same_revision]
+    properties:
+      gates: {const: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4, gate.g5]}
+      migrations: {const: [R0, R1, R2, R3, R4]}
+      r0_r3_evidence: {const: cxxlens.ng-foundation-completion-report.v1}
+      readiness_evidence: {const: cxxlens.ng-api-development-readiness-report.v1}
+      r4_evidence: {const: cxxlens.ng-g5-qualification-report.v1}
+      same_revision: {const: required}
+  package:
+    type: object
+    additionalProperties: false
+    required: [configurations, prefix_relocation, real_project_consumer, storage_backends, required_files]
+    properties:
+      configurations:
+        const:
+          - {id: static, build_shared: 'OFF'}
+          - {id: shared, build_shared: 'ON'}
+      prefix_relocation: {const: required}
+      real_project_consumer: {const: install.real-project-consumer}
+      storage_backends: {const: [memory, sqlite]}
+      required_files:
+        type: array
+        minItems: 4
+        uniqueItems: true
+        items: {$ref: '#/$defs/text'}
+  provider:
+    type: object
+    additionalProperties: false
+    required: [provider_id, provider_version, relations, relation_descriptors, interpretation, qualification, capabilities, guarantee, binary_digest_source, static_pending_tuple_is_production, required_positive_evidence]
+    properties:
+      provider_id: {const: cxxlens.clang22.reference}
+      provider_version: {const: 1.0.0}
+      relations: {const: [cc.entity@1, cc.call_site@1, cc.call_direct_target@1]}
+      relation_descriptors: {const: [cc.entity.v1, cc.call_site.v1, cc.call_direct_target.v1]}
+      interpretation: {const: cc.clang22-canonical-1}
+      qualification: {const: production-supported}
+      capabilities: {const: [canonical-entity, call-site, direct-target, process-isolation]}
+      guarantee: {const: exact-claims-with-coverage-unresolved-and-provenance}
+      binary_digest_source: {const: installed-worker-file}
+      static_pending_tuple_is_production: {const: forbidden}
+      required_positive_evidence:
+        const: [adapter.clang22-provider-normalizer, sdk.example-clang22-native]
+  security:
+    type: object
+    additionalProperties: false
+    required: [profile, conformance_report_schema, required_negative_evidence]
+    properties:
+      profile: {const: schemas/cxxlens_ng_security_profile.yaml}
+      conformance_report_schema: {const: cxxlens.security-conformance-report.v1}
+      required_negative_evidence:
+        type: array
+        minItems: 5
+        uniqueItems: true
+        items: {$ref: '#/$defs/text'}
+  performance:
+    type: object
+    additionalProperties: false
+    required: [authority, report_schema, exact_revision]
+    properties:
+      authority: {const: schemas/cxxlens_ng_g5_qualification.yaml}
+      report_schema: {const: cxxlens.ng-g5-qualification-report.v1}
+      exact_revision: {const: required}
+  documentation:
+    type: object
+    additionalProperties: false
+    required: [doxygen_contract, support_matrix]
+    properties:
+      doxygen_contract: {const: required}
+      support_matrix: {const: docs/support-matrix.md}
+  claim_policy:
+    type: object
+    additionalProperties: false
+    required: [production_authority, required_tuple_fields, required_claim_fields, pending_or_wildcard, unlisted_surface]
+    properties:
+      production_authority: {const: exact-gr-report-tuple-only}
+      required_tuple_fields: {const: [provider_id, provider_version, binary_digest, relation, interpretation, toolchain, platform]}
+      required_claim_fields: {const: [capabilities, guarantee, security_profile_digest, evidence_digest]}
+      pending_or_wildcard: {const: forbidden}
+      unlisted_surface: {const: unsupported}
+  required_artifacts:
+    type: array
+    minItems: 10
+    uniqueItems: true
+    items: {$ref: '#/$defs/text'}
+$defs:
+  text: {type: string, minLength: 1}

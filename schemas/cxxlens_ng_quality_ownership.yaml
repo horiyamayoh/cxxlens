@@ -27,7 +27,7 @@ checks:
     dimensions: [linkage-independent]
     configurations: [linkage-independent]
   - id: quality.production-contracts
-    version: 3
+    version: 4
     owner: quality-target
     command: cmake --build --target cxxlens-quality
     inputs: [CMakeLists.txt, cmake, include, src, tests, tools/quality, tools/ci, schemas, docs, .github/workflows]
@@ -41,7 +41,7 @@ checks:
     dimensions: [static, shared, clang22]
     configurations: [static-clang22, shared-clang22]
   - id: package.installed-consumers
-    version: 1
+    version: 2
     owner: install-job
     command: ctest --label-regex install
     inputs: [CMakeLists.txt, cmake, include, src, tests/install, tools/quality/install_artifact_manifest.py, schemas/cxxlens_ng_install_artifact_manifest.schema.yaml]

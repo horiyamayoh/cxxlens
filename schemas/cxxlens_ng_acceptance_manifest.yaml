@@ -1,6 +1,6 @@
 schema: cxxlens.ng-acceptance-manifest.v1
 kind: acceptance-manifest
-document_version: 1.17.0
+document_version: 1.18.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -234,16 +234,38 @@ entries:
       - .github/workflows/nightly.yml
     summary: Single-owner logical evidence, bound provenance, resource-aware parallel gates, and selectable install/SDK tests.
   - id: gate.release
-    status: deferred
+    status: implemented
     owner_issue: '#167'
     profile: release
     contract_issue: '#167'
     depends_on: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4, gate.g5]
     evidence:
+      - LICENSE
+      - NOTICE
+      - schemas/cxxlens_ng_release_qualification.yaml
+      - schemas/cxxlens_ng_release_qualification.schema.yaml
+      - schemas/cxxlens_ng_release_qualification_report.schema.yaml
+      - schemas/cxxlens_ng_foundation_completion_report.schema.yaml
+      - schemas/cxxlens_ng_api_development_readiness_report.schema.yaml
+      - schemas/cxxlens_ng_g5_qualification_report.schema.yaml
       - schemas/cxxlens_ng_release_bundle.yaml
+      - schemas/cxxlens_ng_acceptance_manifest.yaml
+      - schemas/cxxlens_ng_provider_support_matrix.yaml
+      - tests/install/real_project_consumer/CMakeLists.txt
+      - tests/install/real_project_consumer/model.hpp
+      - tests/install/real_project_consumer/model.cpp
+      - tests/install/real_project_consumer/main.cpp
+      - src/llvm/clang22/provider_worker.cpp
+      - tests/adapter/clang22/provider_normalizer_test.cpp
+      - tests/adapter/clang22/provider_worker_protocol_test.cpp
+      - tests/unit/sdk/provider_runtime_test.cpp
+      - examples/sdk/clang22_native_provider.cpp
+      - tools/quality/check_ng_release_qualification.py
+      - docs/design/adr/0091-distribution-1-production-qualification.md
       - docs/design/adr/0061-relocatable-static-shared-install-package.md
       - docs/design/adr/0062-first-party-sanitizer-closure.md
       - schemas/cxxlens_ng_sanitizer_coverage.yaml
       - tests/install/run_install_test.cmake.in
+      - docs/support-matrix.md
       - .github/workflows/quality.yml
-    summary: Static/shared relocatable install and first-party sanitizer closure are qualified; remaining distribution 1.0 support, performance, and production work stays deferred.
+    summary: Distribution 1.0 is qualified only through a clean-main exact-SHA GR report whose static/shared package, real-project, provider, security, documentation, and G5 evidence all match.

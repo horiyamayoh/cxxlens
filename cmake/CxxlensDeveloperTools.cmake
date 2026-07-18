@@ -30,6 +30,7 @@ add_custom_target(
 foreach(
   contract IN
   ITEMS release_contract
+        release_qualification
         relation_contract
         query_contract
         semantic_guarantee
@@ -173,6 +174,7 @@ add_dependencies(
   cxxlens-ng-query-contract-check
   cxxlens-ng-relation-contract-check
   cxxlens-ng-release-contract-check
+  cxxlens-ng-release-qualification-check
   cxxlens-ng-sdk-contract-check
   cxxlens-ng-security-contract-check
   cxxlens-ng-semantic-guarantee-check

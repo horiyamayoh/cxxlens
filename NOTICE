@@ -1,0 +1,7 @@
+cxxlens
+Copyright 2026 cxxlens contributors
+
+This product includes software developed by the cxxlens contributors.
+LLVM and Clang are optional build-time and runtime dependencies and are not
+redistributed by the cxxlens source or binary package. Their names are
+trademarks of their respective owners.

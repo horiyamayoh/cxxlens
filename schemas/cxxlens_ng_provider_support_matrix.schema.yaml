@@ -2,10 +2,10 @@ $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens.provider-support-matrix.v1
 type: object
 additionalProperties: false
-required: [schema, document_version, maturity, authority, tuple_identity, entries]
+required: [schema, document_version, maturity, authority, tuple_identity, production_claim_policy, entries]
 properties:
   schema: {const: cxxlens.provider-support-matrix.v1}
-  document_version: {const: 1.0.0}
+  document_version: {const: 1.1.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -16,6 +16,17 @@ properties:
       decision_adr: {const: docs/design/adr/0011-provider-trust-certification-discovery.md}
       owner: {const: steward.ng-security}
   tuple_identity: {const: [provider_id, provider_version, binary_digest, relation, interpretation, toolchain, platform]}
+  production_claim_policy:
+    type: object
+    additionalProperties: false
+    required: [authority, report_schema, required_tuple_fields, required_claim_fields, pending_or_wildcard, unlisted_surface]
+    properties:
+      authority: {const: exact-gr-report-tuple-only}
+      report_schema: {const: cxxlens.ng-release-qualification-report.v1}
+      required_tuple_fields: {const: [provider_id, provider_version, binary_digest, relation, interpretation, toolchain, platform]}
+      required_claim_fields: {const: [capabilities, guarantee, security_profile_digest, evidence_digest]}
+      pending_or_wildcard: {const: forbidden}
+      unlisted_surface: {const: unsupported}
   entries:
     type: array
     minItems: 3

@@ -1,5 +1,5 @@
 {
-  "asset_count": 388,
+  "asset_count": 400,
   "assets": [
     {
       "authority": "active",
@@ -102,6 +102,20 @@
     {
       "authority": "active",
       "path": "Doxyfile.in",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "LICENSE",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "NOTICE",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1067,6 +1081,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/design/adr/0091-distribution-1-production-qualification.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/design/adr/README.md",
       "removal_issue": null,
       "replacement": null,
@@ -1886,6 +1907,27 @@
     },
     {
       "authority": "active",
+      "path": "schemas/cxxlens_ng_release_qualification.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_release_qualification.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_release_qualification_report.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "schemas/cxxlens_ng_sanitizer_coverage.schema.yaml",
       "removal_issue": null,
       "replacement": null,
@@ -2264,6 +2306,34 @@
     },
     {
       "authority": "active",
+      "path": "tests/install/real_project_consumer/CMakeLists.txt",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/install/real_project_consumer/main.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/install/real_project_consumer/model.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/install/real_project_consumer/model.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/install/run_install_test.cmake.in",
       "removal_issue": null,
       "replacement": null,
@@ -2384,6 +2454,13 @@
     {
       "authority": "active",
       "path": "tests/quality/test_ng_release_contract.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/quality/test_ng_release_qualification.py",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2586,6 +2663,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_release_qualification.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_sdk_contract.py",
       "removal_issue": null,
       "replacement": null,
@@ -2719,7 +2803,7 @@
     }
   ],
   "classifications": {
-    "active": 352,
+    "active": 364,
     "archived": 35,
     "generated": 1
   },

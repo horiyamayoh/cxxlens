@@ -244,15 +244,17 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
     }
     if any(gates[identifier]["status"] != "implemented" for identifier in required_implemented):
         fail("G0-G4 and gate.foundation must be implemented")
-    if gates["gate.release"]["status"] != "deferred":
-        fail("distribution release must remain explicitly deferred")
+    if gates["gate.release"]["status"] not in {"deferred", "implemented"}:
+        fail("distribution release has an invalid lifecycle state")
     owned_gate_ids = ("gate.g5", "gate.release")
     for identifier in owned_gate_ids:
         if gates[identifier]["owner_issue"] != gates[identifier]["contract_issue"]:
             fail(f"gate owner/contract issue differs: {identifier}")
-    deferred_issue_refs = {
-        gates["gate.release"]["owner_issue"]
-    }
+    deferred_issue_refs = (
+        {gates["gate.release"]["owner_issue"]}
+        if gates["gate.release"]["status"] == "deferred"
+        else set()
+    )
     if gates["gate.g5"]["owner_issue"] == gates["gate.release"]["owner_issue"]:
         fail("G5 and distribution release require distinct tracking issues")
     completed_issue_refs = {
