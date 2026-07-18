@@ -1,0 +1,223 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-public-callable-inventory.v1
+title: cxxlens exact installed-public C++ callable inventory
+type: object
+additionalProperties: false
+required:
+  - schema
+  - kind
+  - document_version
+  - maturity
+  - authority
+  - inclusion_policy
+  - extractor
+  - allocator
+  - inventory_digest
+  - callables
+properties:
+  schema: {const: cxxlens.ng-public-callable-inventory.v1}
+  kind: {const: public-cpp-callable-inventory}
+  document_version: {$ref: '#/$defs/semver'}
+  maturity: {const: implemented}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, catalog, decision_adr, owner_issue, owner]
+    properties:
+      design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
+      catalog: {const: schemas/cxxlens_ng_public_api_catalog.yaml}
+      decision_adr: {const: docs/design/adr/0092-exact-public-callable-inventory.md}
+      owner_issue: {const: '#169'}
+      owner: {$ref: '#/$defs/id'}
+  inclusion_policy:
+    type: object
+    additionalProperties: false
+    required: [include, exclude, ownership]
+    properties:
+      include:
+        const:
+          - installed-public-free-functions-and-function-templates
+          - public-constructors-destructors-members-static-members-operators-and-virtuals
+          - explicitly-deleted-and-explicitly-defaulted-public-callables
+          - inline-constexpr-consteval-and-generated-relation-tag-callables
+      exclude:
+        const:
+          - private-protected-and-detail-callables
+          - non-installed-headers
+          - compiler-implicit-callables
+      ownership: {const: exactly-one-catalog-entry-per-callable}
+  extractor:
+    type: object
+    additionalProperties: false
+    required: [engine, engine_version, canonicalization]
+    properties:
+      engine: {const: clang-ast-json}
+      engine_version: {const: '22'}
+      canonicalization: {const: cxxlens.public-callable-signature.v1}
+  allocator: {$ref: '#/$defs/allocator'}
+  inventory_digest: {$ref: '#/$defs/digest'}
+  callables:
+    type: array
+    minItems: 1
+    items: {$ref: '#/$defs/callable'}
+$defs:
+  id: {type: string, pattern: '^[a-z0-9][a-z0-9._-]*$'}
+  semver: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  path: {type: string, pattern: '^(?:include|src|tools|tests|examples|schemas|docs)/[^\n]+$'}
+  allocator:
+    type: object
+    additionalProperties: false
+    required: [domain, scopes]
+    properties:
+      domain: {const: cxxlens.public-callable-id.v1}
+      scopes:
+        type: array
+        uniqueItems: true
+        items:
+          type: object
+          additionalProperties: false
+          required: [fully_qualified_name, callable_kind, next_overload_slot]
+          properties:
+            fully_qualified_name: {type: string, pattern: '^cxxlens::[^\n]+$'}
+            callable_kind:
+              enum: [free, function-template, constructor, destructor, member, static, operator, virtual]
+            next_overload_slot: {type: integer, minimum: 0}
+  identity:
+    type: object
+    additionalProperties: false
+    required: [overload_slot]
+    properties:
+      overload_slot: {type: integer, minimum: 0}
+  parameter:
+    type: object
+    additionalProperties: false
+    required: [type, name, default]
+    properties:
+      type: {type: string, minLength: 1}
+      name: {type: string}
+      default: {type: [string, 'null']}
+  template_parameter:
+    type: object
+    additionalProperties: false
+    required: [scope, kind, name, declaration]
+    properties:
+      scope: {enum: [enclosing, callable]}
+      kind: {enum: [type, non-type, template]}
+      name: {type: string}
+      declaration: {type: string, minLength: 1}
+  signature:
+    type: object
+    additionalProperties: false
+    required:
+      - source
+      - return_type
+      - parameters
+      - template_parameters
+      - constraints
+      - specifiers
+      - qualifiers
+      - declaration_state
+    properties:
+      source: {type: string, minLength: 1}
+      return_type: {type: string}
+      parameters:
+        type: array
+        items: {$ref: '#/$defs/parameter'}
+      template_parameters:
+        type: array
+        items: {$ref: '#/$defs/template_parameter'}
+      constraints:
+        type: array
+        items:
+          type: object
+          additionalProperties: false
+          required: [scope, position, source]
+          properties:
+            scope: {enum: [enclosing, callable]}
+            position: {enum: [template-parameter, leading-requires, trailing-requires]}
+            source: {type: string, minLength: 1}
+      specifiers:
+        type: object
+        additionalProperties: false
+        required: [static, virtual, pure_virtual, inline, constexpr, consteval, explicit, override, final]
+        properties:
+          static: {type: boolean}
+          virtual: {type: boolean}
+          pure_virtual: {type: boolean}
+          inline: {type: boolean}
+          constexpr: {type: boolean}
+          consteval: {type: boolean}
+          explicit: {type: boolean}
+          override: {type: boolean}
+          final: {type: boolean}
+      qualifiers:
+        type: object
+        additionalProperties: false
+        required: [cv, ref, noexcept]
+        properties:
+          cv: {enum: [none, const, volatile, const-volatile]}
+          ref: {enum: [none, lvalue, rvalue]}
+          noexcept: {type: string, pattern: '^(?:none|noexcept(?: .*)?)$'}
+      declaration_state: {enum: [declared, deleted, defaulted, pure-virtual]}
+  evidence:
+    type: object
+    additionalProperties: false
+    required: [catalog_digest, implementation, test, example, doxygen_key, doxygen_name, source_anchor]
+    properties:
+      catalog_digest: {$ref: '#/$defs/digest'}
+      implementation: {$ref: '#/$defs/path'}
+      test: {type: [string, 'null'], pattern: '^tests/[^\n]+$'}
+      example: {type: [string, 'null'], pattern: '^examples/[^\n]+$'}
+      doxygen_key: {$ref: '#/$defs/digest'}
+      doxygen_name: {type: string, minLength: 1}
+      source_anchor:
+        type: object
+        additionalProperties: false
+        required: [ast, doxygen]
+        properties:
+          ast: {$ref: '#/$defs/source_location'}
+          doxygen: {$ref: '#/$defs/source_location'}
+  source_location:
+    type: object
+    additionalProperties: false
+    required: [line, column]
+    properties:
+      line: {type: integer, minimum: 1}
+      column: {type: integer, minimum: 1}
+  callable:
+    type: object
+    additionalProperties: false
+    required:
+      - id
+      - identity
+      - catalog_entry
+      - package
+      - target
+      - fully_qualified_name
+      - callable_kind
+      - signature
+      - declaring_header
+      - origin
+      - status
+      - stability
+      - qualification
+      - owner
+      - evidence
+    properties:
+      id: {type: string, pattern: '^cpp\.callable\.[0-9a-f]{64}$'}
+      identity: {$ref: '#/$defs/identity'}
+      catalog_entry: {type: string, pattern: '^public\.[a-z0-9-]+$'}
+      package: {enum: [author-sdk, clang22-native-author-sdk]}
+      target: {enum: ['cxxlens::provider_sdk', 'cxxlens::clang22_provider_sdk', 'cxxlens::recipes']}
+      fully_qualified_name: {type: string, pattern: '^cxxlens::[^\n]+$'}
+      callable_kind:
+        enum: [free, function-template, constructor, destructor, member, static, operator, virtual]
+      signature: {$ref: '#/$defs/signature'}
+      declaring_header: {type: string, pattern: '^include/cxxlens/[^\n]+\.hpp$'}
+      origin: {enum: [generated-inline, inline, out-of-line, defaulted, deleted, pure-virtual]}
+      status: {const: implemented}
+      stability: {enum: [source-versioned, clang-major-versioned]}
+      qualification: {enum: [NG0, NG1]}
+      owner: {type: string, pattern: '^#[1-9][0-9]*$'}
+      evidence: {$ref: '#/$defs/evidence'}

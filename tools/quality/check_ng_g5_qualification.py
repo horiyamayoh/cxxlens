@@ -205,6 +205,7 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
             "required_evidence": [
                 "same-sha-foundation-report",
                 "same-sha-wave0-readiness-report",
+                "same-sha-public-callable-report-and-review",
                 "same-sha-g5-report",
                 "static-relocated-install-artifact",
                 "shared-relocated-install-artifact",

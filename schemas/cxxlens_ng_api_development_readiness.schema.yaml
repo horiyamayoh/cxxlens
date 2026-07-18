@@ -3,20 +3,21 @@ $id: https://cxxlens.dev/schemas/cxxlens.ng-api-development-readiness.v1
 title: cxxlens API development Wave 0 readiness contract
 type: object
 additionalProperties: false
-required: [schema, document_version, maturity, authority, binding, target_contract, public_header_authority, required_status_checks, merged_main_checks, baseline, api_unit_workflow, gate_ownership]
+required: [schema, document_version, maturity, authority, binding, target_contract, public_header_authority, public_callable_authority, required_status_checks, merged_main_checks, baseline, api_unit_workflow, gate_ownership]
 properties:
   schema: {const: cxxlens.ng-api-development-readiness.v1}
-  document_version: {const: 1.0.0}
+  document_version: {const: 1.1.0}
   maturity: {const: implemented}
   authority:
     type: object
     additionalProperties: false
-    required: [design, adr, owner_issue, foundation_issue]
+    required: [design, adr, owner_issue, foundation_issue, callable_inventory_issue]
     properties:
       design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
       adr: {const: docs/design/adr/0089-high-level-author-sdk-and-wave0-readiness.md}
       owner_issue: {const: '#168'}
       foundation_issue: {const: '#165'}
+      callable_inventory_issue: {const: '#169'}
   binding:
     type: object
     additionalProperties: false
@@ -54,6 +55,21 @@ properties:
       migration_checker_role: {const: superseded-asset-denylist-only}
       extra_header: {const: reject}
       missing_header: {const: reject}
+  public_callable_authority:
+    type: object
+    additionalProperties: false
+    required: [decision_adr, inventory, inventory_schema, report_schema, checker, report_filename, review_filename, extractor, doxygen_correspondence, required_result]
+    properties:
+      decision_adr: {const: docs/design/adr/0092-exact-public-callable-inventory.md}
+      inventory: {const: schemas/cxxlens_ng_public_callable_inventory.yaml}
+      inventory_schema: {const: schemas/cxxlens_ng_public_callable_inventory.schema.yaml}
+      report_schema: {const: schemas/cxxlens_ng_public_callable_inventory_report.schema.yaml}
+      checker: {const: tools/quality/public_callable_inventory.py}
+      report_filename: {const: cxxlens-ng-public-callable-inventory-report.json}
+      review_filename: {const: cxxlens-ng-public-callable-inventory-review.md}
+      extractor: {const: clang-ast-json-22}
+      doxygen_correspondence: {const: exact-bidirectional}
+      required_result: {const: passed}
   required_status_checks:
     type: object
     additionalProperties: false
@@ -72,7 +88,7 @@ properties:
       exact_revision_tree: {const: required}
       clean_main_checkout: {const: required}
       required_evidence:
-        const: [toolchain-provenance, static-shared-build-test, static-shared-install-manifest, public-header-inventory, authority-digests, test-inventory, generated-header-inventory, foundation-completion-report, branch-protection-status-names]
+        const: [toolchain-provenance, static-shared-build-test, static-shared-install-manifest, public-header-inventory, authority-digests, test-inventory, generated-header-inventory, public-callable-inventory-report, public-callable-review, foundation-completion-report, branch-protection-status-names]
   api_unit_workflow:
     type: object
     additionalProperties: false

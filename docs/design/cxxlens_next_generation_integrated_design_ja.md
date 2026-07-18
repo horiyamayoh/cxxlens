@@ -3578,12 +3578,36 @@ evidence builder、`run_worker` を使い、frame header、sequence、credit、c
 borrowed TU/AST object を callback 外へ保存、所有、thread 移送せず、source と semantic value を detached value
 へ変換する。
 
-exact signature、error、lifetime、threading、versioning、実装 evidence は
+API family の error、lifetime、threading、versioning、invariant、実装 evidence と package/header admission は
 `schemas/cxxlens_ng_public_api_catalog.yaml` を authority とする。IDL generation、compile-fail、LLVM-free install
 consumer に加え、C++ 生成値を既存の `cxxlens.logical-query-ir.v1` reference validator と
 `cxxlens.provider-manifest.v1` schema へ入力する gate は `cxxlens-ng-sdk-contract-check` である。product 全体の target DAG と provider-to-snapshot
 vertical slice は Issue #67 以降で実装され、flagship `calls_to_function` recipe と R2 E2E は Issue #73 で
 production surface へ接続された。
+
+### 22.10 Public callable exact inventory
+
+Issue #169 / ADR 0092 により、全 installed public callable の exact authority は
+`schemas/cxxlens_ng_public_callable_inventory.yaml` とする。Public API Catalog が admitted header、API family、package、target、owner を
+管理し、inventory は一 callable 一 row の stable ID、fully qualified name、kind、return/parameter/default/template/constraint、
+static/virtual/constexpr、cv/ref/noexcept、deleted/defaulted、declaring header、origin、status/stability/qualification、evidence を
+catalog entry へ exact bind する。source line、Doxygen synthetic ID、表示 prose、signature digest は stable callable ID にしない。
+stable ID は fully qualified name、kind、scope 内で非再利用の overload slot から domain-separated hash で導出する。allocator の
+high-water mark と消滅済み scope は履歴として保持し、slot 再利用、ID swap、曖昧な複数 overload migration を拒否する。signature は
+C++ token 単位で literal spelling を保持し、constraint の enclosing/callable scope と template/leading/trailing position、nested
+`noexcept(...)`、`override` / `final` を構造化する。
+
+public C++ declaration の観測 authority として locked Clang 22 AST census を `cxxlens-quality` で常時実行し、header-only declaration、
+inventory-only row、signature drift、duplicate、複数 installed header/entry ownership を双方向に拒否する。Doxygen XML は AST と独立した
+二つ目の exact correspondence とする。Clang/Doxygen の column 値を直接同一視せず、同一 header/line 内の declaration order で対応付けた
+両 source anchor と row 固有の name/signature projection を検査し、一方の成功で他方を
+代替しない。accepted Relation Registry から admitted generated header を全て再生成して byte freshness を検査し、generated callable も
+同じ inventory に含める。human review projection は対象 commit SHA/tree、inventory canonical digest、callable count、Clang major、
+Doxygen correspondence digest に bind し、Wave 0 readiness と GR release qualification は同一 revision の artifact だけを受理する。
+cross-header と redeclaration の同一性は pretty type string ではなく Clang mangled identity / `previousDecl` chain で判定する。alias spelling、
+同一行 Doxygen evidence 一式の交換、同一 header の default/specifier/origin drift を拒否する。stable-ID transition は親 commit と比較し、
+CI が shallow history のため親 inventory を読めない場合は fail closed にする。human review Markdown 本文にも extractor major と Doxygen
+correspondence digest を保持する。
 
 ---
 
@@ -4162,7 +4186,9 @@ release bundle と実 CMake の `PUBLIC` / `INTERFACE` edge に一致し、publi
 relation header の導出可能性は Relation Registry が所有する。migration checker は superseded asset denylist に限定し、新 header
 allowlist を二重管理しない。同時 active write unit は一つ以下とする。main の required status check は exact name set を strict mode で
 要求し、同一 SHA の non-main 成功を先行させる。main へ入った SHA は全 required artifact、JUnit、install manifest、toolchain provenance、
-Foundation completion report、authority/header digest を clean revision/tree に bind した readiness report が passed の場合だけ基準線になる。
+Foundation completion report、authority/header digest、public callable inventory digest、同じ inventory から生成した human review artifact を
+clean revision/tree に bind した readiness report が passed の場合だけ基準線になる。GR は同じ revision の readiness report、AST census、
+独立 Doxygen correspondence を再検証し、stale または別 SHA の callable evidence を production qualification に用いない。
 
 ### 26.4 Test classes
 

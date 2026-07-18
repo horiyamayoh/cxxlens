@@ -91,8 +91,9 @@ def main() -> int:
             if matching_ng_headers:
                 for header in matching_ng_headers:
                     observed_ng_headers[header] += 1
-                # NG API callable details are exact in cxxlens.ng-public-api-catalog.v1;
-                # Doxygen owns the navigable file/type surface without duplicating that contract.
+                # The sibling public_callable_inventory.py check-doxygen command
+                # enforces the exact one-callable-per-row bijection. This checker
+                # retains the independent documentation-quality obligation.
                 continue
             if qualified_name in planned_contracts:
                 observed_planned[qualified_name] += 1
@@ -159,7 +160,7 @@ def main() -> int:
     print(
         f"validated Doxygen contracts for {checked} public callables "
         f"({sum(observed_planned.values())} planned declarations and "
-        f"{sum(observed_ng_headers.values())} NG callables bound to exact catalog obligations)"
+        f"{sum(observed_ng_headers.values())} NG callables in catalog-admitted headers)"
     )
     return 0
 

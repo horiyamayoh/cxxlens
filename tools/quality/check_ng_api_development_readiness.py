@@ -17,6 +17,8 @@ from typing import Any
 import jsonschema
 import yaml
 
+import public_callable_inventory as callable_inventory
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MANIFEST = pathlib.Path("schemas/cxxlens_ng_api_development_readiness.yaml")
@@ -30,6 +32,16 @@ RELEASE_BUNDLE = pathlib.Path("schemas/cxxlens_ng_release_bundle.yaml")
 PUBLIC_API = pathlib.Path("schemas/cxxlens_ng_public_api_catalog.yaml")
 RELATION_REGISTRY = pathlib.Path("schemas/cxxlens_ng_relation_registry.yaml")
 ACCEPTANCE = pathlib.Path("schemas/cxxlens_ng_acceptance_manifest.yaml")
+PUBLIC_CALLABLE_INVENTORY = pathlib.Path(
+    "schemas/cxxlens_ng_public_callable_inventory.yaml"
+)
+PUBLIC_CALLABLE_INVENTORY_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_public_callable_inventory.schema.yaml"
+)
+PUBLIC_CALLABLE_REPORT_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_public_callable_inventory_report.schema.yaml"
+)
+PUBLIC_CALLABLE_CHECKER = pathlib.Path("tools/quality/public_callable_inventory.py")
 
 
 class ReadinessError(ValueError):
@@ -202,6 +214,61 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
     contexts = manifest["required_status_checks"]["contexts"]
     if contexts != sorted(contexts):
         fail("required status contexts must use canonical order")
+    callable_contract = manifest["public_callable_authority"]
+    for marker in (
+        callable_contract["checker"],
+        callable_contract["report_filename"],
+        callable_contract["review_filename"],
+        '--expected-revision "${GITHUB_SHA}"',
+        "name: cxxlens-ng-public-callable-inventory-${{ github.sha }}",
+    ):
+        if marker not in workflow:
+            fail(f"public callable workflow marker is missing: {marker}")
+    quality_job = re.search(
+        r"(?ms)^  quality-contracts:\n(?P<body>.*?)(?=^  [a-z0-9_-]+:\n|\Z)",
+        workflow,
+    )
+    if quality_job is None or "fetch-depth: 2" not in quality_job.group("body"):
+        fail("public callable stable-ID check requires parent history in CI")
+
+
+def validate_public_callable_contract(
+    root: pathlib.Path, manifest: dict[str, Any]
+) -> None:
+    contract = manifest["public_callable_authority"]
+    expected_paths = {
+        "inventory": PUBLIC_CALLABLE_INVENTORY,
+        "inventory_schema": PUBLIC_CALLABLE_INVENTORY_SCHEMA,
+        "report_schema": PUBLIC_CALLABLE_REPORT_SCHEMA,
+        "checker": PUBLIC_CALLABLE_CHECKER,
+    }
+    for key, expected in expected_paths.items():
+        if pathlib.Path(contract[key]) != expected:
+            fail(f"public callable authority path differs: {key}")
+    for key in ("decision_adr", *expected_paths):
+        if not (root / contract[key]).is_file():
+            fail(f"public callable authority is missing: {contract[key]}")
+
+    inventory = load_document(root / contract["inventory"])
+    validate_schema(
+        inventory,
+        load_document(root / contract["inventory_schema"]),
+        "public callable inventory",
+    )
+    if inventory["inventory_digest"] != callable_inventory.inventory_digest(inventory):
+        fail("public callable inventory semantic digest differs")
+    extractor = (
+        f"{inventory['extractor']['engine']}-"
+        f"{inventory['extractor']['engine_version']}"
+    )
+    if extractor != contract["extractor"]:
+        fail("public callable extractor binding differs")
+    try:
+        jsonschema.Draft202012Validator.check_schema(
+            load_document(root / contract["report_schema"])
+        )
+    except jsonschema.SchemaError as error:
+        fail(f"public callable report schema is invalid: {error.message}")
 
 
 def validate_documents(root: pathlib.Path) -> dict[str, Any]:
@@ -219,6 +286,7 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
     if "ALLOWED_PUBLIC_HEADERS" in migration:
         fail("migration checker still owns a public header allowlist")
     validate_gate_ownership(root, manifest)
+    validate_public_callable_contract(root, manifest)
     validate_workflow(root, manifest)
     if len(manifest["api_unit_workflow"]["active_write_units"]) > 1:
         fail("more than one API write unit is active")
@@ -253,6 +321,88 @@ def file_rows(paths: list[pathlib.Path], base: pathlib.Path) -> list[dict[str, s
         {"path": path.relative_to(base).as_posix(), "digest": sha256(path)}
         for path in sorted(set(paths))
     ]
+
+
+def public_callable_evidence(
+    root: pathlib.Path,
+    manifest: dict[str, Any],
+    evidence_dir: pathlib.Path,
+    git: dict[str, Any],
+) -> dict[str, Any]:
+    contract = manifest["public_callable_authority"]
+    report_paths = sorted(evidence_dir.rglob(contract["report_filename"]))
+    review_paths = sorted(evidence_dir.rglob(contract["review_filename"]))
+    if len(report_paths) != 1 or len(review_paths) != 1:
+        fail(
+            "Wave 0 requires exactly one public callable JSON/Markdown evidence "
+            f"pair: reports={len(report_paths)}, reviews={len(review_paths)}"
+        )
+    if report_paths[0].parent != review_paths[0].parent:
+        fail("public callable JSON/Markdown evidence is not from one artifact")
+
+    report_path = report_paths[0]
+    review_path = review_paths[0]
+    report = load_document(report_path)
+    validate_schema(
+        report,
+        load_document(root / contract["report_schema"]),
+        "public callable inventory report",
+    )
+    if report["git"] != git:
+        fail("public callable inventory report differs from Wave 0 git source")
+    if report["result"] != contract["required_result"]:
+        fail("public callable inventory report result differs")
+
+    inventory_path = root / contract["inventory"]
+    inventory = load_document(inventory_path)
+    validate_schema(
+        inventory,
+        load_document(root / contract["inventory_schema"]),
+        "public callable inventory",
+    )
+    semantic_digest = callable_inventory.inventory_digest(inventory)
+    if inventory["inventory_digest"] != semantic_digest:
+        fail("current public callable inventory semantic digest differs")
+    inventory_file_digest = sha256(inventory_path)
+    expected_inventory = {
+        "path": contract["inventory"],
+        "file_digest": inventory_file_digest,
+        "semantic_digest": semantic_digest,
+        "callable_count": len(inventory["callables"]),
+    }
+    if report["inventory"] != expected_inventory:
+        fail("public callable report inventory binding differs from current inventory")
+
+    callable_count = len(inventory["callables"])
+    if report["doxygen"]["count"] != callable_count:
+        fail("public callable Doxygen count differs from inventory callable count")
+    if report["review"]["path"] != contract["review_filename"]:
+        fail("public callable review filename differs")
+    review_digest = sha256(review_path)
+    if report["review"]["digest"] != review_digest:
+        fail("public callable review Markdown digest differs")
+    expected_markdown = callable_inventory.review_markdown(
+        inventory,
+        git,
+        report["run_url"],
+        report["doxygen"]["digest"],
+    )
+    if review_path.read_text(encoding="utf-8") != expected_markdown:
+        fail("public callable review Markdown differs from the current inventory")
+
+    return {
+        "path": report_path.relative_to(evidence_dir).as_posix(),
+        "report_digest": sha256(report_path),
+        "inventory_file_digest": inventory_file_digest,
+        "inventory_semantic_digest": semantic_digest,
+        "review_path": review_path.relative_to(evidence_dir).as_posix(),
+        "review_digest": review_digest,
+        "callable_count": callable_count,
+        "doxygen_count": report["doxygen"]["count"],
+        "result": report["result"],
+        "revision": report["git"]["revision"],
+        "tree": report["git"]["tree"],
+    }
 
 
 def build_report(
@@ -310,6 +460,9 @@ def build_report(
     if test_cases == 0:
         fail("Wave 0 test inventory is empty")
 
+    callable_binding = public_callable_evidence(
+        root, manifest, evidence_dir, git
+    )
     public_headers, generated_headers = public_header_inventory(root)
     authority_paths = [
         root / MANIFEST,
@@ -317,6 +470,11 @@ def build_report(
         root / PUBLIC_API,
         root / RELATION_REGISTRY,
         root / ACCEPTANCE,
+        root / manifest["public_callable_authority"]["decision_adr"],
+        root / manifest["public_callable_authority"]["inventory"],
+        root / manifest["public_callable_authority"]["inventory_schema"],
+        root / manifest["public_callable_authority"]["report_schema"],
+        root / manifest["public_callable_authority"]["checker"],
     ]
     return {
         "schema": "cxxlens.ng-api-development-readiness-report.v1",
@@ -346,6 +504,7 @@ def build_report(
             "revision": foundation["git"]["revision"],
             "tree": foundation["git"]["tree"],
         },
+        "public_callable_inventory": callable_binding,
     }
 
 

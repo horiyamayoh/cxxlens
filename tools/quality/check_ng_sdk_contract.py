@@ -22,7 +22,7 @@ import check_ng_query_contract as query_contract
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "sdk"))
-from relation_idl_compiler import canonical_relation  # noqa: E402
+from relation_idl_compiler import canonical_relation, render  # noqa: E402
 CATALOG = pathlib.Path("schemas/cxxlens_ng_public_api_catalog.yaml")
 SCHEMA = pathlib.Path("schemas/cxxlens_ng_public_api_catalog.schema.yaml")
 PROJECT_CATALOG_CONTRACT = pathlib.Path("schemas/cxxlens_ng_project_catalog_contract.yaml")
@@ -72,6 +72,52 @@ def load_yaml(path: pathlib.Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         fail(f"expected mapping: {path}")
     return value
+
+
+def admitted_generated_relations(
+    catalog: dict[str, Any], registry: dict[str, Any]
+) -> list[tuple[dict[str, Any], pathlib.Path]]:
+    """Return every catalog-admitted generated relation and its committed header."""
+    admitted_headers = {
+        pathlib.Path(header)
+        for collection in (catalog["packages"], catalog["entries"])
+        for row in collection
+        for header in row["headers"]
+        if header.startswith("include/cxxlens/relations/")
+    }
+    registry_by_header: dict[pathlib.Path, dict[str, Any]] = {}
+    for relation in registry["relations"]:
+        if not relation.get("generated_cpp_tag"):
+            continue
+        header = pathlib.Path(
+            "include/cxxlens/relations/"
+            + str(relation["name"]).replace(".", "_")
+            + ".hpp"
+        )
+        if header in registry_by_header:
+            fail(
+                "generated relation header has duplicate registry ownership: "
+                f"{header}"
+            )
+        registry_by_header[header] = relation
+
+    unbound = sorted(
+        header.as_posix() for header in admitted_headers - set(registry_by_header)
+    )
+    if unbound:
+        fail(f"catalog relation headers lack registry binding: {unbound}")
+    return [
+        (registry_by_header[header], header)
+        for header in sorted(admitted_headers, key=lambda path: path.as_posix())
+    ]
+
+
+def validate_generated_relation_header(
+    relation: dict[str, Any], committed: pathlib.Path, *, label: str | None = None
+) -> None:
+    """Reject any byte-level drift from the accepted IDL renderer."""
+    if committed.read_text(encoding="utf-8") != render(relation):
+        fail(f"committed generated relation is stale: {label or committed.as_posix()}")
 
 
 def schema_validate(document: dict[str, Any], schema: dict[str, Any]) -> None:
@@ -437,14 +483,14 @@ def run(command: list[str], *, expect_success: bool, label: str) -> None:
 def validate_generation_and_negatives(root: pathlib.Path, compiler: str) -> None:
     with tempfile.TemporaryDirectory(prefix="cxxlens-sdk-contract-") as directory:
         temporary = pathlib.Path(directory)
+        catalog = load_yaml(root / CATALOG)
         registry = load_yaml(root / "schemas/cxxlens_ng_relation_registry.yaml")
-        generated_relations = {
-            "cc.entity": "cc_entity.hpp",
-            "cc.call_site": "cc_call_site.hpp",
-            "cc.call_direct_target": "cc_call_direct_target.hpp",
-            "company.lock.acquire": "company_lock_acquire.hpp",
-        }
-        for name, filename in generated_relations.items():
+        generated_relations = admitted_generated_relations(catalog, registry)
+        generated_filenames: list[str] = []
+        for relation, relative_header in generated_relations:
+            name = str(relation["name"])
+            filename = relative_header.name
+            generated_filenames.append(filename)
             generated = temporary / filename
             run(
                 [
@@ -460,10 +506,12 @@ def validate_generation_and_negatives(root: pathlib.Path, compiler: str) -> None
                 expect_success=True,
                 label=f"relation IDL generation {name}",
             )
-            committed = root / "include/cxxlens/relations" / filename
+            committed = root / relative_header
+            validate_generated_relation_header(
+                relation, committed, label=relative_header.as_posix()
+            )
             if generated.read_bytes() != committed.read_bytes():
                 fail(f"committed generated relation is stale: {committed.relative_to(root)}")
-            relation = next(row for row in registry["relations"] if row["name"] == name)
             generated_text = generated.read_text(encoding="utf-8")
             for marker in [
                 relation["descriptor_id"],
@@ -515,11 +563,9 @@ def validate_generation_and_negatives(root: pathlib.Path, compiler: str) -> None
 
         source = temporary / "generated_test.cpp"
         source.write_text(
-            '#include "cc_entity.hpp"\n'
-            '#include "cc_call_site.hpp"\n'
-            '#include "cc_call_direct_target.hpp"\n'
-            '#include "company_lock_acquire.hpp"\n'
-            "int main(){return cxxlens::cc::relations::call_site::descriptor().validate()?0:1;}\n",
+            "".join(f'#include "{filename}"\n' for filename in generated_filenames)
+            + "int main(){return "
+            "cxxlens::cc::relations::call_site::descriptor().validate()?0:1;}\n",
             encoding="utf-8",
         )
         run(

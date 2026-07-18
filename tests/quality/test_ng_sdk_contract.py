@@ -7,6 +7,7 @@ import copy
 import json
 import pathlib
 import sys
+import tempfile
 import unittest
 
 import jsonschema
@@ -17,9 +18,11 @@ sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
 from check_ng_sdk_contract import (  # noqa: E402
     SdkContractError,
+    admitted_generated_relations,
     load_yaml,
     validate_boundaries,
     validate_catalog,
+    validate_generated_relation_header,
 )
 
 
@@ -27,6 +30,7 @@ class NgSdkContractTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.catalog = load_yaml(ROOT / "schemas/cxxlens_ng_public_api_catalog.yaml")
+        cls.registry = load_yaml(ROOT / "schemas/cxxlens_ng_relation_registry.yaml")
         cls.project_catalog_contract = load_yaml(
             ROOT / "schemas/cxxlens_ng_project_catalog_contract.yaml"
         )
@@ -58,6 +62,46 @@ class NgSdkContractTest(unittest.TestCase):
         catalog["entries"].append(copy.deepcopy(catalog["entries"][0]))
         with self.assertRaisesRegex(SdkContractError, "duplicate public entry"):
             validate_catalog(ROOT, catalog)
+
+    def test_generation_covers_every_catalog_admitted_relation_header(self) -> None:
+        admitted = {
+            header
+            for collection in (self.catalog["packages"], self.catalog["entries"])
+            for row in collection
+            for header in row["headers"]
+            if header.startswith("include/cxxlens/relations/")
+        }
+        generated = admitted_generated_relations(self.catalog, self.registry)
+        self.assertEqual(
+            {relative.as_posix() for _, relative in generated}, admitted
+        )
+        self.assertEqual(len(generated), 11)
+        for relation, relative in generated:
+            validate_generated_relation_header(
+                relation, ROOT / relative, label=relative.as_posix()
+            )
+
+    def test_manual_edit_of_generated_header_is_rejected(self) -> None:
+        relation, relative = next(
+            row
+            for row in admitted_generated_relations(self.catalog, self.registry)
+            if row[0]["name"] == "cc.entity"
+        )
+        with tempfile.TemporaryDirectory(
+            prefix="cxxlens-generated-header-test-"
+        ) as directory:
+            candidate = pathlib.Path(directory) / relative.name
+            candidate.write_text(
+                (ROOT / relative).read_text(encoding="utf-8")
+                + "// forbidden manual edit\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                SdkContractError, "committed generated relation is stale"
+            ):
+                validate_generated_relation_header(
+                    relation, candidate, label=relative.as_posix()
+                )
 
     def test_lifetime_contract_cannot_be_omitted(self) -> None:
         catalog = copy.deepcopy(self.catalog)

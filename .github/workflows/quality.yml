@@ -74,6 +74,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 2
       - name: Install exact Clang 22 toolchain
         run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
       - name: Install exact Doxygen toolchain
@@ -110,6 +112,17 @@ jobs:
             --checker cmake/CxxlensDeveloperTools.cmake \
             --output build/ci-quick/quality-production.log \
             --evidence-output build/ci-quick/quality-production.evidence.json
+      - name: Generate exact-SHA public callable review
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          python tools/quality/public_callable_inventory.py report \
+            --root . \
+            --compiler clang++-22 \
+            --doxygen-xml build/ci-quick/doxygen/xml \
+            --output-json "${RUNNER_TEMP}/cxxlens-ng-public-callable-inventory-report.json" \
+            --output-markdown "${RUNNER_TEMP}/cxxlens-ng-public-callable-inventory-review.md" \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --expected-revision "${GITHUB_SHA}"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: cxxlens-quality-${{ github.sha }}
@@ -122,6 +135,15 @@ jobs:
             build/ci-quick/quality-unit.evidence.json
             build/ci-quick/quality-production.evidence.json
           if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          name: cxxlens-ng-public-callable-inventory-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/cxxlens-ng-public-callable-inventory-report.json
+            ${{ runner.temp }}/cxxlens-ng-public-callable-inventory-review.md
+          if-no-files-found: error
+          retention-days: 90
 
   install-consumer:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft

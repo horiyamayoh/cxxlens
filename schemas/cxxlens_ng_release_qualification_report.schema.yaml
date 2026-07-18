@@ -21,12 +21,13 @@ properties:
   prerequisites:
     type: object
     additionalProperties: false
-    required: [gates, migrations, foundation_report_digest, readiness_report_digest, g5_report_digest, same_revision]
+    required: [gates, migrations, foundation_report_digest, readiness_report_digest, public_callable_report_digest, g5_report_digest, same_revision]
     properties:
       gates: {const: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4, gate.g5, gate.release]}
       migrations: {const: [R0, R1, R2, R3, R4]}
       foundation_report_digest: {$ref: '#/$defs/digest'}
       readiness_report_digest: {$ref: '#/$defs/digest'}
+      public_callable_report_digest: {$ref: '#/$defs/digest'}
       g5_report_digest: {$ref: '#/$defs/digest'}
       same_revision: {const: true}
   packages:
@@ -86,7 +87,38 @@ properties:
       report_digest: {$ref: '#/$defs/digest'}
       warm_zero_plan_median_us: {type: integer, minimum: 0, maximum: 250000}
       bounded_closure_median_us: {type: integer, minimum: 0, maximum: 5000000}
-  documentation: {const: {doxygen_contract: passed, support_matrix: exact-report-only}}
+  documentation:
+    type: object
+    additionalProperties: false
+    required: [doxygen_contract, doxygen_callable_count, doxygen_digest, public_callable_report, public_callable_inventory, public_callable_review, support_matrix]
+    properties:
+      doxygen_contract: {const: passed}
+      doxygen_callable_count: {type: integer, minimum: 1}
+      doxygen_digest: {$ref: '#/$defs/digest'}
+      public_callable_report:
+        type: object
+        additionalProperties: false
+        required: [path, digest]
+        properties:
+          path: {type: string, pattern: '^(?:[^/\n]+/)*cxxlens-ng-public-callable-inventory-report\.json$'}
+          digest: {$ref: '#/$defs/digest'}
+      public_callable_inventory:
+        type: object
+        additionalProperties: false
+        required: [path, file_digest, semantic_digest, callable_count]
+        properties:
+          path: {const: schemas/cxxlens_ng_public_callable_inventory.yaml}
+          file_digest: {$ref: '#/$defs/digest'}
+          semantic_digest: {$ref: '#/$defs/digest'}
+          callable_count: {type: integer, minimum: 1}
+      public_callable_review:
+        type: object
+        additionalProperties: false
+        required: [path, digest]
+        properties:
+          path: {type: string, pattern: '^(?:[^/\n]+/)*cxxlens-ng-public-callable-inventory-review\.md$'}
+          digest: {$ref: '#/$defs/digest'}
+      support_matrix: {const: exact-report-only}
   negative_evidence:
     type: array
     minItems: 4

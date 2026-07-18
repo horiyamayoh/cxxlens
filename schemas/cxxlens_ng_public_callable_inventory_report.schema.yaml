@@ -1,0 +1,57 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-public-callable-inventory-report.v1
+title: cxxlens exact-SHA public callable inventory review report
+type: object
+additionalProperties: false
+required: [schema, result, generated_at, run_url, git, inventory, extractor, headers, doxygen, review]
+properties:
+  schema: {const: cxxlens.ng-public-callable-inventory-report.v1}
+  result: {const: passed}
+  generated_at: {type: string, format: date-time}
+  run_url: {type: string, format: uri}
+  git: {$ref: '#/$defs/git'}
+  inventory:
+    type: object
+    additionalProperties: false
+    required: [path, file_digest, semantic_digest, callable_count]
+    properties:
+      path: {const: schemas/cxxlens_ng_public_callable_inventory.yaml}
+      file_digest: {$ref: '#/$defs/digest'}
+      semantic_digest: {$ref: '#/$defs/digest'}
+      callable_count: {type: integer, minimum: 1}
+  extractor:
+    type: object
+    additionalProperties: false
+    required: [engine, engine_version, canonicalization]
+    properties:
+      engine: {const: clang-ast-json}
+      engine_version: {const: '22'}
+      canonicalization: {const: cxxlens.public-callable-signature.v1}
+  headers: {$ref: '#/$defs/count_digest'}
+  doxygen: {$ref: '#/$defs/count_digest'}
+  review:
+    type: object
+    additionalProperties: false
+    required: [path, digest]
+    properties:
+      path: {type: string, pattern: '^[^/\n]+\.md$'}
+      digest: {$ref: '#/$defs/digest'}
+$defs:
+  digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  sha: {type: string, pattern: '^[0-9a-f]{40}$'}
+  git:
+    type: object
+    additionalProperties: false
+    required: [revision, tree, branch, clean]
+    properties:
+      revision: {$ref: '#/$defs/sha'}
+      tree: {$ref: '#/$defs/sha'}
+      branch: {const: main}
+      clean: {const: true}
+  count_digest:
+    type: object
+    additionalProperties: false
+    required: [count, digest]
+    properties:
+      count: {type: integer, minimum: 1}
+      digest: {$ref: '#/$defs/digest'}

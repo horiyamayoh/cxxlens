@@ -17,6 +17,8 @@ from typing import Any
 import jsonschema
 import yaml
 
+import public_callable_inventory as callable_inventory
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MANIFEST = pathlib.Path("schemas/cxxlens_ng_release_qualification.yaml")
@@ -26,6 +28,13 @@ INSTALL_SCHEMA = pathlib.Path("schemas/cxxlens_ng_install_artifact_manifest.sche
 G5_REPORT_SCHEMA = pathlib.Path("schemas/cxxlens_ng_g5_qualification_report.schema.yaml")
 FOUNDATION_REPORT_SCHEMA = pathlib.Path("schemas/cxxlens_ng_foundation_completion_report.schema.yaml")
 READINESS_REPORT_SCHEMA = pathlib.Path("schemas/cxxlens_ng_api_development_readiness_report.schema.yaml")
+CALLABLE_INVENTORY = pathlib.Path("schemas/cxxlens_ng_public_callable_inventory.yaml")
+CALLABLE_INVENTORY_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_public_callable_inventory.schema.yaml"
+)
+CALLABLE_REPORT_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_public_callable_inventory_report.schema.yaml"
+)
 SECURITY_REPORT_SCHEMA = pathlib.Path("schemas/cxxlens_ng_security_conformance_report.schema.yaml")
 ACCEPTANCE = pathlib.Path("schemas/cxxlens_ng_acceptance_manifest.yaml")
 RELEASE = pathlib.Path("schemas/cxxlens_ng_release_bundle.yaml")
@@ -101,7 +110,7 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
             "run_url": "https://github.com/horiyamayoh/cxxlens/actions/runs/1",
             "git": {"revision": "1" * 40, "tree": "2" * 40, "branch": "main", "clean": True},
             "release": {"id": "distribution-1.0", "version": "1.0.0", "state": "qualified"},
-            "prerequisites": {"gates": [f"gate.g{i}" for i in range(6)] + ["gate.release"], "migrations": [f"R{i}" for i in range(5)], "foundation_report_digest": "sha256:" + "1" * 64, "readiness_report_digest": "sha256:" + "2" * 64, "g5_report_digest": "sha256:" + "3" * 64, "same_revision": True},
+            "prerequisites": {"gates": [f"gate.g{i}" for i in range(6)] + ["gate.release"], "migrations": [f"R{i}" for i in range(5)], "foundation_report_digest": "sha256:" + "1" * 64, "readiness_report_digest": "sha256:" + "2" * 64, "public_callable_report_digest": "sha256:" + "3" * 64, "g5_report_digest": "sha256:" + "4" * 64, "same_revision": True},
             "packages": [
                 {"configuration": configuration, "prefix_digest": "sha256:" + digit * 64, "manifest_digest": "sha256:" + digit * 64, "toolchain_digest": "sha256:" + digit * 64, "real_project": "passed", "storage_backends": ["memory", "sqlite"], "relocated": True, "license": "sha256:" + digit * 64, "notice": "sha256:" + digit * 64}
                 for configuration, digit in (("static", "1"), ("shared", "2"))
@@ -113,7 +122,26 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
             ],
             "security": {"status": "green", "contract_digest": "sha256:" + "3" * 64, "vector_count": 1},
             "performance": {"report_digest": "sha256:" + "4" * 64, "warm_zero_plan_median_us": 1, "bounded_closure_median_us": 1},
-            "documentation": {"doxygen_contract": "passed", "support_matrix": "exact-report-only"},
+            "documentation": {
+                "doxygen_contract": "passed",
+                "doxygen_callable_count": 1,
+                "doxygen_digest": "sha256:" + "5" * 64,
+                "public_callable_report": {
+                    "path": "cxxlens-public-callables/cxxlens-ng-public-callable-inventory-report.json",
+                    "digest": "sha256:" + "3" * 64,
+                },
+                "public_callable_inventory": {
+                    "path": CALLABLE_INVENTORY.as_posix(),
+                    "file_digest": "sha256:" + "6" * 64,
+                    "semantic_digest": "sha256:" + "7" * 64,
+                    "callable_count": 1,
+                },
+                "public_callable_review": {
+                    "path": "cxxlens-public-callables/cxxlens-ng-public-callable-inventory-review.md",
+                    "digest": "sha256:" + "8" * 64,
+                },
+                "support_matrix": "exact-report-only",
+            },
             "negative_evidence": manifest["security"]["required_negative_evidence"],
             "authority_digests": [{"path": f"authority-{index}", "digest": "sha256:" + str(index) * 64} for index in range(1, 7)],
         },
@@ -153,6 +181,7 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
         "required_evidence": [
             "same-sha-foundation-report",
             "same-sha-wave0-readiness-report",
+            "same-sha-public-callable-report-and-review",
             "same-sha-g5-report",
             "static-relocated-install-artifact",
             "shared-relocated-install-artifact",
@@ -213,6 +242,93 @@ def find_one(root: pathlib.Path, name: str) -> pathlib.Path:
     if len(matches) != 1:
         fail(f"expected exactly one {name}, found {len(matches)}")
     return matches[0]
+
+
+def verify_public_callable_evidence(
+    root: pathlib.Path,
+    manifest: dict[str, Any],
+    evidence: pathlib.Path,
+    git: dict[str, Any],
+    readiness: dict[str, Any],
+) -> dict[str, Any]:
+    """Verify one exact-SHA callable JSON/Markdown pair and its Wave 0 binding."""
+
+    contract = manifest["documentation"]
+    report_path = find_one(evidence, contract["public_callable_report_filename"])
+    review_path = find_one(evidence, contract["public_callable_review_filename"])
+    if report_path.parent != review_path.parent:
+        fail("public callable JSON/Markdown do not form one artifact pair")
+    report = load(report_path)
+    validate_schema(
+        report,
+        load(root / contract["public_callable_report_schema"]),
+        "public callable inventory report",
+    )
+    if report["git"] != git:
+        fail("public callable inventory report is not from the exact GR revision/tree")
+    if report["result"] != "passed":
+        fail("public callable inventory report did not pass")
+
+    inventory_path = root / contract["public_callable_inventory"]
+    inventory = load(inventory_path)
+    try:
+        callable_inventory.validate_inventory_document(root, inventory)
+    except callable_inventory.CallableInventoryError as error:
+        fail(f"current public callable inventory is invalid: {error}")
+    inventory_binding = {
+        "path": contract["public_callable_inventory"],
+        "file_digest": digest(inventory_path),
+        "semantic_digest": callable_inventory.inventory_digest(inventory),
+        "callable_count": len(inventory["callables"]),
+    }
+    if report["inventory"] != inventory_binding:
+        fail("public callable report differs from the current inventory digests/count")
+    if report["doxygen"]["count"] != inventory_binding["callable_count"]:
+        fail("public callable Doxygen count differs from the current inventory")
+
+    if report["review"]["path"] != contract["public_callable_review_filename"]:
+        fail("public callable report names a different Markdown review artifact")
+    review_digest = digest(review_path)
+    if report["review"]["digest"] != review_digest:
+        fail("public callable Markdown review digest differs")
+    expected_markdown = callable_inventory.review_markdown(
+        inventory,
+        git,
+        report["run_url"],
+        report["doxygen"]["digest"],
+    )
+    if review_path.read_text(encoding="utf-8") != expected_markdown:
+        fail("public callable Markdown review differs from the current inventory")
+
+    report_relative = report_path.relative_to(evidence).as_posix()
+    review_relative = review_path.relative_to(evidence).as_posix()
+    report_digest = digest(report_path)
+    expected_readiness_binding = {
+        "path": report_relative,
+        "report_digest": report_digest,
+        "inventory_file_digest": inventory_binding["file_digest"],
+        "inventory_semantic_digest": inventory_binding["semantic_digest"],
+        "review_path": review_relative,
+        "review_digest": review_digest,
+        "callable_count": inventory_binding["callable_count"],
+        "doxygen_count": report["doxygen"]["count"],
+        "result": report["result"],
+        "revision": report["git"]["revision"],
+        "tree": report["git"]["tree"],
+    }
+    readiness_binding = readiness.get("public_callable_inventory")
+    if readiness_binding != expected_readiness_binding:
+        fail(
+            "Wave 0 public callable binding differs from the exact JSON artifact "
+            f"digest: expected={expected_readiness_binding}, actual={readiness_binding}"
+        )
+
+    return {
+        "report": {"path": report_relative, "digest": report_digest},
+        "inventory": inventory_binding,
+        "review": {"path": review_relative, "digest": review_digest},
+        "doxygen": report["doxygen"],
+    }
 
 
 def junit_tests(path: pathlib.Path) -> set[str]:
@@ -306,6 +422,9 @@ def make_report(root: pathlib.Path, manifest: dict[str, Any], evidence: pathlib.
     for label, value in (("foundation", foundation), ("readiness", readiness)):
         if value["git"]["revision"] != git["revision"] or value["git"]["tree"] != git["tree"] or value["result"] != "passed":
             fail(f"{label} evidence is not from the exact GR revision")
+    callable_evidence = verify_public_callable_evidence(
+        root, manifest, evidence, git, readiness
+    )
 
     g5_path = find_one(evidence, "cxxlens-ng-g5-qualification-report.json")
     g5 = load(g5_path)
@@ -326,12 +445,30 @@ def make_report(root: pathlib.Path, manifest: dict[str, Any], evidence: pathlib.
         value = install_values[configuration]
         files = {row["path"]: row["digest"] for row in value["files"]}
         worker = files["bin/cxxlens-clang-worker-22"]
-        evidence_digest = canonical_digest({"install_manifest": value["manifest_digest"], "g5_report": digest(g5_path), "security_report": digest(security_path), "configuration": configuration})
+        evidence_digest = canonical_digest(
+            {
+                "install_manifest": value["manifest_digest"],
+                "g5_report": digest(g5_path),
+                "security_report": digest(security_path),
+                "public_callable_report": callable_evidence["report"]["digest"],
+                "configuration": configuration,
+            }
+        )
         for relation in manifest["provider"]["relations"]:
             production_support.append({"provider_id": manifest["provider"]["provider_id"], "provider_version": manifest["provider"]["provider_version"], "binary_digest": worker, "relation": relation, "interpretation": manifest["provider"]["interpretation"], "toolchain": value["toolchain"]["identity"], "platform": f"linux-{platform.machine().lower()}-{configuration}", "status": "production-supported", "capabilities": manifest["provider"]["capabilities"], "guarantee": manifest["provider"]["guarantee"], "security_profile_digest": security_digest, "evidence_digest": evidence_digest})
 
     metrics = g5["performance"]["metrics_us"]
-    authority_paths = [MANIFEST, RELEASE, ACCEPTANCE, SUPPORT, SECURITY, REGISTRY]
+    authority_paths = [
+        MANIFEST,
+        RELEASE,
+        ACCEPTANCE,
+        SUPPORT,
+        SECURITY,
+        REGISTRY,
+        CALLABLE_INVENTORY,
+        CALLABLE_INVENTORY_SCHEMA,
+        CALLABLE_REPORT_SCHEMA,
+    ]
     report = {
         "schema": "cxxlens.ng-release-qualification-report.v1",
         "result": "passed",
@@ -339,12 +476,20 @@ def make_report(root: pathlib.Path, manifest: dict[str, Any], evidence: pathlib.
         "run_url": run_url,
         "git": git,
         "release": {"id": "distribution-1.0", "version": "1.0.0", "state": "qualified"},
-        "prerequisites": {"gates": manifest["prerequisites"]["gates"] + ["gate.release"], "migrations": manifest["prerequisites"]["migrations"], "foundation_report_digest": digest(foundation_path), "readiness_report_digest": digest(readiness_path), "g5_report_digest": digest(g5_path), "same_revision": True},
+        "prerequisites": {"gates": manifest["prerequisites"]["gates"] + ["gate.release"], "migrations": manifest["prerequisites"]["migrations"], "foundation_report_digest": digest(foundation_path), "readiness_report_digest": digest(readiness_path), "public_callable_report_digest": callable_evidence["report"]["digest"], "g5_report_digest": digest(g5_path), "same_revision": True},
         "packages": packages,
         "production_support": production_support,
         "security": {"status": security["status"], "contract_digest": security["contract_digest"], "vector_count": security["vector_count"]},
         "performance": {"report_digest": digest(g5_path), "warm_zero_plan_median_us": metrics["warm_zero_plan_median"], "bounded_closure_median_us": metrics["bounded_closure_median"]},
-        "documentation": {"doxygen_contract": "passed", "support_matrix": "exact-report-only"},
+        "documentation": {
+            "doxygen_contract": "passed",
+            "doxygen_callable_count": callable_evidence["doxygen"]["count"],
+            "doxygen_digest": callable_evidence["doxygen"]["digest"],
+            "public_callable_report": callable_evidence["report"],
+            "public_callable_inventory": callable_evidence["inventory"],
+            "public_callable_review": callable_evidence["review"],
+            "support_matrix": "exact-report-only",
+        },
         "negative_evidence": manifest["security"]["required_negative_evidence"],
         "authority_digests": [{"path": path.as_posix(), "digest": digest(root / path)} for path in authority_paths],
     }

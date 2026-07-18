@@ -1,5 +1,5 @@
 schema: cxxlens.ng-release-bundle.v1
-document_version: 1.4.0
+document_version: 1.5.0
 maturity: accepted-contract
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -205,6 +205,7 @@ release_qualification:
   required_evidence:
     - same-sha-foundation-report
     - same-sha-wave0-readiness-report
+    - same-sha-public-callable-report-and-review
     - same-sha-g5-report
     - static-relocated-install-artifact
     - shared-relocated-install-artifact

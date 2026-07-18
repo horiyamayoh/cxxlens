@@ -11,6 +11,7 @@
 | Provider Protocol | `schemas/cxxlens_ng_provider_protocol.yaml` | #149 | accepted exact contract |
 | Provider Runtime | `schemas/cxxlens_ng_provider_runtime_contract.yaml` | #151 | implemented exact contract |
 | Public C++ API Catalog | `schemas/cxxlens_ng_public_api_catalog.yaml` | #66–#70 | implemented |
+| Public Callable Inventory | `schemas/cxxlens_ng_public_callable_inventory.yaml` | #169 | implemented exact Clang 22 AST and Doxygen bidirectional correspondence |
 | Acceptance Manifest | `schemas/cxxlens_ng_acceptance_manifest.yaml` | #71 | implemented foundation gates |
 | Foundation Completion | `schemas/cxxlens_ng_foundation_completion_manifest.yaml` | #113 | implemented, CI commit/finding-bound measured-audit report |
 | API Development Readiness | `schemas/cxxlens_ng_api_development_readiness.yaml` | #168 | implemented clean-main Wave 0 baseline |

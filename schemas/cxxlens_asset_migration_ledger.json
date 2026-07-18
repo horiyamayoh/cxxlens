@@ -1,5 +1,5 @@
 {
-  "asset_count": 400,
+  "asset_count": 406,
   "assets": [
     {
       "authority": "active",
@@ -1088,6 +1088,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/design/adr/0092-exact-public-callable-inventory.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/design/adr/README.md",
       "removal_issue": null,
       "replacement": null,
@@ -1795,6 +1802,27 @@
     },
     {
       "authority": "active",
+      "path": "schemas/cxxlens_ng_public_callable_inventory.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_public_callable_inventory.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_public_callable_inventory_report.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "schemas/cxxlens_ng_quality_evidence.schema.yaml",
       "removal_issue": null,
       "replacement": null,
@@ -2439,6 +2467,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_public_callable_inventory.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_ng_query_contract.py",
       "removal_issue": null,
       "replacement": null,
@@ -2740,6 +2775,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/public_callable_inventory.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/requirements.lock",
       "removal_issue": null,
       "replacement": null,
@@ -2803,7 +2845,7 @@
     }
   ],
   "classifications": {
-    "active": 364,
+    "active": 370,
     "archived": 35,
     "generated": 1
   },
