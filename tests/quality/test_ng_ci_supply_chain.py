@@ -57,6 +57,11 @@ class NgCiSupplyChainTest(unittest.TestCase):
                 install_documentation(self.lock)
             run.assert_not_called()
 
+    def test_compiler_profile_contains_sanitizer_runtime(self) -> None:
+        self.assertIn(
+            "libclang-rt-22-dev", self.lock["llvm"]["profiles"]["compiler"]
+        )
+
     def test_mutable_or_unknown_action_is_rejected(self) -> None:
         for action_line in (
             "      - uses: actions/checkout@v4\n",

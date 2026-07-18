@@ -10,7 +10,7 @@
     "issue": "#141",
     "owner": "steward.ci-supply-chain"
   },
-  "document_version": "1.1.0",
+  "document_version": "1.2.0",
   "documentation": {
     "architecture": "amd64",
     "expected_release": "1.9.8",
@@ -27,6 +27,7 @@
       "clang-22": "c35ae50ecf7704b3dd0278837c4c223e72318e15de6869e3c73b58fbc64b547d",
       "clang-tidy-22": "1e5917c1cd027548aff5cd35ee4f781a867d5daf03d9eb92611fc838ae9fa3dc",
       "libclang-22-dev": "f723058ab97299f8088cd2319a947570d76381ab9d428219950429a5c5bc5e9d",
+      "libclang-rt-22-dev": "ec0cb91cfef7d9d439c7123a880f4f4108d5bd3ff70e54193b19fba3630c1c1e",
       "llvm-22": "fa5e184d012d2b17312ee4cd1d90e6adb8da3be78aa15cb0aa66438220effa10",
       "llvm-22-dev": "e5fddde34244e489b351e40daedc952afdd7948fab85ba33290df458faa03490"
     },
@@ -34,12 +35,14 @@
       "clang-22": "1:22.1.8~++20260613092238+e80beda6e255-1~exp1~20260613092253.78",
       "clang-tidy-22": "1:22.1.8~++20260613092238+e80beda6e255-1~exp1~20260613092253.78",
       "libclang-22-dev": "1:22.1.8~++20260613092238+e80beda6e255-1~exp1~20260613092253.78",
+      "libclang-rt-22-dev": "1:22.1.8~++20260613092238+e80beda6e255-1~exp1~20260613092253.78",
       "llvm-22": "1:22.1.8~++20260613092238+e80beda6e255-1~exp1~20260613092253.78",
       "llvm-22-dev": "1:22.1.8~++20260613092238+e80beda6e255-1~exp1~20260613092253.78"
     },
     "profiles": {
       "compiler": [
         "clang-22",
+        "libclang-rt-22-dev",
         "llvm-22"
       ],
       "developer": [
