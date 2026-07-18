@@ -48,7 +48,7 @@ class NgRelationContractTest(unittest.TestCase):
     def test_exact_registry_has_all_ng0_relations_and_valid_vectors(self) -> None:
         registry, results = validate_contract(ROOT)
         self.assertEqual(len(registry["relations"]), 18)
-        self.assertEqual(len(results), 26)
+        self.assertEqual(len(results), 27)
         self.assertEqual({row["decision"] for row in results}, {"accepted", "rejected"})
 
     def test_claim_condition_exists_only_in_system_envelope(self) -> None:

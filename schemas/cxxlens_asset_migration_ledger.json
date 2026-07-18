@@ -1,5 +1,5 @@
 {
-  "asset_count": 365,
+  "asset_count": 366,
   "assets": [
     {
       "authority": "active",
@@ -1005,6 +1005,13 @@
     {
       "authority": "active",
       "path": "docs/design/adr/0082-verified-executable-fd-binding.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/design/adr/0083-cross-tu-semantic-entity-identity.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2558,7 +2565,7 @@
     }
   ],
   "classifications": {
-    "active": 329,
+    "active": 330,
     "archived": 35,
     "generated": 1
   },

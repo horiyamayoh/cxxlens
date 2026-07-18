@@ -2673,12 +2673,20 @@ ID や hidden variant は宣言済み column を介さず直接混ぜない。so
 保持したまま unresolved とし、standard row を捏造しない。
 
 Clang が `getDirectCallee()` を返した call は、callee declaration が header、別 translation unit、未publication
-partition のいずれにあるかに関係なく、definition、なければ canonical declaration の kind/signature/anchor と
+partition のいずれにあるかに関係なく、canonical declaration の semantic key、kind/signature と
 provider-local key/toolchain を entity row と共有する descriptor projection へ入力して
 `cc.call_direct_target.target` を導出する。同一 observation batch 内の entity row 存在を
 directness または target identity の条件にしてはならない。未publication entity は relation registry の
 `soft_semantic` / `on_missing: unresolved` policy で会計する。direct callee または exact callee projection がない call は
 provider unresolved とし、独自 target ID を捏造しない。
+
+Issue #152 / ADR 0083 により cross-TU semantic entity identity は declaration/definition occurrence anchor を含めない。
+`cc.entity.v1` の ordered projection は canonicalization、kind、semantic owner、structural signature、toolchain、
+provider-local semantic key を共有し、synthetic direct target と actual entity publication は同じ `entity_row()` helper を
+同じ完全入力で呼ぶ。source anchor は standard entity rowへ投影せず、
+`frontend.clang22.entity_observation.v1.source` または `cc.declaration.source` に分離する。header declaration、caller TU 内
+forward declaration、別 TU definition、source relocation のいずれでも exact USR entity ID は不変であり、store publication
+後の `cc.call_direct_target.target` は `cc.entity.entity` に join 可能でなければならない。
 
 同じ canonical declaration key の entity observation は provider-owned occurrence rowとして保持しつつ、standard
 `cc.entity` は definition、canonical declaration、canonical observation form の優先順で一件へ正規化する。

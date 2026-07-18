@@ -41,9 +41,9 @@ properties:
       index:
         const: docs/design/catalogs/README.md
       decision_adr:
-        const: docs/design/adr/0057-detached-scalar-value-validation.md
+        const: docs/design/adr/0083-cross-tu-semantic-entity-identity.md
       owner_issue:
-        const: '#114'
+        const: '#152'
       owner:
         const: steward.ng-relations
   compatibility:

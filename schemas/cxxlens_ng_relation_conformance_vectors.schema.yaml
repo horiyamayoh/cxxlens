@@ -23,9 +23,9 @@ properties:
     - decision_adr
     properties:
       owner_issue:
-        const: '#114'
+        const: '#152'
       decision_adr:
-        const: docs/design/adr/0057-detached-scalar-value-validation.md
+        const: docs/design/adr/0083-cross-tu-semantic-entity-identity.md
   registry:
     const: schemas/cxxlens_ng_relation_registry.yaml
   vectors:

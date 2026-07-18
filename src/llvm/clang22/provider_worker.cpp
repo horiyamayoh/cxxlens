@@ -293,13 +293,6 @@ namespace cxxlens::detail::clang22
 				 })
 				if (!result)
 					return sdk::unexpected(std::move(result.error()));
-			if (observation.source_span_id)
-			{
-				auto result = builder.set<relation::anchor>(
-					optional_typed("source_span_id", *observation.source_span_id));
-				if (!result)
-					return sdk::unexpected(std::move(result.error()));
-			}
 			const auto qualified_name = observation.payload.find("symbol.qualified_name");
 			if (qualified_name != observation.payload.end() && !qualified_name->second.empty())
 			{
@@ -424,9 +417,6 @@ namespace cxxlens::detail::clang22
 			if (const auto name = call.payload.find("call.direct_callee_qualified_name");
 				name != call.payload.end() && !name->second.empty())
 				output.payload.emplace("symbol.qualified_name", name->second);
-			if (const auto anchor = call.payload.find("call.direct_callee_anchor");
-				anchor != call.payload.end() && !anchor->second.empty())
-				output.source_span_id = anchor->second;
 			return output;
 		}
 
@@ -829,17 +819,6 @@ namespace cxxlens::detail::clang22
 						identity_declaration->getType().getCanonicalType().getAsString());
 					call.payload.emplace("call.direct_callee_qualified_name",
 										 identity_declaration->getQualifiedNameAsString());
-					if (unit_->source_manager().isWrittenInMainFile(
-							identity_declaration->getLocation()))
-					{
-						auto callee_source = provider::clang22::normalize_source(
-							*unit_,
-							identity_declaration->getSourceRange(),
-							{source_snapshot_, file_, "declaration"});
-						if (callee_source)
-							call.payload.emplace("call.direct_callee_anchor",
-												 std::move(callee_source->id));
-					}
 				}
 				else if (call.payload.at("call.kind") == "dependent")
 					call.payload.emplace("call.unresolved_reason", "dependent-callee");

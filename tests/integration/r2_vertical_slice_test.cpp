@@ -122,8 +122,6 @@ namespace
 		value.payload.emplace("call.direct_callee", std::move(callee));
 		value.payload.emplace("call.direct_callee_kind", "function");
 		value.payload.emplace("call.direct_callee_signature", "void ()");
-		value.payload.emplace("call.direct_callee_anchor",
-							  "span-" + std::string(63U, 'd') + source_suffix);
 		return value;
 	}
 
@@ -157,7 +155,10 @@ namespace
 			call_batch, std::string{clang_contract}, true);
 		require(normalized_entities && normalized_calls && normalized_calls->entities.empty() &&
 					normalized_calls->direct_targets.size() == call_batch.observations.size() &&
-					normalized_calls->unresolved.empty(),
+					normalized_calls->unresolved.empty() &&
+					string_cell(normalized_calls->direct_targets.front(),
+								"cc.call_direct_target.v1.target") ==
+						string_cell(normalized_entities->entities.front(), "cc.entity.v1.entity"),
 				"cross-TU Clang direct target canonicalization failed");
 		normalized_entities->call_observations = std::move(normalized_calls->call_observations);
 		normalized_entities->call_sites = std::move(normalized_calls->call_sites);

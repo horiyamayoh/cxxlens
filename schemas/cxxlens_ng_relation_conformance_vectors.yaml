@@ -1,8 +1,8 @@
 schema: cxxlens.relation-conformance-vectors.v1
-document_version: 1.2.0
+document_version: 1.3.0
 authority:
-  owner_issue: '#114'
-  decision_adr: docs/design/adr/0057-detached-scalar-value-validation.md
+  owner_issue: '#152'
+  decision_adr: docs/design/adr/0083-cross-tu-semantic-entity-identity.md
 registry: schemas/cxxlens_ng_relation_registry.yaml
 vectors:
 - id: exact-registry
@@ -322,3 +322,14 @@ vectors:
     patches:
     - op: remove
       path: /relations/11/columns/1
+- id: entity-occurrence-anchor-in-identity
+  class: negative
+  operation: validate_registry
+  expected:
+    decision: rejected
+    reason_code: relation.identity-display-field
+  input:
+    patches:
+    - op: add
+      path: /relations/7/claim/domain_identity/projection/-
+      value: cc.entity.v1.anchor

@@ -299,14 +299,21 @@ def validate(root: pathlib.Path) -> None:
         if missing:
             raise ContractError(f"{relative} lacks markers: {missing}")
 
+    worker = (root / "src/llvm/clang22/provider_worker.cpp").read_text(encoding="utf-8")
+    for forbidden in ("call.direct_callee_anchor", "builder.set<relation::anchor>"):
+        if forbidden in worker:
+            raise ContractError(
+                f"Clang normalizer leaks occurrence anchor into semantic entity identity: {forbidden}"
+            )
+
     catalog = load(root / "schemas/cxxlens_ng_public_api_catalog.yaml")
     entries = {entry["id"]: entry for entry in catalog["entries"]}
     runtime = entries.get("public.provider-runtime")
     if runtime is None or runtime["status"] != "implemented" or runtime["owner_issue"] != "#151":
         raise ContractError("public.provider-runtime is not an implemented Issue #151 entry")
     native = entries.get("public.native-provider-sdk")
-    if native is None or native["status"] != "implemented" or native["owner_issue"] != "#139":
-        raise ContractError("public.native-provider-sdk is not an implemented Issue #139 entry")
+    if native is None or native["status"] != "implemented" or native["owner_issue"] != "#152":
+        raise ContractError("public.native-provider-sdk is not an implemented Issue #152 entry")
 
     namespaces = load(root / "schemas/cxxlens_ng_namespace_registry.yaml")
     if not any(

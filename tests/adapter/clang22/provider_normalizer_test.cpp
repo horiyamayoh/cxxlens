@@ -84,7 +84,6 @@ namespace
 		entity.payload.emplace("symbol.kind", "function");
 		entity.payload.emplace("symbol.qualified_name", "ns::target");
 		entity.payload.emplace("symbol.signature", "int ()");
-		const auto entity_anchor = *entity.source_span_id;
 
 		auto type = observation(observation_kind::type, "type:int");
 		type.payload.emplace("type.canonical", "int");
@@ -97,7 +96,6 @@ namespace
 		call.payload.emplace("call.direct_callee_kind", "function");
 		call.payload.emplace("call.direct_callee_signature", "int ()");
 		call.payload.emplace("call.direct_callee_qualified_name", "ns::target");
-		call.payload.emplace("call.direct_callee_anchor", entity_anchor);
 		value.observations = {std::move(entity), std::move(type), std::move(call)};
 		require(value.validate().has_value(), "normalizer fixture batch is invalid");
 		return value;
@@ -425,7 +423,6 @@ int main()
 		sdk::canonical_value::null(),
 		sdk::canonical_value::from_string(
 			string_cell(entity_row, "cc.entity.v1.structural_signature_digest")),
-		sdk::canonical_value::from_string(string_cell(entity_row, "cc.entity.v1.anchor")),
 		sdk::canonical_value::from_string(string_cell(entity_row, "cc.entity.v1.toolchain")),
 		sdk::canonical_value::from_bytes(bytes_cell(entity_row, "cc.entity.v1.provider_local_key")),
 	};
@@ -455,8 +452,6 @@ int main()
 			 std::pair{
 				 "cc.entity.v1.structural_signature_digest",
 				 symbol_cell(sdk::scalar_kind::digest, {}, "sha256:" + std::string(64U, 'f'))},
-			 std::pair{"cc.entity.v1.anchor",
-					   optional_typed("source_span_id", "source-span:changed")},
 			 std::pair{"cc.entity.v1.toolchain",
 					   optional_typed("toolchain_context_id", "toolchain-context:changed")},
 			 std::pair{"cc.entity.v1.provider_local_key", optional_bytes({std::byte{0x42}})},
@@ -470,6 +465,13 @@ int main()
 				"entity projection mutation did not change identity: " +
 					std::string{mutation.first});
 	}
+	auto changed_occurrence_anchor = entity_row;
+	changed_occurrence_anchor.cells.insert_or_assign(
+		"cc.entity.v1.anchor", optional_typed("source_span_id", "source-span:changed"));
+	auto changed_occurrence_identity = sdk::derive_domain_identity(
+		cxxlens::cc::relations::entity::descriptor(), changed_occurrence_anchor);
+	require(changed_occurrence_identity && *changed_occurrence_identity == entity_id,
+			"declaration occurrence anchor changed semantic entity identity");
 	const auto call_id = string_cell(call_row, "cc.call_site.v1.call");
 	for (auto mutation : {
 			 std::pair{"cc.call_site.v1.compile_unit",
@@ -520,14 +522,16 @@ int main()
 		redeclaration_batch,
 		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
 		true);
-	const auto definition_anchor = *redeclaration_batch.observations.back().source_span_id;
 	require(canonical_redeclaration && canonical_redeclaration->exact_equivalence &&
 				canonical_redeclaration->entities.size() == 1U &&
 				canonical_redeclaration->entity_observations.size() == 2U &&
 				canonical_redeclaration->unresolved.empty() &&
-				string_cell(canonical_redeclaration->entities.front(), "cc.entity.v1.anchor") ==
-					definition_anchor,
-			"forward declaration and definition did not select one definition entity");
+				!canonical_redeclaration->entities.front().cells.contains("cc.entity.v1.anchor") &&
+				string_cell(canonical_redeclaration->entity_observations.front(),
+							"frontend.clang22.entity_observation.v1.source") !=
+					string_cell(canonical_redeclaration->entity_observations.back(),
+								"frontend.clang22.entity_observation.v1.source"),
+			"redeclaration occurrences were not separated from one semantic entity");
 	auto reversed_redeclarations = redeclaration_batch;
 	std::ranges::reverse(reversed_redeclarations.observations);
 	auto reversed_canonical = canonicalize_provider_batch(
@@ -546,9 +550,9 @@ int main()
 		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
 		true);
 	require(declaration_result && declaration_result->entities.size() == 1U &&
-				string_cell(declaration_result->entities.front(), "cc.entity.v1.anchor") ==
-					*declarations_only.observations.front().source_span_id,
-			"declaration-only chain did not select the canonical declaration");
+				declaration_result->entity_observations.size() == 2U &&
+				!declaration_result->entities.front().cells.contains("cc.entity.v1.anchor"),
+			"declaration occurrence leaked into the semantic entity row");
 	auto moved_anchor = declarations_only;
 	moved_anchor.observations = {
 		redeclaration("clang-usr:redeclared", "void ()", 80U, false, true)};
@@ -557,6 +561,8 @@ int main()
 		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
 		true);
 	require(moved_result &&
+				string_cell(moved_result->entities.front(), "cc.entity.v1.entity") ==
+					string_cell(declaration_result->entities.front(), "cc.entity.v1.entity") &&
 				string_cell(moved_result->entities.front(),
 							"cc.entity.v1.structural_signature_digest") ==
 					string_cell(declaration_result->entities.front(),
@@ -606,6 +612,95 @@ int main()
 				string_cell(cross_tu_result->direct_targets.front(),
 							"cc.call_direct_target.v1.target") == same_tu_target,
 			"header/external/other-TU direct callee depended on a local entity row");
+	auto relocated_definition = batch();
+	relocated_definition.observations.erase(
+		std::ranges::remove_if(relocated_definition.observations,
+							   [](const detached_observation& value)
+							   {
+								   return value.kind != observation_kind::entity;
+							   })
+			.begin(),
+		relocated_definition.observations.end());
+	relocated_definition.observations.front().source_span_id = *sdk::source_span_identity(
+		"source-snapshot:relocated", "file:definition", 400U, 440U, "declaration");
+	auto relocated_definition_result = canonicalize_provider_batch(
+		relocated_definition,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(relocated_definition_result && relocated_definition_result->entities.size() == 1U &&
+				string_cell(relocated_definition_result->entities.front(), "cc.entity.v1.entity") ==
+					same_tu_target,
+			"definition source relocation changed semantic entity identity");
+	auto legacy_forward_anchor = cross_tu;
+	legacy_forward_anchor.observations.front().payload.emplace(
+		"call.direct_callee_anchor",
+		*sdk::source_span_identity("source-snapshot:caller", "file:caller", 1U, 9U, "declaration"));
+	auto legacy_forward_result = canonicalize_provider_batch(
+		legacy_forward_anchor,
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		true);
+	require(legacy_forward_result &&
+				string_cell(legacy_forward_result->direct_targets.front(),
+							"cc.call_direct_target.v1.target") == same_tu_target,
+			"caller-local forward declaration anchor changed cross-TU target identity");
+
+	struct cross_tu_identity_case
+	{
+		std::string semantic_key;
+		std::string entity_kind;
+		std::string signature;
+		std::string call_kind;
+	};
+	const std::array identity_cases{
+		cross_tu_identity_case{
+			"clang-usr:overload-int", "function", "void (int)", "direct_function"},
+		cross_tu_identity_case{
+			"clang-usr:template-int", "function", "void (T<int>)", "direct_function"},
+		cross_tu_identity_case{"clang-usr:member", "method", "void () const", "direct_member"},
+		cross_tu_identity_case{"clang-usr:operator-plus", "method", "value (value)", "operator"},
+	};
+	for (std::size_t index = 0U; index < identity_cases.size(); ++index)
+	{
+		const auto& identity_case = identity_cases[index];
+		observation_batch entity_only;
+		entity_only.unit = "cu-" + std::string(63U, 'e') + std::to_string(index);
+		entity_only.variant = cross_tu.variant;
+		auto entity = observation(observation_kind::entity, identity_case.semantic_key);
+		entity.compile_unit = entity_only.unit;
+		entity.source_span_id = *sdk::source_span_identity("source-snapshot:definitions",
+														   "file:definitions",
+														   100U + index * 20U,
+														   110U + index * 20U,
+														   "declaration");
+		entity.payload.emplace("symbol.kind", identity_case.entity_kind);
+		entity.payload.emplace("symbol.signature", identity_case.signature);
+		entity_only.observations.push_back(std::move(entity));
+
+		observation_batch call_only;
+		call_only.unit = "cu-" + std::string(63U, 'f') + std::to_string(index);
+		call_only.variant = cross_tu.variant;
+		auto call = observation(observation_kind::call, "call:cross-tu:" + std::to_string(index));
+		call.compile_unit = call_only.unit;
+		call.payload.emplace("call.kind", identity_case.call_kind);
+		call.payload.emplace("call.direct_callee", identity_case.semantic_key);
+		call.payload.emplace("call.direct_callee_kind", identity_case.entity_kind);
+		call.payload.emplace("call.direct_callee_signature", identity_case.signature);
+		call_only.observations.push_back(std::move(call));
+		auto entity_result = canonicalize_provider_batch(
+			entity_only,
+			"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+			true);
+		auto call_result = canonicalize_provider_batch(
+			call_only,
+			"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+			true);
+		require(entity_result && call_result && entity_result->entities.size() == 1U &&
+					call_result->direct_targets.size() == 1U &&
+					string_cell(entity_result->entities.front(), "cc.entity.v1.entity") ==
+						string_cell(call_result->direct_targets.front(),
+									"cc.call_direct_target.v1.target"),
+				"cross-TU overload/template/member/operator target did not join entity");
+	}
 	auto macro_calls = cross_tu;
 	macro_calls.observations.front().source_origin_chain = {
 		"macro-spelling:/checkout/include/macros.hpp:10:18",

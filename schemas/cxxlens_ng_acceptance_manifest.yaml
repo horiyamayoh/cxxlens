@@ -1,6 +1,6 @@
 schema: cxxlens.ng-acceptance-manifest.v1
 kind: acceptance-manifest
-document_version: 1.10.0
+document_version: 1.11.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -99,9 +99,9 @@ entries:
     summary: Logical query with permutation-invariant minor requirement reconciliation, predicate parity, canonical evidence, budgets, and closed-world proof.
   - id: gate.g4
     status: implemented
-    owner_issue: '#151'
+    owner_issue: '#152'
     profile: NG0
-    contract_issue: '#151'
+    contract_issue: '#152'
     depends_on: [gate.g1]
     evidence:
       - tests/unit/sdk/provider_runtime_test.cpp
@@ -133,6 +133,7 @@ entries:
       - docs/design/adr/0080-provider-columnar-typed-digests.md
       - docs/design/adr/0081-provider-candidate-canonical-identity.md
       - docs/design/adr/0082-verified-executable-fd-binding.md
+      - docs/design/adr/0083-cross-tu-semantic-entity-identity.md
       - src/sdk/provider_validation_internal.hpp
       - src/runtime/provider_process_adapter.cpp
       - schemas/cxxlens_ng_provider_protocol.yaml
@@ -142,7 +143,7 @@ entries:
       - schemas/cxxlens_ng_provider_execution_report.schema.yaml
       - schemas/cxxlens_ng_security_profile.yaml
       - schemas/cxxlens_ng_clang22_fallback_identity.yaml
-    summary: Provider runtime with sealed verified executable FD binding, measured sandbox evidence, canonical candidate identity, typed digests, and fail-closed isolation.
+    summary: Provider runtime and Clang normalizer with cross-TU joinable semantic entity identity, occurrence-separated anchors, sealed verified execution, and fail-closed isolation.
   - id: gate.g5
     status: deferred
     owner_issue: '#69'

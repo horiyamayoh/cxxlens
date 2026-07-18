@@ -8,6 +8,10 @@
 > with the accepted `cc.entity` descriptor projection. Cross-TU independence remains required;
 > call observations therefore carry the exact callee kind/signature/anchor projection needed to
 > derive the same target ID without a same-batch entity row. Missing projection fails unresolved.
+>
+> Amendment: ADR 0083 / Issue #152 removes declaration/definition occurrence anchor from the
+> semantic entity projection. Call observations carry the exact semantic key, kind, and signature;
+> occurrence source remains in provider-owned entity observations or `cc.declaration`.
 
 ## Context
 

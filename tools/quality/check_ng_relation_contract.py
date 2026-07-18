@@ -77,6 +77,7 @@ REQUIRED_VECTOR_IDS = {
     "exact-call-model",
     "stale-inline-direct-target",
     "call-site-partition-column",
+    "entity-occurrence-anchor-in-identity",
 }
 
 
@@ -375,6 +376,20 @@ def validate_registry(
     _, direct_names = _column_maps(direct)
     if set(direct_names) != {"call", "target", "resolution"}:
         fail("relation.call-model-invalid", "cc.call_direct_target columns differ")
+    entity = relations["cc.entity"]
+    entity_projection = entity["claim"]["domain_identity"]["projection"]
+    if "cc.entity.v1.anchor" in entity_projection:
+        fail(
+            "relation.entity-occurrence-in-identity",
+            "cc.entity semantic identity includes a declaration/definition occurrence anchor",
+        )
+    if "cc.entity.v1.provider_local_key" not in entity_projection:
+        fail("relation.entity-semantic-key-missing", "cc.entity identity lacks semantic key")
+    entity_columns, _ = _column_maps(entity)
+    if entity_columns["cc.entity.v1.anchor"]["identity_role"] != "display":
+        fail("relation.entity-anchor-authoritative", "cc.entity anchor is not occurrence-only")
+    if "cc.entity.v1.anchor" in entity["merge"]["conflict_columns"]:
+        fail("relation.entity-anchor-conflict", "cc.entity merge conflicts on occurrence anchor")
     if relations["company.lock.acquire"]["stability"] != "external-versioned":
         fail("relation.extension-not-external", "external exemplar is not external-versioned")
     return relations
@@ -704,6 +719,8 @@ def validate_design(root: pathlib.Path) -> None:
         "cc.call_direct_target",
         "Issue #60",
         "detached-cell-value-v2",
+        "Issue #152",
+        "cross-TU semantic entity identity",
     )
     for marker in required:
         if marker not in design:
@@ -712,8 +729,8 @@ def validate_design(root: pathlib.Path) -> None:
         if stale in design:
             fail("relation.call-example-stale", f"stale call model remains: {stale}")
     index = (root / "docs/design/catalogs/README.md").read_text(encoding="utf-8")
-    if "accepted exact scalar-value contract" not in index or "#114" not in index:
-        fail("relation.catalog-index-stale", "catalog index does not show accepted #114")
+    if "accepted exact scalar-value and cross-TU entity identity contract" not in index or "#152" not in index:
+        fail("relation.catalog-index-stale", "catalog index does not show accepted #152")
 
 
 def validate_contract(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, str]]]:
