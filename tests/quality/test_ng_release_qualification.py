@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 import pathlib
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -52,6 +53,16 @@ class NgReleaseQualificationTests(unittest.TestCase):
             release.canonical_digest({"files": []}),
             release.canonical_digest({"files": [{"path": "forged"}]}),
         )
+
+    def test_install_junit_is_resolved_from_downloaded_artifact_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = pathlib.Path(temporary)
+            artifact = evidence / "cxxlens-install-static-revision"
+            (artifact / "tests" / "install-consumer").mkdir(parents=True)
+            junit = artifact / "ctest-install-OFF.xml"
+            junit.touch()
+
+            self.assertEqual(release.find_one(evidence, "ctest-install-OFF.xml"), junit)
 
 
 if __name__ == "__main__":

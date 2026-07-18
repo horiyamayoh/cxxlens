@@ -193,7 +193,12 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
         if marker not in worker_source:
             fail(f"Clang 22 worker production surface marker is missing: {marker}")
     workflow = (root / ".github/workflows/quality.yml").read_text(encoding="utf-8")
-    for marker in ("release-qualification:", "needs: [g5-qualification]", "check_ng_release_qualification.py report"):
+    for marker in (
+        "release-qualification:",
+        "needs: [g5-qualification]",
+        "check_ng_release_qualification.py report",
+        "-DCXXLENS_BUILD_DOCS=ON",
+    ):
         if marker not in workflow:
             fail(f"release qualification workflow marker is missing: {marker}")
     install = (root / "tests/install/run_install_test.cmake.in").read_text(encoding="utf-8")
@@ -265,7 +270,7 @@ def make_report(root: pathlib.Path, manifest: dict[str, Any], evidence: pathlib.
         if configuration in install_values:
             fail(f"duplicate install configuration: {configuration}")
         install_values[configuration] = value
-        xml = find_one(path.parent, f"ctest-install-{'ON' if configuration == 'shared' else 'OFF'}.xml")
+        xml = find_one(evidence, f"ctest-install-{'ON' if configuration == 'shared' else 'OFF'}.xml")
         tests = junit_tests(xml)
         required = {
             manifest["package"]["real_project_consumer"],

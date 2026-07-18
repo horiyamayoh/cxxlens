@@ -84,7 +84,8 @@ jobs:
         env:
           CXX: clang++-22
         run: |
-          cmake --preset ci-quick -DCXXLENS_CLANG_ADAPTER=ON
+          cmake --preset ci-quick -DCXXLENS_CLANG_ADAPTER=ON \
+            -DCXXLENS_BUILD_DOCS=ON
           ctest --preset ci-quick --parallel "${CTEST_PARALLEL_LEVEL}" \
             --label-regex quality \
             --output-junit ctest-quality.xml
