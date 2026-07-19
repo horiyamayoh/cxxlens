@@ -101,3 +101,15 @@ requested. The consolidated evidence is recorded in
 The final reviewer ran
 82 combined tail tests and nine focused adversarial regressions; the scope, release, readiness,
 checksum-independent contract checks, and diff hygiene passed.
+
+2026-07-19: Post-ready exact-head review found that the evaluation report schema required two
+unique install-manifest objects but did not independently require one `static` and one `shared`
+configuration. The same object-uniqueness assumption existed in the strict GR package schema.
+Both schemas now enforce the authority-defined two-configuration matrix exactly once with
+order-neutral `contains` constraints. Standalone schema regressions preserve distinct digests so
+object uniqueness cannot mask a duplicate configuration, and the terminal scope consumer has a
+matching fail-closed integration regression.
+
+2026-07-19: Independent re-review approved the correction without further changes after checking
+both configuration orders and rejecting duplicate, unknown, missing, and excess configurations in
+the standalone schemas and terminal consumers.

@@ -36,6 +36,21 @@ properties:
     minItems: 2
     maxItems: 2
     uniqueItems: true
+    allOf:
+      - contains:
+          type: object
+          required: [configuration]
+          properties:
+            configuration: {const: static}
+        minContains: 1
+        maxContains: 1
+      - contains:
+          type: object
+          required: [configuration]
+          properties:
+            configuration: {const: shared}
+        minContains: 1
+        maxContains: 1
     items:
       type: object
       additionalProperties: false

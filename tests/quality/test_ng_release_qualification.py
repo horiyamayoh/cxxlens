@@ -165,6 +165,61 @@ class NgReleaseQualificationTests(unittest.TestCase):
         )
         self.assertTrue((ROOT / release.EVALUATION_REPORT_SCHEMA).is_file())
 
+    def test_release_schemas_require_static_and_shared_exactly_once(self) -> None:
+        evaluation_schema = release.load(ROOT / release.EVALUATION_REPORT_SCHEMA)
+        install_schema = copy.deepcopy(
+            evaluation_schema["properties"]["evidence"]["properties"][
+                "install_manifests"
+            ]
+        )
+        install_schema["$defs"] = copy.deepcopy(evaluation_schema["$defs"])
+        install_manifests = [
+            {
+                "configuration": configuration,
+                "manifest_digest": "sha256:" + digit * 64,
+                "prefix_digest": "sha256:" + digit * 64,
+            }
+            for configuration, digit in (("static", "1"), ("shared", "2"))
+        ]
+        release.validate_schema(
+            install_manifests, install_schema, "evaluation install matrix"
+        )
+        duplicate_static = copy.deepcopy(install_manifests)
+        duplicate_static[1]["configuration"] = "static"
+        with self.assertRaisesRegex(
+            release.ReleaseQualificationError, "schema validation failed"
+        ):
+            release.validate_schema(
+                duplicate_static, install_schema, "evaluation install matrix"
+            )
+
+        report_schema = release.load(ROOT / release.REPORT_SCHEMA)
+        packages_schema = copy.deepcopy(report_schema["properties"]["packages"])
+        packages_schema["$defs"] = copy.deepcopy(report_schema["$defs"])
+        packages = [
+            {
+                "configuration": configuration,
+                "prefix_digest": "sha256:" + digit * 64,
+                "manifest_digest": "sha256:" + digit * 64,
+                "toolchain_digest": "sha256:" + digit * 64,
+                "real_project": "passed",
+                "storage_backends": ["memory", "sqlite"],
+                "relocated": True,
+                "license": "sha256:" + digit * 64,
+                "notice": "sha256:" + digit * 64,
+            }
+            for configuration, digit in (("static", "3"), ("shared", "4"))
+        ]
+        release.validate_schema(packages, packages_schema, "strict package matrix")
+        duplicate_shared = copy.deepcopy(packages)
+        duplicate_shared[0]["configuration"] = "shared"
+        with self.assertRaisesRegex(
+            release.ReleaseQualificationError, "schema validation failed"
+        ):
+            release.validate_schema(
+                duplicate_shared, packages_schema, "strict package matrix"
+            )
+
     def test_wave0_scope_inventory_binding_is_exact(self) -> None:
         current = self.scope_inventory("classified-with-gaps")
         with mock.patch.object(

@@ -676,6 +676,23 @@ class ProductionScopeClosureTest(unittest.TestCase):
                 generated_at="2026-07-19T00:00:00+00:00",
             )
 
+        duplicate_configuration = self.evaluation("not-qualified")
+        duplicate_configuration["evidence"]["install_manifests"][1] = {
+            "configuration": "shared",
+            "manifest_digest": "sha256:" + "b" * 64,
+            "prefix_digest": "sha256:" + "b" * 64,
+        }
+        with self.assertRaisesRegex(closure.ContractError, "validation failed"):
+            closure.build_report(
+                self.model,
+                mode="normal",
+                evaluation=duplicate_configuration,
+                git=GIT,
+                evaluation_digest="sha256:" + "e" * 64,
+                run_url="https://example.invalid/actions/179",
+                generated_at="2026-07-19T00:00:00+00:00",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
