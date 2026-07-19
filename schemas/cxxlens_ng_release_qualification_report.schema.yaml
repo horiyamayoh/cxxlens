@@ -21,7 +21,7 @@ properties:
   prerequisites:
     type: object
     additionalProperties: false
-    required: [gates, migrations, foundation_report_digest, readiness_report_digest, public_callable_report_digest, g5_report_digest, same_revision]
+    required: [gates, migrations, foundation_report_digest, readiness_report_digest, public_callable_report_digest, g5_report_digest, release_evaluation_report_digest, same_revision]
     properties:
       gates: {const: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4, gate.g5, gate.release]}
       migrations: {const: [R0, R1, R2, R3, R4]}
@@ -29,6 +29,7 @@ properties:
       readiness_report_digest: {$ref: '#/$defs/digest'}
       public_callable_report_digest: {$ref: '#/$defs/digest'}
       g5_report_digest: {$ref: '#/$defs/digest'}
+      release_evaluation_report_digest: {$ref: '#/$defs/digest'}
       same_revision: {const: true}
   packages:
     type: array

@@ -68,6 +68,57 @@ EXPECTED_REASONS = {
     "compat.required-feature-missing",
     "compat.request-invalid",
 }
+EXPECTED_PRODUCTION_SCOPE_NAMESPACES = [
+    "release.profile",
+    "release.gate",
+    "release.migration",
+    "distribution.target",
+    "distribution.native-package",
+    "distribution.installed-tool",
+    "distribution.consumer-configuration",
+    "distribution.source-surface",
+    "public.package",
+    "public.author-path",
+    "public.catalog-entry",
+    "public.header",
+    "public.callable",
+    "relation.descriptor",
+    "relation.static-admission",
+    "provider.profile-feature",
+    "provider.message",
+    "provider.execution-surface",
+    "provider.support-tuple",
+    "provider.production-tuple-template",
+    "query.operator",
+    "query.result-status",
+    "query.backend",
+    "g5.closure-kind",
+    "security.profile",
+    "security.namespace",
+    "security.sandbox-profile",
+    "security.sandbox-policy",
+    "compatibility.axis",
+    "quality.check",
+]
+EXPECTED_PRODUCTION_SCOPE_CLOSURE = {
+    "contract": "cxxlens.ng-production-scope-closure.v1",
+    "authority": "schemas/cxxlens_ng_production_scope_closure.yaml",
+    "decision_adr": "docs/design/adr/0095-production-scope-closure.md",
+    "schema": "schemas/cxxlens_ng_production_scope_closure.schema.yaml",
+    "checker": "tools/quality/check_ng_production_scope_closure.py",
+    "namespace_ids": EXPECTED_PRODUCTION_SCOPE_NAMESPACES,
+    "report": {
+        "schema": "schemas/cxxlens_ng_production_scope_closure_report.schema.yaml",
+        "ci_job": "production-scope-closure",
+        "artifact": "cxxlens-ng-production-scope-closure-${revision}",
+    },
+    "evaluation": {
+        "schema": "schemas/cxxlens_ng_release_qualification_evaluation_report.schema.yaml",
+        "ci_job": "release-evaluation",
+        "artifact": "cxxlens-ng-release-qualification-evaluation-${revision}",
+        "not_qualified_satisfies_gate_release": False,
+    },
+}
 
 
 class ReleaseContractError(ValueError):
@@ -250,8 +301,11 @@ def validate_release_mapping(bundle: dict[str, Any], root: pathlib.Path) -> None
     }:
         fail("distribution release set differs")
     one = releases["distribution-1.0"]
-    if one["state"] != "qualified" or one["production_supported"] is not True:
-        fail("distribution 1.0 must be qualified by the independent GR gate")
+    if (
+        one["state"] != "qualification-in-progress"
+        or one["production_supported"] is not False
+    ):
+        fail("distribution 1.0 must remain not-qualified until exact final GR closure")
     if one["required_profiles"] != ["NG0", "NG1"]:
         fail("distribution 1.0 must require NG0 and NG1")
     if one["blocker_migrations"] != ["R0", "R1", "R2", "R3", "R4"]:
@@ -292,6 +346,8 @@ def validate_release_mapping(bundle: dict[str, Any], root: pathlib.Path) -> None
         ],
     }:
         fail("distribution 1.0 GR binding differs")
+    if bundle.get("production_scope_closure") != EXPECTED_PRODUCTION_SCOPE_CLOSURE:
+        fail("distribution 1.0 production scope closure binding differs")
     if releases["future-major"].get("activation_rule") != (
         "breaking-change-to-an-accepted-stable-version-axis"
     ):

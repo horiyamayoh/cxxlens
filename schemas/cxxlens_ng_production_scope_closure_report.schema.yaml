@@ -1,0 +1,440 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-production-scope-closure-report.v1
+type: object
+additionalProperties: false
+required:
+  - schema
+  - result
+  - generated_at
+  - run_url
+  - mode
+  - closure_status
+  - git
+  - binding
+  - summary
+  - domains
+  - surfaces
+  - blocking_feedback
+  - evidence_censuses
+  - upstream
+  - findings
+properties:
+  schema:
+    const: cxxlens.ng-production-scope-closure-report.v1
+  result:
+    const: passed
+  generated_at:
+    type: string
+    format: date-time
+  run_url:
+    type: string
+    format: uri
+  mode:
+    enum: [normal, final]
+  closure_status:
+    enum: [classified-with-gaps, qualified]
+  git:
+    type: object
+    additionalProperties: false
+    required: [revision, tree, branch, clean]
+    properties:
+      revision: {$ref: '#/$defs/revision'}
+      tree: {$ref: '#/$defs/revision'}
+      branch: {const: main}
+      clean: {const: true}
+  binding:
+    type: object
+    additionalProperties: false
+    required:
+      - manifest_path
+      - manifest_digest
+      - manifest_schema_digest
+      - report_schema_digest
+      - checker_digest
+      - source_digests
+      - authority_census_digest
+      - evidence_census_digest
+      - classification_digest
+    properties:
+      manifest_path: {const: schemas/cxxlens_ng_production_scope_closure.yaml}
+      manifest_digest: {$ref: '#/$defs/digest'}
+      manifest_schema_digest: {$ref: '#/$defs/digest'}
+      report_schema_digest: {$ref: '#/$defs/digest'}
+      checker_digest: {$ref: '#/$defs/digest'}
+      source_digests:
+        type: array
+        minItems: 14
+        maxItems: 14
+        prefixItems:
+          - {$ref: '#/$defs/source_acceptance'}
+          - {$ref: '#/$defs/source_g5'}
+          - {$ref: '#/$defs/source_query'}
+          - {$ref: '#/$defs/source_namespace'}
+          - {$ref: '#/$defs/source_provider_protocol'}
+          - {$ref: '#/$defs/source_provider_runtime'}
+          - {$ref: '#/$defs/source_provider_support'}
+          - {$ref: '#/$defs/source_public_api'}
+          - {$ref: '#/$defs/source_public_callables'}
+          - {$ref: '#/$defs/source_quality'}
+          - {$ref: '#/$defs/source_relations'}
+          - {$ref: '#/$defs/source_release_bundle'}
+          - {$ref: '#/$defs/source_release_qualification'}
+          - {$ref: '#/$defs/source_security'}
+        items: false
+      authority_census_digest: {$ref: '#/$defs/digest'}
+      evidence_census_digest: {$ref: '#/$defs/digest'}
+      classification_digest: {$ref: '#/$defs/digest'}
+  summary:
+    type: object
+    additionalProperties: false
+    required: [domain_count, assignable_count, expanded_count, aggregate_count, qualified, tracked_gap, blocked, not_applicable]
+    properties:
+      domain_count: {const: 30}
+      assignable_count: {type: integer, minimum: 1}
+      expanded_count: {type: integer, minimum: 1}
+      aggregate_count: {const: 14}
+      qualified: {type: integer, minimum: 0}
+      tracked_gap: {type: integer, minimum: 0}
+      blocked: {type: integer, minimum: 0}
+      not_applicable: {type: integer, minimum: 0}
+  domains:
+    type: array
+    minItems: 30
+    maxItems: 30
+    prefixItems:
+      - {$ref: '#/$defs/domain_release_profile'}
+      - {$ref: '#/$defs/domain_release_gate'}
+      - {$ref: '#/$defs/domain_release_migration'}
+      - {$ref: '#/$defs/domain_distribution_target'}
+      - {$ref: '#/$defs/domain_distribution_native_package'}
+      - {$ref: '#/$defs/domain_distribution_installed_tool'}
+      - {$ref: '#/$defs/domain_distribution_consumer_configuration'}
+      - {$ref: '#/$defs/domain_distribution_source_surface'}
+      - {$ref: '#/$defs/domain_public_package'}
+      - {$ref: '#/$defs/domain_public_author_path'}
+      - {$ref: '#/$defs/domain_public_catalog_entry'}
+      - {$ref: '#/$defs/domain_public_header'}
+      - {$ref: '#/$defs/domain_public_callable'}
+      - {$ref: '#/$defs/domain_relation_descriptor'}
+      - {$ref: '#/$defs/domain_relation_static_admission'}
+      - {$ref: '#/$defs/domain_provider_profile_feature'}
+      - {$ref: '#/$defs/domain_provider_message'}
+      - {$ref: '#/$defs/domain_provider_execution_surface'}
+      - {$ref: '#/$defs/domain_provider_support_tuple'}
+      - {$ref: '#/$defs/domain_provider_production_tuple_template'}
+      - {$ref: '#/$defs/domain_query_operator'}
+      - {$ref: '#/$defs/domain_query_result_status'}
+      - {$ref: '#/$defs/domain_query_backend'}
+      - {$ref: '#/$defs/domain_g5_closure_kind'}
+      - {$ref: '#/$defs/domain_security_profile'}
+      - {$ref: '#/$defs/domain_security_namespace'}
+      - {$ref: '#/$defs/domain_security_sandbox_profile'}
+      - {$ref: '#/$defs/domain_security_sandbox_policy'}
+      - {$ref: '#/$defs/domain_compatibility_axis'}
+      - {$ref: '#/$defs/domain_quality_check'}
+    items: false
+  surfaces:
+    type: array
+    minItems: 1
+    items:
+      oneOf:
+        - {$ref: '#/$defs/leaf_surface'}
+        - {$ref: '#/$defs/aggregate_surface'}
+  blocking_feedback:
+    type: array
+    uniqueItems: true
+    items: {type: string, pattern: '^DF-[0-9]{4}$'}
+  evidence_censuses:
+    type: array
+    minItems: 13
+    maxItems: 13
+    prefixItems:
+      - {$ref: '#/$defs/evidence_public_callables'}
+      - {$ref: '#/$defs/evidence_provider_support'}
+      - {$ref: '#/$defs/evidence_provider_reasons'}
+      - {$ref: '#/$defs/evidence_provider_vectors'}
+      - {$ref: '#/$defs/evidence_query_vectors'}
+      - {$ref: '#/$defs/evidence_security_levels'}
+      - {$ref: '#/$defs/evidence_security_reasons'}
+      - {$ref: '#/$defs/evidence_security_vectors'}
+      - {$ref: '#/$defs/evidence_g5_inputs'}
+      - {$ref: '#/$defs/evidence_g5_artifacts'}
+      - {$ref: '#/$defs/evidence_release_artifacts'}
+      - {$ref: '#/$defs/evidence_acceptance'}
+      - {$ref: '#/$defs/evidence_typed_tests'}
+    items: false
+  upstream:
+    type: object
+    additionalProperties: false
+    required: [release_evaluation_digest]
+    properties:
+      release_evaluation_digest: {$ref: '#/$defs/digest'}
+      release_qualification_digest: {$ref: '#/$defs/digest'}
+  findings:
+    type: array
+    uniqueItems: true
+    items:
+      type: string
+      pattern: '^scope\.(tracked-gap|blocked)\.[a-z0-9][a-z0-9.-]*$'
+allOf:
+  - if:
+      properties:
+        mode: {const: normal}
+      required: [mode]
+    then:
+      properties:
+        closure_status: {const: classified-with-gaps}
+        summary:
+          anyOf:
+            - properties: {tracked_gap: {minimum: 1}}
+              required: [tracked_gap]
+            - properties: {blocked: {minimum: 1}}
+              required: [blocked]
+        upstream:
+          not: {required: [release_qualification_digest]}
+  - if:
+      properties:
+        mode: {const: final}
+      required: [mode]
+    then:
+      properties:
+        closure_status: {const: qualified}
+        summary:
+          properties:
+            tracked_gap: {const: 0}
+            blocked: {const: 0}
+        blocking_feedback: {maxItems: 0}
+        findings: {maxItems: 0}
+        upstream:
+          required: [release_evaluation_digest, release_qualification_digest]
+$defs:
+  digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  revision:
+    type: string
+    pattern: '^[0-9a-f]{40}$'
+  domain:
+    enum:
+      - release.profile
+      - release.gate
+      - release.migration
+      - distribution.target
+      - distribution.native-package
+      - distribution.installed-tool
+      - distribution.consumer-configuration
+      - distribution.source-surface
+      - public.package
+      - public.author-path
+      - public.catalog-entry
+      - public.header
+      - public.callable
+      - relation.descriptor
+      - relation.static-admission
+      - provider.profile-feature
+      - provider.message
+      - provider.execution-surface
+      - provider.support-tuple
+      - provider.production-tuple-template
+      - query.operator
+      - query.result-status
+      - query.backend
+      - g5.closure-kind
+      - security.profile
+      - security.namespace
+      - security.sandbox-profile
+      - security.sandbox-policy
+      - compatibility.axis
+      - quality.check
+  leaf_domain:
+    enum:
+      - release.migration
+      - distribution.target
+      - distribution.native-package
+      - distribution.installed-tool
+      - distribution.consumer-configuration
+      - distribution.source-surface
+      - public.package
+      - public.author-path
+      - public.catalog-entry
+      - public.header
+      - public.callable
+      - relation.descriptor
+      - relation.static-admission
+      - provider.profile-feature
+      - provider.message
+      - provider.execution-surface
+      - provider.support-tuple
+      - provider.production-tuple-template
+      - query.operator
+      - query.result-status
+      - query.backend
+      - g5.closure-kind
+      - security.profile
+      - security.namespace
+      - security.sandbox-profile
+      - security.sandbox-policy
+      - compatibility.axis
+      - quality.check
+  surface_ref:
+    type: object
+    additionalProperties: false
+    required: [domain, id]
+    properties:
+      domain: {$ref: '#/$defs/domain'}
+      id: {type: string, minLength: 1}
+  typed_evidence:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      enum:
+        - quality.ng-foundation_completion
+        - quality.ng-g5_qualification
+        - quality.ng-provider_protocol
+        - quality.ng-provider_runtime
+        - quality.ng-public_callable_inventory
+        - quality.ng-query_contract
+        - quality.ng-relation_contract
+        - quality.ng-release_contract
+        - quality.ng-release_qualification
+        - quality.ng-sdk_contract
+        - quality.ng-security_contract
+        - quality.ownership
+  leaf_surface:
+    type: object
+    additionalProperties: false
+    required: [domain, id, kind, disposition, assignment, owner_issue, scope, qualification, cross_links]
+    properties:
+      domain: {$ref: '#/$defs/leaf_domain'}
+      id: {type: string, minLength: 1}
+      kind: {const: leaf}
+      disposition: {enum: [production-required, qualification-evidence, explicit-non-1.0, unresolved-authority]}
+      assignment: {type: string, pattern: '^scope\.[a-z0-9][a-z0-9.-]*$'}
+      inherited_from:
+        type: object
+        additionalProperties: false
+        required: [domain, id]
+        properties:
+          domain: {const: public.catalog-entry}
+          id: {type: string, minLength: 1}
+      owner_issue: {type: string, pattern: '^#[0-9]+$'}
+      scope: {enum: [included, excluded, unresolved]}
+      qualification: {enum: [qualified, tracked-gap, blocked, not-applicable]}
+      evidence: {$ref: '#/$defs/typed_evidence'}
+      cross_links:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/surface_ref'}
+    oneOf:
+      - properties: {scope: {const: included}, qualification: {const: qualified}}
+        required: [evidence]
+      - properties: {scope: {const: included}, qualification: {const: tracked-gap}}
+        not: {required: [evidence]}
+      - properties: {scope: {const: excluded}, qualification: {const: not-applicable}}
+        not: {required: [evidence]}
+      - properties: {scope: {const: unresolved}, qualification: {const: blocked}}
+        not: {required: [evidence]}
+  aggregate_surface:
+    type: object
+    additionalProperties: false
+    required: [domain, id, kind, disposition, derived_scope, derived_qualification, cross_links, derived_from]
+    properties:
+      domain: {enum: [release.profile, release.gate]}
+      id: {type: string, minLength: 1}
+      kind: {const: aggregate}
+      disposition: {enum: [production-required, qualification-evidence, explicit-non-1.0]}
+      derived_scope: {enum: [included, excluded]}
+      derived_qualification: {enum: [qualified, tracked-gap, not-applicable]}
+      cross_links:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/surface_ref'}
+      derived_from:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/surface_ref'}
+    oneOf:
+      - properties: {derived_scope: {const: included}, derived_qualification: {const: qualified}}
+      - properties: {derived_scope: {const: included}, derived_qualification: {const: tracked-gap}}
+      - properties: {derived_scope: {const: excluded}, derived_qualification: {const: not-applicable}}
+  domain_census:
+    type: object
+    additionalProperties: false
+    required: [id, count, digest]
+    properties:
+      id: {type: string}
+      count: {type: integer, minimum: 1}
+      digest: {$ref: '#/$defs/digest'}
+  source_digest:
+    type: object
+    additionalProperties: false
+    required: [path, digest]
+    properties:
+      path: {type: string}
+      digest: {$ref: '#/$defs/digest'}
+  evidence_census:
+    type: object
+    additionalProperties: false
+    required: [id, count, digest]
+    properties:
+      id: {type: string}
+      count: {type: integer, minimum: 0}
+      digest: {$ref: '#/$defs/digest'}
+  domain_release_profile: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: release.profile}}}]}
+  domain_release_gate: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: release.gate}}}]}
+  domain_release_migration: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: release.migration}}}]}
+  domain_distribution_target: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: distribution.target}}}]}
+  domain_distribution_native_package: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: distribution.native-package}}}]}
+  domain_distribution_installed_tool: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: distribution.installed-tool}}}]}
+  domain_distribution_consumer_configuration: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: distribution.consumer-configuration}}}]}
+  domain_distribution_source_surface: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: distribution.source-surface}}}]}
+  domain_public_package: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: public.package}}}]}
+  domain_public_author_path: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: public.author-path}}}]}
+  domain_public_catalog_entry: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: public.catalog-entry}}}]}
+  domain_public_header: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: public.header}}}]}
+  domain_public_callable: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: public.callable}}}]}
+  domain_relation_descriptor: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: relation.descriptor}}}]}
+  domain_relation_static_admission: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: relation.static-admission}}}]}
+  domain_provider_profile_feature: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: provider.profile-feature}}}]}
+  domain_provider_message: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: provider.message}}}]}
+  domain_provider_execution_surface: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: provider.execution-surface}}}]}
+  domain_provider_support_tuple: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: provider.support-tuple}}}]}
+  domain_provider_production_tuple_template: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: provider.production-tuple-template}}}]}
+  domain_query_operator: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: query.operator}}}]}
+  domain_query_result_status: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: query.result-status}}}]}
+  domain_query_backend: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: query.backend}}}]}
+  domain_g5_closure_kind: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: g5.closure-kind}}}]}
+  domain_security_profile: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: security.profile}}}]}
+  domain_security_namespace: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: security.namespace}}}]}
+  domain_security_sandbox_profile: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: security.sandbox-profile}}}]}
+  domain_security_sandbox_policy: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: security.sandbox-policy}}}]}
+  domain_compatibility_axis: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: compatibility.axis}}}]}
+  domain_quality_check: {allOf: [{$ref: '#/$defs/domain_census'}, {properties: {id: {const: quality.check}}}]}
+  source_acceptance: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_acceptance_manifest.yaml}}}]}
+  source_g5: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_g5_qualification.yaml}}}]}
+  source_query: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_logical_query_contract.yaml}}}]}
+  source_namespace: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_namespace_registry.yaml}}}]}
+  source_provider_protocol: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_provider_protocol.yaml}}}]}
+  source_provider_runtime: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_provider_runtime_contract.yaml}}}]}
+  source_provider_support: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_provider_support_matrix.yaml}}}]}
+  source_public_api: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_public_api_catalog.yaml}}}]}
+  source_public_callables: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_public_callable_inventory.yaml}}}]}
+  source_quality: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_quality_ownership.yaml}}}]}
+  source_relations: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_relation_registry.yaml}}}]}
+  source_release_bundle: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_release_bundle.yaml}}}]}
+  source_release_qualification: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_release_qualification.yaml}}}]}
+  source_security: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_security_profile.yaml}}}]}
+  evidence_public_callables: {allOf: [{$ref: '#/$defs/evidence_census'}, {properties: {id: {const: public-callable-inventory}}}]}
+  evidence_provider_support: {allOf: [{$ref: '#/$defs/evidence_census'}, {properties: {id: {const: provider-support-entries}}}]}
+  evidence_provider_reasons: {allOf: [{$ref: '#/$defs/evidence_census'}, {properties: {id: {const: provider-reason-codes}}}]}
+  evidence_provider_vectors: {allOf: [{$ref: '#/$defs/evidence_census'}, {properties: {id: {const: provider-conformance-vectors}}}]}
+  evidence_query_vectors: {allOf: [{$ref: '#/$defs/evidence_census'}, {properties: {id: {const: query-conformance-vectors}}}]}
+  evidence_security_levels: {allOf: [{$ref: '#/$defs/evidence_census'}, {properties: {id: {const: security-qualification-levels}}}]}
+  evidence_security_reasons: {allOf: [{$ref: '#/$defs/evidence_census'}, {properties: {id: {const: security-reason-codes}}}]}
+  evidence_security_vectors: {allOf: [{$ref: '#/$defs/evidence_census'}, {properties: {id: {const: security-conformance-vectors}}}]}
+  evidence_g5_inputs: {allOf: [{$ref: '#/$defs/evidence_census'}, {properties: {id: {const: g5-exact-input-axes}}}]}
+  evidence_g5_artifacts: {allOf: [{$ref: '#/$defs/evidence_census'}, {properties: {id: {const: g5-required-artifacts}}}]}
+  evidence_release_artifacts: {allOf: [{$ref: '#/$defs/evidence_census'}, {properties: {id: {const: release-required-artifacts}}}]}
+  evidence_acceptance: {allOf: [{$ref: '#/$defs/evidence_census'}, {properties: {id: {const: acceptance-gate-evidence}}}]}
+  evidence_typed_tests: {allOf: [{$ref: '#/$defs/evidence_census'}, {properties: {id: {const: typed-evidence-tests}}}]}

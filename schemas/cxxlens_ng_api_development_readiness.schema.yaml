@@ -3,10 +3,10 @@ $id: https://cxxlens.dev/schemas/cxxlens.ng-api-development-readiness.v1
 title: cxxlens API development Wave 0 readiness contract
 type: object
 additionalProperties: false
-required: [schema, document_version, maturity, authority, binding, target_contract, public_header_authority, public_callable_authority, implementation_learning, required_status_checks, merged_main_checks, baseline, api_unit_workflow, gate_ownership]
+required: [schema, document_version, maturity, authority, binding, target_contract, public_header_authority, public_callable_authority, production_scope_closure, implementation_learning, required_status_checks, merged_main_checks, baseline, api_unit_workflow, gate_ownership]
 properties:
   schema: {const: cxxlens.ng-api-development-readiness.v1}
-  document_version: {const: 1.2.0}
+  document_version: {const: 1.3.0}
   maturity: {const: implemented}
   authority:
     type: object
@@ -70,6 +70,23 @@ properties:
       extractor: {const: clang-ast-json-22}
       doxygen_correspondence: {const: exact-bidirectional}
       required_result: {const: passed}
+  production_scope_closure:
+    type: object
+    additionalProperties: false
+    required: [decision_adr, owner_issue, manifest, manifest_schema, report_schema, checker, inventory_binding, normal_mode, final_mode, release_evaluation_job, terminal_job]
+    properties:
+      decision_adr: {const: docs/design/adr/0095-production-scope-closure.md}
+      owner_issue: {const: '#179'}
+      manifest: {const: schemas/cxxlens_ng_production_scope_closure.yaml}
+      manifest_schema: {const: schemas/cxxlens_ng_production_scope_closure.schema.yaml}
+      report_schema: {const: schemas/cxxlens_ng_production_scope_closure_report.schema.yaml}
+      checker: {const: tools/quality/check_ng_production_scope_closure.py}
+      inventory_binding:
+        const: [manifest-digest, authority-census-digest, classification-digest, derived-summary, closure-status]
+      normal_mode: {const: allow-explicit-gaps}
+      final_mode: {const: require-qualified}
+      release_evaluation_job: {const: release-evaluation}
+      terminal_job: {const: production-scope-closure}
   implementation_learning:
     type: object
     additionalProperties: false
@@ -96,7 +113,7 @@ properties:
       contexts:
         const: [build-test (OFF), build-test (ON), gcc-public-headers, install-consumer (OFF), install-consumer (ON), quality-contracts, quality-evidence]
   merged_main_checks:
-    const: [foundation-completion, wave0-readiness]
+    const: [foundation-completion, wave0-readiness, g5-qualification, release-evaluation, production-scope-closure]
   baseline:
     type: object
     additionalProperties: false
@@ -105,7 +122,7 @@ properties:
       exact_revision_tree: {const: required}
       clean_main_checkout: {const: required}
       required_evidence:
-        const: [toolchain-provenance, static-shared-build-test, static-shared-install-manifest, public-header-inventory, authority-digests, implementation-learning-contract, test-inventory, generated-header-inventory, public-callable-inventory-report, public-callable-review, foundation-completion-report, branch-protection-status-names]
+        const: [toolchain-provenance, static-shared-build-test, static-shared-install-manifest, public-header-inventory, authority-digests, implementation-learning-contract, test-inventory, generated-header-inventory, public-callable-inventory-report, public-callable-review, foundation-completion-report, branch-protection-status-names, production-scope-inventory-binding]
   api_unit_workflow:
     type: object
     additionalProperties: false

@@ -24,6 +24,45 @@ class NgG5QualificationTests(unittest.TestCase):
         self.assertEqual(self.manifest["maturity"], "implemented")
         self.assertEqual(self.manifest["binding"]["release_migration"], "R4")
 
+    def test_intermediate_release_state_is_non_production_and_fail_closed(self) -> None:
+        original_load = g5.load
+        release = original_load(ROOT / g5.RELEASE_BUNDLE)
+        distribution = next(
+            row for row in release["releases"] if row["id"] == "distribution-1.0"
+        )
+        self.assertEqual(distribution["state"], "qualification-in-progress")
+        self.assertFalse(distribution["production_supported"])
+
+        def replacement(path: pathlib.Path):
+            return release if path == ROOT / g5.RELEASE_BUNDLE else original_load(path)
+
+        distribution["production_supported"] = True
+        with mock.patch.object(g5, "load", side_effect=replacement):
+            with self.assertRaisesRegex(
+                g5.G5QualificationError, "without claiming production support"
+            ):
+                g5.validate_documents(ROOT)
+
+    def test_final_release_state_requires_production_support_and_exact_gr_binding(self) -> None:
+        original_load = g5.load
+        release = original_load(ROOT / g5.RELEASE_BUNDLE)
+        distribution = next(
+            row for row in release["releases"] if row["id"] == "distribution-1.0"
+        )
+        distribution["state"] = "qualified"
+        distribution["production_supported"] = True
+
+        def replacement(path: pathlib.Path):
+            return release if path == ROOT / g5.RELEASE_BUNDLE else original_load(path)
+
+        with mock.patch.object(g5, "load", side_effect=replacement):
+            g5.validate_documents(ROOT)
+            release["release_qualification"]["claim_scope"] = "wildcard"
+            with self.assertRaisesRegex(
+                g5.G5QualificationError, "lacks independent GR binding"
+            ):
+                g5.validate_documents(ROOT)
+
     def test_performance_envelope_is_fail_closed(self) -> None:
         value = {
             "schema": "cxxlens.g5-performance.v1",

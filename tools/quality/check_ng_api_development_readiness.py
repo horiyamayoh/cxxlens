@@ -9,6 +9,7 @@ import hashlib
 import json
 import pathlib
 import re
+import shlex
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -18,6 +19,7 @@ import jsonschema
 import yaml
 
 import public_callable_inventory as callable_inventory
+import check_ng_production_scope_closure as production_scope
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -42,6 +44,21 @@ PUBLIC_CALLABLE_REPORT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_public_callable_inventory_report.schema.yaml"
 )
 PUBLIC_CALLABLE_CHECKER = pathlib.Path("tools/quality/public_callable_inventory.py")
+PRODUCTION_SCOPE_MANIFEST = pathlib.Path(
+    "schemas/cxxlens_ng_production_scope_closure.yaml"
+)
+PRODUCTION_SCOPE_MANIFEST_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_production_scope_closure.schema.yaml"
+)
+PRODUCTION_SCOPE_REPORT_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_production_scope_closure_report.schema.yaml"
+)
+PRODUCTION_SCOPE_CHECKER = pathlib.Path(
+    "tools/quality/check_ng_production_scope_closure.py"
+)
+PRODUCTION_SCOPE_DECISION_ADR = pathlib.Path(
+    "docs/design/adr/0095-production-scope-closure.md"
+)
 IMPLEMENTATION_LEARNING_HANDBOOK = pathlib.Path(
     "docs/development/implementation-learning/README.md"
 )
@@ -242,18 +259,41 @@ def validate_gate_ownership(root: pathlib.Path, manifest: dict[str, Any]) -> Non
 
 def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
     workflow = (root / ".github/workflows/quality.yml").read_text(encoding="utf-8")
+    try:
+        workflow_document = yaml.safe_load(workflow)
+    except yaml.YAMLError as error:
+        fail(f"quality workflow YAML is invalid: {error}")
+    if not isinstance(workflow_document, dict) or not isinstance(
+        workflow_document.get("jobs"), dict
+    ):
+        fail("quality workflow jobs mapping is missing")
+    workflow_jobs = workflow_document["jobs"]
+    if workflow_document.get(True) != {"pull_request": None, "push": None}:
+        fail("quality workflow triggers must be unrestricted pull_request and push")
+    if workflow_document.get("env") != {
+        "CMAKE_GENERATOR": "Ninja",
+        "CMAKE_BUILD_PARALLEL_LEVEL": "${{ vars.CXXLENS_BUILD_JOBS || 4 }}",
+        "CTEST_PARALLEL_LEVEL": "${{ vars.CXXLENS_TEST_JOBS || 4 }}",
+    }:
+        fail("quality workflow global environment differs")
+    if "defaults" in workflow_document:
+        fail("quality workflow must not define global run defaults")
     if "branches: [main]" in workflow:
         fail("pre-main exact-SHA validation requires push checks on non-main branches")
     for job in (
-        "build-test:",
-        "quality-contracts:",
-        "install-consumer:",
-        "gcc-public-headers:",
-        "quality-evidence:",
-        "foundation-completion:",
-        "wave0-readiness:",
+        "build-test",
+        "quality-contracts",
+        "install-consumer",
+        "gcc-public-headers",
+        "quality-evidence",
+        "foundation-completion",
+        "wave0-readiness",
+        "g5-qualification",
+        "release-evaluation",
+        "release-qualification",
+        "production-scope-closure",
     ):
-        if job not in workflow:
+        if job not in workflow_jobs:
             fail(f"required CI job is missing: {job}")
     contexts = manifest["required_status_checks"]["contexts"]
     if contexts != sorted(contexts):
@@ -274,6 +314,527 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
     )
     if quality_job is None or "fetch-depth: 2" not in quality_job.group("body"):
         fail("public callable stable-ID check requires parent history in CI")
+    production_contract = manifest["production_scope_closure"]
+    for marker in (
+        production_contract["checker"],
+        "check_ng_release_qualification.py evaluate",
+        "check_ng_release_qualification.py report",
+        "--mode normal",
+        "name: cxxlens-ng-release-qualification-evaluation-${{ github.sha }}",
+        "name: cxxlens-ng-production-scope-closure-${{ github.sha }}",
+    ):
+        if marker not in workflow:
+            fail(f"production-scope workflow marker is missing: {marker}")
+
+    def workflow_job(name: str) -> str:
+        match = re.search(
+            rf"(?ms)^  {re.escape(name)}:\n(?P<body>.*?)(?=^  [a-zA-Z0-9_-]+:|\Z)",
+            workflow,
+        )
+        if match is None:
+            fail(f"production-scope workflow job is missing: {name}")
+        return match.group("body")
+
+    def configured_job(name: str) -> dict[str, Any]:
+        job = workflow_jobs.get(name)
+        if not isinstance(job, dict):
+            fail(f"production-scope workflow job mapping is missing: {name}")
+        return job
+
+    def configured_step(job: dict[str, Any], name: str) -> dict[str, Any]:
+        steps = job.get("steps")
+        if not isinstance(steps, list):
+            fail(f"production-scope workflow steps are missing: {name}")
+        matches = [
+            step
+            for step in steps
+            if isinstance(step, dict) and step.get("name") == name
+        ]
+        if len(matches) != 1:
+            fail(f"production-scope workflow step must occur exactly once: {name}")
+        return matches[0]
+
+    def require_action_step(
+        job: dict[str, Any], expected: dict[str, Any], name: str
+    ) -> int:
+        steps = job.get("steps")
+        if not isinstance(steps, list):
+            fail(f"production-scope workflow steps are missing: {name}")
+        indexes = [index for index, step in enumerate(steps) if step == expected]
+        if len(indexes) != 1:
+            fail(f"production-scope workflow action step differs: {name}")
+        return indexes[0]
+
+    def shell_commands(step: dict[str, Any], name: str) -> list[list[str]]:
+        run = step.get("run")
+        if not isinstance(run, str):
+            fail(f"production-scope workflow step lacks a run script: {name}")
+        commands: list[list[str]] = []
+        continued: list[str] = []
+        for raw_line in run.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.endswith("\\"):
+                continued.append(line[:-1].rstrip())
+                continue
+            continued.append(line)
+            logical_line = " ".join(continued)
+            continued.clear()
+            try:
+                argv = shlex.split(logical_line, comments=True, posix=True)
+            except ValueError as error:
+                fail(f"production-scope workflow command is invalid in {name}: {error}")
+            if argv:
+                commands.append(argv)
+        if continued:
+            fail(f"production-scope workflow command has a dangling continuation: {name}")
+        return commands
+
+    def normalized_condition(value: Any) -> str:
+        return " ".join(value.split()) if isinstance(value, str) else ""
+
+    evaluation_config = configured_job("release-evaluation")
+    strict_config = configured_job("release-qualification")
+    terminal_config = configured_job("production-scope-closure")
+    expected_job_routing = (
+        (
+            "release-evaluation",
+            evaluation_config,
+            ["g5-qualification"],
+            "github.event_name == 'push' && github.ref == 'refs/heads/main'",
+            {"if", "needs", "runs-on", "outputs", "steps"},
+        ),
+        (
+            "release-qualification",
+            strict_config,
+            ["release-evaluation"],
+            "github.event_name == 'push' && github.ref == 'refs/heads/main' && "
+            "needs.release-evaluation.outputs.qualification == 'qualified'",
+            {"if", "needs", "runs-on", "steps"},
+        ),
+        (
+            "production-scope-closure",
+            terminal_config,
+            ["release-evaluation", "release-qualification"],
+            "always() && github.event_name == 'push' && "
+            "github.ref == 'refs/heads/main'",
+            {"if", "needs", "runs-on", "steps"},
+        ),
+    )
+    for name, job, expected_needs, expected_condition, expected_keys in (
+        expected_job_routing
+    ):
+        if set(job) != expected_keys:
+            fail(f"production-scope job keys differ: {name}")
+        if job.get("runs-on") != "ubuntu-24.04":
+            fail(f"production-scope job runner differs: {name}")
+        if job.get("needs") != expected_needs:
+            fail(f"production-scope job needs differ: {name}")
+        if normalized_condition(job.get("if")) != expected_condition:
+            fail(f"production-scope job condition differs: {name}")
+    if evaluation_config.get("outputs") != {
+        "qualification": "${{ steps.evaluate.outputs.qualification }}"
+    }:
+        fail("release-evaluation qualification output binding differs")
+
+    download_action = (
+        "actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16"
+    )
+    upload_action = (
+        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+    )
+    evaluation_download_index = require_action_step(
+        evaluation_config,
+        {
+            "uses": download_action,
+            "with": {
+                "pattern": "cxxlens-*-${{ github.sha }}",
+                "path": "build/release-evaluation-input",
+            },
+        },
+        "release-evaluation evidence download",
+    )
+    evaluation_upload_index = require_action_step(
+        evaluation_config,
+        {
+            "uses": upload_action,
+            "with": {
+                "name": (
+                    "cxxlens-ng-release-qualification-evaluation-${{ github.sha }}"
+                ),
+                "path": (
+                    "${{ runner.temp }}/cxxlens-ng-security-conformance-report.json\n"
+                    "${{ runner.temp }}/"
+                    "cxxlens-ng-release-qualification-evaluation-report.json\n"
+                ),
+                "if-no-files-found": "error",
+                "retention-days": 365,
+            },
+        },
+        "release-evaluation artifact upload",
+    )
+    strict_download_index = require_action_step(
+        strict_config,
+        {
+            "uses": download_action,
+            "with": {
+                "pattern": "cxxlens-*-${{ github.sha }}",
+                "path": "build/release-qualification-input",
+            },
+        },
+        "strict qualification evidence download",
+    )
+    strict_upload_index = require_action_step(
+        strict_config,
+        {
+            "uses": upload_action,
+            "with": {
+                "name": "cxxlens-ng-release-qualification-${{ github.sha }}",
+                "path": (
+                    "${{ runner.temp }}/cxxlens-ng-release-qualification-report.json"
+                ),
+                "if-no-files-found": "error",
+                "retention-days": 365,
+            },
+        },
+        "strict qualification artifact upload",
+    )
+    terminal_evaluation_download_index = require_action_step(
+        terminal_config,
+        {
+            "uses": download_action,
+            "with": {
+                "name": (
+                    "cxxlens-ng-release-qualification-evaluation-${{ github.sha }}"
+                ),
+                "path": "build/production-scope-input/evaluation",
+            },
+        },
+        "terminal evaluation artifact download",
+    )
+    terminal_gr_download_index = require_action_step(
+        terminal_config,
+        {
+            "if": (
+                "needs.release-evaluation.outputs.qualification == 'qualified'"
+            ),
+            "uses": download_action,
+            "with": {
+                "name": "cxxlens-ng-release-qualification-${{ github.sha }}",
+                "path": "build/production-scope-input/gr",
+            },
+        },
+        "qualified-only terminal GR artifact download",
+    )
+    terminal_upload_index = require_action_step(
+        terminal_config,
+        {
+            "uses": upload_action,
+            "with": {
+                "name": "cxxlens-ng-production-scope-closure-${{ github.sha }}",
+                "path": (
+                    "${{ runner.temp }}/"
+                    "cxxlens-ng-production-scope-closure-report.json"
+                ),
+                "if-no-files-found": "error",
+                "retention-days": 365,
+            },
+        },
+        "terminal production-scope artifact upload",
+    )
+
+    evaluation_job = workflow_job("release-evaluation")
+    strict_job = workflow_job("release-qualification")
+    terminal_job = workflow_job("production-scope-closure")
+    required_job_markers = {
+        "release-evaluation": (
+            "needs: [g5-qualification]",
+            "qualification: ${{ steps.evaluate.outputs.qualification }}",
+            '--github-output "${GITHUB_OUTPUT}"',
+        ),
+        "release-qualification": (
+            "needs: [release-evaluation]",
+            "needs.release-evaluation.outputs.qualification == 'qualified'",
+            "--evaluation ",
+        ),
+        "production-scope-closure": (
+            "always()",
+            "needs: [release-evaluation, release-qualification]",
+            '"${QUALIFICATION}" == "not-qualified"',
+            '"${STRICT_RESULT}" == "skipped"',
+            '"${QUALIFICATION}" == "qualified"',
+            '"${STRICT_RESULT}" == "success"',
+            "--mode normal",
+            "--mode final",
+            '--expected-revision "${GITHUB_SHA}"',
+        ),
+    }
+    for name, body in (
+        ("release-evaluation", evaluation_job),
+        ("release-qualification", strict_job),
+        ("production-scope-closure", terminal_job),
+    ):
+        for marker in required_job_markers[name]:
+            if marker not in body:
+                fail(
+                    "production-scope dependency matrix marker is missing from "
+                    f"{name}: {marker}"
+                )
+
+    evaluation_step = configured_step(
+        evaluation_config, "Evaluate exact-SHA distribution 1.0 qualification"
+    )
+    strict_step = configured_step(
+        strict_config, "Generate exact-SHA distribution 1.0 GR report"
+    )
+    dependency_step = configured_step(
+        terminal_config, "Validate qualification dependency results"
+    )
+    normal_step = configured_step(
+        terminal_config, "Generate classified production-scope report"
+    )
+    final_step = configured_step(
+        terminal_config, "Generate final production-scope report"
+    )
+    evaluation_steps = evaluation_config["steps"]
+    strict_steps = strict_config["steps"]
+    terminal_steps = terminal_config["steps"]
+    common_setup_steps = [
+        {
+            "uses": (
+                "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
+            )
+        },
+        {
+            "uses": (
+                "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065"
+            ),
+            "with": {"python-version": "3.12.11"},
+        },
+        {
+            "run": (
+                "python -m pip install --require-hashes --only-binary=:all: "
+                "--requirement tools/quality/requirements.lock"
+            )
+        },
+    ]
+    if (
+        len(evaluation_steps) != 6
+        or evaluation_steps[:3] != common_setup_steps
+        or evaluation_download_index != 3
+        or evaluation_steps.index(evaluation_step) != 4
+        or evaluation_upload_index != 5
+    ):
+        fail("release-evaluation workflow step order differs")
+    if (
+        len(strict_steps) != 6
+        or strict_steps[:3] != common_setup_steps
+        or strict_download_index != 3
+        or strict_steps.index(strict_step) != 4
+        or strict_upload_index != 5
+    ):
+        fail("strict release qualification workflow step order differs")
+    if (
+        len(terminal_steps) != 9
+        or terminal_steps.index(dependency_step) != 0
+        or terminal_steps[1:4] != common_setup_steps
+        or terminal_evaluation_download_index != 4
+        or terminal_gr_download_index != 5
+        or terminal_steps.index(normal_step) != 6
+        or terminal_steps.index(final_step) != 7
+        or terminal_upload_index != 8
+    ):
+        fail("terminal production-scope workflow step order differs")
+    for step, expected_keys, name in (
+        (evaluation_step, {"name", "id", "run"}, "release evaluation"),
+        (strict_step, {"name", "run"}, "strict release qualification"),
+        (
+            dependency_step,
+            {"name", "env", "run"},
+            "qualification dependency matrix",
+        ),
+        (normal_step, {"name", "if", "run"}, "normal production-scope routing"),
+        (final_step, {"name", "if", "run"}, "final production-scope routing"),
+    ):
+        if set(step) != expected_keys:
+            fail(f"{name} workflow step keys differ")
+    if evaluation_step.get("id") != "evaluate":
+        fail("release evaluation workflow step id differs")
+    if normalized_condition(normal_step.get("if")) != (
+        "needs.release-evaluation.outputs.qualification == 'not-qualified'"
+    ):
+        fail("normal production-scope routing has a different top-level condition")
+    if normalized_condition(final_step.get("if")) != (
+        "needs.release-evaluation.outputs.qualification == 'qualified'"
+    ):
+        fail("final production-scope routing has a different top-level condition")
+    if dependency_step.get("env") != {
+        "EVALUATION_RESULT": "${{ needs.release-evaluation.result }}",
+        "QUALIFICATION": "${{ needs.release-evaluation.outputs.qualification }}",
+        "STRICT_RESULT": "${{ needs.release-qualification.result }}",
+    }:
+        fail("qualification dependency matrix environment binding differs")
+
+    run_url = "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+    evaluation_report = (
+        "${RUNNER_TEMP}/cxxlens-ng-release-qualification-evaluation-report.json"
+    )
+    evaluation_artifact = (
+        "build/production-scope-input/evaluation/"
+        "cxxlens-ng-release-qualification-evaluation-report.json"
+    )
+    gr_artifact = (
+        "build/production-scope-input/gr/"
+        "cxxlens-ng-release-qualification-report.json"
+    )
+    expected_evaluation_commands = [
+        [
+            "python",
+            "tools/quality/check_ng_security_contract.py",
+            "report",
+            "--root",
+            ".",
+            "--output",
+            "${RUNNER_TEMP}/cxxlens-ng-security-conformance-report.json",
+        ],
+        [
+            "python",
+            "tools/quality/check_ng_release_qualification.py",
+            "evaluate",
+            "--root",
+            ".",
+            "--evidence-dir",
+            "build/release-evaluation-input",
+            "--security-report",
+            "${RUNNER_TEMP}/cxxlens-ng-security-conformance-report.json",
+            "--output",
+            evaluation_report,
+            "--run-url",
+            run_url,
+            "--expected-revision",
+            "${GITHUB_SHA}",
+            "--github-output",
+            "${GITHUB_OUTPUT}",
+        ],
+    ]
+    expected_strict_commands = [[
+        "python",
+        "tools/quality/check_ng_release_qualification.py",
+        "report",
+        "--root",
+        ".",
+        "--evidence-dir",
+        "build/release-qualification-input",
+        "--security-report",
+        "build/release-qualification-input/"
+        "cxxlens-ng-release-qualification-evaluation-${GITHUB_SHA}/"
+        "cxxlens-ng-security-conformance-report.json",
+        "--evaluation",
+        "build/release-qualification-input/"
+        "cxxlens-ng-release-qualification-evaluation-${GITHUB_SHA}/"
+        "cxxlens-ng-release-qualification-evaluation-report.json",
+        "--output",
+        "${RUNNER_TEMP}/cxxlens-ng-release-qualification-report.json",
+        "--run-url",
+        run_url,
+        "--expected-revision",
+        "${GITHUB_SHA}",
+    ]]
+    expected_normal_commands = [[
+        "python",
+        "tools/quality/check_ng_production_scope_closure.py",
+        "--root",
+        ".",
+        "report",
+        "--mode",
+        "normal",
+        "--evaluation",
+        evaluation_artifact,
+        "--output",
+        "${RUNNER_TEMP}/cxxlens-ng-production-scope-closure-report.json",
+        "--run-url",
+        run_url,
+        "--expected-revision",
+        "${GITHUB_SHA}",
+    ]]
+    expected_final_commands = [
+        [
+            "python",
+            "tools/quality/check_ng_release_qualification.py",
+            "verify-evaluation-binding",
+            "--root",
+            ".",
+            "--evaluation",
+            evaluation_artifact,
+            "--gr",
+            gr_artifact,
+        ],
+        [
+            "python",
+            "tools/quality/check_ng_production_scope_closure.py",
+            "--root",
+            ".",
+            "report",
+            "--mode",
+            "final",
+            "--evaluation",
+            evaluation_artifact,
+            "--gr",
+            gr_artifact,
+            "--output",
+            "${RUNNER_TEMP}/cxxlens-ng-production-scope-closure-report.json",
+            "--run-url",
+            run_url,
+            "--expected-revision",
+            "${GITHUB_SHA}",
+        ],
+    ]
+    for step, name, expected_commands in (
+        (evaluation_step, "release evaluation", expected_evaluation_commands),
+        (strict_step, "strict release qualification", expected_strict_commands),
+        (normal_step, "normal production-scope routing", expected_normal_commands),
+        (final_step, "final production-scope routing", expected_final_commands),
+    ):
+        if shell_commands(step, name) != expected_commands:
+            fail(f"{name} command argv differ")
+
+    expected_dependency_lines = [
+        'if [[ "${EVALUATION_RESULT}" == "success" && '
+        '"${QUALIFICATION}" == "not-qualified" && '
+        '"${STRICT_RESULT}" == "skipped" ]]; then',
+        "exit 0",
+        "fi",
+        'if [[ "${EVALUATION_RESULT}" == "success" && '
+        '"${QUALIFICATION}" == "qualified" && '
+        '"${STRICT_RESULT}" == "success" ]]; then',
+        "exit 0",
+        "fi",
+        'echo "invalid qualification dependency matrix: '
+        'evaluation=${EVALUATION_RESULT}, qualification=${QUALIFICATION}, '
+        'strict=${STRICT_RESULT}" >&2',
+        "exit 1",
+    ]
+    dependency_run = dependency_step.get("run")
+    if not isinstance(dependency_run, str):
+        fail("qualification dependency matrix run script is missing")
+    actual_dependency_lines = [
+        line.strip()
+        for line in dependency_run.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    if actual_dependency_lines != expected_dependency_lines:
+        fail("qualification dependency matrix script differs")
+    qualified_gr_download = re.compile(
+        r"(?ms)^      - if: needs\.release-evaluation\.outputs\.qualification "
+        r"== 'qualified'\n"
+        r"        uses: actions/download-artifact@.*?\n"
+        r"        with:\n"
+        r"          name: cxxlens-ng-release-qualification-\$\{\{ github\.sha \}\}\n"
+        r"          path: build/production-scope-input/gr(?:\n|$)"
+    )
+    if qualified_gr_download.search(terminal_job) is None:
+        fail("final production-scope routing lacks qualified-only GR download")
 
 
 def validate_public_callable_contract(
@@ -313,6 +874,70 @@ def validate_public_callable_contract(
         )
     except jsonschema.SchemaError as error:
         fail(f"public callable report schema is invalid: {error.message}")
+
+
+def validate_production_scope_contract(
+    root: pathlib.Path, manifest: dict[str, Any]
+) -> dict[str, Any]:
+    contract = manifest["production_scope_closure"]
+    expected_paths = {
+        "decision_adr": PRODUCTION_SCOPE_DECISION_ADR,
+        "manifest": PRODUCTION_SCOPE_MANIFEST,
+        "manifest_schema": PRODUCTION_SCOPE_MANIFEST_SCHEMA,
+        "report_schema": PRODUCTION_SCOPE_REPORT_SCHEMA,
+        "checker": PRODUCTION_SCOPE_CHECKER,
+    }
+    for key, expected in expected_paths.items():
+        if pathlib.Path(contract[key]) != expected:
+            fail(f"production-scope authority path differs: {key}")
+        if not (root / expected).is_file():
+            fail(f"production-scope authority is missing: {expected}")
+
+    bundle = load_document(root / RELEASE_BUNDLE)["production_scope_closure"]
+    expected_bundle = {
+        "contract": "cxxlens.ng-production-scope-closure.v1",
+        "authority": contract["manifest"],
+        "decision_adr": contract["decision_adr"],
+        "schema": contract["manifest_schema"],
+        "checker": contract["checker"],
+        "namespace_ids": list(production_scope.DOMAINS),
+        "report": {
+            "schema": contract["report_schema"],
+            "ci_job": contract["terminal_job"],
+            "artifact": "cxxlens-ng-production-scope-closure-${revision}",
+        },
+        "evaluation": {
+            "schema": (
+                "schemas/"
+                "cxxlens_ng_release_qualification_evaluation_report.schema.yaml"
+            ),
+            "ci_job": contract["release_evaluation_job"],
+            "artifact": (
+                "cxxlens-ng-release-qualification-evaluation-${revision}"
+            ),
+            "not_qualified_satisfies_gate_release": False,
+        },
+    }
+    if bundle != expected_bundle:
+        fail("Release Bundle production-scope binding differs from Wave 0")
+
+    try:
+        binding = production_scope.inventory_binding(root)
+    except production_scope.ContractError as error:
+        fail(f"production-scope inventory is invalid: {error}")
+    expected_keys = {
+        "manifest_path",
+        "manifest_digest",
+        "authority_census_digest",
+        "evidence_census_digest",
+        "classification_digest",
+        "evidence_tests",
+        "summary",
+        "closure_status",
+    }
+    if set(binding) != expected_keys:
+        fail("production-scope inventory binding shape differs")
+    return binding
 
 
 def validate_implementation_learning_contract(
@@ -408,6 +1033,7 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
         fail("migration checker still owns a public header allowlist")
     validate_gate_ownership(root, manifest)
     validate_public_callable_contract(root, manifest)
+    validate_production_scope_contract(root, manifest)
     validate_implementation_learning_contract(root, manifest)
     validate_agent_authorization_contract(root)
     try:
@@ -582,12 +1208,26 @@ def build_report(
     if foundation.get("result") != "passed" or foundation.get("git") != git:
         fail("Foundation completion report differs from Wave 0 source")
 
+    production_scope_binding = validate_production_scope_contract(root, manifest)
+    required_scope_tests = set(production_scope_binding["evidence_tests"])
+    passed_scope_tests: set[str] = set()
     test_cases = 0
     for path in junit:
         root_element = ET.parse(path).getroot()
-        test_cases += len(root_element.findall(".//testcase"))
+        cases = root_element.findall(".//testcase")
+        test_cases += len(cases)
+        for case in cases:
+            name = case.get("name", "")
+            if name not in required_scope_tests:
+                continue
+            if any(case.find(tag) is not None for tag in ("failure", "error", "skipped")):
+                fail(f"production-scope evidence test did not pass: {name} in {path}")
+            passed_scope_tests.add(name)
     if test_cases == 0:
         fail("Wave 0 test inventory is empty")
+    missing_scope_tests = sorted(required_scope_tests - passed_scope_tests)
+    if missing_scope_tests:
+        fail(f"Wave 0 JUnit omits production-scope evidence tests: {missing_scope_tests}")
 
     callable_binding = public_callable_evidence(
         root, manifest, evidence_dir, git
@@ -607,6 +1247,11 @@ def build_report(
         root / manifest["public_callable_authority"]["inventory_schema"],
         root / manifest["public_callable_authority"]["report_schema"],
         root / manifest["public_callable_authority"]["checker"],
+        root / manifest["production_scope_closure"]["decision_adr"],
+        root / manifest["production_scope_closure"]["manifest"],
+        root / manifest["production_scope_closure"]["manifest_schema"],
+        root / manifest["production_scope_closure"]["report_schema"],
+        root / manifest["production_scope_closure"]["checker"],
     ]
     learning = manifest["implementation_learning"]
     authority_paths.extend(
@@ -647,7 +1292,11 @@ def build_report(
         "toolchain_provenance": file_rows(toolchains, evidence_dir),
         "evidence_artifacts": file_rows(evidence, evidence_dir),
         "install_manifests": file_rows(install_manifests, evidence_dir),
-        "test_inventory": {"junit_files": len(junit), "test_cases": test_cases},
+        "test_inventory": {
+            "junit_files": len(junit),
+            "test_cases": test_cases,
+            "production_scope_tests": sorted(required_scope_tests),
+        },
         "foundation_completion": {
             "path": foundation_path.relative_to(evidence_dir).as_posix(),
             "digest": sha256(foundation_path),
@@ -656,6 +1305,7 @@ def build_report(
             "tree": foundation["git"]["tree"],
         },
         "public_callable_inventory": callable_binding,
+        "production_scope_inventory": production_scope_binding,
     }
 
 

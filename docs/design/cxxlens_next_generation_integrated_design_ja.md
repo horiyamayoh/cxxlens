@@ -4161,6 +4161,18 @@ relation、interpretation、toolchain、platform/configuration と capability、
 保持する。source support matrix の `pending` または wildcard、report にない surface、別 rebuild を production-supported と
 推測してはならない。
 
+Issue #179 / ADR 0095 は distribution 1.0 の全 scope を
+`schemas/cxxlens_ng_production_scope_closure.yaml` の typed graph へ閉じる。Release Bundle と各 domain contract は item の ID と
+semantics を所有し、closure contract は typed reference、release disposition、cross-link、evidence/remediation mapping だけを所有する。
+exact-once は namespace 付き leaf node に適用し、callable は catalog owner から継承する。source set は production-required、
+qualification-evidence、explicit-non-1.0、unresolved-authority の disjoint union とし、valid state pair は
+`included/qualified`、`included/tracked-gap`、`excluded/not-applicable`、`unresolved/blocked` の四つだけとする。
+
+tracked gap が残る main は別名の `release-evaluation` artifact を `not-qualified` として生成できるが、production tuple と strict GR report を
+生成してはならず、`gate.release` を満たさない。全 required/evidence node と applicable blocking feedback が閉じた場合だけ
+`release-evaluation: qualified`、既存 strict GR report、final production-scope report を同じ clean revision/tree で生成する。
+Foundation、Wave 0、G5、evaluation、terminal report の digest edge は一方向とし、GR と terminal report の循環 binding を作らない。
+
 Issue #156 は gate の logical evidence ownership を
 `schemas/cxxlens_ng_quality_ownership.yaml` に固定する。linkage 非依存の quality unit test は CTest、production
 checker は `cxxlens-quality`、installed consumer は install job、instrumented execution は nightly が所有し、同じ

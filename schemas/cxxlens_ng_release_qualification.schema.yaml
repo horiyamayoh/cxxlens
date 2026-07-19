@@ -5,7 +5,7 @@ additionalProperties: false
 required: [schema, document_version, maturity, authority, binding, prerequisites, package, provider, security, performance, documentation, claim_policy, required_artifacts]
 properties:
   schema: {const: cxxlens.ng-release-qualification.v1}
-  document_version: {const: 1.1.0}
+  document_version: {const: 1.2.0}
   maturity: {const: implemented}
   authority:
     type: object
@@ -30,7 +30,7 @@ properties:
   prerequisites:
     type: object
     additionalProperties: false
-    required: [gates, migrations, r0_r3_evidence, readiness_evidence, public_callable_evidence, r4_evidence, same_revision]
+    required: [gates, migrations, r0_r3_evidence, readiness_evidence, public_callable_evidence, r4_evidence, release_evaluation_evidence, same_revision]
     properties:
       gates: {const: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4, gate.g5]}
       migrations: {const: [R0, R1, R2, R3, R4]}
@@ -38,6 +38,7 @@ properties:
       readiness_evidence: {const: cxxlens.ng-api-development-readiness-report.v1}
       public_callable_evidence: {const: cxxlens.ng-public-callable-inventory-report.v1}
       r4_evidence: {const: cxxlens.ng-g5-qualification-report.v1}
+      release_evaluation_evidence: {const: cxxlens.ng-release-qualification-evaluation-report.v1}
       same_revision: {const: required}
   package:
     type: object

@@ -1,0 +1,185 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-release-qualification-evaluation-report.v1
+title: cxxlens distribution 1.0 release qualification evaluation report
+type: object
+additionalProperties: false
+required:
+  - schema
+  - result
+  - generated_at
+  - run_url
+  - git
+  - release
+  - qualification
+  - qualified
+  - scope_inventory
+  - evidence
+  - production_support
+  - strict_report
+  - reason_codes
+properties:
+  schema:
+    const: cxxlens.ng-release-qualification-evaluation-report.v1
+  result:
+    const: passed
+  generated_at:
+    type: string
+    format: date-time
+  run_url:
+    type: string
+    format: uri
+  git:
+    type: object
+    additionalProperties: false
+    required: [revision, tree, branch, clean]
+    properties:
+      revision: {$ref: '#/$defs/revision'}
+      tree: {$ref: '#/$defs/revision'}
+      branch: {const: main}
+      clean: {const: true}
+  release:
+    const: {id: distribution-1.0, version: 1.0.0}
+  qualification:
+    enum: [qualified, not-qualified]
+  qualified:
+    type: boolean
+  scope_inventory:
+    $ref: '#/$defs/scope_inventory'
+  evidence:
+    type: object
+    additionalProperties: false
+    required:
+      - foundation_report_digest
+      - readiness_report_digest
+      - public_callable_report_digest
+      - g5_report_digest
+      - security_report_digest
+      - install_manifests
+      - same_revision
+    properties:
+      foundation_report_digest: {$ref: '#/$defs/digest'}
+      readiness_report_digest: {$ref: '#/$defs/digest'}
+      public_callable_report_digest: {$ref: '#/$defs/digest'}
+      g5_report_digest: {$ref: '#/$defs/digest'}
+      security_report_digest: {$ref: '#/$defs/digest'}
+      install_manifests:
+        type: array
+        minItems: 2
+        maxItems: 2
+        uniqueItems: true
+        items:
+          type: object
+          additionalProperties: false
+          required: [configuration, manifest_digest, prefix_digest]
+          properties:
+            configuration: {enum: [static, shared]}
+            manifest_digest: {$ref: '#/$defs/digest'}
+            prefix_digest: {$ref: '#/$defs/digest'}
+      same_revision: {const: true}
+  production_support:
+    const: []
+  strict_report:
+    type: object
+    additionalProperties: false
+    required: [schema, eligible, emitted]
+    properties:
+      schema: {const: cxxlens.ng-release-qualification-report.v1}
+      eligible: {type: boolean}
+      emitted: {const: false}
+  reason_codes:
+    type: array
+    uniqueItems: true
+    items:
+      enum: [release.scope-not-qualified]
+allOf:
+  - if:
+      properties:
+        qualification: {const: qualified}
+      required: [qualification]
+    then:
+      properties:
+        qualified: {const: true}
+        scope_inventory:
+          properties:
+            closure_status: {const: qualified}
+            summary:
+              properties:
+                tracked_gap: {const: 0}
+                blocked: {const: 0}
+        strict_report:
+          properties:
+            eligible: {const: true}
+        reason_codes:
+          maxItems: 0
+    else:
+      properties:
+        qualification: {const: not-qualified}
+        qualified: {const: false}
+        scope_inventory:
+          properties:
+            closure_status: {const: classified-with-gaps}
+            summary:
+              anyOf:
+                - properties:
+                    tracked_gap: {minimum: 1}
+                - properties:
+                    blocked: {minimum: 1}
+        strict_report:
+          properties:
+            eligible: {const: false}
+        reason_codes:
+          const: [release.scope-not-qualified]
+$defs:
+  digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  revision:
+    type: string
+    pattern: '^[0-9a-f]{40}$'
+  scope_inventory:
+    type: object
+    additionalProperties: false
+    required:
+      - manifest_path
+      - manifest_digest
+      - authority_census_digest
+      - evidence_census_digest
+      - classification_digest
+      - evidence_tests
+      - summary
+      - closure_status
+    properties:
+      manifest_path:
+        const: schemas/cxxlens_ng_production_scope_closure.yaml
+      manifest_digest: {$ref: '#/$defs/digest'}
+      authority_census_digest: {$ref: '#/$defs/digest'}
+      evidence_census_digest: {$ref: '#/$defs/digest'}
+      classification_digest: {$ref: '#/$defs/digest'}
+      evidence_tests:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {type: string, pattern: '^quality\.(?:ng-[a-z0-9_]+|ownership)$'}
+      summary:
+        type: object
+        additionalProperties: false
+        required:
+          - domain_count
+          - assignable_count
+          - expanded_count
+          - aggregate_count
+          - qualified
+          - tracked_gap
+          - blocked
+          - not_applicable
+        properties:
+          domain_count: {const: 30}
+          assignable_count: {type: integer, minimum: 1}
+          expanded_count: {type: integer, minimum: 1}
+          aggregate_count: {const: 14}
+          qualified: {type: integer, minimum: 0}
+          tracked_gap: {type: integer, minimum: 0}
+          blocked: {type: integer, minimum: 0}
+          not_applicable: {type: integer, minimum: 0}
+      closure_status:
+        enum: [classified-with-gaps, qualified]

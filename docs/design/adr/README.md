@@ -69,6 +69,7 @@
 | [0092](0092-exact-public-callable-inventory.md) | exact one-callable-per-row public C++ inventory |
 | [0093](0093-implementation-learning-design-feedback.md) | implementation learning and design-feedback governance |
 | [0094](0094-risk-tiered-goal-authorization.md) | risk-tiered standing authorization for explicit goal delegation |
+| [0095](0095-production-scope-closure.md) | exact-once production scope closure and staged qualification |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

@@ -1,0 +1,230 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-production-scope-closure.v1
+type: object
+additionalProperties: false
+required:
+  - schema
+  - document_version
+  - maturity
+  - authority
+  - source_contracts
+  - authority_census_digest
+  - assignments
+  - feedback_exclusions
+properties:
+  schema:
+    const: cxxlens.ng-production-scope-closure.v1
+  document_version:
+    type: string
+    pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'
+  maturity:
+    const: accepted-contract
+  authority:
+    type: object
+    additionalProperties: false
+    required: [design, adr, owner_issue]
+    properties:
+      design:
+        const: docs/design/cxxlens_next_generation_integrated_design_ja.md
+      adr:
+        const: docs/design/adr/0095-production-scope-closure.md
+      owner_issue:
+        const: '#179'
+  source_contracts:
+    const:
+      - schemas/cxxlens_ng_acceptance_manifest.yaml
+      - schemas/cxxlens_ng_g5_qualification.yaml
+      - schemas/cxxlens_ng_logical_query_contract.yaml
+      - schemas/cxxlens_ng_namespace_registry.yaml
+      - schemas/cxxlens_ng_provider_protocol.yaml
+      - schemas/cxxlens_ng_provider_runtime_contract.yaml
+      - schemas/cxxlens_ng_provider_support_matrix.yaml
+      - schemas/cxxlens_ng_public_api_catalog.yaml
+      - schemas/cxxlens_ng_public_callable_inventory.yaml
+      - schemas/cxxlens_ng_quality_ownership.yaml
+      - schemas/cxxlens_ng_relation_registry.yaml
+      - schemas/cxxlens_ng_release_bundle.yaml
+      - schemas/cxxlens_ng_release_qualification.yaml
+      - schemas/cxxlens_ng_security_profile.yaml
+  authority_census_digest:
+    $ref: '#/$defs/digest'
+  assignments:
+    type: array
+    minItems: 1
+    items:
+      $ref: '#/$defs/assignment'
+  feedback_exclusions:
+    type: array
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [feedback, surfaces, authority, reason]
+      properties:
+        feedback:
+          $ref: '#/$defs/feedback'
+        surfaces:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/$defs/surface'
+        authority:
+          type: string
+          pattern: '^(docs|schemas)/[^/].*'
+        reason:
+          type: string
+          minLength: 1
+$defs:
+  digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  feedback:
+    type: string
+    pattern: '^DF-[0-9]{4}$'
+  domain:
+    enum:
+      - release.profile
+      - release.gate
+      - release.migration
+      - distribution.target
+      - distribution.native-package
+      - distribution.installed-tool
+      - distribution.consumer-configuration
+      - distribution.source-surface
+      - public.package
+      - public.author-path
+      - public.catalog-entry
+      - public.header
+      - public.callable
+      - relation.descriptor
+      - relation.static-admission
+      - provider.profile-feature
+      - provider.message
+      - provider.execution-surface
+      - provider.support-tuple
+      - provider.production-tuple-template
+      - query.operator
+      - query.result-status
+      - query.backend
+      - g5.closure-kind
+      - security.profile
+      - security.namespace
+      - security.sandbox-profile
+      - security.sandbox-policy
+      - compatibility.axis
+      - quality.check
+  surface:
+    type: object
+    additionalProperties: false
+    required: [domain, id]
+    properties:
+      domain:
+        $ref: '#/$defs/domain'
+      id:
+        type: string
+        minLength: 1
+  evidence:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items:
+      enum:
+        - quality.ng-foundation_completion
+        - quality.ng-g5_qualification
+        - quality.ng-provider_protocol
+        - quality.ng-provider_runtime
+        - quality.ng-public_callable_inventory
+        - quality.ng-query_contract
+        - quality.ng-relation_contract
+        - quality.ng-release_contract
+        - quality.ng-release_qualification
+        - quality.ng-sdk_contract
+        - quality.ng-security_contract
+        - quality.ownership
+  assignment:
+    type: object
+    additionalProperties: false
+    required: [id, owner_issue, scope, qualification, surfaces]
+    properties:
+      id:
+        type: string
+        pattern: '^scope\.[a-z0-9][a-z0-9.-]*$'
+      owner_issue:
+        type: string
+        pattern: '^#[0-9]+$'
+      scope:
+        enum: [included, excluded, unresolved]
+      qualification:
+        enum: [qualified, tracked-gap, blocked, not-applicable]
+      surfaces:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          $ref: '#/$defs/surface'
+      evidence:
+        $ref: '#/$defs/evidence'
+      gap:
+        type: object
+        additionalProperties: false
+        required: [finding, remediation]
+        properties:
+          finding:
+            type: string
+            pattern: '^scope\.(tracked-gap|blocked)\.[a-z0-9][a-z0-9.-]*$'
+          remediation:
+            type: string
+            minLength: 1
+      feedback:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          $ref: '#/$defs/feedback'
+      exclusion:
+        type: object
+        additionalProperties: false
+        required: [authority, reason]
+        properties:
+          authority:
+            type: string
+            pattern: '^(docs|schemas)/[^/].*'
+          reason:
+            type: string
+            minLength: 1
+    oneOf:
+      - properties:
+          scope: {const: included}
+          qualification: {const: qualified}
+        required: [evidence]
+        not:
+          anyOf:
+            - required: [gap]
+            - required: [feedback]
+            - required: [exclusion]
+      - properties:
+          scope: {const: included}
+          qualification: {const: tracked-gap}
+        required: [gap]
+        not:
+          anyOf:
+            - required: [evidence]
+            - required: [exclusion]
+      - properties:
+          scope: {const: excluded}
+          qualification: {const: not-applicable}
+        required: [exclusion]
+        not:
+          anyOf:
+            - required: [evidence]
+            - required: [gap]
+            - required: [feedback]
+      - properties:
+          scope: {const: unresolved}
+          qualification: {const: blocked}
+        required: [gap, feedback]
+        not:
+          anyOf:
+            - required: [evidence]
+            - required: [exclusion]

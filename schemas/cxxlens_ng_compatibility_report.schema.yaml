@@ -38,7 +38,7 @@ properties:
   context:
     enum: [provider-handshake, snapshot-open, query-load, release-startup]
   qualification_state:
-    enum: [contract-candidate, planned, conditional, qualified, unknown]
+    enum: [contract-candidate, planned, conditional, qualification-in-progress, qualified, unknown]
   axis_results:
     type: array
     items:

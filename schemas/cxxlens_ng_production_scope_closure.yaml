@@ -1,0 +1,323 @@
+schema: cxxlens.ng-production-scope-closure.v1
+document_version: 1.1.0
+maturity: accepted-contract
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md
+  adr: docs/design/adr/0095-production-scope-closure.md
+  owner_issue: '#179'
+source_contracts:
+  - schemas/cxxlens_ng_acceptance_manifest.yaml
+  - schemas/cxxlens_ng_g5_qualification.yaml
+  - schemas/cxxlens_ng_logical_query_contract.yaml
+  - schemas/cxxlens_ng_namespace_registry.yaml
+  - schemas/cxxlens_ng_provider_protocol.yaml
+  - schemas/cxxlens_ng_provider_runtime_contract.yaml
+  - schemas/cxxlens_ng_provider_support_matrix.yaml
+  - schemas/cxxlens_ng_public_api_catalog.yaml
+  - schemas/cxxlens_ng_public_callable_inventory.yaml
+  - schemas/cxxlens_ng_quality_ownership.yaml
+  - schemas/cxxlens_ng_relation_registry.yaml
+  - schemas/cxxlens_ng_release_bundle.yaml
+  - schemas/cxxlens_ng_release_qualification.yaml
+  - schemas/cxxlens_ng_security_profile.yaml
+authority_census_digest: sha256:bc14a443f059120e2fff147c84489d132fe1d7d286d99d4b6c6e9f5f0e85f1ee
+assignments:
+  - id: scope.qualified-baseline
+    owner_issue: '#179'
+    scope: included
+    qualification: qualified
+    evidence:
+      - quality.ng-foundation_completion
+      - quality.ng-provider_protocol
+      - quality.ng-provider_runtime
+      - quality.ng-public_callable_inventory
+      - quality.ng-query_contract
+      - quality.ng-relation_contract
+      - quality.ng-release_contract
+      - quality.ng-release_qualification
+      - quality.ng-sdk_contract
+      - quality.ng-security_contract
+      - quality.ownership
+    surfaces:
+      - {domain: compatibility.axis, id: condition-semantics}
+      - {domain: compatibility.axis, id: distribution}
+      - {domain: compatibility.axis, id: identity-contract}
+      - {domain: compatibility.axis, id: kernel-semantics}
+      - {domain: compatibility.axis, id: logical-query-ir}
+      - {domain: compatibility.axis, id: model-assumption-pack}
+      - {domain: compatibility.axis, id: native-sdk}
+      - {domain: compatibility.axis, id: patch-artifact-plan}
+      - {domain: compatibility.axis, id: provider-implementation}
+      - {domain: compatibility.axis, id: provider-protocol}
+      - {domain: compatibility.axis, id: recipe-semantics}
+      - {domain: compatibility.axis, id: relation-descriptor}
+      - {domain: compatibility.axis, id: snapshot-format}
+      - {domain: distribution.consumer-configuration, id: shared/clang22-provider-sdk}
+      - {domain: distribution.consumer-configuration, id: shared/core}
+      - {domain: distribution.consumer-configuration, id: shared/examples}
+      - {domain: distribution.consumer-configuration, id: shared/provider-sdk}
+      - {domain: distribution.consumer-configuration, id: static/clang22-provider-sdk}
+      - {domain: distribution.consumer-configuration, id: static/core}
+      - {domain: distribution.consumer-configuration, id: static/examples}
+      - {domain: distribution.consumer-configuration, id: static/provider-sdk}
+      - {domain: distribution.installed-tool, id: cxxlens-clang-worker-22}
+      - {domain: distribution.installed-tool, id: cxxlens-provider-scaffold}
+      - {domain: distribution.installed-tool, id: cxxlens-sdk-doctor}
+      - {domain: distribution.native-package, id: cxxlens-clang-worker-22}
+      - {domain: distribution.native-package, id: cxxlens-provider-clang22-sdk}
+      - {domain: distribution.source-surface, id: headers}
+      - {domain: distribution.target, id: 'cxxlens::base'}
+      - {domain: distribution.target, id: 'cxxlens::cpp'}
+      - {domain: distribution.target, id: 'cxxlens::cxxlens'}
+      - {domain: distribution.target, id: 'cxxlens::kernel'}
+      - {domain: distribution.target, id: 'cxxlens::provider_sdk'}
+      - {domain: distribution.target, id: 'cxxlens::query'}
+      - {domain: distribution.target, id: 'cxxlens::recipes'}
+      - {domain: provider.execution-surface, id: in_process}
+      - {domain: provider.execution-surface, id: out_of_process}
+      - {domain: provider.message, id: '10:column_chunk'}
+      - {domain: provider.message, id: '11:batch_end'}
+      - {domain: provider.message, id: '12:batch_ack'}
+      - {domain: provider.message, id: '13:batch_reject'}
+      - {domain: provider.message, id: '14:coverage_chunk'}
+      - {domain: provider.message, id: '15:unresolved_chunk'}
+      - {domain: provider.message, id: '16:closure_candidate'}
+      - {domain: provider.message, id: '17:progress'}
+      - {domain: provider.message, id: '18:cancel'}
+      - {domain: provider.message, id: '19:resume'}
+      - {domain: provider.message, id: '1:hello'}
+      - {domain: provider.message, id: '20:task_complete'}
+      - {domain: provider.message, id: '21:task_failed'}
+      - {domain: provider.message, id: '22:close'}
+      - {domain: provider.message, id: '2:hello_ack'}
+      - {domain: provider.message, id: '3:schema_negotiate'}
+      - {domain: provider.message, id: '4:open_task'}
+      - {domain: provider.message, id: '5:task_accepted'}
+      - {domain: provider.message, id: '6:input_descriptor'}
+      - {domain: provider.message, id: '7:input_chunk'}
+      - {domain: provider.message, id: '8:credit'}
+      - {domain: provider.message, id: '9:batch_begin'}
+      - {domain: provider.profile-feature, id: NG0/ack-and-connection-resume}
+      - {domain: provider.profile-feature, id: NG0/atomic-dependency-groups}
+      - {domain: provider.profile-feature, id: NG0/bounded-budget}
+      - {domain: provider.profile-feature, id: NG0/credit-backpressure}
+      - {domain: provider.profile-feature, id: NG0/deterministic-cbor-control}
+      - {domain: provider.profile-feature, id: NG0/framed-wire}
+      - {domain: provider.profile-feature, id: NG0/streamed-column-chunks}
+      - {domain: provider.profile-feature, id: NG0/structured-failure}
+      - {domain: public.author-path, id: clang22-native-provider}
+      - {domain: public.author-path, id: generated-typed-query}
+      - {domain: public.author-path, id: high-level-recipe}
+      - {domain: public.author-path, id: portable-provider}
+      - {domain: public.author-path, id: runtime-dynamic-query}
+      - {domain: public.catalog-entry, id: public.claim-kernel}
+      - {domain: public.catalog-entry, id: public.common}
+      - {domain: public.catalog-entry, id: public.logical-query}
+      - {domain: public.catalog-entry, id: public.native-provider-sdk}
+      - {domain: public.catalog-entry, id: public.project-catalog}
+      - {domain: public.catalog-entry, id: public.provider-runtime}
+      - {domain: public.catalog-entry, id: public.provider-sdk}
+      - {domain: public.catalog-entry, id: public.query-runtime}
+      - {domain: public.catalog-entry, id: public.recipe}
+      - {domain: public.catalog-entry, id: public.recipe-foundation}
+      - {domain: public.catalog-entry, id: public.relation-dynamic}
+      - {domain: public.catalog-entry, id: public.relation-static}
+      - {domain: public.catalog-entry, id: public.snapshot-store}
+      - {domain: public.header, id: include/cxxlens/cxxlens.hpp}
+      - {domain: public.header, id: include/cxxlens/provider/clang22.hpp}
+      - {domain: public.header, id: include/cxxlens/relations/build_compile_unit.hpp}
+      - {domain: public.header, id: include/cxxlens/relations/build_project.hpp}
+      - {domain: public.header, id: include/cxxlens/relations/build_toolchain_context.hpp}
+      - {domain: public.header, id: include/cxxlens/relations/build_variant.hpp}
+      - {domain: public.header, id: include/cxxlens/relations/cc_call_direct_target.hpp}
+      - {domain: public.header, id: include/cxxlens/relations/cc_call_site.hpp}
+      - {domain: public.header, id: include/cxxlens/relations/cc_entity.hpp}
+      - {domain: public.header, id: include/cxxlens/relations/cc_type.hpp}
+      - {domain: public.header, id: include/cxxlens/relations/company_lock_acquire.hpp}
+      - {domain: public.header, id: include/cxxlens/relations/source_file.hpp}
+      - {domain: public.header, id: include/cxxlens/relations/source_span.hpp}
+      - {domain: public.header, id: include/cxxlens/sdk.hpp}
+      - {domain: public.header, id: include/cxxlens/sdk/claim.hpp}
+      - {domain: public.header, id: include/cxxlens/sdk/common.hpp}
+      - {domain: public.header, id: include/cxxlens/sdk/incremental.hpp}
+      - {domain: public.header, id: include/cxxlens/sdk/provider.hpp}
+      - {domain: public.header, id: include/cxxlens/sdk/query.hpp}
+      - {domain: public.header, id: include/cxxlens/sdk/recipe.hpp}
+      - {domain: public.header, id: include/cxxlens/sdk/relation.hpp}
+      - {domain: public.header, id: include/cxxlens/sdk/store.hpp}
+      - {domain: public.header, id: include/cxxlens/sdk/testing.hpp}
+      - {domain: public.package, id: author-sdk}
+      - {domain: public.package, id: clang22-native-author-sdk}
+      - {domain: public.package, id: core-sdk}
+      - {domain: quality.check, id: cpp.runtime-tests}
+      - {domain: quality.check, id: package.installed-consumers}
+      - {domain: quality.check, id: public-headers.gcc}
+      - {domain: quality.check, id: quality.unit-contracts}
+      - {domain: query.backend, id: memory}
+      - {domain: query.backend, id: sqlite}
+      - {domain: query.operator, id: query.anti_join.v1}
+      - {domain: query.operator, id: query.condition_restrict.v1}
+      - {domain: query.operator, id: query.distinct.v1}
+      - {domain: query.operator, id: query.filter.v1}
+      - {domain: query.operator, id: query.inner_join.v1}
+      - {domain: query.operator, id: query.interpretation_restrict.v1}
+      - {domain: query.operator, id: query.limit.v1}
+      - {domain: query.operator, id: query.order_by.v1}
+      - {domain: query.operator, id: query.project.v1}
+      - {domain: query.operator, id: query.scan.v1}
+      - {domain: query.operator, id: query.semi_join.v1}
+      - {domain: query.operator, id: query.union.v1}
+      - {domain: query.result-status, id: cancelled_with_partial}
+      - {domain: query.result-status, id: complete}
+      - {domain: query.result-status, id: failed_before_result}
+      - {domain: query.result-status, id: truncated}
+      - {domain: relation.descriptor, id: build.compile_unit.v1}
+      - {domain: relation.descriptor, id: build.project.v1}
+      - {domain: relation.descriptor, id: build.toolchain_context.v1}
+      - {domain: relation.descriptor, id: build.variant.v1}
+      - {domain: relation.descriptor, id: cc.call_direct_target.v1}
+      - {domain: relation.descriptor, id: cc.call_site.v1}
+      - {domain: relation.descriptor, id: cc.declaration.v1}
+      - {domain: relation.descriptor, id: cc.entity.v1}
+      - {domain: relation.descriptor, id: cc.type.v1}
+      - {domain: relation.descriptor, id: cc.type_component.v1}
+      - {domain: relation.descriptor, id: company.lock.acquire.v1}
+      - {domain: relation.descriptor, id: core.claim_conflict.v1}
+      - {domain: relation.descriptor, id: core.differential_disagreement.v1}
+      - {domain: relation.descriptor, id: core.provider_execution.v1}
+      - {domain: relation.descriptor, id: core.unresolved.v1}
+      - {domain: relation.descriptor, id: source.file.v1}
+      - {domain: relation.descriptor, id: source.origin.v1}
+      - {domain: relation.descriptor, id: source.span.v1}
+      - {domain: relation.static-admission, id: build.compile_unit.v1}
+      - {domain: relation.static-admission, id: build.project.v1}
+      - {domain: relation.static-admission, id: build.toolchain_context.v1}
+      - {domain: relation.static-admission, id: build.variant.v1}
+      - {domain: relation.static-admission, id: cc.call_direct_target.v1}
+      - {domain: relation.static-admission, id: cc.call_site.v1}
+      - {domain: relation.static-admission, id: cc.entity.v1}
+      - {domain: relation.static-admission, id: cc.type.v1}
+      - {domain: relation.static-admission, id: company.lock.acquire.v1}
+      - {domain: relation.static-admission, id: source.file.v1}
+      - {domain: relation.static-admission, id: source.span.v1}
+      - {domain: release.migration, id: R0}
+      - {domain: release.migration, id: R1}
+      - {domain: release.migration, id: R2}
+      - {domain: release.migration, id: R3}
+      - {domain: security.namespace, id: interpretation.cc}
+      - {domain: security.namespace, id: interpretation.core}
+      - {domain: security.namespace, id: interpretation.provider-owned}
+      - {domain: security.namespace, id: provider.cxxlens}
+      - {domain: security.namespace, id: relation.build}
+      - {domain: security.namespace, id: relation.cc}
+      - {domain: security.namespace, id: relation.core}
+      - {domain: security.namespace, id: relation.frontend-clang22}
+      - {domain: security.namespace, id: relation.provider-owned}
+      - {domain: security.namespace, id: relation.source}
+      - {domain: security.profile, id: cxxlens.security-profile.v1}
+      - {domain: security.sandbox-policy, id: cxxlens.sandbox.linux-provider-baseline}
+      - {domain: security.sandbox-policy, id: cxxlens.sandbox.linux-provider-strict}
+      - {domain: security.sandbox-profile, id: trust.kernel-in-process}
+      - {domain: security.sandbox-profile, id: trust.native-worker}
+      - {domain: security.sandbox-profile, id: trust.remote-provider}
+      - {domain: security.sandbox-profile, id: trust.third-party-provider}
+  - id: scope.clang22-installed-adoption-gap
+    owner_issue: '#181'
+    scope: included
+    qualification: tracked-gap
+    gap:
+      finding: scope.tracked-gap.clang22-installed-adoption
+      remediation: Complete installed actual-source worker output adoption, publication, and query evidence.
+    feedback: [DF-0182]
+    surfaces:
+      - {domain: distribution.consumer-configuration, id: shared/real-project}
+      - {domain: distribution.consumer-configuration, id: static/real-project}
+      - {domain: provider.production-tuple-template, id: shared/cc.call_direct_target@1}
+      - {domain: provider.production-tuple-template, id: shared/cc.call_site@1}
+      - {domain: provider.production-tuple-template, id: shared/cc.entity@1}
+      - {domain: provider.production-tuple-template, id: static/cc.call_direct_target@1}
+      - {domain: provider.production-tuple-template, id: static/cc.call_site@1}
+      - {domain: provider.production-tuple-template, id: static/cc.entity@1}
+  - id: scope.ng1-provider-hardening-gap
+    owner_issue: '#183'
+    scope: included
+    qualification: tracked-gap
+    gap:
+      finding: scope.tracked-gap.ng1-provider-hardening
+      remediation: Implement and independently qualify the accepted NG1 protocol lifecycle and resource features.
+    surfaces:
+      - {domain: provider.message, id: '23:heartbeat'}
+      - {domain: provider.profile-feature, id: NG1/durable-resume-token}
+      - {domain: provider.profile-feature, id: NG1/heartbeat}
+      - {domain: provider.profile-feature, id: NG1/long-run-fault-qualification}
+      - {domain: provider.profile-feature, id: NG1/progress-rate-enforcement}
+      - {domain: provider.profile-feature, id: NG1/spill-staging}
+  - id: scope.incremental-coordinator-gap
+    owner_issue: '#184'
+    scope: included
+    qualification: tracked-gap
+    gap:
+      finding: scope.tracked-gap.incremental-coordinator
+      remediation: Bind G5 and R4 to a production materialization coordinator rather than planner counters.
+    surfaces:
+      - {domain: g5.closure-kind, id: call-target-set}
+      - {domain: g5.closure-kind, id: include-provider-set}
+      - {domain: g5.closure-kind, id: inheritance-subtype-set}
+      - {domain: g5.closure-kind, id: relation-key-enumeration}
+      - {domain: public.catalog-entry, id: public.incremental}
+      - {domain: release.migration, id: R4}
+  - id: scope.nightly-qualification-gap
+    owner_issue: '#185'
+    scope: included
+    qualification: tracked-gap
+    gap:
+      finding: scope.tracked-gap.nightly-qualification
+      remediation: Consume exact-main production-contract, Clang-Tidy, ASan/UBSan, and TSan evidence in release evaluation.
+    surfaces:
+      - {domain: quality.check, id: analysis.clang-tidy}
+      - {domain: quality.check, id: quality.production-contracts}
+      - {domain: quality.check, id: sanitizer.asan-ubsan}
+      - {domain: quality.check, id: sanitizer.tsan}
+  - id: scope.explicit-non-1.0
+    owner_issue: '#179'
+    scope: excluded
+    qualification: not-applicable
+    exclusion:
+      authority: schemas/cxxlens_ng_release_bundle.yaml
+      reason: Release authority explicitly classifies these migrations, source surfaces, or conformance-only fixtures outside distribution 1.0 production scope; profile aggregates are derived separately.
+    surfaces:
+      - {domain: distribution.source-surface, id: cxx-modules}
+      - {domain: release.migration, id: R5}
+      - {domain: release.migration, id: R6}
+      - {domain: release.migration, id: R7}
+      - {domain: security.namespace, id: relation.company-fixture}
+  - id: scope.conformance-only-support
+    owner_issue: '#65'
+    scope: excluded
+    qualification: not-applicable
+    exclusion:
+      authority: schemas/cxxlens_ng_provider_support_matrix.yaml
+      reason: Static support-matrix entries are explicitly conformance-only and cannot be promoted to exact GR production tuples.
+    surfaces:
+      - {domain: provider.support-tuple, id: support.clang22-call-direct-target-linux}
+      - {domain: provider.support-tuple, id: support.clang22-call-site-linux}
+      - {domain: provider.support-tuple, id: support.clang22-entity-linux}
+      - {domain: provider.support-tuple, id: support.company-lock-conformance}
+      - {domain: provider.support-tuple, id: support.kernel-build-project-linux}
+  - id: scope.static-admission-authority-blocker
+    owner_issue: '#174'
+    scope: unresolved
+    qualification: blocked
+    gap:
+      finding: scope.blocked.static-admission-authority
+      remediation: Resolve the seven generated-tag static admission decisions in accepted authority.
+    feedback: [DF-0174]
+    surfaces:
+      - {domain: relation.static-admission, id: cc.declaration.v1}
+      - {domain: relation.static-admission, id: cc.type_component.v1}
+      - {domain: relation.static-admission, id: core.claim_conflict.v1}
+      - {domain: relation.static-admission, id: core.differential_disagreement.v1}
+      - {domain: relation.static-admission, id: core.provider_execution.v1}
+      - {domain: relation.static-admission, id: core.unresolved.v1}
+      - {domain: relation.static-admission, id: source.origin.v1}
+feedback_exclusions: []
