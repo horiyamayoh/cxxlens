@@ -54,6 +54,38 @@ DESIGN_FEEDBACK_CHECKER = pathlib.Path(
 DESIGN_FEEDBACK_ISSUE_TEMPLATE = pathlib.Path(
     ".github/ISSUE_TEMPLATE/design-feedback.yml"
 )
+AGENT_CONTRACT = pathlib.Path("AGENTS.md")
+AGENT_GOAL_CONTRACT = pathlib.Path(
+    "docs/development/agent-api-development-goal.md"
+)
+AUTHORIZATION_DECISION_ADR = pathlib.Path(
+    "docs/design/adr/0094-risk-tiered-goal-authorization.md"
+)
+AUTHORIZATION_POLICY_ID = "CXXLENS_AGENT_AUTHORIZATION_V1"
+AUTHORIZATION_POLICY_TOKEN = re.compile(
+    rf"(?<![A-Za-z0-9_]){re.escape(AUTHORIZATION_POLICY_ID)}(?![A-Za-z0-9_])"
+)
+AUTHORIZATION_COMMON_MARKERS = (
+    "activation: explicit-goal-contract-reference",
+    "non-activation: ordinary-request",
+    "standing-scope: canonical-repository-active-unit",
+    "platform-approval: never-bypass",
+    "protected-main: unit-branch-pr-exact-head-review-merge-exact-merged-main",
+)
+AUTHORIZATION_GOAL_MARKERS = (
+    *AUTHORIZATION_COMMON_MARKERS,
+    "notify-and-continue: reversible-same-contract-issue",
+    "fresh-approval: exact-target-effect-after-disclosure",
+    "external-blocker: evidence-options-stop",
+    "skill-compatibility: prior-goal-authorization-satisfies-generic-approval",
+    "revocation: user-anytime",
+    "direct-main: prohibited",
+    "fresh-approval-reuse: forbidden",
+)
+LEGACY_DIRECT_MAIN_PATTERNS = (
+    re.compile(r"(?:`main`|main)\s*(?:へ|に)\s*(?:直接\s*)?push\s*する"),
+    re.compile(r"push\s+(?:directly\s+)?to\s+`?main`?", re.IGNORECASE),
+)
 
 
 class ReadinessError(ValueError):
@@ -321,6 +353,45 @@ def validate_implementation_learning_contract(
             fail(f"implementation-learning handbook is not required by {path.name}")
 
 
+def validate_agent_authorization_contract(root: pathlib.Path) -> None:
+    decision = root / AUTHORIZATION_DECISION_ADR
+    if not decision.is_file():
+        fail(f"agent authorization decision ADR is missing: {AUTHORIZATION_DECISION_ADR}")
+    if "- Status: Accepted" not in decision.read_text(encoding="utf-8"):
+        fail("agent authorization decision ADR is not accepted")
+
+    documents = {
+        AGENT_CONTRACT: AUTHORIZATION_COMMON_MARKERS,
+        AGENT_GOAL_CONTRACT: AUTHORIZATION_GOAL_MARKERS,
+    }
+    for relative, markers in documents.items():
+        path = root / relative
+        if not path.is_file():
+            fail(f"agent authorization contract is missing: {relative}")
+        text = path.read_text(encoding="utf-8")
+        if len(AUTHORIZATION_POLICY_TOKEN.findall(text)) != 1:
+            fail(
+                "agent authorization policy ID must appear exactly once in "
+                f"{relative}"
+            )
+        for marker in markers:
+            if f"`{marker}`" not in text:
+                fail(
+                    f"agent authorization marker is missing from {relative}: {marker}"
+                )
+        if any(pattern.search(text) for pattern in LEGACY_DIRECT_MAIN_PATTERNS):
+            fail(f"legacy direct-main workflow is forbidden in {relative}")
+
+    goal = (root / AGENT_GOAL_CONTRACT).read_text(encoding="utf-8")
+    goal_example = re.compile(
+        rf"(?m)^/goal\s+{re.escape(AGENT_GOAL_CONTRACT.as_posix())}"
+        rf".*(?<![A-Za-z0-9_]){re.escape(AUTHORIZATION_POLICY_ID)}"
+        rf"(?![A-Za-z0-9_])"
+    )
+    if goal_example.search(goal) is None:
+        fail("short goal example does not bind the authorization policy ID")
+
+
 def validate_documents(root: pathlib.Path) -> dict[str, Any]:
     manifest = load_document(root / MANIFEST)
     validate_schema(
@@ -338,6 +409,7 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
     validate_gate_ownership(root, manifest)
     validate_public_callable_contract(root, manifest)
     validate_implementation_learning_contract(root, manifest)
+    validate_agent_authorization_contract(root)
     try:
         jsonschema.Draft202012Validator.check_schema(
             load_document(root / REPORT_SCHEMA)
@@ -347,7 +419,7 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
     validate_workflow(root, manifest)
     if len(manifest["api_unit_workflow"]["active_write_units"]) > 1:
         fail("more than one API write unit is active")
-    if not (root / "docs/development/agent-api-development-goal.md").is_file():
+    if not (root / AGENT_GOAL_CONTRACT).is_file():
         fail("agent API development execution contract is missing")
     return manifest
 
@@ -527,6 +599,9 @@ def build_report(
         root / PUBLIC_API,
         root / RELATION_REGISTRY,
         root / ACCEPTANCE,
+        root / AGENT_CONTRACT,
+        root / AGENT_GOAL_CONTRACT,
+        root / AUTHORIZATION_DECISION_ADR,
         root / manifest["public_callable_authority"]["decision_adr"],
         root / manifest["public_callable_authority"]["inventory"],
         root / manifest["public_callable_authority"]["inventory_schema"],

@@ -19,6 +19,27 @@ authority を読んだ後、実装前に `docs/development/implementation-learni
 および同じ contract/path を参照する未解決 design feedback record を読む。mental model と feedback record は non-normative であり、
 上記 authority を上書きしない。
 
+## Goal standing authorization
+
+Repository policy `CXXLENS_AGENT_AUTHORIZATION_V1` は、`/goal` が
+`docs/development/agent-api-development-goal.md` を policy ID とともに実行契約として明示参照した実行中だけ有効とする。
+通常の質問、診断、read-only review から暗黙に起動せず、ユーザーはいつでも authorization を revoke または narrow できる。
+
+- `activation: explicit-goal-contract-reference`
+- `non-activation: ordinary-request`
+- `standing-scope: canonical-repository-active-unit`
+- `platform-approval: never-bypass`
+- `protected-main: unit-branch-pr-exact-head-review-merge-exact-merged-main`
+
+active unit 内の可逆な実装、検証、同一 issue の CI 根本修正、unit branch/commit/push、canonical repository 上の active
+issue/PR workflow は standing authorization の範囲とする。当初想定外の supporting file が同一 contract・同一 issue 内で必要なら、
+原因、追加 scope、検証方法を通知して継続する。
+
+destructive/history rewrite、branch protection、secret/permission、課金、外部 production deploy、active issue/PR workflow 外の
+第三者連絡、ユーザー変更との解消不能な競合、authority で決められない重大な public semantics は、対象と effect を開示して fresh
+approval を得る。sandbox/system/platform の approval は standing authorization で迂回しない。`main` は unit branch、PR、exact-head
+required checks、review resolution、merge、exact merged-main qualification の順でのみ更新する。
+
 ## Required implementation rules
 
 - C++23 を使用し、公開 namespace/type/function は設計書の lower snake case に従う。
