@@ -289,7 +289,33 @@ def validate_manifest(root: pathlib.Path, manifest: dict[str, Any]) -> None:
     identifiers = [row["id"] for row in checks]
     if len(identifiers) != len(set(identifiers)):
         raise QualityOwnershipError("quality ownership contains duplicate check IDs")
+    learning_inputs = {
+        "quality.unit-contracts": {
+            "AGENTS.md",
+            ".github/ISSUE_TEMPLATE/design-feedback.yml",
+            "docs",
+        },
+        "quality.production-contracts": {
+            ".clang-format",
+            "AGENTS.md",
+            ".github/ISSUE_TEMPLATE/design-feedback.yml",
+            ".markdownlint-cli2.jsonc",
+            ".yamllint.yaml",
+            "CONTRIBUTING.md",
+            "README.md",
+            "SECURITY.md",
+            "docs",
+        },
+    }
     for row in checks:
+        missing_learning_inputs = learning_inputs.get(row["id"], set()) - set(
+            row["inputs"]
+        )
+        if missing_learning_inputs:
+            raise QualityOwnershipError(
+                "quality implementation-learning inputs are incomplete: "
+                f"{row['id']} -> {sorted(missing_learning_inputs)}"
+            )
         for relative in row["inputs"]:
             if not (root / relative).exists():
                 raise QualityOwnershipError(

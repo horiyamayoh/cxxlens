@@ -1,7 +1,7 @@
 # Architecture Decision Records
 
 | ADR | Decision |
-|---|---|
+| --- | --- |
 | [0002](0002-semantic-relation-platform.md) | semantic relation platform |
 | [0003](0003-versioned-relation-kernel.md) | versioned relation kernel |
 | [0005](0005-product-boundary-release-compatibility.md) | product boundary and release tuple |
@@ -67,6 +67,7 @@
 | [0090](0090-g5-closure-incrementality-qualification.md) | G5 closure, incrementality, and R4 qualification |
 | [0091](0091-distribution-1-production-qualification.md) | distribution 1.0 exact-SHA production qualification |
 | [0092](0092-exact-public-callable-inventory.md) | exact one-callable-per-row public C++ inventory |
+| [0093](0093-implementation-learning-design-feedback.md) | implementation learning and design-feedback governance |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

@@ -32,6 +32,7 @@ foreach(
   contract IN
   ITEMS release_contract
         release_qualification
+        design_feedback
         relation_contract
         query_contract
         semantic_guarantee
@@ -176,6 +177,7 @@ add_dependencies(
   cxxlens-quality
   cxxlens-design-package-check
   cxxlens-documentation-consistency-check
+  cxxlens-ng-design-feedback-check
   cxxlens-ng-provider-protocol-check
   cxxlens-ng-provider-runtime-check
   cxxlens-ng-api-development-readiness-check

@@ -1,7 +1,7 @@
 # Catalog and registry index
 
 | Contract | Path | Owner | State |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Relation Registry | `schemas/cxxlens_ng_relation_registry.yaml` | #152 | accepted exact scalar-value and cross-TU entity identity contract |
 | Logical Query Contract | `schemas/cxxlens_ng_logical_query_contract.yaml` | #61 / #166 | accepted NG0/NG1 exact contract |
 | Query Runtime Contract | `schemas/cxxlens_ng_query_runtime_contract.yaml` | #69 / #166 | implemented closure-bound anti-join |
@@ -15,6 +15,7 @@
 | Acceptance Manifest | `schemas/cxxlens_ng_acceptance_manifest.yaml` | #71 | implemented foundation gates |
 | Foundation Completion | `schemas/cxxlens_ng_foundation_completion_manifest.yaml` | #113 | implemented, CI commit/finding-bound measured-audit report |
 | API Development Readiness | `schemas/cxxlens_ng_api_development_readiness.yaml` | #168 | implemented clean-main Wave 0 baseline |
+| Design Feedback Record | `schemas/cxxlens_ng_design_feedback_record.schema.yaml` | #171 | implemented non-normative implementation-learning lifecycle |
 | G5 Qualification | `schemas/cxxlens_ng_g5_qualification.yaml` | #166 | implemented exact-SHA closure, incrementality, bounded recursion, and R4 performance gate |
 | Quality Evidence Ownership | `schemas/cxxlens_ng_quality_ownership.yaml` | #156 | implemented single-owner and revision/toolchain/input-bound evidence contract |
 | Quality Evidence Instance | `schemas/cxxlens_ng_quality_evidence.schema.yaml` | #156 | implemented exact configuration evidence and workflow aggregation schema |

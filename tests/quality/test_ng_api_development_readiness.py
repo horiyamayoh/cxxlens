@@ -32,12 +32,17 @@ import public_callable_inventory as callable_inventory  # noqa: E402
 
 REQUIRED_FILES = (
     ".github/workflows/quality.yml",
+    ".github/ISSUE_TEMPLATE/design-feedback.yml",
+    "AGENTS.md",
     "CMakeLists.txt",
     "docs/design/adr/0092-exact-public-callable-inventory.md",
+    "docs/design/adr/0093-implementation-learning-design-feedback.md",
     "docs/development/agent-api-development-goal.md",
     "schemas/cxxlens_ng_acceptance_manifest.yaml",
     "schemas/cxxlens_ng_api_development_readiness.schema.yaml",
+    "schemas/cxxlens_ng_api_development_readiness_report.schema.yaml",
     "schemas/cxxlens_ng_api_development_readiness.yaml",
+    "schemas/cxxlens_ng_design_feedback_record.schema.yaml",
     "schemas/cxxlens_ng_public_callable_inventory.schema.yaml",
     "schemas/cxxlens_ng_public_callable_inventory.yaml",
     "schemas/cxxlens_ng_public_callable_inventory_report.schema.yaml",
@@ -46,6 +51,7 @@ REQUIRED_FILES = (
     "schemas/cxxlens_ng_release_bundle.yaml",
     "tools/quality/public_callable_inventory.py",
     "tools/quality/check_ng_migration_completion.py",
+    "tools/quality/check_ng_design_feedback.py",
 )
 
 
@@ -62,6 +68,10 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             destination = root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / relative, destination)
+        shutil.copytree(
+            ROOT / "docs/development/implementation-learning",
+            root / "docs/development/implementation-learning",
+        )
         shutil.copytree(ROOT / "include/cxxlens", root / "include/cxxlens")
         return root
 
@@ -234,6 +244,23 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             with self.assertRaisesRegex(ReadinessError, "schema validation failed"):
                 validate_documents(root)
 
+    def test_missing_implementation_learning_handbook_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            (root / "docs/development/implementation-learning/README.md").unlink()
+            with self.assertRaisesRegex(ReadinessError, "asset is missing"):
+                validate_documents(root)
+
+    def test_implementation_learning_manifest_drift_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            manifest_path = root / "schemas/cxxlens_ng_api_development_readiness.yaml"
+            manifest = load_document(manifest_path)
+            manifest["implementation_learning"]["checker"] = "tools/quality/other.py"
+            self.write_yaml(manifest_path, manifest)
+            with self.assertRaisesRegex(ReadinessError, "schema validation failed"):
+                validate_documents(root)
+
     def test_gate_owner_drift_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
@@ -302,6 +329,45 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             self.assertEqual(binding["tree"], git_state["tree"])
             self.assertEqual(binding["callable_count"], len(inventory["callables"]))
             self.assertEqual(binding["doxygen_count"], binding["callable_count"])
+            authority_paths = {row["path"] for row in report["authorities"]}
+            learning_paths = {
+                row["path"] for row in report["implementation_learning_assets"]
+            }
+            self.assertIn(
+                "docs/design/adr/0093-implementation-learning-design-feedback.md",
+                authority_paths,
+            )
+            self.assertIn(
+                "schemas/cxxlens_ng_design_feedback_record.schema.yaml",
+                authority_paths,
+            )
+            self.assertIn(
+                "docs/development/implementation-learning/mental-models/authority-and-learning-loop.md",
+                learning_paths,
+            )
+            self.assertIn(
+                "docs/development/implementation-learning/records/README.md",
+                learning_paths,
+            )
+            self.assertTrue(authority_paths.isdisjoint(learning_paths))
+
+            mixed = copy.deepcopy(report)
+            mixed["authorities"].append(
+                next(
+                    row
+                    for row in mixed["implementation_learning_assets"]
+                    if "/mental-models/" in row["path"]
+                )
+            )
+            with self.assertRaisesRegex(ReadinessError, "schema validation failed"):
+                validate_schema(
+                    mixed,
+                    load_document(
+                        ROOT
+                        / "schemas/cxxlens_ng_api_development_readiness_report.schema.yaml"
+                    ),
+                    "mixed authority readiness report",
+                )
 
     def test_duplicate_public_callable_evidence_pair_is_rejected(self) -> None:
         git_state = {

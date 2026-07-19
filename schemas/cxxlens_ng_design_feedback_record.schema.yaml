@@ -1,0 +1,115 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens.ng-design-feedback-record.v1
+title: cxxlens implementation design feedback record metadata
+type: object
+additionalProperties: false
+required:
+  - id
+  - title
+  - status
+  - kind
+  - impact
+  - confidence
+  - implementation_disposition
+  - scope
+  - authority_refs
+  - tracking_issue
+  - implementation_issues
+  - resolution_refs
+  - review
+  - created
+properties:
+  id: {type: string, pattern: '^DF-[0-9]{4,}$'}
+  title: {type: string, minLength: 1, maxLength: 160}
+  status:
+    enum: [observed, investigating, proposed, accepted, rejected, deferred, superseded]
+  kind:
+    enum: [contract-contradiction, missing-assumption, implementation-learning, design-opportunity]
+  impact:
+    enum: [local, contract, invariant, security, compatibility, irreversible]
+  confidence: {enum: [low, medium, high]}
+  implementation_disposition: {enum: [blocked, may-proceed]}
+  scope:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {type: string, pattern: '^[a-z][a-z0-9_.-]+$'}
+  authority_refs:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {$ref: '#/$defs/repo_ref'}
+  tracking_issue: {$ref: '#/$defs/issue'}
+  implementation_issues:
+    type: array
+    minItems: 1
+    uniqueItems: true
+    items: {$ref: '#/$defs/issue'}
+  resolution_refs:
+    type: array
+    uniqueItems: true
+    items: {$ref: '#/$defs/repo_ref'}
+  review:
+    type: object
+    additionalProperties: false
+    required: [mode, status, author, reviewer, refs]
+    properties:
+      mode: {enum: [self, independent]}
+      status: {enum: [pending, complete, not-required]}
+      author: {type: string, minLength: 1, pattern: '.*\S.*'}
+      reviewer:
+        oneOf:
+          - {type: string, minLength: 1, pattern: '.*\S.*'}
+          - {type: 'null'}
+      refs:
+        type: array
+        uniqueItems: true
+        items: {type: string, minLength: 1}
+  created: {type: string, format: date}
+  follow_up_issue: {$ref: '#/$defs/issue'}
+  reevaluate_when: {type: string, minLength: 1}
+  superseded_by: {type: string, pattern: '^DF-[0-9]{4,}$'}
+allOf:
+  - if:
+      properties: {status: {const: accepted}}
+      required: [status]
+    then:
+      properties:
+        resolution_refs: {minItems: 1}
+        review:
+          properties:
+            status: {const: complete}
+  - if:
+      properties: {status: {const: deferred}}
+      required: [status]
+    then:
+      required: [follow_up_issue, reevaluate_when]
+  - if:
+      properties: {status: {const: superseded}}
+      required: [status]
+    then:
+      required: [superseded_by]
+  - if:
+      properties:
+        status: {const: accepted}
+        impact: {enum: [contract, invariant, security, compatibility, irreversible]}
+      required: [status, impact]
+    then:
+      properties:
+        review:
+          properties:
+            mode: {const: independent}
+            status: {const: complete}
+            reviewer: {type: string, minLength: 1, pattern: '.*\S.*'}
+            refs: {minItems: 1}
+  - if:
+      properties:
+        status: {enum: [observed, investigating, proposed]}
+        impact: {enum: [contract, invariant, security, compatibility, irreversible]}
+      required: [status, impact]
+    then:
+      properties:
+        implementation_disposition: {const: blocked}
+$defs:
+  issue: {type: string, pattern: '^#[1-9][0-9]*$'}
+  repo_ref: {type: string, pattern: '^(?!/)(?!.*\\.\\.)(?!https?://).+'}

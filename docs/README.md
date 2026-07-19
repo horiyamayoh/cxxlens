@@ -8,6 +8,7 @@
 - [Development architecture](development/architecture.md)
 - [Extending the platform](development/extending-platform.md)
 - [Agent-driven public API development goal](development/agent-api-development-goal.md)
+- [Implementation learning and design feedback](development/implementation-learning/README.md)
 - [Build and test](development/build-and-test.md)
 - [Support matrix](support-matrix.md)
 - [Tutorials](tutorials/README.md)

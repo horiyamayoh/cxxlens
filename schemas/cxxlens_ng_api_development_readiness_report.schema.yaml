@@ -3,7 +3,7 @@ $id: https://cxxlens.dev/schemas/cxxlens.ng-api-development-readiness-report.v1
 title: cxxlens API development Wave 0 exact-SHA baseline report
 type: object
 additionalProperties: false
-required: [schema, result, generated_at, run_url, git, required_ci_jobs, branch_protection, authorities, public_headers, generated_relation_headers, toolchain_provenance, evidence_artifacts, install_manifests, test_inventory, foundation_completion, public_callable_inventory]
+required: [schema, result, generated_at, run_url, git, required_ci_jobs, branch_protection, authorities, implementation_learning_assets, public_headers, generated_relation_headers, toolchain_provenance, evidence_artifacts, install_manifests, test_inventory, foundation_completion, public_callable_inventory]
 properties:
   schema: {const: cxxlens.ng-api-development-readiness-report.v1}
   result: {const: passed}
@@ -31,7 +31,21 @@ properties:
       strict: {const: true}
       required_statuses: {type: array, minItems: 7, uniqueItems: true, items: {type: string, minLength: 1}}
       settings_evidence: {const: github-api-issue-168}
-  authorities: {$ref: '#/$defs/files'}
+  authorities:
+    allOf:
+      - {$ref: '#/$defs/files'}
+      - items:
+          properties:
+            path:
+              not:
+                pattern: '^(?:docs/development/implementation-learning/(?:mental-models|records)(?:/|$)|\.github/ISSUE_TEMPLATE/design-feedback\.yml$)'
+  implementation_learning_assets:
+    allOf:
+      - {$ref: '#/$defs/files'}
+      - items:
+          properties:
+            path:
+              pattern: '^(?:docs/development/implementation-learning/(?:mental-models|records)/.+|\.github/ISSUE_TEMPLATE/design-feedback\.yml)$'
   public_headers: {$ref: '#/$defs/files'}
   generated_relation_headers: {$ref: '#/$defs/files'}
   toolchain_provenance: {$ref: '#/$defs/files'}
