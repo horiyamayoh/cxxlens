@@ -132,7 +132,7 @@ sentence with the protected-main unit workflow, and distinguish notification fro
 The readiness checker accepts the complete policy and rejects missing binding, standing scope,
 ordinary-request non-activation, platform carve-out, fresh approval, external blocker,
 protected-main binding, short-goal-example binding, and legacy direct-main workflow. Targeted
-readiness tests passed 25/25 and design-feedback tests passed 21/21.
+readiness tests passed 28/28 and design-feedback tests passed 21/21.
 
 2026-07-19: The design checksum inventory now includes ADR 0094, preventing the accepted decision
 from falling outside the package-integrity check.
@@ -140,3 +140,8 @@ from falling outside the package-integrity check.
 2026-07-19: Final independent implementation review found no blockers and declared the unit ready
 to commit. The final contract-label run passed 18/18 in addition to the targeted suites and
 freshness checks.
+
+2026-07-19: PR review found that policy-ID substring counting could accept a suffixed token and
+that two prose sentences were checked outside the marker contract. The checker now uses full-token
+matching, moves direct-main prohibition and fresh-approval non-reuse into stable markers, and has
+dedicated negative tests for all three regressions.

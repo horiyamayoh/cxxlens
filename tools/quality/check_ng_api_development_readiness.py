@@ -62,6 +62,9 @@ AUTHORIZATION_DECISION_ADR = pathlib.Path(
     "docs/design/adr/0094-risk-tiered-goal-authorization.md"
 )
 AUTHORIZATION_POLICY_ID = "CXXLENS_AGENT_AUTHORIZATION_V1"
+AUTHORIZATION_POLICY_TOKEN = re.compile(
+    rf"(?<![A-Za-z0-9_]){re.escape(AUTHORIZATION_POLICY_ID)}(?![A-Za-z0-9_])"
+)
 AUTHORIZATION_COMMON_MARKERS = (
     "activation: explicit-goal-contract-reference",
     "non-activation: ordinary-request",
@@ -76,6 +79,8 @@ AUTHORIZATION_GOAL_MARKERS = (
     "external-blocker: evidence-options-stop",
     "skill-compatibility: prior-goal-authorization-satisfies-generic-approval",
     "revocation: user-anytime",
+    "direct-main: prohibited",
+    "fresh-approval-reuse: forbidden",
 )
 LEGACY_DIRECT_MAIN_PATTERNS = (
     re.compile(r"(?:`main`|main)\s*(?:へ|に)\s*(?:直接\s*)?push\s*する"),
@@ -364,7 +369,7 @@ def validate_agent_authorization_contract(root: pathlib.Path) -> None:
         if not path.is_file():
             fail(f"agent authorization contract is missing: {relative}")
         text = path.read_text(encoding="utf-8")
-        if text.count(AUTHORIZATION_POLICY_ID) != 1:
+        if len(AUTHORIZATION_POLICY_TOKEN.findall(text)) != 1:
             fail(
                 "agent authorization policy ID must appear exactly once in "
                 f"{relative}"
@@ -380,14 +385,11 @@ def validate_agent_authorization_contract(root: pathlib.Path) -> None:
     goal = (root / AGENT_GOAL_CONTRACT).read_text(encoding="utf-8")
     goal_example = re.compile(
         rf"(?m)^/goal\s+{re.escape(AGENT_GOAL_CONTRACT.as_posix())}"
-        rf".*{AUTHORIZATION_POLICY_ID}"
+        rf".*(?<![A-Za-z0-9_]){re.escape(AUTHORIZATION_POLICY_ID)}"
+        rf"(?![A-Za-z0-9_])"
     )
     if goal_example.search(goal) is None:
         fail("short goal example does not bind the authorization policy ID")
-    if "protected `main` への direct push を durable workflow として使わない" not in goal:
-        fail("protected-main direct-push prohibition is missing")
-    if "別 target、別 effect、後続操作へ categorical に流用しない" not in goal:
-        fail("fresh approval is not exact-target/effect scoped")
 
 
 def validate_documents(root: pathlib.Path) -> dict[str, Any]:

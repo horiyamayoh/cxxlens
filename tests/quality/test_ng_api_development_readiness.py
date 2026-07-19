@@ -290,6 +290,20 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             with self.assertRaisesRegex(ReadinessError, "short goal example"):
                 validate_documents(root)
 
+    def test_authorization_policy_suffix_is_not_an_exact_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            agents = root / "AGENTS.md"
+            agents.write_text(
+                agents.read_text(encoding="utf-8").replace(
+                    "CXXLENS_AGENT_AUTHORIZATION_V1",
+                    "CXXLENS_AGENT_AUTHORIZATION_V10",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ReadinessError, "must appear exactly once"):
+                validate_documents(root)
+
     def test_authorization_platform_carveout_is_required(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
@@ -371,6 +385,34 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(ReadinessError, "protected-main"):
+                validate_documents(root)
+
+    def test_authorization_direct_main_prohibition_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / "docs/development/agent-api-development-goal.md"
+            goal.write_text(
+                goal.read_text(encoding="utf-8").replace(
+                    "`direct-main: prohibited`",
+                    "direct main marker removed",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ReadinessError, "direct-main"):
+                validate_documents(root)
+
+    def test_authorization_fresh_approval_reuse_is_forbidden(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / "docs/development/agent-api-development-goal.md"
+            goal.write_text(
+                goal.read_text(encoding="utf-8").replace(
+                    "`fresh-approval-reuse: forbidden`",
+                    "fresh approval reuse marker removed",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ReadinessError, "fresh-approval-reuse"):
                 validate_documents(root)
 
     def test_legacy_direct_main_workflow_is_rejected(self) -> None:
