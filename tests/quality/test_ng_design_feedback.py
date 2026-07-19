@@ -58,6 +58,24 @@ class NgDesignFeedbackTest(unittest.TestCase):
                 else ""
             )
             path.write_text(f"# {relative}\n{status}", encoding="utf-8")
+        repository_records = load_records(ROOT)
+        for record in repository_records:
+            metadata = record.metadata
+            references = [
+                *metadata["authority_refs"],
+                *metadata["resolution_refs"],
+                *metadata["review"]["refs"],
+            ]
+            for reference in references:
+                if reference.startswith(("https://", "http://")):
+                    continue
+                relative = pathlib.PurePosixPath(reference.split("#", 1)[0])
+                source = ROOT / relative
+                if not source.is_file():
+                    continue
+                destination = root / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
         return root
 
     @staticmethod
@@ -130,7 +148,7 @@ class NgDesignFeedbackTest(unittest.TestCase):
         (root / INDEX).write_text(render_index(records), encoding="utf-8")
 
     def test_repository_contract_is_valid(self) -> None:
-        self.assertEqual(validate_documents(ROOT), [])
+        validate_documents(ROOT)
 
     def test_valid_lifecycle_states_are_accepted(self) -> None:
         cases = (
@@ -162,7 +180,10 @@ class NgDesignFeedbackTest(unittest.TestCase):
                 metadata.update(additions)
                 self.write_record(root, metadata)
                 self.refresh_index(root)
-                self.assertEqual(len(validate_documents(root)), 1)
+                identifiers = {
+                    record.metadata["id"] for record in validate_documents(root)
+                }
+                self.assertIn("DF-0200", identifiers)
 
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
@@ -172,7 +193,10 @@ class NgDesignFeedbackTest(unittest.TestCase):
             original.update({"status": "superseded", "superseded_by": "DF-0201"})
             self.write_record(root, original)
             self.refresh_index(root)
-            self.assertEqual(len(validate_documents(root)), 2)
+            identifiers = {
+                record.metadata["id"] for record in validate_documents(root)
+            }
+            self.assertTrue({"DF-0200", "DF-0201"}.issubset(identifiers))
 
     def test_duplicate_id_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -375,7 +399,8 @@ class NgDesignFeedbackTest(unittest.TestCase):
                 "https://github.com/horiyamayoh/cxxlens/issues/200#issuecomment-1"
             ]
             self.write_record(root, metadata)
-            self.assertEqual(len(load_records(root)), 1)
+            identifiers = {record.metadata["id"] for record in load_records(root)}
+            self.assertIn("DF-0200", identifiers)
 
     def test_issue_ready_rejects_unresolved_blocker(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

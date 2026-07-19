@@ -1,5 +1,5 @@
 {
-  "asset_count": 415,
+  "asset_count": 416,
   "assets": [
     {
       "authority": "active",
@@ -1194,6 +1194,13 @@
     {
       "authority": "active",
       "path": "docs/development/implementation-learning/records/_template.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0174-generated-relation-static-admission.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2908,7 +2915,7 @@
     }
   ],
   "classifications": {
-    "active": 379,
+    "active": 380,
     "archived": 35,
     "generated": 1
   },

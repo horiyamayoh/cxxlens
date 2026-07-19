@@ -16,6 +16,7 @@ authority_refs:
   - schemas/cxxlens_ng_api_development_readiness.yaml
   - schemas/cxxlens_ng_public_api_catalog.yaml
   - schemas/cxxlens_ng_relation_registry.yaml
+  - schemas/cxxlens_ng_relation_registry.schema.yaml
 tracking_issue: '#174'
 implementation_issues:
   - '#173'
@@ -47,10 +48,11 @@ The seven descriptors without an admitted generated header are `source.origin.v1
 ## Working mental model
 
 The Public API Catalog intentionally owns installed header admission, while the Relation
-Registry owns derivation and identity for an admitted generated header. Dynamic and system
-semantics for all 18 descriptors remain production-required. The unresolved point is whether a
-`generated_cpp_tag` on a non-admitted descriptor is a reserved future name, a required installed
-projection, or metadata that should not exist until admission.
+Registry owns derivation and identity for an admitted generated header. This record does not
+change the dynamic or system semantics of accepted descriptors; it isolates only their installed
+static-header admission. The unresolved point is whether a `generated_cpp_tag` on a non-admitted
+descriptor is a reserved future name, a required installed projection, or metadata that should
+not exist until admission.
 
 ## Mismatch or opportunity
 
@@ -61,9 +63,10 @@ authorizes those seven tags as deferred, dynamic-only, or system-only. The curre
 only that the catalog-admitted subset is generated reproducibly; it does not classify the
 remaining tags.
 
-Adding the headers would irreversibly expand the public source API. Removing or ignoring the tags
-could change compatibility expectations. The affected static-admission unit is therefore blocked
-until authority makes the classification explicit.
+Adding the headers would irreversibly expand the public source API. Removing the tags would change
+the registry/schema contract, while merely ignoring them would leave the metadata unclassified.
+The affected static-admission unit is therefore blocked until authority makes the classification
+explicit.
 
 ## Evidence
 
