@@ -347,7 +347,7 @@ def validate_release_mapping(bundle: dict[str, Any], root: pathlib.Path) -> None
             "static-relocated-install-artifact",
             "shared-relocated-install-artifact",
             "static-shared-runtime-junit",
-            "static-shared-clang22-materialization-reports",
+            "static-shared-clang22-materialization-reports-and-execution-receipts",
             "real-project-memory-sqlite-and-major-rejection",
             "security-conformance-and-negative-paths",
             "doxygen-contract-and-support-matrix",

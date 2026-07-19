@@ -248,6 +248,7 @@ publication_identity:
   domain: publication
   identity_fields: [series_id, snapshot_id, sequence, parent_publication]
   excluded_fields: [physical_generation, state, corrupt]
+  sequence_canonical_codec: unsigned-64-to-explicit-two-complement-signed-canonical-integer
   persisted_binding:
     validation: recompute-and-exact-match
     shared_validator: memory-and-sqlite-persist-load-read-compact
@@ -261,6 +262,7 @@ wire_decoding:
   overflow: store.corrupt
   narrowing_before_range_validation: forbidden
   accepted_v5_payload: decode-encode-byte-identical
+  partition_envelope_claim_order: full-sdk-claim-occurrence-projection
 publication_counters:
   domain: unsigned-64-bit
   fields: [publication_sequence, physical_generation]
@@ -272,6 +274,20 @@ publication_counters:
   maximum_increment: reject
   overflow: store.counter-overflow
   compaction_uses_shared_increment: true
+  sqlite_allocation:
+    lock: begin-immediate-write-transaction
+    authority_scan: all-persisted-records-revalidated-to-authority-record-conditions
+    allocation: checked-max-authority-generation-plus-one-inside-transaction
+    different-series-concurrency: globally-distinct-monotonic-generations
+    corrupt-high-generation: excluded
+    publication_and_compaction_share_allocator: true
+    compaction_range:
+      size: exact-authority-publication-count
+      checked_allocation: max-plus-one-through-max-plus-count
+      assignment_order: prior-publication-sequence-then-prior-physical-generation-then-publication-id
+      distinct_generation_per_publication: true
+      local_generation_after_commit: allocated-range-maximum
+      overflow: rollback-entire-compaction
   sqlite_integer_encoding:
     nonnegative_range: zero-through-int64-max
     upper_unsigned_range: negative-twos-complement-int64
@@ -301,15 +317,28 @@ publication_transaction:
   sqlite_head_cas:
     table: cxxlens_ng_series_head
     transaction: begin-immediate
-    steps: [recheck-expected-parent-and-sequence, immutable-publication-insert, head-update]
-    conflict: store.publication-conflict
-    memory_update: after-commit-only
+    steps: [full-committed-authority-census, derive-each-series-authoritative-head, exact-compare-head-table-id-and-sequence, recheck-expected-parent, allocate-global-generation, immutable-publication-insert, head-update]
+    parent_record: exact-committed-decoded-semantic-graph-valid-authority-record
+    missing-head-with-existing-series-history: store.corrupt
+    same-parent-head-sequence-mismatch: store.corrupt
+    duplicate-publication-id-under-unchanged-parent: store.corrupt
+    conflict: store.publication-conflict-parent-cas-only
+    memory_update: after-commit-full-committed-census
 reader_pin:
   handle_pins: physical-publication-generation
   semantic_snapshot_immutable: true
   reclamation: after-last-pin
 compaction:
   mode: copy-on-write-generation
+  backend_scope: memory-and-sqlite
+  sqlite_transaction: one-begin-immediate-for-entire-replacement-set
+  replacement_order: prior-publication-sequence-then-prior-physical-generation-then-publication-id
+  generation_allocation: checked-distinct-contiguous-global-range
+  resolver_order_preservation: required
+  preexisting-resolver-ambiguity: reject
+  database_payload_and_head_update: atomic
+  process_memory_update: only-after-successful-backend-swap
+  sqlite_process_memory_update: only-after-database-commit
   validate_before_swap:
     - physical-checksum
     - semantic-snapshot-digest
@@ -337,6 +366,7 @@ corruption:
     candidate_state: committed-only
     authority: publication-records-not-decoded-payload-map
     order: [publication-sequence, physical-generation]
+    equal-order-key-different-publication-id: store.snapshot-ambiguous
     selected_corrupt: store.snapshot-corrupt
     selected_payload_missing_or_mismatched: store.snapshot-corrupt
     older_same-snapshot-fallback: forbidden

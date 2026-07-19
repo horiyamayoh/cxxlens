@@ -894,6 +894,15 @@ namespace
 		auto set_descriptor = make_merge_descriptor("company.test.binding", merge_mode::set);
 		auto multiset_descriptor =
 			make_merge_descriptor("company.test.binding", merge_mode::multiset);
+		const auto expected_set_registry_digest = cxxlens::sdk::semantic_digest(
+			"cxxlens.relation-registry.v1",
+			set_descriptor.id + "=" + set_descriptor.descriptor_digest + "\n");
+		const auto expected_multiset_registry_digest = cxxlens::sdk::semantic_digest(
+			"cxxlens.relation-registry.v1",
+			multiset_descriptor.id + "=" + multiset_descriptor.descriptor_digest + "\n");
+		const auto legacy_name_registry_digest = cxxlens::sdk::semantic_digest(
+			"cxxlens.relation-registry.v1",
+			set_descriptor.name + "=" + set_descriptor.descriptor_digest + "\n");
 		cxxlens::sdk::relation_registry set_registry;
 		cxxlens::sdk::relation_registry multiset_registry;
 		require(set_registry.add(std::move(set_descriptor)) &&
@@ -901,9 +910,41 @@ namespace
 				"dynamic descriptor binding setup failed");
 		auto set_engine = set_registry.build("binding-generation");
 		auto multiset_engine = multiset_registry.build("binding-generation");
-		require(set_engine && multiset_engine &&
+		require(expected_set_registry_digest && expected_multiset_registry_digest &&
+					legacy_name_registry_digest && set_engine && multiset_engine &&
+					set_engine->registry_digest() == *expected_set_registry_digest &&
+					multiset_engine->registry_digest() == *expected_multiset_registry_digest &&
+					set_engine->registry_digest() != *legacy_name_registry_digest &&
 					set_engine->registry_digest() != multiset_engine->registry_digest(),
-				"different runtime descriptors produced the same registry digest");
+				"registry digest did not bind canonical descriptor IDs and runtime digests");
+
+		auto duplicate_descriptor =
+			make_merge_descriptor("company.test.binding_duplicate", merge_mode::set);
+		cxxlens::sdk::relation_registry duplicate_registry;
+		require(duplicate_registry.add(duplicate_descriptor).has_value(),
+				"duplicate descriptor setup failed");
+		auto duplicate = duplicate_registry.add(std::move(duplicate_descriptor));
+		require(!duplicate && duplicate.error().code == "sdk.duplicate-descriptor",
+				"duplicate canonical descriptor ID was accepted");
+		auto prefix_descriptor = make_merge_descriptor("company.a", merge_mode::set);
+		auto nested_descriptor = make_merge_descriptor("company.a.b", merge_mode::set);
+		const auto expected_id_order = cxxlens::sdk::semantic_digest(
+			"cxxlens.relation-registry.v1",
+			nested_descriptor.id + "=" + nested_descriptor.descriptor_digest + "\n" +
+				prefix_descriptor.id + "=" + prefix_descriptor.descriptor_digest + "\n");
+		const auto forbidden_name_order = cxxlens::sdk::semantic_digest(
+			"cxxlens.relation-registry.v1",
+			prefix_descriptor.name + "=" + prefix_descriptor.descriptor_digest + "\n" +
+				nested_descriptor.name + "=" + nested_descriptor.descriptor_digest + "\n");
+		cxxlens::sdk::relation_registry ordering_registry;
+		require(ordering_registry.add(std::move(prefix_descriptor)) &&
+					ordering_registry.add(std::move(nested_descriptor)),
+				"descriptor ID/name order inversion setup failed");
+		auto ordering_engine = ordering_registry.build("binding-generation");
+		require(expected_id_order && forbidden_name_order && ordering_engine &&
+					ordering_engine->registry_digest() == *expected_id_order &&
+					ordering_engine->registry_digest() != *forbidden_name_order,
+				"registry digest followed relation-name order instead of descriptor-ID order");
 	}
 
 	void check_descriptor_canonical_collections()

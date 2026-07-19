@@ -895,6 +895,18 @@ namespace cxxlens::sdk
 				relation_error("sdk.engine-generation-invalid", "generation"));
 		if (descriptors_.empty())
 			return cxxlens::sdk::unexpected(relation_error("sdk.registry-empty", "registry"));
+		std::vector<std::pair<std::string, std::string>> inventory;
+		inventory.reserve(descriptors_.size());
+		for (const auto& [name, descriptor] : descriptors_)
+		{
+			(void)name;
+			inventory.emplace_back(descriptor->id, descriptor->descriptor_digest);
+		}
+		std::ranges::sort(inventory, {}, &std::pair<std::string, std::string>::first);
+		for (std::size_t index = 1U; index < inventory.size(); ++index)
+			if (inventory[index - 1U].first == inventory[index].first)
+				return cxxlens::sdk::unexpected(
+					relation_error("sdk.duplicate-descriptor", inventory[index].first));
 		for (const auto& [name, descriptor] : descriptors_)
 			for (const auto& reference : descriptor->references)
 			{
@@ -951,11 +963,11 @@ namespace cxxlens::sdk
 				return cxxlens::sdk::unexpected(std::move(valid.error()));
 		}
 		std::string canonical;
-		for (const auto& [name, descriptor] : descriptors_)
+		for (const auto& [id, descriptor_digest] : inventory)
 		{
-			canonical += name;
+			canonical += id;
 			canonical += '=';
-			canonical += descriptor->descriptor_digest;
+			canonical += descriptor_digest;
 			canonical.push_back('\n');
 		}
 		*frozen_ = true;

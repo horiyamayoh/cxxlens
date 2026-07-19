@@ -64,6 +64,12 @@ BASE_DESCRIPTOR_IDS = [
     "build.compile_unit.v1",
     "source.span.v1",
 ]
+ADMITTED_DESCRIPTOR_IDS = sorted(BASE_DESCRIPTOR_IDS + DESCRIPTOR_IDS)
+ENGINE_GENERATION_CONTRACT = "cxxlens.clang22-materialization-engine.v2"
+INTERPRETATION_POLICY_ID = "cxxlens.clang22-interpretation-policy.v1"
+INTERPRETATION_DOMAIN = "cc.clang22-canonical-1"
+TRUST_POLICY_ID = "cxxlens.clang22-installed-native-worker-trust.v1"
+RAW_INPUT_BYTE_LIMIT = 1_073_741_824
 BASE_RESULT_FIELDS = {
     "build.project.v1": "project",
     "build.toolchain_context.v1": "toolchain",
@@ -164,6 +170,12 @@ EXPECTED_SOURCE_IDENTITY_CONTRACT = {
 }
 RECOMPUTED_IDS_AND_DIGESTS = [
     "materialization_request_id",
+    "authority_registry_digest",
+    "engine_registry_digest",
+    "engine_generation_id",
+    "interpretation_policy_digest",
+    "trust_policy_digest",
+    "snapshot_series_id",
     "project_id",
     "catalog_id",
     "catalog_digest",
@@ -187,7 +199,11 @@ RECOMPUTED_IDS_AND_DIGESTS = [
     "semantic_key_id",
     "assertion_id",
     "claim_content_digest",
+    "producer_input_basis_digest",
     "partition_id",
+    "partition_claim_set_digest",
+    "partition_coverage_digest",
+    "partition_content_digest",
     "snapshot_id",
     "publication_id",
 ]
@@ -428,7 +444,9 @@ EXPECTED_REPORT_DIGEST_CHAIN = {
         "domain": "cxxlens.clang22-batch-result.v1",
         "leaves": [
             "ordered-chunk-set",
-            "row-binding-claim-content-set",
+            "row-binding-set",
+            "exact-worker-assertion-content-set",
+            "exact-worker-assertion-full-occurrence-set",
             "provenance-edge-set",
             "observation-equivalence-census-when-observation",
         ],
@@ -481,12 +499,137 @@ EXPECTED_REPORT_DIGEST_CHAIN = {
     },
     "claim_stage": {
         "content_domain": "cxxlens.clang22-claim-stage-content-set.v1",
+        "sdk_occurrence_domain": (
+            "cxxlens.clang22-claim-stage-sdk-occurrence-set.v1"
+        ),
+        "origin_association_domain": (
+            "cxxlens.clang22-claim-stage-origin-association-set.v1"
+        ),
         "provenance_domain": "cxxlens.clang22-claim-stage-provenance-set.v1",
         "stage_domain": "cxxlens.clang22-claim-stage.v1",
     },
     "global_provenance": {
         "domain": "cxxlens.clang22-global-provenance.v1",
         "inputs": "canonical-three-claim-stage-summaries",
+    },
+    "store_identity": {
+        "inputs": [
+            "claim-rows",
+            "full-sdk-claim-envelopes",
+            "canonicalization-edges",
+            "origin-associations",
+            "complete-final-claim-batch",
+            "exact-eight-field-partitions",
+            "coverage-and-unresolved",
+            "snapshot-manifest",
+            "publication-record",
+            "reopened-store-state",
+        ],
+        "opaque-fixture-ids-or-recomputed-booleans": "forbidden",
+    },
+    "reopened_store": {
+        "descriptor_inventory": (
+            "exact-twelve-id-runtime-digest-pairs-from-handle"
+        ),
+        "required_open_paths": [
+            "current-selector",
+            "open-publication",
+            "open-snapshot",
+        ],
+        "fixed_lookup_inputs": {
+            "current-selector": "exact-full-selector-and-series-id",
+            "open-publication": "exact-candidate-publication-id",
+            "open-snapshot": "exact-candidate-snapshot-id",
+        },
+        "path_receipt": {
+            "status": [
+                "present",
+                "not_found",
+                "corrupt",
+                "ambiguous",
+                "unavailable",
+                "error",
+                "not_attempted",
+            ],
+            "present_projection": [
+                "backend",
+                "full-publication-record",
+                "full-snapshot-manifest",
+                "snapshot-manifest-digest",
+                "exact-descriptor-inventory",
+                "partition-binding-multiset-digest",
+                "row-multiset-digest",
+                "claim-annotation-multiset-digest",
+                "coverage-multiset-digest",
+                "unresolved-digest",
+                "closure-digest",
+                "cursor-projection-digest",
+                "canonical-export-digest",
+                "semantic-projection-digest",
+                "handle-projection-digest",
+            ],
+            "non-present": "typed-sdk-code-and-field-with-null-projection",
+        },
+        "passed_path_rules": {
+            "all-three": "present",
+            "current-selector-and-open-publication": (
+                "same-semantic-publication-as-invocation-with-validated-physical-"
+                "generation-transition"
+            ),
+            "open-snapshot": (
+                "exact-sdk-authoritative-returned-record-with-requested-snapshot-id"
+            ),
+            "all-three-semantic-snapshot-projections": "exact-equal",
+        },
+        "committed_unverified_path_rules": {
+            "closed-mixture": (
+                "present-or-typed-non-present-for-all-three-paths"
+            ),
+            "retain-every-successful-projection": True,
+            "first-failure": (
+                "exact-stage-path-and-sdk-error-or-projection-mismatch"
+            ),
+        },
+        "exact_compare": [
+            "selector",
+            "snapshot-manifest",
+            "eight-field-partition-bindings",
+            "rows",
+            "claim-annotation-multiset",
+            "coverage-multiset",
+            "unresolved",
+            "descriptor-inventory",
+        ],
+        "canonical_export_digest": (
+            "sha256-of-exact-utf8-bytes-returned-by-sdk-canonical-export"
+        ),
+        "snapshot_manifest_digest": (
+            "sha256-of-exact-canonical-json-utf8-bytes"
+        ),
+        "receipt_leaf_digests": (
+            "domain-separated-canonical-tuples-in-named-field-order"
+        ),
+        "semantic_projection_digest": (
+            "excludes-access-path-lookup-and-publication-record"
+        ),
+        "handle_projection_digest": (
+            "includes-semantic-projection-and-full-returned-publication-record"
+        ),
+        "cursor_projection_domain": (
+            "cxxlens.clang22-materialization-reopen-cursor.v1"
+        ),
+        "cursor_projection": (
+            "descriptor-id-order-with-row-canonical-forms-claim-annotation-"
+            "multiset-and-coverage-multiset"
+        ),
+        "partition-envelope-proof": (
+            "checker-reconstructs-exact-sdk-v5-canonical-export-from-full-report-"
+            "claim-envelopes"
+        ),
+        "physical-generation-equality-across-compaction": "not-required",
+        "publication-semantic-fields-and-allowed-generation-transition": "required",
+        "snapshot-path-publication-equality-with-series-paths": "not-required",
+        "boolean-only-proof": "forbidden",
     },
     "validation_order": [
         "batch",
@@ -499,6 +642,12 @@ EXPECTED_REPORT_DIGEST_CHAIN = {
         "claim-stages",
         "global-provenance",
         "base-claim-guarantee-cross-binding",
+        "sdk-claim-envelopes-and-canonicalization",
+        "complete-final-claim-batch",
+        "claim-basis-and-partitions",
+        "snapshot-manifest",
+        "publication-record",
+        "reopened-store-state",
     ],
 }
 STABLE_ERRORS = {
@@ -545,6 +694,15 @@ def load(path: pathlib.Path) -> dict[str, Any]:
 
 class _DuplicateJsonMember(ValueError):
     pass
+
+
+def _reject_duplicate_json_members(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise _DuplicateJsonMember(key)
+        value[key] = item
+    return value
 
 
 def load_strict_json_bytes(
@@ -731,6 +889,16 @@ def source_span_identity(
 
 def canonical_identity_digest(identity_kind: str, values: list[Any]) -> str:
     projection = _canonical_tuple(_canonical_projection_value(value) for value in values)
+    return identity_kind + ":" + content_digest(
+        b"cxxlens\0" + identity_kind.encode("utf-8") + b"\0v1\0" + projection
+    )
+
+
+def canonical_identity_digest_fields(
+    identity_kind: str,
+    fields: Iterable[bytes],
+) -> str:
+    projection = _canonical_tuple(fields)
     return identity_kind + ":" + content_digest(
         b"cxxlens\0" + identity_kind.encode("utf-8") + b"\0v1\0" + projection
     )
@@ -1014,6 +1182,180 @@ def semantic_digest(domain: str, payload: bytes | str) -> str:
         )
     )
     return "semantic-v2:sha256:" + hashlib.sha256(framed).hexdigest()
+
+
+def admitted_descriptor_inventory(registry: dict[str, Any]) -> list[dict[str, str]]:
+    """Project exact Registry bindings into the closed relation-engine inventory."""
+
+    bindings = registry["base_descriptors"] + registry["descriptors"]
+    return sorted(
+        (
+            {
+                "descriptor_id": binding["descriptor_id"],
+                "runtime_descriptor_digest": binding["runtime_descriptor_digest"],
+            }
+            for binding in bindings
+        ),
+        key=lambda binding: binding["descriptor_id"].encode("utf-8"),
+    )
+
+
+def expected_engine_registry_digest(
+    admitted_descriptors: Iterable[dict[str, str]],
+) -> str:
+    inventory = list(admitted_descriptors)
+    payload = "".join(
+        binding["descriptor_id"]
+        + "="
+        + binding["runtime_descriptor_digest"]
+        + "\n"
+        for binding in inventory
+    )
+    return semantic_digest("cxxlens.relation-registry.v1", payload)
+
+
+def expected_engine_generation_id(request: dict[str, Any]) -> str:
+    return canonical_identity_digest(
+        "engine-generation",
+        [
+            request["engine"]["generation_contract"],
+            request["worker"]["provider_id"],
+            request["worker"]["provider_version"],
+            request["worker"]["semantic_contract_digest"],
+            request["engine"]["engine_registry_digest"],
+        ],
+    )
+
+
+def expected_interpretation_policy_digest(policy: dict[str, Any]) -> str:
+    projection = _canonical_tuple(
+        (
+            _canonical_string(policy["policy_id"]),
+            _canonical_string(policy["selected_domain"]),
+        )
+    )
+    return semantic_digest(INTERPRETATION_POLICY_ID, projection)
+
+
+def task_sandbox_requirements(tasks: Iterable[dict[str, Any]]) -> list[dict[str, str]]:
+    return [
+        {"minimum": minimum, "policy_digest": policy_digest}
+        for minimum, policy_digest in sorted(
+            {
+                (task["sandbox"]["minimum"], task["sandbox"]["policy_digest"])
+                for task in tasks
+            }
+        )
+    ]
+
+
+def expected_trust_policy_digest(policy: dict[str, Any]) -> str:
+    requirements = policy["task_sandbox_requirements"]
+    projection = _canonical_tuple(
+        (
+            _canonical_string(policy["policy_id"]),
+            _canonical_string(policy["execution_profile"]),
+            _canonical_string(policy["provider_id"]),
+            _canonical_string(policy["provider_version"]),
+            _canonical_string(policy["semantic_contract_digest"]),
+            _canonical_integer(policy["protocol_major"]),
+            _canonical_integer(policy["protocol_minor"]),
+            _canonical_string(policy["required_qualification"]),
+            _canonical_string(policy["worker_sandbox_policy_digest"]),
+            _canonical_tuple(
+                _canonical_tuple(
+                    (
+                        _canonical_string(requirement["minimum"]),
+                        _canonical_string(requirement["policy_digest"]),
+                    )
+                )
+                for requirement in requirements
+            ),
+        )
+    )
+    return semantic_digest(TRUST_POLICY_ID, projection)
+
+
+def expected_series_id(selector: dict[str, Any]) -> str:
+    return canonical_identity_digest(
+        "snapshot-series",
+        [
+            selector[field]
+            for field in (
+                "catalog_id",
+                "channel_id",
+                "engine_generation_id",
+                "condition_universe_id",
+                "relation_registry_digest",
+                "interpretation_policy_digest",
+                "trust_policy_digest",
+            )
+        ],
+    )
+
+
+def bind_engine_policy_and_selector_identities(request: dict[str, Any]) -> None:
+    inventory = admitted_descriptor_inventory(request["registry"])
+    request["engine"] = {
+        "generation_contract": ENGINE_GENERATION_CONTRACT,
+        "admitted_descriptors": inventory,
+        "engine_registry_digest": expected_engine_registry_digest(inventory),
+        "engine_generation_id": "pending",
+    }
+    request["engine"]["engine_generation_id"] = expected_engine_generation_id(request)
+    request["interpretation_policy"] = {
+        "policy_id": INTERPRETATION_POLICY_ID,
+        "selected_domain": INTERPRETATION_DOMAIN,
+        "interpretation_policy_digest": "pending",
+    }
+    request["interpretation_policy"]["interpretation_policy_digest"] = (
+        expected_interpretation_policy_digest(request["interpretation_policy"])
+    )
+    request["trust_policy"] = {
+        "policy_id": TRUST_POLICY_ID,
+        "execution_profile": "trust.native-worker",
+        "provider_id": request["worker"]["provider_id"],
+        "provider_version": request["worker"]["provider_version"],
+        "semantic_contract_digest": request["worker"]["semantic_contract_digest"],
+        "protocol_major": request["worker"]["protocol_major"],
+        "protocol_minor": request["worker"]["protocol_minor"],
+        "required_qualification": "canonical-semantic-qualified",
+        "worker_sandbox_policy_digest": request["worker"]["sandbox_policy_digest"],
+        "task_sandbox_requirements": task_sandbox_requirements(request["tasks"]),
+        "trust_policy_digest": "pending",
+    }
+    request["trust_policy"]["trust_policy_digest"] = expected_trust_policy_digest(
+        request["trust_policy"]
+    )
+    universes = {task["condition_universe_id"] for task in request["tasks"]}
+    if len(universes) != 1:
+        fail(
+            "materialization.task-binding-mismatch",
+            "request tasks do not share one Store condition universe",
+        )
+    selector = {
+        "catalog_id": request["project"]["catalog_id"],
+        "channel_id": "channel:clang22-production",
+        "engine_generation_id": request["engine"]["engine_generation_id"],
+        "condition_universe_id": next(iter(universes)),
+        "relation_registry_digest": request["engine"]["engine_registry_digest"],
+        "interpretation_policy_digest": request["interpretation_policy"][
+            "interpretation_policy_digest"
+        ],
+        "trust_policy_digest": request["trust_policy"]["trust_policy_digest"],
+    }
+    request["publication"]["selector"] = selector
+    request["publication"]["series_id"] = expected_series_id(selector)
+
+
+def raw_input_observation(request_bytes: bytes) -> dict[str, Any]:
+    observed = request_bytes[: RAW_INPUT_BYTE_LIMIT + 1]
+    return {
+        "byte_limit": RAW_INPUT_BYTE_LIMIT,
+        "observed_size_bytes": len(observed),
+        "observed_prefix_digest": content_digest(observed),
+        "complete": len(request_bytes) <= RAW_INPUT_BYTE_LIMIT,
+    }
 
 
 def project_catalog_projection(project: dict[str, Any]) -> bytes:
@@ -1449,6 +1791,233 @@ def base_registry_relations(root: pathlib.Path) -> dict[str, dict[str, Any]]:
     registry = load(root / REGISTRY)
     relations = {row["descriptor_id"]: row for row in registry["relations"]}
     return {descriptor: relations[descriptor] for descriptor in BASE_DESCRIPTOR_IDS}
+
+
+@functools.lru_cache(maxsize=None)
+def admitted_registry_relations(root: pathlib.Path) -> dict[str, dict[str, Any]]:
+    registry = load(root / REGISTRY)
+    relations = {row["descriptor_id"]: row for row in registry["relations"]}
+    return {descriptor: relations[descriptor] for descriptor in ADMITTED_DESCRIPTOR_IDS}
+
+
+def _base_scalar_type(type_name: str) -> str:
+    while type_name.startswith("optional<") and type_name.endswith(">"):
+        type_name = type_name[len("optional<") : -1]
+    return type_name
+
+
+def _detached_scalar_json(type_name: str, value: Any) -> Any:
+    scalar = _base_scalar_type(type_name)
+    if scalar in {"bytes"} or scalar.startswith("set<"):
+        if not isinstance(value, (bytes, bytearray)):
+            fail("materialization.claim-invalid", "detached bytes cell is not bytes")
+        return bytes(value).hex()
+    if scalar == "bool":
+        if not isinstance(value, bool):
+            fail("materialization.claim-invalid", "detached bool cell is not boolean")
+        return value
+    if scalar in {"int64", "uint64"}:
+        if isinstance(value, bool) or not isinstance(value, int):
+            fail("materialization.claim-invalid", "detached integer cell is not integer")
+        return value
+    if not isinstance(value, str) or not _strict_utf8(value):
+        fail("materialization.claim-invalid", "detached text cell is not strict UTF-8")
+    return value
+
+
+def detached_row_canonical_form(
+    relation: dict[str, Any],
+    row: dict[str, Any],
+) -> str:
+    """Mirror detached_row::canonical_form() for one validated Registry row."""
+
+    cells: dict[str, Any] = {}
+    for column in sorted(relation["columns"], key=lambda item: item["id"]):
+        if column["name"] not in row:
+            if column["required"]:
+                fail(
+                    "materialization.claim-invalid",
+                    f"detached row omits required cell {column['id']}",
+                )
+            continue
+        value = row[column["name"]]
+        if value is None:
+            if not column["type"].startswith("optional<"):
+                fail(
+                    "materialization.claim-invalid",
+                    f"non-optional detached cell is absent: {column['id']}",
+                )
+            cells[column["id"]] = {
+                "state": "absent",
+                "type": column["type"],
+            }
+            continue
+        cells[column["id"]] = {
+            "state": "present",
+            "type": column["type"],
+            "value": _detached_scalar_json(column["type"], value),
+        }
+    return canonical_json(
+        {"cells": cells, "descriptor_id": relation["descriptor_id"]}
+    ).decode("utf-8")
+
+
+def _parse_detached_row_canonical_form(
+    root: pathlib.Path,
+    canonical_form: str,
+    descriptor_id: str,
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    try:
+        value = json.loads(
+            canonical_form,
+            object_pairs_hook=_reject_duplicate_json_members,
+            parse_constant=lambda token: (_ for _ in ()).throw(
+                ValueError(f"non-finite number {token}")
+            ),
+        )
+    except (UnicodeError, ValueError, json.JSONDecodeError, _DuplicateJsonMember) as error:
+        fail("materialization.claim-invalid", f"claim row is not canonical JSON: {error}")
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"cells", "descriptor_id"}
+        or value["descriptor_id"] != descriptor_id
+        or not isinstance(value["cells"], dict)
+        or canonical_json(value).decode("utf-8") != canonical_form
+    ):
+        fail("materialization.claim-invalid", "claim row canonical form differs")
+    relation = admitted_registry_relations(root).get(descriptor_id)
+    if relation is None:
+        fail("materialization.claim-invalid", "claim row descriptor is not admitted")
+    columns = {column["id"]: column for column in relation["columns"]}
+    for column_id, cell in value["cells"].items():
+        column = columns.get(column_id)
+        if (
+            column is None
+            or not isinstance(cell, dict)
+            or cell.get("type") != column["type"]
+            or cell.get("state") not in {"present", "absent", "unknown"}
+        ):
+            fail("materialization.claim-invalid", "claim row cell metadata differs")
+        state = cell["state"]
+        expected_keys = {"state", "type"}
+        if state == "present":
+            expected_keys.add("value")
+            _detached_scalar_json(column["type"], _decoded_detached_scalar(cell))
+        elif state == "absent":
+            if not column["type"].startswith("optional<"):
+                fail("materialization.claim-invalid", "required claim cell is absent")
+        else:
+            expected_keys.add("unknown_reason")
+            reason = cell.get("unknown_reason")
+            if not isinstance(reason, str) or not reason or not _strict_utf8(reason):
+                fail("materialization.claim-invalid", "claim cell unknown reason differs")
+        if set(cell) != expected_keys:
+            fail("materialization.claim-invalid", "claim row cell shape differs")
+    for column in relation["columns"]:
+        if column["required"] and column["id"] not in value["cells"]:
+            fail("materialization.claim-invalid", "claim row omits a required SDK cell")
+    return relation, value["cells"]
+
+
+def _decoded_detached_scalar(cell: dict[str, Any]) -> Any:
+    scalar = _base_scalar_type(cell["type"])
+    value = cell.get("value")
+    if scalar in {"bytes"} or scalar.startswith("set<"):
+        if (
+            not isinstance(value, str)
+            or len(value) % 2
+            or any(byte not in "0123456789abcdef" for byte in value)
+        ):
+            fail("materialization.claim-invalid", "claim row bytes are not lowercase hex")
+        return bytes.fromhex(value)
+    if scalar == "bool":
+        if not isinstance(value, bool):
+            fail("materialization.claim-invalid", "claim row boolean differs")
+        return value
+    if scalar == "int64":
+        if isinstance(value, bool) or not isinstance(value, int) or not -(2**63) <= value < 2**63:
+            fail("materialization.claim-invalid", "claim row signed integer differs")
+        return value
+    if scalar == "uint64":
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value < 2**64:
+            fail("materialization.claim-invalid", "claim row unsigned integer differs")
+        return value
+    if not isinstance(value, str) or not _strict_utf8(value):
+        fail("materialization.claim-invalid", "claim row text differs")
+    return value
+
+
+def _claim_cell_projection(cell: dict[str, Any] | None) -> bytes:
+    if cell is None or cell["state"] == "absent":
+        return _canonical_projection_value(None)
+    if cell["state"] == "unknown":
+        return _canonical_tuple(
+            (
+                _canonical_string("unknown"),
+                _canonical_string(cell.get("unknown_reason", "unspecified")),
+            )
+        )
+    scalar = _base_scalar_type(cell["type"])
+    value = _decoded_detached_scalar(cell)
+    if scalar == "bool":
+        return _canonical_boolean(value)
+    if scalar == "int64":
+        return _canonical_integer(value)
+    if scalar == "uint64":
+        return _canonical_tuple(
+            (_canonical_string("unsigned"), _canonical_string(str(value)))
+        )
+    if scalar in {"bytes"} or scalar.startswith("set<"):
+        return _canonical_bytes(value)
+    return _canonical_string(value)
+
+
+def sdk_claim_identities(
+    root: pathlib.Path,
+    envelope: dict[str, Any],
+) -> tuple[str, str, str]:
+    relation, cells = _parse_detached_row_canonical_form(
+        root,
+        envelope["row_canonical_form"],
+        envelope["descriptor_id"],
+    )
+    semantic_key = canonical_identity_digest_fields(
+        "semantic-key",
+        (
+            _canonical_string(relation["descriptor_id"]),
+            _canonical_integer(relation["semantic_major"]),
+            _canonical_tuple(
+                _claim_cell_projection(cells.get(column_id))
+                for column_id in relation["claim"]["key"]
+            ),
+        ),
+    )
+    assertion = canonical_identity_digest_fields(
+        "assertion",
+        (
+            _canonical_string(semantic_key),
+            _canonical_string(envelope["presence"]["universe"]),
+            _canonical_string(claim_condition_canonical_form(envelope["presence"])),
+            _canonical_string(envelope["interpretation"]),
+            _canonical_string(envelope["producer"]["semantic_contract"]),
+        ),
+    )
+    payload_columns = sorted(
+        column["id"]
+        for column in relation["columns"]
+        if column["identity_role"] == "authoritative_payload"
+    )
+    content = canonical_identity_digest_fields(
+        "claim-content",
+        (
+            _canonical_string(assertion),
+            _canonical_tuple(
+                _claim_cell_projection(cells.get(column_id))
+                for column_id in payload_columns
+            ),
+        ),
+    )
+    return semantic_key, assertion, content
 
 
 def derive_registry_row_identity(relation: dict[str, Any], row: dict[str, Any]) -> str:
@@ -1916,14 +2485,14 @@ def _request_projection(request: dict[str, Any], *, semantic: bool) -> dict[str,
 
 def expected_semantic_request_digest(request: dict[str, Any]) -> str:
     return semantic_digest(
-        "cxxlens.clang22-semantic-request.v1",
+        "cxxlens.clang22-semantic-request.v2",
         _canonical_projection_value(_request_projection(request, semantic=True)),
     )
 
 
 def expected_request_digest(request: dict[str, Any]) -> str:
     return semantic_digest(
-        "cxxlens.clang22-materialization-request.v1",
+        "cxxlens.clang22-materialization-request.v2",
         _canonical_projection_value(_request_projection(request, semantic=False)),
     )
 
@@ -1943,9 +2512,9 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
         "public_cpp_api": "none",
         "generic_adoption_api": "none",
         "clang_native_type_exposure": "forbidden",
-        "request_schema": "cxxlens.clang22-materialization-request.v1",
-        "report_schema": "cxxlens.clang22-materialization-report.v1",
-        "transport": "one-json-request-on-stdin-one-json-report-on-stdout",
+        "request_schema": "cxxlens.clang22-materialization-request.v2",
+        "report_schema": "cxxlens.clang22-materialization-report.v2",
+        "transport": "one-json-request-on-stdin-one-json-response-on-stdout",
         "stderr": "diagnostic-only",
         "shell": "forbidden",
         "json_lexical_policy": EXPECTED_JSON_LEXICAL_POLICY,
@@ -1953,25 +2522,86 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
             "request": "materialization.request-invalid",
             "report": "materialization.report-invalid",
         },
+        "request_validation_pipeline": {
+            "order": [
+                "byte-limit",
+                "strict-json-object",
+                "request-envelope",
+                "version-dispatch",
+                "selected-version-full-schema",
+                "derived-identity-and-binding",
+            ],
+            "request_envelope_fields": ["schema", "request_version"],
+            "unsupported_version_phase": "request-version",
+            "supported_version_schema_failure_phase": "request-schema",
+            "identity_or_binding_failure_phase": "request-binding",
+            "first-failing-boundary-is-authoritative": True,
+        },
+        "input_observation": {
+            "maximum_request_bytes": RAW_INPUT_BYTE_LIMIT,
+            "maximum_consumed_bytes": RAW_INPUT_BYTE_LIMIT + 1,
+            "within_limit": "complete-byte-count-and-sha256",
+            "over_limit": "exact-limit-plus-one-prefix-count-and-sha256-complete-false",
+            "unread_suffix_claim": "forbidden",
+        },
+        "resource_limits": {
+            "maximum_task_count": 4096,
+            "maximum_decoded_source_bytes_per_task": 16777216,
+            "maximum_aggregate_decoded_source_bytes": 536870912,
+            "maximum_content_base64_characters_per_task": 22369624,
+            "maximum_response_bytes": RAW_INPUT_BYTE_LIMIT,
+            "raw_request_storage": "bounded-chunk-read-and-private-spool",
+            "json_processing": "streaming-strict-utf8-duplicate-aware-no-one-gib-dom",
+            "source_decoding": "streaming-base64-to-bounded-private-spool",
+            "report_construction": "bounded-spool-before-publication",
+            "allocation_failure": "exit-two-no-response-authority",
+            "boundary_tests": [
+                "zero",
+                "limit-minus-one",
+                "limit",
+                "limit-plus-one",
+                "limit-plus-two",
+                "fragmented-short-reads",
+            ],
+            "injected_small_limit_state_machine_test": "required",
+        },
+        "process_exit": {
+            "passed_detailed": 0,
+            "schema_valid_failure": 1,
+            "stdout_transport_failure_no_response_authority": 2,
+            "error_kind_from_exit_or_stderr": "forbidden",
+            "post_commit_broken_stdout": (
+                "exit-two-no-response-store-record-only-recovery-authority-and-no-release-evidence"
+            ),
+            "sqlite_blind_retry_after_exit_two": "forbidden",
+            "sqlite_recovery": (
+                "read-only-exact-selector-parent-candidate-snapshot-and-publication-inspection"
+            ),
+            "memory_after_exit_two": "process-local-store-lost-fresh-rerun-only",
+        },
     }:
         fail("materialization.request-invalid", "installed machine surface is not exact")
     if contract["versioning"] != {
-        "machine_contract": "1.0.0",
-        "request": "1.0.0",
-        "report": "1.0.0",
+        "machine_contract": "2.0.0",
+        "request": "2.0.0",
+        "report": "2.0.0",
         "provider_task_input_codec": "cxxlens.clang22.task.v3",
         "observation_native_codec": "cxxlens.clang22.observation-native.v2",
         "provider_protocol": "1.0.0",
         "unknown_member": "reject",
         "missing_required_member": "reject",
         "adjacent_version_fallback": "forbidden",
-        "migration": "no-v1-migration-or-implicit-upgrade",
+        "migration": "v1-unimplemented-unqualified-superseded-no-implicit-upgrade",
     }:
         fail("materialization.version-unsupported", "version/fallback policy is not exact")
     if contract["identity"]["verification_ownership"] != {
         "authority_checker_proves": [
             "machine-shape",
+            "bounded-phase-authentic-response",
             "exact-registry-descriptor-bindings",
+            "descriptor-id-engine-admission",
+            "named-engine-and-policy-identities",
+            "complete-store-selector",
             "observation-v2-native-row-codec",
             "project-catalog-bottom-up-identities",
             "project-entry-final-relation-cross-binding",
@@ -1983,6 +2613,7 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
             "source-path-and-line-index-bottom-up-identities",
             "semantic-request-projection",
             "report-request-source-authority-cross-binding",
+            "claim-partition-snapshot-publication-identities",
         ],
         "implementation_issue_181_shared_codecs_prove": [
             "project-catalog-bottom-up-identities",
@@ -1990,7 +2621,10 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
             "observation-v2-native-row-codec",
             "portable-provider-task-identity",
             "provider-execution-identity",
+            "descriptor-id-engine-admission",
+            "complete-store-selector",
             "claim-partition-snapshot-publication-identities",
+            "reopened-store-exact-comparison",
         ],
         "checker_fixture_is_production_qualification": False,
         "self_consistent_caller_rebinding_without_shared_codec_validation": "reject",
@@ -2075,28 +2709,34 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
         fail("materialization.span-invalid", "span report census contract differs")
     project_tasks = contract["project_and_tasks"]
     if project_tasks["semantic_request_binding"] != {
-        "domain": "cxxlens.clang22-semantic-request.v1",
+        "domain": "cxxlens.clang22-semantic-request.v2",
         "codec": "cxxlens-canonical-tuple-v1",
         "object_encoding": "canonical-sorted-key-entry-tuples",
         "includes": [
             "tool",
             "worker",
             "project",
-            "registry-exact-six-worker-descriptors",
-            "registry-exact-six-base-descriptors",
+            "authority-registry-and-exact-twelve-engine-descriptors",
+            "engine-generation",
+            "interpretation-policy",
+            "trust-policy",
+            "complete-seven-field-selector",
             "group-topology",
             "complete-base-claim-row-payloads",
             "per-tu-source-build-task-condition-budget-sandbox",
-            "publication-transaction-policy",
+            "publication-genesis-partial-policy-transaction-count-reopen-policy",
         ],
         "excludes": [
             "materialization-request-identity-fields",
+            "derived-publication-series-id",
             "publication-backend",
-            "publication-series-id",
             "publication-sqlite-path",
             "publication-expected-parent",
         ],
-        "memory_sqlite_equality": "required-within-package-configuration",
+        "memory_sqlite_equality": (
+            "required-for-fresh-genesis-within-package-configuration"
+        ),
+        "sqlite-genesis-append-equality": "not-claimed",
     }:
         fail("materialization.task-binding-mismatch", "semantic request projection differs")
     if project_tasks["project_catalog"] != {
@@ -2380,6 +3020,28 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
         "memory_sqlite_semantic_parity": "required",
         "static_shared_semantic_parity": "required",
         "exact_observation_equivalence": "required-zero-non-exact-per-descriptor",
+        "execution_receipt": {
+            "fields": [
+                "actual-exit-status",
+                "exact-stdout-byte-count",
+                "stdout-sha256",
+                "parsed-response-count",
+                "stderr-sha256-diagnostic-only",
+            ],
+            "cross_binding": "stdout-bytes-are-the-exact-report-artifact",
+            "passed_report": "actual-exit-zero-and-response-count-one",
+            "schema_valid_failure": (
+                "actual-exit-one-and-response-count-one-release-forbidden"
+            ),
+            "no_response_failure": (
+                "actual-exit-two-and-response-count-zero-release-forbidden"
+            ),
+            "report_set_entry": [
+                "backend",
+                "report-digest",
+                "execution-receipt-digest",
+            ],
+        },
         "missing_extra_duplicate_matrix_entry": "reject",
     }:
         fail("materialization.report-invalid", "installed qualification matrix differs")
@@ -2488,14 +3150,14 @@ def sample_request(
     }
     variant_id = derive_base_row_identity(relations["build.variant.v1"], variant_row)
     request = {
-        "schema": "cxxlens.clang22-materialization-request.v1",
-        "request_version": "1.0.0",
+        "schema": "cxxlens.clang22-materialization-request.v2",
+        "request_version": "2.0.0",
         "materialization_request_id": "pending",
         "request_digest": semantic_digest("cxxlens.fixture.v1", "pending-request"),
         "semantic_request_digest": semantic_digest("cxxlens.fixture.v1", "pending-semantic"),
         "tool": {
             "executable": "cxxlens-clang22-materialize",
-            "interface_version": "1.0.0",
+            "interface_version": "2.0.0",
             "distribution_version": "1.0.0",
             "source_revision": "1" * 40,
             "source_tree": "2" * 40,
@@ -2517,10 +3179,13 @@ def sample_request(
         "project": project,
         "registry": {
             "path": REGISTRY.as_posix(),
-            "registry_digest": registry_digest,
+            "authority_registry_digest": registry_digest,
             "base_descriptors": copy.deepcopy(base_bindings),
             "descriptors": copy.deepcopy(bindings),
         },
+        "engine": {},
+        "interpretation_policy": {},
+        "trust_policy": {},
         "group_topology": {
             "dependency_groups": ["canonical", "observation"],
             "atomic_output_group": "clang22-atomic",
@@ -2529,9 +3194,10 @@ def sample_request(
         "tasks": [],
         "publication": {
             "backend": backend,
-            "series_id": "snapshot-series:fixture",
-            "genesis": False,
-            "expected_parent_publication": "publication:parent",
+            "selector": {},
+            "series_id": "pending",
+            "genesis": True,
+            "expected_parent_publication": None,
             "sqlite_path": "materialization.sqlite" if backend == "sqlite" else None,
             "partial_policy": "forbid",
             "transaction_count": 1,
@@ -2633,6 +3299,7 @@ def sample_request(
         )
     bind_provider_task_identities(request)
     bind_task_execution_identities(request)
+    bind_engine_policy_and_selector_identities(request)
     bind_request_identity(request)
     return request
 
@@ -2718,6 +3385,7 @@ def rebind_request_base_identities(
         )
     bind_provider_task_identities(request)
     bind_task_execution_identities(request)
+    bind_engine_policy_and_selector_identities(request)
     bind_request_identity(request)
 
 
@@ -2735,7 +3403,7 @@ def validate_request(root: pathlib.Path, request: dict[str, Any]) -> None:
     base_bindings = base_descriptor_bindings(root)
     if request["registry"] != {
         "path": REGISTRY.as_posix(),
-        "registry_digest": registry_digest,
+        "authority_registry_digest": registry_digest,
         "base_descriptors": base_bindings,
         "descriptors": bindings,
     }:
@@ -2743,6 +3411,57 @@ def validate_request(root: pathlib.Path, request: dict[str, Any]) -> None:
             "materialization.descriptor-binding-mismatch",
             "request descriptor IDs/digests do not match the current registry",
         )
+    inventory = admitted_descriptor_inventory(request["registry"])
+    inventory_ids = [binding["descriptor_id"] for binding in inventory]
+    if (
+        inventory_ids != ADMITTED_DESCRIPTOR_IDS
+        or len(inventory_ids) != len(set(inventory_ids))
+        or request["engine"]["generation_contract"] != ENGINE_GENERATION_CONTRACT
+        or request["engine"]["admitted_descriptors"] != inventory
+        or request["engine"]["engine_registry_digest"]
+        != expected_engine_registry_digest(inventory)
+        or request["engine"]["engine_generation_id"]
+        != expected_engine_generation_id(request)
+    ):
+        fail(
+            "materialization.descriptor-binding-mismatch",
+            "descriptor-ID engine inventory or generation identity differs",
+        )
+    interpretation_policy = request["interpretation_policy"]
+    if (
+        interpretation_policy["policy_id"] != INTERPRETATION_POLICY_ID
+        or interpretation_policy["selected_domain"] != INTERPRETATION_DOMAIN
+        or interpretation_policy["interpretation_policy_digest"]
+        != expected_interpretation_policy_digest(interpretation_policy)
+    ):
+        fail(
+            "materialization.identity-mismatch",
+            "interpretation policy identity differs",
+        )
+    trust_policy = request["trust_policy"]
+    expected_trust_fields = {
+        "provider_id": request["worker"]["provider_id"],
+        "provider_version": request["worker"]["provider_version"],
+        "semantic_contract_digest": request["worker"]["semantic_contract_digest"],
+        "protocol_major": request["worker"]["protocol_major"],
+        "protocol_minor": request["worker"]["protocol_minor"],
+        "worker_sandbox_policy_digest": request["worker"]["sandbox_policy_digest"],
+    }
+    if (
+        trust_policy["policy_id"] != TRUST_POLICY_ID
+        or trust_policy["execution_profile"] != "trust.native-worker"
+        or trust_policy["required_qualification"]
+        != "canonical-semantic-qualified"
+        or any(
+            trust_policy[field] != value
+            for field, value in expected_trust_fields.items()
+        )
+        or trust_policy["task_sandbox_requirements"]
+        != task_sandbox_requirements(request["tasks"])
+        or trust_policy["trust_policy_digest"]
+        != expected_trust_policy_digest(trust_policy)
+    ):
+        fail("materialization.identity-mismatch", "trust policy identity differs")
     project = request["project"]
     catalog_entries = project["catalog_compile_units"]
     catalog_ids = [entry["catalog_compile_unit_id"] for entry in catalog_entries]
@@ -2769,6 +3488,32 @@ def validate_request(root: pathlib.Path, request: dict[str, Any]) -> None:
             "catalog compile-unit census digest differs",
         )
     tasks = request["tasks"]
+    task_universes = {task["condition_universe_id"] for task in tasks}
+    task_interpretations = {task["interpretation_domain"] for task in tasks}
+    publication = request["publication"]
+    selector = publication["selector"]
+    expected_selector = {
+        "catalog_id": project["catalog_id"],
+        "channel_id": selector["channel_id"],
+        "engine_generation_id": request["engine"]["engine_generation_id"],
+        "condition_universe_id": next(iter(task_universes)) if task_universes else "",
+        "relation_registry_digest": request["engine"]["engine_registry_digest"],
+        "interpretation_policy_digest": interpretation_policy[
+            "interpretation_policy_digest"
+        ],
+        "trust_policy_digest": trust_policy["trust_policy_digest"],
+    }
+    if (
+        len(task_universes) != 1
+        or task_interpretations != {interpretation_policy["selected_domain"]}
+        or not selector["channel_id"]
+        or selector != expected_selector
+        or publication["series_id"] != expected_series_id(selector)
+    ):
+        fail(
+            "materialization.task-binding-mismatch",
+            "complete Store selector or task policy binding differs",
+        )
     selected_ids = [task["selected_catalog_compile_unit_id"] for task in tasks]
     if selected_ids != catalog_ids or len(selected_ids) != len(set(selected_ids)):
         fail(
@@ -2872,9 +3617,17 @@ def validate_request(root: pathlib.Path, request: dict[str, Any]) -> None:
             toolchain_rows[task["toolchain_context_id"]],
         ):
             fail("materialization.identity-mismatch", "toolchain row digest differs")
-    publication = request["publication"]
     if publication["genesis"] != (publication["expected_parent_publication"] is None):
         fail("materialization.stale-parent", "genesis/expected-parent binding differs")
+    if publication["backend"] == "memory" and (
+        not publication["genesis"]
+        or publication["expected_parent_publication"] is not None
+        or publication["sqlite_path"] is not None
+    ):
+        fail(
+            "materialization.store-failure",
+            "memory materialization must be fresh genesis without a path",
+        )
 
 
 def sample_primary_span_bundle(task: dict[str, Any]) -> dict[str, Any]:
@@ -2897,27 +3650,182 @@ def sample_primary_span_bundle(task: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _task_report(request: dict[str, Any], task: dict[str, Any]) -> dict[str, Any]:
+_FIXTURE_WORKER_ROW_CANONICAL: dict[tuple[str, str], str] = {}
+
+
+def _fixture_strong_id(kind: str, seed: str) -> str:
+    return canonical_identity_digest(kind, [seed])
+
+
+def _fixture_scalar_value(type_name: str, seed: str) -> Any:
+    scalar = _base_scalar_type(type_name)
+    if scalar == "bool":
+        return True
+    if scalar in {"int64", "uint64"}:
+        return 0
+    if scalar == "bytes":
+        return seed.encode("utf-8")
+    if scalar == "digest":
+        return semantic_digest("cxxlens.clang22-fixture-cell.v1", seed)
+    if scalar == "semantic_version":
+        return "1.0.0"
+    if scalar.startswith("typed_id<"):
+        parameter = scalar[len("typed_id<") : -1]
+        kind = parameter.removesuffix("_id").replace("_", "-")
+        return _fixture_strong_id(kind, seed)
+    if scalar in {"source_span_id", "evidence_id", "condition_ref"}:
+        return _fixture_strong_id(scalar.replace("_", "-"), seed)
+    if scalar.startswith("closed_symbol<"):
+        symbol = scalar[len("closed_symbol<") : -1]
+        if symbol == "cc.canonicalization-state/1":
+            return "canonicalized"
+        return "fixture"
+    if scalar.startswith("open_symbol<"):
+        symbol = scalar[len("open_symbol<") : -1]
+        return {
+            "cc.call-kind/1": "function",
+            "cc.direct-target-resolution/1": "direct",
+            "source.range-role/1": "expression",
+        }.get(symbol, "fixture")
+    if scalar.startswith("set<"):
+        return b""
+    return seed
+
+
+def _fixture_worker_row(
+    root: pathlib.Path,
+    task: dict[str, Any],
+    descriptor_id: str,
+    *,
+    label: str,
+    ordinal: int,
+    primary_span_bundle: dict[str, Any] | None,
+    exact_equivalence: bool,
+    limitation: str | None,
+) -> tuple[str, str]:
+    relation = admitted_registry_relations(root)[descriptor_id]
+    seed = "|".join(
+        (
+            descriptor_id,
+            task["provider_task_id"],
+            task["task_input_digest"],
+            label,
+            str(ordinal),
+        )
+    )
+    result_column = relation["claim"]["domain_identity"]["result_column"]
+    row: dict[str, Any] = {}
+    for column in relation["columns"]:
+        if column["required"] and column["id"] != result_column:
+            row[column["name"]] = _fixture_scalar_value(
+                column["type"], f"{seed}|{column['id']}"
+            )
+
+    bundle = primary_span_bundle
+    if descriptor_id == "cc.call_site.v1":
+        bundle = bundle or sample_primary_span_bundle(task)
+        row.update(
+            {
+                "compile_unit": task["compile_unit_id"],
+                "source": bundle["span_id"],
+                "kind": "function",
+                "ordinal": ordinal,
+            }
+        )
+    elif descriptor_id == "cc.entity.v1":
+        row.update(
+            {
+                "canonicalization": "canonicalized",
+                "kind": "function",
+                "structural_signature_digest": semantic_digest(
+                    "cxxlens.clang22-fixture-entity-signature.v1", seed
+                ),
+            }
+        )
+    elif descriptor_id == "cc.call_direct_target.v1":
+        row.update(
+            {
+                "resolution": "direct",
+                "call": _fixture_strong_id("cc-call", f"{seed}|call"),
+                "target": _fixture_strong_id("cc-entity", f"{seed}|target"),
+            }
+        )
+    elif descriptor_id in DESCRIPTOR_IDS[3:]:
+        row.update(
+            {
+                "compile_unit": task["compile_unit_id"],
+                "semantic_key": seed.encode("utf-8"),
+                "payload_digest": semantic_digest(
+                    "cxxlens.clang22-fixture-observation-payload.v1", seed
+                ),
+                "exact_equivalence": exact_equivalence,
+            }
+        )
+        if limitation is not None:
+            row["limitation"] = limitation
+        if descriptor_id in SPAN_OBSERVATION_DESCRIPTORS and bundle is not None:
+            row.update(
+                {
+                    "source": bundle["span_id"],
+                    "source_snapshot": bundle["snapshot"],
+                    "source_file": bundle["file"],
+                    "source_begin": bundle["begin"],
+                    "source_end": bundle["end"],
+                    "source_role": bundle["role"],
+                    "source_read_only": bundle["read_only"],
+                }
+            )
+
+    if result_column is not None:
+        result_name = next(
+            column["name"]
+            for column in relation["columns"]
+            if column["id"] == result_column
+        )
+        row[result_name] = derive_registry_row_identity(relation, row)
+    canonical_form = detached_row_canonical_form(relation, row)
+    row_digest = content_digest(canonical_form.encode("utf-8"))
+    cache_key = (descriptor_id, row_digest)
+    previous = _FIXTURE_WORKER_ROW_CANONICAL.setdefault(cache_key, canonical_form)
+    if previous != canonical_form:
+        fail("materialization.claim-invalid", "fixture row digest collision")
+    return row_digest, canonical_form
+
+
+def _task_report(
+    root: pathlib.Path,
+    request: dict[str, Any],
+    task: dict[str, Any],
+) -> dict[str, Any]:
     bindings = {row["descriptor_id"]: row for row in request["registry"]["descriptors"]}
     context = task_semantic_context(task)
     batches: list[dict[str, Any]] = []
     for descriptor in DESCRIPTOR_IDS:
-        row_digest = semantic_digest(
-            "cxxlens.clang22-fixture-materialized-row.v1",
-            _canonical_projection_value(
-                {
-                    "descriptor_id": descriptor,
-                    "originating_task": context,
-                    "final_relation_compile_unit_id": task["compile_unit_id"],
-                }
-            ),
+        primary_span = (
+            sample_primary_span_bundle(task)
+            if descriptor in SPAN_OBSERVATION_DESCRIPTORS
+            else None
+        )
+        row_digest, row_canonical_form = _fixture_worker_row(
+            root,
+            task,
+            descriptor,
+            label="initial",
+            ordinal=0,
+            primary_span_bundle=primary_span,
+            exact_equivalence=True,
+            limitation=None,
         )
         row_binding = {
             "row_digest": row_digest,
+            "row_canonical_form": row_canonical_form,
+            "worker_assertion_claim_ref": (
+                "materialization-claim-envelope:sha256:" + "0" * 64
+            ),
             "final_relation_compile_unit_id": task["compile_unit_id"],
             "originating_task": context,
             "primary_span_bundle_digest": (
-                source_span_bundle_digest(sample_primary_span_bundle(task))
+                source_span_bundle_digest(primary_span)
                 if descriptor in SPAN_OBSERVATION_DESCRIPTORS
                 else None
             ),
@@ -2937,7 +3845,7 @@ def _task_report(request: dict[str, Any], task: dict[str, Any]) -> dict[str, Any
             ),
         )
         provenance_edge_digest = semantic_digest(
-            "cxxlens.clang22-fixture-provenance-edge.v1",
+            "cxxlens.clang22-fixture-provenance-edge.v2",
             _canonical_projection_value(
                 {
                     "descriptor_id": descriptor,
@@ -2956,7 +3864,13 @@ def _task_report(request: dict[str, Any], task: dict[str, Any]) -> dict[str, Any
             "ordered_chunk_digests": [chunk_digest],
             "ordered_chunk_set_digest": "pending",
             "row_bindings": [row_binding],
+            "row_binding_set_digest": "pending",
+            "worker_assertion_claim_refs": [],
+            "worker_assertion_claim_occurrence_count": 0,
+            "claim_content_ids": [],
+            "claim_content_count": 0,
             "claim_content_set_digest": "pending",
+            "sdk_claim_occurrence_set_digest": "pending",
             "provenance_edge_digests": [provenance_edge_digest],
             "provenance_edge_set_digest": "pending",
             "batch_digest": "pending",
@@ -3063,18 +3977,23 @@ def append_fixture_materialized_row(
 
     context = task_semantic_context(task)
     descriptor = batch["descriptor_id"]
-    row_digest = _digest_projection(
-        "cxxlens.clang22-fixture-materialized-row.v1",
-        {
-            "descriptor_id": descriptor,
-            "originating_task": context,
-            "final_relation_compile_unit_id": task["compile_unit_id"],
-            "label": label,
-        },
+    row_digest, row_canonical_form = _fixture_worker_row(
+        ROOT,
+        task,
+        descriptor,
+        label=label,
+        ordinal=len(batch["row_bindings"]),
+        primary_span_bundle=primary_span_bundle,
+        exact_equivalence=exact_equivalence,
+        limitation=limitation,
     )
     batch["row_bindings"].append(
         {
             "row_digest": row_digest,
+            "row_canonical_form": row_canonical_form,
+            "worker_assertion_claim_ref": (
+                "materialization-claim-envelope:sha256:" + "0" * 64
+            ),
             "final_relation_compile_unit_id": task["compile_unit_id"],
             "originating_task": context,
             "primary_span_bundle_digest": (
@@ -3111,12 +4030,11 @@ def append_fixture_materialized_row(
     )
     batch["provenance_edge_digests"].append(
         _digest_projection(
-            "cxxlens.clang22-fixture-provenance-edge.v1",
+            "cxxlens.clang22-fixture-provenance-edge.v2",
             {
                 "descriptor_id": descriptor,
                 "originating_task": context,
                 "row_digest": row_digest,
-                "label": label,
             },
         )
     )
@@ -3242,6 +4160,8 @@ def _batch_leaf_projection(task: dict[str, Any], batch: dict[str, Any]) -> dict[
         "descriptor_id": batch["descriptor_id"],
         "ordered_chunk_digests": batch["ordered_chunk_digests"],
         "row_bindings": batch["row_bindings"],
+        "worker_assertion_claim_refs": batch["worker_assertion_claim_refs"],
+        "claim_content_ids": batch["claim_content_ids"],
         "provenance_edge_digests": batch["provenance_edge_digests"],
     }
 
@@ -3256,12 +4176,28 @@ def bind_batch_digests(task: dict[str, Any], batch: dict[str, Any]) -> None:
             "ordered_chunk_digests": leaf["ordered_chunk_digests"],
         },
     )
-    batch["claim_content_set_digest"] = _digest_projection(
-        "cxxlens.clang22-batch-claim-content-set.v1",
+    batch["row_binding_set_digest"] = _digest_projection(
+        "cxxlens.clang22-batch-row-binding-set.v1",
         {
             "task_execution_key": leaf["task_execution_key"],
             "descriptor_id": leaf["descriptor_id"],
             "row_bindings": leaf["row_bindings"],
+        },
+    )
+    batch["claim_content_set_digest"] = _digest_projection(
+        "cxxlens.clang22-batch-claim-content-set.v2",
+        {
+            "task_execution_key": leaf["task_execution_key"],
+            "descriptor_id": leaf["descriptor_id"],
+            "claim_content_ids": leaf["claim_content_ids"],
+        },
+    )
+    batch["sdk_claim_occurrence_set_digest"] = _digest_projection(
+        "cxxlens.clang22-batch-sdk-occurrence-set.v1",
+        {
+            "task_execution_key": leaf["task_execution_key"],
+            "descriptor_id": leaf["descriptor_id"],
+            "worker_assertion_claim_refs": leaf["worker_assertion_claim_refs"],
         },
     )
     batch["provenance_edge_set_digest"] = _digest_projection(
@@ -3282,7 +4218,11 @@ def bind_batch_digests(task: dict[str, Any], batch: dict[str, Any]) -> None:
             "atomic_output_group_id",
             "row_count",
             "ordered_chunk_set_digest",
+            "row_binding_set_digest",
+            "worker_assertion_claim_occurrence_count",
+            "claim_content_count",
             "claim_content_set_digest",
+            "sdk_claim_occurrence_set_digest",
             "provenance_edge_set_digest",
             "sealed",
         )
@@ -3312,7 +4252,11 @@ def expected_group_batch_set_digest(
                 "batch_digest",
                 "ordered_chunk_set_digest",
                 "row_count",
+                "row_binding_set_digest",
+                "worker_assertion_claim_occurrence_count",
+                "claim_content_count",
                 "claim_content_set_digest",
+                "sdk_claim_occurrence_set_digest",
                 "provenance_edge_set_digest",
             )
         }
@@ -3768,6 +4712,7 @@ def base_claim_report(
     }
     results = []
     for descriptor_id in BASE_DESCRIPTOR_IDS:
+        relation = admitted_registry_relations(root)[descriptor_id]
         descriptor_rows = rows[descriptor_id]
         row_count = len(descriptor_rows)
         row_set_digest = base_claim_row_set_digest(descriptor_id, descriptor_rows)
@@ -3808,6 +4753,9 @@ def base_claim_report(
                 {
                     "row_identity": row_identity,
                     "row_digest": base_claim_row_digest(descriptor_id, row),
+                    "row_canonical_form": detached_row_canonical_form(
+                        relation, row
+                    ),
                     "origin_associations": associations,
                 }
             )
@@ -4072,56 +5020,61 @@ def expected_claim_stage(
     results: Iterable[dict[str, Any]],
     descriptor_id: str,
     guarantee_digest: str,
+    store: dict[str, Any],
 ) -> dict[str, Any]:
     result_list = list(results)
-    batch_rows = []
-    for result in result_list:
-        batch = next(
-            batch
-            for batch in result["batches"]
-            if batch["descriptor_id"] == descriptor_id
-        )
-        batch_rows.append(
-            {
-                "semantic_task_key": semantic_result_key(result),
-                "row_count": batch["row_count"],
-                "row_bindings": batch["row_bindings"],
-                "provenance_edge_digests": batch["provenance_edge_digests"],
-            }
-        )
-    batch_rows.sort(key=lambda row: tuple(row["semantic_task_key"]))
+    final_envelopes = sorted(
+        (
+            envelope
+            for envelope in store["claim_envelopes"]
+            if envelope["role"] == "stored_final"
+            and envelope["descriptor_id"] == descriptor_id
+        ),
+        key=lambda envelope: envelope["claim_ref"],
+    )
+    refs = [envelope["claim_ref"] for envelope in final_envelopes]
+    contents = sorted({envelope["content"] for envelope in final_envelopes})
+    ref_set = set(refs)
+    association_ids = sorted(
+        association["association_id"]
+        for association in store["origin_associations"]
+        if association["stored_claim_ref"] in ref_set
+    )
+    provenance_roots = sorted(
+        envelope["provenance_root"] for envelope in final_envelopes
+    )
     stage: dict[str, Any] = {
         "descriptor_id": descriptor_id,
         "stage": DESCRIPTOR_STAGE[descriptor_id],
-        "claim_count": sum(row["row_count"] for row in batch_rows),
+        "claim_content_ids": contents,
+        "claim_content_count": len(contents),
+        "stored_claim_refs": refs,
+        "sdk_claim_occurrence_count": len(refs),
+        "origin_association_ids": association_ids,
+        "origin_association_count": len(association_ids),
         "claim_content_set_digest": _digest_projection(
             "cxxlens.clang22-claim-stage-content-set.v1",
             {
                 "descriptor_id": descriptor_id,
-                "batches": [
-                    {
-                        "semantic_task_key": row["semantic_task_key"],
-                        "row_count": row["row_count"],
-                        "row_bindings": row["row_bindings"],
-                    }
-                    for row in batch_rows
-                ],
+                "claim_content_ids": contents,
+            },
+        ),
+        "sdk_claim_occurrence_set_digest": _digest_projection(
+            "cxxlens.clang22-claim-stage-sdk-occurrence-set.v1",
+            {"descriptor_id": descriptor_id, "stored_claim_refs": refs},
+        ),
+        "origin_association_set_digest": _digest_projection(
+            "cxxlens.clang22-claim-stage-origin-association-set.v1",
+            {
+                "descriptor_id": descriptor_id,
+                "origin_association_ids": association_ids,
             },
         ),
         "provenance_edge_set_digest": _digest_projection(
             "cxxlens.clang22-claim-stage-provenance-set.v1",
             {
                 "descriptor_id": descriptor_id,
-                "batches": [
-                    {
-                        "semantic_task_key": row["semantic_task_key"],
-                        "row_count": row["row_count"],
-                        "provenance_edge_digests": row[
-                            "provenance_edge_digests"
-                        ],
-                    }
-                    for row in batch_rows
-                ],
+                "provenance_roots": provenance_roots,
             },
         ),
         "guarantee_digest": guarantee_digest,
@@ -4146,7 +5099,12 @@ def expected_global_provenance_digest(
     projection["canonical_claim_stages"] = [
         {
             "descriptor_id": descriptor,
-            "claim_count": stages[descriptor]["claim_count"],
+            "sdk_claim_occurrence_count": stages[descriptor][
+                "sdk_claim_occurrence_count"
+            ],
+            "origin_association_count": stages[descriptor][
+                "origin_association_count"
+            ],
             "provenance_edge_set_digest": stages[descriptor][
                 "provenance_edge_set_digest"
             ],
@@ -4160,6 +5118,1459 @@ def expected_global_provenance_digest(
     )
 
 
+def claim_condition_canonical_form(condition: dict[str, Any]) -> str:
+    fragments = condition["fragments"]
+    if not fragments or fragments != sorted(set(fragments)):
+        fail("materialization.claim-invalid", "Store condition is not canonical")
+    universe = condition["universe"]
+    return str(len(universe.encode("utf-8"))) + ":" + universe + "".join(
+        ";" + str(len(fragment.encode("utf-8"))) + ":" + fragment
+        for fragment in fragments
+    )
+
+
+def direct_input_basis_digest(basis_digest: str) -> str:
+    identity = canonical_identity_digest("producer-input-direct", [basis_digest])
+    return identity.split(":", 1)[1]
+
+
+def materializer_transform_digest(
+    domain: str,
+    materializer_semantics_digest: str,
+    engine_registry_digest: str,
+) -> str:
+    return semantic_digest(
+        domain,
+        _canonical_tuple(
+            _canonical_string(value)
+            for value in (
+                domain,
+                materializer_semantics_digest,
+                engine_registry_digest,
+            )
+        ),
+    )
+
+
+def expected_materializer_semantics_digest(
+    root: pathlib.Path,
+    request: dict[str, Any],
+) -> str:
+    tool = request["tool"]
+    projection = _canonical_tuple(
+        (
+            _canonical_string(tool["executable"]),
+            _canonical_string(tool["interface_version"]),
+            _canonical_string(tool["distribution_version"]),
+            _canonical_string(tool["source_revision"]),
+            _canonical_string(tool["source_tree"]),
+            _canonical_tuple(
+                _canonical_tuple(
+                    (
+                        _canonical_string(binding["path"]),
+                        _canonical_string(binding["digest"]),
+                    )
+                )
+                for binding in sorted(
+                    authority_bindings(root),
+                    key=lambda row: row["path"].encode("utf-8"),
+                )
+            ),
+        )
+    )
+    return semantic_digest("cxxlens.clang22-materializer-semantics.v1", projection)
+
+
+def expected_direct_basis(
+    root: pathlib.Path,
+    request: dict[str, Any],
+) -> dict[str, str]:
+    materializer_semantics = expected_materializer_semantics_digest(root, request)
+    semantic_tasks = sorted(
+        (
+            {
+                "originating_task": task_semantic_context(task),
+                "task_input_digest": task["task_input_digest"],
+            }
+            for task in request["tasks"]
+        ),
+        key=lambda row: task_semantic_context_key(row["originating_task"]),
+    )
+    project = request["project"]
+    projection = _canonical_tuple(
+        (
+            _canonical_string("cxxlens.clang22-direct-materialization-basis.v1"),
+            _canonical_string(materializer_semantics),
+            _canonical_tuple(
+                (
+                    _canonical_string(request["worker"]["provider_id"]),
+                    _canonical_string(request["worker"]["provider_version"]),
+                    _canonical_string(
+                        request["worker"]["semantic_contract_digest"]
+                    ),
+                    _canonical_integer(request["worker"]["protocol_major"]),
+                    _canonical_integer(request["worker"]["protocol_minor"]),
+                )
+            ),
+            _canonical_tuple(
+                _canonical_string(project[field])
+                for field in ("project_id", "catalog_id", "catalog_digest")
+            ),
+            _canonical_tuple(
+                (
+                    _canonical_string(request["engine"]["generation_contract"]),
+                    _canonical_string(request["engine"]["engine_generation_id"]),
+                    _canonical_string(request["engine"]["engine_registry_digest"]),
+                    _canonical_projection_value(
+                        request["engine"]["admitted_descriptors"]
+                    ),
+                )
+            ),
+            _canonical_tuple(
+                _canonical_tuple(
+                    (
+                        _canonical_projection_value(row["originating_task"]),
+                        _canonical_string(row["task_input_digest"]),
+                    )
+                )
+                for row in semantic_tasks
+            ),
+        )
+    )
+    basis_digest = semantic_digest(
+        "cxxlens.clang22-direct-materialization-basis.v1",
+        projection,
+    )
+    return {
+        "projection_version": "cxxlens.clang22-direct-materialization-basis.v1",
+        "materializer_semantics_digest": materializer_semantics,
+        "basis_digest": basis_digest,
+        "producer_input_basis_digest": direct_input_basis_digest(basis_digest),
+        "canonical_adoption_transform_digest": materializer_transform_digest(
+            "cxxlens.clang22-canonical-adoption-transform.v1",
+            materializer_semantics,
+            request["engine"]["engine_registry_digest"],
+        ),
+        "base_ingestion_transform_digest": materializer_transform_digest(
+            "cxxlens.clang22-base-ingestion-transform.v1",
+            materializer_semantics,
+            request["engine"]["engine_registry_digest"],
+        ),
+    }
+
+
+def expected_assumption_set_id(assumptions: list[str]) -> str:
+    if assumptions != sorted(set(assumptions)):
+        fail("materialization.claim-invalid", "guarantee assumptions are not canonical")
+    return "assumption-set:" + semantic_digest(
+        "cxxlens.clang22-assumption-set.v1",
+        _canonical_tuple(_canonical_string(value) for value in assumptions),
+    )
+
+
+def claim_input_basis_digest(input_basis: dict[str, Any]) -> str:
+    if input_basis != {
+        "kind": "direct",
+        "basis_digest": input_basis.get("basis_digest"),
+    }:
+        fail("materialization.claim-invalid", "reported claim basis is not exact direct basis")
+    return direct_input_basis_digest(input_basis["basis_digest"])
+
+
+def sdk_claim_occurrence_projection(envelope: dict[str, Any]) -> bytes:
+    stage = {"assertion": 0, "canonical_claim": 1}.get(envelope["stage"])
+    if stage is None:
+        fail("materialization.claim-invalid", "reported claim stage is not an SDK stage")
+    basis = _canonical_tuple(
+        (
+            _canonical_string("direct"),
+            _canonical_string(envelope["input_basis"]["basis_digest"]),
+        )
+    )
+    guarantee = envelope["guarantee"]
+    modalities = guarantee["verification_modalities"]
+    if modalities != sorted(set(modalities)):
+        fail("materialization.claim-invalid", "claim guarantee modalities are not canonical")
+    return _canonical_tuple(
+        (
+            _canonical_string(envelope["descriptor_id"]),
+            _canonical_string(envelope["semantic_key"]),
+            _canonical_string(envelope["interpretation"]),
+            _canonical_string(envelope["assertion"]),
+            _canonical_string(envelope["content"]),
+            _canonical_string(envelope["row_canonical_form"]),
+            _canonical_string(claim_condition_canonical_form(envelope["presence"])),
+            _canonical_integer(stage),
+            _canonical_string(envelope["producer"]["id"]),
+            _canonical_string(envelope["producer"]["semantic_contract"]),
+            basis,
+            _canonical_string(envelope["provenance_root"]),
+            _canonical_string(guarantee["approximation"]),
+            _canonical_string(guarantee["scope"]),
+            _canonical_string(guarantee["assumptions"]),
+            _canonical_tuple(_canonical_string(value) for value in modalities),
+        )
+    )
+
+
+def sdk_claim_batch_content_digest(envelopes: Iterable[dict[str, Any]]) -> str:
+    ordered = sorted(
+        (
+            sdk_claim_occurrence_projection(envelope),
+            envelope["content"],
+        )
+        for envelope in envelopes
+    )
+    claim_records = _canonical_tuple(
+        _canonical_tuple(
+            (
+                _canonical_string("claim"),
+                _canonical_string(content),
+                _canonical_bytes(occurrence),
+            )
+        )
+        for occurrence, content in ordered
+    )
+    encoded = _canonical_tuple(
+        (
+            _canonical_string("cxxlens.claim-batch.v2"),
+            claim_records,
+            _canonical_tuple(()),
+            _canonical_tuple(()),
+            _canonical_tuple(()),
+        )
+    )
+    return semantic_digest("cxxlens.claim-batch.v2", encoded)
+
+
+def _bind_sdk_claim_envelope(
+    root: pathlib.Path,
+    envelope: dict[str, Any],
+) -> dict[str, Any]:
+    envelope = copy.deepcopy(envelope)
+    envelope["row_ref"] = canonical_identity_digest(
+        "materialization-claim-row",
+        [envelope["descriptor_id"], envelope["row_canonical_form"].encode("utf-8")],
+    )
+    semantic_key, assertion, content = sdk_claim_identities(root, envelope)
+    envelope.update(
+        {
+            "semantic_key": semantic_key,
+            "assertion": assertion,
+            "content": content,
+        }
+    )
+    singleton = sdk_claim_batch_content_digest([envelope])
+    envelope["sdk_singleton_claim_batch_digest"] = singleton
+    envelope["claim_ref"] = canonical_identity_digest(
+        "materialization-claim-envelope",
+        [envelope["role"], singleton],
+    )
+    return envelope
+
+
+def _claim_guarantee(
+    request: dict[str, Any],
+    report: dict[str, Any],
+) -> dict[str, Any]:
+    guarantee = report["side_channels"]["guarantee"]
+    modalities = guarantee["verification_modalities"]
+    if modalities != sorted(set(modalities)):
+        fail("materialization.claim-invalid", "report modalities are not canonical")
+    return {
+        "approximation": "exact",
+        "scope": request["project"]["project_id"],
+        "assumptions": expected_assumption_set_id(guarantee["assumptions"]),
+        "verification_modalities": copy.deepcopy(modalities),
+    }
+
+
+def _make_sdk_claim_envelope(
+    root: pathlib.Path,
+    *,
+    role: str,
+    descriptor_id: str,
+    row_canonical_form: str,
+    condition: dict[str, Any],
+    interpretation: str,
+    stage: str,
+    producer: dict[str, str],
+    basis_digest: str,
+    provenance_root: str,
+    guarantee: dict[str, Any],
+) -> dict[str, Any]:
+    return _bind_sdk_claim_envelope(
+        root,
+        {
+            "claim_ref": "pending",
+            "role": role,
+            "row_ref": "pending",
+            "row_canonical_form": row_canonical_form,
+            "descriptor_id": descriptor_id,
+            "semantic_key": "pending",
+            "assertion": "pending",
+            "content": "pending",
+            "presence": copy.deepcopy(condition),
+            "interpretation": interpretation,
+            "stage": stage,
+            "producer": copy.deepcopy(producer),
+            "input_basis": {"kind": "direct", "basis_digest": basis_digest},
+            "provenance_root": provenance_root,
+            "guarantee": copy.deepcopy(guarantee),
+            "sdk_singleton_claim_batch_digest": "pending",
+        },
+    )
+
+
+def _canonical_basis_digest(precursor_content: str, transform_semantics: str) -> str:
+    return semantic_digest(
+        "cxxlens.canonical-input-basis.v1",
+        precursor_content + "\n" + transform_semantics,
+    )
+
+
+def _claim_association(
+    *,
+    stored_claim_ref: str,
+    originating_task: dict[str, Any],
+    sealed_row_digest: str,
+    source_evidence_digest: str | None,
+) -> dict[str, Any]:
+    association_id = canonical_identity_digest(
+        "materialization-claim-association",
+        [
+            stored_claim_ref,
+            list(task_semantic_context_key(originating_task)),
+            sealed_row_digest,
+            source_evidence_digest or "",
+        ],
+    )
+    return {
+        "association_id": association_id,
+        "stored_claim_ref": stored_claim_ref,
+        "originating_task": copy.deepcopy(originating_task),
+        "sealed_row_digest": sealed_row_digest,
+        "source_evidence_digest": source_evidence_digest,
+    }
+
+
+def coverage_unit_identity(unit: dict[str, str]) -> str:
+    return canonical_identity_digest(
+        "coverage-unit",
+        [unit["domain"], unit["key"], unit["state"], unit["reason"]],
+    )
+
+
+def _semantic_task_key(context: dict[str, Any]) -> str:
+    return canonical_identity_digest(
+        "materialization-task",
+        [
+            context[field]
+            for field in (
+                "provider_task_id",
+                "task_input_digest",
+                "selected_catalog_compile_unit_id",
+                "compile_unit_id",
+                "condition_universe_id",
+                "condition_id",
+                "interpretation_domain",
+            )
+        ],
+    )
+
+
+def _coverage_units(
+    context: dict[str, Any],
+    descriptor_id: str,
+    *,
+    base: bool,
+) -> list[dict[str, str]]:
+    task_key = _semantic_task_key(context)
+    if base:
+        return [
+            {
+                "domain": "materialization.base-descriptor",
+                "key": canonical_identity_digest(
+                    "materialization-base-descriptor", [task_key, descriptor_id]
+                ),
+                "state": "covered",
+                "reason": "",
+            }
+        ]
+    return [
+        {
+            "domain": "materialization.task",
+            "key": task_key,
+            "state": "covered",
+            "reason": "",
+        },
+        {
+            "domain": "materialization.dependency-group",
+            "key": canonical_identity_digest(
+                "materialization-dependency-group",
+                [task_key, DESCRIPTOR_GROUP[descriptor_id]],
+            ),
+            "state": "covered",
+            "reason": "",
+        },
+    ]
+
+
+def _canonical_claim_basis_digest(
+    precursor_content: str,
+    transform_semantics: str,
+) -> str:
+    basis = semantic_digest(
+        "cxxlens.canonical-input-basis.v1",
+        precursor_content + "\n" + transform_semantics,
+    )
+    return direct_input_basis_digest(basis)
+
+
+def _empty_partition_basis_digest(
+    direct_basis_digest: str,
+    descriptor_id: str,
+    condition: dict[str, Any],
+    interpretation: str,
+    producer_semantics: str,
+    transform_semantics: str,
+) -> str:
+    basis = semantic_digest(
+        "cxxlens.clang22-empty-partition-basis.v1",
+        _canonical_tuple(
+            _canonical_string(value)
+            for value in (
+                direct_basis_digest,
+                descriptor_id,
+                claim_condition_canonical_form(condition),
+                interpretation,
+                producer_semantics,
+                transform_semantics,
+            )
+        ),
+    )
+    return direct_input_basis_digest(basis)
+
+
+def _partition_identity_fields(partition: dict[str, Any]) -> list[str]:
+    return [
+        partition["relation_descriptor_id"],
+        partition["scope"],
+        claim_condition_canonical_form(partition["condition"]),
+        partition["interpretation"],
+        partition["producer_semantics"],
+        partition["producer_input_basis_digest"],
+        partition["precision_profile"],
+        partition["assumption_set_id"],
+    ]
+
+
+def bind_store_partition_identities(partition: dict[str, Any]) -> None:
+    refs = sorted(set(partition["stored_claim_refs"]))
+    partition["stored_claim_refs"] = refs
+    contents = sorted(set(partition["claim_content_digests"]))
+    partition["claim_content_digests"] = contents
+    partition["sdk_claim_occurrence_count"] = len(refs)
+    partition["claim_count"] = len(contents)
+    coverage_by_identity = {
+        coverage_unit_identity(unit): unit for unit in partition["coverage_units"]
+    }
+    partition["coverage_units"] = [
+        coverage_by_identity[key] for key in sorted(coverage_by_identity)
+    ]
+    partition["partition_id"] = canonical_identity_digest(
+        "partition", _partition_identity_fields(partition)
+    )
+    partition["claim_set_digest"] = canonical_identity_digest("claim-set", contents)
+    coverage_ids = [
+        coverage_unit_identity(unit) for unit in partition["coverage_units"]
+    ]
+    partition["coverage_digest"] = canonical_identity_digest(
+        "coverage", coverage_ids
+    )
+    partition["content_digest"] = canonical_identity_digest(
+        "partition-content",
+        [
+            partition["partition_id"],
+            partition["claim_set_digest"],
+            partition["coverage_digest"],
+        ],
+    )
+    partition["complete"] = (
+        bool(partition["coverage_units"])
+        and not partition["unresolved"]
+        and all(unit["state"] == "covered" for unit in partition["coverage_units"])
+    )
+
+
+def _compute_store_binding(
+    root: pathlib.Path,
+    request: dict[str, Any],
+    report: dict[str, Any],
+    *,
+    construct_fixture_rows: bool,
+) -> tuple[
+    dict[str, Any],
+    dict[tuple[tuple[str, str, str], str, str], list[dict[str, Any]]],
+]:
+    direct_basis = expected_direct_basis(root, request)
+    materializer_semantics = direct_basis["materializer_semantics_digest"]
+    worker_semantics = request["worker"]["semantic_contract_digest"]
+    materializer = {
+        "id": "cxxlens.clang22.materializer",
+        "semantic_contract": materializer_semantics,
+    }
+    worker = {
+        "id": request["worker"]["provider_id"],
+        "semantic_contract": worker_semantics,
+    }
+    guarantee = _claim_guarantee(request, report)
+    assumption_set = guarantee["assumptions"]
+    task_by_execution = {
+        task_execution_key(task): task for task in request["tasks"]
+    }
+    task_by_context = {
+        task_semantic_context_key(task_semantic_context(task)): task
+        for task in request["tasks"]
+    }
+    supplied_store = report.get("store") or {}
+    supplied_envelopes = {
+        row.get("claim_ref"): row
+        for row in supplied_store.get("claim_envelopes", [])
+        if isinstance(row, dict)
+    }
+    supplied_associations = supplied_store.get("origin_associations", [])
+
+    claim_rows: dict[str, dict[str, Any]] = {}
+    envelopes: dict[str, dict[str, Any]] = {}
+    edges: dict[tuple[str, str, str], dict[str, Any]] = {}
+    associations: dict[str, dict[str, Any]] = {}
+    final_occurrences: list[dict[str, Any]] = []
+    worker_assertions: dict[
+        tuple[tuple[str, str, str], str, str], list[dict[str, Any]]
+    ] = {}
+
+    def add_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
+        previous = envelopes.setdefault(envelope["claim_ref"], envelope)
+        if previous != envelope:
+            fail("materialization.claim-invalid", "claim ref aliases different occurrences")
+        row = {
+            "row_ref": envelope["row_ref"],
+            "descriptor_id": envelope["descriptor_id"],
+            "row_canonical_form": envelope["row_canonical_form"],
+        }
+        prior_row = claim_rows.setdefault(row["row_ref"], row)
+        if prior_row != row:
+            fail("materialization.claim-invalid", "claim row ref aliases different bytes")
+        return previous
+
+    def add_association(value: dict[str, Any]) -> None:
+        previous = associations.setdefault(value["association_id"], value)
+        if previous != value:
+            fail("materialization.claim-invalid", "claim association ID collision")
+
+    def worker_row_canonical(
+        descriptor_id: str,
+        binding: dict[str, Any],
+    ) -> str:
+        canonical_form = binding.get("row_canonical_form")
+        if (
+            not isinstance(canonical_form, str)
+            or content_digest(canonical_form.encode("utf-8"))
+            != binding["row_digest"]
+        ):
+            fail(
+                "materialization.claim-invalid",
+                "sealed worker row digest/canonical form differs",
+            )
+        _parse_detached_row_canonical_form(root, canonical_form, descriptor_id)
+        return canonical_form
+
+    def claim_pair(
+        *,
+        descriptor_id: str,
+        row_canonical_form: str,
+        condition: dict[str, Any],
+        interpretation: str,
+        provenance_root: str,
+        precursor_producer: dict[str, str],
+        transform: str | None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        precursor = add_envelope(
+            _make_sdk_claim_envelope(
+                root,
+                role=("stored_final" if transform is None else "hidden_precursor"),
+                descriptor_id=descriptor_id,
+                row_canonical_form=row_canonical_form,
+                condition=condition,
+                interpretation=interpretation,
+                stage="assertion",
+                producer=precursor_producer,
+                basis_digest=direct_basis["basis_digest"],
+                provenance_root=provenance_root,
+                guarantee=guarantee,
+            )
+        )
+        if transform is None:
+            return precursor, precursor
+        final = add_envelope(
+            _make_sdk_claim_envelope(
+                root,
+                role="stored_final",
+                descriptor_id=descriptor_id,
+                row_canonical_form=row_canonical_form,
+                condition=condition,
+                interpretation=interpretation,
+                stage="canonical_claim",
+                producer=materializer,
+                basis_digest=_canonical_basis_digest(precursor["content"], transform),
+                provenance_root=provenance_root,
+                guarantee=guarantee,
+            )
+        )
+        edge = {
+            "precursor_claim_ref": precursor["claim_ref"],
+            "final_claim_ref": final["claim_ref"],
+            "transform_semantics": transform,
+        }
+        edges[
+            (
+                edge["precursor_claim_ref"],
+                edge["final_claim_ref"],
+                edge["transform_semantics"],
+            )
+        ] = edge
+        return precursor, final
+
+    for result in report["task_results"]:
+        task = task_by_execution.get(task_execution_key(result))
+        if task is None:
+            fail("materialization.task-binding-mismatch", "Store task is unknown")
+        context = task_semantic_context(task)
+        for batch in result["batches"]:
+            descriptor_id = batch["descriptor_id"]
+            expected_roots = sorted(
+                _digest_projection(
+                    "cxxlens.clang22-fixture-provenance-edge.v2",
+                    {
+                        "descriptor_id": descriptor_id,
+                        "originating_task": binding["originating_task"],
+                        "row_digest": binding["row_digest"],
+                    },
+                )
+                for binding in batch["row_bindings"]
+            )
+            if batch["provenance_edge_digests"] != expected_roots:
+                fail(
+                    "materialization.claim-invalid",
+                    "worker row/provenance occurrence binding differs",
+                )
+            for binding in batch["row_bindings"]:
+                if binding["originating_task"] != context:
+                    fail(
+                        "materialization.task-binding-mismatch",
+                        "worker row is attributed to another task",
+                    )
+                provenance_root = _digest_projection(
+                    "cxxlens.clang22-fixture-provenance-edge.v2",
+                    {
+                        "descriptor_id": descriptor_id,
+                        "originating_task": binding["originating_task"],
+                        "row_digest": binding["row_digest"],
+                    },
+                )
+                condition = {
+                    "universe": context["condition_universe_id"],
+                    "fragments": [context["condition_id"]],
+                }
+                precursor, final = claim_pair(
+                    descriptor_id=descriptor_id,
+                    row_canonical_form=worker_row_canonical(descriptor_id, binding),
+                    condition=condition,
+                    interpretation=context["interpretation_domain"],
+                    provenance_root=provenance_root,
+                    precursor_producer=worker,
+                    transform=(
+                        direct_basis["canonical_adoption_transform_digest"]
+                        if DESCRIPTOR_STAGE[descriptor_id] == "canonical_claim"
+                        else None
+                    ),
+                )
+                if (
+                    not construct_fixture_rows
+                    and binding["worker_assertion_claim_ref"]
+                    != precursor["claim_ref"]
+                ):
+                    fail(
+                        "materialization.claim-invalid",
+                        "worker row assertion claim ref differs",
+                    )
+                key = (task_execution_key(task), descriptor_id, binding["row_digest"])
+                worker_assertions.setdefault(key, []).append(precursor)
+                association = _claim_association(
+                    stored_claim_ref=final["claim_ref"],
+                    originating_task=context,
+                    sealed_row_digest=binding["row_digest"],
+                    source_evidence_digest=(
+                        binding["primary_span_bundle_digest"]
+                        or binding["limitation_digest"]
+                    ),
+                )
+                add_association(association)
+                final_occurrences.append(
+                    {
+                        "envelope": final,
+                        "context": context,
+                        "association_id": association["association_id"],
+                        "base": False,
+                    }
+                )
+
+    base_rows = base_claim_rows(root, request)
+    span_rows, _ = validated_span_rows(
+        request,
+        report["span_validation"]["validated_bundle_bindings"],
+    )
+    base_rows["source.span.v1"] = span_rows
+    base_by_identity = {
+        descriptor_id: {
+            row[BASE_RESULT_FIELDS[descriptor_id]]: row
+            for row in rows
+        }
+        for descriptor_id, rows in base_rows.items()
+    }
+    base_seen: set[tuple[tuple[str, ...], str]] = set()
+    for result in report["base_claims"]["descriptor_results"]:
+        descriptor_id = result["descriptor_id"]
+        relation = admitted_registry_relations(root)[descriptor_id]
+        for binding in result["row_envelope_bindings"]:
+            base_row = base_by_identity[descriptor_id].get(binding["row_identity"])
+            if (
+                base_row is None
+                or base_claim_row_digest(descriptor_id, base_row)
+                != binding["row_digest"]
+            ):
+                fail("materialization.claim-invalid", "base Store row binding differs")
+            row_canonical_form = detached_row_canonical_form(relation, base_row)
+            for base_association in binding["origin_associations"]:
+                context = base_association["originating_task"]
+                context_key = task_semantic_context_key(context)
+                if context_key not in task_by_context:
+                    fail(
+                        "materialization.claim-invalid",
+                        "base occurrence references an unknown semantic task",
+                    )
+                base_seen.add((context_key, descriptor_id))
+                condition = {
+                    "universe": context["condition_universe_id"],
+                    "fragments": [context["condition_id"]],
+                }
+                precursor, final = claim_pair(
+                    descriptor_id=descriptor_id,
+                    row_canonical_form=row_canonical_form,
+                    condition=condition,
+                    interpretation=context["interpretation_domain"],
+                    provenance_root=base_association["provenance_edge"][
+                        "subject_digest"
+                    ],
+                    precursor_producer=materializer,
+                    transform=direct_basis["base_ingestion_transform_digest"],
+                )
+                source_evidence = _digest_projection(
+                    "cxxlens.clang22-base-source-evidence.v1",
+                    base_association["evidence_edges"],
+                )
+                association = _claim_association(
+                    stored_claim_ref=final["claim_ref"],
+                    originating_task=context,
+                    sealed_row_digest=binding["row_digest"],
+                    source_evidence_digest=source_evidence,
+                )
+                add_association(association)
+                final_occurrences.append(
+                    {
+                        "envelope": final,
+                        "context": context,
+                        "association_id": association["association_id"],
+                        "base": True,
+                    }
+                )
+
+    partition_groups: dict[tuple[str, ...], dict[str, Any]] = {}
+
+    def partition_for(
+        descriptor_id: str,
+        context: dict[str, Any],
+        producer_semantics: str,
+        producer_input_basis_digest: str,
+        *,
+        empty: bool,
+        base: bool,
+    ) -> dict[str, Any]:
+        condition = {
+            "universe": context["condition_universe_id"],
+            "fragments": [context["condition_id"]],
+        }
+        candidate = {
+            "relation_descriptor_id": descriptor_id,
+            "scope": request["project"]["project_id"],
+            "condition": condition,
+            "interpretation": context["interpretation_domain"],
+            "producer_semantics": producer_semantics,
+            "producer_input_basis_digest": producer_input_basis_digest,
+            "precision_profile": "exact",
+            "assumption_set_id": assumption_set,
+            "empty_partition": empty,
+            "stored_claim_refs": [],
+            "claim_content_digests": [],
+            "sdk_claim_occurrence_count": 0,
+            "origin_association_count": 0,
+            "coverage_units": [],
+            "unresolved": [],
+            "partition_id": "pending",
+            "claim_set_digest": "pending",
+            "coverage_digest": "pending",
+            "content_digest": "pending",
+            "claim_count": 0,
+            "complete": True,
+        }
+        key = tuple(_partition_identity_fields(candidate))
+        partition = partition_groups.setdefault(key, candidate)
+        if partition["empty_partition"] != empty:
+            fail("materialization.claim-invalid", "empty/nonempty partition identity alias")
+        partition["coverage_units"].extend(
+            _coverage_units(context, descriptor_id, base=base)
+        )
+        return partition
+
+    association_rows = list(associations.values())
+    for occurrence in final_occurrences:
+        envelope = occurrence["envelope"]
+        context = occurrence["context"]
+        partition = partition_for(
+            envelope["descriptor_id"],
+            context,
+            envelope["producer"]["semantic_contract"],
+            claim_input_basis_digest(envelope["input_basis"]),
+            empty=False,
+            base=occurrence["base"],
+        )
+        partition["stored_claim_refs"].append(envelope["claim_ref"])
+        partition["claim_content_digests"].append(envelope["content"])
+    for partition in partition_groups.values():
+        refs = set(partition["stored_claim_refs"])
+        partition["origin_association_count"] = sum(
+            association["stored_claim_ref"] in refs
+            for association in association_rows
+        )
+
+    for result in report["task_results"]:
+        task = task_by_execution[task_execution_key(result)]
+        context = task_semantic_context(task)
+        for batch in result["batches"]:
+            if batch["row_bindings"]:
+                continue
+            descriptor_id = batch["descriptor_id"]
+            canonical = DESCRIPTOR_STAGE[descriptor_id] == "canonical_claim"
+            producer_semantics = materializer_semantics if canonical else worker_semantics
+            transform = (
+                direct_basis["canonical_adoption_transform_digest"]
+                if canonical
+                else worker_semantics
+            )
+            condition = {
+                "universe": context["condition_universe_id"],
+                "fragments": [context["condition_id"]],
+            }
+            partition_for(
+                descriptor_id,
+                context,
+                producer_semantics,
+                _empty_partition_basis_digest(
+                    direct_basis["basis_digest"],
+                    descriptor_id,
+                    condition,
+                    context["interpretation_domain"],
+                    producer_semantics,
+                    transform,
+                ),
+                empty=True,
+                base=False,
+            )
+    for context_key, task in task_by_context.items():
+        context = task_semantic_context(task)
+        for descriptor_id in BASE_DESCRIPTOR_IDS:
+            if (context_key, descriptor_id) in base_seen:
+                continue
+            condition = {
+                "universe": context["condition_universe_id"],
+                "fragments": [context["condition_id"]],
+            }
+            partition_for(
+                descriptor_id,
+                context,
+                materializer_semantics,
+                _empty_partition_basis_digest(
+                    direct_basis["basis_digest"],
+                    descriptor_id,
+                    condition,
+                    context["interpretation_domain"],
+                    materializer_semantics,
+                    direct_basis["base_ingestion_transform_digest"],
+                ),
+                empty=True,
+                base=True,
+            )
+
+    partitions = list(partition_groups.values())
+    for partition in partitions:
+        bind_store_partition_identities(partition)
+    partitions.sort(key=lambda partition: partition["partition_id"])
+    manifests = [
+        {
+            "partition_id": partition["partition_id"],
+            "relation_descriptor_id": partition["relation_descriptor_id"],
+            "input_basis_digest": partition["producer_input_basis_digest"],
+            "claim_set_digest": partition["claim_set_digest"],
+            "coverage_digest": partition["coverage_digest"],
+            "content_digest": partition["content_digest"],
+            "claim_count": partition["claim_count"],
+            "complete": partition["complete"],
+        }
+        for partition in partitions
+    ]
+    snapshot = {
+        "schema": "cxxlens.snapshot-manifest.v1",
+        "snapshot_semantics_version": "1.0.0",
+        "catalog_semantic_digest": request["project"]["catalog_digest"],
+        "condition_universe_id": request["publication"]["selector"][
+            "condition_universe_id"
+        ],
+        "relation_registry_digest": request["engine"]["engine_registry_digest"],
+        "interpretation_policy_digest": request["interpretation_policy"][
+            "interpretation_policy_digest"
+        ],
+        "partitions": manifests,
+        "closure_ids": [],
+        "snapshot_id": "pending",
+    }
+    snapshot["snapshot_id"] = canonical_identity_digest(
+        "snapshot",
+        [
+            snapshot["snapshot_semantics_version"],
+            snapshot["catalog_semantic_digest"],
+            snapshot["condition_universe_id"],
+            snapshot["relation_registry_digest"],
+            snapshot["interpretation_policy_digest"],
+            [
+                [
+                    manifest["partition_id"],
+                    manifest["content_digest"],
+                    manifest["coverage_digest"],
+                ]
+                for manifest in manifests
+            ],
+            [],
+        ],
+    )
+    final_by_ref = {
+        occurrence["envelope"]["claim_ref"]: occurrence["envelope"]
+        for occurrence in final_occurrences
+    }
+    final_envelopes = [final_by_ref[key] for key in sorted(final_by_ref)]
+    claim_batch = {
+        "contract": "cxxlens.claim-batch.v2",
+        "final_claim_refs": sorted(final_by_ref),
+        "sdk_claim_occurrence_count": len(final_envelopes),
+        "unique_claim_content_count": len(
+            {envelope["content"] for envelope in final_envelopes}
+        ),
+        "unresolved_count": 0,
+        "conflict_count": 0,
+        "differential_disagreement_count": 0,
+        "content_digest": sdk_claim_batch_content_digest(final_envelopes),
+    }
+    store = {
+        "selector": {
+            "fields": copy.deepcopy(request["publication"]["selector"]),
+            "series_id": request["publication"]["series_id"],
+        },
+        "direct_basis": direct_basis,
+        "claim_rows": [claim_rows[key] for key in sorted(claim_rows)],
+        "claim_envelopes": [envelopes[key] for key in sorted(envelopes)],
+        "canonicalization_edges": [edges[key] for key in sorted(edges)],
+        "origin_associations": [associations[key] for key in sorted(associations)],
+        "claim_batch_validation": claim_batch,
+        "partitions": partitions,
+        "snapshot_manifest": snapshot,
+    }
+    return store, worker_assertions
+
+
+def expected_store_binding(
+    root: pathlib.Path,
+    request: dict[str, Any],
+    report: dict[str, Any],
+    *,
+    construct_fixture_rows: bool = False,
+) -> dict[str, Any]:
+    store, _ = _compute_store_binding(
+        root,
+        request,
+        report,
+        construct_fixture_rows=construct_fixture_rows,
+    )
+    return store
+
+
+def bind_batch_sdk_claim_summaries(
+    root: pathlib.Path,
+    request: dict[str, Any],
+    report: dict[str, Any],
+    *,
+    construct_fixture_rows: bool,
+) -> dict[str, Any]:
+    store, assertions = _compute_store_binding(
+        root,
+        request,
+        report,
+        construct_fixture_rows=construct_fixture_rows,
+    )
+    for result in report["task_results"]:
+        execution_key = task_execution_key(result)
+        for batch in result["batches"]:
+            claims: dict[str, dict[str, Any]] = {}
+            for binding in batch["row_bindings"]:
+                key = (execution_key, batch["descriptor_id"], binding["row_digest"])
+                binding_claims = assertions.get(key, [])
+                binding_refs = {envelope["claim_ref"] for envelope in binding_claims}
+                if len(binding_refs) != 1:
+                    fail(
+                        "materialization.claim-invalid",
+                        "worker row does not bind exactly one assertion occurrence",
+                    )
+                binding["worker_assertion_claim_ref"] = next(iter(binding_refs))
+                for envelope in binding_claims:
+                    previous = claims.setdefault(envelope["claim_ref"], envelope)
+                    if previous != envelope:
+                        fail(
+                            "materialization.claim-invalid",
+                            "worker assertion ref aliases different occurrences",
+                        )
+            ordered = [claims[key] for key in sorted(claims)]
+            batch["worker_assertion_claim_refs"] = [
+                envelope["claim_ref"] for envelope in ordered
+            ]
+            batch["worker_assertion_claim_occurrence_count"] = len(ordered)
+            batch["claim_content_ids"] = sorted(
+                {envelope["content"] for envelope in ordered}
+            )
+            batch["claim_content_count"] = len(batch["claim_content_ids"])
+    return store
+
+
+def _publication_identity_projection(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: record[key]
+        for key in (
+            "publication_id",
+            "series_id",
+            "snapshot_id",
+            "sequence",
+            "parent_publication",
+        )
+    }
+
+
+def _reopened_annotation(envelope: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "relation_descriptor_id": envelope["descriptor_id"],
+        "row_canonical_form": envelope["row_canonical_form"],
+        "presence": copy.deepcopy(envelope["presence"]),
+        "interpretation": envelope["interpretation"],
+        "semantic_key": envelope["semantic_key"],
+        "assertion": envelope["assertion"],
+        "content": envelope["content"],
+        "producer": copy.deepcopy(envelope["producer"]),
+        "provenance_root": envelope["provenance_root"],
+        "guarantee": copy.deepcopy(envelope["guarantee"]),
+    }
+
+
+def _reopened_handle_projection(
+    request: dict[str, Any],
+    store: dict[str, Any],
+    record: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    descriptors = sorted(
+        copy.deepcopy(request["engine"]["admitted_descriptors"]),
+        key=lambda row: row["descriptor_id"],
+    )
+    final_envelopes = [
+        envelope
+        for envelope in store["claim_envelopes"]
+        if envelope["role"] == "stored_final"
+    ]
+    annotations = sorted(
+        (_reopened_annotation(envelope) for envelope in final_envelopes),
+        key=lambda row: canonical_json(row),
+    )
+    rows_by_descriptor: dict[str, list[str]] = {
+        descriptor["descriptor_id"]: [] for descriptor in descriptors
+    }
+    annotations_by_descriptor: dict[str, list[dict[str, Any]]] = {
+        descriptor["descriptor_id"]: [] for descriptor in descriptors
+    }
+    coverage_by_descriptor: dict[str, list[dict[str, Any]]] = {
+        descriptor["descriptor_id"]: [] for descriptor in descriptors
+    }
+    for envelope in final_envelopes:
+        rows_by_descriptor[envelope["descriptor_id"]].append(
+            envelope["row_canonical_form"]
+        )
+    for annotation in annotations:
+        annotations_by_descriptor[annotation["relation_descriptor_id"]].append(
+            annotation
+        )
+    coverage: list[dict[str, Any]] = []
+    for partition in store["partitions"]:
+        descriptor_id = partition["relation_descriptor_id"]
+        for unit in partition["coverage_units"]:
+            row = {
+                "relation_descriptor_id": descriptor_id,
+                "unit": copy.deepcopy(unit),
+            }
+            coverage.append(row)
+            coverage_by_descriptor[descriptor_id].append(copy.deepcopy(unit))
+    coverage.sort(key=lambda row: canonical_json(row))
+    partition_bindings = [
+        {
+            key: copy.deepcopy(partition[key])
+            for key in (
+                "partition_id",
+                "relation_descriptor_id",
+                "scope",
+                "condition",
+                "interpretation",
+                "producer_semantics",
+                "producer_input_basis_digest",
+                "precision_profile",
+                "assumption_set_id",
+            )
+        }
+        for partition in store["partitions"]
+    ]
+    partition_bindings.sort(key=lambda row: row["partition_id"])
+    relations = []
+    for descriptor in descriptors:
+        descriptor_id = descriptor["descriptor_id"]
+        relation = {
+            "relation_descriptor_id": descriptor_id,
+            "row_canonical_forms": sorted(set(rows_by_descriptor[descriptor_id])),
+            "claim_annotations": sorted(
+                annotations_by_descriptor[descriptor_id],
+                key=lambda row: canonical_json(row),
+            ),
+            "coverage": sorted(
+                coverage_by_descriptor[descriptor_id],
+                key=lambda row: canonical_json(row),
+            ),
+        }
+        relations.append(relation)
+    cursor = {
+        "specification": "cxxlens.clang22-materialization-reopen-cursor.v1",
+        "relations": relations,
+        "digest": "pending",
+    }
+    cursor["digest"] = _digest_projection(
+        "cxxlens.clang22-materialization-reopen-cursor.v1",
+        {key: cursor[key] for key in ("specification", "relations")},
+    )
+    canonical_export_projection = {
+        "schema": "cxxlens.snapshot-export.v1",
+        "snapshot_manifest": store["snapshot_manifest"],
+        "claim_contents": sorted(
+            {envelope["content"] for envelope in final_envelopes}
+        ),
+        "rows": relations,
+        "partition_bindings": partition_bindings,
+        "partition_envelopes": [
+            {
+                "partition_id": partition["partition_id"],
+                "stored_claim_refs": partition["stored_claim_refs"],
+                "coverage_units": partition["coverage_units"],
+                "unresolved": partition["unresolved"],
+            }
+            for partition in store["partitions"]
+        ],
+    }
+    canonical_export_digest = content_digest(
+        canonical_json(canonical_export_projection)
+    )
+    semantic_fields = {
+        "backend": request["publication"]["backend"],
+        "snapshot_manifest": store["snapshot_manifest"],
+        "snapshot_manifest_digest": content_digest(
+            canonical_json(store["snapshot_manifest"])
+        ),
+        "descriptors": descriptors,
+        "partition_binding_multiset_digest": _digest_projection(
+            "cxxlens.clang22-reopened-partition-binding-multiset.v1",
+            partition_bindings,
+        ),
+        "row_multiset_digest": _digest_projection(
+            "cxxlens.clang22-reopened-row-multiset.v1",
+            [
+                [relation["relation_descriptor_id"], relation["row_canonical_forms"]]
+                for relation in relations
+            ],
+        ),
+        "claim_annotation_multiset_digest": _digest_projection(
+            "cxxlens.clang22-reopened-claim-annotation-multiset.v1",
+            annotations,
+        ),
+        "coverage_multiset_digest": _digest_projection(
+            "cxxlens.clang22-reopened-coverage-multiset.v1",
+            coverage,
+        ),
+        "unresolved_digest": _digest_projection(
+            "cxxlens.clang22-reopened-unresolved.v1", []
+        ),
+        "closure_digest": _digest_projection(
+            "cxxlens.clang22-reopened-closure.v1", []
+        ),
+        "cursor_projection_digest": cursor["digest"],
+        "canonical_export_digest": canonical_export_digest,
+    }
+    semantic_digest_value = _digest_projection(
+        "cxxlens.clang22-reopened-semantic-projection.v1", semantic_fields
+    )
+    projection = {
+        "backend": semantic_fields["backend"],
+        "publication_record": copy.deepcopy(record),
+        "snapshot_manifest": copy.deepcopy(store["snapshot_manifest"]),
+        "snapshot_manifest_digest": semantic_fields["snapshot_manifest_digest"],
+        "descriptors": descriptors,
+        "partition_binding_multiset_digest": semantic_fields[
+            "partition_binding_multiset_digest"
+        ],
+        "row_multiset_digest": semantic_fields["row_multiset_digest"],
+        "claim_annotation_multiset_digest": semantic_fields[
+            "claim_annotation_multiset_digest"
+        ],
+        "coverage_multiset_digest": semantic_fields["coverage_multiset_digest"],
+        "unresolved_digest": semantic_fields["unresolved_digest"],
+        "closure_digest": semantic_fields["closure_digest"],
+        "cursor_projection_digest": semantic_fields["cursor_projection_digest"],
+        "canonical_export_digest": canonical_export_digest,
+        "semantic_projection_digest": semantic_digest_value,
+        "handle_projection_digest": "pending",
+    }
+    projection["handle_projection_digest"] = _digest_projection(
+        "cxxlens.clang22-reopened-handle-projection.v1",
+        {key: value for key, value in projection.items() if key != "handle_projection_digest"},
+    )
+    reopened = {
+        "backend": request["publication"]["backend"],
+        "selector": copy.deepcopy(store["selector"]),
+        "publication_record": copy.deepcopy(record),
+        "snapshot_manifest": copy.deepcopy(store["snapshot_manifest"]),
+        "descriptors": descriptors,
+        "partition_bindings": partition_bindings,
+        "claim_annotations": annotations,
+        "coverage": coverage,
+        "unresolved": [],
+        "canonical_export_digest": canonical_export_digest,
+        "cursor_projection": cursor,
+        "handle_receipts": [],
+    }
+    return projection, reopened
+
+
+def _present_reopened_receipt(
+    access_path: str,
+    lookup: dict[str, Any],
+    projection: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "access_path": access_path,
+        "lookup": copy.deepcopy(lookup),
+        "status": "present",
+        "sdk_code": None,
+        "sdk_field": None,
+        "projection": copy.deepcopy(projection),
+    }
+
+
+def expected_reopened_store(
+    request: dict[str, Any],
+    store: dict[str, Any],
+    record: dict[str, Any],
+) -> dict[str, Any]:
+    projection, reopened = _reopened_handle_projection(request, store, record)
+    receipts = [
+        _present_reopened_receipt(
+            "current-selector", {"selector": store["selector"]}, projection
+        ),
+        _present_reopened_receipt(
+            "open-publication",
+            {"publication_id": record["publication_id"]},
+            projection,
+        ),
+        _present_reopened_receipt(
+            "open-snapshot", {"snapshot_id": record["snapshot_id"]}, projection
+        ),
+    ]
+    reopened["handle_receipts"] = receipts
+    return reopened
+
+
+def validate_committed_verified_reopened_store(
+    request: dict[str, Any],
+    report: dict[str, Any],
+) -> None:
+    publication = report["publication"]
+    invocation_record = publication["invocation_committed_record"]
+    reopened = report["semantic_verification"]["reopened_store"]
+    expected = expected_reopened_store(request, report["store"], invocation_record)
+    outer_fields = {
+        key: value
+        for key, value in reopened.items()
+        if key not in {"publication_record", "handle_receipts"}
+    }
+    expected_outer_fields = {
+        key: value
+        for key, value in expected.items()
+        if key not in {"publication_record", "handle_receipts"}
+    }
+    if outer_fields != expected_outer_fields:
+        fail(
+            "materialization.store-failure",
+            "reopened Store semantic projection differs",
+        )
+    receipts = reopened["handle_receipts"]
+    expected_receipts = expected["handle_receipts"]
+    semantic_projection_digests: set[str] = set()
+    for receipt, expected_receipt in zip(receipts, expected_receipts):
+        if (
+            receipt["access_path"] != expected_receipt["access_path"]
+            or receipt["lookup"] != expected_receipt["lookup"]
+            or receipt["status"] != "present"
+            or receipt["sdk_code"] is not None
+            or receipt["sdk_field"] is not None
+        ):
+            fail(
+                "materialization.store-failure",
+                "passed reopened Store handle receipt differs",
+            )
+        projection = receipt["projection"]
+        expected_projection = expected_receipt["projection"]
+        semantic_fields = {
+            key: value
+            for key, value in projection.items()
+            if key not in {"publication_record", "handle_projection_digest"}
+        }
+        expected_semantic_fields = {
+            key: value
+            for key, value in expected_projection.items()
+            if key not in {"publication_record", "handle_projection_digest"}
+        }
+        if semantic_fields != expected_semantic_fields:
+            fail(
+                "materialization.store-failure",
+                "reopened handle semantic snapshot projection differs",
+            )
+        _validate_reopened_handle_projection(
+            projection,
+            expected_series_id=(
+                projection["publication_record"]["series_id"]
+                if receipt["access_path"] == "open-snapshot"
+                else publication["series_id"]
+            ),
+        )
+        returned_record = projection["publication_record"]
+        if receipt["access_path"] in {"current-selector", "open-publication"}:
+            _validate_recovered_publication_transition(
+                invocation_record,
+                returned_record,
+                subject=receipt["access_path"],
+            )
+        elif returned_record["snapshot_id"] != publication["candidate_snapshot_id"]:
+            fail(
+                "materialization.store-failure",
+                "open-snapshot returned a different semantic snapshot",
+            )
+        semantic_projection_digests.add(projection["semantic_projection_digest"])
+    if len(semantic_projection_digests) != 1:
+        fail(
+            "materialization.store-failure",
+            "reopened handle semantic projections differ across access paths",
+        )
+    if reopened["publication_record"] != receipts[0]["projection"]["publication_record"]:
+        fail(
+            "materialization.store-failure",
+            "reopened Store current publication record differs",
+        )
+
+
+def bind_committed_verified_publication(
+    request: dict[str, Any],
+    report: dict[str, Any],
+) -> None:
+    snapshot_id = report["store"]["snapshot_manifest"]["snapshot_id"]
+    parent = request["publication"]["expected_parent_publication"]
+    sequence = 1
+    record = {
+        "publication_id": "pending",
+        "series_id": request["publication"]["series_id"],
+        "snapshot_id": snapshot_id,
+        "sequence": sequence,
+        "physical_generation": 1,
+        "parent_publication": parent,
+        "state": "committed",
+        "corrupt": False,
+    }
+    record["publication_id"] = canonical_identity_digest(
+        "publication",
+        [record["series_id"], snapshot_id, sequence, parent or ""],
+    )
+    backend = request["publication"]["backend"]
+    report["publication"] = {
+        "backend": backend,
+        "selector": copy.deepcopy(request["publication"]["selector"]),
+        "series_id": request["publication"]["series_id"],
+        "genesis": request["publication"]["genesis"],
+        "expected_parent_publication": parent,
+        "observed_parent_publication": parent,
+        "observed_parent_record": None,
+        "head_observation": "absent",
+        "publication_attempted": True,
+        "outcome": "committed_verified",
+        "partial_policy": "forbid",
+        "candidate_snapshot_id": snapshot_id,
+        "candidate_identity_state": "constructed",
+        "candidate_identity": _publication_identity_projection(record),
+        "invocation_commit_state": "committed",
+        "committed_transaction_count": 1,
+        "invocation_committed_record": copy.deepcopy(record),
+        "terminal_head": {"status": "present", "record": copy.deepcopy(record)},
+        "candidate_visibility": "present_by_invocation",
+        "prior_history_retained": True,
+        "head_effect": "advanced_to_candidate",
+        "store_failure": None,
+        "sqlite_reopen_status": "opened" if backend == "sqlite" else "not_applicable",
+        "recovery_receipt": None,
+    }
+    report["semantic_verification"] = {
+        "status": "passed",
+        "reopened_store": expected_reopened_store(
+            request, report["store"], record
+        ),
+        "reopen_attempt": None,
+        "failure": None,
+    }
+
+
 def rebind_report_digest_chain(
     root: pathlib.Path,
     request: dict[str, Any],
@@ -4169,6 +6580,23 @@ def rebind_report_digest_chain(
 
     tasks = {task_execution_key(task): task for task in request["tasks"]}
     results = report["task_results"]
+    span_rows, span_bindings = validated_span_rows(
+        request,
+        report["span_validation"]["validated_bundle_bindings"],
+    )
+    report["span_validation"].update(span_report_digests(span_bindings, span_rows))
+    report["base_claims"] = base_claim_report(
+        root,
+        request,
+        report["side_channels"]["guarantee"]["digest"],
+        span_bindings,
+    )
+    report["store"] = bind_batch_sdk_claim_summaries(
+        root,
+        request,
+        report,
+        construct_fixture_rows=True,
+    )
     for result in results:
         task = tasks[task_execution_key(result)]
         for batch in result["batches"]:
@@ -4216,34 +6644,40 @@ def rebind_report_digest_chain(
         report["side_channels"],
         results,
     )
-    report["claim_stages"] = [
-        expected_claim_stage(results, descriptor, guarantee["digest"])
-        for descriptor in DESCRIPTOR_IDS
-    ]
-    report["provenance"]["edge_set_digest"] = expected_global_provenance_digest(
-        report["provenance"],
-        report["claim_stages"],
-    )
-    span_rows, span_bindings = validated_span_rows(
-        request,
-        report["span_validation"]["validated_bundle_bindings"],
-    )
-    report["span_validation"].update(
-        span_report_digests(span_bindings, span_rows)
-    )
     report["base_claims"] = base_claim_report(
         root,
         request,
         guarantee["digest"],
         span_bindings,
     )
+    report["store"] = expected_store_binding(
+        root,
+        request,
+        report,
+        construct_fixture_rows=True,
+    )
+    report["claim_stages"] = [
+        expected_claim_stage(results, descriptor, guarantee["digest"], report["store"])
+        for descriptor in DESCRIPTOR_IDS
+    ]
+    report["provenance"]["edge_set_digest"] = expected_global_provenance_digest(
+        report["provenance"],
+        report["claim_stages"],
+    )
+    if report["result"] == "passed":
+        bind_committed_verified_publication(request, report)
 
 
-def sample_report(root: pathlib.Path, request: dict[str, Any]) -> dict[str, Any]:
+def sample_report(
+    root: pathlib.Path,
+    request: dict[str, Any],
+    *,
+    request_bytes: bytes | None = None,
+) -> dict[str, Any]:
     configuration = request["tool"]["package_configuration"]
     backend = request["publication"]["backend"]
     task_count = len(request["tasks"])
-    task_results = [_task_report(request, task) for task in request["tasks"]]
+    task_results = [_task_report(root, request, task) for task in request["tasks"]]
     observation_rows = {
         (
             task_semantic_context_key(binding["originating_task"]),
@@ -4335,10 +6769,7 @@ def sample_report(root: pathlib.Path, request: dict[str, Any]) -> dict[str, Any]
         side_channels,
         task_results,
     )
-    claim_stages = [
-        expected_claim_stage(task_results, descriptor, guarantee["digest"])
-        for descriptor in DESCRIPTOR_IDS
-    ]
+    claim_stages: list[dict[str, Any]] = []
     provenance = {
         "record_type": "typed-provenance-edge-summary",
         "edge_count": 3 * task_count,
@@ -4348,17 +6779,18 @@ def sample_report(root: pathlib.Path, request: dict[str, Any]) -> dict[str, Any]
         "ambiguous_count": 0,
         "edge_set_digest": "pending",
     }
-    provenance["edge_set_digest"] = expected_global_provenance_digest(
-        provenance,
-        claim_stages,
-    )
-    return {
-        "schema": "cxxlens.clang22-materialization-report.v1",
-        "report_version": "1.0.0",
+    provenance["edge_set_digest"] = "pending"
+    exact_request_bytes = canonical_json(request) if request_bytes is None else request_bytes
+    report = {
+        "schema": "cxxlens.clang22-materialization-report.v2",
+        "report_version": "2.0.0",
+        "response_kind": "detailed",
         "result": "passed",
         "generated_at": datetime.datetime(
             2026, 7, 19, tzinfo=datetime.timezone.utc
         ).isoformat().replace("+00:00", "Z"),
+        "process_exit_status": 0,
+        "raw_input_observation": raw_input_observation(exact_request_bytes),
         "source": {
             "revision": request["tool"]["source_revision"],
             "tree": request["tool"]["source_tree"],
@@ -4403,12 +6835,17 @@ def sample_report(root: pathlib.Path, request: dict[str, Any]) -> dict[str, Any]
             )
         },
         "registry": {
-            "registry_digest": request["registry"]["registry_digest"],
+            "authority_registry_digest": request["registry"][
+                "authority_registry_digest"
+            ],
             "base_descriptors": copy.deepcopy(
                 request["registry"]["base_descriptors"]
             ),
             "descriptors": copy.deepcopy(request["registry"]["descriptors"]),
         },
+        "engine": copy.deepcopy(request["engine"]),
+        "interpretation_policy": copy.deepcopy(request["interpretation_policy"]),
+        "trust_policy": copy.deepcopy(request["trust_policy"]),
         "adoption": {
             "boundary": "sealed-materialization-result",
             "visibility": "tool-private-immutable",
@@ -4455,75 +6892,351 @@ def sample_report(root: pathlib.Path, request: dict[str, Any]) -> dict[str, Any]
         "side_channels": side_channels,
         "claim_stages": claim_stages,
         "provenance": provenance,
+        "store": {},
         "publication": {
             "backend": backend,
+            "selector": copy.deepcopy(request["publication"]["selector"]),
             "series_id": request["publication"]["series_id"],
             "genesis": request["publication"]["genesis"],
             "expected_parent_publication": request["publication"]["expected_parent_publication"],
             "observed_parent_publication": request["publication"]["expected_parent_publication"],
-            "cas_verdict": "matched",
+            "observed_parent_record": None,
+            "head_observation": "absent",
+            "publication_attempted": True,
+            "outcome": "committed_verified",
             "partial_policy": "forbid",
+            "candidate_snapshot_id": "pending",
+            "candidate_identity_state": "constructed",
+            "candidate_identity": None,
+            "invocation_commit_state": "committed",
             "committed_transaction_count": 1,
-            "committed": True,
-            "publication_id": f"publication:{configuration}:{backend}",
-            "snapshot_id": "snapshot:fixture",
-            "prior_head_preserved": True,
-            "sqlite_reopened": backend == "sqlite",
+            "invocation_committed_record": None,
+            "terminal_head": {"status": "absent", "record": None},
+            "candidate_visibility": "present_by_invocation",
+            "prior_history_retained": True,
+            "head_effect": "advanced_to_candidate",
+            "store_failure": None,
+            "sqlite_reopen_status": "opened" if backend == "sqlite" else "not_applicable",
+            "recovery_receipt": None,
         },
         "semantic_verification": {
             "status": "passed",
-            "canonical_export_digest": "sha256:" + "9" * 64,
-            "query_digest": "sha256:" + "a" * 64,
-            "snapshot_identity_recomputed": True,
-            "reopened_store_verified": True,
+            "reopened_store": None,
+            "reopen_attempt": None,
+            "failure": None,
         },
         "authority_digests": copy.deepcopy(authority_bindings(root)),
         "error": None,
     }
+    rebind_report_digest_chain(root, request, report)
+    return report
+
+
+def _publication_record_identity(record: dict[str, Any]) -> str:
+    return canonical_identity_digest(
+        "publication",
+        [
+            record["series_id"],
+            record["snapshot_id"],
+            record["sequence"],
+            record["parent_publication"] or "",
+        ],
+    )
+
+
+def _validate_publication_record(
+    record: dict[str, Any],
+    *,
+    expected_series_id: str,
+    subject: str,
+) -> None:
+    if (
+        record["series_id"] != expected_series_id
+        or record["publication_id"] != _publication_record_identity(record)
+    ):
+        fail(
+            "materialization.store-failure",
+            f"{subject} publication identity differs",
+        )
+
+
+def _same_semantic_publication(
+    left: dict[str, Any],
+    right: dict[str, Any],
+) -> bool:
+    return all(
+        left[field] == right[field]
+        for field in (
+            "publication_id",
+            "series_id",
+            "snapshot_id",
+            "sequence",
+            "parent_publication",
+            "state",
+            "corrupt",
+        )
+    )
+
+
+def _validate_recovered_publication_transition(
+    earlier: dict[str, Any],
+    recovered: dict[str, Any],
+    *,
+    subject: str,
+) -> None:
+    if (
+        not _same_semantic_publication(earlier, recovered)
+        or recovered["physical_generation"] < earlier["physical_generation"]
+    ):
+        fail(
+            "materialization.store-failure",
+            f"{subject} recovery publication transition differs",
+        )
+
+
+def _expected_recovery_selector(request: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "fields": copy.deepcopy(request["publication"]["selector"]),
+        "series_id": request["publication"]["series_id"],
+    }
+
+
+def _lookup_error_is_corruption(code: str | None) -> bool:
+    return code is not None and "corrupt" in code
+
+
+def _validate_publication_recovery_receipt(
+    request: dict[str, Any],
+    publication: dict[str, Any],
+) -> None:
+    receipt = publication["recovery_receipt"]
+    if receipt is None or receipt["selector"] != _expected_recovery_selector(request):
+        fail("materialization.store-failure", "publication recovery selector differs")
+    candidate = publication["candidate_identity"]
+    candidate_id = None if candidate is None else candidate["publication_id"]
+    expected_parent = request["publication"]["expected_parent_publication"]
+    lookups = receipt["current"], receipt["expected_parent"], receipt["candidate"]
+    if receipt["reopen_status"] == "open_failed":
+        expected_statuses = (
+            "not_attempted",
+            "not_attempted",
+            "not_attempted" if candidate_id is not None else "not_applicable",
+        )
+        expected_ids = (None, expected_parent, candidate_id)
+        if (
+            receipt["open_error_code"] is None
+            or receipt["open_error_field"] is None
+            or tuple(row["status"] for row in lookups) != expected_statuses
+            or tuple(row["requested_publication_id"] for row in lookups)
+            != expected_ids
+        ):
+            fail(
+                "materialization.store-failure",
+                "open-failed publication recovery receipt differs",
+            )
+    else:
+        expected_ids = (None, expected_parent, candidate_id)
+        if (
+            receipt["open_error_code"] is not None
+            or receipt["open_error_field"] is not None
+            or tuple(row["requested_publication_id"] for row in lookups)
+            != expected_ids
+            or (expected_parent is None)
+            != (receipt["expected_parent"]["status"] == "not_applicable")
+            or (candidate_id is None)
+            != (receipt["candidate"]["status"] == "not_applicable")
+        ):
+            fail(
+                "materialization.store-failure",
+                "opened publication recovery receipt differs",
+            )
+    for name, lookup in zip(("current", "expected-parent", "candidate"), lookups):
+        record = lookup["record"]
+        if lookup["status"] == "present":
+            _validate_publication_record(
+                record,
+                expected_series_id=publication["series_id"],
+                subject=f"recovered {name}",
+            )
+            requested = lookup["requested_publication_id"]
+            if requested is not None and record["publication_id"] != requested:
+                fail(
+                    "materialization.store-failure",
+                    f"recovered {name} publication lookup differs",
+                )
+    terminal = publication["terminal_head"]
+    current = receipt["current"]
+    if receipt["reopen_status"] == "open_failed":
+        expected_terminal_status = (
+            "corrupt"
+            if _lookup_error_is_corruption(receipt["open_error_code"])
+            else "unavailable"
+        )
+        if terminal != {"status": expected_terminal_status, "record": None}:
+            fail("materialization.store-failure", "open-failed terminal head differs")
+    elif current["status"] == "present":
+        if terminal != {"status": "present", "record": current["record"]}:
+            fail("materialization.store-failure", "recovered terminal head differs")
+    elif current["status"] == "not_found":
+        if terminal != {"status": "absent", "record": None}:
+            fail("materialization.store-failure", "recovered absent head differs")
+    else:
+        expected_terminal_status = (
+            "corrupt"
+            if _lookup_error_is_corruption(current["error_code"])
+            else "unavailable"
+        )
+        if terminal != {"status": expected_terminal_status, "record": None}:
+            fail("materialization.store-failure", "recovered erroneous head differs")
+
+
+def _validate_candidate_publication_identity(
+    request: dict[str, Any],
+    publication: dict[str, Any],
+    expected_store: dict[str, Any],
+) -> None:
+    if publication["candidate_identity_state"] == "not_constructed":
+        if publication["candidate_identity"] is not None:
+            fail("materialization.store-failure", "unconstructed candidate has identity")
+        return
+    candidate = publication["candidate_identity"]
+    candidate_record = {
+        **candidate,
+        "physical_generation": 1,
+        "state": "committed",
+        "corrupt": False,
+    }
+    if (
+        candidate["series_id"] != request["publication"]["series_id"]
+        or candidate["snapshot_id"]
+        != expected_store["snapshot_manifest"]["snapshot_id"]
+        or candidate["parent_publication"]
+        != request["publication"]["expected_parent_publication"]
+        or candidate["publication_id"] != _publication_record_identity(candidate_record)
+        or (request["publication"]["genesis"] and candidate["sequence"] != 1)
+    ):
+        fail("materialization.store-failure", "candidate publication identity differs")
 
 
 def stale_parent_report(root: pathlib.Path, request: dict[str, Any]) -> dict[str, Any]:
+    if request["publication"]["backend"] != "sqlite":
+        raise ValueError("stale-parent fixture requires the SQLite backend")
     report = sample_report(root, request)
+    store = report["store"]
+    snapshot_id = store["snapshot_manifest"]["snapshot_id"]
+    candidate_record = {
+        "publication_id": "pending",
+        "series_id": request["publication"]["series_id"],
+        "snapshot_id": snapshot_id,
+        "sequence": 1,
+        "physical_generation": 2,
+        "parent_publication": request["publication"]["expected_parent_publication"],
+        "state": "committed",
+        "corrupt": False,
+    }
+    candidate_record["publication_id"] = canonical_identity_digest(
+        "publication",
+        [
+            candidate_record["series_id"],
+            candidate_record["snapshot_id"],
+            candidate_record["sequence"],
+            candidate_record["parent_publication"] or "",
+        ],
+    )
+    external_snapshot = "snapshot:sha256:" + "e" * 64
+    observed_record = {
+        "publication_id": "pending",
+        "series_id": request["publication"]["series_id"],
+        "snapshot_id": external_snapshot,
+        "sequence": 1,
+        "physical_generation": 3,
+        "parent_publication": None,
+        "state": "committed",
+        "corrupt": False,
+    }
+    observed_record["publication_id"] = canonical_identity_digest(
+        "publication",
+        [
+            observed_record["series_id"],
+            observed_record["snapshot_id"],
+            observed_record["sequence"],
+            "",
+        ],
+    )
+    not_applicable = {
+        "status": "not_applicable",
+        "requested_publication_id": None,
+        "record": None,
+        "error_code": None,
+        "error_field": None,
+    }
     report["result"] = "failed"
-    report["adoption"]["state"] = "discarded"
-    report["task_results"] = []
-    report["span_validation"]["hard_references_resolved"] = False
-    for result in report["base_claims"]["descriptor_results"]:
-        result["row_count"] = 0
-        result["claim_count"] = 0
-    report["base_claims"]["total_row_count"] = 0
-    report["base_claims"]["total_claim_count"] = 0
-    report["base_claims"]["validated_before_hard_references"] = False
-    for stage in report["claim_stages"]:
-        stage["claim_count"] = 0
-    report["provenance"].update(
-        {
-            "edge_count": 0,
-            "canonical_claim_count": 0,
-            "canonical_claims_with_exact_input_edges": 0,
-        }
-    )
-    report["publication"].update(
-        {
-            "genesis": request["publication"]["genesis"],
-            "observed_parent_publication": "publication:other",
-            "cas_verdict": "stale",
-            "committed_transaction_count": 0,
-            "committed": False,
-            "publication_id": None,
-            "snapshot_id": None,
-            "sqlite_reopened": False,
-        }
-    )
-    report["semantic_verification"].update(
-        {
-            "status": "not_published",
-            "canonical_export_digest": None,
-            "query_digest": None,
-            "snapshot_identity_recomputed": False,
-            "reopened_store_verified": False,
-        }
-    )
+    report["process_exit_status"] = 1
+    report["publication"] = {
+        "backend": "sqlite",
+        "selector": copy.deepcopy(request["publication"]["selector"]),
+        "series_id": request["publication"]["series_id"],
+        "genesis": request["publication"]["genesis"],
+        "expected_parent_publication": request["publication"][
+            "expected_parent_publication"
+        ],
+        "observed_parent_publication": observed_record["publication_id"],
+        "observed_parent_record": copy.deepcopy(observed_record),
+        "head_observation": "present",
+        "publication_attempted": True,
+        "outcome": "rejected_stale",
+        "partial_policy": "forbid",
+        "candidate_snapshot_id": snapshot_id,
+        "candidate_identity_state": "constructed",
+        "candidate_identity": _publication_identity_projection(candidate_record),
+        "invocation_commit_state": "not_committed",
+        "committed_transaction_count": 0,
+        "invocation_committed_record": None,
+        "terminal_head": {
+            "status": "present",
+            "record": copy.deepcopy(observed_record),
+        },
+        "candidate_visibility": "absent",
+        "prior_history_retained": True,
+        "head_effect": "unchanged",
+        "store_failure": {
+            "category": "stale_parent",
+            "cause": {
+                "kind": "sdk_error",
+                "code": "store.publication-conflict",
+                "field": "publication",
+            },
+            "diagnostic_digest": content_digest(b"fixture stale parent"),
+        },
+        "sqlite_reopen_status": "opened",
+        "recovery_receipt": {
+            "selector": copy.deepcopy(store["selector"]),
+            "reopen_status": "opened",
+            "open_error_code": None,
+            "open_error_field": None,
+            "current": {
+                "status": "present",
+                "requested_publication_id": None,
+                "record": copy.deepcopy(observed_record),
+                "error_code": None,
+                "error_field": None,
+            },
+            "expected_parent": not_applicable,
+            "candidate": {
+                "status": "not_found",
+                "requested_publication_id": candidate_record["publication_id"],
+                "record": None,
+                "error_code": "store.publication-not-found",
+                "error_field": None,
+            },
+        },
+    }
+    report["semantic_verification"] = {
+        "status": "not_published",
+        "reopened_store": None,
+        "reopen_attempt": None,
+        "failure": None,
+    }
     report["error"] = {
         "code": "materialization.stale-parent",
         "phase": "publication",
@@ -4531,6 +7244,73 @@ def stale_parent_report(root: pathlib.Path, request: dict[str, Any]) -> dict[str
         "diagnostic": "expected parent differs",
     }
     return report
+
+
+def compact_failure_report(
+    request_bytes: bytes,
+    *,
+    request: dict[str, Any] | None,
+    phase: str,
+    code: str,
+    subject: str = "materialization-request",
+) -> dict[str, Any]:
+    request_bound = request is not None
+    launch_attempt_count = int(
+        phase
+        in {
+            "worker-launch",
+            "transcript",
+            "materialization-validation",
+            "store-open",
+            "store-stage",
+            "report-construction",
+        }
+    )
+    launch_success_count = int(
+        phase
+        in {
+            "transcript",
+            "materialization-validation",
+            "store-open",
+            "store-stage",
+            "report-construction",
+        }
+    )
+    return {
+        "schema": "cxxlens.clang22-materialization-report.v2",
+        "report_version": "2.0.0",
+        "response_kind": "compact_failure",
+        "result": "failed",
+        "generated_at": datetime.datetime(
+            2026, 7, 19, tzinfo=datetime.timezone.utc
+        ).isoformat().replace("+00:00", "Z"),
+        "process_exit_status": 1,
+        "raw_input_observation": raw_input_observation(request_bytes),
+        "binding": {
+            "state": "request-bound" if request_bound else "raw-input-only",
+            "request": _request_binding(request) if request_bound else None,
+        },
+        "effects": {
+            "worker_launch_attempt_count": launch_attempt_count,
+            "worker_launch_success_count": launch_success_count,
+            "store_draft_state": (
+                "discarded"
+                if phase in {"store-stage", "report-construction"}
+                else "not-created"
+            ),
+            "head_observation": "not-observed",
+            "observed_head_publication": None,
+            "publication_attempted": False,
+            "committed_transaction_count": 0,
+            "prior_history_retained": True,
+        },
+        "error": {
+            "code": code,
+            "phase": phase,
+            "subject": subject,
+            "diagnostic": "fixture failure",
+        },
+    }
 
 
 def _exact_task_result(
@@ -4668,19 +7448,173 @@ def _exact_task_result(
         fail("materialization.report-invalid", "task result digest differs")
 
 
-def validate_report(root: pathlib.Path, request: dict[str, Any], report: dict[str, Any]) -> None:
-    validate_request(root, request)
+COMPACT_RAW_PHASE_CODES = {
+    "input-limit": {"materialization.request-invalid"},
+    "json-decode": {"materialization.request-invalid"},
+    "request-envelope": {"materialization.request-invalid"},
+    "request-schema": {"materialization.request-invalid"},
+    "request-version": {"materialization.version-unsupported"},
+    "request-binding": {
+        "materialization.identity-mismatch",
+        "materialization.catalog-census-mismatch",
+        "materialization.task-binding-mismatch",
+        "materialization.descriptor-binding-mismatch",
+    },
+}
+COMPACT_BOUND_PHASE_CODES = {
+    "installation-binding": {"materialization.identity-mismatch"},
+    "worker-launch": {"materialization.worker-failure"},
+    "transcript": {
+        "materialization.transcript-invalid",
+        "materialization.group-incomplete",
+        "materialization.worker-failure",
+    },
+    "materialization-validation": {
+        "materialization.span-invalid",
+        "materialization.claim-invalid",
+        "materialization.coverage-incomplete",
+    },
+    "store-open": {"materialization.store-failure"},
+    "store-stage": {
+        "materialization.store-failure",
+        "materialization.claim-invalid",
+        "materialization.coverage-incomplete",
+    },
+    "report-construction": {"materialization.report-invalid"},
+}
+
+
+def validate_raw_input_observation(
+    observation: dict[str, Any],
+    request_bytes: bytes,
+) -> None:
+    expected = raw_input_observation(request_bytes)
+    if observation != expected:
+        fail(
+            "materialization.report-invalid",
+            "raw input observation differs from exact transport bytes",
+        )
+
+
+def _request_binding(request: dict[str, Any]) -> dict[str, str]:
+    return {
+        "materialization_request_id": request["materialization_request_id"],
+        "request_digest": request["request_digest"],
+        "semantic_request_digest": request["semantic_request_digest"],
+    }
+
+
+def validate_report(
+    root: pathlib.Path,
+    request: dict[str, Any] | None,
+    report: dict[str, Any],
+    *,
+    request_bytes: bytes,
+) -> None:
     validate_schema(
         report,
         load(root / REPORT_SCHEMA),
         "materialization report",
         error_code="materialization.report-invalid",
     )
-    if report["request"] != {
-        "materialization_request_id": request["materialization_request_id"],
-        "request_digest": request["request_digest"],
-        "semantic_request_digest": request["semantic_request_digest"],
-    }:
+    validate_raw_input_observation(report["raw_input_observation"], request_bytes)
+    if report["response_kind"] == "compact_failure":
+        binding = report["binding"]
+        effects = report["effects"]
+        error = report["error"]
+        expected_launch_attempt_count = int(
+            error["phase"]
+            in {
+                "worker-launch",
+                "transcript",
+                "materialization-validation",
+                "store-open",
+                "store-stage",
+                "report-construction",
+            }
+        )
+        expected_launch_success_count = int(
+            error["phase"]
+            in {
+                "transcript",
+                "materialization-validation",
+                "store-open",
+                "store-stage",
+                "report-construction",
+            }
+        )
+        expected_draft_state = (
+            "discarded"
+            if error["phase"] in {"store-stage", "report-construction"}
+            else "not-created"
+        )
+        if binding["state"] == "raw-input-only":
+            allowed_codes = COMPACT_RAW_PHASE_CODES.get(error["phase"])
+            if (
+                request is not None
+                or binding["request"] is not None
+                or allowed_codes is None
+                or error["code"] not in allowed_codes
+                or effects["worker_launch_attempt_count"] != 0
+                or effects["worker_launch_success_count"] != 0
+                or effects["store_draft_state"] != "not-created"
+                or effects["head_observation"] != "not-observed"
+            ):
+                fail(
+                    "materialization.report-invalid",
+                    "raw-input compact failure phase, binding, or effects differ",
+                )
+        else:
+            if request is None:
+                fail(
+                    "materialization.report-invalid",
+                    "request-bound compact failure lacks a validated request",
+                )
+            validate_request(root, request)
+            allowed_codes = COMPACT_BOUND_PHASE_CODES.get(error["phase"])
+            if (
+                binding["request"] != _request_binding(request)
+                or allowed_codes is None
+                or error["code"] not in allowed_codes
+            ):
+                fail(
+                    "materialization.report-invalid",
+                    "request-bound compact failure phase/code/binding differs",
+                )
+            if error["phase"] in {
+                "installation-binding",
+                "worker-launch",
+                "transcript",
+                "materialization-validation",
+            } and effects["head_observation"] != "not-observed":
+                fail(
+                    "materialization.report-invalid",
+                    "pre-Store compact failure claims a head observation",
+                )
+            if error["phase"] in {"installation-binding", "worker-launch"} and effects[
+                "store_draft_state"
+            ] != "not-created":
+                fail(
+                    "materialization.report-invalid",
+                    "pre-Store compact failure claims a Store draft",
+                )
+        if (
+            effects["worker_launch_attempt_count"] != expected_launch_attempt_count
+            or effects["worker_launch_success_count"] != expected_launch_success_count
+            or effects["store_draft_state"] != expected_draft_state
+            or effects["publication_attempted"]
+            or effects["committed_transaction_count"] != 0
+            or not effects["prior_history_retained"]
+        ):
+            fail(
+                "materialization.report-invalid",
+                "compact failure is not an exact zero-publication effect ledger",
+            )
+        return
+    if request is None:
+        fail("materialization.report-invalid", "detailed report lacks request bytes/binding")
+    validate_request(root, request)
+    if report["request"] != _request_binding(request):
         fail("materialization.report-invalid", "report request binding differs")
     if report["source"] != {
         "revision": request["tool"]["source_revision"],
@@ -4729,15 +7663,27 @@ def validate_report(root: pathlib.Path, request: dict[str, Any], report: dict[st
     if report["project"] != expected_project:
         fail("materialization.catalog-census-mismatch", "report project census differs")
     if report["registry"] != {
-        "registry_digest": request["registry"]["registry_digest"],
+        "authority_registry_digest": request["registry"][
+            "authority_registry_digest"
+        ],
         "base_descriptors": request["registry"]["base_descriptors"],
         "descriptors": request["registry"]["descriptors"],
     }:
         fail("materialization.descriptor-binding-mismatch", "report registry binding differs")
+    if (
+        report["engine"] != request["engine"]
+        or report["interpretation_policy"] != request["interpretation_policy"]
+        or report["trust_policy"] != request["trust_policy"]
+    ):
+        fail(
+            "materialization.identity-mismatch",
+            "report engine or named policy binding differs",
+        )
     publication = report["publication"]
     request_publication = request["publication"]
     if (
         publication["backend"] != request_publication["backend"]
+        or publication["selector"] != request_publication["selector"]
         or publication["series_id"] != request_publication["series_id"]
         or publication["genesis"] != request_publication["genesis"]
         or publication["expected_parent_publication"]
@@ -4770,17 +7716,6 @@ def validate_report(root: pathlib.Path, request: dict[str, Any], report: dict[st
             "materialization.coverage-incomplete",
             "typed unresolved category accounting is not exact",
         )
-    if report["result"] == "failed":
-        if report["adoption"]["state"] != "discarded" or publication["committed"]:
-            fail("materialization.claim-invalid", "failed report retained adoptable output")
-        if report["error"]["code"] == "materialization.stale-parent":
-            if (
-                publication["cas_verdict"] != "stale"
-                or publication["observed_parent_publication"]
-                == publication["expected_parent_publication"]
-            ):
-                fail("materialization.stale-parent", "stale-parent failure lacks stale CAS")
-        return
     if report["adoption"] != {
         **report["adoption"],
         "boundary": "sealed-materialization-result",
@@ -4962,6 +7897,7 @@ def validate_report(root: pathlib.Path, request: dict[str, Any], report: dict[st
             results.values(),
             descriptor,
             guarantee["digest"],
+            report["store"],
         )
         if (
             stages[descriptor] != expected_claim
@@ -4976,9 +7912,12 @@ def validate_report(root: pathlib.Path, request: dict[str, Any], report: dict[st
             )
             for result in results.values()
         )
-        if stages[descriptor]["claim_count"] != batch_claim_count:
+        if stages[descriptor]["origin_association_count"] != batch_claim_count:
             fail("materialization.claim-invalid", f"claim/batch census differs for {descriptor}")
-    canonical_count = sum(stages[descriptor]["claim_count"] for descriptor in DESCRIPTOR_IDS[:3])
+    canonical_count = sum(
+        stages[descriptor]["origin_association_count"]
+        for descriptor in DESCRIPTOR_IDS[:3]
+    )
     provenance = report["provenance"]
     if (
         provenance["canonical_claim_count"] != canonical_count
@@ -4990,18 +7929,319 @@ def validate_report(root: pathlib.Path, request: dict[str, Any], report: dict[st
         != expected_global_provenance_digest(provenance, report["claim_stages"])
     ):
         fail("materialization.claim-invalid", "canonical provenance edge accounting differs")
-    if (
-        publication["observed_parent_publication"]
-        != publication["expected_parent_publication"]
-        or publication["cas_verdict"] != "matched"
-        or publication["committed_transaction_count"] != 1
-        or not publication["committed"]
+    expected_store = expected_store_binding(root, request, report)
+    if report["store"] != expected_store:
+        fail(
+            "materialization.store-failure",
+            "claim occurrence, partition, or snapshot identity DAG differs",
+        )
+    snapshot_id = expected_store["snapshot_manifest"]["snapshot_id"]
+    if publication["candidate_snapshot_id"] != snapshot_id:
+        fail("materialization.store-failure", "candidate snapshot identity differs")
+    if publication["series_id"] != expected_series_id(publication["selector"]):
+        fail("materialization.store-failure", "publication series identity differs")
+    outcome = publication["outcome"]
+    if outcome == "committed_verified":
+        expected = {"store": expected_store}
+        bind_committed_verified_publication(request, expected)
+        if (
+            report["result"] != "passed"
+            or report["error"] is not None
+            or publication != expected["publication"]
+            or report["semantic_verification"]["status"] != "passed"
+            or report["semantic_verification"]["reopen_attempt"] is not None
+            or report["semantic_verification"]["failure"] is not None
+        ):
+            fail(
+                "materialization.store-failure",
+                "committed publication or three-path reopened Store differs",
+            )
+        validate_committed_verified_reopened_store(request, report)
+        return
+    if report["result"] != "failed":
+        fail("materialization.store-failure", "non-committed outcome reports success")
+    validate_failed_publication_outcome(
+        request,
+        report,
+        expected_store,
+    )
+
+
+def _validate_reopened_handle_projection(
+    projection: dict[str, Any],
+    *,
+    expected_series_id: str,
+) -> None:
+    _validate_publication_record(
+        projection["publication_record"],
+        expected_series_id=expected_series_id,
+        subject="reopened handle",
+    )
+    if projection["snapshot_manifest_digest"] != content_digest(
+        canonical_json(projection["snapshot_manifest"])
     ):
-        fail("materialization.stale-parent", "passed report lacks exact parent CAS/commit")
-    if publication["backend"] == "sqlite" and not publication["sqlite_reopened"]:
-        fail("materialization.store-failure", "SQLite success was not reopened")
-    if publication["backend"] == "memory" and publication["sqlite_reopened"]:
-        fail("materialization.store-failure", "memory report falsely claims SQLite reopen")
+        fail(
+            "materialization.store-failure",
+            "reopened snapshot manifest digest differs",
+        )
+    semantic_fields = {
+        key: projection[key]
+        for key in (
+            "backend",
+            "snapshot_manifest",
+            "snapshot_manifest_digest",
+            "descriptors",
+            "partition_binding_multiset_digest",
+            "row_multiset_digest",
+            "claim_annotation_multiset_digest",
+            "coverage_multiset_digest",
+            "unresolved_digest",
+            "closure_digest",
+            "cursor_projection_digest",
+            "canonical_export_digest",
+        )
+    }
+    if projection["semantic_projection_digest"] != _digest_projection(
+        "cxxlens.clang22-reopened-semantic-projection.v1", semantic_fields
+    ):
+        fail(
+            "materialization.store-failure",
+            "reopened semantic projection digest differs",
+        )
+    if projection["handle_projection_digest"] != _digest_projection(
+        "cxxlens.clang22-reopened-handle-projection.v1",
+        {
+            key: value
+            for key, value in projection.items()
+            if key != "handle_projection_digest"
+        },
+    ):
+        fail(
+            "materialization.store-failure",
+            "reopened handle projection digest differs",
+        )
+
+
+def _validate_committed_unverified_attempt(
+    request: dict[str, Any],
+    report: dict[str, Any],
+) -> None:
+    publication = report["publication"]
+    verification = report["semantic_verification"]
+    attempt = verification["reopen_attempt"]
+    failure_record = verification["failure"]
+    if (
+        attempt["backend"] != publication["backend"]
+        or publication["store_failure"]["cause"] != failure_record["cause"]
+        or publication["store_failure"]["diagnostic_digest"]
+        != failure_record["diagnostic_digest"]
+    ):
+        fail(
+            "materialization.store-failure",
+            "committed verification failure binding differs",
+        )
+    record = publication["invocation_committed_record"]
+    expected_lookups = (
+        {"selector": _expected_recovery_selector(request)},
+        {"publication_id": record["publication_id"]},
+        {"snapshot_id": record["snapshot_id"]},
+    )
+    first_non_present: dict[str, Any] | None = None
+    for receipt, expected_lookup in zip(attempt["handle_receipts"], expected_lookups):
+        if receipt["lookup"] != expected_lookup:
+            fail(
+                "materialization.store-failure",
+                "committed verification lookup input differs",
+            )
+        if receipt["status"] == "present":
+            _validate_reopened_handle_projection(
+                receipt["projection"],
+                expected_series_id=publication["series_id"],
+            )
+        elif receipt["status"] != "not_attempted" and first_non_present is None:
+            first_non_present = receipt
+    if attempt["close_reopen_status"] == "open_failed":
+        if (
+            failure_record["stage"] != "close-reopen"
+            or failure_record["access_path"] is not None
+            or failure_record["cause"]
+            != {
+                "kind": "sdk_error",
+                "code": attempt["open_error_code"],
+                "field": attempt["open_error_field"],
+            }
+        ):
+            fail(
+                "materialization.store-failure",
+                "close/reopen verification failure differs",
+            )
+    elif first_non_present is not None:
+        if (
+            failure_record["stage"] != first_non_present["access_path"]
+            or failure_record["access_path"] != first_non_present["access_path"]
+            or failure_record["cause"]
+            != {
+                "kind": "sdk_error",
+                "code": first_non_present["sdk_code"],
+                "field": first_non_present["sdk_field"],
+            }
+        ):
+            fail(
+                "materialization.store-failure",
+                "first reopened handle failure differs",
+            )
+    elif failure_record["cause"]["kind"] != "verification_mismatch":
+        fail(
+            "materialization.store-failure",
+            "all-present reopen failure lacks an exact projection mismatch",
+        )
+
+
+def validate_failed_publication_outcome(
+    request: dict[str, Any],
+    report: dict[str, Any],
+    expected_store: dict[str, Any],
+) -> None:
+    publication = report["publication"]
+    outcome = publication["outcome"]
+    if (
+        publication["backend"] != request["publication"]["backend"]
+        or publication["selector"] != request["publication"]["selector"]
+        or publication["series_id"] != request["publication"]["series_id"]
+        or publication["genesis"] != request["publication"]["genesis"]
+        or publication["expected_parent_publication"]
+        != request["publication"]["expected_parent_publication"]
+        or publication["candidate_snapshot_id"]
+        != expected_store["snapshot_manifest"]["snapshot_id"]
+        or publication["partial_policy"] != "forbid"
+        or not publication["publication_attempted"]
+    ):
+        fail("materialization.store-failure", "failed publication request binding differs")
+    _validate_candidate_publication_identity(request, publication, expected_store)
+    if publication["head_observation"] == "present":
+        observed = publication["observed_parent_record"]
+        _validate_publication_record(
+            observed,
+            expected_series_id=publication["series_id"],
+            subject="observed parent",
+        )
+        if observed["publication_id"] != publication["observed_parent_publication"]:
+            fail("materialization.store-failure", "observed parent binding differs")
+    semantic = report["semantic_verification"]
+    expected_category: str
+    if outcome == "rejected_stale":
+        expected_category = "stale_parent"
+        expected_semantic_status = "not_published"
+    elif outcome == "rejected_store_failure":
+        expected_category = publication["store_failure"]["category"]
+        if expected_category not in {
+            "counter_overflow",
+            "identity_validation",
+            "hash_collision",
+            "persistence_corrupt",
+        }:
+            fail(
+                "materialization.store-failure",
+                "definitive zero-commit Store category differs",
+            )
+        expected_semantic_status = "not_published"
+    elif outcome == "publication_outcome_unknown":
+        expected_category = "persistence_io"
+        expected_semantic_status = "publication_unknown"
+    elif outcome == "committed_unverified":
+        expected_category = "post_commit_verification"
+        expected_semantic_status = "committed_unverified"
+    else:
+        fail("materialization.store-failure", "failed publication outcome differs")
+    if (
+        publication["store_failure"]["category"] != expected_category
+        or semantic["status"] != expected_semantic_status
+        or semantic["reopened_store"] is not None
+    ):
+        fail("materialization.store-failure", "failed Store outcome binding differs")
+    if outcome in {"rejected_stale", "rejected_store_failure"}:
+        if (
+            publication["invocation_commit_state"] != "not_committed"
+            or publication["committed_transaction_count"] != 0
+            or publication["invocation_committed_record"] is not None
+            or semantic["reopen_attempt"] is not None
+            or semantic["failure"] is not None
+        ):
+            fail(
+                "materialization.store-failure",
+                "rejected publication zero-commit evidence differs",
+            )
+    elif outcome == "publication_outcome_unknown":
+        if (
+            publication["candidate_identity_state"] != "constructed"
+            or publication["invocation_commit_state"] != "unknown"
+            or publication["committed_transaction_count"] is not None
+            or publication["invocation_committed_record"] is not None
+            or publication["store_failure"]["cause"]
+            != {
+                "kind": "sdk_error",
+                "code": "store.sqlite-failure",
+                "field": publication["store_failure"]["cause"]["field"],
+            }
+            or semantic["reopen_attempt"] is not None
+            or semantic["failure"] is not None
+        ):
+            fail(
+                "materialization.store-failure",
+                "phase-opaque publication outcome is not unknown",
+            )
+    else:
+        committed = publication["invocation_committed_record"]
+        _validate_publication_record(
+            committed,
+            expected_series_id=publication["series_id"],
+            subject="invocation-committed",
+        )
+        if (
+            publication["invocation_commit_state"] != "committed"
+            or publication["committed_transaction_count"] != 1
+            or _publication_identity_projection(committed)
+            != publication["candidate_identity"]
+            or semantic["reopen_attempt"] is None
+            or semantic["failure"] is None
+        ):
+            fail(
+                "materialization.store-failure",
+                "committed-unverified invocation evidence differs",
+            )
+        _validate_committed_unverified_attempt(request, report)
+    if publication["backend"] == "sqlite":
+        _validate_publication_recovery_receipt(request, publication)
+        if publication["sqlite_reopen_status"] != publication["recovery_receipt"][
+            "reopen_status"
+        ]:
+            fail("materialization.store-failure", "SQLite reopen status differs")
+        candidate_status = publication["recovery_receipt"]["candidate"]["status"]
+        if publication["candidate_identity_state"] == "not_constructed":
+            expected_visibility = "not_applicable"
+        elif candidate_status == "not_found":
+            expected_visibility = "absent"
+        elif candidate_status in {"error", "not_attempted"}:
+            expected_visibility = "unknown"
+        elif candidate_status == "present":
+            expected_visibility = (
+                "present_unknown_attribution"
+                if outcome == "publication_outcome_unknown"
+                else (
+                    "present_by_invocation"
+                    if outcome == "committed_unverified"
+                    else "present_external"
+                )
+            )
+        else:
+            expected_visibility = "not_applicable"
+        if publication["candidate_visibility"] != expected_visibility:
+            fail(
+                "materialization.store-failure",
+                "candidate recovery visibility differs",
+            )
+    elif publication["recovery_receipt"] is not None:
+        fail("materialization.store-failure", "memory outcome has SQLite recovery receipt")
 
 
 def _semantic_matrix_projection(request: dict[str, Any]) -> dict[str, Any]:
@@ -5019,6 +8259,11 @@ def _semantic_matrix_projection(request: dict[str, Any]) -> dict[str, Any]:
         },
         "project": request["project"],
         "registry": request["registry"],
+        "engine": request["engine"],
+        "interpretation_policy": request["interpretation_policy"],
+        "trust_policy": request["trust_policy"],
+        "selector": request["publication"]["selector"],
+        "series_id": request["publication"]["series_id"],
         "tasks": [
             {
                 key: task[key]
@@ -5048,7 +8293,10 @@ def _semantic_matrix_projection(request: dict[str, Any]) -> dict[str, Any]:
 
 def validate_qualification_matrix(
     root: pathlib.Path,
-    entries: list[tuple[dict[str, Any], dict[str, Any]]],
+    entries: list[
+        tuple[dict[str, Any], dict[str, Any]]
+        | tuple[dict[str, Any], dict[str, Any], bytes]
+    ],
 ) -> None:
     expected = {
         (configuration, backend)
@@ -5058,13 +8306,33 @@ def validate_qualification_matrix(
     actual: list[tuple[str, str]] = []
     projections: list[dict[str, Any]] = []
     snapshot_ids: set[str] = set()
+    publication_ids: set[str] = set()
     exports: set[str] = set()
     queries: set[str] = set()
     base_claim_sets: set[bytes] = set()
     claim_stage_sets: set[bytes] = set()
     global_provenance_sets: set[bytes] = set()
-    for request, report in entries:
-        validate_report(root, request, report)
+    normalized_entries: list[tuple[dict[str, Any], dict[str, Any], bytes]] = []
+    for entry in entries:
+        if len(entry) == 2:
+            request, report = entry
+            request_bytes = canonical_json(request)
+        elif len(entry) == 3:
+            request, report, request_bytes = entry
+            if not isinstance(request_bytes, bytes):
+                fail(
+                    "materialization.report-invalid",
+                    "qualification exact request artifact is not bytes",
+                )
+        else:
+            fail("materialization.report-invalid", "qualification entry arity differs")
+        normalized_entries.append((request, report, request_bytes))
+        validate_report(
+            root,
+            request,
+            report,
+            request_bytes=request_bytes,
+        )
         if report["result"] != "passed":
             fail("materialization.report-invalid", "qualification matrix contains failure")
         guarantee = report["side_channels"]["guarantee"]
@@ -5083,9 +8351,13 @@ def validate_qualification_matrix(
             )
         )
         projections.append(_semantic_matrix_projection(request))
-        snapshot_ids.add(report["publication"]["snapshot_id"])
-        exports.add(report["semantic_verification"]["canonical_export_digest"])
-        queries.add(report["semantic_verification"]["query_digest"])
+        snapshot_ids.add(report["store"]["snapshot_manifest"]["snapshot_id"])
+        publication_ids.add(
+            report["publication"]["invocation_committed_record"]["publication_id"]
+        )
+        reopened = report["semantic_verification"]["reopened_store"]
+        exports.add(reopened["canonical_export_digest"])
+        queries.add(reopened["cursor_projection"]["digest"])
         base_claim_sets.add(canonical_json(report["base_claims"]))
         claim_stage_sets.add(canonical_json(report["claim_stages"]))
         global_provenance_sets.add(canonical_json(report["provenance"]))
@@ -5096,7 +8368,7 @@ def validate_qualification_matrix(
     for configuration in ("static", "shared"):
         semantic_keys = {
             request["semantic_request_digest"]
-            for request, _ in entries
+            for request, _, _ in normalized_entries
             if request["tool"]["package_configuration"] == configuration
         }
         if len(semantic_keys) != 1:
@@ -5106,6 +8378,7 @@ def validate_qualification_matrix(
             )
     if (
         len(snapshot_ids) != 1
+        or len(publication_ids) != 1
         or len(exports) != 1
         or len(queries) != 1
         or len(base_claim_sets) != 1
@@ -5154,11 +8427,21 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
             request = sample_request(root, configuration=configuration, backend=backend)
             validate_request(root, request)
             report = sample_report(root, request)
-            validate_report(root, request, report)
+            validate_report(
+                root,
+                request,
+                report,
+                request_bytes=canonical_json(request),
+            )
             entries.append((request, report))
     validate_qualification_matrix(root, entries)
     stale_request = sample_request(root, configuration="static", backend="sqlite")
-    validate_report(root, stale_request, stale_parent_report(root, stale_request))
+    validate_report(
+        root,
+        stale_request,
+        stale_parent_report(root, stale_request),
+        request_bytes=canonical_json(stale_request),
+    )
     return contract
 
 

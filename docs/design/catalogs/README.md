@@ -10,7 +10,7 @@
 | SQLite Physical Store | `schemas/cxxlens_ng_sqlite_store_contract.yaml` | #68 | implemented |
 | Provider Protocol | `schemas/cxxlens_ng_provider_protocol.yaml` | #149 | accepted exact contract |
 | Provider Runtime | `schemas/cxxlens_ng_provider_runtime_contract.yaml` | #151 | implemented exact contract |
-| Clang 22 Installed Materialization | `schemas/cxxlens_ng_clang22_materialization_contract.yaml` | #182 | accepted option-2 machine boundary; implementation and production evidence tracked by #181 |
+| Clang 22 Installed Materialization | `schemas/cxxlens_ng_clang22_materialization_contract.yaml` | #181 | accepted option-2 boundary with DF-0191/DF-0192 machine-v2 amendment under independent review; implementation and production evidence tracked by #181 |
 | Public C++ API Catalog | `schemas/cxxlens_ng_public_api_catalog.yaml` | #66–#70 | implemented |
 | Public Callable Inventory | `schemas/cxxlens_ng_public_callable_inventory.yaml` | #169 | implemented exact Clang 22 AST and Doxygen bidirectional correspondence |
 | Acceptance Manifest | `schemas/cxxlens_ng_acceptance_manifest.yaml` | #71 | implemented foundation gates |

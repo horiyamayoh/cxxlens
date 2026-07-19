@@ -250,6 +250,7 @@ entries:
       - schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
       - schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
       - schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
+      - schemas/cxxlens_ng_clang22_materialization_execution_receipt.schema.yaml
       - schemas/cxxlens_ng_production_scope_closure.yaml
       - schemas/cxxlens_ng_production_scope_closure.schema.yaml
       - schemas/cxxlens_ng_production_scope_closure_report.schema.yaml

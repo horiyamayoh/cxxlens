@@ -98,7 +98,19 @@ class ProductionScopeClosureTest(unittest.TestCase):
                     {
                         "configuration": configuration,
                         "backend": backend,
+                        "request_digest": "sha256:" + "1" * 64,
+                        "request_byte_count": 128,
                         "report_digest": digest,
+                        "report_byte_count": 512,
+                        "execution_receipt_digest": "sha256:" + "c" * 64,
+                        "actual_exit_status": 0,
+                        "exact_stdout_byte_count": 512,
+                        "stdout_digest": digest,
+                        "parsed_response_count": 1,
+                        "stderr_digest": (
+                            "sha256:e3b0c44298fc1c149afbf4c8996fb924"
+                            "27ae41e4649b934ca495991b7852b855"
+                        ),
                     }
                     for configuration in ("shared", "static")
                     for backend in ("memory", "sqlite")

@@ -21,7 +21,7 @@ source_contracts:
   - schemas/cxxlens_ng_release_bundle.yaml
   - schemas/cxxlens_ng_release_qualification.yaml
   - schemas/cxxlens_ng_security_profile.yaml
-authority_census_digest: sha256:a8c304024b6921efee1d9b3a22ce603cd3769346a2f1128d0f996151d5a2cdb8
+authority_census_digest: sha256:63e4e607654180454b8442ee6e6b55415933fbd647c747d259a832614d1fbff5
 assignments:
   - id: scope.qualified-baseline
     owner_issue: '#179'
@@ -228,8 +228,8 @@ assignments:
     qualification: tracked-gap
     gap:
       finding: scope.tracked-gap.clang22-installed-adoption
-      remediation: Complete installed actual-source worker output adoption with tool-private independent all-or-none span-bundle validation, publication, and query evidence; do not claim generic relation-row reference enforcement.
-    feedback: [DF-0182, DF-0187]
+      remediation: Accept DF-0191/DF-0192 machine-v2 response and Store identity bindings, then complete installed actual-source worker output adoption with tool-private independent all-or-none span-bundle validation, exact publication, and query evidence; do not claim generic relation-row reference enforcement.
+    feedback: [DF-0182, DF-0187, DF-0191, DF-0192]
     surfaces:
       - {domain: distribution.consumer-configuration, id: shared/real-project}
       - {domain: distribution.consumer-configuration, id: static/real-project}

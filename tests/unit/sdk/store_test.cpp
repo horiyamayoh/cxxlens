@@ -80,10 +80,17 @@ namespace
 	expected_publication_identity(const cxxlens::sdk::publication_record& value)
 	{
 		using cxxlens::sdk::canonical_value;
+		constexpr auto signed_max =
+			static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+		const auto canonical_sequence = value.sequence <= signed_max
+			? static_cast<std::int64_t>(value.sequence)
+			: -1 -
+				static_cast<std::int64_t>(std::numeric_limits<std::uint64_t>::max() -
+										  value.sequence);
 		const std::array fields{
 			canonical_value::from_string(value.series_id),
 			canonical_value::from_string(value.snapshot_id),
-			canonical_value::from_integer(static_cast<std::int64_t>(value.sequence)),
+			canonical_value::from_integer(canonical_sequence),
 			canonical_value::from_string(value.parent_publication.value_or("")),
 		};
 		auto identity = cxxlens::sdk::canonical_identity_digest("publication", fields);
@@ -288,18 +295,30 @@ namespace
 		return draft;
 	}
 
-	[[nodiscard]] bool validates_derived_partition(cxxlens::sdk::snapshot_store& store,
-												   const cxxlens::sdk::relation_engine& value,
-												   const std::string& parent_publication,
-												   std::string input_snapshot,
-												   std::vector<std::string> consumed)
+	[[nodiscard]] cxxlens::sdk::result<void>
+	validate_derived_partition(cxxlens::sdk::snapshot_store& store,
+							   const cxxlens::sdk::relation_engine& value,
+							   const std::string& parent_publication,
+							   std::string input_snapshot,
+							   std::vector<std::string> consumed)
 	{
 		auto writer = store.begin(snapshot_draft(value, parent_publication));
 		require(writer &&
 					writer->stage(
 						derived_partition(value, std::move(input_snapshot), std::move(consumed))),
 				"derived writer setup failed");
-		return writer->validate().has_value();
+		return writer->validate();
+	}
+
+	[[nodiscard]] bool validates_derived_partition(cxxlens::sdk::snapshot_store& store,
+												   const cxxlens::sdk::relation_engine& value,
+												   const std::string& parent_publication,
+												   std::string input_snapshot,
+												   std::vector<std::string> consumed)
+	{
+		return validate_derived_partition(
+				   store, value, parent_publication, std::move(input_snapshot), std::move(consumed))
+			.has_value();
 	}
 
 	void check_canonical_vectors()
@@ -398,7 +417,7 @@ namespace
 		require(stale && stale->stage(partition(relation_engine, false)) && stale->validate(),
 				"stale candidate setup failed");
 		auto stale_publish = stale->publish();
-		require(!stale_publish && stale_publish.error().code == "store.publish-stale-parent",
+		require(!stale_publish && stale_publish.error().code == "store.publication-conflict",
 				"stale parent publish was accepted");
 		auto current = sqlite->current(selector(relation_engine));
 		require(current &&
@@ -896,7 +915,7 @@ namespace
 		require(poisoned.has_value(), "poisoned generation store did not reopen");
 		auto recovered = try_publish(*poisoned, relation_engine, std::nullopt, "recovery");
 		require(recovered && recovered->publication().physical_generation == 1U,
-				"checksum-invalid rejected max generation poisoned the global counter");
+				"valid-checksum rejected max generation poisoned the global counter");
 		std::filesystem::remove(poison_path);
 
 		enum class boundary_case
@@ -1019,6 +1038,299 @@ namespace
 		std::filesystem::remove(path);
 	}
 
+	void check_compaction_resolver_order()
+	{
+		const auto relation_engine = engine();
+		for (const bool sqlite : {false, true})
+		{
+			const auto path = std::filesystem::temp_directory_path() /
+				("cxxlens-ng-compaction-resolver-" + std::string{sqlite ? "sqlite" : "memory"} +
+				 ".sqlite");
+			std::filesystem::remove(path);
+			auto store = sqlite
+				? cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine)
+				: cxxlens::sdk::make_in_memory_snapshot_store(relation_engine);
+			require(store.has_value(), "compaction resolver store unavailable");
+			auto stable = try_publish(*store, relation_engine, std::nullopt, "stable");
+			auto alternate = try_publish(*store, relation_engine, std::nullopt, "alternate");
+			require(stable && alternate && stable->id() == alternate->id() &&
+						stable->publication().sequence == alternate->publication().sequence &&
+						stable->publication().physical_generation <
+							alternate->publication().physical_generation,
+					"two-series resolver setup was not globally ordered");
+			const auto stable_id = std::string{stable->publication().publication_id};
+			const auto alternate_id = std::string{alternate->publication().publication_id};
+			auto selected_before = store->open(stable->id());
+			require(selected_before &&
+						selected_before->publication().publication_id == alternate_id,
+					"same-snapshot resolver did not select the prior physical order");
+			const auto maximum_before = alternate->publication().physical_generation;
+			require(store->compact().has_value(), "two-series compaction failed");
+			auto compacted_stable = store->open_publication(stable_id);
+			auto compacted_alternate = store->open_publication(alternate_id);
+			auto selected_after = store->open(stable->id());
+			require(compacted_stable && compacted_alternate && selected_after &&
+						compacted_stable->publication().physical_generation > maximum_before &&
+						compacted_stable->publication().physical_generation <
+							compacted_alternate->publication().physical_generation &&
+						selected_after->publication().publication_id == alternate_id,
+					"compaction collapsed generations or changed resolver order");
+			if (sqlite)
+			{
+				auto reopened =
+					cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+				auto selected = reopened
+					? reopened->open(stable->id())
+					: cxxlens::sdk::result<cxxlens::sdk::snapshot_handle>{reopened.error()};
+				require(reopened && selected &&
+							selected->publication().publication_id == alternate_id,
+						"SQLite reopen lost compacted resolver order");
+			}
+			std::filesystem::remove(path);
+		}
+	}
+
+	void check_sqlite_publish_refreshes_committed_census()
+	{
+		const auto relation_engine = engine();
+		const auto path = std::filesystem::temp_directory_path() /
+			"cxxlens-ng-publish-refreshes-committed-census.sqlite";
+		std::filesystem::remove(path);
+		auto first = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+		auto second = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+		require(first && second, "publish census refresh stores unavailable");
+
+		auto external = try_publish(*second, relation_engine, std::nullopt, "external");
+		auto local = try_publish(*first, relation_engine, std::nullopt, "local");
+		require(external && local && external->id() == local->id() &&
+					external->publication().physical_generation == 1U &&
+					local->publication().physical_generation == 2U,
+				"publish census refresh setup failed");
+		auto external_selector = selector(relation_engine);
+		external_selector.channel_id = "external";
+		auto visible_external = first->open_publication(external->publication().publication_id);
+		auto current_external = first->current(external_selector);
+		auto selected_local = first->open(local->id());
+		require(visible_external && current_external && selected_local &&
+					current_external->publication().publication_id ==
+						external->publication().publication_id &&
+					selected_local->publication().publication_id ==
+						local->publication().publication_id,
+				"publish discarded an external committed row from process-local read authority");
+
+		auto latest = try_publish(*second, relation_engine, std::nullopt, "latest");
+		require(latest && latest->publication().physical_generation == 3U,
+				"second stale writer did not use the full database generation census");
+		auto local_selector = selector(relation_engine);
+		local_selector.channel_id = "local";
+		auto visible_local = second->open_publication(local->publication().publication_id);
+		auto current_local = second->current(local_selector);
+		auto selected_latest = second->open(latest->id());
+		require(visible_local && current_local && selected_latest &&
+					current_local->publication().publication_id ==
+						local->publication().publication_id &&
+					selected_latest->publication().publication_id ==
+						latest->publication().publication_id,
+				"post-commit census refresh was not symmetric across long-lived stores");
+		std::filesystem::remove(path);
+	}
+
+	void check_sqlite_transactional_generation_authority()
+	{
+		const auto relation_engine = engine();
+		const auto path = std::filesystem::temp_directory_path() /
+			"cxxlens-ng-transactional-generation-authority.sqlite";
+		std::filesystem::remove(path);
+		auto first = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+		auto second = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+		require(first && second, "long-lived SQLite stores unavailable");
+		auto stable = try_publish(*first, relation_engine, std::nullopt, "stable");
+		auto alternate = try_publish(*second, relation_engine, std::nullopt, "alternate");
+		require(stable && alternate && stable->publication().physical_generation == 1U &&
+					alternate->publication().physical_generation == 2U,
+				"different-series writers reused a process-local generation");
+		const auto stable_id = std::string{stable->publication().publication_id};
+		const auto alternate_id = std::string{alternate->publication().publication_id};
+		const auto snapshot_id = std::string{stable->id()};
+
+		require(first->compact().has_value(), "first long-lived compaction failed");
+		require(second->compact().has_value(), "stale compact-vs-compact census failed");
+		auto compacted_stable = second->open_publication(stable_id);
+		auto compacted_alternate = second->open_publication(alternate_id);
+		require(compacted_stable && compacted_alternate &&
+					compacted_stable->publication().physical_generation == 5U &&
+					compacted_alternate->publication().physical_generation == 6U,
+				"stale compaction omitted external publications or reused generations");
+
+		auto external = try_publish(*first, relation_engine, std::nullopt, "external");
+		require(external && external->publication().physical_generation == 7U,
+				"publish-after-external-compaction did not use database authority");
+		const auto external_id = std::string{external->publication().publication_id};
+		require(second->compact().has_value(), "compact-after-external-publish failed");
+		auto final_stable = second->open_publication(stable_id);
+		auto final_alternate = second->open_publication(alternate_id);
+		auto final_external = second->open_publication(external_id);
+		auto selected = second->open(snapshot_id);
+		require(final_stable && final_alternate && final_external && selected &&
+					final_stable->publication().physical_generation == 8U &&
+					final_alternate->publication().physical_generation == 9U &&
+					final_external->publication().physical_generation == 10U &&
+					selected->publication().publication_id == external_id,
+				"publish/compact interleaving did not preserve the full ordered authority set");
+		std::filesystem::remove(path);
+	}
+
+	void check_compaction_failure_isolation()
+	{
+		const auto relation_engine = engine();
+		constexpr auto almost_maximum = std::numeric_limits<std::uint64_t>::max() - 1U;
+		for (const bool sqlite : {false, true})
+		{
+			const auto path = std::filesystem::temp_directory_path() /
+				("cxxlens-ng-compaction-rollback-" + std::string{sqlite ? "sqlite" : "memory"} +
+				 ".sqlite");
+			std::filesystem::remove(path);
+			auto store = sqlite
+				? cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine)
+				: cxxlens::sdk::make_in_memory_snapshot_store(relation_engine);
+			require(store.has_value(), "compaction rollback store unavailable");
+			auto first = try_publish(*store, relation_engine, std::nullopt, "first");
+			auto second = try_publish(*store, relation_engine, std::nullopt, "second");
+			require(first && second, "compaction rollback publications failed");
+			const auto first_id = std::string{first->publication().publication_id};
+			auto rewritten = cxxlens::sdk::rewrite_publication_counters_for_testing(
+				*store, second->publication().publication_id, 1U, almost_maximum);
+			require(rewritten.has_value(), "compaction rollback boundary setup failed");
+			const auto second_id = std::move(*rewritten);
+			auto compacted = store->compact();
+			require(!compacted && compacted.error().code == "store.counter-overflow",
+					"partial compaction allocation did not fail closed");
+			if (sqlite)
+				store = cxxlens::sdk::result<cxxlens::sdk::snapshot_store>{
+					cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine)
+						.value()};
+			auto preserved_first = store->open_publication(first_id);
+			auto preserved_second = store->open_publication(second_id);
+			require(preserved_first && preserved_second &&
+						preserved_first->publication().physical_generation == 1U &&
+						preserved_second->publication().physical_generation == almost_maximum,
+					"failed compaction partially replaced prior generations");
+			std::filesystem::remove(path);
+		}
+	}
+
+	void check_sqlite_authority_corruption()
+	{
+		const auto relation_engine = engine();
+		const std::array mutations{"missing", "publication", "sequence"};
+		for (const auto* mutation : mutations)
+		{
+			const auto path = std::filesystem::temp_directory_path() /
+				("cxxlens-ng-head-corruption-" + std::string{mutation} + ".sqlite");
+			std::filesystem::remove(path);
+			{
+				auto store =
+					cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+				require(store.has_value(), "head corruption store unavailable");
+				auto published = publish(*store, relation_engine, false);
+				require(cxxlens::sdk::rewrite_publication_payload_for_testing(
+							*store,
+							published.publication().publication_id,
+							"test.series-head",
+							mutation,
+							0U)
+							.has_value(),
+						"head corruption setup failed");
+			}
+			auto reopened =
+				cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+			require(!reopened && reopened.error().code == "store.corrupt",
+					"missing, different, or sequence-drifted durable head was accepted");
+			std::filesystem::remove(path);
+		}
+
+		const auto duplicate_path =
+			std::filesystem::temp_directory_path() / "cxxlens-ng-duplicate-valid-sequence.sqlite";
+		std::filesystem::remove(duplicate_path);
+		auto store =
+			cxxlens::sdk::open_sqlite_snapshot_store(duplicate_path.string(), relation_engine);
+		require(store.has_value(), "duplicate sequence store unavailable");
+		auto published = publish(*store, relation_engine, false);
+		require(
+			cxxlens::sdk::rewrite_publication_payload_for_testing(
+				*store, published.publication().publication_id, "test.duplicate-sequence", "", 0U)
+				.has_value(),
+			"duplicate valid authority setup failed");
+		auto compacted = store->compact();
+		require(!compacted && compacted.error().code == "store.compact-validation-failed",
+				"duplicate valid sequence was admitted to compaction authority");
+		auto duplicate_reopen =
+			cxxlens::sdk::open_sqlite_snapshot_store(duplicate_path.string(), relation_engine);
+		require(!duplicate_reopen && duplicate_reopen.error().code == "store.current-ambiguous",
+				"duplicate valid sequence was admitted by reopen head derivation");
+		std::filesystem::remove(duplicate_path);
+
+		const auto orphan_path =
+			std::filesystem::temp_directory_path() / "cxxlens-ng-orphan-parent.sqlite";
+		std::filesystem::remove(orphan_path);
+		{
+			auto orphan_store =
+				cxxlens::sdk::open_sqlite_snapshot_store(orphan_path.string(), relation_engine);
+			require(orphan_store.has_value(), "orphan parent store unavailable");
+			auto orphan = publish(*orphan_store, relation_engine, false);
+			require(cxxlens::sdk::rewrite_publication_payload_for_testing(
+						*orphan_store,
+						orphan.publication().publication_id,
+						"test.orphan-parent",
+						"",
+						0U)
+						.has_value(),
+					"orphan parent setup failed");
+		}
+		auto orphan_reopen =
+			cxxlens::sdk::open_sqlite_snapshot_store(orphan_path.string(), relation_engine);
+		require(!orphan_reopen && orphan_reopen.error().code == "store.corrupt",
+				"identity-valid orphan publication topology was admitted by reopen");
+		std::filesystem::remove(orphan_path);
+	}
+
+	void check_unsigned_counter_codec_transition()
+	{
+		const auto relation_engine = engine();
+		constexpr auto signed_maximum =
+			static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+		const std::array values{
+			signed_maximum, signed_maximum + 1U, std::numeric_limits<std::uint64_t>::max()};
+		for (const auto value : values)
+		{
+			const auto path = std::filesystem::temp_directory_path() /
+				("cxxlens-ng-u64-codec-" + std::to_string(value) + ".sqlite");
+			std::filesystem::remove(path);
+			std::string publication_id;
+			{
+				auto store =
+					cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+				require(store.has_value(), "u64 codec store unavailable");
+				auto published = publish(*store, relation_engine, false);
+				auto rewritten = cxxlens::sdk::rewrite_publication_counters_for_testing(
+					*store, published.publication().publication_id, value, value);
+				require(rewritten.has_value(), "u64 codec rewrite failed");
+				publication_id = std::move(*rewritten);
+			}
+			auto reopened =
+				cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+			auto opened = reopened
+				? reopened->open_publication(publication_id)
+				: cxxlens::sdk::result<cxxlens::sdk::snapshot_handle>{reopened.error()};
+			require(reopened && opened && opened->publication().sequence == value &&
+						opened->publication().physical_generation == value &&
+						opened->publication().publication_id ==
+							expected_publication_identity(opened->publication()),
+					"u64 SQLite or canonical identity codec did not round trip a sign boundary");
+			std::filesystem::remove(path);
+		}
+	}
+
 	void check_derived_basis_membership()
 	{
 		const auto relation_engine = engine();
@@ -1109,6 +1421,140 @@ namespace
 					"corrupt current input snapshot was accepted");
 		}
 	}
+
+	void check_derived_basis_uses_checked_snapshot_resolver()
+	{
+		const auto relation_engine = engine();
+		for (const bool sqlite : {false, true})
+		{
+			const auto path = std::filesystem::temp_directory_path() /
+				("cxxlens-ng-derived-resolver-" + std::string{sqlite ? "sqlite" : "memory"} +
+				 ".sqlite");
+			std::filesystem::remove(path);
+			auto store = sqlite
+				? cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine)
+				: cxxlens::sdk::make_in_memory_snapshot_store(relation_engine);
+			require(store.has_value(), "derived resolver store unavailable");
+			auto stable = try_publish(*store, relation_engine, std::nullopt, "stable");
+			auto alternate = try_publish(*store, relation_engine, std::nullopt, "alternate");
+			require(stable && alternate && stable->id() == alternate->id() &&
+						stable->publication().physical_generation <
+							alternate->publication().physical_generation,
+					"derived resolver corrupt-latest setup failed");
+			const auto partition_content = stable->manifest().partitions.front().content_digest;
+			require(cxxlens::sdk::mark_publication_corrupt_for_testing(
+						*store, alternate->publication().publication_id)
+						.has_value(),
+					"derived resolver latest-corrupt setup failed");
+			auto opened = store->open(stable->id());
+			auto derived = validate_derived_partition(*store,
+													  relation_engine,
+													  stable->publication().publication_id,
+													  std::string{stable->id()},
+													  {partition_content});
+			require(!opened && opened.error().code == "store.snapshot-corrupt" && !derived &&
+						derived.error().code == "store.snapshot-corrupt",
+					"derived basis fell back behind the corrupt selected publication");
+			std::filesystem::remove(path);
+		}
+
+		for (const bool sqlite : {false, true})
+		{
+			const auto path = std::filesystem::temp_directory_path() /
+				("cxxlens-ng-derived-ambiguous-" + std::string{sqlite ? "sqlite" : "memory"} +
+				 ".sqlite");
+			std::filesystem::remove(path);
+			auto store = sqlite
+				? cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine)
+				: cxxlens::sdk::make_in_memory_snapshot_store(relation_engine);
+			require(store.has_value(), "derived ambiguity store unavailable");
+			auto stable = try_publish(*store, relation_engine, std::nullopt, "stable");
+			auto alternate = try_publish(*store, relation_engine, std::nullopt, "alternate");
+			auto latest = try_publish(*store, relation_engine, std::nullopt, "latest");
+			require(stable && alternate && latest && stable->id() == alternate->id() &&
+						stable->id() == latest->id(),
+					"derived ambiguity publications differ semantically");
+			std::array publication_ids{std::string{stable->publication().publication_id},
+									   std::string{alternate->publication().publication_id},
+									   std::string{latest->publication().publication_id}};
+			const auto high = std::ranges::min_element(publication_ids);
+			for (const auto& publication_id : publication_ids)
+			{
+				if (publication_id == *high)
+					continue;
+				auto rewritten = cxxlens::sdk::rewrite_publication_counters_for_testing(
+					*store, publication_id, 1U, 1U);
+				require(rewritten.has_value(), "derived ambiguity low-key setup failed");
+			}
+			auto rewritten_high =
+				cxxlens::sdk::rewrite_publication_counters_for_testing(*store, *high, 1U, 3U);
+			require(rewritten_high.has_value(), "derived ambiguity high-key setup failed");
+			const auto partition_content = stable->manifest().partitions.front().content_digest;
+			auto opened = store->open(stable->id());
+			auto derived = validate_derived_partition(*store,
+													  relation_engine,
+													  stable->publication().publication_id,
+													  std::string{stable->id()},
+													  {partition_content});
+			require(!opened && opened.error().code == "store.snapshot-ambiguous" && !derived &&
+						derived.error().code == "store.snapshot-ambiguous",
+					"derived basis did not share the semantic snapshot ambiguity verdict");
+			if (sqlite)
+			{
+				auto reopened =
+					cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+				auto reopened_semantic = reopened
+					? reopened->open(stable->id())
+					: cxxlens::sdk::result<cxxlens::sdk::snapshot_handle>{reopened.error()};
+				require(reopened && !reopened_semantic &&
+							reopened_semantic.error().code == "store.snapshot-ambiguous",
+						"SQLite reopen missed a lower-order ambiguous resolver pair");
+			}
+			std::filesystem::remove(path);
+		}
+	}
+
+	void check_v5_manifest_order_is_canonical()
+	{
+		const auto relation_engine = engine();
+		const auto path =
+			std::filesystem::temp_directory_path() / "cxxlens-ng-manifest-order.sqlite";
+		std::filesystem::remove(path);
+		std::string publication_id;
+		std::string snapshot_id;
+		{
+			auto store = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+			require(store.has_value(), "manifest order store unavailable");
+			auto writer = store->begin(snapshot_draft(relation_engine));
+			auto first = partition(relation_engine, false);
+			auto second = partition(relation_engine, true);
+			second.scope = "compile-unit-2";
+			second.coverage.front().key = "compile-unit-2";
+			require(writer && writer->stage(std::move(first)) && writer->stage(std::move(second)) &&
+						writer->validate(),
+					"two-partition manifest setup failed");
+			auto published = writer->publish();
+			require(published && published->manifest().partitions.size() == 2U,
+					"two-partition manifest did not publish");
+			publication_id = published->publication().publication_id;
+			snapshot_id = published->id();
+			require(cxxlens::sdk::rewrite_publication_payload_for_testing(
+						*store, publication_id, "test.reverse-manifest-partitions", "", 0U)
+						.has_value(),
+					"manifest order tamper failed");
+		}
+		auto reopened = cxxlens::sdk::open_sqlite_snapshot_store(path.string(), relation_engine);
+		auto current = reopened
+			? reopened->current(selector(relation_engine))
+			: cxxlens::sdk::result<cxxlens::sdk::snapshot_handle>{reopened.error()};
+		auto semantic = reopened
+			? reopened->open(snapshot_id)
+			: cxxlens::sdk::result<cxxlens::sdk::snapshot_handle>{reopened.error()};
+		require(reopened && !current && current.error().code == "store.current-corrupt" &&
+					!semantic && semantic.error().code == "store.snapshot-corrupt",
+				"noncanonical v5 manifest order was exposed as an intact snapshot");
+		std::filesystem::remove(path);
+	}
 } // namespace
 
 int main()
@@ -1117,10 +1563,18 @@ int main()
 	check_backend_parity();
 	check_occurrence_round_trip();
 	check_sqlite_multi_instance_cas();
+	check_compaction_resolver_order();
+	check_sqlite_publish_refreshes_committed_census();
+	check_sqlite_transactional_generation_authority();
+	check_compaction_failure_isolation();
+	check_sqlite_authority_corruption();
+	check_unsigned_counter_codec_transition();
 	check_sqlite_semantic_graph_tamper();
 	check_publication_identity_binding();
 	check_snapshot_version_wire_bounds();
 	check_publication_counter_bounds();
 	check_derived_basis_membership();
+	check_derived_basis_uses_checked_snapshot_resolver();
+	check_v5_manifest_order_is_canonical();
 	return 0;
 }

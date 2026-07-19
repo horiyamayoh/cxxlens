@@ -34,7 +34,30 @@ class NgClang22MaterializationTests(unittest.TestCase):
         )
 
     def report(self, request: dict) -> dict:
-        return materialization.sample_report(ROOT, request)
+        request_bytes = materialization.canonical_json(request)
+        return materialization.sample_report(
+            ROOT,
+            request,
+            request_bytes=request_bytes,
+        )
+
+    def validate_report(
+        self,
+        request: dict | None,
+        report: dict,
+        *,
+        request_bytes: bytes | None = None,
+    ) -> None:
+        if request_bytes is None:
+            if request is None:
+                self.fail("raw-input compact failures require explicit request bytes")
+            request_bytes = materialization.canonical_json(request)
+        materialization.validate_report(
+            ROOT,
+            request,
+            report,
+            request_bytes=request_bytes,
+        )
 
     def matrix(self) -> list[tuple[dict, dict]]:
         entries = []
@@ -43,6 +66,53 @@ class NgClang22MaterializationTests(unittest.TestCase):
                 request = self.request(configuration, backend)
                 entries.append((request, self.report(request)))
         return entries
+
+    @staticmethod
+    def rebind_publication_record(record: dict) -> None:
+        record["publication_id"] = materialization.canonical_identity_digest(
+            "publication",
+            [
+                record["series_id"],
+                record["snapshot_id"],
+                record["sequence"],
+                record["parent_publication"] or "",
+            ],
+        )
+
+    @staticmethod
+    def rebind_reopened_semantic_projection(projection: dict) -> None:
+        semantic_fields = {
+            key: projection[key]
+            for key in (
+                "backend",
+                "snapshot_manifest",
+                "snapshot_manifest_digest",
+                "descriptors",
+                "partition_binding_multiset_digest",
+                "row_multiset_digest",
+                "claim_annotation_multiset_digest",
+                "coverage_multiset_digest",
+                "unresolved_digest",
+                "closure_digest",
+                "cursor_projection_digest",
+                "canonical_export_digest",
+            )
+        }
+        projection["semantic_projection_digest"] = materialization._digest_projection(
+            "cxxlens.clang22-reopened-semantic-projection.v1",
+            semantic_fields,
+        )
+
+    @staticmethod
+    def rebind_reopened_handle_projection(projection: dict) -> None:
+        projection["handle_projection_digest"] = materialization._digest_projection(
+            "cxxlens.clang22-reopened-handle-projection.v1",
+            {
+                key: value
+                for key, value in projection.items()
+                if key != "handle_projection_digest"
+            },
+        )
 
     def test_strict_json_loader_rejects_lexical_ambiguity(self) -> None:
         self.assertEqual(
@@ -88,6 +158,142 @@ class NgClang22MaterializationTests(unittest.TestCase):
                     caught.exception.code, "materialization.report-invalid"
                 )
 
+    def test_raw_input_observation_binds_exact_transport_bytes(self) -> None:
+        request = self.request()
+        canonical = materialization.canonical_json(request)
+        transported = b" \n" + canonical + b"\n\t"
+        self.assertEqual(
+            materialization.load_strict_json_bytes(transported, "request"),
+            request,
+        )
+        report = materialization.sample_report(
+            ROOT,
+            request,
+            request_bytes=transported,
+        )
+        self.validate_report(request, report, request_bytes=transported)
+
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "raw input observation differs from exact transport bytes",
+        ):
+            self.validate_report(request, report, request_bytes=canonical)
+
+        mutations = {
+            "size": lambda observation: observation.__setitem__(
+                "observed_size_bytes", observation["observed_size_bytes"] + 1
+            ),
+            "digest": lambda observation: observation.__setitem__(
+                "observed_prefix_digest", "sha256:" + "0" * 64
+            ),
+            "complete": lambda observation: observation.__setitem__(
+                "complete", False
+            ),
+        }
+        for label, mutate in mutations.items():
+            drift = copy.deepcopy(report)
+            mutate(drift["raw_input_observation"])
+            with self.subTest(label=label):
+                with self.assertRaises(materialization.MaterializationError) as caught:
+                    self.validate_report(
+                        request,
+                        drift,
+                        request_bytes=transported,
+                    )
+                self.assertEqual(
+                    caught.exception.code,
+                    "materialization.report-invalid",
+                )
+
+        original_limit = materialization.RAW_INPUT_BYTE_LIMIT
+        try:
+            materialization.RAW_INPUT_BYTE_LIMIT = 4
+            oversized = materialization.raw_input_observation(b"abcdef")
+        finally:
+            materialization.RAW_INPUT_BYTE_LIMIT = original_limit
+        self.assertEqual(oversized["observed_size_bytes"], 5)
+        self.assertEqual(
+            oversized["observed_prefix_digest"],
+            materialization.content_digest(b"abcde"),
+        )
+        self.assertFalse(oversized["complete"])
+
+    def test_compact_failure_binding_phase_code_and_effects_are_closed(self) -> None:
+        undecodable = b'{"request":'
+        raw_failure = materialization.compact_failure_report(
+            undecodable,
+            request=None,
+            phase="json-decode",
+            code="materialization.request-invalid",
+        )
+        self.validate_report(None, raw_failure, request_bytes=undecodable)
+
+        raw_mutations = {
+            "worker": lambda report: report["effects"].__setitem__(
+                "worker_launch_count", 1
+            ),
+            "draft": lambda report: report["effects"].__setitem__(
+                "store_draft_state", "discarded"
+            ),
+            "head": lambda report: report["effects"].update(
+                {
+                    "head_observation": "present",
+                    "observed_head_publication": "publication:forged",
+                }
+            ),
+            "phase": lambda report: report["error"].__setitem__(
+                "phase", "worker-launch"
+            ),
+        }
+        for label, mutate in raw_mutations.items():
+            drift = copy.deepcopy(raw_failure)
+            mutate(drift)
+            with self.subTest(raw_effect=label):
+                with self.assertRaises(materialization.MaterializationError):
+                    self.validate_report(None, drift, request_bytes=undecodable)
+
+        request = self.request()
+        request_bytes = materialization.canonical_json(request)
+        bound_failure = materialization.compact_failure_report(
+            request_bytes,
+            request=request,
+            phase="worker-launch",
+            code="materialization.worker-failure",
+        )
+        self.validate_report(
+            request,
+            bound_failure,
+            request_bytes=request_bytes,
+        )
+
+        bound_mutations = {
+            "binding": lambda report: report["binding"]["request"].__setitem__(
+                "request_digest", "semantic-v2:sha256:" + "0" * 64
+            ),
+            "code": lambda report: report["error"].__setitem__(
+                "code", "materialization.claim-invalid"
+            ),
+            "head": lambda report: report["effects"].update(
+                {
+                    "head_observation": "present",
+                    "observed_head_publication": "publication:forged",
+                }
+            ),
+            "commit": lambda report: report["effects"].__setitem__(
+                "committed_transaction_count", 1
+            ),
+        }
+        for label, mutate in bound_mutations.items():
+            drift = copy.deepcopy(bound_failure)
+            mutate(drift)
+            with self.subTest(bound_effect=label):
+                with self.assertRaises(materialization.MaterializationError):
+                    self.validate_report(
+                        request,
+                        drift,
+                        request_bytes=request_bytes,
+                    )
+
     def test_report_schema_errors_use_report_invalid_family(self) -> None:
         request = self.request()
         mutations = {
@@ -99,7 +305,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
                 report = self.report(request)
                 mutate(report)
                 with self.assertRaises(materialization.MaterializationError) as caught:
-                    materialization.validate_report(ROOT, request, report)
+                    self.validate_report(request, report)
                 self.assertEqual(
                     caught.exception.code,
                     "materialization.report-invalid",
@@ -187,6 +393,126 @@ class NgClang22MaterializationTests(unittest.TestCase):
                 for row in bindings
             )
         )
+
+    def test_machine_v2_and_descriptor_id_engine_inventory_are_exact(self) -> None:
+        request = self.request()
+        self.assertEqual(
+            request["schema"],
+            "cxxlens.clang22-materialization-request.v2",
+        )
+        self.assertEqual(request["request_version"], "2.0.0")
+        inventory = request["engine"]["admitted_descriptors"]
+        self.assertEqual(
+            [binding["descriptor_id"] for binding in inventory],
+            materialization.ADMITTED_DESCRIPTOR_IDS,
+        )
+        payload = b"".join(
+            (
+                binding["descriptor_id"]
+                + "="
+                + binding["runtime_descriptor_digest"]
+                + "\n"
+            ).encode("utf-8")
+            for binding in inventory
+        )
+        self.assertEqual(
+            request["engine"]["engine_registry_digest"],
+            materialization.semantic_digest(
+                "cxxlens.relation-registry.v1",
+                payload,
+            ),
+        )
+        self.assertNotEqual(
+            request["engine"]["engine_registry_digest"],
+            request["registry"]["authority_registry_digest"],
+        )
+
+        mutations = {
+            "relation-name-alias": lambda drift: drift["engine"][
+                "admitted_descriptors"
+            ][0].__setitem__("descriptor_id", "build_compile_unit"),
+            "duplicate": lambda drift: drift["engine"][
+                "admitted_descriptors"
+            ][1].update(drift["engine"]["admitted_descriptors"][0]),
+            "reordered": lambda drift: drift["engine"][
+                "admitted_descriptors"
+            ].reverse(),
+            "authority-digest-alias": lambda drift: drift["engine"].__setitem__(
+                "engine_registry_digest",
+                drift["registry"]["authority_registry_digest"],
+            ),
+        }
+        for label, mutate in mutations.items():
+            drift = self.request()
+            mutate(drift)
+            materialization.bind_request_identity(drift)
+            with self.subTest(label=label):
+                with self.assertRaises(materialization.MaterializationError):
+                    materialization.validate_request(ROOT, drift)
+
+        legacy = self.request()
+        legacy["schema"] = "cxxlens.clang22-materialization-request.v1"
+        legacy["request_version"] = "1.0.0"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "materialization.request-invalid",
+        ):
+            materialization.validate_request(ROOT, legacy)
+
+    def test_complete_selector_and_memory_genesis_policy_are_fail_closed(self) -> None:
+        request = self.request()
+        selector_mutations = {
+            "catalog_id": "catalog:forged",
+            "engine_generation_id": "engine-generation:sha256:" + "0" * 64,
+            "condition_universe_id": "condition-universe:forged",
+            "relation_registry_digest": "semantic-v2:sha256:" + "1" * 64,
+            "interpretation_policy_digest": "semantic-v2:sha256:" + "2" * 64,
+            "trust_policy_digest": "semantic-v2:sha256:" + "3" * 64,
+        }
+        for field, value in selector_mutations.items():
+            drift = self.request()
+            drift["publication"]["selector"][field] = value
+            drift["publication"]["series_id"] = materialization.expected_series_id(
+                drift["publication"]["selector"]
+            )
+            materialization.bind_request_identity(drift)
+            with self.subTest(selector_field=field):
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "complete Store selector or task policy binding differs",
+                ):
+                    materialization.validate_request(ROOT, drift)
+
+        alternate_channel = self.request()
+        old_semantic_digest = alternate_channel["semantic_request_digest"]
+        alternate_channel["publication"]["selector"][
+            "channel_id"
+        ] = "channel:alternate"
+        alternate_channel["publication"]["series_id"] = (
+            materialization.expected_series_id(
+                alternate_channel["publication"]["selector"]
+            )
+        )
+        materialization.bind_request_identity(alternate_channel)
+        materialization.validate_request(ROOT, alternate_channel)
+        self.assertNotEqual(
+            alternate_channel["semantic_request_digest"],
+            old_semantic_digest,
+        )
+
+        memory_append = self.request(backend="memory")
+        memory_append["publication"].update(
+            {
+                "genesis": False,
+                "expected_parent_publication": "publication:parent",
+            }
+        )
+        materialization.bind_request_identity(memory_append)
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "materialization request",
+        ):
+            materialization.validate_request(ROOT, memory_append)
 
     def test_observation_v2_native_codec_closes_payload_origin_and_row_identity(
         self,
@@ -804,7 +1130,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
         with self.assertRaisesRegex(
             materialization.MaterializationError, "materialization report"
         ):
-            materialization.validate_report(ROOT, request, report)
+            self.validate_report(request, report)
 
     def test_platform_configuration_binding_is_fail_closed(self) -> None:
         request = self.request("static", "memory")
@@ -813,7 +1139,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
         with self.assertRaisesRegex(
             materialization.MaterializationError, "platform/configuration"
         ):
-            materialization.validate_report(ROOT, request, report)
+            self.validate_report(request, report)
 
     def test_unsealed_or_partial_group_and_batch_are_rejected(self) -> None:
         request = self.request()
@@ -822,14 +1148,14 @@ class NgClang22MaterializationTests(unittest.TestCase):
         with self.assertRaisesRegex(
             materialization.MaterializationError, "materialization.group-incomplete"
         ):
-            materialization.validate_report(ROOT, request, unsealed)
+            self.validate_report(request, unsealed)
 
         missing_batch = self.report(request)
         missing_batch["task_results"][0]["batches"].pop()
         with self.assertRaisesRegex(
             materialization.MaterializationError, "materialization report"
         ):
-            materialization.validate_report(ROOT, request, missing_batch)
+            self.validate_report(request, missing_batch)
 
     def test_zero_row_canonical_and_observation_batches_are_valid(self) -> None:
         request = self.request()
@@ -866,12 +1192,12 @@ class NgClang22MaterializationTests(unittest.TestCase):
             }
         )
         materialization.rebind_report_digest_chain(ROOT, request, canonical)
-        materialization.validate_report(ROOT, request, canonical)
+        self.validate_report(request, canonical)
 
         observation = self.report(request)
         empty_batch(observation, "frontend.clang22.type_observation.v2")
         materialization.rebind_report_digest_chain(ROOT, request, observation)
-        materialization.validate_report(ROOT, request, observation)
+        self.validate_report(request, observation)
 
     def test_zero_row_batch_normalization_is_fail_closed(self) -> None:
         request = self.request()
@@ -896,12 +1222,11 @@ class NgClang22MaterializationTests(unittest.TestCase):
                 ),
             }
         )
-        materialization.rebind_report_digest_chain(ROOT, request, zero_with_chunk)
         with self.assertRaisesRegex(
             materialization.MaterializationError,
             "materialization.report-invalid",
         ):
-            materialization.validate_report(ROOT, request, zero_with_chunk)
+            self.validate_report(request, zero_with_chunk)
 
         zero_with_binding = self.report(request)
         target = batch(zero_with_binding)
@@ -912,12 +1237,11 @@ class NgClang22MaterializationTests(unittest.TestCase):
                 "provenance_edge_digests": [],
             }
         )
-        materialization.rebind_report_digest_chain(ROOT, request, zero_with_binding)
         with self.assertRaisesRegex(
             materialization.MaterializationError,
             "materialization.report-invalid",
         ):
-            materialization.validate_report(ROOT, request, zero_with_binding)
+            self.validate_report(request, zero_with_binding)
 
         zero_with_provenance = self.report(request)
         target = batch(zero_with_provenance)
@@ -931,55 +1255,35 @@ class NgClang22MaterializationTests(unittest.TestCase):
                 ),
             }
         )
-        materialization.rebind_report_digest_chain(
-            ROOT,
-            request,
-            zero_with_provenance,
-        )
         with self.assertRaisesRegex(
             materialization.MaterializationError,
             "materialization.report-invalid",
         ):
-            materialization.validate_report(ROOT, request, zero_with_provenance)
+            self.validate_report(request, zero_with_provenance)
 
         nonzero_without_chunk = self.report(request)
         batch(nonzero_without_chunk)["ordered_chunk_digests"] = []
-        materialization.rebind_report_digest_chain(
-            ROOT,
-            request,
-            nonzero_without_chunk,
-        )
         with self.assertRaisesRegex(
             materialization.MaterializationError,
             "materialization.report-invalid",
         ):
-            materialization.validate_report(ROOT, request, nonzero_without_chunk)
+            self.validate_report(request, nonzero_without_chunk)
 
         nonzero_without_binding = self.report(request)
         batch(nonzero_without_binding)["row_bindings"] = []
-        materialization.rebind_report_digest_chain(
-            ROOT,
-            request,
-            nonzero_without_binding,
-        )
         with self.assertRaisesRegex(
             materialization.MaterializationError,
             "materialization.report-invalid",
         ):
-            materialization.validate_report(ROOT, request, nonzero_without_binding)
+            self.validate_report(request, nonzero_without_binding)
 
         nonzero_without_provenance = self.report(request)
         batch(nonzero_without_provenance)["provenance_edge_digests"] = []
-        materialization.rebind_report_digest_chain(
-            ROOT,
-            request,
-            nonzero_without_provenance,
-        )
         with self.assertRaisesRegex(
             materialization.MaterializationError,
             "materialization.report-invalid",
         ):
-            materialization.validate_report(ROOT, request, nonzero_without_provenance)
+            self.validate_report(request, nonzero_without_provenance)
 
     def test_span_id_range_and_absent_accounting_are_fail_closed(self) -> None:
         request = self.request()
@@ -988,14 +1292,14 @@ class NgClang22MaterializationTests(unittest.TestCase):
         with self.assertRaisesRegex(
             materialization.MaterializationError, "materialization.span-invalid"
         ):
-            materialization.validate_report(ROOT, request, mismatched)
+            self.validate_report(request, mismatched)
 
         absent = self.report(request)
         absent["span_validation"]["absent_bundle_count"] = 1
         with self.assertRaisesRegex(
             materialization.MaterializationError, "absent span accounting"
         ):
-            materialization.validate_report(ROOT, request, absent)
+            self.validate_report(request, absent)
 
         exact_with_accounted_absence = self.report(request)
         exact_with_accounted_absence["span_validation"].update(
@@ -1036,11 +1340,9 @@ class NgClang22MaterializationTests(unittest.TestCase):
         with self.assertRaisesRegex(
             materialization.MaterializationError, "materialization.report-invalid"
         ):
-            materialization.validate_report(
-                ROOT, request, exact_with_accounted_absence
-            )
+            self.validate_report(request, exact_with_accounted_absence)
 
-    def test_absent_call_span_is_retained_as_nonexact_without_call_site(self) -> None:
+    def test_detailed_report_rejects_nonexact_absent_call_span(self) -> None:
         request = self.request()
         report = self.report(request)
         report["span_validation"].update(
@@ -1080,7 +1382,11 @@ class NgClang22MaterializationTests(unittest.TestCase):
             "under_approximation"
         )
         materialization.rebind_report_digest_chain(ROOT, request, report)
-        materialization.validate_report(ROOT, request, report)
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "materialization.report-invalid",
+        ):
+            self.validate_report(request, report)
 
     def test_observation_span_census_and_unique_count_are_fail_closed(self) -> None:
         request = self.request()
@@ -1090,7 +1396,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.MaterializationError,
             "validated span row census differs|observation/span bundle census differs",
         ):
-            materialization.validate_report(ROOT, request, census_bypass)
+            self.validate_report(request, census_bypass)
 
         unique_bypass = self.report(request)
         unique_bypass["span_validation"].update(
@@ -1103,9 +1409,11 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.MaterializationError,
             "materialization.span-invalid",
         ):
-            materialization.validate_report(ROOT, request, unique_bypass)
+            self.validate_report(request, unique_bypass)
 
-    def test_absent_bundle_requires_exact_typed_unresolved_category(self) -> None:
+    def test_detailed_report_rejects_nonexact_unresolved_category_accounting(
+        self,
+    ) -> None:
         request = self.request()
         report = self.report(request)
         report["span_validation"].update(
@@ -1134,40 +1442,137 @@ class NgClang22MaterializationTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(
             materialization.MaterializationError,
-            "typed unresolved category accounting is not exact",
+            "materialization.report-invalid",
         ):
-            materialization.validate_report(ROOT, request, report)
+            self.validate_report(request, report)
 
     def test_stale_parent_cannot_forge_success_and_valid_failure_preserves_head(self) -> None:
         request = self.request("static", "sqlite")
         forged = self.report(request)
-        forged["publication"]["observed_parent_publication"] = "publication:other"
+        forged["publication"]["expected_parent_publication"] = (
+            "publication:sha256:" + "0" * 64
+        )
         with self.assertRaisesRegex(
             materialization.MaterializationError, "materialization.stale-parent"
         ):
-            materialization.validate_report(ROOT, request, forged)
+            self.validate_report(request, forged)
 
         failed = materialization.stale_parent_report(ROOT, request)
-        materialization.validate_report(ROOT, request, failed)
-        self.assertFalse(failed["publication"]["committed"])
-        self.assertTrue(failed["publication"]["prior_head_preserved"])
+        self.validate_report(request, failed)
+        publication = failed["publication"]
+        self.assertEqual(publication["outcome"], "rejected_stale")
+        self.assertEqual(publication["candidate_identity_state"], "constructed")
+        self.assertEqual(publication["invocation_commit_state"], "not_committed")
+        self.assertEqual(publication["committed_transaction_count"], 0)
+        self.assertIsNone(publication["invocation_committed_record"])
+        self.assertEqual(publication["candidate_visibility"], "absent")
+        self.assertTrue(publication["prior_history_retained"])
+        self.assertEqual(
+            publication["recovery_receipt"]["candidate"]["status"],
+            "not_found",
+        )
+        self.assertEqual(failed["semantic_verification"]["status"], "not_published")
 
     def test_passed_sqlite_requires_reopen_and_memory_forbids_false_claim(self) -> None:
         sqlite_request = self.request("static", "sqlite")
         sqlite_report = self.report(sqlite_request)
-        sqlite_report["publication"]["sqlite_reopened"] = False
+        sqlite_report["publication"]["sqlite_reopen_status"] = "not_applicable"
         with self.assertRaisesRegex(
             materialization.MaterializationError, "materialization report"
         ):
-            materialization.validate_report(ROOT, sqlite_request, sqlite_report)
+            self.validate_report(sqlite_request, sqlite_report)
 
         memory_request = self.request("static", "memory")
         memory_report = self.report(memory_request)
-        memory_report["publication"]["sqlite_reopened"] = True
+        memory_report["publication"]["sqlite_reopen_status"] = "opened"
         with self.assertRaisesRegex(
             materialization.MaterializationError, "materialization report"
         ):
-            materialization.validate_report(ROOT, memory_request, memory_report)
+            self.validate_report(memory_request, memory_report)
+
+    def test_open_snapshot_receipt_may_return_same_snapshot_from_another_series(
+        self,
+    ) -> None:
+        request = self.request("static", "sqlite")
+        report = self.report(request)
+        receipt = report["semantic_verification"]["reopened_store"][
+            "handle_receipts"
+        ][2]
+        record = receipt["projection"]["publication_record"]
+        record.update(
+            {
+                "series_id": "snapshot-series:sha256:" + "f" * 64,
+                "sequence": 7,
+                "physical_generation": 9,
+                "parent_publication": "publication:sha256:" + "e" * 64,
+            }
+        )
+        self.rebind_publication_record(record)
+        self.rebind_reopened_handle_projection(receipt["projection"])
+
+        self.validate_report(request, report)
+
+    def test_reopened_handle_publication_and_semantic_drift_is_rejected(
+        self,
+    ) -> None:
+        request = self.request("static", "sqlite")
+
+        for index, access_path in ((0, "current-selector"), (1, "open-publication")):
+            report = self.report(request)
+            receipt = report["semantic_verification"]["reopened_store"][
+                "handle_receipts"
+            ][index]
+            record = receipt["projection"]["publication_record"]
+            record["snapshot_id"] = "snapshot:sha256:" + "d" * 64
+            self.rebind_publication_record(record)
+            self.rebind_reopened_handle_projection(receipt["projection"])
+            with self.subTest(access_path=access_path):
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    f"{access_path} recovery publication transition differs",
+                ):
+                    self.validate_report(request, report)
+
+        snapshot_drift = self.report(request)
+        snapshot_receipt = snapshot_drift["semantic_verification"]["reopened_store"][
+            "handle_receipts"
+        ][2]
+        snapshot_record = snapshot_receipt["projection"]["publication_record"]
+        snapshot_record["snapshot_id"] = "snapshot:sha256:" + "c" * 64
+        self.rebind_publication_record(snapshot_record)
+        self.rebind_reopened_handle_projection(snapshot_receipt["projection"])
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "open-snapshot returned a different semantic snapshot",
+        ):
+            self.validate_report(request, snapshot_drift)
+
+        generation_regression = self.report(request)
+        current_receipt = generation_regression["semantic_verification"][
+            "reopened_store"
+        ]["handle_receipts"][0]
+        current_receipt["projection"]["publication_record"][
+            "physical_generation"
+        ] = 0
+        self.rebind_reopened_handle_projection(current_receipt["projection"])
+        with self.assertRaises(materialization.MaterializationError) as caught:
+            self.validate_report(request, generation_regression)
+        self.assertEqual(caught.exception.code, "materialization.report-invalid")
+
+        semantic_drift = self.report(request)
+        semantic_receipt = semantic_drift["semantic_verification"]["reopened_store"][
+            "handle_receipts"
+        ][2]
+        semantic_receipt["projection"]["canonical_export_digest"] = (
+            "sha256:" + "b" * 64
+        )
+        self.rebind_reopened_semantic_projection(semantic_receipt["projection"])
+        self.rebind_reopened_handle_projection(semantic_receipt["projection"])
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "reopened handle semantic snapshot projection differs",
+        ):
+            self.validate_report(request, semantic_drift)
 
     def test_matrix_requires_static_shared_and_memory_sqlite_exactly_once(self) -> None:
         entries = self.matrix()
@@ -1181,6 +1586,44 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.MaterializationError, "installed matrix differs"
         ):
             materialization.validate_qualification_matrix(ROOT, duplicate)
+
+    def test_qualification_three_tuple_binds_exact_raw_request_bytes(self) -> None:
+        entries = []
+        for configuration in ("static", "shared"):
+            for backend in ("memory", "sqlite"):
+                request = self.request(configuration, backend)
+                request_bytes = (
+                    b" \n" + materialization.canonical_json(request) + b"\n\t"
+                )
+                report = materialization.sample_report(
+                    ROOT,
+                    request,
+                    request_bytes=request_bytes,
+                )
+                entries.append((request, report, request_bytes))
+
+        materialization.validate_qualification_matrix(ROOT, entries)
+
+        request, report, _ = entries[0]
+        wrong_bytes = copy.deepcopy(entries)
+        wrong_bytes[0] = (
+            request,
+            report,
+            materialization.canonical_json(request),
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "raw input observation differs from exact transport bytes",
+        ):
+            materialization.validate_qualification_matrix(ROOT, wrong_bytes)
+
+        non_bytes = copy.deepcopy(entries)
+        non_bytes[0] = (request, report, "not-bytes")
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "qualification exact request artifact is not bytes",
+        ):
+            materialization.validate_qualification_matrix(ROOT, non_bytes)
 
     def test_semantic_request_digest_is_backend_independent_and_bound(self) -> None:
         memory = self.request("static", "memory")
@@ -1219,14 +1662,14 @@ class NgClang22MaterializationTests(unittest.TestCase):
         with self.assertRaisesRegex(
             materialization.MaterializationError, "source revision/tree"
         ):
-            materialization.validate_report(ROOT, request, wrong_source)
+            self.validate_report(request, wrong_source)
 
         wrong_authority = self.report(request)
         wrong_authority["authority_digests"][0]["digest"] = "sha256:" + "0" * 64
         with self.assertRaisesRegex(
             materialization.MaterializationError, "authority digests"
         ):
-            materialization.validate_report(ROOT, request, wrong_authority)
+            self.validate_report(request, wrong_authority)
 
     def test_source_content_size_and_digest_are_recomputed(self) -> None:
         request = self.request()
@@ -1291,7 +1734,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.MaterializationError,
             "materialization.claim-invalid",
         ):
-            materialization.validate_report(ROOT, request, report)
+            self.validate_report(request, report)
 
         digest_drift = self.report(request)
         digest_drift["base_claims"]["descriptor_results"][0]["row_set_digest"] = (
@@ -1301,27 +1744,12 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.MaterializationError,
             "materialization.claim-invalid",
         ):
-            materialization.validate_report(ROOT, request, digest_drift)
+            self.validate_report(request, digest_drift)
 
     def test_base_row_context_and_span_bundle_edges_cannot_be_swapped(self) -> None:
         request = self.request(translation_unit_count=2)
-        request["tasks"][0].update(
-            {
-                "condition_universe_id": "condition-universe:first",
-                "condition_id": "condition:first",
-            }
-        )
-        request["tasks"][1].update(
-            {
-                "condition_universe_id": "condition-universe:second",
-                "condition_id": "condition:second",
-            }
-        )
-        materialization.bind_provider_task_identities(request)
-        materialization.bind_task_execution_identities(request)
-        materialization.bind_request_identity(request)
         report = self.report(request)
-        materialization.validate_report(ROOT, request, report)
+        self.validate_report(request, report)
 
         swapped_rows = copy.deepcopy(report)
         source_files = next(
@@ -1357,7 +1785,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.MaterializationError,
             "base-claim census/binding differs",
         ):
-            materialization.validate_report(ROOT, request, swapped_rows)
+            self.validate_report(request, swapped_rows)
 
         swapped_span = copy.deepcopy(report)
         span_bindings = swapped_span["span_validation"][
@@ -1393,7 +1821,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.MaterializationError,
             "primary span task source binding differs|span bundle originating task binding differs",
         ):
-            materialization.validate_report(ROOT, request, swapped_span)
+            self.validate_report(request, swapped_span)
 
     def test_genesis_parent_binding_is_exact(self) -> None:
         genesis = self.request()
@@ -1401,7 +1829,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
         genesis["publication"]["expected_parent_publication"] = None
         materialization.bind_request_identity(genesis)
         materialization.validate_request(ROOT, genesis)
-        materialization.validate_report(ROOT, genesis, self.report(genesis))
+        self.validate_report(genesis, self.report(genesis))
 
         invalid_pairs = ((True, "publication:parent"), (False, None))
         for flag, parent in invalid_pairs:
@@ -1443,7 +1871,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
         )
         report = self.report(request)
         report["task_results"].reverse()
-        materialization.validate_report(ROOT, request, report)
+        self.validate_report(request, report)
 
     def test_physical_execution_identity_is_excluded_from_base_semantics(self) -> None:
         static_request = self.request("static", translation_unit_count=2)
@@ -1494,6 +1922,9 @@ class NgClang22MaterializationTests(unittest.TestCase):
             task["catalog_id"] = global_catalog_drift["project"]["catalog_id"]
             task["catalog_digest"] = global_catalog_drift["project"]["catalog_digest"]
         materialization.bind_provider_task_identities(global_catalog_drift)
+        materialization.bind_engine_policy_and_selector_identities(
+            global_catalog_drift
+        )
         materialization.bind_request_identity(global_catalog_drift)
         with self.assertRaisesRegex(
             materialization.MaterializationError,
@@ -1571,6 +2002,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
         )
         materialization.bind_provider_task_identities(aliased)
         materialization.bind_task_execution_identities(aliased)
+        materialization.bind_engine_policy_and_selector_identities(aliased)
         materialization.bind_request_identity(aliased)
         with self.assertRaisesRegex(
             materialization.MaterializationError,
@@ -1645,7 +2077,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.MaterializationError,
             "not every requested task has one result",
         ):
-            materialization.validate_report(ROOT, request, duplicate_result)
+            self.validate_report(request, duplicate_result)
 
         missing_result = self.report(request)
         missing_result["task_results"].pop()
@@ -1653,7 +2085,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.MaterializationError,
             "not every requested task has one result",
         ):
-            materialization.validate_report(ROOT, request, missing_result)
+            self.validate_report(request, missing_result)
 
         extra_result = self.report(request)
         extra_copy = copy.deepcopy(extra_result["task_results"][0])
@@ -1663,7 +2095,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.MaterializationError,
             "not every requested task has one result",
         ):
-            materialization.validate_report(ROOT, request, extra_result)
+            self.validate_report(request, extra_result)
 
         selected_drift = self.report(request)
         selected_drift["task_results"][0]["selected_catalog_compile_unit_id"] = (
@@ -1673,7 +2105,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.MaterializationError,
             "task report differs at selected_catalog_compile_unit_id",
         ):
-            materialization.validate_report(ROOT, request, selected_drift)
+            self.validate_report(request, selected_drift)
 
     def test_legacy_final_id_census_field_is_schema_rejected(self) -> None:
         legacy_fields = {
@@ -1721,6 +2153,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
         old_task_id = request["tasks"][0]["provider_task_id"]
         request["tasks"][0]["condition_universe_id"] = "condition-universe:two"
         materialization.bind_task_execution_identities(request)
+        materialization.bind_engine_policy_and_selector_identities(request)
         materialization.bind_request_identity(request)
         with self.assertRaisesRegex(
             materialization.MaterializationError,
@@ -1849,7 +2282,72 @@ class NgClang22MaterializationTests(unittest.TestCase):
                 report = self.report(request)
                 mutate(report)
                 with self.assertRaises(materialization.MaterializationError):
-                    materialization.validate_report(ROOT, request, report)
+                    self.validate_report(request, report)
+
+    def test_store_condition_canonical_form_uses_utf8_byte_lengths(self) -> None:
+        condition = {
+            "universe": "条件:世界",
+            "fragments": ["alpha", "β", "条件"],
+        }
+        expected = "13:条件:世界;5:alpha;2:β;6:条件"
+        self.assertEqual(
+            materialization.claim_condition_canonical_form(condition),
+            expected,
+        )
+        self.assertNotEqual(
+            expected,
+            "5:条件:世界;5:alpha;1:β;2:条件",
+        )
+
+    def test_store_claim_partition_snapshot_and_publication_dag_is_exact(
+        self,
+    ) -> None:
+        request = self.request()
+
+        def claim_partitions(report: dict) -> list[dict]:
+            return [
+                partition
+                for partition in report["store"]["partitions"]
+                if partition["stored_claim_refs"]
+            ]
+
+        def add_unreferenced_content(report: dict) -> None:
+            claim_partitions(report)[0]["claim_content_digests"].append(
+                "claim-content:sha256:" + "0" * 64
+            )
+
+        def drop_stored_claim_ref(report: dict) -> None:
+            claim_partitions(report)[0]["stored_claim_refs"].pop()
+
+        def substitute_stored_claim_ref(report: dict) -> None:
+            first, second = claim_partitions(report)[:2]
+            first["stored_claim_refs"][0] = second["stored_claim_refs"][0]
+
+        mutations = {
+            "unreferenced-content": add_unreferenced_content,
+            "dropped-stored-claim-ref": drop_stored_claim_ref,
+            "substituted-stored-claim-ref": substitute_stored_claim_ref,
+            "coverage-key": lambda report: report["store"]["partitions"][0][
+                "coverage_units"
+            ][0].__setitem__(
+                "key", "materialization-base-descriptor:sha256:" + "1" * 64
+            ),
+            "partition-id": lambda report: report["store"]["partitions"][
+                0
+            ].__setitem__("partition_id", "partition:sha256:" + "2" * 64),
+            "snapshot-id": lambda report: report["store"][
+                "snapshot_manifest"
+            ].__setitem__("snapshot_id", "snapshot:sha256:" + "3" * 64),
+            "publication-id": lambda report: report["publication"][
+                "invocation_committed_record"
+            ].__setitem__("publication_id", "publication:sha256:" + "4" * 64),
+        }
+        for label, mutate in mutations.items():
+            report = self.report(request)
+            mutate(report)
+            with self.subTest(label=label):
+                with self.assertRaises(materialization.MaterializationError):
+                    self.validate_report(request, report)
 
     def test_observation_equivalence_census_is_typed_and_fail_closed(self) -> None:
         request = self.request()
@@ -1864,7 +2362,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.MaterializationError,
             "materialization report",
         ):
-            materialization.validate_report(ROOT, request, missing)
+            self.validate_report(request, missing)
 
         canonical_extra = self.report(request)
         canonical_extra["task_results"][0]["batches"][0][
@@ -1878,7 +2376,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.MaterializationError,
             "materialization report",
         ):
-            materialization.validate_report(ROOT, request, canonical_extra)
+            self.validate_report(request, canonical_extra)
 
         forged_exact = self.report(request)
         type_batch = next(
@@ -1908,7 +2406,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.MaterializationError,
             "materialization.report-invalid",
         ):
-            materialization.validate_report(ROOT, request, forged_exact)
+            self.validate_report(request, forged_exact)
 
         under = self.report(request)
         type_batch = next(
@@ -1937,7 +2435,11 @@ class NgClang22MaterializationTests(unittest.TestCase):
             "under_approximation"
         )
         materialization.rebind_report_digest_chain(ROOT, request, under)
-        materialization.validate_report(ROOT, request, under)
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "materialization.report-invalid",
+        ):
+            self.validate_report(request, under)
 
         pairing = self.report(request)
         type_batch = next(
@@ -1957,28 +2459,17 @@ class NgClang22MaterializationTests(unittest.TestCase):
             "under_approximation"
         )
         materialization.rebind_report_digest_chain(ROOT, request, pairing)
-        materialization.validate_report(ROOT, request, pairing)
-        equivalence_rows = type_batch["observation_equivalence_census"]["rows"]
-        self.assertEqual(len(equivalence_rows), 2)
-        fields = ("exact_equivalence", "limitation", "limitation_digest")
-        first_values = tuple(equivalence_rows[0][field] for field in fields)
-        second_values = tuple(equivalence_rows[1][field] for field in fields)
-        for field, value in zip(fields, second_values, strict=True):
-            equivalence_rows[0][field] = value
-        for field, value in zip(fields, first_values, strict=True):
-            equivalence_rows[1][field] = value
-        materialization.rebind_report_digest_chain(ROOT, request, pairing)
         with self.assertRaisesRegex(
             materialization.MaterializationError,
-            "observation equivalence rows differ from adopted row bindings",
+            "materialization.report-invalid",
         ):
-            materialization.validate_report(ROOT, request, pairing)
+            self.validate_report(request, pairing)
 
         matrix = self.matrix()
         matrix[0] = (request, under)
         with self.assertRaisesRegex(
             materialization.MaterializationError,
-            "qualification requires exact observation equivalence",
+            "materialization.report-invalid",
         ):
             materialization.validate_qualification_matrix(ROOT, matrix)
 
@@ -1999,12 +2490,11 @@ class NgClang22MaterializationTests(unittest.TestCase):
                 ],
             }
         )
-        materialization.rebind_report_digest_chain(ROOT, request, report)
         with self.assertRaisesRegex(
             materialization.MaterializationError,
-            "row is attributed to another task",
+            "worker row/provenance occurrence binding differs|row is attributed to another task",
         ):
-            materialization.validate_report(ROOT, request, report)
+            materialization.rebind_report_digest_chain(ROOT, request, report)
 
         request = self.request()
         report = self.report(request)
@@ -2096,7 +2586,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             }
         )
         materialization.rebind_report_digest_chain(ROOT, request, report)
-        materialization.validate_report(ROOT, request, report)
+        self.validate_report(request, report)
 
         same_task_calls = [
             binding
@@ -2127,7 +2617,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.MaterializationError,
             "span bundle is not bound to its adopted observation row",
         ):
-            materialization.validate_report(ROOT, request, report)
+            self.validate_report(request, report)
 
     def test_machine_contract_rejects_invocation_digest_and_exactness_drift(self) -> None:
         contract = copy.deepcopy(materialization.load(ROOT / materialization.CONTRACT))

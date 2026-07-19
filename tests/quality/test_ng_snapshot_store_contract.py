@@ -23,6 +23,7 @@ from check_ng_snapshot_store_contract import (  # noqa: E402
     closure_binding,
     closure_mutation_matrix,
     compact,
+    decode_sqlite_unsigned_integer,
     format_open,
     identity_digest,
     load_yaml,
@@ -30,8 +31,11 @@ from check_ng_snapshot_store_contract import (  # noqa: E402
     publish,
     select_current,
     series_id,
+    sqlite_unsigned_integer,
     snapshot_digest_matrix,
+    unsigned_counter_canonical_integer,
     validate_all,
+    validate_contract_shape,
     validate_identity_graph,
 )
 
@@ -51,6 +55,82 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         values = [None, False, 0, b"0", "0", ["a", "bc"], ["ab", "c"]]
         encoded = [canonical_binary(value) for value in values]
         self.assertEqual(len(encoded), len(set(encoded)))
+
+    def test_unsigned_counter_codecs_are_exact_across_sign_boundary(self) -> None:
+        values = [0, (1 << 63) - 1, 1 << 63, (1 << 64) - 1]
+        expected_signed = [0, (1 << 63) - 1, -(1 << 63), -1]
+        self.assertEqual(
+            [unsigned_counter_canonical_integer(value) for value in values],
+            expected_signed,
+        )
+        self.assertEqual(
+            [
+                decode_sqlite_unsigned_integer(sqlite_unsigned_integer(value))
+                for value in values
+            ],
+            values,
+        )
+        for invalid in (-1, 1 << 64, True):
+            with self.assertRaisesRegex(StoreContractError, "counter-domain-invalid"):
+                unsigned_counter_canonical_integer(invalid)
+
+    def test_transactional_publication_and_compaction_contract_is_fail_closed(self) -> None:
+        mutations = [
+            (
+                "store.counter-authority-invalid",
+                lambda value: value["publication_counters"]["authority_record"][
+                    "excluded"
+                ].remove("rejected"),
+            ),
+            (
+                "store.counter-allocation-invalid",
+                lambda value: value["publication_counters"]["sqlite_allocation"].update(
+                    authority_scan="process-local-records"
+                ),
+            ),
+            (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"]["sqlite_head_cas"].update(
+                    conflict="store.publication-conflict-any-failure"
+                ),
+            ),
+            (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"]["sqlite_head_cas"].update(
+                    memory_update="after-commit-local-candidate-only"
+                ),
+            ),
+            (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"]["sqlite_head_cas"][
+                    "steps"
+                ].remove("full-committed-authority-census"),
+            ),
+            (
+                "store.counter-allocation-invalid",
+                lambda value: value["publication_counters"]["sqlite_allocation"][
+                    "compaction_range"
+                ].update(distinct_generation_per_publication=False),
+            ),
+            (
+                "store.compaction-contract-invalid",
+                lambda value: value["compaction"].update(
+                    sqlite_process_memory_update="before-database-commit"
+                ),
+            ),
+            (
+                "store.counter-storage-invalid",
+                lambda value: value["publication_identity"].update(
+                    sequence_canonical_codec="implementation-defined-cast"
+                ),
+            ),
+        ]
+        for code, mutate in mutations:
+            with self.subTest(code=code):
+                changed = copy.deepcopy(self.contract)
+                mutate(changed)
+                with self.assertRaisesRegex(StoreContractError, code):
+                    validate_contract_shape(changed)
 
     def test_domain_separation_changes_digest(self) -> None:
         fields = ["same", 1]

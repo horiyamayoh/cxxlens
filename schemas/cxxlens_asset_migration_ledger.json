@@ -1,5 +1,5 @@
 {
-  "asset_count": 436,
+  "asset_count": 439,
   "assets": [
     {
       "authority": "active",
@@ -1263,6 +1263,20 @@
     },
     {
       "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0191-materialization-prebinding-error-response.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0192-materialization-registry-store-digest-binding.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/doxygen-main.md",
       "removal_issue": null,
       "replacement": null,
@@ -1656,6 +1670,13 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_clang22_materialization_contract.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_clang22_materialization_execution_receipt.schema.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -3055,7 +3076,7 @@
     }
   ],
   "classifications": {
-    "active": 400,
+    "active": 403,
     "archived": 35,
     "generated": 1
   },

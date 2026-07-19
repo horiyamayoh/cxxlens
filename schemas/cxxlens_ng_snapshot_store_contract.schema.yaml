@@ -93,13 +93,14 @@ properties:
   publication_identity:
     type: object
     additionalProperties: false
-    required: [domain, identity_fields, excluded_fields, persisted_binding, compaction]
+    required: [domain, identity_fields, excluded_fields, sequence_canonical_codec, persisted_binding, compaction]
     properties:
       domain: {const: publication}
       identity_fields:
         const: [series_id, snapshot_id, sequence, parent_publication]
       excluded_fields:
         const: [physical_generation, state, corrupt]
+      sequence_canonical_codec: {const: unsigned-64-to-explicit-two-complement-signed-canonical-integer}
       persisted_binding:
         type: object
         additionalProperties: false
@@ -113,7 +114,7 @@ properties:
   wire_decoding:
     type: object
     additionalProperties: false
-    required: [snapshot_semantics_version_components, component_domain, maximum, overflow, narrowing_before_range_validation, accepted_v5_payload]
+    required: [snapshot_semantics_version_components, component_domain, maximum, overflow, narrowing_before_range_validation, accepted_v5_payload, partition_envelope_claim_order]
     properties:
       snapshot_semantics_version_components: {const: [major, minor, patch]}
       component_domain: {const: unsigned-32-bit}
@@ -121,10 +122,11 @@ properties:
       overflow: {const: store.corrupt}
       narrowing_before_range_validation: {const: forbidden}
       accepted_v5_payload: {const: decode-encode-byte-identical}
+      partition_envelope_claim_order: {const: full-sdk-claim-occurrence-projection}
   publication_counters:
     type: object
     additionalProperties: false
-    required: [domain, fields, authority_record, global_generation, increment, maximum_increment, overflow, compaction_uses_shared_increment, sqlite_integer_encoding]
+    required: [domain, fields, authority_record, global_generation, increment, maximum_increment, overflow, compaction_uses_shared_increment, sqlite_allocation, sqlite_integer_encoding]
     properties:
       domain: {const: unsigned-64-bit}
       fields: {const: [publication_sequence, physical_generation]}
@@ -134,13 +136,75 @@ properties:
       maximum_increment: {const: reject}
       overflow: {const: store.counter-overflow}
       compaction_uses_shared_increment: {const: true}
+      sqlite_allocation:
+        type: object
+        additionalProperties: false
+        required: [lock, authority_scan, allocation, different-series-concurrency, corrupt-high-generation, publication_and_compaction_share_allocator, compaction_range]
+        properties:
+          lock: {const: begin-immediate-write-transaction}
+          authority_scan: {const: all-persisted-records-revalidated-to-authority-record-conditions}
+          allocation: {const: checked-max-authority-generation-plus-one-inside-transaction}
+          different-series-concurrency: {const: globally-distinct-monotonic-generations}
+          corrupt-high-generation: {const: excluded}
+          publication_and_compaction_share_allocator: {const: true}
+          compaction_range:
+            type: object
+            additionalProperties: false
+            required: [size, checked_allocation, assignment_order, distinct_generation_per_publication, local_generation_after_commit, overflow]
+            properties:
+              size: {const: exact-authority-publication-count}
+              checked_allocation: {const: max-plus-one-through-max-plus-count}
+              assignment_order: {const: prior-publication-sequence-then-prior-physical-generation-then-publication-id}
+              distinct_generation_per_publication: {const: true}
+              local_generation_after_commit: {const: allocated-range-maximum}
+              overflow: {const: rollback-entire-compaction}
       sqlite_integer_encoding: {$ref: '#/$defs/open_object'}
   publication_series: {type: object, required: [selector_fields, series_id, current_api, catalog_only_lookup, missing_selector_field, cross_series_fallback, head_selection]}
-  publication_transaction: {type: object, required: [states, visible_states, commit, stale_parent, failed_publish_preserves_head, recovery]}
+  publication_transaction:
+    type: object
+    required: [states, visible_states, commit, stale_parent, failed_publish_preserves_head, recovery, sqlite_head_cas]
+    properties:
+      sqlite_head_cas:
+        type: object
+        required: [table, transaction, steps, parent_record, missing-head-with-existing-series-history, same-parent-head-sequence-mismatch, duplicate-publication-id-under-unchanged-parent, conflict, memory_update]
+        properties:
+          table: {const: cxxlens_ng_series_head}
+          transaction: {const: begin-immediate}
+          steps: {const: [full-committed-authority-census, derive-each-series-authoritative-head, exact-compare-head-table-id-and-sequence, recheck-expected-parent, allocate-global-generation, immutable-publication-insert, head-update]}
+          parent_record: {const: exact-committed-decoded-semantic-graph-valid-authority-record}
+          missing-head-with-existing-series-history: {const: store.corrupt}
+          same-parent-head-sequence-mismatch: {const: store.corrupt}
+          duplicate-publication-id-under-unchanged-parent: {const: store.corrupt}
+          conflict: {const: store.publication-conflict-parent-cas-only}
+          memory_update: {const: after-commit-full-committed-census}
   reader_pin: {type: object, required: [handle_pins, semantic_snapshot_immutable, reclamation]}
-  compaction: {type: object, required: [mode, validate_before_swap, failure_preserves_prior_generation, pinned_generation_reclamation]}
+  compaction:
+    type: object
+    required: [mode, backend_scope, sqlite_transaction, replacement_order, generation_allocation, resolver_order_preservation, preexisting-resolver-ambiguity, database_payload_and_head_update, process_memory_update, sqlite_process_memory_update, validate_before_swap, failure_preserves_prior_generation, pinned_generation_reclamation]
+    properties:
+      mode: {const: copy-on-write-generation}
+      backend_scope: {const: memory-and-sqlite}
+      sqlite_transaction: {const: one-begin-immediate-for-entire-replacement-set}
+      replacement_order: {const: prior-publication-sequence-then-prior-physical-generation-then-publication-id}
+      generation_allocation: {const: checked-distinct-contiguous-global-range}
+      resolver_order_preservation: {const: required}
+      preexisting-resolver-ambiguity: {const: reject}
+      database_payload_and_head_update: {const: atomic}
+      process_memory_update: {const: only-after-successful-backend-swap}
+      sqlite_process_memory_update: {const: only-after-database-commit}
+      validate_before_swap: {type: array, minItems: 1, uniqueItems: true}
+      failure_preserves_prior_generation: {const: true}
+      pinned_generation_reclamation: {const: deferred}
   format_compatibility: {type: object, required: [physical_format_excluded_from_snapshot_id, direct_open, migration, migration_commit_requires_same_semantic_digest, incompatible_without_migrator]}
-  corruption: {type: object, required: [verify_on_open, corrupt_current, explicit_intact_prior_open, repair]}
+  corruption:
+    type: object
+    required: [verify_on_open, object_graph_reconstruction, corrupt_current, semantic_snapshot_resolution, explicit_intact_prior_open, repair]
+    properties:
+      semantic_snapshot_resolution:
+        type: object
+        required: [candidate_state, authority, order, equal-order-key-different-publication-id, selected_corrupt, selected_payload_missing_or_mismatched, older_same-snapshot-fallback, consumers]
+        properties:
+          equal-order-key-different-publication-id: {const: store.snapshot-ambiguous}
   backend_authority: {type: object, required: [implementation, backends, roots, jobs, orders, equality, conformance_vectors]}
 $defs:
   version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}

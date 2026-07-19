@@ -14,12 +14,14 @@ required:
   - versioning
   - identity
   - relation_outputs
+  - registry_engine_binding
   - base_claims
   - source_identity
   - group_topology
   - project_and_tasks
   - span_adoption
   - claim_adoption
+  - store_binding
   - side_channels
   - publication
   - report
@@ -28,8 +30,8 @@ required:
   - lifetime
   - acceptance
 properties:
-  schema: {const: cxxlens.clang22-materialization-contract.v1}
-  document_version: {const: 1.0.0}
+  schema: {const: cxxlens.clang22-materialization-contract.v2}
+  document_version: {const: 2.0.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -38,7 +40,7 @@ properties:
     properties:
       design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
       decision_adr: {const: docs/design/adr/0096-clang22-installed-materialization-boundary.md}
-      owner_issue: {const: '#182'}
+      owner_issue: {const: '#181'}
       owner: {const: steward.ng-clang22-provider}
   dependencies:
     type: array
@@ -125,6 +127,7 @@ properties:
             result_identity: registry-declared-domain-projection-via-sdk-derive-domain-identity
             validation: shared-row-builder-plus-sdk-validate-domain-identity-before-seal
           v1_bytes_or_digest: reject-without-reconstruction-from-native-v2-fields
+  registry_engine_binding: {$ref: '#/$defs/nonempty_object'}
   base_claims:
     const:
       owner: installed-tool
@@ -171,12 +174,13 @@ properties:
   project_and_tasks:
     const:
       semantic_request_binding:
-        domain: cxxlens.clang22-semantic-request.v1
+        domain: cxxlens.clang22-semantic-request.v2
         codec: cxxlens-canonical-tuple-v1
         object_encoding: canonical-sorted-key-entry-tuples
-        includes: [tool, worker, project, registry-exact-six-worker-descriptors, registry-exact-six-base-descriptors, group-topology, complete-base-claim-row-payloads, per-tu-source-build-task-condition-budget-sandbox, publication-transaction-policy]
-        excludes: [materialization-request-identity-fields, publication-backend, publication-series-id, publication-sqlite-path, publication-expected-parent]
-        memory_sqlite_equality: required-within-package-configuration
+        includes: [tool, worker, project, authority-registry-and-exact-twelve-engine-descriptors, engine-generation, interpretation-policy, trust-policy, complete-seven-field-selector, group-topology, complete-base-claim-row-payloads, per-tu-source-build-task-condition-budget-sandbox, publication-genesis-partial-policy-transaction-count-reopen-policy]
+        excludes: [materialization-request-identity-fields, derived-publication-series-id, publication-backend, publication-sqlite-path, publication-expected-parent]
+        memory_sqlite_equality: required-for-fresh-genesis-within-package-configuration
+        sqlite-genesis-append-equality: not-claimed
       project_catalog:
         authority: validated-project-catalog
         public_codec: cxxlens.project-catalog.v1
@@ -266,6 +270,7 @@ properties:
           non_exact: preserve-typed-approximation-assumptions-modalities-and-unresolved
           inference_from-success-or-prose: forbidden
     additionalProperties: true
+  store_binding: {$ref: '#/$defs/nonempty_object'}
   side_channels: {$ref: '#/$defs/nonempty_object'}
   publication: {$ref: '#/$defs/nonempty_object'}
   report:
@@ -278,7 +283,7 @@ properties:
           report_self_consistency_is_adoption_authority: false
           batch:
             domain: cxxlens.clang22-batch-result.v1
-            leaves: [ordered-chunk-set, row-binding-claim-content-set, provenance-edge-set, observation-equivalence-census-when-observation]
+            leaves: [ordered-chunk-set, row-binding-set, exact-worker-assertion-content-set, exact-worker-assertion-full-occurrence-set, provenance-edge-set, observation-equivalence-census-when-observation]
             task_binding: exact-composite-execution-key-plus-semantic-row-origin-and-final-relation-compile-unit
             row_binding_fields: [row-digest, semantic-originating-task, final-relation-compile-unit-id, primary-span-bundle-digest-or-absent, exact-equivalence-or-absent, limitation-digest-or-absent]
             observation_census_binding: exact-row-digest-origin-final-exactness-and-limitation-digest
@@ -301,12 +306,50 @@ properties:
             base-or-claim-stage-back-edge: forbidden
           claim_stage:
             content_domain: cxxlens.clang22-claim-stage-content-set.v1
+            sdk_occurrence_domain: cxxlens.clang22-claim-stage-sdk-occurrence-set.v1
+            origin_association_domain: cxxlens.clang22-claim-stage-origin-association-set.v1
             provenance_domain: cxxlens.clang22-claim-stage-provenance-set.v1
             stage_domain: cxxlens.clang22-claim-stage.v1
           global_provenance:
             domain: cxxlens.clang22-global-provenance.v1
             inputs: canonical-three-claim-stage-summaries
-          validation_order: [batch, group, task-side-channel, task-result, task-result-and-raw-frame-sets, global-side-channels, guarantee, claim-stages, global-provenance, base-claim-guarantee-cross-binding]
+          store_identity:
+            inputs: [claim-rows, full-sdk-claim-envelopes, canonicalization-edges, origin-associations, complete-final-claim-batch, exact-eight-field-partitions, coverage-and-unresolved, snapshot-manifest, publication-record, reopened-store-state]
+            opaque-fixture-ids-or-recomputed-booleans: forbidden
+          reopened_store:
+            descriptor_inventory: exact-twelve-id-runtime-digest-pairs-from-handle
+            required_open_paths: [current-selector, open-publication, open-snapshot]
+            fixed_lookup_inputs:
+              current-selector: exact-full-selector-and-series-id
+              open-publication: exact-candidate-publication-id
+              open-snapshot: exact-candidate-snapshot-id
+            path_receipt:
+              status: [present, not_found, corrupt, ambiguous, unavailable, error, not_attempted]
+              present_projection: [backend, full-publication-record, full-snapshot-manifest, snapshot-manifest-digest, exact-descriptor-inventory, partition-binding-multiset-digest, row-multiset-digest, claim-annotation-multiset-digest, coverage-multiset-digest, unresolved-digest, closure-digest, cursor-projection-digest, canonical-export-digest, semantic-projection-digest, handle-projection-digest]
+              non-present: typed-sdk-code-and-field-with-null-projection
+            passed_path_rules:
+              all-three: present
+              current-selector-and-open-publication: same-semantic-publication-as-invocation-with-validated-physical-generation-transition
+              open-snapshot: exact-sdk-authoritative-returned-record-with-requested-snapshot-id
+              all-three-semantic-snapshot-projections: exact-equal
+            committed_unverified_path_rules:
+              closed-mixture: present-or-typed-non-present-for-all-three-paths
+              retain-every-successful-projection: true
+              first-failure: exact-stage-path-and-sdk-error-or-projection-mismatch
+            exact_compare: [selector, snapshot-manifest, eight-field-partition-bindings, rows, claim-annotation-multiset, coverage-multiset, unresolved, descriptor-inventory]
+            canonical_export_digest: sha256-of-exact-utf8-bytes-returned-by-sdk-canonical-export
+            snapshot_manifest_digest: sha256-of-exact-canonical-json-utf8-bytes
+            receipt_leaf_digests: domain-separated-canonical-tuples-in-named-field-order
+            semantic_projection_digest: excludes-access-path-lookup-and-publication-record
+            handle_projection_digest: includes-semantic-projection-and-full-returned-publication-record
+            cursor_projection_domain: cxxlens.clang22-materialization-reopen-cursor.v1
+            cursor_projection: descriptor-id-order-with-row-canonical-forms-claim-annotation-multiset-and-coverage-multiset
+            partition-envelope-proof: checker-reconstructs-exact-sdk-v5-canonical-export-from-full-report-claim-envelopes
+            physical-generation-equality-across-compaction: not-required
+            publication-semantic-fields-and-allowed-generation-transition: required
+            snapshot-path-publication-equality-with-series-paths: not-required
+            boolean-only-proof: forbidden
+          validation_order: [batch, group, task-side-channel, task-result, task-result-and-raw-frame-sets, global-side-channels, guarantee, claim-stages, global-provenance, base-claim-guarantee-cross-binding, sdk-claim-envelopes-and-canonicalization, complete-final-claim-batch, claim-basis-and-partitions, snapshot-manifest, publication-record, reopened-store-state]
     additionalProperties: true
   qualification:
     const:
@@ -319,6 +362,13 @@ properties:
       memory_sqlite_semantic_parity: required
       static_shared_semantic_parity: required
       exact_observation_equivalence: required-zero-non-exact-per-descriptor
+      execution_receipt:
+        fields: [actual-exit-status, exact-stdout-byte-count, stdout-sha256, parsed-response-count, stderr-sha256-diagnostic-only]
+        cross_binding: stdout-bytes-are-the-exact-report-artifact
+        passed_report: actual-exit-zero-and-response-count-one
+        schema_valid_failure: actual-exit-one-and-response-count-one-release-forbidden
+        no_response_failure: actual-exit-two-and-response-count-zero-release-forbidden
+        report_set_entry: [backend, report-digest, execution-receipt-digest]
       missing_extra_duplicate_matrix_entry: reject
   errors: {$ref: '#/$defs/nonempty_object'}
   lifetime: {$ref: '#/$defs/nonempty_object'}

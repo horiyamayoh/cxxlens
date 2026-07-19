@@ -159,6 +159,33 @@ def canonical_binary(value: Any) -> bytes:
     fail("store.canonical-type-unsupported", type(value).__name__)
 
 
+def unsigned_counter_canonical_integer(value: int) -> int:
+    """Map one logical u64 to the SDK's explicit signed canonical integer."""
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or not 0 <= value < (1 << 64)
+    ):
+        fail("store.counter-domain-invalid", str(value))
+    return value if value <= (1 << 63) - 1 else value - (1 << 64)
+
+
+def sqlite_unsigned_integer(value: int) -> int:
+    """Encode one logical u64 in SQLite's signed INTEGER domain."""
+    return unsigned_counter_canonical_integer(value)
+
+
+def decode_sqlite_unsigned_integer(value: int) -> int:
+    """Recover the exact logical u64 from a SQLite signed INTEGER."""
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or not -(1 << 63) <= value < (1 << 63)
+    ):
+        fail("store.counter-storage-invalid", str(value))
+    return value if value >= 0 else value + (1 << 64)
+
+
 def identity_digest(kind: str, fields: list[Any]) -> str:
     domain = b"cxxlens\0" + kind.encode("ascii") + b"\0v1\0"
     hashed = hashlib.sha256(domain + canonical_binary(fields)).hexdigest()
@@ -579,6 +606,7 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
         "overflow": "store.corrupt",
         "narrowing_before_range_validation": "forbidden",
         "accepted_v5_payload": "decode-encode-byte-identical",
+        "partition_envelope_claim_order": "full-sdk-claim-occurrence-projection",
     }:
         fail("store.version-wire-domain-invalid", "semantic version decoding")
     counters = contract["publication_counters"]
@@ -607,8 +635,90 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
         ],
     }:
         fail("store.counter-authority-invalid", "record acceptance")
-    if counters["sqlite_integer_encoding"]["round_trip"] != "exact-u64":
+    if counters["global_generation"] != "maximum-authority-record-generation":
+        fail("store.counter-authority-invalid", "global generation")
+    expected_sqlite_allocation = {
+        "lock": "begin-immediate-write-transaction",
+        "authority_scan": (
+            "all-persisted-records-revalidated-to-authority-record-conditions"
+        ),
+        "allocation": "checked-max-authority-generation-plus-one-inside-transaction",
+        "different-series-concurrency": "globally-distinct-monotonic-generations",
+        "corrupt-high-generation": "excluded",
+        "publication_and_compaction_share_allocator": True,
+        "compaction_range": {
+            "size": "exact-authority-publication-count",
+            "checked_allocation": "max-plus-one-through-max-plus-count",
+            "assignment_order": (
+                "prior-publication-sequence-then-prior-physical-generation-then-"
+                "publication-id"
+            ),
+            "distinct_generation_per_publication": True,
+            "local_generation_after_commit": "allocated-range-maximum",
+            "overflow": "rollback-entire-compaction",
+        },
+    }
+    if counters.get("sqlite_allocation") != expected_sqlite_allocation:
+        fail("store.counter-allocation-invalid", "SQLite transactional allocator")
+    if counters.get("sqlite_integer_encoding") != {
+        "nonnegative_range": "zero-through-int64-max",
+        "upper_unsigned_range": "negative-twos-complement-int64",
+        "round_trip": "exact-u64",
+    }:
         fail("store.counter-storage-invalid", "SQLite integer encoding")
+    if publication.get("sequence_canonical_codec") != (
+        "unsigned-64-to-explicit-two-complement-signed-canonical-integer"
+    ):
+        fail("store.counter-storage-invalid", "publication identity integer encoding")
+    expected_head_cas = {
+        "table": "cxxlens_ng_series_head",
+        "transaction": "begin-immediate",
+        "steps": [
+            "full-committed-authority-census",
+            "derive-each-series-authoritative-head",
+            "exact-compare-head-table-id-and-sequence",
+            "recheck-expected-parent",
+            "allocate-global-generation",
+            "immutable-publication-insert",
+            "head-update",
+        ],
+        "parent_record": (
+            "exact-committed-decoded-semantic-graph-valid-authority-record"
+        ),
+        "missing-head-with-existing-series-history": "store.corrupt",
+        "same-parent-head-sequence-mismatch": "store.corrupt",
+        "duplicate-publication-id-under-unchanged-parent": "store.corrupt",
+        "conflict": "store.publication-conflict-parent-cas-only",
+        "memory_update": "after-commit-full-committed-census",
+    }
+    if contract["publication_transaction"].get("sqlite_head_cas") != expected_head_cas:
+        fail("store.publication-cas-invalid", "durable head authority")
+    expected_compaction = {
+        "mode": "copy-on-write-generation",
+        "backend_scope": "memory-and-sqlite",
+        "sqlite_transaction": "one-begin-immediate-for-entire-replacement-set",
+        "replacement_order": (
+            "prior-publication-sequence-then-prior-physical-generation-then-"
+            "publication-id"
+        ),
+        "generation_allocation": "checked-distinct-contiguous-global-range",
+        "resolver_order_preservation": "required",
+        "preexisting-resolver-ambiguity": "reject",
+        "database_payload_and_head_update": "atomic",
+        "process_memory_update": "only-after-successful-backend-swap",
+        "sqlite_process_memory_update": "only-after-database-commit",
+        "validate_before_swap": [
+            "physical-checksum",
+            "semantic-snapshot-digest",
+            "publication-identity-binding",
+            "manifest-closure-binding",
+            "persisted-semantic-object-graph",
+        ],
+        "failure_preserves_prior_generation": True,
+        "pinned_generation_reclamation": "deferred",
+    }
+    if contract.get("compaction") != expected_compaction:
+        fail("store.compaction-contract-invalid", "atomic replacement set")
     if contract["partition"]["closure_ids_in_identity"] != "forbidden":
         fail("store.identity-cycle", "partition includes closure IDs")
     if set(contract["closure"]["identity_fields"]) != set(CLOSURE_FIELDS):

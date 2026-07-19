@@ -5,7 +5,7 @@ additionalProperties: false
 required: [schema, document_version, maturity, authority, binding, prerequisites, package, materialization, provider, security, performance, documentation, claim_policy, required_artifacts]
 properties:
   schema: {const: cxxlens.ng-release-qualification.v1}
-  document_version: {const: 1.3.0}
+  document_version: {const: 1.5.0}
   maturity: {const: implemented}
   authority:
     type: object
@@ -67,6 +67,17 @@ properties:
       report_schema: schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
       request_filename: cxxlens-clang22-materialization-request.json
       report_filename: cxxlens-clang22-materialization-report.json
+      execution_receipt_filename: cxxlens-clang22-materialization-execution-receipt.json
+      execution_receipt_schema: schemas/cxxlens_ng_clang22_materialization_execution_receipt.schema.yaml
+      execution_receipt:
+        schema: cxxlens.clang22-materialization-execution-receipt.v1
+        encoding: strict-json-single-object
+        maximum_bytes: 65536
+        fields: [actual_exit_status, exact_stdout_byte_count, stdout_sha256, parsed_response_count, stderr_sha256]
+        report_cross_binding: exact-stdout-bytes-equal-report-artifact
+        qualified: {actual_exit_status: 0, parsed_response_count: 1}
+        schema_valid_failure: {actual_exit_status: 1, parsed_response_count: 1, release_eligible: false}
+        no_response_failure: {actual_exit_status: 2, parsed_response_count: 0, release_eligible: false}
       configurations: [static, shared]
       cardinality: exactly-one-per-configuration-and-backend
       relocated_installed_execution: required
@@ -79,7 +90,7 @@ properties:
         encoding: canonical-json-sorted-keys-no-whitespace
         projection: [configuration, reports]
         backend_order: [memory, sqlite]
-        report_entry_fields: [backend, report_digest]
+        report_entry_fields: [backend, report_digest, execution_receipt_digest]
   provider:
     type: object
     additionalProperties: false
@@ -140,7 +151,7 @@ properties:
       required_claim_fields: {const: [capabilities, guarantee, security_profile_digest, evidence_digest]}
       pending_or_wildcard: {const: forbidden}
       unlisted_surface: {const: unsupported}
-      tuple_evidence_projection: {const: [install_manifest, materialization_report_set, g5_report, security_report, public_callable_report, configuration]}
+      tuple_evidence_projection: {const: [install_manifest, installed_worker, materialization_tool, materialization_request_artifacts, materialization_report_set, materialization_contract, g5_report, security_report, public_callable_report, configuration]}
   required_artifacts:
     type: array
     minItems: 10

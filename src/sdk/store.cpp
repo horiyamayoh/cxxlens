@@ -199,12 +199,23 @@ namespace cxxlens::sdk
 			return *canonical_identity_digest("snapshot", fields);
 		}
 
+		[[nodiscard]] constexpr std::int64_t
+		canonical_counter_integer(const std::uint64_t value) noexcept
+		{
+			constexpr auto signed_max =
+				static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+			if (value <= signed_max)
+				return static_cast<std::int64_t>(value);
+			return -1 -
+				static_cast<std::int64_t>(std::numeric_limits<std::uint64_t>::max() - value);
+		}
+
 		[[nodiscard]] std::string publication_identity(const publication_record& value)
 		{
 			const std::array fields{
 				text(value.series_id),
 				text(value.snapshot_id),
-				canonical_value::from_integer(static_cast<std::int64_t>(value.sequence)),
+				canonical_value::from_integer(canonical_counter_integer(value.sequence)),
 				text(value.parent_publication.value_or("")),
 			};
 			return *canonical_identity_digest("publication", fields);
@@ -786,7 +797,7 @@ namespace cxxlens::sdk
 			for (const auto& [partition_id, draft] : envelopes)
 			{
 				auto claims = draft.claims;
-				std::ranges::sort(claims, {}, &claim::content);
+				std::ranges::sort(claims, detail::claim_occurrence_less);
 				auto coverage_values = draft.coverage;
 				std::ranges::sort(
 					coverage_values,
@@ -1238,6 +1249,15 @@ namespace cxxlens::sdk
 					return unexpected(std::move(closure.error()));
 				manifest.closure_ids.push_back(std::move(*closure));
 			}
+			if (payload_has_partition_envelopes &&
+				(!std::ranges::is_sorted(
+					 manifest.partitions, {}, &partition_manifest::partition_id) ||
+				 std::ranges::adjacent_find(
+					 manifest.partitions, {}, &partition_manifest::partition_id) !=
+					 manifest.partitions.end() ||
+				 !std::ranges::is_sorted(manifest.closure_ids) ||
+				 std::ranges::adjacent_find(manifest.closure_ids) != manifest.closure_ids.end()))
+				return unexpected(store_error("store.corrupt", "manifest", "noncanonical-order"));
 			auto& publication = value->publication_record_value;
 			auto publication_id = reader.string();
 			auto series = reader.string();
@@ -2093,6 +2113,125 @@ namespace cxxlens::sdk
 				return unexpected(store_error("store.corrupt", "sqlite", "integer"));
 			return output;
 		}
+
+		using publication_record_map = std::map<std::string, publication_record, std::less<>>;
+		using series_head_map = std::map<std::string, std::string, std::less<>>;
+
+		[[nodiscard]] result<series_head_map>
+		derive_authority_heads(const publication_record_map& records)
+		{
+			std::map<std::string, std::map<std::uint64_t, const publication_record*>, std::less<>>
+				series_records;
+			std::map<std::string,
+					 std::map<std::pair<std::uint64_t, std::uint64_t>, std::string>,
+					 std::less<>>
+				snapshot_resolver_keys;
+			for (const auto& [id, record] : records)
+			{
+				if (record.state != publication_state::committed || record.corrupt ||
+					record.publication_id != id || !validate_publication_identity(record))
+					return unexpected(store_error("store.corrupt", id, "authority-record"));
+				auto& by_sequence = series_records[record.series_id];
+				if (!by_sequence.emplace(record.sequence, &record).second)
+					return unexpected(
+						store_error("store.corrupt", record.series_id, "duplicate-sequence"));
+				auto& resolver = snapshot_resolver_keys[record.snapshot_id];
+				if (const auto [position, inserted] =
+						resolver.emplace(std::pair{record.sequence, record.physical_generation},
+										 record.publication_id);
+					!inserted && position->second != record.publication_id)
+					return unexpected(store_error("store.snapshot-ambiguous", record.snapshot_id));
+			}
+
+			series_head_map heads;
+			for (const auto& [series, by_sequence] : series_records)
+			{
+				// Generic Store topology requires one parentless root and checked +1 edges.
+				// Fresh writers produce sequence 1; the materialization contract is what
+				// additionally restricts its accepted genesis evidence to sequence 1.
+				std::size_t roots{};
+				for (const auto& [sequence, record] : by_sequence)
+				{
+					(void)sequence;
+					if (!record->parent_publication)
+					{
+						++roots;
+						continue;
+					}
+					const auto parent = records.find(*record->parent_publication);
+					if (parent == records.end() || parent->second.series_id != series)
+						return unexpected(
+							store_error("store.corrupt", record->publication_id, "parent"));
+					auto expected =
+						checked_counter_increment(parent->second.sequence, "publication_sequence");
+					if (!expected || *expected != record->sequence)
+						return unexpected(store_error(
+							"store.corrupt", record->publication_id, "parent-sequence"));
+				}
+				if (roots != 1U)
+					return unexpected(store_error("store.corrupt", series, "series-roots"));
+				heads.emplace(series, by_sequence.rbegin()->second->publication_id);
+			}
+			return heads;
+		}
+
+		// Reopen retains corrupt committed records so read APIs can return their typed
+		// no-fallback verdict. Head topology still comes from the complete durable
+		// committed record graph rather than a map-order first/max shortcut.
+		[[nodiscard]] result<series_head_map>
+		derive_diagnostic_heads(const publication_record_map& records)
+		{
+			std::map<std::string, std::map<std::uint64_t, const publication_record*>, std::less<>>
+				series_records;
+			for (const auto& [id, record] : records)
+			{
+				(void)id;
+				if (record.state != publication_state::committed)
+					continue;
+				auto& by_sequence = series_records[record.series_id];
+				if (!by_sequence.emplace(record.sequence, &record).second)
+					return unexpected(store_error("store.current-ambiguous", record.series_id));
+			}
+
+			series_head_map heads;
+			for (const auto& [series, by_sequence] : series_records)
+			{
+				if (std::ranges::any_of(by_sequence,
+										[](const auto& entry)
+										{
+											return entry.second->corrupt;
+										}))
+				{
+					heads.emplace(series, by_sequence.rbegin()->second->publication_id);
+					continue;
+				}
+				std::size_t roots{};
+				for (const auto& [sequence, record] : by_sequence)
+				{
+					(void)sequence;
+					if (!record->parent_publication)
+					{
+						++roots;
+						continue;
+					}
+					const auto parent = records.find(*record->parent_publication);
+					if (parent == records.end() ||
+						parent->second.state != publication_state::committed ||
+						parent->second.series_id != series)
+						return unexpected(
+							store_error("store.corrupt", record->publication_id, "parent"));
+					auto expected =
+						checked_counter_increment(parent->second.sequence, "publication_sequence");
+					if (!expected || *expected != record->sequence)
+						return unexpected(store_error(
+							"store.corrupt", record->publication_id, "parent-sequence"));
+				}
+				if (roots != 1U)
+					return unexpected(store_error("store.corrupt", series, "series-roots"));
+				heads.emplace(series, by_sequence.rbegin()->second->publication_id);
+			}
+			return heads;
+		}
 	} // namespace
 
 	struct snapshot_store::implementation
@@ -2135,72 +2274,207 @@ namespace cxxlens::sdk
 			return persisted;
 		}
 
-		[[nodiscard]] result<void>
-		persist_new(const snapshot_handle::data& value,
+		struct authority_census
+		{
+			publication_record_map records;
+			std::map<std::string, std::shared_ptr<snapshot_handle::data>, std::less<>> publications;
+			publication_record_map authority_records;
+			std::map<std::string, std::shared_ptr<snapshot_handle::data>, std::less<>>
+				authority_publications;
+			series_head_map heads;
+			std::map<std::string, std::string, std::less<>> snapshot_exports;
+			std::vector<std::string> invalid_committed;
+			std::uint64_t maximum_generation{};
+		};
+
+		[[nodiscard]] result<authority_census> database_authority_census() const
+		{
+			if (database == nullptr)
+				return unexpected(store_error("store.corrupt", "sqlite", "backend"));
+			auto rows = database->query(
+				"SELECT publication_id,series_id,snapshot_id,sequence,generation,"
+				"COALESCE(parent,''),state,checksum,hex(payload) "
+				"FROM cxxlens_ng_publication ORDER BY series_id,sequence,publication_id");
+			if (!rows)
+				return unexpected(std::move(rows.error()));
+
+			authority_census census;
+			std::vector<std::string> validated_committed;
+			std::map<std::string, std::vector<std::string>, std::less<>> snapshot_members;
+			std::set<std::string, std::less<>> colliding_snapshots;
+			for (const auto& row : *rows)
+			{
+				if (row.size() != 9U)
+					return unexpected(store_error("store.corrupt", "sqlite", "column-count"));
+				auto sequence = parse_unsigned(row[3]);
+				auto physical = parse_unsigned(row[4]);
+				auto state = parse_unsigned(row[6]);
+				auto payload = hex_bytes(row[8]);
+				if (!sequence || !physical || !state || !payload ||
+					*state > static_cast<std::uint8_t>(publication_state::rolled_back))
+					return unexpected(store_error("store.corrupt", "sqlite", "publication-row"));
+				publication_record record{row[0],
+										  row[1],
+										  row[2],
+										  *sequence,
+										  *physical,
+										  row[5].empty() ? std::optional<std::string>{}
+														 : std::optional<std::string>{row[5]},
+										  static_cast<publication_state>(*state),
+										  false};
+				const auto invalid = [&]()
+				{
+					record.corrupt = true;
+					if (!census.records.emplace(row[0], record).second)
+						return false;
+					if (record.state == publication_state::committed)
+						census.invalid_committed.push_back(row[0]);
+					return true;
+				};
+				if (!validate_publication_identity(record) || content_digest(*payload) != row[7])
+				{
+					if (!invalid())
+						return unexpected(
+							store_error("store.corrupt", row[0], "duplicate-publication-id"));
+					continue;
+				}
+				auto decoded = decode_snapshot(*payload, engine);
+				if (!decoded || (*decoded)->publication_record_value != record)
+				{
+					if (!invalid())
+						return unexpected(
+							store_error("store.corrupt", row[0], "duplicate-publication-id"));
+					continue;
+				}
+				(*decoded)->physical_backend = backend;
+				if (!census.records.emplace(record.publication_id, record).second ||
+					!census.publications.emplace(record.publication_id, *decoded).second)
+					return unexpected(store_error(
+						"store.corrupt", record.publication_id, "duplicate-publication-id"));
+				if (record.state != publication_state::committed)
+					continue;
+
+				validated_committed.push_back(record.publication_id);
+				snapshot_members[record.snapshot_id].push_back(record.publication_id);
+				const auto canonical_export = canonical_export_of(**decoded);
+				const auto [position, inserted] =
+					census.snapshot_exports.emplace(record.snapshot_id, canonical_export);
+				if (!inserted && position->second != canonical_export)
+					colliding_snapshots.insert(record.snapshot_id);
+			}
+
+			for (const auto& snapshot : colliding_snapshots)
+			{
+				census.snapshot_exports.erase(snapshot);
+				for (const auto& id : snapshot_members.at(snapshot))
+				{
+					census.records.at(id).corrupt = true;
+					census.invalid_committed.push_back(id);
+				}
+			}
+			for (const auto& id : validated_committed)
+			{
+				const auto& record = census.records.at(id);
+				if (record.corrupt)
+					continue;
+				census.authority_records.emplace(id, record);
+				census.authority_publications.emplace(id, census.publications.at(id));
+				census.maximum_generation =
+					std::max(census.maximum_generation, record.physical_generation);
+			}
+
+			auto derived_heads = derive_authority_heads(census.authority_records);
+			if (!derived_heads)
+				return unexpected(std::move(derived_heads.error()));
+			census.heads = std::move(*derived_heads);
+			auto durable_heads = database->query(
+				"SELECT series_id,current_publication,sequence FROM cxxlens_ng_series_head");
+			if (!durable_heads)
+				return unexpected(std::move(durable_heads.error()));
+			if (durable_heads->size() != census.heads.size())
+				return unexpected(store_error("store.corrupt", "sqlite", "series-head-count"));
+			for (const auto& row : *durable_heads)
+			{
+				if (row.size() != 3U || !census.heads.contains(row[0]) ||
+					census.heads.at(row[0]) != row[1])
+					return unexpected(store_error("store.corrupt", "sqlite", "series-head"));
+				auto sequence = parse_unsigned(row[2]);
+				const auto record = census.authority_records.find(row[1]);
+				if (!sequence || record == census.authority_records.end() ||
+					record->second.sequence != *sequence)
+					return unexpected(
+						store_error("store.corrupt", "sqlite", "series-head-sequence"));
+			}
+			return census;
+		}
+
+		[[nodiscard]] result<authority_census>
+		persist_new(snapshot_handle::data& value,
 					const std::optional<std::string>& expected_parent) const
 		{
-			if (auto valid = validate_publication_identity(value.publication_record_value); !valid)
-				return unexpected(std::move(valid.error()));
 			if (database == nullptr)
-				return {};
+				return unexpected(store_error("store.corrupt", "sqlite", "backend"));
 			if (auto begun = database->execute("BEGIN IMMEDIATE;"); !begun)
-				return begun;
+				return unexpected(std::move(begun.error()));
 			const auto rollback = [&]()
 			{
 				(void)database->execute("ROLLBACK;");
 			};
-			const auto& record = value.publication_record_value;
-			auto head = database->query(
-				"SELECT current_publication,sequence FROM cxxlens_ng_series_head WHERE series_id=" +
-				sql_quote(record.series_id));
-			if (!head)
+			auto census = database_authority_census();
+			if (!census)
 			{
 				rollback();
-				return unexpected(std::move(head.error()));
+				return unexpected(std::move(census.error()));
 			}
-			if (head->size() > 1U || (!head->empty() && head->front().size() != 2U))
+			auto next_generation =
+				checked_counter_increment(census->maximum_generation, "physical_generation");
+			if (!next_generation)
 			{
 				rollback();
-				return unexpected(store_error("store.corrupt", record.series_id, "series-head"));
+				return unexpected(std::move(next_generation.error()));
 			}
-			const std::optional<std::string> actual_parent = head->empty()
+			auto& record = value.publication_record_value;
+			const auto head = census->heads.find(record.series_id);
+			const std::optional<std::string> actual_parent = head == census->heads.end()
 				? std::optional<std::string>{}
-				: std::optional<std::string>{head->front().front()};
-			auto prior_sequence = head->empty() ? result<std::uint64_t>{std::uint64_t{0U}}
-												: parse_unsigned(head->front()[1U]);
-			if (!prior_sequence)
-			{
-				rollback();
-				return unexpected(std::move(prior_sequence.error()));
-			}
-			if (actual_parent != expected_parent || record.parent_publication != expected_parent)
+				: std::optional<std::string>{head->second};
+			if (actual_parent != expected_parent)
 			{
 				rollback();
 				return unexpected(store_error("store.publication-conflict", record.series_id));
 			}
-			auto next_sequence = checked_counter_increment(*prior_sequence, "publication_sequence");
+			const auto prior_sequence = actual_parent
+				? census->authority_records.at(*actual_parent).sequence
+				: std::uint64_t{};
+			auto next_sequence = checked_counter_increment(prior_sequence, "publication_sequence");
 			if (!next_sequence)
 			{
 				rollback();
 				return unexpected(std::move(next_sequence.error()));
 			}
-			if (record.sequence != *next_sequence)
+			record.sequence = *next_sequence;
+			record.physical_generation = *next_generation;
+			record.parent_publication = expected_parent;
+			record.state = publication_state::committed;
+			record.corrupt = false;
+			record.publication_id = publication_identity(record);
+			if (auto valid = validate_publication_identity(record); !valid)
 			{
 				rollback();
-				return unexpected(store_error("store.publication-conflict", record.series_id));
+				return unexpected(std::move(valid.error()));
 			}
-			auto duplicate = database->query(
-				"SELECT publication_id FROM cxxlens_ng_publication WHERE publication_id=" +
-				sql_quote(record.publication_id));
-			if (!duplicate)
+			if (const auto existing = census->snapshot_exports.find(record.snapshot_id);
+				existing != census->snapshot_exports.end() &&
+				existing->second != canonical_export_of(value))
 			{
 				rollback();
-				return unexpected(std::move(duplicate.error()));
+				return unexpected(store_error("store.hash-collision", record.snapshot_id));
 			}
-			if (!duplicate->empty())
+			if (census->records.contains(record.publication_id))
 			{
 				rollback();
-				return unexpected(store_error("store.publication-conflict", record.publication_id));
+				return unexpected(store_error(
+					"store.corrupt", record.publication_id, "duplicate-publication-id"));
 			}
 			const auto payload = encode_snapshot(value);
 			const auto checksum = content_digest(payload);
@@ -2215,7 +2489,7 @@ namespace cxxlens::sdk
 			if (auto inserted = database->execute(insert.str()); !inserted)
 			{
 				rollback();
-				return inserted;
+				return unexpected(std::move(inserted.error()));
 			}
 			const auto head_sql = actual_parent
 				? "UPDATE cxxlens_ng_series_head SET current_publication=" +
@@ -2229,14 +2503,64 @@ namespace cxxlens::sdk
 			if (auto updated = database->execute(head_sql); !updated)
 			{
 				rollback();
-				return updated;
+				return unexpected(std::move(updated.error()));
 			}
+			auto changed = database->query("SELECT changes()");
+			if (!changed || changed->size() != 1U || changed->front().size() != 1U ||
+				changed->front().front() != "1")
+			{
+				rollback();
+				return unexpected(
+					store_error("store.corrupt", record.series_id, "series-head-cas"));
+			}
+			auto committed_value = std::make_shared<snapshot_handle::data>(value);
+			census->records.emplace(record.publication_id, record);
+			census->publications.emplace(record.publication_id, committed_value);
+			census->authority_records.emplace(record.publication_id, record);
+			census->authority_publications.emplace(record.publication_id, committed_value);
+			census->heads[record.series_id] = record.publication_id;
+			census->snapshot_exports[record.snapshot_id] = canonical_export_of(value);
+			census->maximum_generation = record.physical_generation;
 			if (auto committed = database->execute("COMMIT;"); !committed)
 			{
 				rollback();
-				return committed;
+				return unexpected(std::move(committed.error()));
 			}
-			return {};
+			return std::move(*census);
+		}
+
+		[[nodiscard]] result<std::shared_ptr<snapshot_handle::data>>
+		resolve_snapshot_publication(const std::string_view snapshot_id) const
+		{
+			const publication_record* selected{};
+			std::map<std::pair<std::uint64_t, std::uint64_t>, std::string> resolver_keys;
+			for (const auto& [publication_id, record] : records)
+			{
+				(void)publication_id;
+				if (record.state != publication_state::committed ||
+					record.snapshot_id != snapshot_id)
+					continue;
+				const auto [position, inserted] = resolver_keys.emplace(
+					std::pair{record.sequence, record.physical_generation}, record.publication_id);
+				if (!inserted && position->second != record.publication_id)
+					return unexpected(
+						store_error("store.snapshot-ambiguous", std::string{snapshot_id}));
+				if (selected == nullptr ||
+					std::tie(selected->sequence, selected->physical_generation) <
+						std::tie(record.sequence, record.physical_generation))
+					selected = &record;
+			}
+			if (selected == nullptr)
+				return unexpected(
+					store_error("store.snapshot-not-found", std::string{snapshot_id}));
+			if (selected->corrupt || !validate_publication_identity(*selected))
+				return unexpected(store_error("store.snapshot-corrupt", selected->publication_id));
+			const auto publication = publications.find(selected->publication_id);
+			if (publication == publications.end() ||
+				publication->second->publication_record_value != *selected ||
+				publication->second->semantic_manifest.id != snapshot_id)
+				return unexpected(store_error("store.snapshot-corrupt", selected->publication_id));
+			return publication->second;
 		}
 
 		[[nodiscard]] result<void> load()
@@ -2291,14 +2615,19 @@ namespace cxxlens::sdk
 				auto token = std::make_shared<const std::uint64_t>(*physical);
 				(*decoded)->generation_pin = token;
 				(*decoded)->physical_backend = backend;
-				const bool collision = std::ranges::any_of(
-					publications,
-					[&](const auto& existing)
-					{
-						return existing.second->semantic_manifest.id ==
-							(*decoded)->semantic_manifest.id &&
-							canonical_export_of(*existing.second) != canonical_export_of(**decoded);
-					});
+				const bool collision =
+					record.state == publication_state::committed &&
+					std::ranges::any_of(
+						publications,
+						[&](const auto& existing)
+						{
+							return existing.second->publication_record_value.state ==
+								publication_state::committed &&
+								existing.second->semantic_manifest.id ==
+								(*decoded)->semantic_manifest.id &&
+								canonical_export_of(*existing.second) !=
+								canonical_export_of(**decoded);
+						});
 				if (collision)
 				{
 					record.corrupt = true;
@@ -2306,32 +2635,17 @@ namespace cxxlens::sdk
 					continue;
 				}
 				if (record.state == publication_state::committed)
+				{
 					generation = std::max(generation, *physical);
-				generation_tokens.push_back(token);
+					generation_tokens.push_back(token);
+				}
 				records.emplace(record.publication_id, record);
 				publications.emplace(record.publication_id, std::move(*decoded));
 			}
-			for (const auto& [id, record] : records)
-			{
-				if (record.state != publication_state::committed)
-					continue;
-				const auto current = heads.find(record.series_id);
-				if (current == heads.end() ||
-					records.at(current->second).sequence < record.sequence)
-					heads[record.series_id] = id;
-				else if (records.at(current->second).sequence == record.sequence)
-					return unexpected(store_error("store.current-ambiguous", record.series_id));
-			}
-			for (const auto& [series, publication] : heads)
-			{
-				const auto& record = records.at(publication);
-				if (auto initialized =
-						database->execute("INSERT OR IGNORE INTO cxxlens_ng_series_head VALUES(" +
-										  sql_quote(series) + ',' + sql_quote(publication) + ',' +
-										  sqlite_unsigned(record.sequence) + ");");
-					!initialized)
-					return initialized;
-			}
+			auto diagnosed_heads = derive_diagnostic_heads(records);
+			if (!diagnosed_heads)
+				return unexpected(std::move(diagnosed_heads.error()));
+			heads = std::move(*diagnosed_heads);
 			auto persisted_heads = database->query(
 				"SELECT series_id,current_publication,sequence FROM cxxlens_ng_series_head");
 			if (!persisted_heads)
@@ -2386,32 +2700,10 @@ namespace cxxlens::sdk
 	result<snapshot_handle> snapshot_store::open(const std::string_view snapshot_id) const
 	{
 		std::scoped_lock lock{implementation_->mutex};
-		const publication_record* selected{};
-		for (const auto& [publication_id, record] : implementation_->records)
-		{
-			(void)publication_id;
-			if (record.state != publication_state::committed || record.snapshot_id != snapshot_id)
-				continue;
-			if (selected != nullptr && selected->sequence == record.sequence &&
-				selected->physical_generation == record.physical_generation &&
-				selected->publication_id != record.publication_id)
-				return unexpected(
-					store_error("store.snapshot-ambiguous", std::string{snapshot_id}));
-			if (selected == nullptr ||
-				std::tie(selected->sequence, selected->physical_generation) <
-					std::tie(record.sequence, record.physical_generation))
-				selected = &record;
-		}
-		if (selected == nullptr)
-			return unexpected(store_error("store.snapshot-not-found", std::string{snapshot_id}));
-		if (selected->corrupt || !validate_publication_identity(*selected))
-			return unexpected(store_error("store.snapshot-corrupt", selected->publication_id));
-		const auto publication = implementation_->publications.find(selected->publication_id);
-		if (publication == implementation_->publications.end() ||
-			publication->second->publication_record_value != *selected ||
-			publication->second->semantic_manifest.id != snapshot_id)
-			return unexpected(store_error("store.snapshot-corrupt", selected->publication_id));
-		return snapshot_handle{publication->second};
+		auto resolved = implementation_->resolve_snapshot_publication(snapshot_id);
+		if (!resolved)
+			return unexpected(std::move(resolved.error()));
+		return snapshot_handle{std::move(*resolved)};
 	}
 
 	result<snapshot_handle>
@@ -2456,45 +2748,203 @@ namespace cxxlens::sdk
 	result<void> snapshot_store::compact()
 	{
 		std::scoped_lock lock{implementation_->mutex};
-		if (const auto corrupt = std::ranges::find_if(implementation_->records,
-													  [](const auto& record)
-													  {
-														  return record.second.corrupt;
-													  });
-			corrupt != implementation_->records.end())
-			return unexpected(store_error("store.compact-validation-failed", corrupt->first));
-		std::vector<std::pair<std::string, std::shared_ptr<snapshot_handle::data>>> replacements;
-		auto next_generation =
-			checked_counter_increment(implementation_->generation, "physical_generation");
-		if (!next_generation)
-			return unexpected(std::move(next_generation.error()));
-		for (const auto& [id, current] : implementation_->publications)
+		using replacement_entry = std::pair<std::string, std::shared_ptr<snapshot_handle::data>>;
+		const auto replacement_order =
+			[](const replacement_entry& left, const replacement_entry& right)
 		{
-			if (current->semantic_manifest.id != snapshot_identity(current->semantic_manifest) ||
-				current->publication_record_value.corrupt ||
-				!validate_publication_identity(current->publication_record_value))
-				return unexpected(store_error("store.compact-validation-failed", id));
-			if (!current->partition_envelopes.empty())
-				if (auto valid = validate_semantic_graph(*current, implementation_->engine); !valid)
+			const auto& left_record = left.second->publication_record_value;
+			const auto& right_record = right.second->publication_record_value;
+			return std::tie(left_record.sequence,
+							left_record.physical_generation,
+							left_record.publication_id) < std::tie(right_record.sequence,
+																   right_record.physical_generation,
+																   right_record.publication_id);
+		};
+		const auto validate_replacement = [&](snapshot_handle::data& value) -> result<void>
+		{
+			const auto& record = value.publication_record_value;
+			if (record.state != publication_state::committed || record.corrupt ||
+				value.semantic_manifest.id != snapshot_identity(value.semantic_manifest) ||
+				!validate_publication_identity(record))
+				return unexpected(
+					store_error("store.compact-validation-failed", record.publication_id));
+			if (!value.partition_envelopes.empty())
+				if (auto valid = validate_semantic_graph(value, implementation_->engine); !valid)
+					return unexpected(
+						store_error("store.compact-validation-failed", record.publication_id));
+			return {};
+		};
+
+		if (implementation_->database == nullptr)
+		{
+			publication_record_map authority_records;
+			std::vector<replacement_entry> replacements;
+			std::map<std::string, std::string, std::less<>> snapshot_exports;
+			std::uint64_t maximum_generation{};
+			for (const auto& [id, record] : implementation_->records)
+			{
+				if (record.state != publication_state::committed)
+					continue;
+				const auto current = implementation_->publications.find(id);
+				if (record.corrupt || !validate_publication_identity(record) ||
+					current == implementation_->publications.end() ||
+					current->second->publication_record_value != record)
 					return unexpected(store_error("store.compact-validation-failed", id));
+				auto replacement = std::make_shared<snapshot_handle::data>(*current->second);
+				if (auto valid = validate_replacement(*replacement); !valid)
+					return valid;
+				const auto export_value = canonical_export_of(*replacement);
+				const auto [position, inserted] =
+					snapshot_exports.emplace(record.snapshot_id, export_value);
+				if (!inserted && position->second != export_value)
+					return unexpected(store_error("store.compact-validation-failed", id));
+				authority_records.emplace(id, record);
+				maximum_generation = std::max(maximum_generation, record.physical_generation);
+				replacements.emplace_back(id, std::move(replacement));
+			}
+			auto authority_heads = derive_authority_heads(authority_records);
+			if (!authority_heads)
+				return unexpected(std::move(authority_heads.error()));
+			if (*authority_heads != implementation_->heads)
+				return unexpected(store_error("store.compact-validation-failed", "series-head"));
+			std::ranges::sort(replacements, replacement_order);
+			auto next_generation = maximum_generation;
+			for (auto& [id, replacement] : replacements)
+			{
+				(void)id;
+				auto allocated = checked_counter_increment(next_generation, "physical_generation");
+				if (!allocated)
+					return unexpected(std::move(allocated.error()));
+				next_generation = *allocated;
+				replacement->publication_record_value.physical_generation = next_generation;
+				if (auto valid = validate_replacement(*replacement); !valid)
+					return valid;
+			}
+			for (auto& [id, replacement] : replacements)
+			{
+				auto token = std::make_shared<const std::uint64_t>(
+					replacement->publication_record_value.physical_generation);
+				replacement->generation_pin = token;
+				implementation_->generation_tokens.push_back(token);
+				implementation_->records[id] = replacement->publication_record_value;
+				implementation_->publications[id] = std::move(replacement);
+			}
+			implementation_->generation = next_generation;
+			return {};
+		}
+
+		if (auto begun = implementation_->database->execute("BEGIN IMMEDIATE;"); !begun)
+			return begun;
+		const auto rollback = [&]()
+		{
+			(void)implementation_->database->execute("ROLLBACK;");
+		};
+		auto census = implementation_->database_authority_census();
+		if (!census)
+		{
+			auto failure = std::move(census.error());
+			rollback();
+			if (failure.code == "store.corrupt")
+				return unexpected(
+					store_error("store.compact-validation-failed", failure.field, failure.detail));
+			return unexpected(std::move(failure));
+		}
+		if (!census->invalid_committed.empty())
+		{
+			const auto id = census->invalid_committed.front();
+			rollback();
+			return unexpected(store_error("store.compact-validation-failed", id));
+		}
+
+		std::vector<replacement_entry> replacements;
+		for (const auto& [id, current] : census->authority_publications)
+		{
 			auto replacement = std::make_shared<snapshot_handle::data>(*current);
-			replacement->publication_record_value.physical_generation = *next_generation;
-			if (auto valid = validate_publication_identity(replacement->publication_record_value);
-				!valid)
-				return unexpected(store_error("store.compact-validation-failed", id));
-			auto token = std::make_shared<const std::uint64_t>(*next_generation);
-			replacement->generation_pin = token;
-			if (auto persisted = implementation_->persist(*replacement); !persisted)
-				return unexpected(std::move(persisted.error()));
-			implementation_->generation_tokens.push_back(token);
+			if (auto valid = validate_replacement(*replacement); !valid)
+			{
+				rollback();
+				return valid;
+			}
 			replacements.emplace_back(id, std::move(replacement));
 		}
+		std::ranges::sort(replacements, replacement_order);
+		auto next_generation = census->maximum_generation;
 		for (auto& [id, replacement] : replacements)
 		{
-			implementation_->records[id] = replacement->publication_record_value;
-			implementation_->publications[id] = std::move(replacement);
+			auto allocated = checked_counter_increment(next_generation, "physical_generation");
+			if (!allocated)
+			{
+				rollback();
+				return unexpected(std::move(allocated.error()));
+			}
+			next_generation = *allocated;
+			replacement->publication_record_value.physical_generation = next_generation;
+			if (auto valid = validate_replacement(*replacement); !valid)
+			{
+				rollback();
+				return valid;
+			}
+			const auto payload = encode_snapshot(*replacement);
+			const auto checksum = content_digest(payload);
+			const auto updated = implementation_->database->execute(
+				"UPDATE cxxlens_ng_publication SET generation=" + sqlite_unsigned(next_generation) +
+				",checksum=" + sql_quote(checksum) + ",payload=X'" + bytes_hex(payload) +
+				"' WHERE publication_id=" + sql_quote(id));
+			if (!updated)
+			{
+				rollback();
+				return updated;
+			}
+			auto changed = implementation_->database->query("SELECT changes()");
+			if (!changed || changed->size() != 1U || changed->front().size() != 1U ||
+				changed->front().front() != "1")
+			{
+				rollback();
+				return unexpected(store_error("store.corrupt", id, "compaction-replace"));
+			}
+			census->records[id] = replacement->publication_record_value;
+			census->publications[id] = replacement;
+			census->authority_records[id] = replacement->publication_record_value;
+			census->authority_publications[id] = replacement;
 		}
-		implementation_->generation = *next_generation;
+
+		if (auto deleted =
+				implementation_->database->execute("DELETE FROM cxxlens_ng_series_head;");
+			!deleted)
+		{
+			rollback();
+			return deleted;
+		}
+		for (const auto& [series, publication] : census->heads)
+		{
+			const auto& record = census->authority_records.at(publication);
+			if (auto inserted = implementation_->database->execute(
+					"INSERT INTO cxxlens_ng_series_head VALUES(" + sql_quote(series) + ',' +
+					sql_quote(publication) + ',' + sqlite_unsigned(record.sequence) + ");");
+				!inserted)
+			{
+				rollback();
+				return inserted;
+			}
+		}
+		if (auto committed = implementation_->database->execute("COMMIT;"); !committed)
+		{
+			rollback();
+			return committed;
+		}
+
+		for (auto& [id, replacement] : replacements)
+		{
+			(void)id;
+			auto token = std::make_shared<const std::uint64_t>(
+				replacement->publication_record_value.physical_generation);
+			replacement->generation_pin = token;
+			implementation_->generation_tokens.push_back(token);
+		}
+		implementation_->records = std::move(census->records);
+		implementation_->publications = std::move(census->publications);
+		implementation_->heads = std::move(census->heads);
+		implementation_->generation = next_generation;
 		return {};
 	}
 
@@ -2591,22 +3041,20 @@ namespace cxxlens::sdk
 				if (const auto* derived = std::get_if<derived_claim_basis>(&value.input_basis))
 				{
 					std::scoped_lock lock{data_->store->mutex};
-					const auto prior = std::ranges::find_if(
-						data_->store->publications,
-						[&](const auto& publication)
-						{
-							return publication.second->semantic_manifest.id ==
-								derived->input_snapshot &&
-								publication.second->publication_record_value.state ==
-								publication_state::committed &&
-								!publication.second->publication_record_value.corrupt &&
-								publication.second->publication_record_value.physical_generation <=
-								data_->store->generation;
-						});
-					if (prior == data_->store->publications.end())
+					auto prior =
+						data_->store->resolve_snapshot_publication(derived->input_snapshot);
+					if (!prior)
+					{
+						if (prior.error().code != "store.snapshot-not-found")
+							return unexpected(std::move(prior.error()));
 						return unexpected(
 							store_error("store.derived-basis-not-prior", value.content));
-					const auto& partitions = prior->second->semantic_manifest.partitions;
+					}
+					if ((*prior)->publication_record_value.physical_generation >
+						data_->store->generation)
+						return unexpected(
+							store_error("store.derived-basis-not-prior", value.content));
+					const auto& partitions = (*prior)->semantic_manifest.partitions;
 					const bool complete_membership = std::ranges::all_of(
 						derived->consumed_partition_content_digests,
 						[&](const std::string& consumed)
@@ -2724,65 +3172,130 @@ namespace cxxlens::sdk
 		auto& store = *data_->store;
 		std::scoped_lock lock{store.mutex};
 		const auto series_id = data_->draft.series.id();
-		const auto head = store.heads.find(series_id);
-		const std::optional<std::string> current_parent = head == store.heads.end()
-			? std::optional<std::string>{}
-			: std::optional<std::string>{head->second};
-		if (current_parent != data_->draft.expected_parent_publication)
-		{
-			data_->current_state = publication_state::rejected;
-			return unexpected(store_error("store.publish-stale-parent", series_id));
-		}
-		auto sequence = head == store.heads.end()
-			? result<std::uint64_t>{std::uint64_t{1U}}
-			: checked_counter_increment(store.records.at(head->second).sequence,
-										"publication_sequence");
-		auto generation = checked_counter_increment(store.generation, "physical_generation");
-		if (!sequence || !generation)
-		{
-			data_->current_state = publication_state::rejected;
-			return unexpected(!sequence ? std::move(sequence.error())
-										: std::move(generation.error()));
-		}
 		publication_record record;
 		record.series_id = series_id;
 		record.snapshot_id = data_->candidate->semantic_manifest.id;
-		record.sequence = *sequence;
-		record.physical_generation = *generation;
-		record.parent_publication = current_parent;
+		record.parent_publication = data_->draft.expected_parent_publication;
 		record.state = publication_state::committed;
-		record.publication_id = publication_identity(record);
-		if (auto valid = validate_publication_identity(record); !valid)
-		{
-			data_->current_state = publication_state::rejected;
-			return unexpected(std::move(valid.error()));
-		}
 		data_->candidate->publication_record_value = record;
-		const bool collision = std::ranges::any_of(
-			store.publications,
-			[&](const auto& existing)
+		std::optional<snapshot_store::implementation::authority_census> committed_census;
+
+		if (store.database == nullptr)
+		{
+			publication_record_map authority_records;
+			std::map<std::string, std::string, std::less<>> snapshot_exports;
+			std::uint64_t maximum_generation{};
+			for (const auto& [id, existing_record] : store.records)
 			{
-				return existing.second->semantic_manifest.id ==
-					data_->candidate->semantic_manifest.id &&
-					canonical_export_of(*existing.second) != canonical_export_of(*data_->candidate);
-			});
-		if (collision)
-		{
-			data_->current_state = publication_state::rejected;
-			return unexpected(store_error("store.hash-collision", record.snapshot_id));
+				if (existing_record.state != publication_state::committed)
+					continue;
+				const auto publication = store.publications.find(id);
+				if (existing_record.corrupt || !validate_publication_identity(existing_record) ||
+					publication == store.publications.end() ||
+					publication->second->publication_record_value != existing_record)
+					continue;
+				authority_records.emplace(id, existing_record);
+				maximum_generation =
+					std::max(maximum_generation, existing_record.physical_generation);
+				const auto export_value = canonical_export_of(*publication->second);
+				const auto [position, inserted] =
+					snapshot_exports.emplace(existing_record.snapshot_id, export_value);
+				if (!inserted && position->second != export_value)
+				{
+					data_->current_state = publication_state::rejected;
+					return unexpected(
+						store_error("store.hash-collision", existing_record.snapshot_id));
+				}
+			}
+			auto authority_heads = derive_authority_heads(authority_records);
+			if (!authority_heads || *authority_heads != store.heads)
+			{
+				data_->current_state = publication_state::rejected;
+				return unexpected(store_error("store.corrupt", series_id, "series-head"));
+			}
+			const auto head = authority_heads->find(series_id);
+			const std::optional<std::string> current_parent = head == authority_heads->end()
+				? std::optional<std::string>{}
+				: std::optional<std::string>{head->second};
+			if (current_parent != data_->draft.expected_parent_publication)
+			{
+				data_->current_state = publication_state::rejected;
+				return unexpected(store_error("store.publish-stale-parent", series_id));
+			}
+			const auto prior_sequence =
+				current_parent ? authority_records.at(*current_parent).sequence : std::uint64_t{};
+			auto sequence = checked_counter_increment(prior_sequence, "publication_sequence");
+			auto next_generation =
+				checked_counter_increment(maximum_generation, "physical_generation");
+			if (!sequence || !next_generation)
+			{
+				data_->current_state = publication_state::rejected;
+				return unexpected(!sequence ? std::move(sequence.error())
+											: std::move(next_generation.error()));
+			}
+			auto& candidate_record = data_->candidate->publication_record_value;
+			candidate_record.sequence = *sequence;
+			candidate_record.physical_generation = *next_generation;
+			candidate_record.publication_id = publication_identity(candidate_record);
+			if (auto valid = validate_publication_identity(candidate_record); !valid)
+			{
+				data_->current_state = publication_state::rejected;
+				return unexpected(std::move(valid.error()));
+			}
+			if (const auto existing = snapshot_exports.find(candidate_record.snapshot_id);
+				existing != snapshot_exports.end() &&
+				existing->second != canonical_export_of(*data_->candidate))
+			{
+				data_->current_state = publication_state::rejected;
+				return unexpected(
+					store_error("store.hash-collision", candidate_record.snapshot_id));
+			}
 		}
-		auto token = std::make_shared<const std::uint64_t>(*generation);
-		data_->candidate->generation_pin = token;
-		if (auto persisted = store.persist_new(*data_->candidate, current_parent); !persisted)
+		if (store.database != nullptr)
 		{
-			data_->current_state = publication_state::rolled_back;
-			return unexpected(std::move(persisted.error()));
+			auto persisted =
+				store.persist_new(*data_->candidate, data_->draft.expected_parent_publication);
+			if (!persisted)
+			{
+				data_->current_state = persisted.error().code == "store.publication-conflict"
+					? publication_state::rejected
+					: publication_state::rolled_back;
+				return unexpected(std::move(persisted.error()));
+			}
+			committed_census.emplace(std::move(*persisted));
 		}
-		store.generation = *generation;
-		store.generation_tokens.push_back(token);
-		store.records[record.publication_id] = record;
-		store.publications[record.publication_id] = data_->candidate;
-		store.heads[series_id] = record.publication_id;
+		const auto& committed_record = data_->candidate->publication_record_value;
+		if (committed_census)
+		{
+			committed_census->publications[committed_record.publication_id] = data_->candidate;
+			committed_census->authority_publications[committed_record.publication_id] =
+				data_->candidate;
+			for (auto& [id, publication] : committed_census->authority_publications)
+			{
+				const auto record_value = committed_census->authority_records.find(id);
+				if (record_value == committed_census->authority_records.end())
+					continue;
+				auto token =
+					std::make_shared<const std::uint64_t>(record_value->second.physical_generation);
+				publication->generation_pin = token;
+				store.generation_tokens.push_back(token);
+			}
+			store.records = std::move(committed_census->records);
+			store.publications = std::move(committed_census->publications);
+			store.heads = std::move(committed_census->heads);
+			store.generation = committed_census->maximum_generation;
+		}
+		else
+		{
+			auto token =
+				std::make_shared<const std::uint64_t>(committed_record.physical_generation);
+			data_->candidate->generation_pin = token;
+			store.generation = committed_record.physical_generation;
+			store.generation_tokens.push_back(token);
+			store.records[committed_record.publication_id] = committed_record;
+			store.publications[committed_record.publication_id] = data_->candidate;
+			store.heads[series_id] = committed_record.publication_id;
+		}
 		data_->current_state = publication_state::committed;
 		return snapshot_handle{data_->candidate};
 	}
@@ -2836,7 +3349,9 @@ namespace cxxlens::sdk
 		return {};
 	}
 
-	// The raw before/after pair is intentionally symmetric in this test-only fault injector.
+	// Existing test-only fault-injection hook. Ordinary calls perform a symmetric raw
+	// before/after payload rewrite; closed `test.*` selectors exercise persisted metadata,
+	// topology, and canonical-order failures without adding callable test symbols.
 	// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 	result<void> rewrite_publication_payload_for_testing(snapshot_store& store,
 														 const std::string_view publication_id,
@@ -2845,8 +3360,98 @@ namespace cxxlens::sdk
 														 const std::size_t occurrence)
 	{
 		std::scoped_lock lock{store.implementation_->mutex};
-		if (store.implementation_->database == nullptr || before.empty() ||
-			before.size() != after.size())
+		if (store.implementation_->database == nullptr)
+			return unexpected(store_error("store.corrupt", "test-rewrite", "backend"));
+		const auto publication = store.implementation_->publications.find(publication_id);
+		if (before == "test.series-head")
+		{
+			if (publication == store.implementation_->publications.end())
+				return unexpected(
+					store_error("store.publication-not-found", std::string{publication_id}));
+			const auto& series_id = publication->second->publication_record_value.series_id;
+			std::string sql;
+			if (after == "missing")
+				sql = "DELETE FROM cxxlens_ng_series_head WHERE series_id=" + sql_quote(series_id);
+			else if (after == "publication")
+				sql = "UPDATE cxxlens_ng_series_head SET current_publication='publication:missing' "
+					  "WHERE series_id=" +
+					sql_quote(series_id);
+			else if (after == "sequence")
+				sql = "UPDATE cxxlens_ng_series_head SET sequence=0 WHERE series_id=" +
+					sql_quote(series_id);
+			else
+				return unexpected(store_error("store.corrupt", "test-series-head", "mutation"));
+			return store.implementation_->database->execute(std::move(sql));
+		}
+		if (before == "test.duplicate-sequence")
+		{
+			if (publication == store.implementation_->publications.end())
+				return unexpected(
+					store_error("store.publication-not-found", std::string{publication_id}));
+			auto duplicate = snapshot_handle::data{*publication->second};
+			auto& record = duplicate.publication_record_value;
+			record.parent_publication = "publication:duplicate-parent";
+			auto generation =
+				checked_counter_increment(record.physical_generation, "physical_generation");
+			if (!generation)
+				return unexpected(std::move(generation.error()));
+			record.physical_generation = *generation;
+			record.publication_id = publication_identity(record);
+			const auto payload = encode_snapshot(duplicate);
+			const auto checksum = content_digest(payload);
+			std::ostringstream sql;
+			sql << "INSERT INTO cxxlens_ng_publication VALUES(" << sql_quote(record.publication_id)
+				<< ',' << sql_quote(record.series_id) << ',' << sql_quote(record.snapshot_id) << ','
+				<< sqlite_unsigned(record.sequence) << ','
+				<< sqlite_unsigned(record.physical_generation) << ','
+				<< sql_quote(*record.parent_publication) << ','
+				<< static_cast<unsigned>(record.state) << ',' << sql_quote(checksum) << ",X'"
+				<< bytes_hex(payload) << "');";
+			return store.implementation_->database->execute(sql.str());
+		}
+		if (before == "test.reverse-manifest-partitions")
+		{
+			if (publication == store.implementation_->publications.end())
+				return unexpected(
+					store_error("store.publication-not-found", std::string{publication_id}));
+			auto reordered = snapshot_handle::data{*publication->second};
+			if (reordered.semantic_manifest.partitions.size() < 2U)
+				return unexpected(store_error("store.corrupt", "test-manifest-order", "count"));
+			std::ranges::reverse(reordered.semantic_manifest.partitions);
+			if (reordered.semantic_manifest.id != snapshot_identity(reordered.semantic_manifest))
+				return unexpected(store_error("store.corrupt", "test-manifest-order", "identity"));
+			return store.implementation_->persist(reordered);
+		}
+		if (before == "test.orphan-parent")
+		{
+			if (publication == store.implementation_->publications.end())
+				return unexpected(
+					store_error("store.publication-not-found", std::string{publication_id}));
+			auto orphaned = snapshot_handle::data{*publication->second};
+			auto& record = orphaned.publication_record_value;
+			record.parent_publication =
+				"publication:sha256:"
+				"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+			record.publication_id = publication_identity(record);
+			const auto payload = encode_snapshot(orphaned);
+			const auto checksum = content_digest(payload);
+			std::ostringstream sql;
+			sql << "BEGIN IMMEDIATE;UPDATE cxxlens_ng_publication SET publication_id="
+				<< sql_quote(record.publication_id)
+				<< ",parent=" << sql_quote(*record.parent_publication)
+				<< ",checksum=" << sql_quote(checksum) << ",payload=X'" << bytes_hex(payload)
+				<< "' WHERE publication_id=" << sql_quote(publication_id)
+				<< ";UPDATE cxxlens_ng_series_head SET current_publication="
+				<< sql_quote(record.publication_id)
+				<< " WHERE current_publication=" << sql_quote(publication_id) << ";COMMIT;";
+			if (auto updated = store.implementation_->database->execute(sql.str()); !updated)
+			{
+				(void)store.implementation_->database->execute("ROLLBACK;");
+				return updated;
+			}
+			return {};
+		}
+		if (before.empty() || before.size() != after.size())
 			return unexpected(store_error("store.corrupt", "test-rewrite", "invalid"));
 		auto selected = store.implementation_->database->query(
 			"SELECT hex(payload) FROM cxxlens_ng_publication WHERE publication_id=" +
@@ -3070,11 +3675,11 @@ namespace cxxlens::sdk
 		record.physical_generation = generation;
 		record.state = publication_state::rejected;
 		const auto payload = encode_snapshot(rejected);
-		const auto invalid_checksum = std::string{"sha256:"} + std::string(64U, '0');
+		const auto checksum = content_digest(payload);
 		std::ostringstream sql;
 		sql << "BEGIN IMMEDIATE;UPDATE cxxlens_ng_publication SET generation="
 			<< sqlite_unsigned(generation) << ",state=" << static_cast<unsigned>(record.state)
-			<< ",checksum=" << sql_quote(invalid_checksum) << ",payload=X'" << bytes_hex(payload)
+			<< ",checksum=" << sql_quote(checksum) << ",payload=X'" << bytes_hex(payload)
 			<< "' WHERE publication_id=" << sql_quote(publication_id)
 			<< ";DELETE FROM cxxlens_ng_series_head WHERE current_publication="
 			<< sql_quote(publication_id) << ";COMMIT;";

@@ -13,12 +13,15 @@ required:
   - worker
   - project
   - registry
+  - engine
+  - interpretation_policy
+  - trust_policy
   - group_topology
   - tasks
   - publication
 properties:
-  schema: {const: cxxlens.clang22-materialization-request.v1}
-  request_version: {const: 1.0.0}
+  schema: {const: cxxlens.clang22-materialization-request.v2}
+  request_version: {const: 2.0.0}
   materialization_request_id: {$ref: '#/$defs/strong_id'}
   request_digest: {$ref: '#/$defs/semantic_digest'}
   semantic_request_digest: {$ref: '#/$defs/semantic_digest'}
@@ -28,7 +31,7 @@ properties:
     required: [executable, interface_version, distribution_version, source_revision, source_tree, installed_executable_digest, package_configuration, prefix_manifest_digest, relocated_prefix_digest]
     properties:
       executable: {const: cxxlens-clang22-materialize}
-      interface_version: {const: 1.0.0}
+      interface_version: {const: 2.0.0}
       distribution_version: {const: 1.0.0}
       source_revision: {$ref: '#/$defs/revision'}
       source_tree: {$ref: '#/$defs/revision'}
@@ -63,15 +66,16 @@ properties:
       catalog_compile_units:
         type: array
         minItems: 1
+        maxItems: 4096
         uniqueItems: true
         items: {$ref: '#/$defs/catalog_compile_unit'}
   registry:
     type: object
     additionalProperties: false
-    required: [path, registry_digest, base_descriptors, descriptors]
+    required: [path, authority_registry_digest, base_descriptors, descriptors]
     properties:
       path: {const: schemas/cxxlens_ng_relation_registry.yaml}
-      registry_digest: {$ref: '#/$defs/content_digest'}
+      authority_registry_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
       base_descriptors:
         type: array
         minItems: 6
@@ -84,6 +88,67 @@ properties:
         maxItems: 6
         uniqueItems: true
         items: {$ref: '#/$defs/descriptor_binding'}
+  engine:
+    type: object
+    additionalProperties: false
+    required: [generation_contract, admitted_descriptors, engine_registry_digest, engine_generation_id]
+    properties:
+      generation_contract: {const: cxxlens.clang22-materialization-engine.v2}
+      admitted_descriptors:
+        type: array
+        minItems: 12
+        maxItems: 12
+        uniqueItems: true
+        prefixItems:
+          - {$ref: '#/$defs/admitted_build_compile_unit'}
+          - {$ref: '#/$defs/admitted_build_project'}
+          - {$ref: '#/$defs/admitted_build_toolchain_context'}
+          - {$ref: '#/$defs/admitted_build_variant'}
+          - {$ref: '#/$defs/admitted_cc_call_direct_target'}
+          - {$ref: '#/$defs/admitted_cc_call_site'}
+          - {$ref: '#/$defs/admitted_cc_entity'}
+          - {$ref: '#/$defs/admitted_frontend_call'}
+          - {$ref: '#/$defs/admitted_frontend_entity'}
+          - {$ref: '#/$defs/admitted_frontend_type'}
+          - {$ref: '#/$defs/admitted_source_file'}
+          - {$ref: '#/$defs/admitted_source_span'}
+        items: false
+      engine_registry_digest: {$ref: '#/$defs/semantic_digest'}
+      engine_generation_id: {type: string, pattern: '^engine-generation:sha256:[0-9a-f]{64}$'}
+  interpretation_policy:
+    type: object
+    additionalProperties: false
+    required: [policy_id, selected_domain, interpretation_policy_digest]
+    properties:
+      policy_id: {const: cxxlens.clang22-interpretation-policy.v1}
+      selected_domain: {const: cc.clang22-canonical-1}
+      interpretation_policy_digest: {$ref: '#/$defs/semantic_digest'}
+  trust_policy:
+    type: object
+    additionalProperties: false
+    required: [policy_id, execution_profile, provider_id, provider_version, semantic_contract_digest, protocol_major, protocol_minor, required_qualification, worker_sandbox_policy_digest, task_sandbox_requirements, trust_policy_digest]
+    properties:
+      policy_id: {const: cxxlens.clang22-installed-native-worker-trust.v1}
+      execution_profile: {const: trust.native-worker}
+      provider_id: {const: cxxlens.clang22.reference}
+      provider_version: {const: 1.0.0}
+      semantic_contract_digest: {$ref: '#/$defs/content_digest'}
+      protocol_major: {const: 1}
+      protocol_minor: {const: 0}
+      required_qualification: {const: canonical-semantic-qualified}
+      worker_sandbox_policy_digest: {$ref: '#/$defs/content_digest'}
+      task_sandbox_requirements:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          type: object
+          additionalProperties: false
+          required: [minimum, policy_digest]
+          properties:
+            minimum: {enum: [enforced, certified]}
+            policy_digest: {$ref: '#/$defs/content_digest'}
+      trust_policy_digest: {$ref: '#/$defs/semantic_digest'}
   group_topology:
     type: object
     additionalProperties: false
@@ -95,6 +160,7 @@ properties:
   tasks:
     type: array
     minItems: 1
+    maxItems: 4096
     uniqueItems: true
     items:
       type: object
@@ -181,7 +247,7 @@ properties:
             encoding: {enum: [utf8, utf16le, utf16be, locale_dependent, binary_or_unknown]}
             line_index_id: {$ref: '#/$defs/line_index_id'}
             read_only: {type: boolean}
-            content_base64: {type: string, pattern: '^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$'}
+            content_base64: {type: string, maxLength: 22369624, pattern: '^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$'}
         effective_argv:
           type: array
           minItems: 1
@@ -213,10 +279,11 @@ properties:
   publication:
     type: object
     additionalProperties: false
-    required: [backend, series_id, genesis, expected_parent_publication, sqlite_path, partial_policy, transaction_count, reopen_before_success]
+    required: [backend, selector, series_id, genesis, expected_parent_publication, sqlite_path, partial_policy, transaction_count, reopen_before_success]
     properties:
       backend: {enum: [memory, sqlite]}
-      series_id: {$ref: '#/$defs/strong_id'}
+      selector: {$ref: '#/$defs/series_selector'}
+      series_id: {type: string, pattern: '^snapshot-series:sha256:[0-9a-f]{64}$'}
       genesis: {type: boolean}
       expected_parent_publication:
         oneOf:
@@ -236,7 +303,10 @@ properties:
         then:
           properties: {sqlite_path: {type: string}}
         else:
-          properties: {sqlite_path: {type: 'null'}}
+          properties:
+            sqlite_path: {type: 'null'}
+            genesis: {const: true}
+            expected_parent_publication: {type: 'null'}
       - if:
           properties: {genesis: {const: true}}
           required: [genesis]
@@ -245,6 +315,37 @@ properties:
         else:
           properties: {expected_parent_publication: {$ref: '#/$defs/strong_id'}}
 $defs:
+  admitted_descriptor:
+    type: object
+    additionalProperties: false
+    required: [descriptor_id, runtime_descriptor_digest]
+    properties:
+      descriptor_id: {$ref: '#/$defs/strong_id'}
+      runtime_descriptor_digest: {$ref: '#/$defs/semantic_digest'}
+  admitted_build_compile_unit: {allOf: [{$ref: '#/$defs/admitted_descriptor'}, {properties: {descriptor_id: {const: build.compile_unit.v1}}, required: [descriptor_id]}]}
+  admitted_build_project: {allOf: [{$ref: '#/$defs/admitted_descriptor'}, {properties: {descriptor_id: {const: build.project.v1}}, required: [descriptor_id]}]}
+  admitted_build_toolchain_context: {allOf: [{$ref: '#/$defs/admitted_descriptor'}, {properties: {descriptor_id: {const: build.toolchain_context.v1}}, required: [descriptor_id]}]}
+  admitted_build_variant: {allOf: [{$ref: '#/$defs/admitted_descriptor'}, {properties: {descriptor_id: {const: build.variant.v1}}, required: [descriptor_id]}]}
+  admitted_cc_call_direct_target: {allOf: [{$ref: '#/$defs/admitted_descriptor'}, {properties: {descriptor_id: {const: cc.call_direct_target.v1}}, required: [descriptor_id]}]}
+  admitted_cc_call_site: {allOf: [{$ref: '#/$defs/admitted_descriptor'}, {properties: {descriptor_id: {const: cc.call_site.v1}}, required: [descriptor_id]}]}
+  admitted_cc_entity: {allOf: [{$ref: '#/$defs/admitted_descriptor'}, {properties: {descriptor_id: {const: cc.entity.v1}}, required: [descriptor_id]}]}
+  admitted_frontend_call: {allOf: [{$ref: '#/$defs/admitted_descriptor'}, {properties: {descriptor_id: {const: frontend.clang22.call_observation.v2}}, required: [descriptor_id]}]}
+  admitted_frontend_entity: {allOf: [{$ref: '#/$defs/admitted_descriptor'}, {properties: {descriptor_id: {const: frontend.clang22.entity_observation.v2}}, required: [descriptor_id]}]}
+  admitted_frontend_type: {allOf: [{$ref: '#/$defs/admitted_descriptor'}, {properties: {descriptor_id: {const: frontend.clang22.type_observation.v2}}, required: [descriptor_id]}]}
+  admitted_source_file: {allOf: [{$ref: '#/$defs/admitted_descriptor'}, {properties: {descriptor_id: {const: source.file.v1}}, required: [descriptor_id]}]}
+  admitted_source_span: {allOf: [{$ref: '#/$defs/admitted_descriptor'}, {properties: {descriptor_id: {const: source.span.v1}}, required: [descriptor_id]}]}
+  series_selector:
+    type: object
+    additionalProperties: false
+    required: [catalog_id, channel_id, engine_generation_id, condition_universe_id, relation_registry_digest, interpretation_policy_digest, trust_policy_digest]
+    properties:
+      catalog_id: {$ref: '#/$defs/strong_id'}
+      channel_id: {$ref: '#/$defs/strong_id'}
+      engine_generation_id: {type: string, pattern: '^engine-generation:sha256:[0-9a-f]{64}$'}
+      condition_universe_id: {$ref: '#/$defs/strong_id'}
+      relation_registry_digest: {$ref: '#/$defs/semantic_digest'}
+      interpretation_policy_digest: {$ref: '#/$defs/semantic_digest'}
+      trust_policy_digest: {$ref: '#/$defs/semantic_digest'}
   catalog_compile_unit:
     type: object
     additionalProperties: false

@@ -200,7 +200,7 @@ $defs:
       feedback:
         type: array
         uniqueItems: true
-        items: {enum: [DF-0182, DF-0187]}
+        items: {enum: [DF-0182, DF-0187, DF-0191, DF-0192]}
     allOf:
       - if:
           properties: {state: {const: tracked-gap-empty}}
@@ -211,7 +211,7 @@ $defs:
             report_count: {const: 0}
             report_set_count: {const: 0}
             owner_issue: {const: '#181'}
-            feedback: {const: [DF-0182, DF-0187]}
+            feedback: {const: [DF-0182, DF-0187, DF-0191, DF-0192]}
         else:
           properties:
             request_count: {const: 4}
@@ -252,11 +252,20 @@ $defs:
     items:
       type: object
       additionalProperties: false
-      required: [configuration, backend, report_digest]
+      required: [configuration, backend, request_digest, request_byte_count, report_digest, report_byte_count, execution_receipt_digest, actual_exit_status, exact_stdout_byte_count, stdout_digest, parsed_response_count, stderr_digest]
       properties:
         configuration: {enum: [static, shared]}
         backend: {enum: [memory, sqlite]}
+        request_digest: {$ref: '#/$defs/digest'}
+        request_byte_count: {type: integer, minimum: 1, maximum: 1073741824}
         report_digest: {$ref: '#/$defs/digest'}
+        report_byte_count: {type: integer, minimum: 1, maximum: 1073741824}
+        execution_receipt_digest: {$ref: '#/$defs/digest'}
+        actual_exit_status: {const: 0}
+        exact_stdout_byte_count: {type: integer, minimum: 1, maximum: 1073741824}
+        stdout_digest: {$ref: '#/$defs/digest'}
+        parsed_response_count: {const: 1}
+        stderr_digest: {$ref: '#/$defs/digest'}
   materialization_report_set_matrix:
     type: array
     minItems: 2
