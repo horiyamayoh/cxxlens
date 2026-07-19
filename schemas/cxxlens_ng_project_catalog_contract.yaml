@@ -1,5 +1,5 @@
 schema: cxxlens.project-catalog-contract.v1
-document_version: 1.0.0
+document_version: 1.1.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#53-canonical-tuple
@@ -9,7 +9,7 @@ authority:
 value_types:
   compile_unit_entry:
     fields: [compile_unit_id, effective_invocation_digest, source_digest, environment_digest]
-    identity: stable-control-free-typed-id
+    identity: stable-control-free-catalog-local-input-id
     digests: exact-canonical-digest
   project_catalog:
     fields: [catalog_id, catalog_digest, logical_root, environment_digest, compile_units]
@@ -24,9 +24,15 @@ identity:
   catalog_digest: semantic-digest-v2-over-canonical-projection
   catalog_id: catalog-prefix-plus-exact-catalog-digest
   validation: bottom-up-recompute-and-exact-compare
+identity_boundary:
+  catalog_compile_unit_id: project-upstream-catalog-input-census-identity
+  build_compile_unit_relation_id: independently-derived-from-accepted-relation-registry
+  implicit_equality_alias: forbidden
+  consumer_mapping: exact-entry-digests-to-final-relation-payload-and-id
 consumers:
   provider_task: validate-before-task-accepted
   build_project: exact-catalog-id-digest-logical-root-environment-fields
+  build_compile_unit: explicit-catalog-entry-to-final-relation-id-mapping-required
   catalog_loader: project_catalog-make-only
 acceptance:
   - add-delete-replace-mismatch
@@ -36,3 +42,4 @@ acceptance:
   - duplicate-conflict-rejected
   - independent-encoder-byte-identical
   - forged-provider-task-rejected-before-acceptance
+  - catalog-entry-and-build-relation-id-are-not-implicitly-aliased

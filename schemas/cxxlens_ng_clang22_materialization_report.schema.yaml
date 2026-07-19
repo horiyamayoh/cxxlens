@@ -1,0 +1,810 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://cxxlens.dev/schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
+title: cxxlens installed Clang 22 materialization report
+type: object
+additionalProperties: false
+required:
+  - schema
+  - report_version
+  - result
+  - generated_at
+  - source
+  - request
+  - installation
+  - provider
+  - project
+  - registry
+  - adoption
+  - task_results
+  - span_validation
+  - base_claims
+  - side_channels
+  - claim_stages
+  - provenance
+  - publication
+  - semantic_verification
+  - authority_digests
+  - error
+properties:
+  schema: {const: cxxlens.clang22-materialization-report.v1}
+  report_version: {const: 1.0.0}
+  result: {enum: [passed, failed]}
+  generated_at: {type: string, format: date-time}
+  source:
+    type: object
+    additionalProperties: false
+    required: [revision, tree]
+    properties:
+      revision: {$ref: '#/$defs/revision'}
+      tree: {$ref: '#/$defs/revision'}
+  request:
+    type: object
+    additionalProperties: false
+    required: [materialization_request_id, request_digest, semantic_request_digest]
+    properties:
+      materialization_request_id: {$ref: '#/$defs/strong_id'}
+      request_digest: {$ref: '#/$defs/semantic_digest'}
+      semantic_request_digest: {$ref: '#/$defs/semantic_digest'}
+  installation:
+    type: object
+    additionalProperties: false
+    required: [configuration, platform, prefix_manifest_digest, relocated_prefix_digest, tool_digest, worker_digest, relocated, runtime_dependency_policy, tool_worker_same_prefix]
+    properties:
+      configuration: {enum: [static, shared]}
+      platform: {type: string, pattern: '^linux-[A-Za-z0-9_.-]+-(?:static|shared)$'}
+      prefix_manifest_digest: {$ref: '#/$defs/content_digest'}
+      relocated_prefix_digest: {$ref: '#/$defs/content_digest'}
+      tool_digest: {$ref: '#/$defs/content_digest'}
+      worker_digest: {$ref: '#/$defs/content_digest'}
+      relocated: {const: true}
+      runtime_dependency_policy: {const: self-contained-prefix}
+      tool_worker_same_prefix: {const: true}
+  provider:
+    type: object
+    additionalProperties: false
+    required: [tool_executable, tool_interface_version, worker_executable, provider_id, provider_version, semantic_contract_digest, protocol_major, protocol_minor, sandbox_policy_digest]
+    properties:
+      tool_executable: {const: cxxlens-clang22-materialize}
+      tool_interface_version: {const: 1.0.0}
+      worker_executable: {const: cxxlens-clang-worker-22}
+      provider_id: {const: cxxlens.clang22.reference}
+      provider_version: {const: 1.0.0}
+      semantic_contract_digest: {$ref: '#/$defs/content_digest'}
+      protocol_major: {const: 1}
+      protocol_minor: {const: 0}
+      sandbox_policy_digest: {$ref: '#/$defs/content_digest'}
+  project:
+    type: object
+    additionalProperties: false
+    required: [project_id, catalog_id, catalog_digest, logical_root, catalog_environment_digest, catalog_compile_unit_census_digest, catalog_compile_units]
+    properties:
+      project_id: {$ref: '#/$defs/strong_id'}
+      catalog_id: {$ref: '#/$defs/strong_id'}
+      catalog_digest: {$ref: '#/$defs/content_digest'}
+      logical_root: {$ref: '#/$defs/strong_id'}
+      catalog_environment_digest: {$ref: '#/$defs/content_digest'}
+      catalog_compile_unit_census_digest: {$ref: '#/$defs/semantic_digest'}
+      catalog_compile_units:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {$ref: '#/$defs/catalog_compile_unit'}
+  registry:
+    type: object
+    additionalProperties: false
+    required: [registry_digest, base_descriptors, descriptors]
+    properties:
+      registry_digest: {$ref: '#/$defs/content_digest'}
+      base_descriptors:
+        type: array
+        minItems: 6
+        maxItems: 6
+        uniqueItems: true
+        items: {$ref: '#/$defs/base_descriptor_binding'}
+      descriptors:
+        type: array
+        minItems: 6
+        maxItems: 6
+        uniqueItems: true
+        items: {$ref: '#/$defs/descriptor_binding'}
+  adoption:
+    type: object
+    additionalProperties: false
+    required: [boundary, visibility, state, partial_policy, all_tasks_mandatory, all_groups_mandatory, all_batches_mandatory, task_result_set_digest, raw_frames]
+    properties:
+      boundary: {const: sealed-materialization-result}
+      visibility: {const: tool-private-immutable}
+      state: {enum: [sealed, discarded]}
+      partial_policy: {const: forbid}
+      all_tasks_mandatory: {const: true}
+      all_groups_mandatory: {const: true}
+      all_batches_mandatory: {const: true}
+      task_result_set_digest: {$ref: '#/$defs/content_digest'}
+      raw_frames:
+        type: object
+        additionalProperties: false
+        required: [authority, retained, frame_count, frame_set_digest]
+        properties:
+          authority: {const: diagnostic-only-non-authoritative}
+          retained: {const: false}
+          frame_count: {type: integer, minimum: 0}
+          frame_set_digest: {$ref: '#/$defs/content_digest'}
+  task_results:
+    type: array
+    uniqueItems: true
+    items: {$ref: '#/$defs/task_result'}
+  span_validation:
+    type: object
+    additionalProperties: false
+    required: [contract, bundle_fields, optionality, origin_evidence, observed_bundle_count, absent_bundle_count, entity_absent_bundle_count, call_absent_bundle_count, absent_bundle_unresolved_count, source_dependent_canonical_omission_count, unique_bundle_count, constructed_source_span_claim_count, recomputed_id_mismatch_count, invalid_range_count, task_binding_mismatch_count, hard_references_resolved, validated_bundle_bindings, bundle_task_binding_set_digest, bundle_set_digest, source_span_claim_set_digest, evidence_digest]
+    properties:
+      contract: {const: full-primary-span-bundle-v2}
+      bundle_fields: {const: [span_id, snapshot, file, begin, end, role, read_only]}
+      optionality: {const: entity-and-call-optional-all-or-none}
+      origin_evidence: {const: separately-retained-and-digest-bound}
+      observed_bundle_count: {type: integer, minimum: 0}
+      absent_bundle_count: {type: integer, minimum: 0}
+      entity_absent_bundle_count: {type: integer, minimum: 0}
+      call_absent_bundle_count: {type: integer, minimum: 0}
+      absent_bundle_unresolved_count: {type: integer, minimum: 0}
+      source_dependent_canonical_omission_count: {type: integer, minimum: 0}
+      unique_bundle_count: {type: integer, minimum: 0}
+      constructed_source_span_claim_count: {type: integer, minimum: 0}
+      recomputed_id_mismatch_count: {type: integer, minimum: 0}
+      invalid_range_count: {type: integer, minimum: 0}
+      task_binding_mismatch_count: {type: integer, minimum: 0}
+      hard_references_resolved: {type: boolean}
+      validated_bundle_bindings:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/span_bundle_binding'}
+      bundle_task_binding_set_digest: {$ref: '#/$defs/content_digest'}
+      bundle_set_digest: {$ref: '#/$defs/content_digest'}
+      source_span_claim_set_digest: {$ref: '#/$defs/content_digest'}
+      evidence_digest: {$ref: '#/$defs/content_digest'}
+  base_claims:
+    type: object
+    additionalProperties: false
+    required: [descriptor_ids, stage, transaction_visibility, descriptor_results, total_row_count, total_claim_count, claim_set_digest, validated_before_hard_references]
+    properties:
+      descriptor_ids: {const: [build.project.v1, build.toolchain_context.v1, build.variant.v1, source.file.v1, build.compile_unit.v1, source.span.v1]}
+      stage: {const: canonical_claim}
+      transaction_visibility: {const: unpublished-until-single-commit}
+      descriptor_results:
+        type: array
+        minItems: 6
+        maxItems: 6
+        uniqueItems: true
+        items: {$ref: '#/$defs/base_claim_result'}
+      total_row_count: {type: integer, minimum: 0}
+      total_claim_count: {type: integer, minimum: 0}
+      claim_set_digest: {$ref: '#/$defs/content_digest'}
+      validated_before_hard_references: {type: boolean}
+  side_channels:
+    type: object
+    additionalProperties: false
+    required: [coverage, unresolved, evidence, guarantee]
+    properties:
+      coverage:
+        type: object
+        additionalProperties: false
+        required: [record_type, record_count, state_counts, balance, digest]
+        properties:
+          record_type: {const: typed-coverage-unit}
+          record_count: {type: integer, minimum: 0}
+          state_counts:
+            type: object
+            additionalProperties: false
+            required: [covered, excluded, not_applicable, failed, unresolved, unsupported, stale, truncated]
+            properties:
+              covered: {type: integer, minimum: 0}
+              excluded: {type: integer, minimum: 0}
+              not_applicable: {type: integer, minimum: 0}
+              failed: {type: integer, minimum: 0}
+              unresolved: {type: integer, minimum: 0}
+              unsupported: {type: integer, minimum: 0}
+              stale: {type: integer, minimum: 0}
+              truncated: {type: integer, minimum: 0}
+          balance: {enum: [exact, incomplete]}
+          digest: {$ref: '#/$defs/content_digest'}
+      unresolved:
+        type: object
+        additionalProperties: false
+        required: [record_type, record_count, blocking_count, categories, category_counts, digest]
+        properties:
+          record_type: {const: typed-unresolved-item}
+          record_count: {type: integer, minimum: 0}
+          blocking_count: {type: integer, minimum: 0}
+          categories:
+            type: array
+            uniqueItems: true
+            items: {enum: [ambiguous_identity, budget_exhausted, claim_conflict, closure_missing, custom, external_dependency, missing_input, missing_primary_span_bundle, model_missing, open_world, precision_not_achieved, provider_unavailable, stale_input, trust_boundary, unsupported_construct]}
+          category_counts:
+            type: object
+            propertyNames:
+              enum: [ambiguous_identity, budget_exhausted, claim_conflict, closure_missing, custom, external_dependency, missing_input, missing_primary_span_bundle, model_missing, open_world, precision_not_achieved, provider_unavailable, stale_input, trust_boundary, unsupported_construct]
+            additionalProperties: {type: integer, minimum: 1}
+          digest: {$ref: '#/$defs/content_digest'}
+      evidence:
+        type: object
+        additionalProperties: false
+        required: [record_type, record_count, kinds, kind_counts, subject_binding, digest]
+        properties:
+          record_type: {const: typed-evidence-edge}
+          record_count: {type: integer, minimum: 0}
+          kinds:
+            type: array
+            uniqueItems: true
+            items: {enum: [source_observation, compile_context, provider_execution, canonicalization, model_assumption, derivation, user_configuration, dynamic_observation, verification, exclusion, closure_proof]}
+          kind_counts:
+            type: object
+            propertyNames:
+              enum: [source_observation, compile_context, provider_execution, canonicalization, model_assumption, derivation, user_configuration, dynamic_observation, verification, exclusion, closure_proof]
+            additionalProperties: {type: integer, minimum: 1}
+          subject_binding: {const: exact-claim-or-task-identity}
+          digest: {$ref: '#/$defs/content_digest'}
+      guarantee:
+        type: object
+        additionalProperties: false
+        required: [record_type, approximation, scope, assumptions, verification_modalities, observation_descriptor_censuses, digest]
+        properties:
+          record_type: {const: typed-guarantee}
+          approximation: {enum: [unknown, under_approximation, over_approximation, exact]}
+          scope: {$ref: '#/$defs/strong_id'}
+          assumptions:
+            type: array
+            uniqueItems: true
+            items: {$ref: '#/$defs/strong_id'}
+          verification_modalities:
+            type: array
+            minItems: 1
+            uniqueItems: true
+            items: {$ref: '#/$defs/strong_id'}
+          observation_descriptor_censuses:
+            type: array
+            minItems: 3
+            maxItems: 3
+            uniqueItems: true
+            prefixItems:
+              - allOf:
+                  - {$ref: '#/$defs/observation_descriptor_census'}
+                  - properties: {descriptor_id: {const: frontend.clang22.call_observation.v2}}
+                    required: [descriptor_id]
+              - allOf:
+                  - {$ref: '#/$defs/observation_descriptor_census'}
+                  - properties: {descriptor_id: {const: frontend.clang22.entity_observation.v2}}
+                    required: [descriptor_id]
+              - allOf:
+                  - {$ref: '#/$defs/observation_descriptor_census'}
+                  - properties: {descriptor_id: {const: frontend.clang22.type_observation.v2}}
+                    required: [descriptor_id]
+            items: false
+          digest: {$ref: '#/$defs/content_digest'}
+        allOf:
+          - if:
+              properties: {approximation: {const: exact}}
+              required: [approximation]
+            then:
+              properties:
+                observation_descriptor_censuses:
+                  not:
+                    contains:
+                      type: object
+                      properties:
+                        non_exact_equivalence_count: {minimum: 1}
+                      required: [non_exact_equivalence_count]
+  claim_stages:
+    type: array
+    minItems: 6
+    maxItems: 6
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [descriptor_id, stage, claim_count, claim_content_set_digest, provenance_edge_set_digest, guarantee_digest, claim_stage_digest]
+      properties:
+        descriptor_id:
+          enum: [cc.call_direct_target.v1, cc.call_site.v1, cc.entity.v1, frontend.clang22.call_observation.v2, frontend.clang22.entity_observation.v2, frontend.clang22.type_observation.v2]
+        stage: {enum: [assertion, canonical_claim]}
+        claim_count: {type: integer, minimum: 0}
+        claim_content_set_digest: {$ref: '#/$defs/content_digest'}
+        provenance_edge_set_digest: {$ref: '#/$defs/content_digest'}
+        guarantee_digest: {$ref: '#/$defs/content_digest'}
+        observation_equivalence_census: {$ref: '#/$defs/observation_equivalence_census'}
+        claim_stage_digest: {$ref: '#/$defs/content_digest'}
+      allOf:
+        - if:
+            properties:
+              descriptor_id:
+                enum: [frontend.clang22.call_observation.v2, frontend.clang22.entity_observation.v2, frontend.clang22.type_observation.v2]
+            required: [descriptor_id]
+          then:
+            required: [observation_equivalence_census]
+          else:
+            not:
+              required: [observation_equivalence_census]
+  provenance:
+    type: object
+    additionalProperties: false
+    required: [record_type, edge_count, canonical_claim_count, canonical_claims_with_exact_input_edges, orphan_count, ambiguous_count, edge_set_digest]
+    properties:
+      record_type: {const: typed-provenance-edge-summary}
+      edge_count: {type: integer, minimum: 0}
+      canonical_claim_count: {type: integer, minimum: 0}
+      canonical_claims_with_exact_input_edges: {type: integer, minimum: 0}
+      orphan_count: {type: integer, minimum: 0}
+      ambiguous_count: {type: integer, minimum: 0}
+      edge_set_digest: {$ref: '#/$defs/content_digest'}
+  publication:
+    type: object
+    additionalProperties: false
+    required: [backend, series_id, genesis, expected_parent_publication, observed_parent_publication, cas_verdict, partial_policy, committed_transaction_count, committed, publication_id, snapshot_id, prior_head_preserved, sqlite_reopened]
+    properties:
+      backend: {enum: [memory, sqlite]}
+      series_id: {$ref: '#/$defs/strong_id'}
+      genesis: {type: boolean}
+      expected_parent_publication: {$ref: '#/$defs/nullable_id'}
+      observed_parent_publication: {$ref: '#/$defs/nullable_id'}
+      cas_verdict: {enum: [matched, stale, not_attempted]}
+      partial_policy: {const: forbid}
+      committed_transaction_count: {type: integer, minimum: 0, maximum: 1}
+      committed: {type: boolean}
+      publication_id: {$ref: '#/$defs/nullable_id'}
+      snapshot_id: {$ref: '#/$defs/nullable_id'}
+      prior_head_preserved: {const: true}
+      sqlite_reopened: {type: boolean}
+  semantic_verification:
+    type: object
+    additionalProperties: false
+    required: [status, canonical_export_digest, query_digest, snapshot_identity_recomputed, reopened_store_verified]
+    properties:
+      status: {enum: [passed, not_published]}
+      canonical_export_digest: {$ref: '#/$defs/nullable_digest'}
+      query_digest: {$ref: '#/$defs/nullable_digest'}
+      snapshot_identity_recomputed: {type: boolean}
+      reopened_store_verified: {type: boolean}
+  authority_digests:
+    type: array
+    minItems: 5
+    maxItems: 5
+    uniqueItems: true
+    items:
+      type: object
+      additionalProperties: false
+      required: [path, digest]
+      properties:
+        path:
+          enum: [schemas/cxxlens_ng_clang22_materialization_contract.yaml, schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml, schemas/cxxlens_ng_clang22_materialization_request.schema.yaml, schemas/cxxlens_ng_clang22_materialization_report.schema.yaml, schemas/cxxlens_ng_relation_registry.yaml]
+        digest: {$ref: '#/$defs/content_digest'}
+  error:
+    oneOf:
+      - {type: 'null'}
+      - {$ref: '#/$defs/error'}
+allOf:
+  - if:
+      properties: {result: {const: passed}}
+      required: [result]
+    then:
+      properties:
+        error: {type: 'null'}
+        adoption:
+          properties: {state: {const: sealed}}
+        task_results: {minItems: 1}
+        publication:
+          properties:
+            cas_verdict: {const: matched}
+            committed_transaction_count: {const: 1}
+            committed: {const: true}
+            publication_id: {$ref: '#/$defs/strong_id'}
+            snapshot_id: {$ref: '#/$defs/strong_id'}
+        semantic_verification:
+          properties:
+            status: {const: passed}
+            canonical_export_digest: {$ref: '#/$defs/content_digest'}
+            query_digest: {$ref: '#/$defs/content_digest'}
+            snapshot_identity_recomputed: {const: true}
+            reopened_store_verified: {const: true}
+    else:
+      properties:
+        error: {$ref: '#/$defs/error'}
+        adoption:
+          properties: {state: {const: discarded}}
+        publication:
+          properties:
+            committed_transaction_count: {const: 0}
+            committed: {const: false}
+            publication_id: {type: 'null'}
+            snapshot_id: {type: 'null'}
+        semantic_verification:
+          properties:
+            status: {const: not_published}
+            canonical_export_digest: {type: 'null'}
+            query_digest: {type: 'null'}
+  - if:
+      properties:
+        result: {const: passed}
+        publication:
+          properties: {backend: {const: sqlite}}
+          required: [backend]
+      required: [result, publication]
+    then:
+      properties:
+        publication:
+          properties: {sqlite_reopened: {const: true}}
+  - if:
+      properties:
+        result: {const: passed}
+        publication:
+          properties: {backend: {const: memory}}
+          required: [backend]
+      required: [result, publication]
+    then:
+      properties:
+        publication:
+          properties: {sqlite_reopened: {const: false}}
+$defs:
+  catalog_compile_unit:
+    type: object
+    additionalProperties: false
+    required: [catalog_compile_unit_id, effective_invocation_digest, source_digest, environment_digest]
+    properties:
+      catalog_compile_unit_id: {$ref: '#/$defs/strong_id'}
+      effective_invocation_digest: {$ref: '#/$defs/content_digest'}
+      source_digest: {$ref: '#/$defs/content_digest'}
+      environment_digest: {$ref: '#/$defs/content_digest'}
+  strong_id:
+    type: string
+    minLength: 1
+    maxLength: 512
+    pattern: '^[^\u0000-\u001f\u007f]+$'
+  content_digest:
+    type: string
+    pattern: '^(?:sha256|semantic-v2:sha256):[0-9a-f]{64}$'
+  semantic_digest:
+    type: string
+    pattern: '^semantic-v2:sha256:[0-9a-f]{64}$'
+  revision:
+    type: string
+    pattern: '^[0-9a-f]{40}$'
+  nullable_id:
+    oneOf:
+      - {$ref: '#/$defs/strong_id'}
+      - {type: 'null'}
+  nullable_digest:
+    oneOf:
+      - {$ref: '#/$defs/content_digest'}
+      - {type: 'null'}
+  task_semantic_context:
+    type: object
+    additionalProperties: false
+    required: [provider_task_id, task_input_digest, selected_catalog_compile_unit_id, compile_unit_id, condition_universe_id, condition_id, interpretation_domain]
+    properties:
+      provider_task_id: {type: string, pattern: '^task:semantic-v2:sha256:[0-9a-f]{64}$'}
+      task_input_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+      selected_catalog_compile_unit_id: {$ref: '#/$defs/strong_id'}
+      compile_unit_id: {$ref: '#/$defs/strong_id'}
+      condition_universe_id: {$ref: '#/$defs/strong_id'}
+      condition_id: {$ref: '#/$defs/strong_id'}
+      interpretation_domain: {$ref: '#/$defs/strong_id'}
+  primary_span_bundle:
+    type: object
+    additionalProperties: false
+    required: [span_id, snapshot, file, begin, end, role, read_only]
+    properties:
+      span_id: {$ref: '#/$defs/strong_id'}
+      snapshot: {$ref: '#/$defs/strong_id'}
+      file: {$ref: '#/$defs/strong_id'}
+      begin: {type: integer, minimum: 0, maximum: 9223372036854775807}
+      end: {type: integer, minimum: 0, maximum: 9223372036854775807}
+      role: {$ref: '#/$defs/strong_id'}
+      read_only: {type: boolean}
+  span_bundle_binding:
+    type: object
+    additionalProperties: false
+    required: [bundle, bundle_digest, row_digest, observation_descriptor_id, observation_row_digest, originating_task]
+    properties:
+      bundle: {$ref: '#/$defs/primary_span_bundle'}
+      bundle_digest: {$ref: '#/$defs/content_digest'}
+      row_digest: {$ref: '#/$defs/content_digest'}
+      observation_descriptor_id:
+        enum: [frontend.clang22.call_observation.v2, frontend.clang22.entity_observation.v2]
+      observation_row_digest: {$ref: '#/$defs/content_digest'}
+      originating_task: {$ref: '#/$defs/task_semantic_context'}
+  materialized_row_binding:
+    type: object
+    additionalProperties: false
+    required: [row_digest, final_relation_compile_unit_id, originating_task, primary_span_bundle_digest, exact_equivalence, limitation_digest]
+    properties:
+      row_digest: {$ref: '#/$defs/content_digest'}
+      final_relation_compile_unit_id: {$ref: '#/$defs/strong_id'}
+      originating_task: {$ref: '#/$defs/task_semantic_context'}
+      primary_span_bundle_digest: {$ref: '#/$defs/nullable_digest'}
+      exact_equivalence:
+        oneOf:
+          - {type: boolean}
+          - {type: 'null'}
+      limitation_digest: {$ref: '#/$defs/nullable_digest'}
+    allOf:
+      - if:
+          properties: {exact_equivalence: {const: true}}
+          required: [exact_equivalence]
+        then:
+          properties: {limitation_digest: {type: 'null'}}
+      - if:
+          properties: {exact_equivalence: {const: false}}
+          required: [exact_equivalence]
+        then:
+          properties:
+            limitation_digest: {$ref: '#/$defs/content_digest'}
+      - if:
+          properties: {exact_equivalence: {type: 'null'}}
+          required: [exact_equivalence]
+        then:
+          properties: {limitation_digest: {type: 'null'}}
+  observation_equivalence_row:
+    type: object
+    additionalProperties: false
+    required: [observation_row_digest, final_relation_compile_unit_id, originating_task, exact_equivalence, limitation, limitation_digest]
+    properties:
+      observation_row_digest: {$ref: '#/$defs/content_digest'}
+      final_relation_compile_unit_id: {$ref: '#/$defs/strong_id'}
+      originating_task: {$ref: '#/$defs/task_semantic_context'}
+      exact_equivalence: {type: boolean}
+      limitation:
+        oneOf:
+          - {type: 'null'}
+          - {type: string, minLength: 1, maxLength: 4096}
+      limitation_digest: {$ref: '#/$defs/nullable_digest'}
+    allOf:
+      - if:
+          properties: {exact_equivalence: {const: true}}
+          required: [exact_equivalence]
+        then:
+          properties:
+            limitation: {type: 'null'}
+            limitation_digest: {type: 'null'}
+      - if:
+          properties: {exact_equivalence: {const: false}}
+          required: [exact_equivalence]
+        then:
+          properties:
+            limitation: {type: string, minLength: 1, maxLength: 4096}
+            limitation_digest: {$ref: '#/$defs/content_digest'}
+  observation_equivalence_census:
+    type: object
+    additionalProperties: false
+    required: [rows, exact_equivalence_count, non_exact_equivalence_count, row_equivalence_set_digest]
+    properties:
+      rows:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/observation_equivalence_row'}
+      exact_equivalence_count: {type: integer, minimum: 0}
+      non_exact_equivalence_count: {type: integer, minimum: 0}
+      row_equivalence_set_digest: {$ref: '#/$defs/content_digest'}
+  observation_descriptor_census:
+    type: object
+    additionalProperties: false
+    required: [descriptor_id, exact_equivalence_count, non_exact_equivalence_count, row_equivalence_set_digest]
+    properties:
+      descriptor_id:
+        enum: [frontend.clang22.call_observation.v2, frontend.clang22.entity_observation.v2, frontend.clang22.type_observation.v2]
+      exact_equivalence_count: {type: integer, minimum: 0}
+      non_exact_equivalence_count: {type: integer, minimum: 0}
+      row_equivalence_set_digest: {$ref: '#/$defs/content_digest'}
+  base_row_envelope_binding:
+    type: object
+    additionalProperties: false
+    required: [row_identity, row_digest, origin_associations]
+    properties:
+      row_identity: {$ref: '#/$defs/strong_id'}
+      row_digest: {$ref: '#/$defs/content_digest'}
+      origin_associations:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {$ref: '#/$defs/base_row_origin_association'}
+  base_row_edge:
+    type: object
+    additionalProperties: false
+    required: [kind, subject_digest]
+    properties:
+      kind: {$ref: '#/$defs/strong_id'}
+      subject_digest: {$ref: '#/$defs/content_digest'}
+  base_row_source_bundle_edge:
+    type: object
+    additionalProperties: false
+    required: [bundle_digest, observation_descriptor_id, observation_row_digest]
+    properties:
+      bundle_digest: {$ref: '#/$defs/content_digest'}
+      observation_descriptor_id:
+        enum: [frontend.clang22.call_observation.v2, frontend.clang22.entity_observation.v2]
+      observation_row_digest: {$ref: '#/$defs/content_digest'}
+  base_row_origin_association:
+    type: object
+    additionalProperties: false
+    required: [originating_task, provenance_edge, evidence_edges, source_bundle]
+    properties:
+      originating_task: {$ref: '#/$defs/task_semantic_context'}
+      provenance_edge: {$ref: '#/$defs/base_row_edge'}
+      evidence_edges:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {$ref: '#/$defs/base_row_edge'}
+      source_bundle:
+        oneOf:
+          - {type: 'null'}
+          - {$ref: '#/$defs/base_row_source_bundle_edge'}
+  descriptor_binding:
+    type: object
+    additionalProperties: false
+    required: [descriptor_id, descriptor_version, contract_digest, runtime_descriptor_digest, dependency_group_id, atomic_output_group_id, batch_id, output_stage]
+    properties:
+      descriptor_id:
+        enum: [cc.call_direct_target.v1, cc.call_site.v1, cc.entity.v1, frontend.clang22.call_observation.v2, frontend.clang22.entity_observation.v2, frontend.clang22.type_observation.v2]
+      descriptor_version: {enum: [1.0.0, 2.0.0]}
+      contract_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+      runtime_descriptor_digest: {$ref: '#/$defs/semantic_digest'}
+      dependency_group_id: {enum: [canonical, observation]}
+      atomic_output_group_id: {const: clang22-atomic}
+      batch_id: {type: string, pattern: '^(?:cc\.(?:call_direct_target|call_site|entity)\.v1|frontend\.clang22\.(?:call|entity|type)_observation\.v2)-batch$'}
+      output_stage: {enum: [assertion, canonical_claim]}
+  base_descriptor_binding:
+    type: object
+    additionalProperties: false
+    required: [descriptor_id, descriptor_version, contract_digest, runtime_descriptor_digest, stage_order, output_stage, owner]
+    properties:
+      descriptor_id:
+        enum: [build.project.v1, build.toolchain_context.v1, build.variant.v1, source.file.v1, build.compile_unit.v1, source.span.v1]
+      descriptor_version: {const: 1.0.0}
+      contract_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+      runtime_descriptor_digest: {$ref: '#/$defs/semantic_digest'}
+      stage_order: {type: integer, minimum: 0, maximum: 5}
+      output_stage: {const: canonical_claim}
+      owner: {const: installed-tool}
+  base_claim_result:
+    type: object
+    additionalProperties: false
+    required: [descriptor_id, row_count, claim_count, row_set_digest, row_envelope_bindings, row_envelope_binding_set_digest, condition_fragment_set_digest, interpretation_domain_set_digest, producer_identity_digest, provenance_edge_set_digest, evidence_edge_set_digest, guarantee_digest, envelope_set_digest]
+    properties:
+      descriptor_id:
+        enum: [build.project.v1, build.toolchain_context.v1, build.variant.v1, source.file.v1, build.compile_unit.v1, source.span.v1]
+      row_count: {type: integer, minimum: 0}
+      claim_count: {type: integer, minimum: 0}
+      row_set_digest: {$ref: '#/$defs/content_digest'}
+      row_envelope_bindings:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/base_row_envelope_binding'}
+      row_envelope_binding_set_digest: {$ref: '#/$defs/content_digest'}
+      condition_fragment_set_digest: {$ref: '#/$defs/content_digest'}
+      interpretation_domain_set_digest: {$ref: '#/$defs/content_digest'}
+      producer_identity_digest: {$ref: '#/$defs/content_digest'}
+      provenance_edge_set_digest: {$ref: '#/$defs/content_digest'}
+      evidence_edge_set_digest: {$ref: '#/$defs/content_digest'}
+      guarantee_digest: {$ref: '#/$defs/content_digest'}
+      envelope_set_digest: {$ref: '#/$defs/content_digest'}
+  group_result:
+    type: object
+    additionalProperties: false
+    required: [dependency_group_id, atomic_output_group_id, descriptor_ids, sealed, batch_set_digest]
+    properties:
+      dependency_group_id: {enum: [canonical, observation]}
+      atomic_output_group_id: {const: clang22-atomic}
+      descriptor_ids:
+        type: array
+        minItems: 3
+        maxItems: 3
+        uniqueItems: true
+        items:
+          enum: [cc.call_direct_target.v1, cc.call_site.v1, cc.entity.v1, frontend.clang22.call_observation.v2, frontend.clang22.entity_observation.v2, frontend.clang22.type_observation.v2]
+      sealed: {type: boolean}
+      batch_set_digest: {$ref: '#/$defs/content_digest'}
+  batch_result:
+    type: object
+    additionalProperties: false
+    required: [batch_id, descriptor_id, runtime_descriptor_digest, dependency_group_id, atomic_output_group_id, row_count, ordered_chunk_digests, ordered_chunk_set_digest, row_bindings, claim_content_set_digest, provenance_edge_digests, provenance_edge_set_digest, batch_digest, sealed]
+    properties:
+      batch_id: {type: string, minLength: 1}
+      descriptor_id:
+        enum: [cc.call_direct_target.v1, cc.call_site.v1, cc.entity.v1, frontend.clang22.call_observation.v2, frontend.clang22.entity_observation.v2, frontend.clang22.type_observation.v2]
+      runtime_descriptor_digest: {$ref: '#/$defs/semantic_digest'}
+      dependency_group_id: {enum: [canonical, observation]}
+      atomic_output_group_id: {const: clang22-atomic}
+      row_count: {type: integer, minimum: 0}
+      ordered_chunk_digests:
+        type: array
+        items: {$ref: '#/$defs/content_digest'}
+      ordered_chunk_set_digest: {$ref: '#/$defs/content_digest'}
+      row_bindings:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/materialized_row_binding'}
+      claim_content_set_digest: {$ref: '#/$defs/content_digest'}
+      provenance_edge_digests:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/$defs/content_digest'}
+      provenance_edge_set_digest: {$ref: '#/$defs/content_digest'}
+      observation_equivalence_census: {$ref: '#/$defs/observation_equivalence_census'}
+      batch_digest: {$ref: '#/$defs/content_digest'}
+      sealed: {type: boolean}
+    allOf:
+      - if:
+          properties: {row_count: {const: 0}}
+          required: [row_count]
+        then:
+          properties:
+            ordered_chunk_digests: {maxItems: 0}
+            row_bindings: {maxItems: 0}
+            provenance_edge_digests: {maxItems: 0}
+        else:
+          properties:
+            ordered_chunk_digests: {minItems: 1}
+            row_bindings: {minItems: 1}
+            provenance_edge_digests: {minItems: 1}
+      - if:
+          properties:
+            descriptor_id:
+              enum: [frontend.clang22.call_observation.v2, frontend.clang22.entity_observation.v2, frontend.clang22.type_observation.v2]
+          required: [descriptor_id]
+        then:
+          required: [observation_equivalence_census]
+        else:
+          not:
+            required: [observation_equivalence_census]
+  task_result:
+    type: object
+    additionalProperties: false
+    required: [provider_task_id, provider_execution_id, selected_catalog_compile_unit_id, compile_unit_id, task_input_digest, terminal, transcript, groups, batches, side_channel_components, side_channel_digest, task_result_digest]
+    properties:
+      provider_task_id: {type: string, pattern: '^task:semantic-v2:sha256:[0-9a-f]{64}$'}
+      provider_execution_id: {$ref: '#/$defs/strong_id'}
+      selected_catalog_compile_unit_id: {$ref: '#/$defs/strong_id'}
+      compile_unit_id: {$ref: '#/$defs/strong_id'}
+      task_input_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+      terminal:
+        enum: [provider.success, provider.timeout, provider.cancelled, provider.output-limit, provider.crash, provider.malformed-frame, provider.checksum-mismatch, provider.truncated-stream, provider.schema-invalid, provider.coverage-incomplete, provider.runtime-unavailable, provider.binary-identity-mismatch, provider.protocol-state-invalid, provider.credit-exceeded, provider.backpressure, provider.task-binding-mismatch, provider.batch-invalid, provider.batch-state-invalid, provider.relation-incompatible, provider.required-feature-missing, provider.protocol-minor-mismatch, provider.unknown-required-extension, provider.invalid-frame-flags, provider.unsupported-compression, provider.frontend-request-invalid, security.sandbox-insufficient, security.sandbox-policy-mismatch]
+      transcript:
+        type: object
+        additionalProperties: false
+        required: [frame_count, transcript_digest, semantic_digest, raw_frame_digest]
+        properties:
+          frame_count: {type: integer, minimum: 1}
+          transcript_digest: {$ref: '#/$defs/content_digest'}
+          semantic_digest: {$ref: '#/$defs/semantic_digest'}
+          raw_frame_digest: {$ref: '#/$defs/content_digest'}
+      groups:
+        type: array
+        minItems: 2
+        maxItems: 2
+        uniqueItems: true
+        items: {$ref: '#/$defs/group_result'}
+      batches:
+        type: array
+        minItems: 6
+        maxItems: 6
+        uniqueItems: true
+        items: {$ref: '#/$defs/batch_result'}
+      side_channel_components:
+        type: object
+        additionalProperties: false
+        required: [coverage_set_digest, unresolved_set_digest, evidence_set_digest, guarantee_fragment_digest]
+        properties:
+          coverage_set_digest: {$ref: '#/$defs/content_digest'}
+          unresolved_set_digest: {$ref: '#/$defs/content_digest'}
+          evidence_set_digest: {$ref: '#/$defs/content_digest'}
+          guarantee_fragment_digest: {$ref: '#/$defs/content_digest'}
+      side_channel_digest: {$ref: '#/$defs/content_digest'}
+      task_result_digest: {$ref: '#/$defs/content_digest'}
+  error:
+    type: object
+    additionalProperties: false
+    required: [code, phase, subject, diagnostic]
+    properties:
+      code:
+        enum: [materialization.request-invalid, materialization.version-unsupported, materialization.identity-mismatch, materialization.catalog-census-mismatch, materialization.task-binding-mismatch, materialization.descriptor-binding-mismatch, materialization.transcript-invalid, materialization.group-incomplete, materialization.span-invalid, materialization.claim-invalid, materialization.coverage-incomplete, materialization.stale-parent, materialization.store-failure, materialization.worker-failure, materialization.report-invalid]
+      phase: {enum: [request, identity, catalog, task, worker, transcript, adoption, span, claim, coverage, publication, report]}
+      subject: {$ref: '#/$defs/strong_id'}
+      diagnostic: {type: string}

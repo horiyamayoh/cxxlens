@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 import json
 import pathlib
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -19,7 +20,9 @@ sys.path.insert(0, str(ROOT / "tools" / "quality"))
 from check_ng_sdk_contract import (  # noqa: E402
     SdkContractError,
     admitted_generated_relations,
+    canonical_relation,
     load_yaml,
+    render,
     validate_boundaries,
     validate_catalog,
     validate_generated_relation_header,
@@ -77,9 +80,67 @@ class NgSdkContractTest(unittest.TestCase):
         )
         self.assertEqual(len(generated), 11)
         for relation, relative in generated:
+            self.assertNotEqual(relation.get("api_surface"), "dynamic_only")
             validate_generated_relation_header(
                 relation, ROOT / relative, label=relative.as_posix()
             )
+
+    def test_dynamic_only_relation_is_not_a_cpp_generation_surface(self) -> None:
+        dynamic = next(
+            row
+            for row in self.registry["relations"]
+            if row["name"] == "frontend.clang22.entity_observation"
+        )
+        self.assertEqual(dynamic["api_surface"], "dynamic_only")
+        self.assertIsNone(dynamic["generated_cpp_tag"])
+        with self.assertRaisesRegex(ValueError, "dynamic-only relation"):
+            render(dynamic)
+
+        with tempfile.TemporaryDirectory(
+            prefix="cxxlens-dynamic-relation-test-"
+        ) as directory:
+            output = pathlib.Path(directory) / "forbidden.hpp"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "tools/sdk/relation_idl_compiler.py"),
+                    "--registry",
+                    str(ROOT / "schemas/cxxlens_ng_relation_registry.yaml"),
+                    "--relation",
+                    str(dynamic["name"]),
+                    "--output",
+                    str(output),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 2)
+            self.assertIn("dynamic-only relation", completed.stderr)
+            self.assertFalse(output.exists())
+
+    def test_dynamic_row_constraint_canonicalization_ignores_set_order(self) -> None:
+        left = next(
+            copy.deepcopy(row)
+            for row in self.registry["relations"]
+            if row["name"] == "frontend.clang22.call_observation"
+        )
+        right = copy.deepcopy(left)
+        right["row_constraints"]["all_or_none"][0].reverse()
+        self.assertEqual(canonical_relation(left), canonical_relation(right))
+
+    def test_sdk_binding_rejects_unclassified_null_generated_tag(self) -> None:
+        registry = copy.deepcopy(self.registry)
+        dynamic = next(
+            row
+            for row in registry["relations"]
+            if row["name"] == "frontend.clang22.entity_observation"
+        )
+        dynamic.pop("api_surface")
+        with self.assertRaisesRegex(
+            SdkContractError, "tag/dynamic-only classification differs"
+        ):
+            admitted_generated_relations(self.catalog, registry)
 
     def test_manual_edit_of_generated_header_is_rejected(self) -> None:
         relation, relative = next(
@@ -128,9 +189,38 @@ class NgSdkContractTest(unittest.TestCase):
         with self.assertRaises(jsonschema.ValidationError):
             jsonschema.Draft202012Validator(self.project_catalog_schema).validate(contract)
 
+    def test_project_catalog_cannot_alias_catalog_and_relation_unit_ids(self) -> None:
+        contract = copy.deepcopy(self.project_catalog_contract)
+        contract["value_types"]["compile_unit_entry"]["identity"] = (
+            "final-build-compile-unit-relation-id"
+        )
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(self.project_catalog_schema).validate(contract)
+
+        contract = copy.deepcopy(self.project_catalog_contract)
+        contract["identity_boundary"]["implicit_equality_alias"] = "required"
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(self.project_catalog_schema).validate(contract)
+
+        contract = copy.deepcopy(self.project_catalog_contract)
+        contract["consumers"].pop("build_compile_unit")
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(self.project_catalog_schema).validate(contract)
+
     def test_provider_task_projection_cannot_drop_condition(self) -> None:
         contract = copy.deepcopy(self.provider_task_contract)
         contract["task_projection"]["fields"].remove("condition")
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(self.provider_task_schema).validate(contract)
+
+    def test_provider_task_id_cannot_become_execution_occurrence_identity(self) -> None:
+        contract = copy.deepcopy(self.provider_task_contract)
+        contract["execution_identity"]["task_id_scope"] = "execution-occurrence"
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.Draft202012Validator(self.provider_task_schema).validate(contract)
+
+        contract = copy.deepcopy(self.provider_task_contract)
+        contract["execution_identity"]["result_correlation"] = "task-id-only"
         with self.assertRaises(jsonschema.ValidationError):
             jsonschema.Draft202012Validator(self.provider_task_schema).validate(contract)
 

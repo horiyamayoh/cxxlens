@@ -36,6 +36,17 @@ def canonical_relation(relation: dict[str, object]) -> dict[str, object]:
     conflict_columns = merge.get("conflict_columns", [])
     assert isinstance(conflict_columns, list)
     conflict_columns.sort()
+    row_constraints = canonical.get("row_constraints")
+    if row_constraints is not None:
+        assert isinstance(row_constraints, dict)
+        all_or_none = row_constraints.get("all_or_none", [])
+        assert isinstance(all_or_none, list)
+        normalized_groups: list[list[object]] = []
+        for group in all_or_none:
+            assert isinstance(group, list)
+            normalized_groups.append(sorted(group, key=str))
+        normalized_groups.sort(key=lambda group: tuple(map(str, group)))
+        row_constraints["all_or_none"] = normalized_groups
     return canonical
 
 
@@ -82,7 +93,14 @@ def type_expr(value: str) -> str:
 
 def render(relation: dict[str, object]) -> str:
     relation = canonical_relation(relation)
-    qualified = str(relation["generated_cpp_tag"])
+    if relation.get("api_surface") == "dynamic_only":
+        raise ValueError(
+            f"dynamic-only relation has no generated C++ tag: {relation['name']}"
+        )
+    qualified_value = relation.get("generated_cpp_tag")
+    if not isinstance(qualified_value, str):
+        raise ValueError(f"relation has no generated_cpp_tag: {relation['name']}")
+    qualified = qualified_value
     parts = qualified.split("::")
     if parts[0] != "cxxlens" or len(parts) < 3:
         raise ValueError(f"invalid generated_cpp_tag: {qualified}")
@@ -258,7 +276,11 @@ def main() -> int:
         print(f"relation registry validation failed: {error.message}", file=sys.stderr)
         return 2
     names = [str(item["name"]) for item in document["relations"]]
-    tags = [str(item["generated_cpp_tag"]) for item in document["relations"]]
+    tags = [
+        str(item["generated_cpp_tag"])
+        for item in document["relations"]
+        if item["generated_cpp_tag"] is not None
+    ]
     if len(names) != len(set(names)) or len(tags) != len(set(tags)):
         print("relation registry contains duplicate names or C++ tags", file=sys.stderr)
         return 2
@@ -268,6 +290,12 @@ def main() -> int:
     )
     if relation is None:
         print(f"relation not found: {args.relation}", file=sys.stderr)
+        return 2
+    if relation.get("api_surface") == "dynamic_only":
+        print(
+            f"dynamic-only relation has no generated C++ tag: {args.relation}",
+            file=sys.stderr,
+        )
         return 2
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(render(relation), encoding="utf-8")

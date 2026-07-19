@@ -87,8 +87,15 @@ def admitted_generated_relations(
     }
     registry_by_header: dict[pathlib.Path, dict[str, Any]] = {}
     for relation in registry["relations"]:
-        if not relation.get("generated_cpp_tag"):
+        tag = relation.get("generated_cpp_tag")
+        surface = relation.get("api_surface")
+        if surface == "dynamic_only" and tag is None:
             continue
+        if surface is not None or not isinstance(tag, str):
+            fail(
+                "relation generated C++ tag/dynamic-only classification differs: "
+                f"{relation['name']}"
+            )
         header = pathlib.Path(
             "include/cxxlens/relations/"
             + str(relation["name"]).replace(".", "_")
@@ -143,6 +150,30 @@ def validate_project_catalog_contract(
 ) -> None:
     contract = load_yaml(root / PROJECT_CATALOG_CONTRACT)
     schema_validate(contract, load_yaml(root / PROJECT_CATALOG_SCHEMA))
+    if contract.get("value_types", {}).get("compile_unit_entry") != {
+        "fields": [
+            "compile_unit_id",
+            "effective_invocation_digest",
+            "source_digest",
+            "environment_digest",
+        ],
+        "identity": "stable-control-free-catalog-local-input-id",
+        "digests": "exact-canonical-digest",
+    }:
+        fail("project catalog compile-unit input identity is not exact")
+    if contract.get("identity_boundary") != {
+        "catalog_compile_unit_id": "project-upstream-catalog-input-census-identity",
+        "build_compile_unit_relation_id": (
+            "independently-derived-from-accepted-relation-registry"
+        ),
+        "implicit_equality_alias": "forbidden",
+        "consumer_mapping": "exact-entry-digests-to-final-relation-payload-and-id",
+    }:
+        fail("project catalog identity boundary is not exact")
+    if contract.get("consumers", {}).get("build_compile_unit") != (
+        "explicit-catalog-entry-to-final-relation-id-mapping-required"
+    ):
+        fail("project catalog build.compile_unit mapping is not explicit")
     public_entry = entries.get("public.project-catalog", {})
     if public_entry.get("owner_issue") != "#121":
         fail("project catalog ownership must remain with Issue #121")
@@ -175,7 +206,12 @@ def validate_project_catalog_contract(
     relation_source = (root / "src/sdk/relation.cpp").read_text(encoding="utf-8")
     provider_source = (root / "src/sdk/provider.cpp").read_text(encoding="utf-8")
     worker_source = (root / "src/llvm/clang22/provider_worker.cpp").read_text(encoding="utf-8")
-    for marker in ("catalog_compile_unit", "project_catalog::make", "canonical_projection"):
+    for marker in (
+        "catalog_compile_unit",
+        "not a build.compile_unit row ID",
+        "project_catalog::make",
+        "canonical_projection",
+    ):
         if marker not in header + relation_source:
             fail(f"project catalog implementation marker is missing: {marker}")
     validation = provider_source.find("task_value.validate()")

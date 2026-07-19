@@ -343,10 +343,15 @@ namespace cxxlens::sdk
 		const detached_row& row_;
 	};
 
-	/** @brief One exact compile-unit identity and its catalog authority digests. */
+	/** @brief One exact catalog-local compile-unit input identity and its authority digests. */
 	struct catalog_compile_unit
 	{
-		/** @brief Stable compile-unit identity within the catalog. */
+		/**
+		 * @brief Stable input identity within this catalog, not a build.compile_unit row ID.
+		 *
+		 * A consumer that materializes `build.compile_unit` derives that relation ID from the
+		 * accepted Relation Registry and retains an explicit mapping to this catalog-local ID.
+		 */
 		std::string compile_unit_id;
 		/** @brief Digest of the exact effective compiler invocation. */
 		std::string effective_invocation_digest;
@@ -354,7 +359,7 @@ namespace cxxlens::sdk
 		std::string source_digest;
 		/** @brief Digest of the unit's effective environment authority. */
 		std::string environment_digest;
-		/** @brief Validate the typed identity and all exact digest grammars. */
+		/** @brief Validate the catalog input identity and all exact digest grammars. */
 		[[nodiscard]] result<void> validate() const;
 		[[nodiscard]] bool operator==(const catalog_compile_unit&) const = default;
 	};

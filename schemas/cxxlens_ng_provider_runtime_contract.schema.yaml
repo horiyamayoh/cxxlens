@@ -18,7 +18,7 @@ required:
   - acceptance
 properties:
   schema: {const: cxxlens.provider-runtime-contract.v1}
-  document_version: {const: 1.16.0}
+  document_version: {const: 1.17.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -36,16 +36,59 @@ properties:
     items: {type: string, minLength: 1}
   runtime: {$ref: '#/$defs/open_object'}
   selection: {$ref: '#/$defs/open_object'}
-  protocol_session: {$ref: '#/$defs/open_object'}
+  protocol_session:
+    type: object
+    minProperties: 1
+    additionalProperties: true
+    required: [typed_validation]
+    properties:
+      typed_validation:
+        type: object
+        minProperties: 1
+        additionalProperties: true
+        required: [adoption_projection]
+        properties:
+          adoption_projection:
+            const:
+              validated_frames: diagnostic-only-non-authoritative
+              sealed_value: tool-private-immutable-complete-task-result
+              reconstruction_from_public_frames: forbidden
+              specialization_reference_kind: reverse-specialization-index
+              specialization_dependency: false
+              publication: installed-materializer-contract-only
   terminal: {$ref: '#/$defs/open_object'}
-  clang22: {$ref: '#/$defs/open_object'}
+  clang22:
+    type: object
+    minProperties: 1
+    additionalProperties: true
+    required: [observations, legacy_observations_v1, canonical_outputs, installed_materialization]
+    properties:
+      observations:
+        const: [frontend.clang22.call_observation.v2, frontend.clang22.entity_observation.v2, frontend.clang22.type_observation.v2]
+      legacy_observations_v1: {const: private-transport-only-non-adoptable}
+      canonical_outputs:
+        const: [cc.call_direct_target.v1, cc.call_site.v1, cc.entity.v1]
+      installed_materialization:
+        const:
+          tool: cxxlens-clang22-materialize
+          reference_kind: reverse-specialization-index
+          dependency: false
+          authority: schemas/cxxlens_ng_clang22_materialization_contract.yaml
+          public_cpp_bridge: forbidden
+          exact_outputs: [cc.call_direct_target.v1, cc.call_site.v1, cc.entity.v1, frontend.clang22.call_observation.v2, frontend.clang22.entity_observation.v2, frontend.clang22.type_observation.v2]
+          dependency_groups: [canonical, observation]
+          partial_adoption: forbidden
+          source_less_observation: retain-with-typed-unresolved-and-non-exact-guarantee
+          canonical_call_site_without_complete_primary_span: reject-transaction
   report:
     type: object
     additionalProperties: false
-    required: [schema, measured_executable_digest]
+    required: [schema, measured_executable_digest, frames_authority, adoption_authority]
     properties:
       schema: {const: schemas/cxxlens_ng_provider_execution_report.schema.yaml}
       measured_executable_digest: {const: exact-sealed-image-digest-or-null-before-measurement}
+      frames_authority: {const: diagnostic-only}
+      adoption_authority: {const: none}
   acceptance:
     type: array
     minItems: 8

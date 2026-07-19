@@ -1,5 +1,5 @@
 schema: cxxlens.provider-runtime-contract.v1
-document_version: 1.16.0
+document_version: 1.17.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#17-provider-model
@@ -191,6 +191,13 @@ protocol_session:
     host_transcript_authority: launcher-manifest-task-digests-and-negotiated-version
     host_transcript_invalid: fail-before-payload-decode-without-output
     validator_bypass: forbidden
+    adoption_projection:
+      validated_frames: diagnostic-only-non-authoritative
+      sealed_value: tool-private-immutable-complete-task-result
+      reconstruction_from_public_frames: forbidden
+      specialization_reference_kind: reverse-specialization-index
+      specialization_dependency: false
+      publication: installed-materializer-contract-only
     harness_acceptance: complete-success-terminal-only
     callback_failure_cleanup: task-failed-terminal-for-provider-and-side-channel-finalization-errors
   sequence: contiguous-from-zero
@@ -231,6 +238,9 @@ terminal:
     - security.sandbox-policy-mismatch
   prior_published_snapshot: immutable
   unsealed_output: discarded
+  public_frames:
+    purpose: diagnostics-and-transcript-evidence-only
+    claim_or_partition_adoption: forbidden
 clang22:
   executable: cxxlens-clang-worker-22
   package: cxxlensClang22ProviderSDK
@@ -254,13 +264,31 @@ clang22:
     process: forbidden
     serialized_pointer_or_address: forbidden
   observations:
-    - frontend.clang22.entity_observation.v1
-    - frontend.clang22.type_observation.v1
-    - frontend.clang22.call_observation.v1
+    - frontend.clang22.call_observation.v2
+    - frontend.clang22.entity_observation.v2
+    - frontend.clang22.type_observation.v2
+  legacy_observations_v1: private-transport-only-non-adoptable
   canonical_outputs:
-    - cc.entity.v1
-    - cc.call_site.v1
     - cc.call_direct_target.v1
+    - cc.call_site.v1
+    - cc.entity.v1
+  installed_materialization:
+    tool: cxxlens-clang22-materialize
+    reference_kind: reverse-specialization-index
+    dependency: false
+    authority: schemas/cxxlens_ng_clang22_materialization_contract.yaml
+    public_cpp_bridge: forbidden
+    exact_outputs:
+      - cc.call_direct_target.v1
+      - cc.call_site.v1
+      - cc.entity.v1
+      - frontend.clang22.call_observation.v2
+      - frontend.clang22.entity_observation.v2
+      - frontend.clang22.type_observation.v2
+    dependency_groups: [canonical, observation]
+    partial_adoption: forbidden
+    source_less_observation: retain-with-typed-unresolved-and-non-exact-guarantee
+    canonical_call_site_without_complete_primary_span: reject-transaction
   semantic_loss:
     fatal_or_error: non-exact
     ignored_semantic_option: non-exact
@@ -281,6 +309,8 @@ clang22:
 report:
   schema: schemas/cxxlens_ng_provider_execution_report.schema.yaml
   measured_executable_digest: exact-sealed-image-digest-or-null-before-measurement
+  frames_authority: diagnostic-only
+  adoption_authority: none
 acceptance:
   - kernel-query-store-link-closure-is-llvm-free
   - native-object-never-crosses-callback-thread-process
@@ -296,3 +326,6 @@ acceptance:
   - structured-control-metadata-lossless-and-delimiter-independent
   - host-to-provider-shared-state-validator-and-runtime-worker-fixture-parity
   - immutable-selection-token-revalidated-before-process-effect
+  - public-raw-frames-never-authorize-claim-or-snapshot-adoption
+  - clang22-installed-materializer-owns-exact-task-and-sealed-adoption
+  - clang22-observation-v2-span-bundle-is-all-or-none-when-present

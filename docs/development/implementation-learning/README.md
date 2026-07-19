@@ -7,7 +7,9 @@
 次の三層を混同しません。
 
 1. 統合設計、machine-readable contract、accepted ADR は normative authority です。明示的に置換されるまで従います。
-2. [Mental models](mental-models/authority-and-learning-loop.md) は non-normative な説明です。理解を助けますが、契約を上書きしません。
+2. [Authority and learning loop](mental-models/authority-and-learning-loop.md) と
+   [Identity is not reconstruction authority](mental-models/identity-is-not-reconstruction-authority.md) は non-normative な mental model です。
+   理解を助けますが、契約を上書きしません。
 3. [Design feedback records](records/README.md) は observation から disposition までを保持する non-normative な履歴です。
 
 「文書より良いと思う」ことは silent deviation の許可ではありません。material な疑義を evidence とともに記録し、必要なら対象実装を

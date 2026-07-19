@@ -182,7 +182,7 @@ properties:
           clean_environment:
             const: [LD_LIBRARY_PATH, DYLD_LIBRARY_PATH]
           direct_installed_tools:
-            const: [cxxlens-provider-scaffold, cxxlens-sdk-doctor, cxxlens-clang-worker-22]
+            const: [cxxlens-provider-scaffold, cxxlens-sdk-doctor, cxxlens-clang-worker-22, cxxlens-clang22-materialize]
           installed_consumers:
             const: [core, provider-sdk, clang22-provider-sdk, real-project, examples]
           prefix_relocation:
@@ -315,17 +315,25 @@ properties:
   release_qualification:
     type: object
     additionalProperties: false
-    required: [gate, authority, checker, ci_job, status, claim_scope, report_artifact, required_evidence]
+    required: [gate, authority, materialization_contract, materialization_report_matrix, materialization_report_set_binding, checker, ci_job, status, claim_scope, report_artifact, required_evidence]
     properties:
       gate: {const: gate.release}
       authority: {const: schemas/cxxlens_ng_release_qualification.yaml}
+      materialization_contract: {const: schemas/cxxlens_ng_clang22_materialization_contract.yaml}
+      materialization_report_matrix:
+        const:
+          - {configuration: static, backend: memory}
+          - {configuration: static, backend: sqlite}
+          - {configuration: shared, backend: memory}
+          - {configuration: shared, backend: sqlite}
+      materialization_report_set_binding: {const: exact-configuration-two-report-set-digest}
       checker: {const: tools/quality/check_ng_release_qualification.py}
       ci_job: {const: release-qualification}
       status: {const: implemented}
       claim_scope: {const: exact-gr-report-tuples-only}
       report_artifact: {const: 'cxxlens-ng-release-qualification-${revision}'}
       required_evidence:
-        const: [same-sha-foundation-report, same-sha-wave0-readiness-report, same-sha-public-callable-report-and-review, same-sha-g5-report, static-relocated-install-artifact, shared-relocated-install-artifact, static-shared-runtime-junit, real-project-memory-sqlite-and-major-rejection, security-conformance-and-negative-paths, doxygen-contract-and-support-matrix, license-and-notice]
+        const: [same-sha-foundation-report, same-sha-wave0-readiness-report, same-sha-public-callable-report-and-review, same-sha-g5-report, static-relocated-install-artifact, shared-relocated-install-artifact, static-shared-runtime-junit, static-shared-clang22-materialization-reports, real-project-memory-sqlite-and-major-rejection, security-conformance-and-negative-paths, doxygen-contract-and-support-matrix, license-and-notice]
   production_scope_closure:
     type: object
     additionalProperties: false

@@ -9,7 +9,7 @@
 | In-memory and SQLite immutable snapshots | implemented with semantic parity |
 | Typed/dynamic Logical Query runtime | implemented reference engine |
 | Portable provider SDK/runtime | implemented |
-| Clang 22 native SDK/worker | production-supported only for exact tuples in a passed GR report |
+| Clang 22 native SDK/worker/materializer | production-supported only for exact tuples whose installed worker-to-store report is bound by a passed GR report |
 | Recipe foundation | implemented |
 | Flagship `calls_to_function` end-to-end recipe | implemented with typed/dynamic/provider/store parity |
 | GCC/IR/object/binary providers | future provider entries |
@@ -25,4 +25,6 @@ Distribution 1.0 の production claim は
 `conformance-only` entry は認定候補を表し、`binary_digest: pending`、広い platform 名、wildcard から production support を
 推測しません。report の各 tuple は exact installed worker digest、Clang toolchain identity、Linux architecture と static/shared
 configuration、relation、`cc.clang22-canonical-1` interpretation、capability、guarantee、security profile digest、evidence digest を
-保持します。report にない provider、relation、platform、binary rebuild は unsupported です。
+保持します。各 configuration の evidence digest は、relocated installed materializer と worker、exact task/six descriptors、全 mandatory
+group を束縛する memory report と再 open 済み SQLite report の canonical two-report set digest を含みます。
+report にない provider、relation、platform、binary rebuild、または materialization report は unsupported です。

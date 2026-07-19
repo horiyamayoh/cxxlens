@@ -1,16 +1,16 @@
 schema: cxxlens.relation-registry.v1
 kind: relation-registry
-document_version: 1.3.0
+document_version: 1.4.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
   index: docs/design/catalogs/README.md
-  decision_adr: docs/design/adr/0083-cross-tu-semantic-entity-identity.md
-  owner_issue: '#152'
+  decision_adr: docs/design/adr/0096-clang22-installed-materialization-boundary.md
+  owner_issue: '#182'
   owner: steward.ng-relations
 compatibility:
   version_axis: relation-descriptor
-  current: 1.3.0
+  current: 1.4.0
   semantic_major_policy: exact-major-compatible-minor
   unknown_optional_columns: preserve
   unknown_open_symbols: preserve
@@ -116,8 +116,8 @@ system_claim_envelope:
     semantic_role: guarantee
 api_projection:
   static:
-    descriptor_source: relations[].descriptor_id
-    column_source: relations[].columns[].id
+    descriptor_source: relations[generated_cpp_tag!=null].descriptor_id
+    column_source: relations[generated_cpp_tag!=null].columns[].id
   dynamic:
     relation_lookup:
     - name
@@ -2049,4 +2049,454 @@ relations:
     - relation-key-enumeration
   provenance:
     minimum: derivation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: frontend.clang22.entity_observation.v2
+  name: frontend.clang22.entity_observation
+  version: 2.0.0
+  semantic_major: 2
+  semantics: frontend.clang22.entity_observation/2
+  owner_namespace: cxxlens.clang22.reference
+  stability: versioned
+  profile: NG0
+  summary: Provider-owned Clang 22 entity occurrence with revalidatable primary source authority.
+  api_surface: dynamic_only
+  generated_cpp_tag: null
+  claim:
+    cardinality: functional_assertion
+    key:
+    - frontend.clang22.entity_observation.v2.observation
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: frontend.clang22.entity_observation.v2.observation
+      projection:
+      - frontend.clang22.entity_observation.v2.compile_unit
+      - frontend.clang22.entity_observation.v2.semantic_key
+      - frontend.clang22.entity_observation.v2.payload_digest
+      - frontend.clang22.entity_observation.v2.source
+      - frontend.clang22.entity_observation.v2.source_snapshot
+      - frontend.clang22.entity_observation.v2.source_file
+      - frontend.clang22.entity_observation.v2.source_begin
+      - frontend.clang22.entity_observation.v2.source_end
+      - frontend.clang22.entity_observation.v2.source_role
+      - frontend.clang22.entity_observation.v2.source_read_only
+      - frontend.clang22.entity_observation.v2.source_origin_chain
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: frontend.clang22.entity_observation.v2.observation
+    name: observation
+    type: typed_id<clang22_observation_id>
+    required: true
+    identity_role: claim_key
+  - id: frontend.clang22.entity_observation.v2.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: frontend.clang22.entity_observation.v2.semantic_key
+    name: semantic_key
+    type: bytes
+    required: true
+    identity_role: authoritative_payload
+    semantic: Exact UTF-8 bytes of the validated native semantic key under cxxlens.clang22.observation-native.v2.
+  - id: frontend.clang22.entity_observation.v2.payload_digest
+    name: payload_digest
+    type: digest
+    required: true
+    identity_role: authoritative_payload
+    semantic: Semantic-v2 digest in domain cxxlens.clang22.observation-payload.v2 over the exact descriptor-bound sorted payload tuple.
+  - id: frontend.clang22.entity_observation.v2.source
+    name: source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Recomputed source.span identity for the complete primary span bundle.
+  - id: frontend.clang22.entity_observation.v2.source_snapshot
+    name: source_snapshot
+    type: optional<typed_id<source_snapshot_id>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Source snapshot in the source.span identity projection.
+  - id: frontend.clang22.entity_observation.v2.source_file
+    name: source_file
+    type: optional<typed_id<file_id>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: File identity in the source.span identity projection.
+  - id: frontend.clang22.entity_observation.v2.source_begin
+    name: source_begin
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Half-open source begin byte offset in the source.span identity projection.
+  - id: frontend.clang22.entity_observation.v2.source_end
+    name: source_end
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Half-open source end byte offset in the source.span identity projection.
+  - id: frontend.clang22.entity_observation.v2.source_role
+    name: source_role
+    type: optional<open_symbol<source.range-role/1>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Explicit normalization role in the source.span identity projection.
+  - id: frontend.clang22.entity_observation.v2.source_read_only
+    name: source_read_only
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Read-only source policy preserved in the materialized source.span payload.
+  - id: frontend.clang22.entity_observation.v2.source_origin_chain
+    name: source_origin_chain
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Exact cxxlens-canonical-tuple-v1 bytes for the nonempty immediate-to-outermost cxxlens.clang22.source-origin-chain.v2 projection; absent for an empty chain.
+  - id: frontend.clang22.entity_observation.v2.exact_equivalence
+    name: exact_equivalence
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: frontend.clang22.entity_observation.v2.limitation
+    name: limitation
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  row_constraints:
+    all_or_none:
+    - - frontend.clang22.entity_observation.v2.source
+      - frontend.clang22.entity_observation.v2.source_snapshot
+      - frontend.clang22.entity_observation.v2.source_file
+      - frontend.clang22.entity_observation.v2.source_begin
+      - frontend.clang22.entity_observation.v2.source_end
+      - frontend.clang22.entity_observation.v2.source_role
+      - frontend.clang22.entity_observation.v2.source_read_only
+  references:
+  - source_columns:
+    - frontend.clang22.entity_observation.v2.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - frontend.clang22.entity_observation.v2.source
+    - frontend.clang22.entity_observation.v2.source_snapshot
+    - frontend.clang22.entity_observation.v2.source_file
+    - frontend.clang22.entity_observation.v2.source_begin
+    - frontend.clang22.entity_observation.v2.source_end
+    - frontend.clang22.entity_observation.v2.source_role
+    - frontend.clang22.entity_observation.v2.source_read_only
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    - source.span.v1.snapshot
+    - source.span.v1.file
+    - source.span.v1.begin
+    - source.span.v1.end
+    - source.span.v1.role
+    - source.span.v1.read_only
+    strength: hard
+    on_missing: reject_batch
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - frontend.clang22.entity_observation.v2.compile_unit
+    - frontend.clang22.entity_observation.v2.semantic_key
+    - frontend.clang22.entity_observation.v2.payload_digest
+    - frontend.clang22.entity_observation.v2.source
+    - frontend.clang22.entity_observation.v2.source_snapshot
+    - frontend.clang22.entity_observation.v2.source_file
+    - frontend.clang22.entity_observation.v2.source_begin
+    - frontend.clang22.entity_observation.v2.source_end
+    - frontend.clang22.entity_observation.v2.source_role
+    - frontend.clang22.entity_observation.v2.source_read_only
+    - frontend.clang22.entity_observation.v2.source_origin_chain
+    - frontend.clang22.entity_observation.v2.exact_equivalence
+    - frontend.clang22.entity_observation.v2.limitation
+  partition:
+    suggested_keys:
+    - frontend.clang22.entity_observation.v2.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - frontend.clang22.entity_observation.v2.semantic_key
+  - - frontend.clang22.entity_observation.v2.source
+  coverage:
+    execution_domain: frontend.clang22.entity-observation.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: frontend.clang22.type_observation.v2
+  name: frontend.clang22.type_observation
+  version: 2.0.0
+  semantic_major: 2
+  semantics: frontend.clang22.type_observation/2
+  owner_namespace: cxxlens.clang22.reference
+  stability: versioned
+  profile: NG0
+  summary: Provider-owned Clang 22 structural type observation without source authority.
+  api_surface: dynamic_only
+  generated_cpp_tag: null
+  claim:
+    cardinality: functional_assertion
+    key:
+    - frontend.clang22.type_observation.v2.observation
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: frontend.clang22.type_observation.v2.observation
+      projection:
+      - frontend.clang22.type_observation.v2.compile_unit
+      - frontend.clang22.type_observation.v2.semantic_key
+      - frontend.clang22.type_observation.v2.payload_digest
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: frontend.clang22.type_observation.v2.observation
+    name: observation
+    type: typed_id<clang22_observation_id>
+    required: true
+    identity_role: claim_key
+  - id: frontend.clang22.type_observation.v2.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: frontend.clang22.type_observation.v2.semantic_key
+    name: semantic_key
+    type: bytes
+    required: true
+    identity_role: authoritative_payload
+    semantic: Exact UTF-8 bytes of the validated native semantic key under cxxlens.clang22.observation-native.v2.
+  - id: frontend.clang22.type_observation.v2.payload_digest
+    name: payload_digest
+    type: digest
+    required: true
+    identity_role: authoritative_payload
+    semantic: Semantic-v2 digest in domain cxxlens.clang22.observation-payload.v2 over the exact descriptor-bound sorted payload tuple.
+  - id: frontend.clang22.type_observation.v2.exact_equivalence
+    name: exact_equivalence
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: frontend.clang22.type_observation.v2.limitation
+    name: limitation
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  references:
+  - source_columns:
+    - frontend.clang22.type_observation.v2.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - frontend.clang22.type_observation.v2.compile_unit
+    - frontend.clang22.type_observation.v2.semantic_key
+    - frontend.clang22.type_observation.v2.payload_digest
+    - frontend.clang22.type_observation.v2.exact_equivalence
+    - frontend.clang22.type_observation.v2.limitation
+  partition:
+    suggested_keys:
+    - frontend.clang22.type_observation.v2.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - frontend.clang22.type_observation.v2.semantic_key
+  coverage:
+    execution_domain: frontend.clang22.type-observation.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
+  evolution_policy: ng0.additive.v1
+- descriptor_id: frontend.clang22.call_observation.v2
+  name: frontend.clang22.call_observation
+  version: 2.0.0
+  semantic_major: 2
+  semantics: frontend.clang22.call_observation/2
+  owner_namespace: cxxlens.clang22.reference
+  stability: versioned
+  profile: NG0
+  summary: Provider-owned Clang 22 call occurrence with revalidatable primary source authority.
+  api_surface: dynamic_only
+  generated_cpp_tag: null
+  claim:
+    cardinality: functional_assertion
+    key:
+    - frontend.clang22.call_observation.v2.observation
+    condition_policy: claim-envelope-required
+    interpretation_required: true
+    domain_identity:
+      result_column: frontend.clang22.call_observation.v2.observation
+      projection:
+      - frontend.clang22.call_observation.v2.compile_unit
+      - frontend.clang22.call_observation.v2.semantic_key
+      - frontend.clang22.call_observation.v2.payload_digest
+      - frontend.clang22.call_observation.v2.source
+      - frontend.clang22.call_observation.v2.source_snapshot
+      - frontend.clang22.call_observation.v2.source_file
+      - frontend.clang22.call_observation.v2.source_begin
+      - frontend.clang22.call_observation.v2.source_end
+      - frontend.clang22.call_observation.v2.source_role
+      - frontend.clang22.call_observation.v2.source_read_only
+      - frontend.clang22.call_observation.v2.source_origin_chain
+      contract: canonical-binary-tuple-v1
+  columns:
+  - id: frontend.clang22.call_observation.v2.observation
+    name: observation
+    type: typed_id<clang22_observation_id>
+    required: true
+    identity_role: claim_key
+  - id: frontend.clang22.call_observation.v2.compile_unit
+    name: compile_unit
+    type: typed_id<compile_unit_id>
+    required: true
+    identity_role: authoritative_payload
+  - id: frontend.clang22.call_observation.v2.semantic_key
+    name: semantic_key
+    type: bytes
+    required: true
+    identity_role: authoritative_payload
+    semantic: Exact UTF-8 bytes of the validated native semantic key under cxxlens.clang22.observation-native.v2.
+  - id: frontend.clang22.call_observation.v2.payload_digest
+    name: payload_digest
+    type: digest
+    required: true
+    identity_role: authoritative_payload
+    semantic: Semantic-v2 digest in domain cxxlens.clang22.observation-payload.v2 over the exact descriptor-bound sorted payload tuple.
+  - id: frontend.clang22.call_observation.v2.source
+    name: source
+    type: optional<typed_id<source_span_id>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Recomputed source.span identity for the complete primary span bundle.
+  - id: frontend.clang22.call_observation.v2.source_snapshot
+    name: source_snapshot
+    type: optional<typed_id<source_snapshot_id>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Source snapshot in the source.span identity projection.
+  - id: frontend.clang22.call_observation.v2.source_file
+    name: source_file
+    type: optional<typed_id<file_id>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: File identity in the source.span identity projection.
+  - id: frontend.clang22.call_observation.v2.source_begin
+    name: source_begin
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Half-open source begin byte offset in the source.span identity projection.
+  - id: frontend.clang22.call_observation.v2.source_end
+    name: source_end
+    type: optional<uint64>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Half-open source end byte offset in the source.span identity projection.
+  - id: frontend.clang22.call_observation.v2.source_role
+    name: source_role
+    type: optional<open_symbol<source.range-role/1>>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Explicit normalization role in the source.span identity projection.
+  - id: frontend.clang22.call_observation.v2.source_read_only
+    name: source_read_only
+    type: optional<bool>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Read-only source policy preserved in the materialized source.span payload.
+  - id: frontend.clang22.call_observation.v2.source_origin_chain
+    name: source_origin_chain
+    type: optional<bytes>
+    required: false
+    identity_role: authoritative_payload
+    semantic: Exact cxxlens-canonical-tuple-v1 bytes for the nonempty immediate-to-outermost cxxlens.clang22.source-origin-chain.v2 projection; absent for an empty chain.
+  - id: frontend.clang22.call_observation.v2.exact_equivalence
+    name: exact_equivalence
+    type: bool
+    required: true
+    identity_role: authoritative_payload
+  - id: frontend.clang22.call_observation.v2.limitation
+    name: limitation
+    type: optional<utf8_string>
+    required: false
+    identity_role: authoritative_payload
+  row_constraints:
+    all_or_none:
+    - - frontend.clang22.call_observation.v2.source
+      - frontend.clang22.call_observation.v2.source_snapshot
+      - frontend.clang22.call_observation.v2.source_file
+      - frontend.clang22.call_observation.v2.source_begin
+      - frontend.clang22.call_observation.v2.source_end
+      - frontend.clang22.call_observation.v2.source_role
+      - frontend.clang22.call_observation.v2.source_read_only
+  references:
+  - source_columns:
+    - frontend.clang22.call_observation.v2.compile_unit
+    target_relation: build.compile_unit
+    target_columns:
+    - build.compile_unit.v1.compile_unit
+    strength: hard
+    on_missing: reject_batch
+  - source_columns:
+    - frontend.clang22.call_observation.v2.source
+    - frontend.clang22.call_observation.v2.source_snapshot
+    - frontend.clang22.call_observation.v2.source_file
+    - frontend.clang22.call_observation.v2.source_begin
+    - frontend.clang22.call_observation.v2.source_end
+    - frontend.clang22.call_observation.v2.source_role
+    - frontend.clang22.call_observation.v2.source_read_only
+    target_relation: source.span
+    target_columns:
+    - source.span.v1.span
+    - source.span.v1.snapshot
+    - source.span.v1.file
+    - source.span.v1.begin
+    - source.span.v1.end
+    - source.span.v1.role
+    - source.span.v1.read_only
+    strength: hard
+    on_missing: reject_batch
+  merge:
+    mode: functional_assertion
+    conflict_columns:
+    - frontend.clang22.call_observation.v2.compile_unit
+    - frontend.clang22.call_observation.v2.semantic_key
+    - frontend.clang22.call_observation.v2.payload_digest
+    - frontend.clang22.call_observation.v2.source
+    - frontend.clang22.call_observation.v2.source_snapshot
+    - frontend.clang22.call_observation.v2.source_file
+    - frontend.clang22.call_observation.v2.source_begin
+    - frontend.clang22.call_observation.v2.source_end
+    - frontend.clang22.call_observation.v2.source_role
+    - frontend.clang22.call_observation.v2.source_read_only
+    - frontend.clang22.call_observation.v2.source_origin_chain
+    - frontend.clang22.call_observation.v2.exact_equivalence
+    - frontend.clang22.call_observation.v2.limitation
+  partition:
+    suggested_keys:
+    - frontend.clang22.call_observation.v2.compile_unit
+    condition_fragment: envelope
+    interpretation_domain: envelope
+  indexes:
+  - - frontend.clang22.call_observation.v2.semantic_key
+  - - frontend.clang22.call_observation.v2.source
+  coverage:
+    execution_domain: frontend.clang22.call-observation.compile-unit
+  closure:
+    supported_kinds:
+    - relation-key-enumeration
+  provenance:
+    minimum: direct_observation
   evolution_policy: ng0.additive.v1

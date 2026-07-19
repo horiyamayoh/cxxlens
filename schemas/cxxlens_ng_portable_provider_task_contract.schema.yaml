@@ -3,10 +3,10 @@ $id: https://cxxlens.dev/schemas/cxxlens_ng_portable_provider_task_contract.sche
 title: cxxlens portable provider task contract
 type: object
 additionalProperties: false
-required: [schema, document_version, maturity, authority, session, task_projection, validation, context, protocol, acceptance]
+required: [schema, document_version, maturity, authority, session, task_projection, execution_identity, validation, context, protocol, installed_specializations, acceptance]
 properties:
   schema: {const: cxxlens.portable-provider-task-contract.v1}
-  document_version: {const: 1.0.0}
+  document_version: {const: 1.2.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -29,6 +29,14 @@ properties:
       descriptor_identity: {const: [descriptor_id, descriptor_digest]}
       ordering: {const: canonical-byte-order}
       task_id: {const: task-prefix-plus-semantic-digest-v2}
+  execution_identity:
+    const:
+      task_id_scope: semantic-task-projection-not-execution-occurrence
+      input_binding: open-task-task-input-digest
+      provider_execution_id: exact-provider-binary-task-digest-input-digest
+      task_id_reuse: allowed-only-for-identical-validated-task-projection
+      result_correlation: exact-task-id-input-digest-provider-execution-id-tuple
+      duplicate_tuple: reject
   validation: {$ref: '#/$defs/nonempty_object'}
   context: {$ref: '#/$defs/nonempty_object'}
   protocol:
@@ -38,9 +46,23 @@ properties:
     properties:
       batch_begin: {const: [task_id, descriptor_id, descriptor_digest, dependency_group_id, atomic_output_group_id, batch_id]}
       logical_process_validator: {const: shared}
+  installed_specializations:
+    const:
+      clang22_materialization:
+        reference_kind: reverse-specialization-index
+        dependency: false
+        authority: schemas/cxxlens_ng_clang22_materialization_contract.yaml
+        task_owner: installed-provider-owned-tool
+        public_cpp_task_builder: forbidden
+        requested_outputs: exact-contract-six
+        dependency_groups: exact-canonical-and-observation-both-mandatory
+        validated_result: tool-private-immutable-sealed-value
+        public_process_frames: diagnostic-only
+        partial_adoption: forbidden
+        condition_binding: exact-materializer-derived-universe-and-condition-ref
   acceptance:
     type: array
-    minItems: 8
+    minItems: 9
     uniqueItems: true
     items: {type: string, pattern: '^[a-z0-9-]+$'}
 $defs:

@@ -35,6 +35,7 @@ SOURCE_CONTRACTS = (
     "schemas/cxxlens_ng_namespace_registry.yaml",
     "schemas/cxxlens_ng_provider_protocol.yaml",
     "schemas/cxxlens_ng_provider_runtime_contract.yaml",
+    "schemas/cxxlens_ng_clang22_materialization_contract.yaml",
     "schemas/cxxlens_ng_provider_support_matrix.yaml",
     "schemas/cxxlens_ng_public_api_catalog.yaml",
     "schemas/cxxlens_ng_public_callable_inventory.yaml",
@@ -48,6 +49,23 @@ EVIDENCE_CONTRACTS = (
     "schemas/cxxlens_ng_provider_conformance_vectors.yaml",
     "schemas/cxxlens_ng_query_conformance_vectors.yaml",
     "schemas/cxxlens_ng_security_conformance_vectors.yaml",
+)
+
+CLANG22_MATERIALIZATION_CONTRACT = "schemas/cxxlens_ng_clang22_materialization_contract.yaml"
+CLANG22_MATERIALIZATION_TOOL = "cxxlens-clang22-materialize"
+CLANG22_CANONICAL_DESCRIPTORS = (
+    "cc.call_direct_target.v1",
+    "cc.call_site.v1",
+    "cc.entity.v1",
+)
+CLANG22_OBSERVATION_DESCRIPTORS = (
+    "frontend.clang22.call_observation.v2",
+    "frontend.clang22.entity_observation.v2",
+    "frontend.clang22.type_observation.v2",
+)
+CLANG22_EXACT_DESCRIPTORS = (
+    *CLANG22_CANONICAL_DESCRIPTORS,
+    *CLANG22_OBSERVATION_DESCRIPTORS,
 )
 
 DOMAINS = (
@@ -94,6 +112,7 @@ EVIDENCE_TEST_PATHS = {
     "quality.ng-relation_contract": "tests/quality/test_ng_relation_contract.py",
     "quality.ng-release_contract": "tests/quality/test_ng_release_contract.py",
     "quality.ng-release_qualification": "tests/quality/test_ng_release_qualification.py",
+    "quality.ng-clang22_materialization": "tests/quality/test_ng_clang22_materialization.py",
     "quality.ng-sdk_contract": "tests/quality/test_ng_sdk_contract.py",
     "quality.ng-security_contract": "tests/quality/test_ng_security_contract.py",
     "quality.ownership": "tests/quality/test_quality_ownership.py",
@@ -171,6 +190,34 @@ class SurfaceKey:
 
 SURFACE_EVIDENCE_TESTS = {
     SurfaceKey("release.migration", "R4"): ("quality.ng-g5_qualification",),
+    SurfaceKey("distribution.installed-tool", "cxxlens-clang22-materialize"): (
+        "quality.ng-clang22_materialization",
+        "quality.ng-release_qualification",
+    ),
+    SurfaceKey("distribution.native-package", "cxxlens-clang22-materialize"): (
+        "quality.ng-clang22_materialization",
+        "quality.ng-release_qualification",
+    ),
+    SurfaceKey("relation.descriptor", "frontend.clang22.entity_observation.v2"): (
+        "quality.ng-clang22_materialization",
+        "quality.ng-relation_contract",
+    ),
+    SurfaceKey("relation.descriptor", "frontend.clang22.type_observation.v2"): (
+        "quality.ng-clang22_materialization",
+        "quality.ng-relation_contract",
+    ),
+    SurfaceKey("relation.descriptor", "frontend.clang22.call_observation.v2"): (
+        "quality.ng-clang22_materialization",
+        "quality.ng-relation_contract",
+    ),
+    **{
+        SurfaceKey("provider.production-tuple-template", f"{configuration}/{relation}"): (
+            "quality.ng-clang22_materialization",
+            "quality.ng-release_qualification",
+        )
+        for configuration in ("static", "shared")
+        for relation in ("cc.entity@1", "cc.call_site@1", "cc.call_direct_target@1")
+    },
 }
 NIGHTLY_EVIDENCE_SURFACES = {
     SurfaceKey("quality.check", "analysis.clang-tidy"),
@@ -282,6 +329,79 @@ def add_node(
     )
 
 
+def validate_clang22_materialization_census(
+    materialization: dict[str, Any],
+    release: dict[str, Any],
+    release_qualification: dict[str, Any],
+    relations: dict[str, Any],
+) -> None:
+    """Bind the #182 machine authority to the typed production census."""
+
+    try:
+        surface = materialization["surface"]
+        relation_outputs = materialization["relation_outputs"]
+        groups = materialization["group_topology"]["descriptor_groups"]
+        qualification = materialization["qualification"]
+        release_surface = release["distribution_surface"]
+        release_materialization = release_qualification["materialization"]
+        release_provider = release_qualification["provider"]
+    except (KeyError, TypeError) as error:
+        fail(f"Clang 22 materialization census is structurally incomplete: {error}")
+
+    if surface.get("executable") != CLANG22_MATERIALIZATION_TOOL:
+        fail("Clang 22 materialization executable differs from the production census")
+    if tuple(relation_outputs.get("exact_six_canonical_order", ())) != CLANG22_EXACT_DESCRIPTORS:
+        fail("Clang 22 materialization exact-six descriptor order differs")
+    if tuple(groups.get("canonical", ())) != CLANG22_CANONICAL_DESCRIPTORS:
+        fail("Clang 22 materialization canonical dependency group differs")
+    if tuple(groups.get("observation", ())) != CLANG22_OBSERVATION_DESCRIPTORS:
+        fail("Clang 22 materialization observation dependency group differs")
+    if tuple(qualification.get("configurations", ())) != ("static", "shared"):
+        fail("Clang 22 materialization configuration census differs")
+    if tuple(qualification.get("backends", ())) != ("memory", "sqlite"):
+        fail("Clang 22 materialization backend census differs")
+
+    native_packages = release_surface.get("native_packages", [])
+    installed_tools = release_surface.get("package_qualification", {}).get(
+        "direct_installed_tools", []
+    )
+    if native_packages.count(CLANG22_MATERIALIZATION_TOOL) != 1:
+        fail("release bundle must contain exactly one Clang 22 materialization native package")
+    if installed_tools.count(CLANG22_MATERIALIZATION_TOOL) != 1:
+        fail("release bundle must contain exactly one Clang 22 materialization installed tool")
+
+    expected_release_materialization = {
+        "tool": CLANG22_MATERIALIZATION_TOOL,
+        "contract": CLANG22_MATERIALIZATION_CONTRACT,
+        "configurations": ["static", "shared"],
+        "storage_backends": ["memory", "sqlite"],
+    }
+    for field, expected in expected_release_materialization.items():
+        if release_materialization.get(field) != expected:
+            fail(f"release qualification materialization {field} differs: {expected!r}")
+    observed_release_descriptors = release_provider.get(
+        "observation_relation_descriptors", []
+    )
+    if (
+        len(observed_release_descriptors) != len(CLANG22_OBSERVATION_DESCRIPTORS)
+        or tuple(sorted(observed_release_descriptors)) != CLANG22_OBSERVATION_DESCRIPTORS
+    ):
+        fail("release qualification observation descriptor census differs")
+
+    registry_rows = {
+        row.get("descriptor_id"): row
+        for row in relations.get("relations", [])
+        if isinstance(row, dict)
+    }
+    for descriptor in CLANG22_OBSERVATION_DESCRIPTORS:
+        row = registry_rows.get(descriptor)
+        if row is None or row.get("api_surface") != "dynamic_only":
+            fail(
+                "Clang 22 observation descriptor must be registered dynamic-only: "
+                f"{descriptor}"
+            )
+
+
 def derive_inventory(root: Path) -> dict[SurfaceKey, SourceNode]:
     """Derive the closed 30-domain census solely from accepted source contracts."""
 
@@ -299,6 +419,13 @@ def derive_inventory(root: Path) -> dict[SurfaceKey, SourceNode]:
     security = sources["schemas/cxxlens_ng_security_profile.yaml"]
     namespaces = sources["schemas/cxxlens_ng_namespace_registry.yaml"]
     quality = sources["schemas/cxxlens_ng_quality_ownership.yaml"]
+
+    validate_clang22_materialization_census(
+        sources[CLANG22_MATERIALIZATION_CONTRACT],
+        release,
+        release_qualification,
+        relations,
+    )
 
     nodes: dict[SurfaceKey, SourceNode] = {}
 
@@ -390,7 +517,9 @@ def derive_inventory(root: Path) -> dict[SurfaceKey, SourceNode]:
         add_node(nodes, "relation.descriptor", descriptor, "production-required")
         stem = relation["name"].replace(".", "_")
         links = [relation_key]
-        if stem in static_headers:
+        if relation.get("api_surface") == "dynamic_only":
+            disposition = "explicit-non-1.0"
+        elif stem in static_headers:
             header = f"include/cxxlens/relations/{stem}.hpp"
             links.append(SurfaceKey("public.header", header))
             disposition = "qualification-evidence"
@@ -908,6 +1037,7 @@ def validate_repository(root: Path | str) -> ValidatedModel:
             f"extra={[f'{x.domain}/{x.id}' for x in extra]}"
         )
 
+    all_records = load_feedback_records(root)
     records = applicable_feedback(root)
     referenced_feedback = {
         feedback
@@ -931,9 +1061,19 @@ def validate_repository(root: Path | str) -> ValidatedModel:
             if assignments[key]["qualification"] != "not-applicable":
                 fail(f"feedback exclusion surface is not excluded: {key.domain}/{key.id}")
         exclusions.add(feedback)
-    unknown_feedback = sorted((referenced_feedback | exclusions) - set(records))
+    unknown_feedback = sorted((referenced_feedback | exclusions) - set(all_records))
     if unknown_feedback:
-        fail(f"manifest references feedback outside applicable blocking census: {unknown_feedback}")
+        fail(f"manifest references unknown design feedback: {unknown_feedback}")
+    nonblocking_unaccepted = sorted(
+        feedback
+        for feedback in referenced_feedback - set(records)
+        if all_records[feedback].get("status") != "accepted"
+    )
+    if nonblocking_unaccepted:
+        fail(
+            "tracked-gap feedback is neither an active blocker nor accepted authority: "
+            f"{nonblocking_unaccepted}"
+        )
     unmapped = sorted(set(records) - referenced_feedback - exclusions)
     if unmapped:
         fail(f"applicable blocking design feedback is not mapped: {unmapped}")

@@ -2,18 +2,19 @@ $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens.ng-release-qualification.v1
 type: object
 additionalProperties: false
-required: [schema, document_version, maturity, authority, binding, prerequisites, package, provider, security, performance, documentation, claim_policy, required_artifacts]
+required: [schema, document_version, maturity, authority, binding, prerequisites, package, materialization, provider, security, performance, documentation, claim_policy, required_artifacts]
 properties:
   schema: {const: cxxlens.ng-release-qualification.v1}
-  document_version: {const: 1.2.0}
+  document_version: {const: 1.3.0}
   maturity: {const: implemented}
   authority:
     type: object
     additionalProperties: false
-    required: [design, adr, owner_issue]
+    required: [design, adr, amendments, owner_issue]
     properties:
       design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
       adr: {const: docs/design/adr/0091-distribution-1-production-qualification.md}
+      amendments: {const: [docs/design/adr/0096-clang22-installed-materialization-boundary.md]}
       owner_issue: {const: '#167'}
   binding:
     type: object
@@ -57,15 +58,38 @@ properties:
         minItems: 4
         uniqueItems: true
         items: {$ref: '#/$defs/text'}
+  materialization:
+    const:
+      tool: cxxlens-clang22-materialize
+      contract: schemas/cxxlens_ng_clang22_materialization_contract.yaml
+      contract_schema: schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
+      request_schema: schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
+      report_schema: schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
+      request_filename: cxxlens-clang22-materialization-request.json
+      report_filename: cxxlens-clang22-materialization-report.json
+      configurations: [static, shared]
+      cardinality: exactly-one-per-configuration-and-backend
+      relocated_installed_execution: required
+      runtime_loader_environment: unset
+      storage_backends: [memory, sqlite]
+      exact_observation_equivalence: required-zero-non-exact-per-descriptor
+      tuple_evidence_binding: exact-configuration-two-report-set-digest
+      report_set_digest:
+        algorithm: sha256
+        encoding: canonical-json-sorted-keys-no-whitespace
+        projection: [configuration, reports]
+        backend_order: [memory, sqlite]
+        report_entry_fields: [backend, report_digest]
   provider:
     type: object
     additionalProperties: false
-    required: [provider_id, provider_version, relations, relation_descriptors, interpretation, qualification, capabilities, guarantee, binary_digest_source, static_pending_tuple_is_production, required_positive_evidence]
+    required: [provider_id, provider_version, relations, relation_descriptors, observation_relation_descriptors, interpretation, qualification, capabilities, guarantee, binary_digest_source, static_pending_tuple_is_production, required_positive_evidence]
     properties:
       provider_id: {const: cxxlens.clang22.reference}
       provider_version: {const: 1.0.0}
       relations: {const: [cc.entity@1, cc.call_site@1, cc.call_direct_target@1]}
       relation_descriptors: {const: [cc.entity.v1, cc.call_site.v1, cc.call_direct_target.v1]}
+      observation_relation_descriptors: {const: [frontend.clang22.call_observation.v2, frontend.clang22.entity_observation.v2, frontend.clang22.type_observation.v2]}
       interpretation: {const: cc.clang22-canonical-1}
       qualification: {const: production-supported}
       capabilities: {const: [canonical-entity, call-site, direct-target, process-isolation]}
@@ -73,7 +97,7 @@ properties:
       binary_digest_source: {const: installed-worker-file}
       static_pending_tuple_is_production: {const: forbidden}
       required_positive_evidence:
-        const: [adapter.clang22-provider-normalizer, sdk.example-clang22-native]
+        const: [adapter.clang22-provider-normalizer, sdk.example-clang22-native, install.clang22-materialization]
   security:
     type: object
     additionalProperties: false
@@ -109,13 +133,14 @@ properties:
   claim_policy:
     type: object
     additionalProperties: false
-    required: [production_authority, required_tuple_fields, required_claim_fields, pending_or_wildcard, unlisted_surface]
+    required: [production_authority, required_tuple_fields, required_claim_fields, pending_or_wildcard, unlisted_surface, tuple_evidence_projection]
     properties:
       production_authority: {const: exact-gr-report-tuple-only}
       required_tuple_fields: {const: [provider_id, provider_version, binary_digest, relation, interpretation, toolchain, platform]}
       required_claim_fields: {const: [capabilities, guarantee, security_profile_digest, evidence_digest]}
       pending_or_wildcard: {const: forbidden}
       unlisted_surface: {const: unsupported}
+      tuple_evidence_projection: {const: [install_manifest, materialization_report_set, g5_report, security_report, public_callable_report, configuration]}
   required_artifacts:
     type: array
     minItems: 10

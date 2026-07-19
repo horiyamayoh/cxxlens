@@ -38,6 +38,7 @@ properties:
       - schemas/cxxlens_ng_namespace_registry.yaml
       - schemas/cxxlens_ng_provider_protocol.yaml
       - schemas/cxxlens_ng_provider_runtime_contract.yaml
+      - schemas/cxxlens_ng_clang22_materialization_contract.yaml
       - schemas/cxxlens_ng_provider_support_matrix.yaml
       - schemas/cxxlens_ng_public_api_catalog.yaml
       - schemas/cxxlens_ng_public_callable_inventory.yaml
@@ -139,6 +140,7 @@ $defs:
         - quality.ng-relation_contract
         - quality.ng-release_contract
         - quality.ng-release_qualification
+        - quality.ng-clang22_materialization
         - quality.ng-sdk_contract
         - quality.ng-security_contract
         - quality.ownership

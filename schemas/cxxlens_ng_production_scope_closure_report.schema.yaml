@@ -63,8 +63,8 @@ properties:
       checker_digest: {$ref: '#/$defs/digest'}
       source_digests:
         type: array
-        minItems: 14
-        maxItems: 14
+        minItems: 15
+        maxItems: 15
         prefixItems:
           - {$ref: '#/$defs/source_acceptance'}
           - {$ref: '#/$defs/source_g5'}
@@ -72,6 +72,7 @@ properties:
           - {$ref: '#/$defs/source_namespace'}
           - {$ref: '#/$defs/source_provider_protocol'}
           - {$ref: '#/$defs/source_provider_runtime'}
+          - {$ref: '#/$defs/source_clang22_materialization'}
           - {$ref: '#/$defs/source_provider_support'}
           - {$ref: '#/$defs/source_public_api'}
           - {$ref: '#/$defs/source_public_callables'}
@@ -298,6 +299,7 @@ $defs:
         - quality.ng-relation_contract
         - quality.ng-release_contract
         - quality.ng-release_qualification
+        - quality.ng-clang22_materialization
         - quality.ng-sdk_contract
         - quality.ng-security_contract
         - quality.ownership
@@ -417,6 +419,7 @@ $defs:
   source_namespace: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_namespace_registry.yaml}}}]}
   source_provider_protocol: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_provider_protocol.yaml}}}]}
   source_provider_runtime: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_provider_runtime_contract.yaml}}}]}
+  source_clang22_materialization: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_clang22_materialization_contract.yaml}}}]}
   source_provider_support: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_provider_support_matrix.yaml}}}]}
   source_public_api: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_public_api_catalog.yaml}}}]}
   source_public_callables: {allOf: [{$ref: '#/$defs/source_digest'}, {properties: {path: {const: schemas/cxxlens_ng_public_callable_inventory.yaml}}}]}

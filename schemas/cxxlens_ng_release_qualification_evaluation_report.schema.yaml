@@ -54,7 +54,11 @@ properties:
       - public_callable_report_digest
       - g5_report_digest
       - security_report_digest
+      - materialization_contract_digest
+      - materialization_evidence
       - install_manifests
+      - materialization_reports
+      - materialization_report_sets
       - same_revision
     properties:
       foundation_report_digest: {$ref: '#/$defs/digest'}
@@ -62,6 +66,8 @@ properties:
       public_callable_report_digest: {$ref: '#/$defs/digest'}
       g5_report_digest: {$ref: '#/$defs/digest'}
       security_report_digest: {$ref: '#/$defs/digest'}
+      materialization_contract_digest: {$ref: '#/$defs/digest'}
+      materialization_evidence: {$ref: '#/$defs/materialization_evidence'}
       install_manifests:
         type: array
         minItems: 2
@@ -90,7 +96,30 @@ properties:
             configuration: {enum: [static, shared]}
             manifest_digest: {$ref: '#/$defs/digest'}
             prefix_digest: {$ref: '#/$defs/digest'}
+      materialization_reports:
+        oneOf:
+          - {const: []}
+          - {$ref: '#/$defs/materialization_report_matrix'}
+      materialization_report_sets:
+        oneOf:
+          - {const: []}
+          - {$ref: '#/$defs/materialization_report_set_matrix'}
       same_revision: {const: true}
+    allOf:
+      - if:
+          properties:
+            materialization_evidence:
+              properties: {state: {const: tracked-gap-empty}}
+              required: [state]
+          required: [materialization_evidence]
+        then:
+          properties:
+            materialization_reports: {const: []}
+            materialization_report_sets: {const: []}
+        else:
+          properties:
+            materialization_reports: {$ref: '#/$defs/materialization_report_matrix'}
+            materialization_report_sets: {$ref: '#/$defs/materialization_report_set_matrix'}
   production_support:
     const: []
   strict_report:
@@ -124,6 +153,10 @@ allOf:
         strict_report:
           properties:
             eligible: {const: true}
+        evidence:
+          properties:
+            materialization_evidence:
+              properties: {state: {const: exact-matrix}}
         reason_codes:
           maxItems: 0
     else:
@@ -151,6 +184,104 @@ $defs:
   revision:
     type: string
     pattern: '^[0-9a-f]{40}$'
+  materialization_evidence:
+    type: object
+    additionalProperties: false
+    required: [state, request_count, report_count, report_set_count, owner_issue, feedback]
+    properties:
+      state: {enum: [exact-matrix, tracked-gap-empty]}
+      request_count: {type: integer, minimum: 0, maximum: 4}
+      report_count: {type: integer, minimum: 0, maximum: 4}
+      report_set_count: {type: integer, minimum: 0, maximum: 2}
+      owner_issue:
+        oneOf:
+          - {const: '#181'}
+          - {type: 'null'}
+      feedback:
+        type: array
+        uniqueItems: true
+        items: {enum: [DF-0182, DF-0187]}
+    allOf:
+      - if:
+          properties: {state: {const: tracked-gap-empty}}
+          required: [state]
+        then:
+          properties:
+            request_count: {const: 0}
+            report_count: {const: 0}
+            report_set_count: {const: 0}
+            owner_issue: {const: '#181'}
+            feedback: {const: [DF-0182, DF-0187]}
+        else:
+          properties:
+            request_count: {const: 4}
+            report_count: {const: 4}
+            report_set_count: {const: 2}
+            owner_issue: {type: 'null'}
+            feedback: {const: []}
+  materialization_report_matrix:
+    type: array
+    minItems: 4
+    maxItems: 4
+    uniqueItems: true
+    allOf:
+      - contains:
+          type: object
+          required: [configuration, backend]
+          properties: {configuration: {const: static}, backend: {const: memory}}
+        minContains: 1
+        maxContains: 1
+      - contains:
+          type: object
+          required: [configuration, backend]
+          properties: {configuration: {const: static}, backend: {const: sqlite}}
+        minContains: 1
+        maxContains: 1
+      - contains:
+          type: object
+          required: [configuration, backend]
+          properties: {configuration: {const: shared}, backend: {const: memory}}
+        minContains: 1
+        maxContains: 1
+      - contains:
+          type: object
+          required: [configuration, backend]
+          properties: {configuration: {const: shared}, backend: {const: sqlite}}
+        minContains: 1
+        maxContains: 1
+    items:
+      type: object
+      additionalProperties: false
+      required: [configuration, backend, report_digest]
+      properties:
+        configuration: {enum: [static, shared]}
+        backend: {enum: [memory, sqlite]}
+        report_digest: {$ref: '#/$defs/digest'}
+  materialization_report_set_matrix:
+    type: array
+    minItems: 2
+    maxItems: 2
+    uniqueItems: true
+    allOf:
+      - contains:
+          type: object
+          required: [configuration]
+          properties: {configuration: {const: static}}
+        minContains: 1
+        maxContains: 1
+      - contains:
+          type: object
+          required: [configuration]
+          properties: {configuration: {const: shared}}
+        minContains: 1
+        maxContains: 1
+    items:
+      type: object
+      additionalProperties: false
+      required: [configuration, report_set_digest]
+      properties:
+        configuration: {enum: [static, shared]}
+        report_set_digest: {$ref: '#/$defs/digest'}
   scope_inventory:
     type: object
     additionalProperties: false

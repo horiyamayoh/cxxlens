@@ -1526,7 +1526,7 @@ allocator:
   - fully_qualified_name: cxxlens::source::relations::span::span_column::ref
     callable_kind: static
     next_overload_slot: 1
-inventory_digest: sha256:b9b7a386e61086fa8d730daaab896a17e01ffd4531f116a5982d18b9b7f0a8f1
+inventory_digest: sha256:fe51a6fe65908fd5df4bc0f380cfd1fa86168c261b2fbdc2a2145dddf5f83538
 callables:
 - id: cpp.callable.00100ca7a0bda4b73503b24a4e6f6d33be47b954c7553cab8f70e85f9e77f492
   identity:
@@ -1667,7 +1667,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -1779,7 +1779,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -1985,7 +1985,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -2034,7 +2034,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -2140,7 +2140,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -2193,7 +2193,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -2496,7 +2496,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -2697,7 +2697,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -2953,7 +2953,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -3003,7 +3003,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -3257,7 +3257,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -3511,7 +3511,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -3664,7 +3664,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -3875,7 +3875,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -3924,7 +3924,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -4099,7 +4099,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -4155,7 +4155,7 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:226d1245c03ee162598086095194eca46fa66ec279bb076f575f858d64259e3d
+    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
     implementation: src/llvm/clang22/provider_sdk.cpp
     test: tests/public_headers/provider_clang22_header_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
@@ -4204,7 +4204,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -4357,7 +4357,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -4631,7 +4631,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -4783,7 +4783,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -5225,7 +5225,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -5281,7 +5281,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -5383,7 +5383,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -5581,7 +5581,7 @@ callables:
   qualification: NG0
   owner: '#121'
   evidence:
-    catalog_digest: sha256:f03bc0f1b2df5d4f0ec0c691f16c2fb418a0c68f8e21b304e67c5d653135dcbb
+    catalog_digest: sha256:c7beaa11373923d7784defe82df20f7f477c9cfb689597767b14c2b2e628cb8e
     implementation: schemas/cxxlens_ng_project_catalog_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: null
@@ -5589,10 +5589,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: catalog_compile_unit :: validate'
     source_anchor:
       ast:
-        line: 358
+        line: 363
         column: 30
       doxygen:
-        line: 358
+        line: 363
         column: 9
 - id: cpp.callable.27f20ab185f8f5c424eb3b33dbcb3ce54b21d335ca22923bd76372b8365b31b0
   identity:
@@ -5633,7 +5633,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -5732,7 +5732,7 @@ callables:
   qualification: NG0
   owner: '#121'
   evidence:
-    catalog_digest: sha256:f03bc0f1b2df5d4f0ec0c691f16c2fb418a0c68f8e21b304e67c5d653135dcbb
+    catalog_digest: sha256:c7beaa11373923d7784defe82df20f7f477c9cfb689597767b14c2b2e628cb8e
     implementation: schemas/cxxlens_ng_project_catalog_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: null
@@ -5740,10 +5740,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: project_catalog :: validate'
     source_anchor:
       ast:
-        line: 383
+        line: 388
         column: 30
       doxygen:
-        line: 383
+        line: 388
         column: 9
 - id: cpp.callable.2987de6aedb715b1012bf7ac6cd8d01c7791ec8ee292d33cc4d06227e977438d
   identity:
@@ -5837,7 +5837,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -6156,7 +6156,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -6261,7 +6261,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -6879,7 +6879,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -7294,7 +7294,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -7347,7 +7347,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -7654,7 +7654,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -7809,7 +7809,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -7912,7 +7912,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -7961,7 +7961,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -8067,7 +8067,7 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:226d1245c03ee162598086095194eca46fa66ec279bb076f575f858d64259e3d
+    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
     implementation: src/llvm/clang22/provider_sdk.cpp
     test: tests/public_headers/provider_clang22_header_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
@@ -8322,7 +8322,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -8673,7 +8673,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -8723,7 +8723,7 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:226d1245c03ee162598086095194eca46fa66ec279bb076f575f858d64259e3d
+    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
     implementation: src/llvm/clang22/provider_sdk.cpp
     test: tests/public_headers/provider_clang22_header_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
@@ -8882,7 +8882,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -9039,7 +9039,7 @@ callables:
   qualification: NG0
   owner: '#121'
   evidence:
-    catalog_digest: sha256:f03bc0f1b2df5d4f0ec0c691f16c2fb418a0c68f8e21b304e67c5d653135dcbb
+    catalog_digest: sha256:c7beaa11373923d7784defe82df20f7f477c9cfb689597767b14c2b2e628cb8e
     implementation: schemas/cxxlens_ng_project_catalog_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: null
@@ -9047,10 +9047,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: catalog_compile_unit :: operator =='
     source_anchor:
       ast:
-        line: 359
+        line: 364
         column: 22
       doxygen:
-        line: 359
+        line: 364
         column: 7
 - id: cpp.callable.4842af008600f9f6c9af598e3131b57742e28bd7c7de0daf308f9c82087389e3
   identity:
@@ -9091,7 +9091,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -9143,7 +9143,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -9395,7 +9395,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -9447,7 +9447,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -9556,7 +9556,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -10131,7 +10131,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -10184,7 +10184,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -10285,7 +10285,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -10386,7 +10386,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -10495,7 +10495,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -10545,7 +10545,7 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:226d1245c03ee162598086095194eca46fa66ec279bb076f575f858d64259e3d
+    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
     implementation: src/llvm/clang22/provider_sdk.cpp
     test: tests/public_headers/provider_clang22_header_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
@@ -10657,7 +10657,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -10805,7 +10805,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -11177,7 +11177,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -11759,7 +11759,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -11911,7 +11911,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -12270,7 +12270,7 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:226d1245c03ee162598086095194eca46fa66ec279bb076f575f858d64259e3d
+    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
     implementation: src/llvm/clang22/provider_sdk.cpp
     test: tests/public_headers/provider_clang22_header_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
@@ -12369,7 +12369,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -12570,7 +12570,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -12788,7 +12788,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -12989,7 +12989,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -13198,7 +13198,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -13522,7 +13522,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -13575,7 +13575,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -13674,7 +13674,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -13779,7 +13779,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -13882,7 +13882,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -13935,7 +13935,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -13988,7 +13988,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -14341,7 +14341,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -14394,7 +14394,7 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:226d1245c03ee162598086095194eca46fa66ec279bb076f575f858d64259e3d
+    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
     implementation: src/llvm/clang22/provider_sdk.cpp
     test: tests/public_headers/provider_clang22_header_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
@@ -14446,7 +14446,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -14499,7 +14499,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -14651,7 +14651,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -14802,7 +14802,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -14855,7 +14855,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -15179,7 +15179,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -15548,7 +15548,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -15703,7 +15703,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -15802,7 +15802,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -16165,7 +16165,7 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:226d1245c03ee162598086095194eca46fa66ec279bb076f575f858d64259e3d
+    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
     implementation: src/llvm/clang22/provider_sdk.cpp
     test: tests/public_headers/provider_clang22_header_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
@@ -16691,7 +16691,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -16991,7 +16991,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -17249,7 +17249,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -17668,7 +17668,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -17768,7 +17768,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -17867,7 +17867,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -18078,7 +18078,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -18734,7 +18734,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -19036,7 +19036,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -19184,7 +19184,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -19387,7 +19387,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -19440,7 +19440,7 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:226d1245c03ee162598086095194eca46fa66ec279bb076f575f858d64259e3d
+    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
     implementation: src/llvm/clang22/provider_sdk.cpp
     test: tests/public_headers/provider_clang22_header_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
@@ -19595,7 +19595,7 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:226d1245c03ee162598086095194eca46fa66ec279bb076f575f858d64259e3d
+    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
     implementation: src/llvm/clang22/provider_sdk.cpp
     test: tests/public_headers/provider_clang22_header_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
@@ -20305,7 +20305,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -20501,7 +20501,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -20553,7 +20553,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -20603,7 +20603,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -20814,7 +20814,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -21018,7 +21018,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -21067,7 +21067,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -21274,7 +21274,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -21386,7 +21386,7 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:226d1245c03ee162598086095194eca46fa66ec279bb076f575f858d64259e3d
+    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
     implementation: src/llvm/clang22/provider_sdk.cpp
     test: tests/public_headers/provider_clang22_header_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
@@ -21550,7 +21550,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -21648,7 +21648,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -21848,7 +21848,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -21950,7 +21950,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -22115,7 +22115,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -22419,7 +22419,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -22621,7 +22621,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -22677,7 +22677,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -22733,7 +22733,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -22835,7 +22835,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -23096,7 +23096,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -23149,7 +23149,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -23400,7 +23400,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -23565,7 +23565,7 @@ callables:
   qualification: NG0
   owner: '#121'
   evidence:
-    catalog_digest: sha256:f03bc0f1b2df5d4f0ec0c691f16c2fb418a0c68f8e21b304e67c5d653135dcbb
+    catalog_digest: sha256:c7beaa11373923d7784defe82df20f7f477c9cfb689597767b14c2b2e628cb8e
     implementation: schemas/cxxlens_ng_project_catalog_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: null
@@ -23573,10 +23573,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: project_catalog :: make'
     source_anchor:
       ast:
-        line: 377
+        line: 382
         column: 3
       doxygen:
-        line: 377
+        line: 382
         column: 1
 - id: cpp.callable.cddfb68e3171e159b660ef322e3a01f08af17a3a8db4249d814396a5d14da6cf
   identity:
@@ -23726,7 +23726,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -23931,7 +23931,7 @@ callables:
   qualification: NG0
   owner: '#121'
   evidence:
-    catalog_digest: sha256:f03bc0f1b2df5d4f0ec0c691f16c2fb418a0c68f8e21b304e67c5d653135dcbb
+    catalog_digest: sha256:c7beaa11373923d7784defe82df20f7f477c9cfb689597767b14c2b2e628cb8e
     implementation: schemas/cxxlens_ng_project_catalog_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: null
@@ -23939,10 +23939,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: project_catalog :: canonical_projection'
     source_anchor:
       ast:
-        line: 381
+        line: 386
         column: 48
       doxygen:
-        line: 381
+        line: 386
         column: 9
 - id: cpp.callable.d1627958deca767d6fc3221b39cb4f8e2499c855231de55886a544ff19c8776e
   identity:
@@ -24030,7 +24030,7 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:226d1245c03ee162598086095194eca46fa66ec279bb076f575f858d64259e3d
+    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
     implementation: src/llvm/clang22/provider_sdk.cpp
     test: tests/public_headers/provider_clang22_header_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
@@ -24083,7 +24083,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -24136,7 +24136,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -24289,7 +24289,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -24342,7 +24342,7 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:226d1245c03ee162598086095194eca46fa66ec279bb076f575f858d64259e3d
+    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
     implementation: src/llvm/clang22/provider_sdk.cpp
     test: tests/public_headers/provider_clang22_header_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
@@ -24594,7 +24594,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -24699,7 +24699,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -25059,7 +25059,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -25177,7 +25177,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -25348,7 +25348,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -25503,7 +25503,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -25661,7 +25661,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -25710,7 +25710,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -26174,7 +26174,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -26475,7 +26475,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -26577,7 +26577,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -26630,7 +26630,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -26683,7 +26683,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -26785,7 +26785,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -27357,7 +27357,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -27613,7 +27613,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -27666,7 +27666,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -27769,7 +27769,7 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:226d1245c03ee162598086095194eca46fa66ec279bb076f575f858d64259e3d
+    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
     implementation: src/llvm/clang22/provider_sdk.cpp
     test: tests/public_headers/provider_clang22_header_test.cpp
     example: examples/sdk/clang22_native_provider.cpp
@@ -27825,7 +27825,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -27986,7 +27986,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -28141,7 +28141,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -28456,7 +28456,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -28676,7 +28676,7 @@ callables:
   qualification: NG0
   owner: '#151'
   evidence:
-    catalog_digest: sha256:dd402194932a261d629283017110883ee2486bca746aea314e5192dd7c9de2da
+    catalog_digest: sha256:8e89c3a58ac64d0436b7df65a798015646fce30a0fe09fa284e53529d0750bde
     implementation: src/sdk/provider.cpp
     test: tests/unit/sdk/provider_runtime_test.cpp
     example: null
@@ -29027,7 +29027,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -29079,7 +29079,7 @@ callables:
   qualification: NG0
   owner: '#140'
   evidence:
-    catalog_digest: sha256:a161894b01757c4ff1aa41da9ab11619fd30dbde20c299388758dbd3d8d7d71e
+    catalog_digest: sha256:a3c3123a24af3e443ec14ae8e2f538917f3a04a9874be746340ea3194a807cbc
     implementation: schemas/cxxlens_ng_portable_provider_task_contract.yaml
     test: tests/unit/sdk/sdk_test.cpp
     example: examples/sdk/portable_provider.cpp
@@ -29181,7 +29181,7 @@ callables:
   qualification: NG0
   owner: '#153'
   evidence:
-    catalog_digest: sha256:226d1245c03ee162598086095194eca46fa66ec279bb076f575f858d64259e3d
+    catalog_digest: sha256:845daf0d79802ffe7b98b6c5e022a20f921d6c15cda938706b3e7b2d4faecd1d
     implementation: src/llvm/clang22/provider_sdk.cpp
     test: tests/public_headers/provider_clang22_header_test.cpp
     example: examples/sdk/clang22_native_provider.cpp

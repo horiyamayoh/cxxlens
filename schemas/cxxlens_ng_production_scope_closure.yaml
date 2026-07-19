@@ -1,5 +1,5 @@
 schema: cxxlens.ng-production-scope-closure.v1
-document_version: 1.1.0
+document_version: 1.2.0
 maturity: accepted-contract
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -12,6 +12,7 @@ source_contracts:
   - schemas/cxxlens_ng_namespace_registry.yaml
   - schemas/cxxlens_ng_provider_protocol.yaml
   - schemas/cxxlens_ng_provider_runtime_contract.yaml
+  - schemas/cxxlens_ng_clang22_materialization_contract.yaml
   - schemas/cxxlens_ng_provider_support_matrix.yaml
   - schemas/cxxlens_ng_public_api_catalog.yaml
   - schemas/cxxlens_ng_public_callable_inventory.yaml
@@ -20,7 +21,7 @@ source_contracts:
   - schemas/cxxlens_ng_release_bundle.yaml
   - schemas/cxxlens_ng_release_qualification.yaml
   - schemas/cxxlens_ng_security_profile.yaml
-authority_census_digest: sha256:bc14a443f059120e2fff147c84489d132fe1d7d286d99d4b6c6e9f5f0e85f1ee
+authority_census_digest: sha256:a8c304024b6921efee1d9b3a22ce603cd3769346a2f1128d0f996151d5a2cdb8
 assignments:
   - id: scope.qualified-baseline
     owner_issue: '#179'
@@ -227,17 +228,22 @@ assignments:
     qualification: tracked-gap
     gap:
       finding: scope.tracked-gap.clang22-installed-adoption
-      remediation: Complete installed actual-source worker output adoption, publication, and query evidence.
-    feedback: [DF-0182]
+      remediation: Complete installed actual-source worker output adoption with tool-private independent all-or-none span-bundle validation, publication, and query evidence; do not claim generic relation-row reference enforcement.
+    feedback: [DF-0182, DF-0187]
     surfaces:
       - {domain: distribution.consumer-configuration, id: shared/real-project}
       - {domain: distribution.consumer-configuration, id: static/real-project}
+      - {domain: distribution.installed-tool, id: cxxlens-clang22-materialize}
+      - {domain: distribution.native-package, id: cxxlens-clang22-materialize}
       - {domain: provider.production-tuple-template, id: shared/cc.call_direct_target@1}
       - {domain: provider.production-tuple-template, id: shared/cc.call_site@1}
       - {domain: provider.production-tuple-template, id: shared/cc.entity@1}
       - {domain: provider.production-tuple-template, id: static/cc.call_direct_target@1}
       - {domain: provider.production-tuple-template, id: static/cc.call_site@1}
       - {domain: provider.production-tuple-template, id: static/cc.entity@1}
+      - {domain: relation.descriptor, id: frontend.clang22.call_observation.v2}
+      - {domain: relation.descriptor, id: frontend.clang22.entity_observation.v2}
+      - {domain: relation.descriptor, id: frontend.clang22.type_observation.v2}
   - id: scope.ng1-provider-hardening-gap
     owner_issue: '#183'
     scope: included
@@ -291,6 +297,17 @@ assignments:
       - {domain: release.migration, id: R6}
       - {domain: release.migration, id: R7}
       - {domain: security.namespace, id: relation.company-fixture}
+  - id: scope.dynamic-only-clang22-observations
+    owner_issue: '#182'
+    scope: excluded
+    qualification: not-applicable
+    exclusion:
+      authority: docs/design/adr/0096-clang22-installed-materialization-boundary.md
+      reason: The provider-owned observation v2 relations are admitted for dynamic Store/query use while the approved option-2 boundary explicitly forbids generated static C++ tags.
+    surfaces:
+      - {domain: relation.static-admission, id: frontend.clang22.call_observation.v2}
+      - {domain: relation.static-admission, id: frontend.clang22.entity_observation.v2}
+      - {domain: relation.static-admission, id: frontend.clang22.type_observation.v2}
   - id: scope.conformance-only-support
     owner_issue: '#65'
     scope: excluded

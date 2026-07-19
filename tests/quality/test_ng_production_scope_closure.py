@@ -81,9 +81,31 @@ class ProductionScopeClosureTest(unittest.TestCase):
                 "public_callable_report_digest": digest,
                 "g5_report_digest": digest,
                 "security_report_digest": digest,
+                "materialization_contract_digest": digest,
+                "materialization_evidence": {
+                    "state": "exact-matrix",
+                    "request_count": 4,
+                    "report_count": 4,
+                    "report_set_count": 2,
+                    "owner_issue": None,
+                    "feedback": [],
+                },
                 "install_manifests": [
                     {"configuration": "shared", "manifest_digest": digest, "prefix_digest": digest},
                     {"configuration": "static", "manifest_digest": digest, "prefix_digest": digest},
+                ],
+                "materialization_reports": [
+                    {
+                        "configuration": configuration,
+                        "backend": backend,
+                        "report_digest": digest,
+                    }
+                    for configuration in ("shared", "static")
+                    for backend in ("memory", "sqlite")
+                ],
+                "materialization_report_sets": [
+                    {"configuration": "shared", "report_set_digest": digest},
+                    {"configuration": "static", "report_set_digest": digest},
                 ],
                 "same_revision": True,
             },
@@ -112,6 +134,7 @@ class ProductionScopeClosureTest(unittest.TestCase):
                 "readiness_report_digest": digest,
                 "public_callable_report_digest": digest,
                 "g5_report_digest": digest,
+                "materialization_contract_digest": digest,
                 "release_evaluation_report_digest": "sha256:" + "e" * 64,
                 "same_revision": True,
             },
@@ -121,6 +144,7 @@ class ProductionScopeClosureTest(unittest.TestCase):
                     "prefix_digest": digest,
                     "manifest_digest": digest,
                     "toolchain_digest": digest,
+                    "materialization_report_set_digest": digest,
                     "real_project": "passed",
                     "storage_backends": ["memory", "sqlite"],
                     "relocated": True,
@@ -165,8 +189,8 @@ class ProductionScopeClosureTest(unittest.TestCase):
     def test_repository_check_closes_exact_30_domains(self) -> None:
         self.assertEqual(tuple(sorted({key.domain for key in self.model.nodes})), tuple(sorted(closure.DOMAINS)))
         self.assertEqual(self.model.summary["domain_count"], 30)
-        self.assertEqual(self.model.summary["assignable_count"], 223)
-        self.assertEqual(self.model.summary["expanded_count"], 773)
+        self.assertEqual(self.model.summary["assignable_count"], 231)
+        self.assertEqual(self.model.summary["expanded_count"], 781)
         self.assertEqual(self.model.summary["aggregate_count"], 14)
         self.assertEqual(self.model.closure_status, "classified-with-gaps")
 
@@ -187,10 +211,20 @@ class ProductionScopeClosureTest(unittest.TestCase):
 
     def test_known_gap_and_blocker_census_is_truthful(self) -> None:
         assignments = {assignment["id"]: assignment for assignment in self.model.manifest["assignments"]}
-        self.assertEqual(len(assignments["scope.clang22-installed-adoption-gap"]["surfaces"]), 8)
+        self.assertEqual(len(assignments["scope.clang22-installed-adoption-gap"]["surfaces"]), 13)
         self.assertEqual(len(assignments["scope.ng1-provider-hardening-gap"]["surfaces"]), 6)
         self.assertEqual(len(assignments["scope.incremental-coordinator-gap"]["surfaces"]), 6)
         self.assertEqual(len(assignments["scope.nightly-qualification-gap"]["surfaces"]), 4)
+        self.assertEqual(
+            {
+                (row["domain"], row["id"])
+                for row in assignments["scope.dynamic-only-clang22-observations"]["surfaces"]
+            },
+            {
+                ("relation.static-admission", descriptor)
+                for descriptor in closure.CLANG22_OBSERVATION_DESCRIPTORS
+            },
+        )
         self.assertEqual(
             {
                 row["id"]
@@ -203,7 +237,24 @@ class ProductionScopeClosureTest(unittest.TestCase):
                 "sanitizer.tsan",
             },
         )
-        self.assertEqual(self.model.blocking_feedback, ("DF-0174", "DF-0182"))
+        self.assertEqual(
+            self.model.blocking_feedback,
+            ("DF-0174",),
+        )
+
+    def test_materialization_authority_is_bound_to_the_typed_census(self) -> None:
+        temporary, root = self.clone_contract_root()
+        self.addCleanup(temporary.cleanup)
+        contract_path = root / closure.CLANG22_MATERIALIZATION_CONTRACT
+        contract = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
+        contract["surface"]["executable"] = "cxxlens-clang22-materialize-unbound"
+        contract_path.write_text(
+            yaml.safe_dump(contract, sort_keys=False), encoding="utf-8"
+        )
+        with self.assertRaisesRegex(
+            closure.ContractError, "executable differs from the production census"
+        ):
+            closure.validate_repository(root)
 
     def test_conformance_only_support_is_never_promoted(self) -> None:
         rows = [row for row in self.model.expanded if row["domain"] == "provider.support-tuple"]
@@ -579,12 +630,14 @@ class ProductionScopeClosureTest(unittest.TestCase):
         temporary, root = self.clone_contract_root()
         self.addCleanup(temporary.cleanup)
         manifest = self.read_manifest(root)
-        clang_gap = next(
-            row for row in manifest["assignments"] if row["id"] == "scope.clang22-installed-adoption-gap"
+        static_blocker = next(
+            row
+            for row in manifest["assignments"]
+            if row["id"] == "scope.static-admission-authority-blocker"
         )
-        clang_gap.pop("feedback")
+        static_blocker["feedback"] = ["DF-0182"]
         self.write_manifest(root, manifest)
-        with self.assertRaisesRegex(closure.ContractError, r"not mapped: \['DF-0182'\]"):
+        with self.assertRaisesRegex(closure.ContractError, r"not mapped: \['DF-0174'\]"):
             closure.validate_repository(root)
 
     def test_feedback_exclusion_cannot_be_self_authorized(self) -> None:

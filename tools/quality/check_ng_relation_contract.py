@@ -48,7 +48,35 @@ REQUIRED_RELATIONS = {
     "core.claim_conflict",
     "core.differential_disagreement",
     "company.lock.acquire",
+    "frontend.clang22.entity_observation",
+    "frontend.clang22.type_observation",
+    "frontend.clang22.call_observation",
 }
+
+CLANG22_OBSERVATION_RELATIONS = {
+    "frontend.clang22.entity_observation",
+    "frontend.clang22.type_observation",
+    "frontend.clang22.call_observation",
+}
+
+CLANG22_INSTALLED_OUTPUT_DESCRIPTORS = {
+    "frontend.clang22.entity_observation.v2",
+    "frontend.clang22.type_observation.v2",
+    "frontend.clang22.call_observation.v2",
+    "cc.entity.v1",
+    "cc.call_site.v1",
+    "cc.call_direct_target.v1",
+}
+
+CLANG22_PRIMARY_SPAN_SUFFIXES = (
+    "source",
+    "source_snapshot",
+    "source_file",
+    "source_begin",
+    "source_end",
+    "source_role",
+    "source_read_only",
+)
 
 REQUIRED_VECTOR_IDS = {
     "exact-registry",
@@ -78,6 +106,14 @@ REQUIRED_VECTOR_IDS = {
     "stale-inline-direct-target",
     "call-site-partition-column",
     "entity-occurrence-anchor-in-identity",
+    "clang22-observation-v2-family",
+    "clang22-span-column-missing",
+    "clang22-span-constraint-partial",
+    "clang22-span-constraint-duplicate",
+    "clang22-span-constraint-unknown-column",
+    "clang22-span-reference-mismatch",
+    "clang22-hard-reference-unknown",
+    "dynamic-only-static-projection",
 }
 
 
@@ -121,6 +157,28 @@ def digest(value: Any) -> str:
     return "sha256:" + hashlib.sha256(canonical_json(value)).hexdigest()
 
 
+def canonical_relation_projection(relation: dict[str, Any]) -> dict[str, Any]:
+    """Canonicalize registry collections whose insertion order is non-semantic."""
+    canonical = copy.deepcopy(relation)
+    references = canonical.setdefault("references", [])
+    references.sort(
+        key=lambda reference: (
+            tuple(reference["source_columns"]),
+            str(reference["strength"]),
+            str(reference["target_relation"]),
+            tuple(reference["target_columns"]),
+        )
+    )
+    canonical["merge"].setdefault("conflict_columns", []).sort()
+    constraints = canonical.get("row_constraints")
+    if isinstance(constraints, dict):
+        groups = constraints.get("all_or_none", [])
+        constraints["all_or_none"] = sorted(
+            (sorted(group) for group in groups), key=lambda group: tuple(group)
+        )
+    return canonical
+
+
 def registry_semantic_projection(registry: dict[str, Any]) -> dict[str, Any]:
     """Exclude migration/document metadata and relation registration order."""
     return {
@@ -137,7 +195,10 @@ def registry_semantic_projection(registry: dict[str, Any]) -> dict[str, Any]:
         "evolution_policies": sorted(
             registry["evolution_policies"], key=lambda row: row["id"]
         ),
-        "relations": sorted(registry["relations"], key=lambda row: row["name"]),
+        "relations": sorted(
+            (canonical_relation_projection(row) for row in registry["relations"]),
+            key=lambda row: row["name"],
+        ),
     }
 
 
@@ -177,6 +238,233 @@ def _column_maps(
         rows_by(relation["columns"], "id", f"{relation['name']} column IDs"),
         rows_by(relation["columns"], "name", f"{relation['name']} column names"),
     )
+
+
+def _validate_row_constraints(
+    relation: dict[str, Any], columns: dict[str, dict[str, Any]]
+) -> None:
+    constraints = relation.get("row_constraints")
+    if constraints is None:
+        return
+    groups = constraints.get("all_or_none", [])
+    canonical_groups: set[tuple[str, ...]] = set()
+    constrained_columns: set[str] = set()
+    for group in groups:
+        if len(group) != len(set(group)):
+            fail(
+                "relation.row-constraint-duplicate-column",
+                f"{relation['name']} all-or-none group repeats a column",
+            )
+        canonical = tuple(sorted(group))
+        if canonical in canonical_groups:
+            fail(
+                "relation.row-constraint-duplicate",
+                f"{relation['name']} repeats an all-or-none group",
+            )
+        canonical_groups.add(canonical)
+        unknown = sorted(set(group) - set(columns))
+        if unknown:
+            fail(
+                "relation.row-constraint-column-unknown",
+                f"{relation['name']} all-or-none columns are unknown: {unknown}",
+            )
+        overlap = sorted(set(group) & constrained_columns)
+        if overlap:
+            fail(
+                "relation.row-constraint-overlap",
+                f"{relation['name']} all-or-none groups overlap: {overlap}",
+            )
+        constrained_columns.update(group)
+        non_optional = sorted(
+            identifier
+            for identifier in group
+            if columns[identifier]["required"]
+            or not columns[identifier]["type"].startswith("optional<")
+        )
+        if non_optional:
+            fail(
+                "relation.row-constraint-column-not-optional",
+                f"{relation['name']} all-or-none columns are not optional: {non_optional}",
+            )
+
+
+def _validate_clang22_observation_relations(
+    relations: dict[str, dict[str, Any]],
+) -> None:
+    dynamic = {
+        name
+        for name, relation in relations.items()
+        if relation.get("api_surface") == "dynamic_only"
+    }
+    if dynamic != CLANG22_OBSERVATION_RELATIONS:
+        fail(
+            "relation.dynamic-surface-set-invalid",
+            "dynamic-only relation set differs from the accepted Clang 22 observation family",
+        )
+
+    base_specs = {
+        "observation": ("typed_id<clang22_observation_id>", True, "claim_key"),
+        "compile_unit": ("typed_id<compile_unit_id>", True, "authoritative_payload"),
+        "semantic_key": ("bytes", True, "authoritative_payload"),
+        "payload_digest": ("digest", True, "authoritative_payload"),
+        "exact_equivalence": ("bool", True, "authoritative_payload"),
+        "limitation": ("optional<utf8_string>", False, "authoritative_payload"),
+    }
+    span_specs = {
+        "source": ("optional<typed_id<source_span_id>>", False, "authoritative_payload"),
+        "source_snapshot": (
+            "optional<typed_id<source_snapshot_id>>",
+            False,
+            "authoritative_payload",
+        ),
+        "source_file": ("optional<typed_id<file_id>>", False, "authoritative_payload"),
+        "source_begin": ("optional<uint64>", False, "authoritative_payload"),
+        "source_end": ("optional<uint64>", False, "authoritative_payload"),
+        "source_role": (
+            "optional<open_symbol<source.range-role/1>>",
+            False,
+            "authoritative_payload",
+        ),
+        "source_read_only": ("optional<bool>", False, "authoritative_payload"),
+        "source_origin_chain": ("optional<bytes>", False, "authoritative_payload"),
+    }
+    source_targets = [
+        "source.span.v1.span",
+        "source.span.v1.snapshot",
+        "source.span.v1.file",
+        "source.span.v1.begin",
+        "source.span.v1.end",
+        "source.span.v1.role",
+        "source.span.v1.read_only",
+    ]
+
+    for name in sorted(CLANG22_OBSERVATION_RELATIONS):
+        relation = relations[name]
+        prefix = f"{name}.v2."
+        if (
+            relation["descriptor_id"] != f"{name}.v2"
+            or relation["version"] != "2.0.0"
+            or relation["semantic_major"] != 2
+            or relation["semantics"] != f"{name}/2"
+            or relation["owner_namespace"] != "cxxlens.clang22.reference"
+            or relation["stability"] != "versioned"
+            or relation.get("api_surface") != "dynamic_only"
+            or relation.get("generated_cpp_tag") is not None
+        ):
+            fail(
+                "relation.observation-v2-authority-invalid",
+                f"{name} descriptor/version/owner/dynamic authority differs",
+            )
+
+        has_span = name != "frontend.clang22.type_observation"
+        expected_specs = dict(base_specs)
+        if has_span:
+            expected_specs.update(span_specs)
+        _, columns_by_name = _column_maps(relation)
+        missing_span = sorted(
+            set(CLANG22_PRIMARY_SPAN_SUFFIXES) - set(columns_by_name)
+        ) if has_span else []
+        if missing_span:
+            fail(
+                "relation.observation-span-column-missing",
+                f"{name} primary span columns are missing: {missing_span}",
+            )
+        if set(columns_by_name) != set(expected_specs):
+            fail(
+                "relation.observation-column-set-invalid",
+                f"{name} observation column set differs",
+            )
+        for column_name, expected in expected_specs.items():
+            column = columns_by_name[column_name]
+            actual = (column["type"], column["required"], column["identity_role"])
+            if actual != expected or column["id"] != prefix + column_name:
+                fail(
+                    "relation.observation-column-contract-invalid",
+                    f"{name}.{column_name} column contract differs",
+                )
+
+        expected_projection = [
+            prefix + "compile_unit",
+            prefix + "semantic_key",
+            prefix + "payload_digest",
+        ]
+        if has_span:
+            expected_projection.extend(prefix + suffix for suffix in CLANG22_PRIMARY_SPAN_SUFFIXES)
+            expected_projection.append(prefix + "source_origin_chain")
+        claim = relation["claim"]
+        if (
+            claim["key"] != [prefix + "observation"]
+            or claim["domain_identity"]["result_column"] != prefix + "observation"
+            or claim["domain_identity"]["projection"] != expected_projection
+        ):
+            fail(
+                "relation.observation-identity-invalid",
+                f"{name} observation identity projection differs",
+            )
+
+        compile_reference = {
+            "source_columns": [prefix + "compile_unit"],
+            "target_relation": "build.compile_unit",
+            "target_columns": ["build.compile_unit.v1.compile_unit"],
+            "strength": "hard",
+            "on_missing": "reject_batch",
+        }
+        expected_references = [compile_reference]
+        if has_span:
+            expected_references.append(
+                {
+                    "source_columns": [
+                        prefix + suffix for suffix in CLANG22_PRIMARY_SPAN_SUFFIXES
+                    ],
+                    "target_relation": "source.span",
+                    "target_columns": source_targets,
+                    "strength": "hard",
+                    "on_missing": "reject_batch",
+                }
+            )
+        canonical_references = sorted(
+            relation["references"], key=lambda row: canonical_json(row)
+        )
+        if canonical_references != sorted(
+            expected_references, key=lambda row: canonical_json(row)
+        ):
+            fail(
+                "relation.observation-span-reference-invalid"
+                if has_span
+                else "relation.observation-reference-invalid",
+                f"{name} hard-reference projection differs",
+            )
+
+        constraints = relation.get("row_constraints")
+        if has_span:
+            expected_group = sorted(
+                prefix + suffix for suffix in CLANG22_PRIMARY_SPAN_SUFFIXES
+            )
+            actual_groups = (
+                []
+                if constraints is None
+                else sorted(sorted(group) for group in constraints["all_or_none"])
+            )
+            if actual_groups != [expected_group]:
+                fail(
+                    "relation.observation-span-constraint-invalid",
+                    f"{name} primary span all-or-none constraint differs",
+                )
+        elif constraints is not None:
+            fail(
+                "relation.observation-type-span-forbidden",
+                "type observation must not carry a primary span constraint",
+            )
+
+        if (
+            relation["partition"]["suggested_keys"] != [prefix + "compile_unit"]
+            or relation["provenance"]["minimum"] != "direct_observation"
+            or relation["evolution_policy"] != "ng0.additive.v1"
+        ):
+            fail(
+                "relation.observation-policy-invalid",
+                f"{name} partition/provenance/evolution policy differs",
+            )
 
 
 def validate_envelope(registry: dict[str, Any]) -> None:
@@ -223,6 +511,15 @@ def validate_registry(
     *,
     schema: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
+    static_projection = registry.get("api_projection", {}).get("static")
+    if static_projection != {
+        "descriptor_source": "relations[generated_cpp_tag!=null].descriptor_id",
+        "column_source": "relations[generated_cpp_tag!=null].columns[].id",
+    }:
+        fail(
+            "relation.static-projection-includes-dynamic",
+            "static projection does not exclude dynamic-only descriptors",
+        )
     if schema is not None:
         schema_validate(registry, schema, "relation registry")
     validate_envelope(registry)
@@ -232,6 +529,25 @@ def validate_registry(
     missing = sorted(REQUIRED_RELATIONS - set(relations))
     if missing:
         fail("relation.required-relation-missing", f"required relations missing: {missing}")
+
+    generated_tags: list[str] = []
+    for name, relation in relations.items():
+        tag = relation.get("generated_cpp_tag")
+        surface = relation.get("api_surface")
+        if surface is None and isinstance(tag, str):
+            generated_tags.append(tag)
+        elif surface == "dynamic_only" and tag is None:
+            pass
+        else:
+            fail(
+                "relation.api-surface-invalid",
+                f"{name} generated C++ tag/dynamic-only classification differs",
+            )
+    duplicate_tags = sorted(
+        tag for tag in set(generated_tags) if generated_tags.count(tag) != 1
+    )
+    if duplicate_tags:
+        fail("relation.duplicate-id", f"generated C++ tags duplicate: {duplicate_tags}")
 
     evolution = rows_by(registry["evolution_policies"], "id", "evolution policies")
     symbols = rows_by(registry["symbol_contracts"], "id", "symbol contracts")
@@ -250,6 +566,7 @@ def validate_registry(
             )
         columns, names = _column_maps(relation)
         relation_columns[name] = columns
+        _validate_row_constraints(relation, columns)
         duplicate_global = sorted(set(columns) & all_column_ids)
         if duplicate_global:
             fail("relation.duplicate-id", f"global column IDs duplicate: {duplicate_global}")
@@ -365,6 +682,7 @@ def validate_registry(
             elif reference["on_missing"] != "unresolved":
                 fail("relation.soft-reference-policy", f"{name} soft reference is not accounted")
     assert_acyclic(hard_graph)
+    _validate_clang22_observation_relations(relations)
 
     call_site = relations["cc.call_site"]
     _, call_names = _column_maps(call_site)
@@ -759,7 +1077,7 @@ def make_report(
             "name": row["name"],
             "descriptor_id": row["descriptor_id"],
             "version": row["version"],
-            "digest": digest(row),
+            "digest": digest(canonical_relation_projection(row)),
         }
         for row in sorted(registry["relations"], key=lambda item: item["name"])
     ]

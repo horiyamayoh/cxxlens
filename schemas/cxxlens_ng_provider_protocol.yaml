@@ -1,5 +1,5 @@
 schema: cxxlens.provider-protocol.v1
-document_version: 1.10.0
+document_version: 1.11.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#18-provider-protocol
@@ -331,6 +331,17 @@ atomicity:
     boundary: dependency-group-only
     implicit: forbidden
   publication: issue-63-snapshot-transaction-only
+adoption_boundary:
+  transcript_validation: necessary-not-sufficient-for-adoption
+  public_execution_report_frames: diagnostic-only
+  adoption_input: immutable-sealed-decoded-groups-from-the-shared-validator
+  group_inventory: exact-task-declared-and-complete
+  base_hard_references: independently-validated-before-group-adoption
+  partial_policy: explicit-at-task-authority-never-inferred
+  clang22_installed_reference_kind: reverse-specialization-index
+  clang22_installed_dependency: false
+  clang22_installed_authority: schemas/cxxlens_ng_clang22_materialization_contract.yaml
+  raw_frame_redecode_or_private_codec_duplication: forbidden
 planning:
   inputs:
     - required-relations

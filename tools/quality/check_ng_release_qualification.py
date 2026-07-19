@@ -19,6 +19,7 @@ from typing import Any
 import jsonschema
 import yaml
 
+import check_ng_clang22_materialization as materialization
 import public_callable_inventory as callable_inventory
 
 
@@ -46,6 +47,61 @@ RELEASE = pathlib.Path("schemas/cxxlens_ng_release_bundle.yaml")
 SUPPORT = pathlib.Path("schemas/cxxlens_ng_provider_support_matrix.yaml")
 SECURITY = pathlib.Path("schemas/cxxlens_ng_security_profile.yaml")
 REGISTRY = pathlib.Path("schemas/cxxlens_ng_relation_registry.yaml")
+MATERIALIZATION_CONTRACT = pathlib.Path(
+    "schemas/cxxlens_ng_clang22_materialization_contract.yaml"
+)
+MATERIALIZATION_CONTRACT_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml"
+)
+MATERIALIZATION_REQUEST_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml"
+)
+MATERIALIZATION_REPORT_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_clang22_materialization_report.schema.yaml"
+)
+MATERIALIZATION_MATRIX = (
+    ("static", "memory"),
+    ("static", "sqlite"),
+    ("shared", "memory"),
+    ("shared", "sqlite"),
+)
+MATERIALIZATION_TOOL_FILE = "bin/cxxlens-clang22-materialize"
+MATERIALIZATION_ASSIGNMENT_ID = "scope.clang22-installed-adoption-gap"
+MATERIALIZATION_ASSIGNMENT_OWNER = "#181"
+MATERIALIZATION_ASSIGNMENT_FEEDBACK = ("DF-0182", "DF-0187")
+MATERIALIZATION_ASSIGNMENT_SURFACES = (
+    ("distribution.consumer-configuration", "shared/real-project"),
+    ("distribution.consumer-configuration", "static/real-project"),
+    ("distribution.installed-tool", "cxxlens-clang22-materialize"),
+    ("distribution.native-package", "cxxlens-clang22-materialize"),
+    ("provider.production-tuple-template", "shared/cc.call_direct_target@1"),
+    ("provider.production-tuple-template", "shared/cc.call_site@1"),
+    ("provider.production-tuple-template", "shared/cc.entity@1"),
+    ("provider.production-tuple-template", "static/cc.call_direct_target@1"),
+    ("provider.production-tuple-template", "static/cc.call_site@1"),
+    ("provider.production-tuple-template", "static/cc.entity@1"),
+    ("relation.descriptor", "frontend.clang22.call_observation.v2"),
+    ("relation.descriptor", "frontend.clang22.entity_observation.v2"),
+    ("relation.descriptor", "frontend.clang22.type_observation.v2"),
+)
+MATERIALIZATION_ASSIGNMENT_EVIDENCE = (
+    "quality.ng-clang22_materialization",
+    "quality.ng-relation_contract",
+    "quality.ng-release_qualification",
+)
+MATERIALIZATION_BASE_CLAIM_DESCRIPTORS = (
+    "build.project.v1",
+    "build.toolchain_context.v1",
+    "build.variant.v1",
+    "source.file.v1",
+    "build.compile_unit.v1",
+    "source.span.v1",
+)
+MATERIALIZATION_TASK_EXECUTION_KEY_FIELDS = (
+    "provider_task_id",
+    "task_input_digest",
+    "provider_execution_id",
+)
 
 
 class ReleaseQualificationError(ValueError):
@@ -64,6 +120,19 @@ def load(path: pathlib.Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         fail(f"expected mapping: {path}")
     return value
+
+
+def load_materialization_json(path: pathlib.Path, label: str) -> dict[str, Any]:
+    """Load one request/report with the specialization's strict byte policy."""
+
+    try:
+        raw = path.read_bytes()
+    except OSError as error:
+        fail(f"cannot read {label} {path}: {error}")
+    try:
+        return materialization.load_strict_json_bytes(raw, f"{label} {path}")
+    except materialization.MaterializationError as error:
+        fail(f"{label} is not strict materialization JSON: {error}")
 
 
 def validate_schema(value: Any, schema: dict[str, Any], label: str) -> None:
@@ -156,6 +225,153 @@ def verify_production_scope_inventory(
     return current
 
 
+def materialization_assignment_shape(qualification: str) -> dict[str, Any]:
+    """Return an exact accepted assignment shape for the materializer surface."""
+
+    assignment: dict[str, Any] = {
+        "id": MATERIALIZATION_ASSIGNMENT_ID,
+        "owner_issue": MATERIALIZATION_ASSIGNMENT_OWNER,
+        "scope": "included",
+        "qualification": qualification,
+        "surfaces": [
+            {"domain": domain, "id": surface_id}
+            for domain, surface_id in MATERIALIZATION_ASSIGNMENT_SURFACES
+        ],
+    }
+    if qualification == "tracked-gap":
+        assignment.update(
+            {
+                "gap": {
+                    "finding": "scope.tracked-gap.clang22-installed-adoption",
+                    "remediation": (
+                        "Complete installed actual-source worker output adoption with "
+                        "tool-private independent all-or-none span-bundle validation, "
+                        "publication, and query evidence; do not claim generic "
+                        "relation-row reference enforcement."
+                    ),
+                },
+                "feedback": list(MATERIALIZATION_ASSIGNMENT_FEEDBACK),
+            }
+        )
+    elif qualification == "qualified":
+        assignment["evidence"] = list(MATERIALIZATION_ASSIGNMENT_EVIDENCE)
+    else:
+        fail(f"unsupported materialization assignment qualification: {qualification}")
+    return assignment
+
+
+def materialization_assignment_transition(root: pathlib.Path) -> dict[str, Any]:
+    """Classify only the materializer assignment; unrelated scope gaps are irrelevant."""
+
+    try:
+        scope_checker = importlib.import_module("check_ng_production_scope_closure")
+    except ImportError as error:
+        fail(f"production scope checker is unavailable: {error}")
+    contract_error = getattr(scope_checker, "ContractError", None)
+    if not isinstance(contract_error, type) or not issubclass(
+        contract_error, Exception
+    ):
+        fail("production scope checker omits ContractError")
+    try:
+        model = scope_checker.validate_repository(root)
+        key = scope_checker.SurfaceKey(
+            "distribution.installed-tool", "cxxlens-clang22-materialize"
+        )
+        assignment = model.assignments[key]
+    except (KeyError, OSError, ValueError, contract_error) as error:
+        fail(f"cannot resolve the Clang 22 materializer assignment: {error}")
+
+    if assignment == materialization_assignment_shape("tracked-gap"):
+        return {
+            "assignment_state": "tracked-gap",
+            "materialization_evidence": {
+                "state": "tracked-gap-empty",
+                "request_count": 0,
+                "report_count": 0,
+                "report_set_count": 0,
+                "owner_issue": MATERIALIZATION_ASSIGNMENT_OWNER,
+                "feedback": list(MATERIALIZATION_ASSIGNMENT_FEEDBACK),
+            },
+        }
+    if assignment == materialization_assignment_shape("qualified"):
+        return {
+            "assignment_state": "qualified",
+            "materialization_evidence": {
+                "state": "exact-matrix",
+                "request_count": 4,
+                "report_count": 4,
+                "report_set_count": 2,
+                "owner_issue": None,
+                "feedback": [],
+            },
+        }
+    fail(
+        "Clang 22 materializer assignment is neither the exact "
+        "#181/DF-0182/DF-0187 tracked gap nor the exact included+qualified assignment"
+    )
+
+
+def materialization_required_install_files(
+    manifest: dict[str, Any], transition: dict[str, Any]
+) -> list[str]:
+    """Apply the pre-#181 exemption to the tool binary and to no schema."""
+
+    required = list(manifest["package"]["required_files"])
+    state = transition.get("assignment_state")
+    if state == "tracked-gap":
+        if required.count(MATERIALIZATION_TOOL_FILE) != 1:
+            fail("release package does not bind the materialization tool binary exactly")
+        required.remove(MATERIALIZATION_TOOL_FILE)
+    elif state != "qualified":
+        fail(f"unsupported materialization assignment state: {state}")
+    return required
+
+
+def collect_materialization_evidence(
+    root: pathlib.Path,
+    manifest: dict[str, Any],
+    evidence: pathlib.Path,
+    install_values: dict[str, dict[str, Any]],
+    git: dict[str, Any],
+    transition: dict[str, Any],
+) -> tuple[
+    dict[tuple[str, str], dict[str, Any]],
+    dict[str, str],
+    dict[str, Any],
+]:
+    """Require exact zero for the tracked gap or the exact matrix when qualified."""
+
+    report_paths = [
+        path
+        for path in evidence.rglob(manifest["materialization"]["report_filename"])
+        if path.is_file()
+    ]
+    request_paths = [
+        path
+        for path in evidence.rglob(manifest["materialization"]["request_filename"])
+        if path.is_file()
+    ]
+    state = transition.get("assignment_state")
+    if state == "tracked-gap":
+        if report_paths or request_paths:
+            fail(
+                "the exact #181/DF-0182/DF-0187 tracked gap requires zero materialization "
+                f"requests and reports, found {len(request_paths)} requests and "
+                f"{len(report_paths)} reports"
+            )
+        return {}, {}, transition["materialization_evidence"]
+    if state != "qualified":
+        fail(f"unsupported materialization assignment state: {state}")
+    reports, report_sets = verify_materialization_reports(
+        root,
+        manifest,
+        evidence,
+        install_values,
+        git,
+    )
+    return reports, report_sets, transition["materialization_evidence"]
+
+
 def require_exact_clean_main(
     root: pathlib.Path, expected_revision: str
 ) -> dict[str, Any]:
@@ -183,9 +399,9 @@ def validate_documents(
             "run_url": "https://github.com/horiyamayoh/cxxlens/actions/runs/1",
             "git": {"revision": "1" * 40, "tree": "2" * 40, "branch": "main", "clean": True},
             "release": {"id": "distribution-1.0", "version": "1.0.0", "state": "qualified"},
-            "prerequisites": {"gates": [f"gate.g{i}" for i in range(6)] + ["gate.release"], "migrations": [f"R{i}" for i in range(5)], "foundation_report_digest": "sha256:" + "1" * 64, "readiness_report_digest": "sha256:" + "2" * 64, "public_callable_report_digest": "sha256:" + "3" * 64, "g5_report_digest": "sha256:" + "4" * 64, "release_evaluation_report_digest": "sha256:" + "5" * 64, "same_revision": True},
+            "prerequisites": {"gates": [f"gate.g{i}" for i in range(6)] + ["gate.release"], "migrations": [f"R{i}" for i in range(5)], "foundation_report_digest": "sha256:" + "1" * 64, "readiness_report_digest": "sha256:" + "2" * 64, "public_callable_report_digest": "sha256:" + "3" * 64, "g5_report_digest": "sha256:" + "4" * 64, "materialization_contract_digest": "sha256:" + "5" * 64, "release_evaluation_report_digest": "sha256:" + "6" * 64, "same_revision": True},
             "packages": [
-                {"configuration": configuration, "prefix_digest": "sha256:" + digit * 64, "manifest_digest": "sha256:" + digit * 64, "toolchain_digest": "sha256:" + digit * 64, "real_project": "passed", "storage_backends": ["memory", "sqlite"], "relocated": True, "license": "sha256:" + digit * 64, "notice": "sha256:" + digit * 64}
+                {"configuration": configuration, "prefix_digest": "sha256:" + digit * 64, "manifest_digest": "sha256:" + digit * 64, "toolchain_digest": "sha256:" + digit * 64, "materialization_report_set_digest": "sha256:" + digit * 64, "real_project": "passed", "storage_backends": ["memory", "sqlite"], "relocated": True, "license": "sha256:" + digit * 64, "notice": "sha256:" + digit * 64}
                 for configuration, digit in (("static", "1"), ("shared", "2"))
             ],
             "production_support": [
@@ -261,6 +477,15 @@ def validate_documents(
                 "public_callable_report_digest": "sha256:" + "6" * 64,
                 "g5_report_digest": "sha256:" + "7" * 64,
                 "security_report_digest": "sha256:" + "8" * 64,
+                "materialization_contract_digest": "sha256:" + "9" * 64,
+                "materialization_evidence": {
+                    "state": "exact-matrix",
+                    "request_count": 4,
+                    "report_count": 4,
+                    "report_set_count": 2,
+                    "owner_issue": None,
+                    "feedback": [],
+                },
                 "install_manifests": [
                     {
                         "configuration": configuration,
@@ -268,6 +493,22 @@ def validate_documents(
                         "prefix_digest": "sha256:" + digit * 64,
                     }
                     for configuration, digit in (("static", "9"), ("shared", "a"))
+                ],
+                "materialization_reports": [
+                    {
+                        "configuration": configuration,
+                        "backend": backend,
+                        "report_digest": "sha256:" + digit * 64,
+                    }
+                    for configuration, digit in (("static", "b"), ("shared", "c"))
+                    for backend in ("memory", "sqlite")
+                ],
+                "materialization_report_sets": [
+                    {
+                        "configuration": configuration,
+                        "report_set_digest": "sha256:" + digit * 64,
+                    }
+                    for configuration, digit in (("static", "d"), ("shared", "e"))
                 ],
                 "same_revision": True,
             },
@@ -289,6 +530,49 @@ def validate_documents(
     cmake = (root / "CMakeLists.txt").read_text(encoding="utf-8")
     if "VERSION 1.0.0" not in cmake or "LICENSE NOTICE" not in cmake:
         fail("distribution package is not version 1.0.0 with license/notice")
+
+    try:
+        materialization.validate_documents(root)
+    except materialization.MaterializationError as error:
+        fail(f"Clang 22 materialization authority is invalid: {error}")
+    expected_materialization = {
+        "tool": "cxxlens-clang22-materialize",
+        "contract": MATERIALIZATION_CONTRACT.as_posix(),
+        "contract_schema": MATERIALIZATION_CONTRACT_SCHEMA.as_posix(),
+        "request_schema": MATERIALIZATION_REQUEST_SCHEMA.as_posix(),
+        "report_schema": MATERIALIZATION_REPORT_SCHEMA.as_posix(),
+        "request_filename": "cxxlens-clang22-materialization-request.json",
+        "report_filename": "cxxlens-clang22-materialization-report.json",
+        "configurations": ["static", "shared"],
+        "cardinality": "exactly-one-per-configuration-and-backend",
+        "relocated_installed_execution": "required",
+        "runtime_loader_environment": "unset",
+        "storage_backends": ["memory", "sqlite"],
+        "exact_observation_equivalence": (
+            "required-zero-non-exact-per-descriptor"
+        ),
+        "tuple_evidence_binding": "exact-configuration-two-report-set-digest",
+        "report_set_digest": {
+            "algorithm": "sha256",
+            "encoding": "canonical-json-sorted-keys-no-whitespace",
+            "projection": ["configuration", "reports"],
+            "backend_order": ["memory", "sqlite"],
+            "report_entry_fields": ["backend", "report_digest"],
+        },
+    }
+    if manifest.get("materialization") != expected_materialization:
+        fail("release materialization matrix/set-digest contract differs")
+    if manifest["provider"].get("observation_relation_descriptors") != materialization.DESCRIPTOR_IDS[3:]:
+        fail("release observation descriptor order differs from materialization authority")
+    if manifest["claim_policy"].get("tuple_evidence_projection") != [
+        "install_manifest",
+        "materialization_report_set",
+        "g5_report",
+        "security_report",
+        "public_callable_report",
+        "configuration",
+    ]:
+        fail("production tuple evidence omits the materialization report set")
 
     acceptance = load(root / ACCEPTANCE)
     gates = {row["id"]: row for row in acceptance["entries"]}
@@ -313,6 +597,12 @@ def validate_documents(
     expected_release_binding = {
         "gate": "gate.release",
         "authority": MANIFEST.as_posix(),
+        "materialization_contract": MATERIALIZATION_CONTRACT.as_posix(),
+        "materialization_report_matrix": [
+            {"configuration": configuration, "backend": backend}
+            for configuration, backend in MATERIALIZATION_MATRIX
+        ],
+        "materialization_report_set_binding": "exact-configuration-two-report-set-digest",
         "checker": "tools/quality/check_ng_release_qualification.py",
         "ci_job": "release-qualification",
         "status": "implemented",
@@ -326,6 +616,7 @@ def validate_documents(
             "static-relocated-install-artifact",
             "shared-relocated-install-artifact",
             "static-shared-runtime-junit",
+            "static-shared-clang22-materialization-reports",
             "real-project-memory-sqlite-and-major-rejection",
             "security-conformance-and-negative-paths",
             "doxygen-contract-and-support-matrix",
@@ -539,6 +830,667 @@ def verify_install_manifest(root: pathlib.Path, path: pathlib.Path, revision: st
     return configuration, value
 
 
+def materialization_report_set_digest(
+    reports: dict[tuple[str, str], dict[str, Any]], configuration: str
+) -> str:
+    """Digest one configuration's canonical memory/SQLite report set."""
+
+    return canonical_digest(
+        {
+            "configuration": configuration,
+            "reports": [
+                {
+                    "backend": backend,
+                    "report_digest": reports[(configuration, backend)]["digest"],
+                }
+                for backend in ("memory", "sqlite")
+            ],
+        }
+    )
+
+
+def validate_release_span_census(report: dict[str, Any]) -> None:
+    """Independently close observation rows, span presence, and unresolved counts."""
+
+    stages: dict[str, dict[str, Any]] = {}
+    for stage in report["claim_stages"]:
+        descriptor_id = stage["descriptor_id"]
+        if descriptor_id in stages:
+            fail(f"duplicate materialization claim stage: {descriptor_id}")
+        stages[descriptor_id] = stage
+
+    observation_rows = {
+        descriptor_id: 0
+        for descriptor_id in materialization.SPAN_OBSERVATION_DESCRIPTORS
+    }
+    for task in report["task_results"]:
+        task_batches: dict[str, dict[str, Any]] = {}
+        for batch in task["batches"]:
+            descriptor_id = batch["descriptor_id"]
+            if descriptor_id in task_batches:
+                fail(
+                    "duplicate materialization task batch while closing span census: "
+                    f"{task['provider_task_id']}:{descriptor_id}"
+                )
+            task_batches[descriptor_id] = batch
+        for descriptor_id in observation_rows:
+            if descriptor_id not in task_batches:
+                fail(
+                    "materialization task omits a span-bearing observation batch: "
+                    f"{task['provider_task_id']}:{descriptor_id}"
+                )
+            observation_rows[descriptor_id] += task_batches[descriptor_id]["row_count"]
+
+    for descriptor_id, row_count in observation_rows.items():
+        stage = stages.get(descriptor_id)
+        if stage is None or stage["claim_count"] != row_count:
+            fail(
+                "materialization span observation claim/row census differs: "
+                f"{descriptor_id}"
+            )
+
+    spans = report["span_validation"]
+    total_observations = sum(observation_rows.values())
+    if total_observations != (
+        spans["observed_bundle_count"] + spans["absent_bundle_count"]
+    ):
+        fail(
+            "materialization entity/call observation census does not equal "
+            "observed plus absent primary-span bundles"
+        )
+    if spans["unique_bundle_count"] > spans["observed_bundle_count"]:
+        fail("materialization unique primary-span census exceeds observed bundles")
+    if spans["absent_bundle_count"] != (
+        spans["entity_absent_bundle_count"] + spans["call_absent_bundle_count"]
+    ):
+        fail("materialization entity/call absent-bundle census differs")
+
+    unresolved = report["side_channels"]["unresolved"]
+    category_counts = unresolved["category_counts"]
+    if (
+        sum(category_counts.values()) != unresolved["record_count"]
+        or unresolved["categories"] != sorted(category_counts)
+    ):
+        fail("materialization unresolved category census is not canonical and exact")
+    absence_category = materialization.PRIMARY_SPAN_ABSENCE_CATEGORY
+    absence_unresolved_count = category_counts.get(absence_category, 0)
+    if (
+        spans["absent_bundle_unresolved_count"] != spans["absent_bundle_count"]
+        or absence_unresolved_count != spans["absent_bundle_unresolved_count"]
+        or unresolved["record_count"] < spans["absent_bundle_unresolved_count"]
+    ):
+        fail(
+            "materialization absent primary-span bundles lack exact typed "
+            "unresolved category accounting"
+        )
+
+
+def validate_release_observation_equivalence(report: dict[str, Any]) -> None:
+    """Independently require a zero-non-exact census for every observation row."""
+
+    descriptor_ids = materialization.DESCRIPTOR_IDS[3:]
+    aggregate: dict[str, dict[str, Any]] = {
+        descriptor: {
+            "exact_equivalence_count": 0,
+            "non_exact_equivalence_count": 0,
+            "rows": [],
+        }
+        for descriptor in descriptor_ids
+    }
+    for task in report["task_results"]:
+        batches = {batch["descriptor_id"]: batch for batch in task["batches"]}
+        for descriptor in descriptor_ids:
+            batch = batches.get(descriptor)
+            if batch is None or "observation_equivalence_census" not in batch:
+                fail(
+                    "production materialization omits observation equivalence census: "
+                    f"{descriptor}"
+                )
+            census = batch["observation_equivalence_census"]
+            if (
+                census["exact_equivalence_count"]
+                + census["non_exact_equivalence_count"]
+                != batch["row_count"]
+                or len(census["rows"]) != batch["row_count"]
+                or len(batch["row_bindings"]) != batch["row_count"]
+            ):
+                fail(
+                    "production materialization observation equivalence batch census "
+                    f"differs: {descriptor}"
+                )
+            census_bindings = sorted(
+                (
+                    {
+                        "observation_row_digest": row["observation_row_digest"],
+                        "final_relation_compile_unit_id": row[
+                            "final_relation_compile_unit_id"
+                        ],
+                        "originating_task": row["originating_task"],
+                        "exact_equivalence": row["exact_equivalence"],
+                        "limitation_digest": row["limitation_digest"],
+                    }
+                    for row in census["rows"]
+                ),
+                key=lambda row: json.dumps(row, sort_keys=True),
+            )
+            row_bindings = sorted(
+                (
+                    {
+                        "observation_row_digest": binding["row_digest"],
+                        "final_relation_compile_unit_id": binding[
+                            "final_relation_compile_unit_id"
+                        ],
+                        "originating_task": binding["originating_task"],
+                        "exact_equivalence": binding["exact_equivalence"],
+                        "limitation_digest": binding["limitation_digest"],
+                    }
+                    for binding in batch["row_bindings"]
+                ),
+                key=lambda row: json.dumps(row, sort_keys=True),
+            )
+            if census_bindings != row_bindings:
+                fail(
+                    "production materialization observation equivalence row binding "
+                    f"differs: {descriptor}"
+                )
+            aggregate[descriptor]["exact_equivalence_count"] += census[
+                "exact_equivalence_count"
+            ]
+            aggregate[descriptor]["non_exact_equivalence_count"] += census[
+                "non_exact_equivalence_count"
+            ]
+            aggregate[descriptor]["rows"].extend(census["rows"])
+
+    stages = {stage["descriptor_id"]: stage for stage in report["claim_stages"]}
+    guarantee = report["side_channels"]["guarantee"]
+    guarantee_censuses = guarantee["observation_descriptor_censuses"]
+    if [row["descriptor_id"] for row in guarantee_censuses] != descriptor_ids:
+        fail("production materialization observation guarantee census order differs")
+    guarantee_by_descriptor = {
+        row["descriptor_id"]: row for row in guarantee_censuses
+    }
+    for descriptor in descriptor_ids:
+        expected = materialization.observation_equivalence_census(
+            descriptor,
+            aggregate[descriptor]["rows"],
+        )
+        stage = stages.get(descriptor)
+        stage_census = None if stage is None else stage.get(
+            "observation_equivalence_census"
+        )
+        guarantee_census = guarantee_by_descriptor[descriptor]
+        if stage_census != expected or guarantee_census != {
+            "descriptor_id": descriptor,
+            "exact_equivalence_count": expected["exact_equivalence_count"],
+            "non_exact_equivalence_count": expected[
+                "non_exact_equivalence_count"
+            ],
+            "row_equivalence_set_digest": expected[
+                "row_equivalence_set_digest"
+            ],
+        }:
+            fail(
+                "production materialization observation equivalence cross-layer "
+                f"census differs: {descriptor}"
+            )
+        if expected["non_exact_equivalence_count"] != 0:
+            fail(
+                "production materialization contains a non-exact observation: "
+                f"{descriptor}"
+            )
+
+
+def validate_release_base_claims(
+    request: dict[str, Any], report: dict[str, Any]
+) -> None:
+    """Independently bind the six host-owned base-claim censuses."""
+
+    base = report["base_claims"]
+    if base["descriptor_ids"] != list(MATERIALIZATION_BASE_CLAIM_DESCRIPTORS):
+        fail("materialization base-claim descriptor order differs")
+    results = base["descriptor_results"]
+    if [row["descriptor_id"] for row in results] != list(
+        MATERIALIZATION_BASE_CLAIM_DESCRIPTORS
+    ):
+        fail("materialization base-claim result order differs")
+
+    tasks = request["tasks"]
+    spans = report["span_validation"]
+    expected_counts = {
+        "build.project.v1": 1,
+        "build.toolchain_context.v1": len(
+            {task["toolchain_context_id"] for task in tasks}
+        ),
+        "build.variant.v1": len({task["build_variant_id"] for task in tasks}),
+        "source.file.v1": len(
+            {
+                (task["source"]["source_snapshot_id"], task["source"]["file_id"])
+                for task in tasks
+            }
+        ),
+        "build.compile_unit.v1": len(
+            {task["compile_unit_id"] for task in tasks}
+        ),
+        "source.span.v1": spans["constructed_source_span_claim_count"],
+    }
+    for result in results:
+        expected = expected_counts[result["descriptor_id"]]
+        if result["row_count"] != expected or result["claim_count"] != expected:
+            fail(
+                "materialization base-claim descriptor census differs: "
+                f"{result['descriptor_id']}"
+            )
+    if (
+        base["total_row_count"] != sum(row["row_count"] for row in results)
+        or base["total_claim_count"]
+        != sum(row["claim_count"] for row in results)
+        or base["total_row_count"] != base["total_claim_count"]
+        or not base["validated_before_hard_references"]
+    ):
+        fail("materialization total base-claim census is incomplete")
+
+
+def materialization_task_execution_key(row: dict[str, Any]) -> tuple[str, str, str]:
+    """Return the exact semantic-task/input/physical-execution correlation key."""
+
+    return tuple(  # type: ignore[return-value]
+        row[field] for field in MATERIALIZATION_TASK_EXECUTION_KEY_FIELDS
+    )
+
+
+def validate_release_task_execution_census(
+    request: dict[str, Any], report: dict[str, Any]
+) -> None:
+    """Bind catalog-local selections to exactly one composite execution result."""
+
+    request_project = request["project"]
+    report_project = report["project"]
+    request_entries = request_project["catalog_compile_units"]
+    report_entries = report_project["catalog_compile_units"]
+    catalog_ids = [entry["catalog_compile_unit_id"] for entry in request_entries]
+    if (
+        report_entries != request_entries
+        or report_project["catalog_compile_unit_census_digest"]
+        != request_project["catalog_compile_unit_census_digest"]
+        or report_project["catalog_compile_unit_census_digest"]
+        != materialization.expected_catalog_compile_unit_census_digest(report_project)
+    ):
+        fail("materialization report catalog-local compile-unit census differs")
+
+    request_tasks = request["tasks"]
+    result_rows = report["task_results"]
+    request_keys = [
+        materialization_task_execution_key(task) for task in request_tasks
+    ]
+    result_keys = [
+        materialization_task_execution_key(result) for result in result_rows
+    ]
+    if (
+        len(request_keys) != len(set(request_keys))
+        or len(result_keys) != len(set(result_keys))
+        or set(result_keys) != set(request_keys)
+    ):
+        fail(
+            "materialization composite task/input/execution result census differs"
+        )
+
+    selected_ids = [
+        result["selected_catalog_compile_unit_id"] for result in result_rows
+    ]
+    if (
+        len(selected_ids) != len(catalog_ids)
+        or len(selected_ids) != len(set(selected_ids))
+        or set(selected_ids) != set(catalog_ids)
+    ):
+        fail("materialization selected catalog compile-unit census differs")
+
+    tasks_by_key = dict(zip(request_keys, request_tasks, strict=True))
+    for key, result in zip(result_keys, result_rows, strict=True):
+        task = tasks_by_key[key]
+        if (
+            result["selected_catalog_compile_unit_id"]
+            != task["selected_catalog_compile_unit_id"]
+            or result["compile_unit_id"] != task["compile_unit_id"]
+        ):
+            fail(
+                "materialization catalog-local/final compile-unit execution "
+                "mapping differs"
+            )
+
+
+def validate_release_base_claim_parity(
+    reports: dict[tuple[str, str], dict[str, Any]],
+) -> None:
+    """Require every configuration/backend to expose the same full base set."""
+
+    first = reports[MATERIALIZATION_MATRIX[0]]["value"]["base_claims"]
+    for key in MATERIALIZATION_MATRIX[1:]:
+        if reports[key]["value"]["base_claims"] != first:
+            fail(
+                "materialization memory/SQLite/static/shared base-claim "
+                "count/set-digest parity differs"
+            )
+
+
+def verify_materialization_reports(
+    root: pathlib.Path,
+    manifest: dict[str, Any],
+    evidence: pathlib.Path,
+    install_values: dict[str, dict[str, Any]],
+    git: dict[str, Any],
+) -> tuple[
+    dict[tuple[str, str], dict[str, Any]],
+    dict[str, str],
+]:
+    """Validate the exact static/shared x memory/SQLite installed report matrix."""
+
+    report_name = manifest["materialization"]["report_filename"]
+    request_name = manifest["materialization"]["request_filename"]
+    paths = sorted(path for path in evidence.rglob(report_name) if path.is_file())
+    if len(paths) != len(MATERIALIZATION_MATRIX):
+        fail(
+            "GR requires exactly four static/shared x memory/SQLite Clang 22 "
+            f"materialization reports, found {len(paths)}"
+        )
+    request_paths = sorted(
+        path for path in evidence.rglob(request_name) if path.is_file()
+    )
+    if len(request_paths) != len(MATERIALIZATION_MATRIX):
+        fail(
+            "GR requires exactly four co-located Clang 22 materialization "
+            f"requests, found {len(request_paths)}"
+        )
+    if {path.parent for path in request_paths} != {path.parent for path in paths}:
+        fail("materialization request/report artifact pairs are not co-located exactly")
+
+    report_schema = load(root / MATERIALIZATION_REPORT_SCHEMA)
+    expected_authorities = materialization.authority_bindings(root)
+    expected_registry_digest, expected_descriptors = materialization.descriptor_bindings(
+        root
+    )
+    expected_registry = {
+        "registry_digest": expected_registry_digest,
+        "base_descriptors": materialization.base_descriptor_bindings(root),
+        "descriptors": expected_descriptors,
+    }
+    reports: dict[tuple[str, str], dict[str, Any]] = {}
+
+    for path in paths:
+        request_path = path.with_name(request_name)
+        request = load_materialization_json(request_path, "materialization request")
+        try:
+            materialization.validate_request(root, request)
+        except materialization.MaterializationError as error:
+            fail(f"materialization request binding is invalid: {request_path}: {error}")
+        report = load_materialization_json(path, "materialization report")
+        validate_schema(report, report_schema, f"Clang 22 materialization report {path}")
+        if report["result"] != "passed":
+            fail(f"materialization qualification contains a failed report: {path}")
+        if report["source"] != {
+            "revision": git["revision"],
+            "tree": git["tree"],
+        }:
+            fail(f"materialization report is not bound to exact source: {path}")
+        if report["authority_digests"] != expected_authorities:
+            fail(f"materialization authority digest binding differs: {path}")
+        if report["registry"] != expected_registry:
+            fail(f"materialization registry/descriptor binding differs: {path}")
+
+        installation = report["installation"]
+        publication = report["publication"]
+        configuration = installation["configuration"]
+        backend = publication["backend"]
+        key = (configuration, backend)
+        if key not in MATERIALIZATION_MATRIX:
+            fail(f"unexpected materialization matrix combination: {key}")
+        if key in reports:
+            fail(f"duplicate materialization matrix combination: {key}")
+        if configuration not in install_values:
+            fail(f"materialization report has no install manifest: {configuration}")
+
+        install = install_values[configuration]
+        files = {row["path"]: row["digest"] for row in install["files"]}
+        expected_installation = {
+            "prefix_manifest_digest": install["manifest_digest"],
+            "relocated_prefix_digest": install["prefix_digest"],
+            "tool_digest": files["bin/cxxlens-clang22-materialize"],
+            "worker_digest": files["bin/cxxlens-clang-worker-22"],
+        }
+        if any(
+            installation[field] != expected
+            for field, expected in expected_installation.items()
+        ):
+            fail(
+                "materialization install/prefix/tool/worker digest binding differs: "
+                f"{configuration}/{backend}"
+            )
+        validate_release_task_execution_census(request, report)
+        validate_release_span_census(report)
+        validate_release_observation_equivalence(report)
+        validate_release_base_claims(request, report)
+        try:
+            materialization.validate_report(root, request, report)
+        except materialization.MaterializationError as error:
+            fail(
+                "materialization request/report binding is invalid: "
+                f"{configuration}/{backend}: {error}"
+            )
+        expected_platform = f"linux-{platform.machine().lower()}-{configuration}"
+        if installation["platform"] != expected_platform:
+            fail(
+                "materialization platform/configuration binding differs: "
+                f"expected={expected_platform}, actual={installation['platform']}"
+            )
+
+        task_results = report["task_results"]
+        descriptor_bindings = {
+            row["descriptor_id"]: row for row in expected_descriptors
+        }
+        for task in task_results:
+            if task["terminal"] != "provider.success":
+                fail(f"materialization task did not succeed: {task['provider_task_id']}")
+            groups = {row["dependency_group_id"]: row for row in task["groups"]}
+            if set(groups) != set(materialization.GROUP_DESCRIPTORS):
+                fail(f"materialization task group set differs: {task['provider_task_id']}")
+            for group, descriptors in materialization.GROUP_DESCRIPTORS.items():
+                value = groups[group]
+                if (
+                    value["descriptor_ids"] != descriptors
+                    or value["atomic_output_group_id"] != "clang22-atomic"
+                    or not value["sealed"]
+                ):
+                    fail(
+                        "materialization task group is not exact/sealed: "
+                        f"{task['provider_task_id']}:{group}"
+                    )
+            batches = {row["descriptor_id"]: row for row in task["batches"]}
+            if set(batches) != set(materialization.DESCRIPTOR_IDS):
+                fail(f"materialization task batch set differs: {task['provider_task_id']}")
+            for descriptor_id, binding in descriptor_bindings.items():
+                batch = batches[descriptor_id]
+                if (
+                    batch["batch_id"] != binding["batch_id"]
+                    or batch["runtime_descriptor_digest"]
+                    != binding["runtime_descriptor_digest"]
+                    or batch["dependency_group_id"]
+                    != binding["dependency_group_id"]
+                    or batch["atomic_output_group_id"] != "clang22-atomic"
+                    or not batch["sealed"]
+                ):
+                    fail(
+                        "materialization batch binding differs: "
+                        f"{task['provider_task_id']}:{descriptor_id}"
+                    )
+
+        adoption = report["adoption"]
+        if (
+            adoption["state"] != "sealed"
+            or not adoption["all_tasks_mandatory"]
+            or not adoption["all_groups_mandatory"]
+            or not adoption["all_batches_mandatory"]
+            or adoption["raw_frames"]["authority"]
+            != "diagnostic-only-non-authoritative"
+            or adoption["raw_frames"]["retained"]
+        ):
+            fail(
+                "production materialization report lacks sealed all-or-nothing adoption: "
+                f"{configuration}/{backend}"
+            )
+        spans = report["span_validation"]
+        if (
+            spans["absent_bundle_count"] != 0
+            or spans["absent_bundle_unresolved_count"] != 0
+            or spans["source_dependent_canonical_omission_count"] != 0
+            or spans["unique_bundle_count"]
+            != spans["constructed_source_span_claim_count"]
+            or spans["recomputed_id_mismatch_count"] != 0
+            or spans["invalid_range_count"] != 0
+            or spans["task_binding_mismatch_count"] != 0
+            or not spans["hard_references_resolved"]
+        ):
+            fail(
+                "production materialization report has incomplete source-span adoption: "
+                f"{configuration}/{backend}"
+            )
+        coverage = report["side_channels"]["coverage"]
+        if (
+            sum(coverage["state_counts"].values()) != coverage["record_count"]
+            or coverage["balance"] != "exact"
+            or coverage["state_counts"]["covered"] != coverage["record_count"]
+        ):
+            fail(
+                "production materialization coverage is not exact and complete: "
+                f"{configuration}/{backend}"
+            )
+        unresolved = report["side_channels"]["unresolved"]
+        if unresolved["record_count"] != 0 or unresolved["blocking_count"] != 0:
+            fail(
+                "production materialization report has unresolved work: "
+                f"{configuration}/{backend}"
+            )
+        guarantee = report["side_channels"]["guarantee"]
+        if guarantee["approximation"] != "exact" or any(
+            census["non_exact_equivalence_count"] != 0
+            for census in guarantee["observation_descriptor_censuses"]
+        ):
+            fail(
+                "production materialization report lacks an exact guarantee: "
+                f"{configuration}/{backend}"
+            )
+        stages = {row["descriptor_id"]: row for row in report["claim_stages"]}
+        if set(stages) != set(materialization.DESCRIPTOR_IDS):
+            fail("production materialization claim-stage set differs")
+        for descriptor_id, expected_stage in materialization.DESCRIPTOR_STAGE.items():
+            if stages[descriptor_id]["stage"] != expected_stage:
+                fail(
+                    "production materialization claim stage differs: "
+                    f"{descriptor_id}"
+                )
+        canonical_count = sum(
+            stages[descriptor_id]["claim_count"]
+            for descriptor_id in materialization.DESCRIPTOR_IDS[:3]
+        )
+        provenance = report["provenance"]
+        if (
+            provenance["canonical_claim_count"] != canonical_count
+            or provenance["canonical_claims_with_exact_input_edges"]
+            != canonical_count
+            or provenance["orphan_count"] != 0
+            or provenance["ambiguous_count"] != 0
+        ):
+            fail("production materialization provenance is incomplete")
+        if (
+            publication["observed_parent_publication"]
+            != publication["expected_parent_publication"]
+            or publication["cas_verdict"] != "matched"
+            or publication["committed_transaction_count"] != 1
+            or not publication["committed"]
+        ):
+            fail(
+                "production materialization report lacks one exact committed transaction: "
+                f"{configuration}/{backend}"
+            )
+        if backend == "sqlite" and not publication["sqlite_reopened"]:
+            fail("SQLite materialization report was not close/reopen verified")
+        if backend == "memory" and publication["sqlite_reopened"]:
+            fail("memory materialization report falsely claims SQLite reopen")
+        semantic = report["semantic_verification"]
+        if (
+            semantic["status"] != "passed"
+            or not semantic["snapshot_identity_recomputed"]
+            or not semantic["reopened_store_verified"]
+        ):
+            fail(
+                "materialization semantic reopen/identity verification is incomplete: "
+                f"{configuration}/{backend}"
+            )
+        reports[key] = {
+            "request_path": request_path,
+            "request": request,
+            "path": path,
+            "digest": digest(path),
+            "value": report,
+        }
+
+    if set(reports) != set(MATERIALIZATION_MATRIX):
+        fail(f"materialization matrix differs: {sorted(reports)}")
+    validate_release_base_claim_parity(reports)
+    try:
+        materialization.validate_qualification_matrix(
+            root,
+            [
+                (reports[key]["request"], reports[key]["value"])
+                for key in MATERIALIZATION_MATRIX
+            ],
+        )
+    except materialization.MaterializationError as error:
+        fail(f"materialization qualification matrix is invalid: {error}")
+
+    first = reports[MATERIALIZATION_MATRIX[0]]["value"]
+    for key in MATERIALIZATION_MATRIX[1:]:
+        report = reports[key]["value"]
+        if report["provider"] != first["provider"]:
+            fail("materialization matrix provider semantics differ")
+        if report["project"] != first["project"]:
+            fail("materialization matrix project semantics differ")
+        if report["registry"] != first["registry"]:
+            fail("materialization matrix registry semantics differ")
+
+    for configuration in ("static", "shared"):
+        if (
+            reports[(configuration, "memory")]["request"][
+                "semantic_request_digest"
+            ]
+            != reports[(configuration, "sqlite")]["request"][
+                "semantic_request_digest"
+            ]
+        ):
+            fail(
+                f"{configuration} memory/SQLite semantic request digests differ"
+            )
+
+    snapshots = {
+        reports[key]["value"]["publication"]["snapshot_id"]
+        for key in MATERIALIZATION_MATRIX
+    }
+    exports = {
+        reports[key]["value"]["semantic_verification"]["canonical_export_digest"]
+        for key in MATERIALIZATION_MATRIX
+    }
+    queries = {
+        reports[key]["value"]["semantic_verification"]["query_digest"]
+        for key in MATERIALIZATION_MATRIX
+    }
+    if len(snapshots) != 1 or len(exports) != 1 or len(queries) != 1:
+        fail("materialization memory/SQLite/static/shared semantic parity differs")
+
+    report_sets = {
+        configuration: materialization_report_set_digest(reports, configuration)
+        for configuration in ("static", "shared")
+    }
+    return reports, report_sets
+
+
 def collect_release_evidence(
     root: pathlib.Path,
     manifest: dict[str, Any],
@@ -549,13 +1501,34 @@ def collect_release_evidence(
     """Validate exact-SHA inputs without constructing either release report."""
 
     git = require_exact_clean_main(root, expected_revision)
+    foundation_path = find_one(evidence, "cxxlens-ng-foundation-completion-report.json")
+    foundation = load(foundation_path)
+    validate_schema(foundation, load(root / FOUNDATION_REPORT_SCHEMA), "foundation report")
+    readiness_path = find_one(evidence, "cxxlens-ng-api-development-readiness-report.json")
+    readiness = load(readiness_path)
+    validate_schema(readiness, load(root / READINESS_REPORT_SCHEMA), "readiness report")
+    for label, value in (("foundation", foundation), ("readiness", readiness)):
+        if value["git"]["revision"] != git["revision"] or value["git"]["tree"] != git["tree"] or value["result"] != "passed":
+            fail(f"{label} evidence is not from the exact GR revision")
+    scope_inventory = verify_production_scope_inventory(root, readiness)
+    materialization_transition = materialization_assignment_transition(root)
+
     install_paths = sorted(evidence.rglob("install-artifact-manifest.json"))
     if len(install_paths) != 2:
         fail(f"GR requires exactly static/shared install manifests, found {len(install_paths)}")
     packages: list[dict[str, Any]] = []
     install_values: dict[str, dict[str, Any]] = {}
+    required_install_files = materialization_required_install_files(
+        manifest, materialization_transition
+    )
     for path in install_paths:
-        configuration, value = verify_install_manifest(root, path, git["revision"], git["tree"], manifest["package"]["required_files"])
+        configuration, value = verify_install_manifest(
+            root,
+            path,
+            git["revision"],
+            git["tree"],
+            required_install_files,
+        )
         if configuration in install_values:
             fail(f"duplicate install configuration: {configuration}")
         install_values[configuration] = value
@@ -577,25 +1550,38 @@ def collect_release_evidence(
     packages.sort(key=lambda row: (row["configuration"] != "static", row["configuration"]))
     if set(install_values) != {"static", "shared"}:
         fail("static/shared package matrix is incomplete")
+    (
+        materialization_reports,
+        materialization_report_sets,
+        materialization_evidence,
+    ) = collect_materialization_evidence(
+        root,
+        manifest,
+        evidence,
+        install_values,
+        git,
+        materialization_transition,
+    )
+    for package in packages:
+        if materialization_report_sets:
+            package["materialization_report_set_digest"] = (
+                materialization_report_sets[package["configuration"]]
+            )
 
     build_xml = sorted(evidence.rglob("ctest-build-*.xml"))
     if len(build_xml) != 2:
         fail(f"GR requires exactly static/shared runtime JUnit, found {len(build_xml)}")
     runtime_tests = set().union(*(junit_tests(path) for path in build_xml))
-    for test in manifest["provider"]["required_positive_evidence"] + manifest["security"]["required_negative_evidence"][:2]:
+    required_runtime_tests = list(manifest["provider"]["required_positive_evidence"])
+    if materialization_transition["assignment_state"] == "tracked-gap":
+        required_runtime_tests.remove("install.clang22-materialization")
+    required_runtime_tests.extend(
+        manifest["security"]["required_negative_evidence"][:2]
+    )
+    for test in required_runtime_tests:
         if test not in runtime_tests:
             fail(f"provider runtime evidence is missing: {test}")
 
-    foundation_path = find_one(evidence, "cxxlens-ng-foundation-completion-report.json")
-    foundation = load(foundation_path)
-    validate_schema(foundation, load(root / FOUNDATION_REPORT_SCHEMA), "foundation report")
-    readiness_path = find_one(evidence, "cxxlens-ng-api-development-readiness-report.json")
-    readiness = load(readiness_path)
-    validate_schema(readiness, load(root / READINESS_REPORT_SCHEMA), "readiness report")
-    for label, value in (("foundation", foundation), ("readiness", readiness)):
-        if value["git"]["revision"] != git["revision"] or value["git"]["tree"] != git["tree"] or value["result"] != "passed":
-            fail(f"{label} evidence is not from the exact GR revision")
-    scope_inventory = verify_production_scope_inventory(root, readiness)
     callable_evidence = verify_public_callable_evidence(
         root, manifest, evidence, git, readiness
     )
@@ -614,9 +1600,13 @@ def collect_release_evidence(
         fail("Doxygen production contract evidence is missing")
 
     return {
+        "root": root,
         "git": git,
         "packages": packages,
         "install_values": install_values,
+        "materialization_reports": materialization_reports,
+        "materialization_report_sets": materialization_report_sets,
+        "materialization_evidence": materialization_evidence,
         "foundation_path": foundation_path,
         "readiness_path": readiness_path,
         "callable_evidence": callable_evidence,
@@ -644,6 +1634,9 @@ def production_support_tuples(
         evidence_digest = canonical_digest(
             {
                 "install_manifest": value["manifest_digest"],
+                "materialization_report_set": evidence[
+                    "materialization_report_sets"
+                ][configuration],
                 "g5_report": digest(evidence["g5_path"]),
                 "security_report": digest(evidence["security_path"]),
                 "public_callable_report": evidence["callable_evidence"]["report"]["digest"],
@@ -666,6 +1659,30 @@ def evaluation_evidence_binding(evidence: dict[str, Any]) -> dict[str, Any]:
         }
         for configuration in ("static", "shared")
     ]
+    if evidence["materialization_evidence"]["state"] == "exact-matrix":
+        materialization_reports = [
+            {
+                "configuration": configuration,
+                "backend": backend,
+                "report_digest": evidence["materialization_reports"][
+                    (configuration, backend)
+                ]["digest"],
+            }
+            for configuration in ("static", "shared")
+            for backend in ("memory", "sqlite")
+        ]
+        materialization_report_sets = [
+            {
+                "configuration": configuration,
+                "report_set_digest": evidence["materialization_report_sets"][
+                    configuration
+                ],
+            }
+            for configuration in ("static", "shared")
+        ]
+    else:
+        materialization_reports = []
+        materialization_report_sets = []
     return {
         "foundation_report_digest": digest(evidence["foundation_path"]),
         "readiness_report_digest": digest(evidence["readiness_path"]),
@@ -674,7 +1691,13 @@ def evaluation_evidence_binding(evidence: dict[str, Any]) -> dict[str, Any]:
         ],
         "g5_report_digest": digest(evidence["g5_path"]),
         "security_report_digest": digest(evidence["security_path"]),
+        "materialization_contract_digest": digest(
+            evidence["root"] / MATERIALIZATION_CONTRACT
+        ),
+        "materialization_evidence": evidence["materialization_evidence"],
         "install_manifests": install_manifests,
+        "materialization_reports": materialization_reports,
+        "materialization_report_sets": materialization_report_sets,
         "same_revision": True,
     }
 
@@ -753,6 +1776,10 @@ def make_report(
     metrics = evidence["g5"]["performance"]["metrics_us"]
     authority_paths = [
         MANIFEST,
+        MATERIALIZATION_CONTRACT,
+        MATERIALIZATION_CONTRACT_SCHEMA,
+        MATERIALIZATION_REQUEST_SCHEMA,
+        MATERIALIZATION_REPORT_SCHEMA,
         RELEASE,
         ACCEPTANCE,
         SUPPORT,
@@ -769,7 +1796,7 @@ def make_report(
         "run_url": run_url,
         "git": evidence["git"],
         "release": {"id": "distribution-1.0", "version": "1.0.0", "state": "qualified"},
-        "prerequisites": {"gates": manifest["prerequisites"]["gates"] + ["gate.release"], "migrations": manifest["prerequisites"]["migrations"], "foundation_report_digest": digest(evidence["foundation_path"]), "readiness_report_digest": digest(evidence["readiness_path"]), "public_callable_report_digest": evidence["callable_evidence"]["report"]["digest"], "g5_report_digest": digest(evidence["g5_path"]), "release_evaluation_report_digest": digest(evaluation_path), "same_revision": True},
+        "prerequisites": {"gates": manifest["prerequisites"]["gates"] + ["gate.release"], "migrations": manifest["prerequisites"]["migrations"], "foundation_report_digest": digest(evidence["foundation_path"]), "readiness_report_digest": digest(evidence["readiness_path"]), "public_callable_report_digest": evidence["callable_evidence"]["report"]["digest"], "g5_report_digest": digest(evidence["g5_path"]), "materialization_contract_digest": digest(root / MATERIALIZATION_CONTRACT), "release_evaluation_report_digest": digest(evaluation_path), "same_revision": True},
         "packages": evidence["packages"],
         "production_support": production_support,
         "security": {"status": evidence["security"]["status"], "contract_digest": evidence["security"]["contract_digest"], "vector_count": evidence["security"]["vector_count"]},
