@@ -1,5 +1,5 @@
 {
-  "asset_count": 418,
+  "asset_count": 427,
   "assets": [
     {
       "authority": "active",
@@ -1116,6 +1116,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/design/adr/0095-production-scope-closure.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/design/adr/README.md",
       "removal_issue": null,
       "replacement": null,
@@ -1215,6 +1222,20 @@
     {
       "authority": "active",
       "path": "docs/development/implementation-learning/records/df-0177-standing-authorization-boundary.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0180-production-scope-closure.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0182-clang22-installed-output-adoption.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1732,6 +1753,27 @@
     },
     {
       "authority": "active",
+      "path": "schemas/cxxlens_ng_production_scope_closure.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_production_scope_closure.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_production_scope_closure_report.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "schemas/cxxlens_ng_project_catalog_contract.schema.yaml",
       "removal_issue": null,
       "replacement": null,
@@ -2013,6 +2055,13 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_release_qualification.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_release_qualification_evaluation_report.schema.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2530,6 +2579,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_production_scope_closure.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_ng_provider_protocol.py",
       "removal_issue": null,
       "replacement": null,
@@ -2747,6 +2803,13 @@
     },
     {
       "authority": "active",
+      "path": "tools/quality/check_ng_production_scope_closure.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tools/quality/check_ng_provider_protocol.py",
       "removal_issue": null,
       "replacement": null,
@@ -2929,7 +2992,7 @@
     }
   ],
   "classifications": {
-    "active": 382,
+    "active": 391,
     "archived": 35,
     "generated": 1
   },

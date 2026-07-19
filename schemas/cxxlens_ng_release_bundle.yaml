@@ -1,5 +1,5 @@
 schema: cxxlens.ng-release-bundle.v1
-document_version: 1.5.0
+document_version: 1.6.0
 maturity: accepted-contract
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -159,12 +159,12 @@ releases:
     production_supported: false
   - id: distribution-1.0
     distribution_range: '1.0'
-    state: qualified
+    state: qualification-in-progress
     required_profiles: [NG0, NG1]
     optional_profiles: []
     blocker_migrations: [R0, R1, R2, R3, R4]
     blocker_gates: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4, gate.g5, gate.release]
-    production_supported: true
+    production_supported: false
   - id: distribution-1.x
     distribution_range: 1.x
     state: planned
@@ -214,6 +214,53 @@ release_qualification:
     - security-conformance-and-negative-paths
     - doxygen-contract-and-support-matrix
     - license-and-notice
+
+production_scope_closure:
+  contract: cxxlens.ng-production-scope-closure.v1
+  authority: schemas/cxxlens_ng_production_scope_closure.yaml
+  decision_adr: docs/design/adr/0095-production-scope-closure.md
+  schema: schemas/cxxlens_ng_production_scope_closure.schema.yaml
+  checker: tools/quality/check_ng_production_scope_closure.py
+  namespace_ids:
+    - release.profile
+    - release.gate
+    - release.migration
+    - distribution.target
+    - distribution.native-package
+    - distribution.installed-tool
+    - distribution.consumer-configuration
+    - distribution.source-surface
+    - public.package
+    - public.author-path
+    - public.catalog-entry
+    - public.header
+    - public.callable
+    - relation.descriptor
+    - relation.static-admission
+    - provider.profile-feature
+    - provider.message
+    - provider.execution-surface
+    - provider.support-tuple
+    - provider.production-tuple-template
+    - query.operator
+    - query.result-status
+    - query.backend
+    - g5.closure-kind
+    - security.profile
+    - security.namespace
+    - security.sandbox-profile
+    - security.sandbox-policy
+    - compatibility.axis
+    - quality.check
+  report:
+    schema: schemas/cxxlens_ng_production_scope_closure_report.schema.yaml
+    ci_job: production-scope-closure
+    artifact: cxxlens-ng-production-scope-closure-${revision}
+  evaluation:
+    schema: schemas/cxxlens_ng_release_qualification_evaluation_report.schema.yaml
+    ci_job: release-evaluation
+    artifact: cxxlens-ng-release-qualification-evaluation-${revision}
+    not_qualified_satisfies_gate_release: false
 
 provider_protocol_boundary:
   NG0:

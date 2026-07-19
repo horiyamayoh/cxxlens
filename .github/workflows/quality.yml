@@ -366,9 +366,51 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  release-qualification:
+  release-evaluation:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [g5-qualification]
+    runs-on: ubuntu-24.04
+    outputs:
+      qualification: ${{ steps.evaluate.outputs.qualification }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12.11"
+      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8
+        with:
+          pattern: cxxlens-*-${{ github.sha }}
+          path: build/release-evaluation-input
+      - name: Evaluate exact-SHA distribution 1.0 qualification
+        id: evaluate
+        run: |
+          python tools/quality/check_ng_security_contract.py report \
+            --root . \
+            --output "${RUNNER_TEMP}/cxxlens-ng-security-conformance-report.json"
+          python tools/quality/check_ng_release_qualification.py evaluate \
+            --root . \
+            --evidence-dir build/release-evaluation-input \
+            --security-report "${RUNNER_TEMP}/cxxlens-ng-security-conformance-report.json" \
+            --output "${RUNNER_TEMP}/cxxlens-ng-release-qualification-evaluation-report.json" \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --expected-revision "${GITHUB_SHA}" \
+            --github-output "${GITHUB_OUTPUT}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-ng-release-qualification-evaluation-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/cxxlens-ng-security-conformance-report.json
+            ${{ runner.temp }}/cxxlens-ng-release-qualification-evaluation-report.json
+          if-no-files-found: error
+          retention-days: 365
+
+  release-qualification:
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.release-evaluation.outputs.qualification == 'qualified'
+    needs: [release-evaluation]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
@@ -382,22 +424,83 @@ jobs:
           path: build/release-qualification-input
       - name: Generate exact-SHA distribution 1.0 GR report
         run: |
-          python tools/quality/check_ng_security_contract.py report \
-            --root . \
-            --output "${RUNNER_TEMP}/cxxlens-ng-security-conformance-report.json"
           python tools/quality/check_ng_release_qualification.py report \
             --root . \
             --evidence-dir build/release-qualification-input \
-            --security-report "${RUNNER_TEMP}/cxxlens-ng-security-conformance-report.json" \
+            --security-report "build/release-qualification-input/cxxlens-ng-release-qualification-evaluation-${GITHUB_SHA}/cxxlens-ng-security-conformance-report.json" \
+            --evaluation "build/release-qualification-input/cxxlens-ng-release-qualification-evaluation-${GITHUB_SHA}/cxxlens-ng-release-qualification-evaluation-report.json" \
             --output "${RUNNER_TEMP}/cxxlens-ng-release-qualification-report.json" \
             --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
             --expected-revision "${GITHUB_SHA}"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: cxxlens-ng-release-qualification-${{ github.sha }}
-          path: |
-            ${{ runner.temp }}/cxxlens-ng-security-conformance-report.json
-            ${{ runner.temp }}/cxxlens-ng-release-qualification-report.json
-            build/release-qualification-input
+          path: ${{ runner.temp }}/cxxlens-ng-release-qualification-report.json
+          if-no-files-found: error
+          retention-days: 365
+
+  production-scope-closure:
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    needs: [release-evaluation, release-qualification]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Validate qualification dependency results
+        env:
+          EVALUATION_RESULT: ${{ needs.release-evaluation.result }}
+          QUALIFICATION: ${{ needs.release-evaluation.outputs.qualification }}
+          STRICT_RESULT: ${{ needs.release-qualification.result }}
+        run: |
+          if [[ "${EVALUATION_RESULT}" == "success" && "${QUALIFICATION}" == "not-qualified" && "${STRICT_RESULT}" == "skipped" ]]; then
+            exit 0
+          fi
+          if [[ "${EVALUATION_RESULT}" == "success" && "${QUALIFICATION}" == "qualified" && "${STRICT_RESULT}" == "success" ]]; then
+            exit 0
+          fi
+          echo "invalid qualification dependency matrix: evaluation=${EVALUATION_RESULT}, qualification=${QUALIFICATION}, strict=${STRICT_RESULT}" >&2
+          exit 1
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12.11"
+      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8
+        with:
+          name: cxxlens-ng-release-qualification-evaluation-${{ github.sha }}
+          path: build/production-scope-input/evaluation
+      - if: needs.release-evaluation.outputs.qualification == 'qualified'
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8
+        with:
+          name: cxxlens-ng-release-qualification-${{ github.sha }}
+          path: build/production-scope-input/gr
+      - name: Generate classified production-scope report
+        if: needs.release-evaluation.outputs.qualification == 'not-qualified'
+        run: |
+          python tools/quality/check_ng_production_scope_closure.py --root . report \
+            --mode normal \
+            --evaluation build/production-scope-input/evaluation/cxxlens-ng-release-qualification-evaluation-report.json \
+            --output "${RUNNER_TEMP}/cxxlens-ng-production-scope-closure-report.json" \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --expected-revision "${GITHUB_SHA}"
+      - name: Generate final production-scope report
+        if: needs.release-evaluation.outputs.qualification == 'qualified'
+        run: |
+          python tools/quality/check_ng_release_qualification.py verify-evaluation-binding \
+            --root . \
+            --evaluation build/production-scope-input/evaluation/cxxlens-ng-release-qualification-evaluation-report.json \
+            --gr build/production-scope-input/gr/cxxlens-ng-release-qualification-report.json
+          python tools/quality/check_ng_production_scope_closure.py --root . report \
+            --mode final \
+            --evaluation build/production-scope-input/evaluation/cxxlens-ng-release-qualification-evaluation-report.json \
+            --gr build/production-scope-input/gr/cxxlens-ng-release-qualification-report.json \
+            --output "${RUNNER_TEMP}/cxxlens-ng-production-scope-closure-report.json" \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --expected-revision "${GITHUB_SHA}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-ng-production-scope-closure-${{ github.sha }}
+          path: ${{ runner.temp }}/cxxlens-ng-production-scope-closure-report.json
           if-no-files-found: error
           retention-days: 365

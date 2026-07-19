@@ -6,9 +6,11 @@ from __future__ import annotations
 import argparse
 import datetime
 import hashlib
+import importlib
 import json
 import pathlib
 import platform
+import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -24,6 +26,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 MANIFEST = pathlib.Path("schemas/cxxlens_ng_release_qualification.yaml")
 MANIFEST_SCHEMA = pathlib.Path("schemas/cxxlens_ng_release_qualification.schema.yaml")
 REPORT_SCHEMA = pathlib.Path("schemas/cxxlens_ng_release_qualification_report.schema.yaml")
+EVALUATION_REPORT_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_release_qualification_evaluation_report.schema.yaml"
+)
 INSTALL_SCHEMA = pathlib.Path("schemas/cxxlens_ng_install_artifact_manifest.schema.yaml")
 G5_REPORT_SCHEMA = pathlib.Path("schemas/cxxlens_ng_g5_qualification_report.schema.yaml")
 FOUNDATION_REPORT_SCHEMA = pathlib.Path("schemas/cxxlens_ng_foundation_completion_report.schema.yaml")
@@ -99,7 +104,75 @@ def git_state(root: pathlib.Path) -> dict[str, Any]:
     }
 
 
-def validate_documents(root: pathlib.Path) -> dict[str, Any]:
+def production_scope_inventory_binding(root: pathlib.Path) -> dict[str, Any]:
+    """Recompute the static production-scope inventory/classification binding."""
+
+    try:
+        scope_checker = importlib.import_module("check_ng_production_scope_closure")
+    except ImportError as error:
+        fail(f"production scope checker is unavailable: {error}")
+    helper = getattr(scope_checker, "inventory_binding", None)
+    if not callable(helper):
+        fail("production scope checker omits inventory_binding(root)")
+    contract_error = getattr(scope_checker, "ContractError", None)
+    if not isinstance(contract_error, type) or not issubclass(
+        contract_error, Exception
+    ):
+        fail("production scope checker omits ContractError")
+    try:
+        value = helper(root)
+    except contract_error as error:
+        fail(f"production scope inventory evaluation failed: {error}")
+    except (OSError, ValueError) as error:
+        fail(f"production scope inventory evaluation failed: {error}")
+    if not isinstance(value, dict):
+        fail("production scope inventory binding is not a mapping")
+    return value
+
+
+def verify_production_scope_inventory(
+    root: pathlib.Path, readiness: dict[str, Any]
+) -> dict[str, Any]:
+    """Require Wave 0 to bind the exact current static scope classification."""
+
+    current = production_scope_inventory_binding(root)
+    readiness_binding = readiness.get("production_scope_inventory")
+    if readiness_binding != current:
+        fail(
+            "Wave 0 production scope inventory binding differs from the current "
+            f"classification: expected={current}, actual={readiness_binding}"
+        )
+    readiness_tests = readiness.get("test_inventory", {}).get(
+        "production_scope_tests"
+    )
+    if readiness_tests != current.get("evidence_tests"):
+        fail(
+            "Wave 0 JUnit production-scope evidence differs from the current "
+            f"typed test binding: expected={current.get('evidence_tests')}, "
+            f"actual={readiness_tests}"
+        )
+    if current.get("closure_status") not in {"classified-with-gaps", "qualified"}:
+        fail("production scope inventory has an invalid closure status")
+    return current
+
+
+def require_exact_clean_main(
+    root: pathlib.Path, expected_revision: str
+) -> dict[str, Any]:
+    git = git_state(root)
+    if git != {
+        "revision": expected_revision,
+        "tree": git["tree"],
+        "branch": "main",
+        "clean": True,
+    }:
+        fail(f"GR evaluation requires exact clean main revision: {git}")
+    return git
+
+
+def validate_documents(
+    root: pathlib.Path, *, require_qualified_release: bool = False
+) -> dict[str, Any]:
     manifest = load(root / MANIFEST)
     validate_schema(manifest, load(root / MANIFEST_SCHEMA), "release qualification")
     validate_schema(
@@ -110,7 +183,7 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
             "run_url": "https://github.com/horiyamayoh/cxxlens/actions/runs/1",
             "git": {"revision": "1" * 40, "tree": "2" * 40, "branch": "main", "clean": True},
             "release": {"id": "distribution-1.0", "version": "1.0.0", "state": "qualified"},
-            "prerequisites": {"gates": [f"gate.g{i}" for i in range(6)] + ["gate.release"], "migrations": [f"R{i}" for i in range(5)], "foundation_report_digest": "sha256:" + "1" * 64, "readiness_report_digest": "sha256:" + "2" * 64, "public_callable_report_digest": "sha256:" + "3" * 64, "g5_report_digest": "sha256:" + "4" * 64, "same_revision": True},
+            "prerequisites": {"gates": [f"gate.g{i}" for i in range(6)] + ["gate.release"], "migrations": [f"R{i}" for i in range(5)], "foundation_report_digest": "sha256:" + "1" * 64, "readiness_report_digest": "sha256:" + "2" * 64, "public_callable_report_digest": "sha256:" + "3" * 64, "g5_report_digest": "sha256:" + "4" * 64, "release_evaluation_report_digest": "sha256:" + "5" * 64, "same_revision": True},
             "packages": [
                 {"configuration": configuration, "prefix_digest": "sha256:" + digit * 64, "manifest_digest": "sha256:" + digit * 64, "toolchain_digest": "sha256:" + digit * 64, "real_project": "passed", "storage_backends": ["memory", "sqlite"], "relocated": True, "license": "sha256:" + digit * 64, "notice": "sha256:" + digit * 64}
                 for configuration, digit in (("static", "1"), ("shared", "2"))
@@ -148,6 +221,67 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
         load(root / REPORT_SCHEMA),
         "release report",
     )
+    validate_schema(
+        {
+            "schema": "cxxlens.ng-release-qualification-evaluation-report.v1",
+            "result": "passed",
+            "generated_at": "2026-07-19T00:00:00Z",
+            "run_url": "https://github.com/horiyamayoh/cxxlens/actions/runs/1",
+            "git": {
+                "revision": "1" * 40,
+                "tree": "2" * 40,
+                "branch": "main",
+                "clean": True,
+            },
+            "release": {"id": "distribution-1.0", "version": "1.0.0"},
+            "qualification": "not-qualified",
+            "qualified": False,
+            "scope_inventory": {
+                "manifest_path": "schemas/cxxlens_ng_production_scope_closure.yaml",
+                "manifest_digest": "sha256:" + "1" * 64,
+                "authority_census_digest": "sha256:" + "2" * 64,
+                "evidence_census_digest": "sha256:" + "3" * 64,
+                "classification_digest": "sha256:" + "3" * 64,
+                "evidence_tests": ["quality.ownership"],
+                "summary": {
+                    "domain_count": 30,
+                    "assignable_count": 1,
+                    "expanded_count": 1,
+                    "aggregate_count": 14,
+                    "qualified": 0,
+                    "tracked_gap": 1,
+                    "blocked": 0,
+                    "not_applicable": 0,
+                },
+                "closure_status": "classified-with-gaps",
+            },
+            "evidence": {
+                "foundation_report_digest": "sha256:" + "4" * 64,
+                "readiness_report_digest": "sha256:" + "5" * 64,
+                "public_callable_report_digest": "sha256:" + "6" * 64,
+                "g5_report_digest": "sha256:" + "7" * 64,
+                "security_report_digest": "sha256:" + "8" * 64,
+                "install_manifests": [
+                    {
+                        "configuration": configuration,
+                        "manifest_digest": "sha256:" + digit * 64,
+                        "prefix_digest": "sha256:" + digit * 64,
+                    }
+                    for configuration, digit in (("static", "9"), ("shared", "a"))
+                ],
+                "same_revision": True,
+            },
+            "production_support": [],
+            "strict_report": {
+                "schema": "cxxlens.ng-release-qualification-report.v1",
+                "eligible": False,
+                "emitted": False,
+            },
+            "reason_codes": ["release.scope-not-qualified"],
+        },
+        load(root / EVALUATION_REPORT_SCHEMA),
+        "release evaluation report",
+    )
 
     missing = [path for path in manifest["required_artifacts"] if not (root / path).is_file()]
     if missing:
@@ -168,7 +302,13 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
 
     release = load(root / RELEASE)
     row = next(item for item in release["releases"] if item["id"] == "distribution-1.0")
-    if row["state"] != "qualified" or row["production_supported"] is not True:
+    release_state = (row["state"], row["production_supported"])
+    if release_state not in {
+        ("qualification-in-progress", False),
+        ("qualified", True),
+    }:
+        fail("distribution 1.0 has an invalid qualification state")
+    if require_qualified_release and release_state != ("qualified", True):
         fail("distribution 1.0 is not qualified")
     expected_release_binding = {
         "gate": "gate.release",
@@ -194,6 +334,14 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
     }
     if release.get("release_qualification") != expected_release_binding:
         fail("release qualification binding differs")
+    scope_evaluation = release.get("production_scope_closure", {}).get("evaluation")
+    if scope_evaluation != {
+        "schema": EVALUATION_REPORT_SCHEMA.as_posix(),
+        "ci_job": "release-evaluation",
+        "artifact": "cxxlens-ng-release-qualification-evaluation-${revision}",
+        "not_qualified_satisfies_gate_release": False,
+    }:
+        fail("release evaluation binding differs")
 
     support = load(root / SUPPORT)
     policy = support.get("production_claim_policy", {})
@@ -222,14 +370,34 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
         if marker not in worker_source:
             fail(f"Clang 22 worker production surface marker is missing: {marker}")
     workflow = (root / ".github/workflows/quality.yml").read_text(encoding="utf-8")
+    def workflow_job(name: str) -> re.Match[str] | None:
+        return re.search(
+            rf"(?ms)^  {re.escape(name)}:\n(?P<body>.*?)(?=^  [a-zA-Z0-9_-]+:|\Z)",
+            workflow,
+        )
+
+    evaluation_job = workflow_job("release-evaluation")
+    strict_job = workflow_job("release-qualification")
+    if evaluation_job is None or strict_job is None:
+        fail("release evaluation/qualification workflow jobs are missing")
     for marker in (
-        "release-qualification:",
         "needs: [g5-qualification]",
-        "check_ng_release_qualification.py report",
-        "-DCXXLENS_BUILD_DOCS=ON",
+        "check_ng_release_qualification.py evaluate",
+        '--github-output "${GITHUB_OUTPUT}"',
+        "qualification: ${{ steps.evaluate.outputs.qualification }}",
     ):
-        if marker not in workflow:
-            fail(f"release qualification workflow marker is missing: {marker}")
+        if marker not in evaluation_job.group("body"):
+            fail(f"release evaluation workflow marker is missing: {marker}")
+    for marker in (
+        "needs: [release-evaluation]",
+        "needs.release-evaluation.outputs.qualification == 'qualified'",
+        "check_ng_release_qualification.py report",
+        "--evaluation ",
+    ):
+        if marker not in strict_job.group("body"):
+            fail(f"strict release qualification workflow marker is missing: {marker}")
+    if "-DCXXLENS_BUILD_DOCS=ON" not in workflow:
+        fail("release qualification workflow omits Doxygen production build")
     install = (root / "tests/install/run_install_test.cmake.in").read_text(encoding="utf-8")
     for marker in ("real-project-consumer", "share/doc/cxxlens/LICENSE", "share/doc/cxxlens/NOTICE", "libcxxlens_base.so.1"):
         if marker not in install:
@@ -371,11 +539,16 @@ def verify_install_manifest(root: pathlib.Path, path: pathlib.Path, revision: st
     return configuration, value
 
 
-def make_report(root: pathlib.Path, manifest: dict[str, Any], evidence: pathlib.Path, security_path: pathlib.Path, run_url: str, expected_revision: str, generated_at: str) -> dict[str, Any]:
-    git = git_state(root)
-    if git != {"revision": expected_revision, "tree": git["tree"], "branch": "main", "clean": True}:
-        fail(f"GR report requires exact clean main revision: {git}")
+def collect_release_evidence(
+    root: pathlib.Path,
+    manifest: dict[str, Any],
+    evidence: pathlib.Path,
+    security_path: pathlib.Path,
+    expected_revision: str,
+) -> dict[str, Any]:
+    """Validate exact-SHA inputs without constructing either release report."""
 
+    git = require_exact_clean_main(root, expected_revision)
     install_paths = sorted(evidence.rglob("install-artifact-manifest.json"))
     if len(install_paths) != 2:
         fail(f"GR requires exactly static/shared install manifests, found {len(install_paths)}")
@@ -422,6 +595,7 @@ def make_report(root: pathlib.Path, manifest: dict[str, Any], evidence: pathlib.
     for label, value in (("foundation", foundation), ("readiness", readiness)):
         if value["git"]["revision"] != git["revision"] or value["git"]["tree"] != git["tree"] or value["result"] != "passed":
             fail(f"{label} evidence is not from the exact GR revision")
+    scope_inventory = verify_production_scope_inventory(root, readiness)
     callable_evidence = verify_public_callable_evidence(
         root, manifest, evidence, git, readiness
     )
@@ -439,25 +613,144 @@ def make_report(root: pathlib.Path, manifest: dict[str, Any], evidence: pathlib.
     if "validated Doxygen contracts" not in quality_log:
         fail("Doxygen production contract evidence is missing")
 
+    return {
+        "git": git,
+        "packages": packages,
+        "install_values": install_values,
+        "foundation_path": foundation_path,
+        "readiness_path": readiness_path,
+        "callable_evidence": callable_evidence,
+        "scope_inventory": scope_inventory,
+        "g5_path": g5_path,
+        "g5": g5,
+        "security_path": security_path,
+        "security": security,
+    }
+
+
+def production_support_tuples(
+    root: pathlib.Path,
+    manifest: dict[str, Any],
+    evidence: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Derive candidate exact tuples only after all shared evidence is valid."""
+
     security_digest = digest(root / SECURITY)
-    production_support = []
+    production_support: list[dict[str, Any]] = []
     for configuration in ("static", "shared"):
-        value = install_values[configuration]
+        value = evidence["install_values"][configuration]
         files = {row["path"]: row["digest"] for row in value["files"]}
         worker = files["bin/cxxlens-clang-worker-22"]
         evidence_digest = canonical_digest(
             {
                 "install_manifest": value["manifest_digest"],
-                "g5_report": digest(g5_path),
-                "security_report": digest(security_path),
-                "public_callable_report": callable_evidence["report"]["digest"],
+                "g5_report": digest(evidence["g5_path"]),
+                "security_report": digest(evidence["security_path"]),
+                "public_callable_report": evidence["callable_evidence"]["report"]["digest"],
                 "configuration": configuration,
             }
         )
         for relation in manifest["provider"]["relations"]:
             production_support.append({"provider_id": manifest["provider"]["provider_id"], "provider_version": manifest["provider"]["provider_version"], "binary_digest": worker, "relation": relation, "interpretation": manifest["provider"]["interpretation"], "toolchain": value["toolchain"]["identity"], "platform": f"linux-{platform.machine().lower()}-{configuration}", "status": "production-supported", "capabilities": manifest["provider"]["capabilities"], "guarantee": manifest["provider"]["guarantee"], "security_profile_digest": security_digest, "evidence_digest": evidence_digest})
+    return production_support
 
-    metrics = g5["performance"]["metrics_us"]
+
+def evaluation_evidence_binding(evidence: dict[str, Any]) -> dict[str, Any]:
+    install_manifests = [
+        {
+            "configuration": configuration,
+            "manifest_digest": evidence["install_values"][configuration][
+                "manifest_digest"
+            ],
+            "prefix_digest": evidence["install_values"][configuration]["prefix_digest"],
+        }
+        for configuration in ("static", "shared")
+    ]
+    return {
+        "foundation_report_digest": digest(evidence["foundation_path"]),
+        "readiness_report_digest": digest(evidence["readiness_path"]),
+        "public_callable_report_digest": evidence["callable_evidence"]["report"][
+            "digest"
+        ],
+        "g5_report_digest": digest(evidence["g5_path"]),
+        "security_report_digest": digest(evidence["security_path"]),
+        "install_manifests": install_manifests,
+        "same_revision": True,
+    }
+
+
+def verify_qualified_evaluation(
+    root: pathlib.Path,
+    evaluation_path: pathlib.Path,
+    evidence: dict[str, Any],
+) -> dict[str, Any]:
+    evaluation = load(evaluation_path)
+    validate_schema(
+        evaluation,
+        load(root / EVALUATION_REPORT_SCHEMA),
+        "release evaluation report",
+    )
+    if evaluation["git"] != evidence["git"]:
+        fail("release evaluation is not bound to the exact GR revision/tree")
+    if evaluation["scope_inventory"] != evidence["scope_inventory"]:
+        fail("release evaluation scope binding differs from current Wave 0")
+    if evaluation["evidence"] != evaluation_evidence_binding(evidence):
+        fail("release evaluation evidence binding differs from exact GR inputs")
+    if evaluation["qualification"] != "qualified" or not evaluation["qualified"]:
+        fail("strict GR report requires a qualified release evaluation")
+    return evaluation
+
+
+def verify_gr_evaluation_artifact_binding(
+    root: pathlib.Path,
+    evaluation_path: pathlib.Path,
+    gr_path: pathlib.Path,
+) -> str:
+    """Verify that a strict GR names the exact evaluation artifact it consumed."""
+
+    evaluation = load(evaluation_path)
+    gr = load(gr_path)
+    validate_schema(
+        evaluation,
+        load(root / EVALUATION_REPORT_SCHEMA),
+        "release evaluation report",
+    )
+    validate_schema(gr, load(root / REPORT_SCHEMA), "release report")
+    if evaluation["git"] != gr["git"]:
+        fail("strict GR and release evaluation use different revision/tree bindings")
+    if evaluation["qualification"] != "qualified" or not evaluation["qualified"]:
+        fail("strict GR terminal binding requires a qualified release evaluation")
+    expected_digest = digest(evaluation_path)
+    actual_digest = gr["prerequisites"]["release_evaluation_report_digest"]
+    if actual_digest != expected_digest:
+        fail(
+            "strict GR release evaluation artifact digest differs: "
+            f"expected={expected_digest}, actual={actual_digest}"
+        )
+    return expected_digest
+
+
+def make_report(
+    root: pathlib.Path,
+    manifest: dict[str, Any],
+    evidence_dir: pathlib.Path,
+    security_path: pathlib.Path,
+    run_url: str,
+    expected_revision: str,
+    generated_at: str,
+    evaluation_path: pathlib.Path | None = None,
+) -> dict[str, Any]:
+    evidence = collect_release_evidence(
+        root, manifest, evidence_dir, security_path, expected_revision
+    )
+    if evidence["scope_inventory"]["closure_status"] != "qualified":
+        fail("strict GR report requires production scope with no tracked or blocked gaps")
+    if evaluation_path is None:
+        fail("strict GR report requires a qualified release evaluation artifact")
+    verify_qualified_evaluation(root, evaluation_path, evidence)
+    production_support = production_support_tuples(root, manifest, evidence)
+
+    metrics = evidence["g5"]["performance"]["metrics_us"]
     authority_paths = [
         MANIFEST,
         RELEASE,
@@ -474,20 +767,20 @@ def make_report(root: pathlib.Path, manifest: dict[str, Any], evidence: pathlib.
         "result": "passed",
         "generated_at": generated_at,
         "run_url": run_url,
-        "git": git,
+        "git": evidence["git"],
         "release": {"id": "distribution-1.0", "version": "1.0.0", "state": "qualified"},
-        "prerequisites": {"gates": manifest["prerequisites"]["gates"] + ["gate.release"], "migrations": manifest["prerequisites"]["migrations"], "foundation_report_digest": digest(foundation_path), "readiness_report_digest": digest(readiness_path), "public_callable_report_digest": callable_evidence["report"]["digest"], "g5_report_digest": digest(g5_path), "same_revision": True},
-        "packages": packages,
+        "prerequisites": {"gates": manifest["prerequisites"]["gates"] + ["gate.release"], "migrations": manifest["prerequisites"]["migrations"], "foundation_report_digest": digest(evidence["foundation_path"]), "readiness_report_digest": digest(evidence["readiness_path"]), "public_callable_report_digest": evidence["callable_evidence"]["report"]["digest"], "g5_report_digest": digest(evidence["g5_path"]), "release_evaluation_report_digest": digest(evaluation_path), "same_revision": True},
+        "packages": evidence["packages"],
         "production_support": production_support,
-        "security": {"status": security["status"], "contract_digest": security["contract_digest"], "vector_count": security["vector_count"]},
-        "performance": {"report_digest": digest(g5_path), "warm_zero_plan_median_us": metrics["warm_zero_plan_median"], "bounded_closure_median_us": metrics["bounded_closure_median"]},
+        "security": {"status": evidence["security"]["status"], "contract_digest": evidence["security"]["contract_digest"], "vector_count": evidence["security"]["vector_count"]},
+        "performance": {"report_digest": digest(evidence["g5_path"]), "warm_zero_plan_median_us": metrics["warm_zero_plan_median"], "bounded_closure_median_us": metrics["bounded_closure_median"]},
         "documentation": {
             "doxygen_contract": "passed",
-            "doxygen_callable_count": callable_evidence["doxygen"]["count"],
-            "doxygen_digest": callable_evidence["doxygen"]["digest"],
-            "public_callable_report": callable_evidence["report"],
-            "public_callable_inventory": callable_evidence["inventory"],
-            "public_callable_review": callable_evidence["review"],
+            "doxygen_callable_count": evidence["callable_evidence"]["doxygen"]["count"],
+            "doxygen_digest": evidence["callable_evidence"]["doxygen"]["digest"],
+            "public_callable_report": evidence["callable_evidence"]["report"],
+            "public_callable_inventory": evidence["callable_evidence"]["inventory"],
+            "public_callable_review": evidence["callable_evidence"]["review"],
             "support_matrix": "exact-report-only",
         },
         "negative_evidence": manifest["security"]["required_negative_evidence"],
@@ -497,28 +790,122 @@ def make_report(root: pathlib.Path, manifest: dict[str, Any], evidence: pathlib.
     return report
 
 
+def make_evaluation_report(
+    root: pathlib.Path,
+    manifest: dict[str, Any],
+    evidence_dir: pathlib.Path,
+    security_path: pathlib.Path,
+    run_url: str,
+    expected_revision: str,
+    generated_at: str,
+) -> dict[str, Any]:
+    evidence = collect_release_evidence(
+        root, manifest, evidence_dir, security_path, expected_revision
+    )
+    qualified = evidence["scope_inventory"]["closure_status"] == "qualified"
+    report = {
+        "schema": "cxxlens.ng-release-qualification-evaluation-report.v1",
+        "result": "passed",
+        "generated_at": generated_at,
+        "run_url": run_url,
+        "git": evidence["git"],
+        "release": {"id": "distribution-1.0", "version": "1.0.0"},
+        "qualification": "qualified" if qualified else "not-qualified",
+        "qualified": qualified,
+        "scope_inventory": evidence["scope_inventory"],
+        "evidence": evaluation_evidence_binding(evidence),
+        "production_support": [],
+        "strict_report": {
+            "schema": "cxxlens.ng-release-qualification-report.v1",
+            "eligible": qualified,
+            "emitted": False,
+        },
+        "reason_codes": [] if qualified else ["release.scope-not-qualified"],
+    }
+    validate_schema(
+        report, load(root / EVALUATION_REPORT_SCHEMA), "release evaluation report"
+    )
+    return report
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("check", "report"))
+    parser.add_argument(
+        "command",
+        choices=("check", "evaluate", "report", "verify-evaluation-binding"),
+    )
     parser.add_argument("--root", type=pathlib.Path, default=ROOT)
     parser.add_argument("--evidence-dir", type=pathlib.Path)
     parser.add_argument("--security-report", type=pathlib.Path)
+    parser.add_argument("--evaluation", type=pathlib.Path)
+    parser.add_argument("--gr", type=pathlib.Path)
     parser.add_argument("--output", type=pathlib.Path)
+    parser.add_argument("--github-output", type=pathlib.Path)
     parser.add_argument("--run-url")
     parser.add_argument("--expected-revision")
     parser.add_argument("--generated-at")
     arguments = parser.parse_args()
     try:
         root = arguments.root.resolve()
-        manifest = validate_documents(root)
-        if arguments.command == "report":
+        manifest = validate_documents(
+            root, require_qualified_release=arguments.command == "report"
+        )
+        if arguments.github_output and arguments.command != "evaluate":
+            fail("--github-output is valid only for evaluate")
+        if arguments.command == "verify-evaluation-binding":
+            if arguments.evaluation is None or arguments.gr is None:
+                fail("verify-evaluation-binding requires evaluation and GR artifacts")
+            verify_gr_evaluation_artifact_binding(
+                root,
+                arguments.evaluation.resolve(),
+                arguments.gr.resolve(),
+            )
+            print("strict GR release evaluation artifact binding passed")
+            return 0
+        if arguments.command in {"evaluate", "report"}:
             if not all((arguments.evidence_dir, arguments.security_report, arguments.output, arguments.run_url, arguments.expected_revision)):
-                fail("report requires evidence, security report, output, run URL, and expected revision")
+                fail(
+                    f"{arguments.command} requires evidence, security report, output, "
+                    "run URL, and expected revision"
+                )
+            if arguments.command == "report" and arguments.evaluation is None:
+                fail("report requires a qualified evaluation artifact")
             generated_at = arguments.generated_at or datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
-            report = make_report(root, manifest, arguments.evidence_dir.resolve(), arguments.security_report.resolve(), arguments.run_url, arguments.expected_revision, generated_at)
+            if arguments.command == "evaluate":
+                report = make_evaluation_report(
+                    root,
+                    manifest,
+                    arguments.evidence_dir.resolve(),
+                    arguments.security_report.resolve(),
+                    arguments.run_url,
+                    arguments.expected_revision,
+                    generated_at,
+                )
+            else:
+                report = make_report(
+                    root,
+                    manifest,
+                    arguments.evidence_dir.resolve(),
+                    arguments.security_report.resolve(),
+                    arguments.run_url,
+                    arguments.expected_revision,
+                    generated_at,
+                    arguments.evaluation.resolve(),
+                )
             arguments.output.parent.mkdir(parents=True, exist_ok=True)
             arguments.output.write_text(json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
-        print("distribution 1.0 release qualification passed")
+            if arguments.command == "evaluate":
+                signal = f"qualification={report['qualification']}"
+                if arguments.github_output:
+                    arguments.github_output.parent.mkdir(parents=True, exist_ok=True)
+                    with arguments.github_output.open("a", encoding="utf-8") as output:
+                        output.write(signal + "\n")
+                print(signal)
+                return 0
+        if arguments.command == "report":
+            print("distribution 1.0 strict release qualification report passed")
+        else:
+            print("distribution 1.0 release qualification contract check passed")
         return 0
     except (ReleaseQualificationError, OSError) as error:
         print(f"release qualification failure: {error}", file=sys.stderr)

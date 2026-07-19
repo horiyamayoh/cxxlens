@@ -28,6 +28,7 @@ from check_ng_api_development_readiness import (  # noqa: E402
     validate_schema,
 )
 import public_callable_inventory as callable_inventory  # noqa: E402
+import check_ng_production_scope_closure as production_scope  # noqa: E402
 
 
 REQUIRED_FILES = (
@@ -38,18 +39,49 @@ REQUIRED_FILES = (
     "docs/design/adr/0092-exact-public-callable-inventory.md",
     "docs/design/adr/0093-implementation-learning-design-feedback.md",
     "docs/design/adr/0094-risk-tiered-goal-authorization.md",
+    "docs/design/adr/0095-production-scope-closure.md",
     "docs/development/agent-api-development-goal.md",
     "schemas/cxxlens_ng_acceptance_manifest.yaml",
     "schemas/cxxlens_ng_api_development_readiness.schema.yaml",
     "schemas/cxxlens_ng_api_development_readiness_report.schema.yaml",
     "schemas/cxxlens_ng_api_development_readiness.yaml",
     "schemas/cxxlens_ng_design_feedback_record.schema.yaml",
+    "schemas/cxxlens_ng_g5_qualification.yaml",
+    "schemas/cxxlens_ng_logical_query_contract.yaml",
+    "schemas/cxxlens_ng_namespace_registry.yaml",
+    "schemas/cxxlens_ng_production_scope_closure.schema.yaml",
+    "schemas/cxxlens_ng_production_scope_closure.yaml",
+    "schemas/cxxlens_ng_production_scope_closure_report.schema.yaml",
+    "schemas/cxxlens_ng_provider_protocol.yaml",
+    "schemas/cxxlens_ng_provider_conformance_vectors.yaml",
+    "schemas/cxxlens_ng_provider_runtime_contract.yaml",
+    "schemas/cxxlens_ng_provider_support_matrix.yaml",
     "schemas/cxxlens_ng_public_callable_inventory.schema.yaml",
     "schemas/cxxlens_ng_public_callable_inventory.yaml",
     "schemas/cxxlens_ng_public_callable_inventory_report.schema.yaml",
     "schemas/cxxlens_ng_public_api_catalog.yaml",
     "schemas/cxxlens_ng_relation_registry.yaml",
     "schemas/cxxlens_ng_release_bundle.yaml",
+    "schemas/cxxlens_ng_release_qualification.yaml",
+    "schemas/cxxlens_ng_release_qualification_report.schema.yaml",
+    "schemas/cxxlens_ng_query_conformance_vectors.yaml",
+    "schemas/cxxlens_ng_security_conformance_vectors.yaml",
+    "schemas/cxxlens_ng_security_profile.yaml",
+    "schemas/cxxlens_ng_quality_ownership.yaml",
+    "tests/quality/test_ng_g5_qualification.py",
+    "tests/CMakeLists.txt",
+    "tests/quality/test_ng_foundation_completion.py",
+    "tests/quality/test_ng_provider_protocol.py",
+    "tests/quality/test_ng_provider_runtime.py",
+    "tests/quality/test_ng_public_callable_inventory.py",
+    "tests/quality/test_ng_query_contract.py",
+    "tests/quality/test_ng_relation_contract.py",
+    "tests/quality/test_ng_release_contract.py",
+    "tests/quality/test_ng_release_qualification.py",
+    "tests/quality/test_ng_sdk_contract.py",
+    "tests/quality/test_ng_security_contract.py",
+    "tests/quality/test_quality_ownership.py",
+    "tools/quality/check_ng_production_scope_closure.py",
     "tools/quality/public_callable_inventory.py",
     "tools/quality/check_ng_migration_completion.py",
     "tools/quality/check_ng_design_feedback.py",
@@ -166,9 +198,10 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             evidence_dir / "shared" / "install-artifact-manifest.json",
             {"configuration": "shared"},
         )
+        scope_tests = production_scope.validate_repository(ROOT).evidence_tests
+        cases = "".join(f'<testcase name="{name}"/>' for name in scope_tests)
         (evidence_dir / "ctest-quality.xml").write_text(
-            '<testsuite><testcase name="quality"/></testsuite>\n',
-            encoding="utf-8",
+            f"<testsuite>{cases}</testsuite>\n", encoding="utf-8"
         )
         self.write_json(
             evidence_dir / "cxxlens-ng-foundation-completion-report.json",
@@ -440,6 +473,337 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             with self.assertRaisesRegex(ReadinessError, "G5 gate owner differs"):
                 validate_documents(root)
 
+    def test_release_bundle_production_scope_binding_drift_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            bundle_path = root / "schemas/cxxlens_ng_release_bundle.yaml"
+            bundle = load_document(bundle_path)
+            bundle["production_scope_closure"]["report"]["ci_job"] = (
+                "synthetic-terminal"
+            )
+            self.write_yaml(bundle_path, bundle)
+            with self.assertRaisesRegex(
+                ReadinessError, "Release Bundle production-scope binding differs"
+            ):
+                validate_documents(root)
+
+    def test_production_scope_dependency_matrix_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            workflow = root / ".github/workflows/quality.yml"
+            workflow.write_text(
+                workflow.read_text(encoding="utf-8").replace(
+                    '"${STRICT_RESULT}" == "skipped"',
+                    '"${STRICT_RESULT}" == "success"',
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                ReadinessError, "dependency matrix marker is missing"
+            ):
+                validate_documents(root)
+
+    def test_production_scope_report_conditions_cannot_be_reversed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            workflow = root / ".github/workflows/quality.yml"
+            text = workflow.read_text(encoding="utf-8")
+            normal = (
+                "if: needs.release-evaluation.outputs.qualification == "
+                "'not-qualified'"
+            )
+            final = (
+                "if: needs.release-evaluation.outputs.qualification == 'qualified'"
+            )
+            normal_header = (
+                "      - name: Generate classified production-scope report\n"
+                f"        {normal}\n"
+            )
+            final_header = (
+                "      - name: Generate final production-scope report\n"
+                f"        {final}\n"
+            )
+            self.assertIn(normal_header, text)
+            self.assertIn(final_header, text)
+            text = text.replace(
+                normal_header,
+                "      - name: Generate classified production-scope report\n"
+                f"        {final}\n",
+                1,
+            )
+            text = text.replace(
+                final_header,
+                "      - name: Generate final production-scope report\n"
+                f"        {normal}\n",
+                1,
+            )
+            text = text.replace(
+                "        run: |\n"
+                "          python tools/quality/check_ng_production_scope_closure.py",
+                "        run: |\n"
+                f"          # {normal}\n"
+                "          python tools/quality/check_ng_production_scope_closure.py",
+                1,
+            )
+            final_step = "      - name: Generate final production-scope report\n"
+            text = text.replace(
+                final_step,
+                final_step + f"        # {final}\n",
+                1,
+            )
+            workflow.write_text(text, encoding="utf-8")
+            with self.assertRaisesRegex(
+                ReadinessError, "normal production-scope routing"
+            ):
+                validate_documents(root)
+
+    def test_production_scope_modes_cannot_be_reversed_with_comments(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            workflow = root / ".github/workflows/quality.yml"
+            text = workflow.read_text(encoding="utf-8")
+            text = text.replace("--mode normal \\", "--mode synthetic \\", 1)
+            text = text.replace("--mode final \\", "--mode normal \\", 1)
+            text = text.replace("--mode synthetic \\", "--mode final \\", 1)
+            text = text.replace(
+                "        run: |\n"
+                "          python tools/quality/check_ng_production_scope_closure.py",
+                "        run: |\n"
+                "          # --mode normal\n"
+                "          python tools/quality/check_ng_production_scope_closure.py",
+                1,
+            )
+            final_step = "      - name: Generate final production-scope report\n"
+            text = text.replace(
+                final_step,
+                final_step + "        # --mode final\n",
+                1,
+            )
+            workflow.write_text(text, encoding="utf-8")
+            with self.assertRaisesRegex(
+                ReadinessError, "normal production-scope routing command argv differ"
+            ):
+                validate_documents(root)
+
+    def test_final_scope_command_requires_its_own_gr_argument(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            workflow = root / ".github/workflows/quality.yml"
+            text = workflow.read_text(encoding="utf-8")
+            final_gr = (
+                "            --gr build/production-scope-input/gr/"
+                "cxxlens-ng-release-qualification-report.json \\\n"
+            )
+            self.assertIn(final_gr, text)
+            workflow.write_text(text.replace(final_gr, "", 1), encoding="utf-8")
+            with self.assertRaisesRegex(
+                ReadinessError, "final production-scope routing command argv differ"
+            ):
+                validate_documents(root)
+
+    def test_strict_gr_command_requires_evaluation_argument(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            workflow = root / ".github/workflows/quality.yml"
+            text = workflow.read_text(encoding="utf-8")
+            evaluation_argument = (
+                '            --evaluation "build/release-qualification-input/'
+                'cxxlens-ng-release-qualification-evaluation-${GITHUB_SHA}/'
+                'cxxlens-ng-release-qualification-evaluation-report.json" \\\n'
+            )
+            self.assertIn(evaluation_argument, text)
+            text = text.replace(
+                evaluation_argument,
+                "            # --evaluation intentionally omitted\n",
+                1,
+            )
+            workflow.write_text(text, encoding="utf-8")
+            with self.assertRaisesRegex(
+                ReadinessError, "strict release qualification command argv differ"
+            ):
+                validate_documents(root)
+
+    def test_qualification_dependency_pairs_cannot_be_swapped(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            workflow = root / ".github/workflows/quality.yml"
+            text = workflow.read_text(encoding="utf-8")
+            not_qualified = (
+                '"${QUALIFICATION}" == "not-qualified" && '
+                '"${STRICT_RESULT}" == "skipped"'
+            )
+            qualified = (
+                '"${QUALIFICATION}" == "qualified" && '
+                '"${STRICT_RESULT}" == "success"'
+            )
+            text = text.replace(not_qualified, "synthetic-pair", 1)
+            text = text.replace(qualified, not_qualified, 1)
+            text = text.replace("synthetic-pair", qualified, 1)
+            workflow.write_text(text, encoding="utf-8")
+            with self.assertRaisesRegex(
+                ReadinessError, "qualification dependency matrix script differs"
+            ):
+                validate_documents(root)
+
+    def test_terminal_evaluation_artifact_download_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            workflow = root / ".github/workflows/quality.yml"
+            text = workflow.read_text(encoding="utf-8")
+            download = (
+                "      - uses: actions/download-artifact@"
+                "fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8\n"
+                "        with:\n"
+                "          name: cxxlens-ng-release-qualification-evaluation-"
+                "${{ github.sha }}\n"
+                "          path: build/production-scope-input/evaluation\n"
+            )
+            self.assertIn(download, text)
+            workflow.write_text(text.replace(download, "", 1), encoding="utf-8")
+            with self.assertRaisesRegex(
+                ReadinessError, "terminal evaluation artifact download"
+            ):
+                validate_documents(root)
+
+    def test_terminal_artifact_download_must_precede_report_steps(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            workflow = root / ".github/workflows/quality.yml"
+            text = workflow.read_text(encoding="utf-8")
+            download = (
+                "      - uses: actions/download-artifact@"
+                "fa0a91b85d4f404e444e00e005971372dc801d16  # v4.1.8\n"
+                "        with:\n"
+                "          name: cxxlens-ng-release-qualification-evaluation-"
+                "${{ github.sha }}\n"
+                "          path: build/production-scope-input/evaluation\n"
+            )
+            upload = (
+                "      - uses: actions/upload-artifact@"
+                "ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2\n"
+                "        with:\n"
+                "          name: cxxlens-ng-production-scope-closure-"
+                "${{ github.sha }}\n"
+            )
+            self.assertIn(download, text)
+            self.assertIn(upload, text)
+            text = text.replace(download, "", 1)
+            text = text.replace(upload, download + upload, 1)
+            workflow.write_text(text, encoding="utf-8")
+            with self.assertRaisesRegex(
+                ReadinessError, "terminal production-scope workflow step order differs"
+            ):
+                validate_documents(root)
+
+    def test_terminal_artifacts_cannot_be_mutated_by_extra_steps(self) -> None:
+        evaluation_path = (
+            "build/production-scope-input/evaluation/"
+            "cxxlens-ng-release-qualification-evaluation-report.json"
+        )
+        mutations = (
+            (
+                "          path: build/production-scope-input/evaluation\n",
+                "          path: build/production-scope-input/evaluation\n"
+                f'      - run: "printf x >> {evaluation_path}"\n',
+            ),
+            (
+                "      - uses: actions/upload-artifact@"
+                "ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2\n"
+                "        with:\n"
+                "          name: cxxlens-ng-production-scope-closure-"
+                "${{ github.sha }}\n",
+                "      - run: \"printf x >> "
+                "${RUNNER_TEMP}/cxxlens-ng-production-scope-closure-report.json\"\n"
+                "      - uses: actions/upload-artifact@"
+                "ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2\n"
+                "        with:\n"
+                "          name: cxxlens-ng-production-scope-closure-"
+                "${{ github.sha }}\n",
+            ),
+        )
+        for marker, replacement in mutations:
+            with self.subTest(marker=marker):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = self.copied_root(temporary)
+                    workflow = root / ".github/workflows/quality.yml"
+                    text = workflow.read_text(encoding="utf-8")
+                    self.assertIn(marker, text)
+                    workflow.write_text(
+                        text.replace(marker, replacement, 1), encoding="utf-8"
+                    )
+                    with self.assertRaisesRegex(
+                        ReadinessError,
+                        "terminal production-scope workflow step order differs",
+                    ):
+                        validate_documents(root)
+
+    def test_terminal_job_runner_and_shape_are_fixed(self) -> None:
+        mutations = (
+            ("runs-on: ubuntu-24.04", "runs-on: windows-latest", "runner differs"),
+            (
+                "    runs-on: ubuntu-24.04\n    steps:\n",
+                "    runs-on: ubuntu-24.04\n"
+                "    defaults:\n"
+                "      run:\n"
+                "        shell: python\n"
+                "    steps:\n",
+                "job keys differ",
+            ),
+        )
+        for marker, replacement, error in mutations:
+            with self.subTest(error=error):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = self.copied_root(temporary)
+                    workflow = root / ".github/workflows/quality.yml"
+                    text = workflow.read_text(encoding="utf-8")
+                    terminal = text.index("  production-scope-closure:\n")
+                    prefix = text[:terminal]
+                    body = text[terminal:]
+                    self.assertIn(marker, body)
+                    workflow.write_text(
+                        prefix + body.replace(marker, replacement, 1),
+                        encoding="utf-8",
+                    )
+                    with self.assertRaisesRegex(ReadinessError, error):
+                        validate_documents(root)
+
+    def test_tail_jobs_cannot_inherit_uncontrolled_global_execution(self) -> None:
+        mutations = (
+            (
+                "env:\n  CMAKE_GENERATOR: Ninja\n",
+                "env:\n  BASH_ENV: synthetic-hook\n  CMAKE_GENERATOR: Ninja\n",
+                "global environment differs",
+            ),
+            (
+                "jobs:\n",
+                "defaults:\n  run:\n    shell: python\n\njobs:\n",
+                "global run defaults",
+            ),
+        )
+        for marker, replacement, error in mutations:
+            with self.subTest(error=error):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = self.copied_root(temporary)
+                    workflow = root / ".github/workflows/quality.yml"
+                    text = workflow.read_text(encoding="utf-8")
+                    self.assertIn(marker, text)
+                    workflow.write_text(
+                        text.replace(marker, replacement, 1), encoding="utf-8"
+                    )
+                    with self.assertRaisesRegex(ReadinessError, error):
+                        validate_documents(root)
+
+    def test_quality_workflow_requires_unrestricted_push_trigger(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            workflow = root / ".github/workflows/quality.yml"
+            text = workflow.read_text(encoding="utf-8")
+            self.assertIn("  push:\n", text)
+            workflow.write_text(text.replace("  push:\n", "", 1), encoding="utf-8")
+            with self.assertRaisesRegex(ReadinessError, "workflow triggers"):
+                validate_documents(root)
+
     def test_callable_inventory_semantic_digest_drift_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
@@ -488,6 +852,7 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
                 "API development readiness report test fixture",
             )
             binding = report["public_callable_inventory"]
+            scope_binding = report["production_scope_inventory"]
             inventory = load_document(
                 ROOT / "schemas/cxxlens_ng_public_callable_inventory.yaml"
             )
@@ -496,6 +861,12 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             self.assertEqual(binding["tree"], git_state["tree"])
             self.assertEqual(binding["callable_count"], len(inventory["callables"]))
             self.assertEqual(binding["doxygen_count"], binding["callable_count"])
+            self.assertEqual(
+                scope_binding["manifest_path"],
+                "schemas/cxxlens_ng_production_scope_closure.yaml",
+            )
+            self.assertEqual(scope_binding["summary"]["domain_count"], 30)
+            self.assertEqual(scope_binding["closure_status"], "classified-with-gaps")
             authority_paths = {row["path"] for row in report["authorities"]}
             learning_paths = {
                 row["path"] for row in report["implementation_learning_assets"]
@@ -515,6 +886,14 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             )
             self.assertIn(
                 "docs/design/adr/0094-risk-tiered-goal-authorization.md",
+                authority_paths,
+            )
+            self.assertIn(
+                "docs/design/adr/0095-production-scope-closure.md",
+                authority_paths,
+            )
+            self.assertIn(
+                "schemas/cxxlens_ng_production_scope_closure.yaml",
                 authority_paths,
             )
             self.assertIn(
@@ -543,6 +922,41 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
                         / "schemas/cxxlens_ng_api_development_readiness_report.schema.yaml"
                     ),
                     "mixed authority readiness report",
+                )
+
+    def test_wave0_junit_must_contain_every_typed_scope_evidence_test(self) -> None:
+        git_state = {
+            "revision": "1" * 40,
+            "tree": "2" * 40,
+            "branch": "main",
+            "clean": True,
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence_dir = pathlib.Path(temporary)
+            self.complete_evidence(evidence_dir, git_state)
+            required = production_scope.validate_repository(ROOT).evidence_tests
+            junit = evidence_dir / "ctest-quality.xml"
+            text = junit.read_text(encoding="utf-8")
+            text = text.replace(f'<testcase name="{required[0]}"/>', "", 1)
+            junit.write_text(text, encoding="utf-8")
+            required_jobs = [
+                *self.manifest["required_status_checks"]["contexts"],
+                "foundation-completion",
+            ]
+            with mock.patch(
+                "check_ng_api_development_readiness.current_git_state",
+                return_value=git_state,
+            ), self.assertRaisesRegex(
+                ReadinessError, "JUnit omits production-scope evidence tests"
+            ):
+                build_report(
+                    ROOT,
+                    self.manifest,
+                    evidence_dir,
+                    "https://github.com/horiyamayoh/cxxlens/actions/runs/1",
+                    required_jobs,
+                    "2026-07-19T00:00:00Z",
+                    git_state["revision"],
                 )
 
     def test_duplicate_public_callable_evidence_pair_is_rejected(self) -> None:

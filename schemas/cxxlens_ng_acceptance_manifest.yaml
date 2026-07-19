@@ -1,6 +1,6 @@
 schema: cxxlens.ng-acceptance-manifest.v1
 kind: acceptance-manifest
-document_version: 1.19.0
+document_version: 1.20.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -245,6 +245,10 @@ entries:
       - schemas/cxxlens_ng_release_qualification.yaml
       - schemas/cxxlens_ng_release_qualification.schema.yaml
       - schemas/cxxlens_ng_release_qualification_report.schema.yaml
+      - schemas/cxxlens_ng_release_qualification_evaluation_report.schema.yaml
+      - schemas/cxxlens_ng_production_scope_closure.yaml
+      - schemas/cxxlens_ng_production_scope_closure.schema.yaml
+      - schemas/cxxlens_ng_production_scope_closure_report.schema.yaml
       - schemas/cxxlens_ng_foundation_completion_report.schema.yaml
       - schemas/cxxlens_ng_api_development_readiness_report.schema.yaml
       - schemas/cxxlens_ng_public_callable_inventory.yaml
@@ -261,12 +265,15 @@ entries:
       - src/llvm/clang22/provider_worker.cpp
       - tests/adapter/clang22/provider_normalizer_test.cpp
       - tests/adapter/clang22/provider_worker_protocol_test.cpp
+      - tests/quality/test_ng_production_scope_closure.py
       - tests/unit/sdk/provider_runtime_test.cpp
       - examples/sdk/clang22_native_provider.cpp
       - tools/quality/check_ng_release_qualification.py
+      - tools/quality/check_ng_production_scope_closure.py
       - tools/quality/public_callable_inventory.py
       - docs/design/adr/0092-exact-public-callable-inventory.md
       - docs/design/adr/0091-distribution-1-production-qualification.md
+      - docs/design/adr/0095-production-scope-closure.md
       - docs/design/adr/0061-relocatable-static-shared-install-package.md
       - docs/design/adr/0062-first-party-sanitizer-closure.md
       - schemas/cxxlens_ng_sanitizer_coverage.yaml

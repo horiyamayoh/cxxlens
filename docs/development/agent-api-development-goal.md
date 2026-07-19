@@ -325,8 +325,14 @@ independent consumer、real-project evidence を組み合わせる。
 push し、PR を作成する。PR の exact-head required checks、未解決 review の解消、branch protection、single-active-unit invariant を
 確認した後に merge する。protected `main` への direct push を durable workflow として使わない。
 
-merge 後は exact merged-main SHA の required checks、Foundation、Wave 0、G5、release qualification を確認する。issue close は
-merged-main qualification、completion evidence、learning checkpoint が揃った後に行う。
+production scope に tracked gap がある intermediate unit の merge 後は、exact merged-main SHA の required checks、Foundation、Wave 0、
+G5、`release-evaluation`、normal production-scope report を確認する。`release-evaluation: not-qualified` は評価器の fail-closed success だけを
+意味し、`gate.release`、GR、production support を満たさない。その unit が所有する surface の classification/evidence、completion evidence、
+learning checkpoint が揃った後に issue を閉じる。
+
+全 tracked gap の解消後は `release-evaluation: qualified`、`release-qualification` が生成する strict GR report、final-mode
+production-scope report を同じ exact merged-main SHA で確認する。これは ADR 0095 が ADR 0094 の per-unit post-merge rule に加える
+限定 amendment であり、final release qualification を intermediate evaluation へ弱めるものではない。
 
 複数 issue の無関係な変更を1 commit にまとめない。1 issue に複数 commit が必要な場合も、issue 完了時点の
 exact commit set を記録する。
@@ -395,6 +401,7 @@ DoD を満たした場合だけ `completed` として閉じる。未実装、未
 - typed / dynamic、backend、provider surface の必要 parity が成立する
 - example、install consumer、Doxygen、catalog、traceability が揃う
 - G5 と release qualification を含む mandatory gate が evidence 付きで完了する
+- final production-scope report が `qualified` であり、intermediate `not-qualified` evaluation が残っていない
 - production-supported と宣言する provider tuple が exact digest と qualification を持つ
 - deferred / planned 作業が追跡 issue なしで残っていない
 - 全 implementation issue が learning checkpoint を持ち、未解決 blocking design feedback を残していない

@@ -190,32 +190,42 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
         fail("release R4/G5 binding differs")
     distribution = next(row for row in release["releases"] if row["id"] == "distribution-1.0")
     release_binding = release.get("release_qualification")
+    expected_release_binding = {
+        "gate": "gate.release",
+        "authority": "schemas/cxxlens_ng_release_qualification.yaml",
+        "checker": "tools/quality/check_ng_release_qualification.py",
+        "ci_job": "release-qualification",
+        "status": "implemented",
+        "claim_scope": "exact-gr-report-tuples-only",
+        "report_artifact": "cxxlens-ng-release-qualification-${revision}",
+        "required_evidence": [
+            "same-sha-foundation-report",
+            "same-sha-wave0-readiness-report",
+            "same-sha-public-callable-report-and-review",
+            "same-sha-g5-report",
+            "static-relocated-install-artifact",
+            "shared-relocated-install-artifact",
+            "static-shared-runtime-junit",
+            "real-project-memory-sqlite-and-major-rejection",
+            "security-conformance-and-negative-paths",
+            "doxygen-contract-and-support-matrix",
+            "license-and-notice",
+        ],
+    }
     if distribution["state"] == "planned":
         if distribution["production_supported"]:
             fail("planned distribution 1.0 cannot claim production support")
+    elif distribution["state"] == "qualification-in-progress":
+        if distribution["production_supported"] or release_binding != expected_release_binding:
+            fail(
+                "qualification-in-progress distribution 1.0 must retain strict GR "
+                "binding without claiming production support"
+            )
     elif distribution["state"] == "qualified":
-        if not distribution["production_supported"] or release_binding != {
-            "gate": "gate.release",
-            "authority": "schemas/cxxlens_ng_release_qualification.yaml",
-            "checker": "tools/quality/check_ng_release_qualification.py",
-            "ci_job": "release-qualification",
-            "status": "implemented",
-            "claim_scope": "exact-gr-report-tuples-only",
-            "report_artifact": "cxxlens-ng-release-qualification-${revision}",
-            "required_evidence": [
-                "same-sha-foundation-report",
-                "same-sha-wave0-readiness-report",
-                "same-sha-public-callable-report-and-review",
-                "same-sha-g5-report",
-                "static-relocated-install-artifact",
-                "shared-relocated-install-artifact",
-                "static-shared-runtime-junit",
-                "real-project-memory-sqlite-and-major-rejection",
-                "security-conformance-and-negative-paths",
-                "doxygen-contract-and-support-matrix",
-                "license-and-notice",
-            ],
-        }:
+        if (
+            not distribution["production_supported"]
+            or release_binding != expected_release_binding
+        ):
             fail("qualified distribution 1.0 lacks independent GR binding")
     else:
         fail("distribution 1.0 has an invalid G5/GR state")

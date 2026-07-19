@@ -3,7 +3,7 @@ $id: https://cxxlens.dev/schemas/cxxlens.ng-api-development-readiness-report.v1
 title: cxxlens API development Wave 0 exact-SHA baseline report
 type: object
 additionalProperties: false
-required: [schema, result, generated_at, run_url, git, required_ci_jobs, branch_protection, authorities, implementation_learning_assets, public_headers, generated_relation_headers, toolchain_provenance, evidence_artifacts, install_manifests, test_inventory, foundation_completion, public_callable_inventory]
+required: [schema, result, generated_at, run_url, git, required_ci_jobs, branch_protection, authorities, implementation_learning_assets, public_headers, generated_relation_headers, toolchain_provenance, evidence_artifacts, install_manifests, test_inventory, foundation_completion, public_callable_inventory, production_scope_inventory]
 properties:
   schema: {const: cxxlens.ng-api-development-readiness-report.v1}
   result: {const: passed}
@@ -54,10 +54,15 @@ properties:
   test_inventory:
     type: object
     additionalProperties: false
-    required: [junit_files, test_cases]
+    required: [junit_files, test_cases, production_scope_tests]
     properties:
       junit_files: {type: integer, minimum: 1}
       test_cases: {type: integer, minimum: 1}
+      production_scope_tests:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {type: string, pattern: '^quality\.(?:ng-[a-z0-9_]+|ownership)$'}
   foundation_completion:
     type: object
     additionalProperties: false
@@ -84,6 +89,35 @@ properties:
       result: {const: passed}
       revision: {type: string, pattern: '^[0-9a-f]{40}$'}
       tree: {type: string, pattern: '^[0-9a-f]{40}$'}
+  production_scope_inventory:
+    type: object
+    additionalProperties: false
+    required: [manifest_path, manifest_digest, authority_census_digest, evidence_census_digest, classification_digest, evidence_tests, summary, closure_status]
+    properties:
+      manifest_path: {const: schemas/cxxlens_ng_production_scope_closure.yaml}
+      manifest_digest: {$ref: '#/$defs/digest'}
+      authority_census_digest: {$ref: '#/$defs/digest'}
+      evidence_census_digest: {$ref: '#/$defs/digest'}
+      classification_digest: {$ref: '#/$defs/digest'}
+      evidence_tests:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items: {type: string, pattern: '^quality\.(?:ng-[a-z0-9_]+|ownership)$'}
+      summary:
+        type: object
+        additionalProperties: false
+        required: [domain_count, assignable_count, expanded_count, aggregate_count, qualified, tracked_gap, blocked, not_applicable]
+        properties:
+          domain_count: {const: 30}
+          assignable_count: {type: integer, minimum: 1}
+          expanded_count: {type: integer, minimum: 1}
+          aggregate_count: {const: 14}
+          qualified: {type: integer, minimum: 0}
+          tracked_gap: {type: integer, minimum: 0}
+          blocked: {type: integer, minimum: 0}
+          not_applicable: {type: integer, minimum: 0}
+      closure_status: {enum: [classified-with-gaps, qualified]}
 $defs:
   digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
   files:

@@ -13,6 +13,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
 from check_ng_release_contract import (  # noqa: E402
+    EXPECTED_PRODUCTION_SCOPE_NAMESPACES,
     ReleaseContractError,
     decide,
     load_document,
@@ -20,6 +21,7 @@ from check_ng_release_contract import (  # noqa: E402
     validate_boundary,
     validate_bundle,
     validate_package_qualification,
+    validate_release_mapping,
 )
 
 
@@ -193,15 +195,43 @@ class NgReleaseContractTest(unittest.TestCase):
         self.assertIn("compat.release-not-qualified", report["reason_codes"])
         self.assertEqual(report["environment_findings"][0]["severity"], "blocker")
 
-    def test_doctor_accepts_commit_bound_runtime_qualification(self) -> None:
+    def test_doctor_runtime_evidence_cannot_override_intermediate_release_state(self) -> None:
         document = request(SNAPSHOT_AXES, context="snapshot-open", operation="doctor")
         document["environment"] = {
             "runtime_qualified": True,
             "evidence_refs": ["cxxlens-ng-release-qualification-exact-sha"],
         }
         report = decide(self.bundle, document, ROOT)
-        self.assertEqual(report["decision"], "supported")
-        self.assertEqual(report["environment_findings"], [])
+        self.assertEqual(report["decision"], "unsupported")
+        self.assertEqual(report["qualification_state"], "qualification-in-progress")
+        self.assertIn("compat.release-not-qualified", report["reason_codes"])
+        self.assertEqual(report["environment_findings"][0]["severity"], "blocker")
+
+    def test_production_scope_closure_binds_exact_thirty_namespaces(self) -> None:
+        closure = self.bundle["production_scope_closure"]
+        self.assertEqual(len(closure["namespace_ids"]), 30)
+        self.assertEqual(closure["namespace_ids"], EXPECTED_PRODUCTION_SCOPE_NAMESPACES)
+        self.assertEqual(closure["evaluation"]["ci_job"], "release-evaluation")
+        self.assertFalse(closure["evaluation"]["not_qualified_satisfies_gate_release"])
+
+    def test_production_scope_closure_cannot_omit_namespace(self) -> None:
+        bundle = copy.deepcopy(self.bundle)
+        bundle["production_scope_closure"]["namespace_ids"].pop()
+        with self.assertRaisesRegex(ReleaseContractError, "scope closure binding differs"):
+            validate_release_mapping(bundle, ROOT)
+
+    def test_production_scope_closure_artifact_binding_is_exact(self) -> None:
+        bundle = copy.deepcopy(self.bundle)
+        bundle["production_scope_closure"]["evaluation"]["artifact"] = "stale-artifact"
+        with self.assertRaisesRegex(ReleaseContractError, "scope closure binding differs"):
+            validate_release_mapping(bundle, ROOT)
+
+    def test_distribution_one_is_truthfully_not_qualified(self) -> None:
+        release = next(
+            row for row in self.bundle["releases"] if row["id"] == "distribution-1.0"
+        )
+        self.assertEqual(release["state"], "qualification-in-progress")
+        self.assertFalse(release["production_supported"])
 
     def test_language_neutral_kernel_cannot_depend_on_cxx_semantics(self) -> None:
         bundle = copy.deepcopy(self.bundle)

@@ -16,6 +16,7 @@ required:
   - non_blocking_migrations
   - g5_qualification
   - release_qualification
+  - production_scope_closure
   - provider_protocol_boundary
   - version_axes
   - compatibility_contexts
@@ -270,7 +271,7 @@ properties:
           type: string
           minLength: 1
         state:
-          enum: [contract-candidate, planned, conditional, qualified]
+          enum: [contract-candidate, planned, conditional, qualification-in-progress, qualified]
         required_profiles:
           $ref: '#/$defs/profile_array'
         optional_profiles:
@@ -325,6 +326,35 @@ properties:
       report_artifact: {const: 'cxxlens-ng-release-qualification-${revision}'}
       required_evidence:
         const: [same-sha-foundation-report, same-sha-wave0-readiness-report, same-sha-public-callable-report-and-review, same-sha-g5-report, static-relocated-install-artifact, shared-relocated-install-artifact, static-shared-runtime-junit, real-project-memory-sqlite-and-major-rejection, security-conformance-and-negative-paths, doxygen-contract-and-support-matrix, license-and-notice]
+  production_scope_closure:
+    type: object
+    additionalProperties: false
+    required: [contract, authority, decision_adr, schema, checker, namespace_ids, report, evaluation]
+    properties:
+      contract: {const: cxxlens.ng-production-scope-closure.v1}
+      authority: {const: schemas/cxxlens_ng_production_scope_closure.yaml}
+      decision_adr: {const: docs/design/adr/0095-production-scope-closure.md}
+      schema: {const: schemas/cxxlens_ng_production_scope_closure.schema.yaml}
+      checker: {const: tools/quality/check_ng_production_scope_closure.py}
+      namespace_ids:
+        const: [release.profile, release.gate, release.migration, distribution.target, distribution.native-package, distribution.installed-tool, distribution.consumer-configuration, distribution.source-surface, public.package, public.author-path, public.catalog-entry, public.header, public.callable, relation.descriptor, relation.static-admission, provider.profile-feature, provider.message, provider.execution-surface, provider.support-tuple, provider.production-tuple-template, query.operator, query.result-status, query.backend, g5.closure-kind, security.profile, security.namespace, security.sandbox-profile, security.sandbox-policy, compatibility.axis, quality.check]
+      report:
+        type: object
+        additionalProperties: false
+        required: [schema, ci_job, artifact]
+        properties:
+          schema: {const: schemas/cxxlens_ng_production_scope_closure_report.schema.yaml}
+          ci_job: {const: production-scope-closure}
+          artifact: {const: 'cxxlens-ng-production-scope-closure-${revision}'}
+      evaluation:
+        type: object
+        additionalProperties: false
+        required: [schema, ci_job, artifact, not_qualified_satisfies_gate_release]
+        properties:
+          schema: {const: schemas/cxxlens_ng_release_qualification_evaluation_report.schema.yaml}
+          ci_job: {const: release-evaluation}
+          artifact: {const: 'cxxlens-ng-release-qualification-evaluation-${revision}'}
+          not_qualified_satisfies_gate_release: {const: false}
   provider_protocol_boundary:
     type: object
     additionalProperties: false
