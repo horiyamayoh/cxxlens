@@ -23,9 +23,9 @@ properties:
     - decision_adr
     properties:
       owner_issue:
-        const: '#152'
+        const: '#182'
       decision_adr:
-        const: docs/design/adr/0083-cross-tu-semantic-entity-identity.md
+        const: docs/design/adr/0096-clang22-installed-materialization-boundary.md
   registry:
     const: schemas/cxxlens_ng_relation_registry.yaml
   vectors:

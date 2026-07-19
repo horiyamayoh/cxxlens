@@ -80,6 +80,7 @@ properties:
       policy_digest: {$ref: '#/$defs/digest'}
       evidence_digest: {$ref: '#/$defs/semantic_digest'}
   frames:
+    description: Validated transcript evidence retained for diagnostics only; this object is never claim, partition, dependency-group, or snapshot-adoption authority.
     type: object
     additionalProperties: false
     required: [count, last_sequence, transcript_digest]

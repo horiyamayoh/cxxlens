@@ -326,6 +326,14 @@ def validate_release_mapping(bundle: dict[str, Any], root: pathlib.Path) -> None
     if bundle.get("release_qualification") != {
         "gate": "gate.release",
         "authority": "schemas/cxxlens_ng_release_qualification.yaml",
+        "materialization_contract": "schemas/cxxlens_ng_clang22_materialization_contract.yaml",
+        "materialization_report_matrix": [
+            {"configuration": "static", "backend": "memory"},
+            {"configuration": "static", "backend": "sqlite"},
+            {"configuration": "shared", "backend": "memory"},
+            {"configuration": "shared", "backend": "sqlite"},
+        ],
+        "materialization_report_set_binding": "exact-configuration-two-report-set-digest",
         "checker": "tools/quality/check_ng_release_qualification.py",
         "ci_job": "release-qualification",
         "status": "implemented",
@@ -339,6 +347,7 @@ def validate_release_mapping(bundle: dict[str, Any], root: pathlib.Path) -> None
             "static-relocated-install-artifact",
             "shared-relocated-install-artifact",
             "static-shared-runtime-junit",
+            "static-shared-clang22-materialization-reports",
             "real-project-memory-sqlite-and-major-rejection",
             "security-conformance-and-negative-paths",
             "doxygen-contract-and-support-matrix",

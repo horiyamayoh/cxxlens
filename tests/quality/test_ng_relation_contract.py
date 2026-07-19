@@ -13,8 +13,12 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
 from check_ng_relation_contract import (  # noqa: E402
+    CLANG22_INSTALLED_OUTPUT_DESCRIPTORS,
+    CLANG22_OBSERVATION_RELATIONS,
+    CLANG22_PRIMARY_SPAN_SUFFIXES,
     REGISTRY,
     REGISTRY_SCHEMA,
+    REPORT_SCHEMA,
     VECTORS,
     RelationContractError,
     apply_patches,
@@ -41,15 +45,109 @@ class NgRelationContractTest(unittest.TestCase):
         cls.registry = load_yaml(ROOT / REGISTRY)
         cls.registry_schema = load_yaml(ROOT / REGISTRY_SCHEMA)
         cls.vectors = load_yaml(ROOT / VECTORS)
+        cls.report_schema = load_yaml(ROOT / REPORT_SCHEMA)
 
     def vector(self, identifier: str) -> dict:
         return next(row for row in self.vectors["vectors"] if row["id"] == identifier)
 
     def test_exact_registry_has_all_ng0_relations_and_valid_vectors(self) -> None:
         registry, results = validate_contract(ROOT)
-        self.assertEqual(len(registry["relations"]), 18)
-        self.assertEqual(len(results), 27)
+        self.assertEqual(registry["document_version"], "1.4.0")
+        self.assertEqual(registry["compatibility"]["current"], "1.4.0")
+        self.assertEqual(len(registry["relations"]), 21)
+        self.assertEqual(len(results), 35)
         self.assertEqual({row["decision"] for row in results}, {"accepted", "rejected"})
+
+    def test_static_projection_excludes_dynamic_only_relations(self) -> None:
+        self.assertEqual(
+            self.registry["api_projection"]["static"],
+            {
+                "descriptor_source": "relations[generated_cpp_tag!=null].descriptor_id",
+                "column_source": "relations[generated_cpp_tag!=null].columns[].id",
+            },
+        )
+        vector = self.vector("dynamic-only-static-projection")
+        self.assertEqual(
+            execute_vector(self.registry, self.registry_schema, vector),
+            ("rejected", "relation.static-projection-includes-dynamic"),
+        )
+
+    def test_clang22_installed_outputs_bind_exact_dynamic_v2_family(self) -> None:
+        relations = {row["name"]: row for row in self.registry["relations"]}
+        descriptors = {row["descriptor_id"] for row in self.registry["relations"]}
+        self.assertTrue(CLANG22_INSTALLED_OUTPUT_DESCRIPTORS.issubset(descriptors))
+        self.assertFalse(
+            {
+                "frontend.clang22.entity_observation.v1",
+                "frontend.clang22.type_observation.v1",
+                "frontend.clang22.call_observation.v1",
+            }
+            & descriptors
+        )
+        dynamic = {
+            name
+            for name, relation in relations.items()
+            if relation.get("api_surface") == "dynamic_only"
+        }
+        self.assertEqual(dynamic, CLANG22_OBSERVATION_RELATIONS)
+        for name in dynamic:
+            relation = relations[name]
+            self.assertEqual(relation["version"], "2.0.0")
+            self.assertEqual(relation["semantic_major"], 2)
+            self.assertIsNone(relation["generated_cpp_tag"])
+
+    def test_entity_and_call_span_authority_is_optional_all_or_none(self) -> None:
+        relations = {row["name"]: row for row in self.registry["relations"]}
+        for kind in ("entity", "call"):
+            name = f"frontend.clang22.{kind}_observation"
+            relation = relations[name]
+            prefix = relation["descriptor_id"] + "."
+            expected = {prefix + suffix for suffix in CLANG22_PRIMARY_SPAN_SUFFIXES}
+            columns = {row["id"]: row for row in relation["columns"]}
+            self.assertEqual(
+                {identifier for identifier in columns if identifier in expected}, expected
+            )
+            self.assertTrue(
+                all(
+                    not columns[identifier]["required"]
+                    and columns[identifier]["type"].startswith("optional<")
+                    for identifier in expected
+                )
+            )
+            self.assertEqual(
+                {frozenset(group) for group in relation["row_constraints"]["all_or_none"]},
+                {frozenset(expected)},
+            )
+
+        type_columns = {
+            row["name"]
+            for row in relations["frontend.clang22.type_observation"]["columns"]
+        }
+        self.assertFalse(set(CLANG22_PRIMARY_SPAN_SUFFIXES) & type_columns)
+
+    def test_dynamic_only_tag_binding_is_fail_closed(self) -> None:
+        dynamic = next(
+            row
+            for row in self.registry["relations"]
+            if row["name"] == "frontend.clang22.entity_observation"
+        )
+        dynamic_index = self.registry["relations"].index(dynamic)
+        candidate = copy.deepcopy(self.registry)
+        candidate["relations"][dynamic_index].pop("api_surface")
+        with self.assertRaisesRegex(RelationContractError, "relation.schema-invalid"):
+            validate_registry(candidate, schema=self.registry_schema)
+
+        candidate = copy.deepcopy(self.registry)
+        candidate["relations"][dynamic_index]["generated_cpp_tag"] = (
+            "cxxlens::frontend::clang22::entity_observation"
+        )
+        with self.assertRaisesRegex(RelationContractError, "relation.schema-invalid"):
+            validate_registry(candidate, schema=self.registry_schema)
+
+        candidate = copy.deepcopy(self.registry)
+        candidate["relations"][0]["api_surface"] = "dynamic_only"
+        with self.assertRaisesRegex(RelationContractError, "relation.schema-invalid"):
+            validate_registry(candidate, schema=self.registry_schema)
 
     def test_claim_condition_exists_only_in_system_envelope(self) -> None:
         envelope = self.registry["system_claim_envelope"]
@@ -186,14 +284,84 @@ class NgRelationContractTest(unittest.TestCase):
         results = validate_vectors(self.registry, self.registry_schema, self.vectors)
         report = make_report(self.registry, results)
         self.assertEqual(report["status"], "green")
-        self.assertEqual(len(report["descriptors"]), 18)
-        self.assertEqual(len({row["digest"] for row in report["descriptors"]}), 18)
+        self.assertEqual(len(report["descriptors"]), 21)
+        self.assertEqual(len({row["digest"] for row in report["descriptors"]}), 21)
+        clang22 = {
+            row["descriptor_id"]: (row["version"], row["digest"])
+            for row in report["descriptors"]
+            if row["descriptor_id"].startswith("frontend.clang22.")
+        }
+        self.assertEqual(
+            clang22,
+            {
+                "frontend.clang22.call_observation.v2": (
+                    "2.0.0",
+                    "sha256:07ea48a7f00e80972ba59c14ee96f916772ad9ed57fc84e313e3958f08fa548a",
+                ),
+                "frontend.clang22.entity_observation.v2": (
+                    "2.0.0",
+                    "sha256:4a5012801fcde26110a9f6350177d74d7d6975edde96337d4d3918ca7a004d51",
+                ),
+                "frontend.clang22.type_observation.v2": (
+                    "2.0.0",
+                    "sha256:53c54f967eb041e75ea98463c212d259fed0d3a310038ac9c93209749e72387f",
+                ),
+            },
+        )
+
+    def test_report_schema_requires_exactly_21_descriptors(self) -> None:
+        results = validate_vectors(self.registry, self.registry_schema, self.vectors)
+        report = make_report(self.registry, results)
+        schema_validate(report, self.report_schema, "relation report")
+        for mutation in ("missing", "extra"):
+            candidate = copy.deepcopy(report)
+            if mutation == "missing":
+                candidate["descriptors"].pop()
+            else:
+                candidate["descriptors"].append(
+                    copy.deepcopy(candidate["descriptors"][-1])
+                )
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(
+                RelationContractError, "relation.schema-invalid"
+            ):
+                schema_validate(candidate, self.report_schema, "relation report")
+
+    def test_span_fail_closed_vectors_cover_constraint_and_reference_drift(self) -> None:
+        expected = {
+            "clang22-span-column-missing": "relation.row-constraint-column-unknown",
+            "clang22-span-constraint-partial": "relation.observation-span-constraint-invalid",
+            "clang22-span-constraint-duplicate": "relation.row-constraint-duplicate",
+            "clang22-span-constraint-unknown-column": "relation.row-constraint-column-unknown",
+            "clang22-span-reference-mismatch": "relation.observation-span-reference-invalid",
+            "clang22-hard-reference-unknown": "relation.reference-target-unknown",
+        }
+        for identifier, reason in expected.items():
+            with self.subTest(identifier=identifier):
+                self.assertEqual(
+                    execute_vector(
+                        self.registry, self.registry_schema, self.vector(identifier)
+                    ),
+                    ("rejected", reason),
+                )
 
     def test_registry_digest_ignores_authority_metadata_and_relation_order(self) -> None:
         left = copy.deepcopy(self.registry)
         right = copy.deepcopy(self.registry)
         right["authority"]["owner_issue"] = "#999"
         right["relations"].reverse()
+        entity = next(
+            row
+            for row in right["relations"]
+            if row["name"] == "frontend.clang22.entity_observation"
+        )
+        entity["row_constraints"]["all_or_none"][0].reverse()
+        compile_unit = next(
+            row
+            for row in right["relations"]
+            if row["name"] == "build.compile_unit"
+        )
+        compile_unit["references"].reverse()
+        compile_unit["merge"]["conflict_columns"].reverse()
         self.assertEqual(
             registry_semantic_projection(left),
             registry_semantic_projection(right),

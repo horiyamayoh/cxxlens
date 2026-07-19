@@ -41,9 +41,9 @@ properties:
       index:
         const: docs/design/catalogs/README.md
       decision_adr:
-        const: docs/design/adr/0083-cross-tu-semantic-entity-identity.md
+        const: docs/design/adr/0096-clang22-installed-materialization-boundary.md
       owner_issue:
-        const: '#152'
+        const: '#182'
       owner:
         const: steward.ng-relations
   compatibility:
@@ -200,9 +200,9 @@ properties:
         - column_source
         properties:
           descriptor_source:
-            const: relations[].descriptor_id
+            const: relations[generated_cpp_tag!=null].descriptor_id
           column_source:
-            const: relations[].columns[].id
+            const: relations[generated_cpp_tag!=null].columns[].id
       dynamic:
         type: object
         additionalProperties: false
@@ -438,6 +438,17 @@ $defs:
   relation:
     type: object
     additionalProperties: false
+    oneOf:
+    - properties:
+        generated_cpp_tag:
+          type: string
+          pattern: ^cxxlens::[a-z][a-z0-9_:]*$
+      not:
+        required: [api_surface]
+    - properties:
+        api_surface: {const: dynamic_only}
+        generated_cpp_tag: {type: 'null'}
+      required: [api_surface]
     required:
     - descriptor_id
     - name
@@ -484,9 +495,13 @@ $defs:
       summary:
         type: string
         minLength: 1
+      api_surface:
+        const: dynamic_only
       generated_cpp_tag:
-        type: string
-        pattern: ^cxxlens::[a-z][a-z0-9_:]*$
+        oneOf:
+        - type: string
+          pattern: ^cxxlens::[a-z][a-z0-9_:]*$
+        - type: 'null'
       claim:
         type: object
         additionalProperties: false
@@ -536,6 +551,22 @@ $defs:
         minItems: 1
         items:
           $ref: '#/$defs/column'
+      row_constraints:
+        type: object
+        additionalProperties: false
+        required:
+        - all_or_none
+        properties:
+          all_or_none:
+            description: Unordered unique sets of optional columns whose row presence is atomic.
+            type: array
+            minItems: 1
+            items:
+              type: array
+              minItems: 2
+              uniqueItems: true
+              items:
+                $ref: '#/$defs/stable_id'
       references:
         description: Unordered collection canonicalized by every serialized reference field.
         type: array

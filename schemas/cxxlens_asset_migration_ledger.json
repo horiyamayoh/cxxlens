@@ -1,5 +1,5 @@
 {
-  "asset_count": 427,
+  "asset_count": 436,
   "assets": [
     {
       "authority": "active",
@@ -1123,6 +1123,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/design/adr/0096-clang22-installed-materialization-boundary.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/design/adr/README.md",
       "removal_issue": null,
       "replacement": null,
@@ -1200,6 +1207,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/development/implementation-learning/mental-models/identity-is-not-reconstruction-authority.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/development/implementation-learning/records/README.md",
       "removal_issue": null,
       "replacement": null,
@@ -1236,6 +1250,13 @@
     {
       "authority": "active",
       "path": "docs/development/implementation-learning/records/df-0182-clang22-installed-output-adoption.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0187-project-catalog-build-identity-cycle.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1621,6 +1642,34 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_clang22_fallback_identity.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_clang22_materialization_contract.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_clang22_materialization_report.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2551,6 +2600,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_clang22_materialization.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_ng_design_feedback.py",
       "removal_issue": null,
       "replacement": null,
@@ -2762,6 +2818,13 @@
     {
       "authority": "active",
       "path": "tools/quality/check_ng_api_development_readiness.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tools/quality/check_ng_clang22_materialization.py",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2992,7 +3055,7 @@
     }
   ],
   "classifications": {
-    "active": 391,
+    "active": 400,
     "archived": 35,
     "generated": 1
   },

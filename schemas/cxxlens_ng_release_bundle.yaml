@@ -1,5 +1,5 @@
 schema: cxxlens.ng-release-bundle.v1
-document_version: 1.6.0
+document_version: 1.7.0
 maturity: accepted-contract
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -81,7 +81,7 @@ distribution_surface:
       stability: stable-at-1.0
   aggregate_target: cxxlens::cxxlens
   aggregate_excludes: [cxxlens::provider_sdk, cxxlens::recipes, native-provider, native-sdk]
-  native_packages: [cxxlens-clang-worker-22, cxxlens-provider-clang22-sdk]
+  native_packages: [cxxlens-clang-worker-22, cxxlens-clang22-materialize, cxxlens-provider-clang22-sdk]
   source_surface:
     headers: authoritative
     cxx_modules: experimental-not-installed-in-1.0
@@ -96,7 +96,7 @@ distribution_surface:
       - {id: shared, build_shared: 'ON'}
     artifact_source: same-configured-and-tested-prefix
     clean_environment: [LD_LIBRARY_PATH, DYLD_LIBRARY_PATH]
-    direct_installed_tools: [cxxlens-provider-scaffold, cxxlens-sdk-doctor, cxxlens-clang-worker-22]
+    direct_installed_tools: [cxxlens-provider-scaffold, cxxlens-sdk-doctor, cxxlens-clang-worker-22, cxxlens-clang22-materialize]
     installed_consumers: [core, provider-sdk, clang22-provider-sdk, real-project, examples]
     prefix_relocation: required
     exported_transitive_dependencies: consumer-link-verified
@@ -197,6 +197,13 @@ g5_qualification:
 release_qualification:
   gate: gate.release
   authority: schemas/cxxlens_ng_release_qualification.yaml
+  materialization_contract: schemas/cxxlens_ng_clang22_materialization_contract.yaml
+  materialization_report_matrix:
+    - {configuration: static, backend: memory}
+    - {configuration: static, backend: sqlite}
+    - {configuration: shared, backend: memory}
+    - {configuration: shared, backend: sqlite}
+  materialization_report_set_binding: exact-configuration-two-report-set-digest
   checker: tools/quality/check_ng_release_qualification.py
   ci_job: release-qualification
   status: implemented
@@ -210,6 +217,7 @@ release_qualification:
     - static-relocated-install-artifact
     - shared-relocated-install-artifact
     - static-shared-runtime-junit
+    - static-shared-clang22-materialization-reports
     - real-project-memory-sqlite-and-major-rejection
     - security-conformance-and-negative-paths
     - doxygen-contract-and-support-matrix

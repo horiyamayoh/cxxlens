@@ -246,6 +246,7 @@ foreach(
         security_contract
         release_contract
         release_qualification
+        clang22_materialization
         production_scope_closure
         sdk_contract
         ci_supply_chain

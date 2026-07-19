@@ -245,6 +245,10 @@ install(
   FILES schemas/cxxlens_ng_provider_runtime_contract.yaml
         schemas/cxxlens_ng_provider_runtime_contract.schema.yaml
         schemas/cxxlens_ng_provider_execution_report.schema.yaml
+        schemas/cxxlens_ng_clang22_materialization_contract.yaml
+        schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
+        schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
+        schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
 install(FILES README.md SECURITY.md LICENSE NOTICE
         DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cxxlens")

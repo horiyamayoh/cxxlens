@@ -3,10 +3,10 @@ $id: https://cxxlens.dev/schemas/cxxlens_ng_project_catalog_contract.schema.yaml
 title: cxxlens project catalog contract
 type: object
 additionalProperties: false
-required: [schema, document_version, maturity, authority, value_types, canonical_projection, identity, consumers, acceptance]
+required: [schema, document_version, maturity, authority, value_types, canonical_projection, identity, identity_boundary, consumers, acceptance]
 properties:
   schema: {const: cxxlens.project-catalog-contract.v1}
-  document_version: {const: 1.0.0}
+  document_version: {const: 1.1.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -22,7 +22,11 @@ properties:
     additionalProperties: false
     required: [compile_unit_entry, project_catalog]
     properties:
-      compile_unit_entry: {$ref: '#/$defs/nonempty_object'}
+      compile_unit_entry:
+        const:
+          fields: [compile_unit_id, effective_invocation_digest, source_digest, environment_digest]
+          identity: stable-control-free-catalog-local-input-id
+          digests: exact-canonical-digest
       project_catalog: {$ref: '#/$defs/nonempty_object'}
   canonical_projection:
     type: object
@@ -43,17 +47,27 @@ properties:
       catalog_digest: {const: semantic-digest-v2-over-canonical-projection}
       catalog_id: {const: catalog-prefix-plus-exact-catalog-digest}
       validation: {const: bottom-up-recompute-and-exact-compare}
+  identity_boundary:
+    type: object
+    additionalProperties: false
+    required: [catalog_compile_unit_id, build_compile_unit_relation_id, implicit_equality_alias, consumer_mapping]
+    properties:
+      catalog_compile_unit_id: {const: project-upstream-catalog-input-census-identity}
+      build_compile_unit_relation_id: {const: independently-derived-from-accepted-relation-registry}
+      implicit_equality_alias: {const: forbidden}
+      consumer_mapping: {const: exact-entry-digests-to-final-relation-payload-and-id}
   consumers:
     type: object
     additionalProperties: false
-    required: [provider_task, build_project, catalog_loader]
+    required: [provider_task, build_project, build_compile_unit, catalog_loader]
     properties:
       provider_task: {const: validate-before-task-accepted}
       build_project: {const: exact-catalog-id-digest-logical-root-environment-fields}
+      build_compile_unit: {const: explicit-catalog-entry-to-final-relation-id-mapping-required}
       catalog_loader: {const: project_catalog-make-only}
   acceptance:
     type: array
-    minItems: 7
+    minItems: 8
     uniqueItems: true
     items: {type: string, pattern: '^[a-z0-9-]+$'}
 $defs:

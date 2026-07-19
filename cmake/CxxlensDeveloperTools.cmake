@@ -32,6 +32,7 @@ foreach(
   contract IN
   ITEMS release_contract
         release_qualification
+        clang22_materialization
         production_scope_closure
         design_feedback
         relation_contract
@@ -179,6 +180,7 @@ add_dependencies(
   cxxlens-design-package-check
   cxxlens-documentation-consistency-check
   cxxlens-ng-design-feedback-check
+  cxxlens-ng-clang22-materialization-check
   cxxlens-ng-provider-protocol-check
   cxxlens-ng-provider-runtime-check
   cxxlens-ng-production-scope-closure-check

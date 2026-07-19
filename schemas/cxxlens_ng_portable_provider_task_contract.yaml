@@ -1,5 +1,5 @@
 schema: cxxlens.portable-provider-task-contract.v1
-document_version: 1.0.0
+document_version: 1.2.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#174-provider-task
@@ -18,6 +18,13 @@ task_projection:
   descriptor_identity: [descriptor_id, descriptor_digest]
   ordering: canonical-byte-order
   task_id: task-prefix-plus-semantic-digest-v2
+execution_identity:
+  task_id_scope: semantic-task-projection-not-execution-occurrence
+  input_binding: open-task-task-input-digest
+  provider_execution_id: exact-provider-binary-task-digest-input-digest
+  task_id_reuse: allowed-only-for-identical-validated-task-projection
+  result_correlation: exact-task-id-input-digest-provider-execution-id-tuple
+  duplicate_tuple: reject
 validation:
   timing: before-task-accepted
   requested_outputs: nonempty-valid-sorted-unique-exact-subset-of-offers
@@ -32,6 +39,19 @@ context:
 protocol:
   batch_begin: [task_id, descriptor_id, descriptor_digest, dependency_group_id, atomic_output_group_id, batch_id]
   logical_process_validator: shared
+installed_specializations:
+  clang22_materialization:
+    reference_kind: reverse-specialization-index
+    dependency: false
+    authority: schemas/cxxlens_ng_clang22_materialization_contract.yaml
+    task_owner: installed-provider-owned-tool
+    public_cpp_task_builder: forbidden
+    requested_outputs: exact-contract-six
+    dependency_groups: exact-canonical-and-observation-both-mandatory
+    validated_result: tool-private-immutable-sealed-value
+    public_process_frames: diagnostic-only
+    partial_adoption: forbidden
+    condition_binding: exact-materializer-derived-universe-and-condition-ref
 acceptance:
   - unrequested-relation-rejected
   - descriptor-shape-mismatch-rejected
@@ -41,3 +61,6 @@ acceptance:
   - invalid-provider-identity-rejected-before-acceptance
   - exact-session-task-succeeds
   - logical-process-verdict-parity
+  - installed-specialization-does-not-create-public-task-builder
+  - installed-specialization-binds-exact-task-and-all-mandatory-groups
+  - shared-task-id-executions-remain-input-and-execution-distinct

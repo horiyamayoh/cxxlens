@@ -16,7 +16,8 @@ properties:
     pattern: '^sha256:[0-9a-f]{64}$'
   descriptors:
     type: array
-    minItems: 18
+    minItems: 21
+    maxItems: 21
     items:
       type: object
       additionalProperties: false

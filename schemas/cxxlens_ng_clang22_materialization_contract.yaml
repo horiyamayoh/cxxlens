@@ -1,0 +1,569 @@
+schema: cxxlens.clang22-materialization-contract.v1
+document_version: 1.0.0
+maturity: accepted
+authority:
+  design: docs/design/cxxlens_next_generation_integrated_design_ja.md
+  decision_adr: docs/design/adr/0096-clang22-installed-materialization-boundary.md
+  owner_issue: '#182'
+  owner: steward.ng-clang22-provider
+dependencies:
+  - schemas/cxxlens_ng_relation_registry.yaml
+  - schemas/cxxlens_ng_project_catalog_contract.yaml
+  - schemas/cxxlens_ng_portable_provider_task_contract.yaml
+  - schemas/cxxlens_ng_provider_protocol.yaml
+  - schemas/cxxlens_ng_provider_runtime_contract.yaml
+  - schemas/cxxlens_ng_snapshot_store_contract.yaml
+dependency_policy:
+  kind: generic-input-authorities-only
+  self_dependency: forbidden
+  reverse_specialization_edges: non-dependency
+  cycles: forbidden
+surface:
+  selected_option: installed-provider-owned-machine-contract
+  executable: cxxlens-clang22-materialize
+  worker_executable: cxxlens-clang-worker-22
+  public_cpp_api: none
+  generic_adoption_api: none
+  clang_native_type_exposure: forbidden
+  request_schema: cxxlens.clang22-materialization-request.v1
+  report_schema: cxxlens.clang22-materialization-report.v1
+  transport: one-json-request-on-stdin-one-json-report-on-stdout
+  stderr: diagnostic-only
+  shell: forbidden
+  json_lexical_policy:
+    encoding: strict-utf8-no-bom
+    document: exactly-one-top-level-object
+    duplicate_members: reject-at-any-depth
+    trailing_or_second_value: reject
+    non_finite_numbers: reject
+    yaml_authority_loading: separate
+  json_lexical_errors:
+    request: materialization.request-invalid
+    report: materialization.report-invalid
+versioning:
+  machine_contract: 1.0.0
+  request: 1.0.0
+  report: 1.0.0
+  provider_task_input_codec: cxxlens.clang22.task.v3
+  observation_native_codec: cxxlens.clang22.observation-native.v2
+  provider_protocol: 1.0.0
+  unknown_member: reject
+  missing_required_member: reject
+  adjacent_version_fallback: forbidden
+  migration: no-v1-migration-or-implicit-upgrade
+identity:
+  provider_id: cxxlens.clang22.reference
+  provider_version: 1.0.0
+  interpretation_domain: cc.clang22-canonical-1
+  exact_tool_identity:
+    - executable
+    - interface_version
+    - installed_executable_digest
+    - distribution_version
+    - source_revision
+    - source_tree
+    - package_configuration
+    - prefix_manifest_digest
+    - relocated_prefix_digest
+  exact_worker_identity:
+    - executable
+    - provider_id
+    - provider_version
+    - installed_binary_digest
+    - semantic_contract_digest
+    - protocol_major
+    - protocol_minor
+    - sandbox_policy_digest
+  derived_ids_and_digests_recomputed_and_compared:
+    - materialization_request_id
+    - project_id
+    - catalog_id
+    - catalog_digest
+    - catalog_compile_unit_census_digest
+    - compile_unit_id
+    - source_snapshot_id
+    - file_id
+    - line_index_id
+    - source_content_digest
+    - build_variant_id
+    - toolchain_context_id
+    - normalized_invocation_digest
+    - task_input_digest
+    - provider_task_id
+    - provider_condition_ref_id
+    - provider_execution_id
+    - batch_id
+    - source_span_id
+    - observation_payload_digest
+    - clang22_observation_id
+    - semantic_key_id
+    - assertion_id
+    - claim_content_digest
+    - partition_id
+    - snapshot_id
+    - publication_id
+  validated_or_cross_bound_caller_authority:
+    - selected_catalog_compile_unit_id
+    - environment_digest
+  mismatch: materialization.identity-mismatch
+  verification_ownership:
+    authority_checker_proves: [machine-shape, exact-registry-descriptor-bindings, observation-v2-native-row-codec, project-catalog-bottom-up-identities, project-entry-final-relation-cross-binding, portable-provider-task-identity, clang22-task-v3-input-identity, project-task-census-cross-binding, composite-task-result-matching, source-byte-size-and-digest, source-path-and-line-index-bottom-up-identities, semantic-request-projection, report-request-source-authority-cross-binding]
+    implementation_issue_181_shared_codecs_prove: [project-catalog-bottom-up-identities, clang22-task-v3-input-identity, observation-v2-native-row-codec, portable-provider-task-identity, provider-execution-identity, claim-partition-snapshot-publication-identities]
+    checker_fixture_is_production_qualification: false
+    self_consistent_caller_rebinding_without_shared_codec_validation: reject
+relation_outputs:
+  digest_authority:
+    registry: schemas/cxxlens_ng_relation_registry.yaml
+    contract_digest: sha256-of-canonical-exact-registry-relation-entry
+    runtime_descriptor_digest: cxxlens.relation-descriptor-binding.v2
+    validation: recompute-both-and-exact-compare-before-worker-launch
+  exact_six_canonical_order:
+    - cc.call_direct_target.v1
+    - cc.call_site.v1
+    - cc.entity.v1
+    - frontend.clang22.call_observation.v2
+    - frontend.clang22.entity_observation.v2
+    - frontend.clang22.type_observation.v2
+  observation_v1:
+    status: transport-only-non-adoptable
+    adoption: forbidden
+    canonical_form_reuse: forbidden
+    payload_digest_alias: forbidden
+    origin_chain_reinterpretation: forbidden
+  observation_v2_native_codec:
+    codec: cxxlens.clang22.observation-native.v2
+    canonical_binary: cxxlens-canonical-tuple-v1
+    canonical_integer_domain: signed-int64
+    kind_to_descriptor:
+      call: frontend.clang22.call_observation.v2
+      entity: frontend.clang22.entity_observation.v2
+      type: frontend.clang22.type_observation.v2
+    native_record:
+      exact_fields: [kind, final_relation_compile_unit_id, semantic_key, payload, primary_span, origin_chain, exact_equivalence, limitation]
+      authority: validated-provider-native-detached-value-before-row-construction
+      unknown_or_missing_field: reject
+    semantic_key:
+      input: nonempty-strict-utf8-native-string
+      row_encoding: exact-utf8-bytes
+      normalization: none
+      hash_or_v1_alias: forbidden
+    payload:
+      input: unique-map-of-nonempty-strict-utf8-key-to-strict-utf8-value
+      key_order: strict-utf8-byte-lexicographic
+      entry_projection: [key-as-utf8-string, value-as-utf8-string]
+      projection: [cxxlens.clang22.observation-payload.v2, relation-descriptor-id, canonical-ordered-entry-tuples]
+      digest: semantic-digest-v2
+      digest_domain: cxxlens.clang22.observation-payload.v2
+      row_encoding: canonical-semantic-v2-digest-string
+    primary_span:
+      entity_and_call: exact-seven-field-bundle-or-absent
+      type: absent-only
+      row_mapping: [source, source_snapshot, source_file, source_begin, source_end, source_role, source_read_only]
+    origin_chain:
+      input_order: immediate-expansion-to-outermost
+      entry_projection: [kind-as-utf8-string, logical-path-as-utf8-string, begin-as-signed-int64, end-as-signed-int64, read-only-as-boolean]
+      projection: [cxxlens.clang22.source-origin-chain.v2, ordered-entry-tuples]
+      empty: optional-column-absent
+      nonempty_row_encoding: exact-canonical-binary-bytes
+      duplicate_entries: preserve
+      path_normalization: none
+      entry_validation: nonempty-kind-and-path-valid-utf8-zero-to-int64max-half-open-and-read-only-true
+      type: empty-only
+    row:
+      compile_unit: exact-current-task-final-relation-compile-unit-id
+      exact_equivalence: exact-native-boolean
+      limitation: absent-or-nonempty-strict-utf8
+      exact_limitation_coupling: true-requires-absent-and-false-requires-nonempty-limitation
+      result_identity: registry-declared-domain-projection-via-sdk-derive-domain-identity
+      validation: shared-row-builder-plus-sdk-validate-domain-identity-before-seal
+    v1_bytes_or_digest: reject-without-reconstruction-from-native-v2-fields
+  descriptor_fallback: forbidden
+base_claims:
+  owner: installed-tool
+  descriptor_order: [build.project.v1, build.toolchain_context.v1, build.variant.v1, source.file.v1, build.compile_unit.v1, source.span.v1]
+  topology: exact-hard-reference-topological-order
+  worker_output_overlap: forbidden
+  staging: same-unpublished-single-transaction-before-worker-hard-reference-validation
+  row_authority:
+    build.project.v1: exact-project-request-payload
+    build.toolchain_context.v1: exact-task-toolchain-payload
+    build.variant.v1: exact-task-variant-payload
+    source.file.v1: exact-task-source-payload-and-decoded-bytes
+    build.compile_unit.v1: exact-task-build-payload-normalized-invocation-maps-to-effective-invocation
+    source.span.v1: independently-validated-worker-full-span-bundle-v2-with-origin-explicitly-absent
+  envelope_construction:
+    condition_fragment: exact-originating-task-condition-universe-and-condition
+    interpretation_domain: exact-originating-task-interpretation-domain
+    row_envelope_binding: exact-row-identity-and-row-digest-to-sorted-origin-associations
+    semantic_task_context: [provider-task-id, task-input-digest, selected-catalog-compile-unit-id, final-relation-compile-unit-id, condition-universe-id, condition-id, interpretation-domain]
+    physical_provider_execution: excluded
+    source_span_bundle_edge: exact-validated-bundle-observation-row-and-originating-semantic-task-association
+    producer_identity: exact-tool-semantic-identity-excluding-package-configuration-binary-and-prefix
+    physical_producer_occurrence: exact-report-installation-provider-and-authority-binding-outside-semantic-envelope
+    provenance: exact-request-row-or-validated-span-bundle-to-claim-edge
+    evidence: exact-catalog-source-toolchain-or-provider-observation-edge
+    guarantee: exact-report-guarantee-digest
+    caller_authored_envelope: forbidden
+  validation:
+    - recompute-exact-registry-domain-identities
+    - reject-conflicting-duplicate-base-rows
+    - validate-hard-references-in-descriptor-order
+    - recompute-row-envelope-and-source-bundle-task-binding-sets
+    - bind-row-envelope-and-edge-set-digests
+    - seal-before-worker-output-adoption
+source_identity:
+  logical_path:
+    contract_version: cxxlens.logical-path.v1
+    accepted_domain: project
+    request_form: project-uri-with-normalized-nonempty-posix-relative-path
+    normalization: reject-empty-dot-dotdot-empty-segment-backslash-query-fragment-and-non-nfc
+    file_id: canonical-file-domain-identity-over-domain-relative-path-and-contract-version
+  line_index:
+    contract_version: cxxlens.byte-line-index.v1
+    authority: decoded-source-bytes
+    offsets: zero-and-byte-after-each-lf-including-eof
+    identity: canonical-line-index-domain-identity-over-contract-content-size-and-offsets
+  validation: recompute-before-source-file-and-task-adoption
+group_topology:
+  dependency_groups: [canonical, observation]
+  atomic_output_group: clang22-atomic
+  descriptor_groups:
+    canonical: [cc.call_direct_target.v1, cc.call_site.v1, cc.entity.v1]
+    observation: [frontend.clang22.call_observation.v2, frontend.clang22.entity_observation.v2, frontend.clang22.type_observation.v2]
+  batch_id: descriptor-id-plus--batch
+  all_tasks_mandatory: true
+  all_dependency_groups_mandatory: true
+  all_batches_mandatory: true
+  partial_policy: forbid
+  unsealed_or_missing: materialization.group-incomplete
+project_and_tasks:
+  semantic_request_binding:
+    domain: cxxlens.clang22-semantic-request.v1
+    codec: cxxlens-canonical-tuple-v1
+    object_encoding: canonical-sorted-key-entry-tuples
+    includes: [tool, worker, project, registry-exact-six-worker-descriptors, registry-exact-six-base-descriptors, group-topology, complete-base-claim-row-payloads, per-tu-source-build-task-condition-budget-sandbox, publication-transaction-policy]
+    excludes: [materialization-request-identity-fields, publication-backend, publication-series-id, publication-sqlite-path, publication-expected-parent]
+    memory_sqlite_equality: required-within-package-configuration
+  project_catalog:
+    authority: validated-project-catalog
+    public_codec: cxxlens.project-catalog.v1
+    request_fields: [catalog_id, catalog_digest, logical_root, catalog_environment_digest, catalog_compile_units]
+    entry_fields: [catalog_compile_unit_id, effective_invocation_digest, source_digest, environment_digest]
+    public_entry_mapping: catalog_compile_unit_id-to-compile_unit_id
+    ordering: catalog-compile-unit-id-byte-order
+    validation: independent-bottom-up-recompute-canonical-projection-digest-and-id
+    empty: reject
+    duplicate_or_conflict: reject
+  project_census:
+    digest_domain: cxxlens.clang22-catalog-compile-unit-census.v1
+    digest_projection: canonical-ordered-catalog-compile-unit-id-tuple
+    equality: selected-catalog-compile-unit-set-exactly-equals-catalog-census
+    task_order: selected-catalog-compile-unit-id-byte-order
+  effective_invocation_codec:
+    codec: cxxlens.clang22.effective-invocation.v1
+    canonical_binary: cxxlens-canonical-tuple-v1
+    projection: [contract-tag, working-directory, ordered-effective-argv]
+    argv_semantics:
+      argv0: preserve
+      order: preserve
+      duplicates: preserve
+      shell_parsing: forbidden
+      sorting_or_deduplication: forbidden
+    digest: semantic-digest-v2-in-exact-domain
+    cross_binding: [task-normalized-invocation-digest, selected-catalog-effective-invocation-digest, final-build-compile-unit-effective-invocation-digest]
+    validation_order: recompute-before-project-catalog-final-compile-unit-task-and-request-identities
+  per_translation_unit_binding:
+    source: [source_snapshot_id, file_id, logical_path, content_digest, size_bytes, encoding, line_index_id, read_only, content_base64]
+    toolchain: [toolchain_context_id, family, exact_version, target_triple, builtin_headers_digest, sysroot, abi_digest, plugin_spec_digest]
+    variant: [build_variant_id, project_id, toolchain_context_id, language, language_standard, target_triple, predefined_macros_digest, include_search_digest, semantic_flags_digest]
+    build: [project_id, catalog_id, catalog_digest, selected_catalog_compile_unit_id, independently-derived-final-compile_unit_id, source_snapshot_id, build_variant_id, toolchain_context_id, normalized_invocation_digest-as-effective_invocation_digest, language, working_directory, environment_digest, effective_argv]
+    condition: [condition_universe_id, condition_id]
+    task: [task_input_digest, provider_task_id, provider_execution_id, selected_catalog_compile_unit_id, final-compile-unit-id, exact-six-descriptors, canonical-two-groups, budget, sandbox]
+  catalog_entry_mapping:
+    match: selected-catalog-compile-unit-id
+    payload: [normalized-invocation-digest, source-content-digest, environment-digest]
+    final_relation_id: independently-derived-build-compile-unit-id
+    catalog-final-id-alias: forbidden
+    cardinality: every-catalog-entry-exactly-one-task
+  portable_provider_task:
+    codec: cxxlens.provider-task.v1
+    canonical_projection: [contract-tag, provider-id, provider-version, provider-semantic-contract-digest, global-catalog-id, global-catalog-digest, requested-output-descriptors, derived-condition-ref-id, interpretation, offered-output-descriptors, empty-required-relations, interpretation-domains, input-stage, output-stage, dependency-groups]
+    condition_binding:
+      source: [condition-universe-id, condition-id]
+      codec: cxxlens-canonical-tuple-v1
+      projection: [cxxlens.clang22.condition-ref.v1, condition-universe-id, condition-id]
+      digest_domain: cxxlens.clang22.condition-ref.v1
+      generic_condition_value: condition-ref-prefix-plus-semantic-digest-v2
+      validation: recompute-before-portable-task-id-and-exact-cross-bind-worker-v3
+    descriptor_digest: exact-runtime-descriptor-digest
+    session: [exact-six-offered-outputs, empty-required-relations, cc-clang22-canonical-1-only, observation-input-stage, assertion-output-stage]
+    per_tu_excluded: [task-input-payload, selected-catalog-compile-unit-id, final-relation-compile-unit-id, provider-execution-id]
+    task_id: task-prefix-plus-semantic-digest-v2
+    validation: independent-bottom-up-recompute-before-task-accepted
+  worker_task_v3:
+    codec: cxxlens.clang22.task.v3
+    canonical_integer_domain: signed-int64
+    canonical_projection: [contract-tag, full-global-project-catalog, selected-catalog-compile-unit-id, final-relation-compile-unit-id, exact-per-tu-task-payload]
+    full_global_project_catalog: [catalog_id, catalog_digest, logical_root, catalog_environment_digest, catalog_compile_units]
+    selected_entry_validation: exact-invocation-source-environment-digest-match
+    worker_reconstruction: shared-project-catalog-factory-before-output
+    payload_authority: installed-tool-derived-only
+    task_input_digest: sha256-content-digest-of-exact-projection-bytes
+    old_codec_or_caller_payload: reject
+  task_execution_matching:
+    key: [provider_task_id, task_input_digest, provider_execution_id]
+    provider_task_id_uniqueness: not-required
+    duplicate_missing_or_extra: reject
+    report_order: non-authoritative
+    correlation_binding: exact-composite-execution-key
+    semantic_context_sort: task-id-then-input-then-selected-catalog-id-then-final-relation-id
+    semantic_provenance_binding: task-id-input-selected-catalog-id-final-relation-id
+    physical_occurrence: provider-execution-id-report-only
+  task_construction: installed-tool-private-authority
+  task_mutation: recompute-and-exact-compare-before-task-accepted
+  task_or_census_mismatch: materialization.task-binding-mismatch
+span_adoption:
+  owner: installed-tool-source-ingestion
+  observation_contract: full-primary-span-bundle-v2
+  all_or_none_fields: [span_id, snapshot, file, begin, end, role, read_only]
+  registry_column_binding:
+    authority: schemas/cxxlens_ng_relation_registry.yaml
+    abstract_to_registry_column_id:
+      frontend.clang22.entity_observation.v2:
+        span_id: frontend.clang22.entity_observation.v2.source
+        snapshot: frontend.clang22.entity_observation.v2.source_snapshot
+        file: frontend.clang22.entity_observation.v2.source_file
+        begin: frontend.clang22.entity_observation.v2.source_begin
+        end: frontend.clang22.entity_observation.v2.source_end
+        role: frontend.clang22.entity_observation.v2.source_role
+        read_only: frontend.clang22.entity_observation.v2.source_read_only
+      frontend.clang22.call_observation.v2:
+        span_id: frontend.clang22.call_observation.v2.source
+        snapshot: frontend.clang22.call_observation.v2.source_snapshot
+        file: frontend.clang22.call_observation.v2.source_file
+        begin: frontend.clang22.call_observation.v2.source_begin
+        end: frontend.clang22.call_observation.v2.source_end
+        role: frontend.clang22.call_observation.v2.source_role
+        read_only: frontend.clang22.call_observation.v2.source_read_only
+    all_or_none: exact-single-mapped-seven-as-unordered-set
+    origin_evidence_column_id:
+      frontend.clang22.entity_observation.v2: frontend.clang22.entity_observation.v2.source_origin_chain
+      frontend.clang22.call_observation.v2: frontend.clang22.call_observation.v2.source_origin_chain
+    origin_evidence_shape: optional-bytes-excluded-from-primary-mapping-and-all-or-none
+    validation: exact-column-id-name-type-optionality-row-constraint-and-origin-separation-before-row-adoption
+  optionality:
+    entity_and_call: optional-all-or-none
+    absent: retain-observation-with-typed-unresolved-and-non-exact-guarantee
+    entity_absent_canonicalization: canonical-entity-may-remain-without-source-anchor
+    call_absent_canonicalization: omit-cc-call-site-and-source-dependent-canonical-row
+    partial: reject-entire-materialization
+  report_census:
+    entity_plus_call_observation_rows: observed-bundle-count-plus-absent-bundle-count
+    unique_bundle_count: less-than-or-equal-observed-bundle-count
+    entity_absent_bundle_count: less-than-or-equal-entity-observation-rows
+    call_absent_bundle_count: less-than-or-equal-call-observation-rows
+    passed_constructed_source_span_claim_count: exact-unique-bundle-count
+    validated_bundle_binding: exact-bundle-and-bundle-digest-and-constructed-row-digest-and-originating-semantic-task-context
+    bundle_task_binding_set_digest: required-and-recomputed
+  independent_validator:
+    owner: installed-tool-private
+    timing: after-row-decode-before-sealed-result
+    independence: [relation-row-builder, relation-reference-absence-shortcut, registry-row-constraints, public-generic-engine]
+    presence_rule: entity-and-call-seven-fields-all-present-or-all-absent
+    partial_effect: reject-entire-materialization
+    absent_effect: typed-unresolved-non-exact-and-source-dependent-canonical-omission
+    public_api: none
+  origin_evidence: retained-separately-and-digest-bound
+  validation_order:
+    - validate-bundle-shape-and-range
+    - exact-match-task-snapshot-file-and-source-bounds
+    - recompute-source-span-identity
+    - exact-compare-caller-span-id
+    - canonical-deduplicate-full-bundle
+    - construct-source-span-base-claim
+    - validate-canonical-hard-references
+  identity_authority: sdk.source_span_identity(snapshot,file,begin,end,role)
+  seventh_worker_relation: forbidden
+  partial_or_mismatched_bundle: materialization.span-invalid
+claim_adoption:
+  boundary: sealed-materialization-result
+  visibility: tool-private-immutable-noncopyable
+  construction: shared-typed-transcript-validator-only
+  public_report_frames:
+    authority: diagnostic-only-non-authoritative
+    adoption: forbidden
+    retention_after_report: forbidden
+  stages:
+    base_claims:
+      descriptors: [build.project.v1, build.toolchain_context.v1, build.variant.v1, source.file.v1, build.compile_unit.v1, source.span.v1]
+      stage: canonical_claim
+    provider_observations:
+      descriptors: [frontend.clang22.call_observation.v2, frontend.clang22.entity_observation.v2, frontend.clang22.type_observation.v2]
+      stage: assertion
+    canonical_outputs:
+      descriptors: [cc.call_direct_target.v1, cc.call_site.v1, cc.entity.v1]
+      stage: canonical_claim
+  provenance:
+    canonical_claim_input: exact-observation-assertion-edge-set
+    source_span_input: exact-full-span-bundle-and-origin-evidence
+    unattached_or_ambiguous_edge: reject-entire-materialization
+  hard_reference_validation:
+    base_claims: [build.project.v1, build.toolchain_context.v1, build.variant.v1, source.file.v1, build.compile_unit.v1, source.span.v1]
+    staged_claims: exact-two-groups
+    missing: reject-entire-materialization
+  guarantee:
+    exact_preconditions: [zero-non-exact-in-each-observation-descriptor-census, complete-balanced-coverage, no-blocking-unresolved, no-absent-primary-span-bundle, exact-task-census, exact-six-batches, full-span-validation, complete-provenance, successful-publication]
+    non_exact: preserve-typed-approximation-assumptions-modalities-and-unresolved
+    inference_from-success-or-prose: forbidden
+side_channels:
+  coverage:
+    record_type: typed-coverage-unit
+    balance: requested-fragments-exact-partition
+    empty-success: forbidden
+  unresolved:
+    record_type: typed-unresolved-item
+    control_from_message_prose: forbidden
+    blocking_item_with_exact_claim: forbidden
+    category_order: lexical
+    category_count_encoding: sparse-positive-map
+    record_count_closure: exact-sum-of-category-counts
+    absent_bundle_category: missing_primary_span_bundle
+    absent_bundle_count_binding: span-validation-absent-bundle-unresolved-count
+  evidence:
+    record_type: typed-evidence-edge
+    subject_binding: exact-claim-or-task-identity
+    orphan_or_ambiguous: reject-entire-materialization
+  claim_stage:
+    record_type: typed-claim-stage-summary
+    observation_as_canonical_or_canonical_as_observation: reject
+  provenance:
+    record_type: typed-provenance-edge-summary
+    canonical_without-input-edge: reject
+  guarantee:
+    record_type: typed-guarantee
+    fields: [approximation, scope, assumptions, verification_modalities, observation_descriptor_censuses]
+publication:
+  target_per_request: exactly-one-of-memory-or-sqlite
+  transaction_per_request: exactly-one-all-tasks-all-groups
+  staging_visibility: unpublished
+  partial_policy: forbid
+  expected_parent_cas: required-null-only-for-genesis
+  stale_parent: materialization.stale-parent
+  stale_or_failure_effect: prior-head-preserved-no-new-publication
+  memory_validation: reopen-published-handle-and-canonical-query
+  sqlite_validation: close-and-reopen-database-before-success-report
+  backend_parity: exact-snapshot-canonical-export-and-query-digest
+  publication_authority: committed-store-record-not-tool-report
+report:
+  request_binding: exact-request-id-request-digest-and-semantic-request-digest
+  required_bindings:
+    - exact-source-revision-and-tree
+    - exact-materialization-authority-file-digests
+    - tool-and-worker-identity
+    - exact-project-catalog-and-catalog-compile-unit-census
+    - exact-registry-and-six-descriptor-digests
+    - every-task-input-and-transcript-digest
+    - every-group-and-batch-digest
+    - typed-side-channel-digests
+    - base-claim-and-span-validation-digests
+    - exact-base-descriptor-row-envelope-and-edge-censuses
+    - claim-stage-and-provenance-digests
+    - guarantee-digest
+    - expected-parent-and-publication-identities
+    - installed-prefix-and-configuration
+  passed: sealed-result-and-committed-single-transaction-only
+  failed: discarded-result-zero-publication-and-structured-error
+  digest_chain:
+    leaf_authority: shared-validator-sealed-decoded-rows-chunks-provenance-and-typed-side-channels
+    report_self_consistency_is_adoption_authority: false
+    batch:
+      domain: cxxlens.clang22-batch-result.v1
+      leaves: [ordered-chunk-set, row-binding-claim-content-set, provenance-edge-set, observation-equivalence-census-when-observation]
+      task_binding: exact-composite-execution-key-plus-semantic-row-origin-and-final-relation-compile-unit
+      row_binding_fields: [row-digest, semantic-originating-task, final-relation-compile-unit-id, primary-span-bundle-digest-or-absent, exact-equivalence-or-absent, limitation-digest-or-absent]
+      observation_census_binding: exact-row-digest-origin-final-exactness-and-limitation-digest
+      empty_batch_normalization: zero-row-zero-ordered-chunks-zero-row-bindings-zero-provenance-edges
+    group:
+      domain: cxxlens.clang22-group-batch-set.v1
+      order: descriptor-contract-order
+    task:
+      side_channel_domain: cxxlens.clang22-task-side-channels.v1
+      result_domain: cxxlens.clang22-task-result.v1
+      result_set_domain: cxxlens.clang22-task-result-set.v1
+      raw_frame_set_domain: cxxlens.clang22-raw-frame-set.v1
+    global_side_channels:
+      domains: [cxxlens.clang22-global-coverage.v1, cxxlens.clang22-global-unresolved.v1, cxxlens.clang22-global-evidence.v1]
+      task_order: semantic-task-key-byte-order
+      physical_provider_execution: excluded
+    guarantee:
+      domain: cxxlens.clang22-materialization-guarantee.v1
+      inputs: [global-side-channel-digests, task-guarantee-fragments, canonical-three-observation-descriptor-censuses]
+      base-or-claim-stage-back-edge: forbidden
+    claim_stage:
+      content_domain: cxxlens.clang22-claim-stage-content-set.v1
+      provenance_domain: cxxlens.clang22-claim-stage-provenance-set.v1
+      stage_domain: cxxlens.clang22-claim-stage.v1
+    global_provenance:
+      domain: cxxlens.clang22-global-provenance.v1
+      inputs: canonical-three-claim-stage-summaries
+    validation_order: [batch, group, task-side-channel, task-result, task-result-and-raw-frame-sets, global-side-channels, guarantee, claim-stages, global-provenance, base-claim-guarantee-cross-binding]
+qualification:
+  configurations: [static, shared]
+  backends: [memory, sqlite]
+  required_matrix: exact-cartesian-product
+  relocated_prefix: required
+  same_project_request_and_worker_semantics: required
+  sqlite_reopened: required
+  memory_sqlite_semantic_parity: required
+  static_shared_semantic_parity: required
+  exact_observation_equivalence: required-zero-non-exact-per-descriptor
+  missing_extra_duplicate_matrix_entry: reject
+errors:
+  stable:
+    - materialization.request-invalid
+    - materialization.version-unsupported
+    - materialization.identity-mismatch
+    - materialization.catalog-census-mismatch
+    - materialization.task-binding-mismatch
+    - materialization.descriptor-binding-mismatch
+    - materialization.transcript-invalid
+    - materialization.group-incomplete
+    - materialization.span-invalid
+    - materialization.claim-invalid
+    - materialization.coverage-incomplete
+    - materialization.stale-parent
+    - materialization.store-failure
+    - materialization.worker-failure
+    - materialization.report-invalid
+  structured_fields: [code, phase, subject, diagnostic]
+  diagnostic_prose_control_flow: forbidden
+  unknown_error_code: materialization.report-invalid
+lifetime:
+  request_bytes: valid-until-request-decode-completes
+  source_bytes: owned-until-corresponding-worker-task-terminal
+  decoded_rows: owned-only-inside-sealed-result-builder
+  sealed_result: immutable-until-transaction-terminal
+  native_clang_objects: worker-job-thread-process-confined
+  raw_frames: diagnostic-only-and-destroyed-before-process-exit
+  store_claims: value-owned-after-commit
+  public_handle: none
+acceptance:
+  - exact-six-registry-bound-descriptors
+  - exact-entity-call-span-registry-column-mapping
+  - caller-identities-recomputed-and-compared
+  - catalog-census-equals-task-census
+  - project-catalog-codec-recomputed-bottom-up
+  - catalog-entry-maps-to-distinct-final-compile-unit
+  - worker-v3-binds-full-global-catalog-selected-entry-and-final-id
+  - portable-provider-task-id-recomputed-from-global-semantics
+  - task-results-match-by-composite-execution-key
+  - all-tasks-groups-batches-mandatory
+  - full-span-bundle-builds-base-source-span
+  - observation-span-and-typed-unresolved-censuses-close
+  - raw-frames-never-authorize-adoption
+  - typed-stage-provenance-coverage-unresolved-evidence-guarantee
+  - expected-parent-cas-preserves-prior-head
+  - one-fail-closed-transaction-per-request
+  - memory-sqlite-static-shared-installed-parity
+  - no-public-cpp-or-native-type-surface
+  - no-silent-version-descriptor-provider-or-backend-fallback
