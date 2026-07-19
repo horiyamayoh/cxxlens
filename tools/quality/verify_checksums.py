@@ -32,6 +32,7 @@ PACKAGE_PATHS = (
     "docs/design/adr/0091-distribution-1-production-qualification.md",
     "docs/design/adr/0092-exact-public-callable-inventory.md",
     "docs/design/adr/0093-implementation-learning-design-feedback.md",
+    "docs/design/adr/0094-risk-tiered-goal-authorization.md",
     "docs/design/catalogs/README.md",
     "schemas/cxxlens_ng_claim_envelope.schema.yaml",
     "schemas/cxxlens_ng_relation_registry.yaml",

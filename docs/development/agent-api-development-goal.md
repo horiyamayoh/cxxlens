@@ -4,8 +4,43 @@
 全体を継続開発するための実行契約である。次の短い goal からこの文書を参照する。
 
 ```text
-/goal docs/development/agent-api-development-goal.md を実行契約として、本リポジトリの実質すべての公開 API を contract-driven、issue-tracked、evidence-closed で完成させ、production qualification 可能な状態にしてください。必要に応じて複数のサブエージェントを自律的に編成し、roadmap 作成から実装、issue 単位の commit/push、最終 SHA の CI green まで継続してください。
+/goal docs/development/agent-api-development-goal.md を実行契約として CXXLENS_AGENT_AUTHORIZATION_V1 を適用し、本リポジトリの実質すべての公開 API を contract-driven、issue-tracked、evidence-closed で完成させ、production qualification 可能な状態にしてください。必要に応じて複数のサブエージェントを自律的に編成し、roadmap 作成から実装、issue 単位の branch/PR/merge、最終 SHA の CI green まで継続してください。
 ```
+
+## Autonomous execution and approval boundary
+
+上の短い `/goal` のように、この文書と policy ID を明示参照した goal の実行中だけ standing authorization を有効にする。
+単なる質問、診断、read-only review、またはこの実行契約を参照しない依頼から暗黙に有効化しない。ユーザーは実行中でも
+authorization をいつでも revoke または narrow でき、その後の操作は狭められた範囲に従う。
+
+| 区分 | 実行境界 |
+| --- | --- |
+| Standing authorization | read-only audit、active unit 内の編集・生成・test/build、同一 issue の CI 根本修正、unit branch/commit/push、canonical cxxlens repository 上の active issue/PR に限定した更新・check rerun・review 対応、exact-head gate 後の active PR merge、merged-main qualification と learning checkpoint 後の active issue close は再承認不要 |
+| Notify and continue | 当初想定外の supporting test/file が必要でも、同一 contract・同一 issue 内で可逆なら、原因、追加 scope、検証方法を commentary で通知して継続する。これは approval gate ではない |
+| Fresh user approval | destructive operation/history rewrite、branch protection 変更、secret/permission 追加、課金、外部 production deploy、active issue/PR workflow 外の顧客・第三者への連絡、ユーザー変更との解消不能な競合、authority で決められない重大な public semantics は停止する。対象、effect、不可逆性または rollback を開示し、exact target/effect に限定した承認を得る |
+| External blocker | 必須 reviewer、toolchain、service、permission を取得できない場合は、証拠と選択肢を示して停止する |
+| Platform approval | sandbox、system、host platform が要求する権限確認は standing authorization で迂回しない |
+
+checker が prose の偶然一致に依存せず境界を固定できるよう、次の binding marker を保持する。
+
+- `activation: explicit-goal-contract-reference`
+- `non-activation: ordinary-request`
+- `standing-scope: canonical-repository-active-unit`
+- `notify-and-continue: reversible-same-contract-issue`
+- `fresh-approval: exact-target-effect-after-disclosure`
+- `external-blocker: evidence-options-stop`
+- `platform-approval: never-bypass`
+- `skill-compatibility: prior-goal-authorization-satisfies-generic-approval`
+- `protected-main: unit-branch-pr-exact-head-review-merge-exact-merged-main`
+- `revocation: user-anytime`
+
+skill が一般的な explicit approval を要求しても、操作が active policy の standing-authorization 範囲に明示されていれば、goal
+開始時の承認で満たされたものとする。skill の診断、focused plan、結果報告は実行するが、その approval のためだけに会話を停止しない。
+skill がより具体的な安全条件を持つ場合、または操作が列挙範囲外なら、その条件または fresh-approval gate を維持する。
+
+standing authorization は repository 内の active unit を越える mutable authority を与えない。canonical repository の active
+issue/PR における通常の review 応答と、顧客・第三者への外部連絡を区別する。fresh approval は開示した exact target/effect にだけ有効で、
+別 target、別 effect、後続操作へ categorical に流用しない。platform approval も別の capability gate であり、この contract は迂回しない。
 
 ## Mission
 
@@ -284,7 +319,12 @@ independent consumer、real-project evidence を組み合わせる。
 
 ## Commit, Push, Issue Closure
 
-1つの GitHub issue を完了するごとに、対象差分だけを commit し、`main` へ push する。
+1つの GitHub issue を active write unit とし、qualified `main` から専用 unit branch を作る。対象差分だけを commit して branch へ
+push し、PR を作成する。PR の exact-head required checks、未解決 review の解消、branch protection、single-active-unit invariant を
+確認した後に merge する。protected `main` への direct push を durable workflow として使わない。
+
+merge 後は exact merged-main SHA の required checks、Foundation、Wave 0、G5、release qualification を確認する。issue close は
+merged-main qualification、completion evidence、learning checkpoint が揃った後に行う。
 
 複数 issue の無関係な変更を1 commit にまとめない。1 issue に複数 commit が必要な場合も、issue 完了時点の
 exact commit set を記録する。
@@ -306,7 +346,7 @@ DoD を満たした場合だけ `completed` として閉じる。未実装、未
 
 ## CI Monitoring
 
-全対象 issue の完了後、最終 `main` SHA の required CI を監視する。
+各 unit の merge 後と全対象 issue の完了後に、exact merged-main SHA の required CI を監視する。
 
 失敗した場合は job、step、log、artifact を調査し、根本原因を修正して commit / push する。新しい SHA の
 全 required CI が緑になるまで継続する。

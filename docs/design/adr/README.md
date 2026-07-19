@@ -68,6 +68,7 @@
 | [0091](0091-distribution-1-production-qualification.md) | distribution 1.0 exact-SHA production qualification |
 | [0092](0092-exact-public-callable-inventory.md) | exact one-callable-per-row public C++ inventory |
 | [0093](0093-implementation-learning-design-feedback.md) | implementation learning and design-feedback governance |
+| [0094](0094-risk-tiered-goal-authorization.md) | risk-tiered standing authorization for explicit goal delegation |
 
 identity、condition、closure、protocol major、snapshot format、native lifetime、sandbox、determinism を変更する場合は
 新しい ADR が必要です。

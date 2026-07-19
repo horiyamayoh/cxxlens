@@ -37,6 +37,7 @@ REQUIRED_FILES = (
     "CMakeLists.txt",
     "docs/design/adr/0092-exact-public-callable-inventory.md",
     "docs/design/adr/0093-implementation-learning-design-feedback.md",
+    "docs/design/adr/0094-risk-tiered-goal-authorization.md",
     "docs/development/agent-api-development-goal.md",
     "schemas/cxxlens_ng_acceptance_manifest.yaml",
     "schemas/cxxlens_ng_api_development_readiness.schema.yaml",
@@ -261,6 +262,130 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             with self.assertRaisesRegex(ReadinessError, "schema validation failed"):
                 validate_documents(root)
 
+    def test_authorization_policy_binding_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            agents = root / "AGENTS.md"
+            agents.write_text(
+                agents.read_text(encoding="utf-8").replace(
+                    "CXXLENS_AGENT_AUTHORIZATION_V1", "REMOVED_POLICY_ID"
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ReadinessError, "must appear exactly once"):
+                validate_documents(root)
+
+    def test_authorization_policy_must_be_bound_in_short_goal_example(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / "docs/development/agent-api-development-goal.md"
+            text = goal.read_text(encoding="utf-8").replace(
+                "CXXLENS_AGENT_AUTHORIZATION_V1 を適用し",
+                "policy を適用し",
+            )
+            goal.write_text(
+                text + "\nCXXLENS_AGENT_AUTHORIZATION_V1\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ReadinessError, "short goal example"):
+                validate_documents(root)
+
+    def test_authorization_platform_carveout_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / "docs/development/agent-api-development-goal.md"
+            goal.write_text(
+                goal.read_text(encoding="utf-8").replace(
+                    "`platform-approval: never-bypass`", "platform marker removed"
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ReadinessError, "platform-approval"):
+                validate_documents(root)
+
+    def test_authorization_standing_scope_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / "docs/development/agent-api-development-goal.md"
+            goal.write_text(
+                goal.read_text(encoding="utf-8").replace(
+                    "`standing-scope: canonical-repository-active-unit`",
+                    "standing scope marker removed",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ReadinessError, "standing-scope"):
+                validate_documents(root)
+
+    def test_authorization_fresh_approval_boundary_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / "docs/development/agent-api-development-goal.md"
+            goal.write_text(
+                goal.read_text(encoding="utf-8").replace(
+                    "`fresh-approval: exact-target-effect-after-disclosure`",
+                    "fresh approval marker removed",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ReadinessError, "fresh-approval"):
+                validate_documents(root)
+
+    def test_authorization_external_blocker_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / "docs/development/agent-api-development-goal.md"
+            goal.write_text(
+                goal.read_text(encoding="utf-8").replace(
+                    "`external-blocker: evidence-options-stop`",
+                    "external blocker marker removed",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ReadinessError, "external-blocker"):
+                validate_documents(root)
+
+    def test_authorization_ordinary_request_non_activation_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / "docs/development/agent-api-development-goal.md"
+            goal.write_text(
+                goal.read_text(encoding="utf-8").replace(
+                    "`non-activation: ordinary-request`",
+                    "non-activation marker removed",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ReadinessError, "non-activation"):
+                validate_documents(root)
+
+    def test_authorization_protected_main_workflow_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / "docs/development/agent-api-development-goal.md"
+            goal.write_text(
+                goal.read_text(encoding="utf-8").replace(
+                    "`protected-main: unit-branch-pr-exact-head-review-merge-exact-merged-main`",
+                    "protected main marker removed",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ReadinessError, "protected-main"):
+                validate_documents(root)
+
+    def test_legacy_direct_main_workflow_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            goal = root / "docs/development/agent-api-development-goal.md"
+            goal.write_text(
+                goal.read_text(encoding="utf-8")
+                + "\n1つの GitHub issue を完了するごとに、対象差分だけを commit し、"
+                "`main` へ push する。\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ReadinessError, "direct-main"):
+                validate_documents(root)
+
     def test_gate_owner_drift_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
@@ -339,6 +464,15 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             )
             self.assertIn(
                 "schemas/cxxlens_ng_design_feedback_record.schema.yaml",
+                authority_paths,
+            )
+            self.assertIn("AGENTS.md", authority_paths)
+            self.assertIn(
+                "docs/development/agent-api-development-goal.md",
+                authority_paths,
+            )
+            self.assertIn(
+                "docs/design/adr/0094-risk-tiered-goal-authorization.md",
                 authority_paths,
             )
             self.assertIn(

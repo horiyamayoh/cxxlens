@@ -14,4 +14,6 @@ None.
 
 ## Resolved
 
-None.
+| ID | Status | Implementation | Scope | Title |
+|---|---|---|---|---|
+| [DF-0177](df-0177-standing-authorization-boundary.md) | accepted | may-proceed | `agent-goal.standing-authorization`, `agent-goal.protected-main-workflow`, `api-development-readiness.authorization-binding` | Bind delegated goal execution to a risk-tiered approval boundary |
