@@ -1,7 +1,7 @@
 # Support matrix
 
 | Surface | State |
-|---|---|
+| --- | --- |
 | Language | C++23 |
 | Host | Linux primary |
 | Core target DAG | implemented and installed |

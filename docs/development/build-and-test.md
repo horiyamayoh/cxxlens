@@ -1,7 +1,7 @@
 # Build and test
 
 | Preset | Purpose |
-|---|---|
+| --- | --- |
 | `dev-clang` | Debug build and complete test suite |
 | `ci-quick` | warnings-as-errors CI build |
 | `docs` | Doxygen and documentation contracts |
@@ -27,7 +27,7 @@ cache hit は operational data であり pass evidence ではありません。
 ## Gate mode
 
 | Mode | Scope | Final SHA qualification |
-|---|---|---|
+| --- | --- | --- |
 | `fast` | slow/process、quality、install を除く unit/integration/public-header smoke | no |
 | `check` | 全 CTest（install を除く）と production quality checker | no |
 | `full` | configured lane の runtime、quality、install。CI aggregate は static/shared と GCC も必須 | aggregate only |
@@ -43,7 +43,7 @@ CMake、workflow、selector 自身、unknown file、dependency graph failure は
 ## Local/CI correspondence
 
 | CI owner | Local reproduction |
-|---|---|
+| --- | --- |
 | `build-test` static/shared | <code>ctest --preset ci-quick -j N -LE 'quality&#124;install'</code> |
 | `quality-contracts` | `ctest --preset ci-quick -j N -L quality` and `cmake --build --preset ci-quick --target cxxlens-quality` |
 | `install-consumer` static/shared | `ctest --preset install-check -j N -L install` |

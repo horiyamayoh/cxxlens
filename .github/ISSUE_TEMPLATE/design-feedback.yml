@@ -1,0 +1,70 @@
+name: Design feedback
+description: Capture a material implementation discovery before changing normative authority
+title: "[Design feedback] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue tracks investigation and disposition. The repository record is durable but non-normative; accepted ADRs/contracts remain authoritative.
+  - type: input
+    id: source_issue
+    attributes:
+      label: Source implementation issue
+      description: The implementation issue that exposed this finding.
+      placeholder: "#171"
+    validations:
+      required: true
+  - type: input
+    id: record_path
+    attributes:
+      label: Record path
+      description: Use pending-issue-number only while this issue is being created, then replace it before investigation or implementation continues.
+      placeholder: docs/development/implementation-learning/records/df-0171-short-title.md
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and affected authority
+      description: List subsystem/contract IDs and exact normative paths.
+    validations:
+      required: true
+  - type: textarea
+    id: observation
+    attributes:
+      label: Observation and evidence
+      description: State the reproducible fact separately from interpretation.
+    validations:
+      required: true
+  - type: textarea
+    id: mental_model
+    attributes:
+      label: Working mental model
+      description: Explain the current model, confidence, and known uncertainty.
+    validations:
+      required: true
+  - type: dropdown
+    id: disposition
+    attributes:
+      label: Implementation disposition
+      options:
+        - blocked
+        - may-proceed
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and trade-offs
+      description: Compare plausible responses and reversibility.
+    validations:
+      required: true
+  - type: checkboxes
+    id: contract
+    attributes:
+      label: Authority contract
+      options:
+        - label: I will not treat this issue or its comments as normative authority.
+          required: true
+        - label: I will create/update the repository record before affected work continues.
+          required: true

@@ -47,11 +47,13 @@ malformed/oversized output、sandbox report、prior snapshot survival の eviden
 
 ## Completion checklist
 
+- relevant mental model と unresolved design feedback を開始前に確認した
 - schema/invariant、identity、validator、tests、service の順で実装した
 - public header/signature/ownership と error/unresolved/coverage を定義した
 - ID/order/version compatibility と unknown handling を固定した
 - positive/negative/conformance/install example を追加した
 - API catalog、relation registry、Doxygen、設計 traceability を更新した
+- learning checkpoint に `none` または関連 DF ID を記録し、未解決 blocker を残していない
 - `ctest` と `cxxlens-quality` が green である
 - support matrix は conformance と production support を混同していない
 

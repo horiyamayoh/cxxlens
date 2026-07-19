@@ -60,6 +60,28 @@ class QualityOwnershipTest(unittest.TestCase):
     def test_manifest_and_repository_wiring_are_valid(self) -> None:
         validate_manifest(ROOT, self.manifest)
 
+    def test_implementation_learning_input_drift_is_rejected(self) -> None:
+        for identifier, missing in (
+            ("quality.unit-contracts", "AGENTS.md"),
+            ("quality.unit-contracts", "docs"),
+            (
+                "quality.production-contracts",
+                ".github/ISSUE_TEMPLATE/design-feedback.yml",
+            ),
+            ("quality.production-contracts", ".markdownlint-cli2.jsonc"),
+        ):
+            with self.subTest(identifier=identifier):
+                manifest = copy.deepcopy(self.manifest)
+                check = next(
+                    row for row in manifest["checks"] if row["id"] == identifier
+                )
+                check["inputs"].remove(missing)
+                with self.assertRaisesRegex(
+                    QualityOwnershipError,
+                    "implementation-learning inputs are incomplete",
+                ):
+                    validate_manifest(ROOT, manifest)
+
     def test_exact_evidence_set_is_accepted(self) -> None:
         validate_evidence(
             [evidence("a"), evidence("b")], {("a", "test"), ("b", "test")}

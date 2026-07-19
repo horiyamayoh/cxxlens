@@ -1,5 +1,5 @@
 {
-  "asset_count": 406,
+  "asset_count": 415,
   "assets": [
     {
       "authority": "active",
@@ -25,6 +25,13 @@
     {
       "authority": "active",
       "path": ".github/CODEOWNERS",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": ".github/ISSUE_TEMPLATE/design-feedback.yml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1095,6 +1102,13 @@
     },
     {
       "authority": "active",
+      "path": "docs/design/adr/0093-implementation-learning-design-feedback.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/design/adr/README.md",
       "removal_issue": null,
       "replacement": null,
@@ -1152,6 +1166,34 @@
     {
       "authority": "active",
       "path": "docs/development/extending-platform.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/README.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/mental-models/authority-and-learning-loop.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/README.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/_template.md",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1551,6 +1593,13 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_compatibility_request.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_design_feedback_record.schema.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2432,6 +2481,13 @@
     },
     {
       "authority": "active",
+      "path": "tests/quality/test_ng_design_feedback.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/quality/test_ng_foundation_completion.py",
       "removal_issue": null,
       "replacement": null,
@@ -2629,6 +2685,13 @@
     {
       "authority": "active",
       "path": "tools/quality/check_ng_api_development_readiness.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tools/quality/check_ng_design_feedback.py",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2845,7 +2908,7 @@
     }
   ],
   "classifications": {
-    "active": 370,
+    "active": 379,
     "archived": 35,
     "generated": 1
   },

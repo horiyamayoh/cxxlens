@@ -3,10 +3,10 @@ $id: https://cxxlens.dev/schemas/cxxlens.ng-api-development-readiness.v1
 title: cxxlens API development Wave 0 readiness contract
 type: object
 additionalProperties: false
-required: [schema, document_version, maturity, authority, binding, target_contract, public_header_authority, public_callable_authority, required_status_checks, merged_main_checks, baseline, api_unit_workflow, gate_ownership]
+required: [schema, document_version, maturity, authority, binding, target_contract, public_header_authority, public_callable_authority, implementation_learning, required_status_checks, merged_main_checks, baseline, api_unit_workflow, gate_ownership]
 properties:
   schema: {const: cxxlens.ng-api-development-readiness.v1}
-  document_version: {const: 1.1.0}
+  document_version: {const: 1.2.0}
   maturity: {const: implemented}
   authority:
     type: object
@@ -70,6 +70,23 @@ properties:
       extractor: {const: clang-ast-json-22}
       doxygen_correspondence: {const: exact-bidirectional}
       required_result: {const: passed}
+  implementation_learning:
+    type: object
+    additionalProperties: false
+    required: [decision_adr, owner_issue, handbook, mental_models, records, index, record_schema, checker, issue_template, feedback_record_authority_role, mental_model_authority_role, completion_check]
+    properties:
+      decision_adr: {const: docs/design/adr/0093-implementation-learning-design-feedback.md}
+      owner_issue: {const: '#171'}
+      handbook: {const: docs/development/implementation-learning/README.md}
+      mental_models: {const: docs/development/implementation-learning/mental-models}
+      records: {const: docs/development/implementation-learning/records}
+      index: {const: docs/development/implementation-learning/records/README.md}
+      record_schema: {const: schemas/cxxlens_ng_design_feedback_record.schema.yaml}
+      checker: {const: tools/quality/check_ng_design_feedback.py}
+      issue_template: {const: .github/ISSUE_TEMPLATE/design-feedback.yml}
+      feedback_record_authority_role: {const: never-normative-resolution-refs-own-authority}
+      mental_model_authority_role: {const: non-normative-explanatory-only}
+      completion_check: {const: issue-ready}
   required_status_checks:
     type: object
     additionalProperties: false
@@ -88,7 +105,7 @@ properties:
       exact_revision_tree: {const: required}
       clean_main_checkout: {const: required}
       required_evidence:
-        const: [toolchain-provenance, static-shared-build-test, static-shared-install-manifest, public-header-inventory, authority-digests, test-inventory, generated-header-inventory, public-callable-inventory-report, public-callable-review, foundation-completion-report, branch-protection-status-names]
+        const: [toolchain-provenance, static-shared-build-test, static-shared-install-manifest, public-header-inventory, authority-digests, implementation-learning-contract, test-inventory, generated-header-inventory, public-callable-inventory-report, public-callable-review, foundation-completion-report, branch-protection-status-names]
   api_unit_workflow:
     type: object
     additionalProperties: false

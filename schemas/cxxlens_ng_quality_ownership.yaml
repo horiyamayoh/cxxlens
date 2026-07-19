@@ -20,17 +20,17 @@ evidence_binding:
   cache_is_evidence: false
 checks:
   - id: quality.unit-contracts
-    version: 1
+    version: 2
     owner: ctest
     command: ctest --label-regex quality
-    inputs: [tests/quality, tools/quality, schemas]
+    inputs: [AGENTS.md, .github/ISSUE_TEMPLATE/design-feedback.yml, docs, tests/quality, tools/quality, schemas]
     dimensions: [linkage-independent]
     configurations: [linkage-independent]
   - id: quality.production-contracts
-    version: 5
+    version: 6
     owner: quality-target
     command: cmake --build --target cxxlens-quality
-    inputs: [CMakeLists.txt, cmake, include, src, tests, tools/quality, tools/ci, schemas, docs, .github/workflows]
+    inputs: [.clang-format, .markdownlint-cli2.jsonc, .yamllint.yaml, AGENTS.md, CONTRIBUTING.md, README.md, SECURITY.md, CMakeLists.txt, cmake, include, src, tests, tools/quality, tools/ci, schemas, docs, .github/workflows, .github/ISSUE_TEMPLATE/design-feedback.yml]
     dimensions: [linkage-independent]
     configurations: [linkage-independent]
   - id: cpp.runtime-tests

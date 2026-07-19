@@ -1,5 +1,5 @@
 schema: cxxlens.ng-api-development-readiness.v1
-document_version: 1.1.0
+document_version: 1.2.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -39,6 +39,19 @@ public_callable_authority:
   extractor: clang-ast-json-22
   doxygen_correspondence: exact-bidirectional
   required_result: passed
+implementation_learning:
+  decision_adr: docs/design/adr/0093-implementation-learning-design-feedback.md
+  owner_issue: '#171'
+  handbook: docs/development/implementation-learning/README.md
+  mental_models: docs/development/implementation-learning/mental-models
+  records: docs/development/implementation-learning/records
+  index: docs/development/implementation-learning/records/README.md
+  record_schema: schemas/cxxlens_ng_design_feedback_record.schema.yaml
+  checker: tools/quality/check_ng_design_feedback.py
+  issue_template: .github/ISSUE_TEMPLATE/design-feedback.yml
+  feedback_record_authority_role: never-normative-resolution-refs-own-authority
+  mental_model_authority_role: non-normative-explanatory-only
+  completion_check: issue-ready
 required_status_checks:
   strict: true
   contexts:
@@ -61,6 +74,7 @@ baseline:
     - static-shared-install-manifest
     - public-header-inventory
     - authority-digests
+    - implementation-learning-contract
     - test-inventory
     - generated-header-inventory
     - public-callable-inventory-report
@@ -79,6 +93,7 @@ api_unit_workflow:
     - typed-dynamic-ir-parity
     - positive-negative-boundary-determinism-tests
     - exact-callable-ast-doxygen-correspondence
+    - implementation-learning-checkpoint
     - doxygen-example-install-consumer
     - support-stability-evidence
     - exact-sha-ci
@@ -93,6 +108,7 @@ api_unit_workflow:
     - static-dynamic-descriptor-ir-result-parity
     - positive-negative-malformed-boundary-permutation-tests
     - public-callable-inventory-review-binding
+    - design-feedback-none-or-issue-ready
     - doxygen-example-install-consumer
     - support-claim
     - pre-main-required-checks

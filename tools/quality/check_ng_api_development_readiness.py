@@ -42,6 +42,18 @@ PUBLIC_CALLABLE_REPORT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_public_callable_inventory_report.schema.yaml"
 )
 PUBLIC_CALLABLE_CHECKER = pathlib.Path("tools/quality/public_callable_inventory.py")
+IMPLEMENTATION_LEARNING_HANDBOOK = pathlib.Path(
+    "docs/development/implementation-learning/README.md"
+)
+DESIGN_FEEDBACK_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_design_feedback_record.schema.yaml"
+)
+DESIGN_FEEDBACK_CHECKER = pathlib.Path(
+    "tools/quality/check_ng_design_feedback.py"
+)
+DESIGN_FEEDBACK_ISSUE_TEMPLATE = pathlib.Path(
+    ".github/ISSUE_TEMPLATE/design-feedback.yml"
+)
 
 
 class ReadinessError(ValueError):
@@ -271,6 +283,44 @@ def validate_public_callable_contract(
         fail(f"public callable report schema is invalid: {error.message}")
 
 
+def validate_implementation_learning_contract(
+    root: pathlib.Path, manifest: dict[str, Any]
+) -> None:
+    contract = manifest["implementation_learning"]
+    expected_files = {
+        "handbook": IMPLEMENTATION_LEARNING_HANDBOOK,
+        "record_schema": DESIGN_FEEDBACK_SCHEMA,
+        "checker": DESIGN_FEEDBACK_CHECKER,
+        "issue_template": DESIGN_FEEDBACK_ISSUE_TEMPLATE,
+        "index": pathlib.Path(
+            "docs/development/implementation-learning/records/README.md"
+        ),
+        "decision_adr": pathlib.Path(
+            "docs/design/adr/0093-implementation-learning-design-feedback.md"
+        ),
+    }
+    for key, expected in expected_files.items():
+        if pathlib.Path(contract[key]) != expected:
+            fail(f"implementation-learning path differs: {key}")
+        if not (root / expected).is_file():
+            fail(f"implementation-learning asset is missing: {expected}")
+    for key in ("mental_models", "records"):
+        if not (root / contract[key]).is_dir():
+            fail(f"implementation-learning directory is missing: {contract[key]}")
+
+    checker = (root / contract["checker"]).read_text(encoding="utf-8")
+    for marker in ("issue-ready", "implementation_disposition", "resolution_refs"):
+        if marker not in checker:
+            fail(f"design-feedback checker marker is missing: {marker}")
+    handbook_path = contract["handbook"]
+    for path in (
+        root / "AGENTS.md",
+        root / "docs/development/agent-api-development-goal.md",
+    ):
+        if handbook_path not in path.read_text(encoding="utf-8"):
+            fail(f"implementation-learning handbook is not required by {path.name}")
+
+
 def validate_documents(root: pathlib.Path) -> dict[str, Any]:
     manifest = load_document(root / MANIFEST)
     validate_schema(
@@ -287,6 +337,13 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
         fail("migration checker still owns a public header allowlist")
     validate_gate_ownership(root, manifest)
     validate_public_callable_contract(root, manifest)
+    validate_implementation_learning_contract(root, manifest)
+    try:
+        jsonschema.Draft202012Validator.check_schema(
+            load_document(root / REPORT_SCHEMA)
+        )
+    except jsonschema.SchemaError as error:
+        fail(f"API development readiness report schema is invalid: {error.message}")
     validate_workflow(root, manifest)
     if len(manifest["api_unit_workflow"]["active_write_units"]) > 1:
         fail("more than one API write unit is active")
@@ -476,6 +533,22 @@ def build_report(
         root / manifest["public_callable_authority"]["report_schema"],
         root / manifest["public_callable_authority"]["checker"],
     ]
+    learning = manifest["implementation_learning"]
+    authority_paths.extend(
+        root / learning[key]
+        for key in (
+            "decision_adr",
+            "handbook",
+            "record_schema",
+            "checker",
+        )
+    )
+    implementation_learning_paths = [root / learning["issue_template"]]
+    implementation_learning_paths.extend(
+        path
+        for key in ("mental_models", "records")
+        for path in sorted((root / learning[key]).glob("*.md"))
+    )
     return {
         "schema": "cxxlens.ng-api-development-readiness-report.v1",
         "result": "passed",
@@ -489,6 +562,9 @@ def build_report(
             "settings_evidence": "github-api-issue-168",
         },
         "authorities": file_rows(authority_paths, root),
+        "implementation_learning_assets": file_rows(
+            implementation_learning_paths, root
+        ),
         "public_headers": file_rows([root / path for path in public_headers], root),
         "generated_relation_headers": file_rows(
             [root / path for path in generated_headers], root
