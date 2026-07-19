@@ -15,6 +15,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
 import check_ng_release_qualification as release  # noqa: E402
+import check_ng_production_scope_closure as scope  # noqa: E402
 
 
 class NgReleaseQualificationTests(unittest.TestCase):
@@ -196,6 +197,19 @@ class NgReleaseQualificationTests(unittest.TestCase):
                         },
                     },
                 )
+
+    def test_scope_contract_error_is_wrapped_as_release_error(self) -> None:
+        with mock.patch.object(
+            scope,
+            "inventory_binding",
+            side_effect=scope.ContractError("synthetic scope violation"),
+        ):
+            with self.assertRaisesRegex(
+                release.ReleaseQualificationError,
+                "production scope inventory evaluation failed: "
+                "synthetic scope violation",
+            ):
+                release.production_scope_inventory_binding(ROOT)
 
     def test_not_qualified_evaluation_has_no_production_tuple(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

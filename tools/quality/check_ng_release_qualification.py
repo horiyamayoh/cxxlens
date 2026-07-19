@@ -114,8 +114,15 @@ def production_scope_inventory_binding(root: pathlib.Path) -> dict[str, Any]:
     helper = getattr(scope_checker, "inventory_binding", None)
     if not callable(helper):
         fail("production scope checker omits inventory_binding(root)")
+    contract_error = getattr(scope_checker, "ContractError", None)
+    if not isinstance(contract_error, type) or not issubclass(
+        contract_error, Exception
+    ):
+        fail("production scope checker omits ContractError")
     try:
         value = helper(root)
+    except contract_error as error:
+        fail(f"production scope inventory evaluation failed: {error}")
     except (OSError, ValueError) as error:
         fail(f"production scope inventory evaluation failed: {error}")
     if not isinstance(value, dict):
