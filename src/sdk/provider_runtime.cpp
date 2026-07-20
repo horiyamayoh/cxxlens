@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <ranges>
@@ -11,6 +12,7 @@
 #include <cxxlens/sdk/provider.hpp>
 
 #include "json_internal.hpp"
+#include "provider_runtime_internal.hpp"
 #include "provider_validation_internal.hpp"
 
 namespace cxxlens::sdk::provider
@@ -43,10 +45,12 @@ namespace cxxlens::sdk::provider
 				 canonical_digest(value.substr(semantic_prefix.size())));
 		}
 
+#if !defined(CXXLENS_PROVIDER_RUNTIME_INTERNAL_ONLY)
 		[[nodiscard]] std::string json_string(const std::string_view value)
 		{
 			return cxxlens::sdk::detail::canonical_json_string(value);
 		}
+#endif
 
 		[[nodiscard]] bool namespaced(const std::string_view value)
 		{
@@ -142,14 +146,115 @@ namespace cxxlens::sdk::provider
 
 	namespace detail
 	{
-		result<transcript_terminal>
+		sealed_provider_batch::sealed_provider_batch(std::string task_id,
+													 std::string descriptor_id,
+													 std::string descriptor_digest,
+													 std::string dependency_group_id,
+													 std::string atomic_output_group_id,
+													 std::string batch_id,
+													 std::string batch_digest,
+													 std::vector<std::string> ordered_chunk_digests,
+													 std::vector<detached_row> rows)
+			: task_id_{std::move(task_id)}, descriptor_id_{std::move(descriptor_id)},
+			  descriptor_digest_{std::move(descriptor_digest)},
+			  dependency_group_id_{std::move(dependency_group_id)},
+			  atomic_output_group_id_{std::move(atomic_output_group_id)},
+			  batch_id_{std::move(batch_id)}, batch_digest_{std::move(batch_digest)},
+			  ordered_chunk_digests_{std::move(ordered_chunk_digests)}, rows_{std::move(rows)}
+		{
+		}
+
+		std::string_view sealed_provider_batch::task_id() const noexcept
+		{
+			return task_id_;
+		}
+		std::string_view sealed_provider_batch::descriptor_id() const noexcept
+		{
+			return descriptor_id_;
+		}
+		std::string_view sealed_provider_batch::descriptor_digest() const noexcept
+		{
+			return descriptor_digest_;
+		}
+		std::string_view sealed_provider_batch::dependency_group_id() const noexcept
+		{
+			return dependency_group_id_;
+		}
+		std::string_view sealed_provider_batch::atomic_output_group_id() const noexcept
+		{
+			return atomic_output_group_id_;
+		}
+		std::string_view sealed_provider_batch::batch_id() const noexcept
+		{
+			return batch_id_;
+		}
+		std::string_view sealed_provider_batch::batch_digest() const noexcept
+		{
+			return batch_digest_;
+		}
+		std::span<const std::string> sealed_provider_batch::ordered_chunk_digests() const noexcept
+		{
+			return ordered_chunk_digests_;
+		}
+		std::span<const detached_row> sealed_provider_batch::rows() const noexcept
+		{
+			return rows_;
+		}
+
+		sealed_provider_transcript::sealed_provider_transcript(
+			std::vector<sealed_provider_batch> batches,
+			std::vector<coverage_unit> coverage,
+			std::vector<unresolved_item> unresolved,
+			std::vector<evidence_item> evidence)
+			: batches_{std::move(batches)}, coverage_{std::move(coverage)},
+			  unresolved_{std::move(unresolved)}, evidence_{std::move(evidence)}
+		{
+		}
+
+		std::span<const sealed_provider_batch> sealed_provider_transcript::batches() const noexcept
+		{
+			return batches_;
+		}
+		std::span<const coverage_unit> sealed_provider_transcript::coverage() const noexcept
+		{
+			return coverage_;
+		}
+		std::span<const unresolved_item> sealed_provider_transcript::unresolved() const noexcept
+		{
+			return unresolved_;
+		}
+		std::span<const evidence_item> sealed_provider_transcript::evidence() const noexcept
+		{
+			return evidence_;
+		}
+
+		const std::optional<sealed_provider_transcript>&
+		transcript_validation_result::sealed() const noexcept
+		{
+			return sealed_;
+		}
+		std::optional<sealed_provider_transcript>
+		transcript_validation_result::take_sealed() && noexcept
+		{
+			return std::move(sealed_);
+		}
+		const std::optional<error>& transcript_validation_result::sealing_error() const noexcept
+		{
+			return sealing_error_;
+		}
+		std::optional<error> transcript_validation_result::take_sealing_error() && noexcept
+		{
+			return std::move(sealing_error_);
+		}
+
+		result<transcript_validation_result>
 		validate_provider_transcript(const transcript_validation_request& request,
 									 const std::span<const frame> frames,
 									 const protocol_limits session_limits)
 		{
 			const auto fail = [](std::string code, std::string field, std::string detail = {})
 			{
-				return result<transcript_terminal>{cxxlens::sdk::unexpected(
+				return result<transcript_validation_result>{cxxlens::sdk::unexpected(
 					runtime_error(std::move(code), std::move(field), std::move(detail)))};
 			};
 			std::uint64_t consumed_bytes{};
@@ -185,7 +290,11 @@ namespace cxxlens::sdk::provider
 			bool terminal_seen{};
 			std::uint64_t output_rows{};
 			std::uint64_t diagnostics{};
-			transcript_terminal terminal;
+			transcript_validation_result terminal;
+			std::vector<sealed_provider_batch> sealed_batches;
+			std::vector<coverage_unit> sealed_coverage;
+			std::vector<unresolved_item> sealed_unresolved;
+			std::vector<evidence_item> sealed_evidence;
 			std::set<std::string, std::less<>> batches;
 			struct open_batch
 			{
@@ -197,6 +306,9 @@ namespace cxxlens::sdk::provider
 				std::vector<std::string> ordered_chunk_digests;
 				std::map<std::string, std::uint64_t, std::less<>> next_row_offsets;
 				std::map<std::string, std::uint64_t, std::less<>> next_chunk_indexes;
+				std::map<std::string, std::vector<detached_cell>, std::less<>> column_cells;
+				std::optional<std::uint64_t> cycle_row_offset;
+				std::optional<std::uint32_t> cycle_row_count;
 			};
 			std::optional<open_batch> batch;
 			const auto expected_hello = request.provider_manifest == nullptr
@@ -303,12 +415,16 @@ namespace cxxlens::sdk::provider
 										  {},
 										  {},
 										  {},
+										  {},
+										  {},
+										  {},
 										  {}};
 						for (const auto& column : descriptor->columns)
 						{
 							opened.columns.push_back({column.id, 0U, 0U});
 							opened.next_row_offsets.emplace(column.id, 0U);
 							opened.next_chunk_indexes.emplace(column.id, 0U);
+							opened.column_cells.emplace(column.id, std::vector<detached_cell>{});
 						}
 						batch = std::move(opened);
 						break;
@@ -328,6 +444,12 @@ namespace cxxlens::sdk::provider
 							batch->descriptor->columns[expected_column_index];
 						const auto summary = std::ranges::find(
 							batch->columns, chunk->column_id, &batch_column_summary::column_id);
+						const auto starts_cycle = expected_column_index == 0U;
+						if (starts_cycle)
+						{
+							batch->cycle_row_offset = chunk->row_offset;
+							batch->cycle_row_count = chunk->row_count;
+						}
 						if (chunk->task_id != request.task_id ||
 							chunk->dependency_group_id != batch->dependency_group_id ||
 							chunk->atomic_output_group_id != batch->atomic_output_group_id ||
@@ -337,13 +459,28 @@ namespace cxxlens::sdk::provider
 							chunk->column_id != expected_column.id ||
 							summary == batch->columns.end() ||
 							chunk->row_offset != batch->next_row_offsets.at(chunk->column_id) ||
-							chunk->chunk_index != batch->next_chunk_indexes.at(chunk->column_id))
+							chunk->chunk_index != batch->next_chunk_indexes.at(chunk->column_id) ||
+							!batch->cycle_row_offset || !batch->cycle_row_count ||
+							chunk->row_offset != *batch->cycle_row_offset ||
+							chunk->row_count != *batch->cycle_row_count ||
+							chunk->cells.size() != chunk->row_count ||
+							chunk->row_count > std::numeric_limits<std::uint64_t>::max() -
+									batch->next_row_offsets.at(chunk->column_id))
 							return fail("provider.batch-invalid", request.task_id, "chunk-binding");
 						summary->payload_bytes += value.payload.size();
 						++summary->chunk_count;
 						batch->next_row_offsets.at(chunk->column_id) += chunk->row_count;
 						++batch->next_chunk_indexes.at(chunk->column_id);
+						auto& cells = batch->column_cells.at(chunk->column_id);
+						cells.insert(cells.end(),
+									 std::make_move_iterator(chunk->cells.begin()),
+									 std::make_move_iterator(chunk->cells.end()));
 						batch->ordered_chunk_digests.push_back(std::move(chunk->chunk_digest));
+						if (expected_column_index + 1U == batch->descriptor->columns.size())
+						{
+							batch->cycle_row_offset.reset();
+							batch->cycle_row_count.reset();
+						}
 						break;
 					}
 					case message_type::batch_end:
@@ -373,12 +510,58 @@ namespace cxxlens::sdk::provider
 								batch->descriptor->descriptor_digest ||
 							batch_terminal->columns != batch->columns ||
 							batch_terminal->ordered_chunk_digests != batch->ordered_chunk_digests ||
-							!all_rows_match)
+							batch->cycle_row_offset || batch->cycle_row_count || !all_rows_match)
 							return fail("provider.batch-invalid", request.task_id, "end");
 						if (request.budget != nullptr &&
 							batch_terminal->row_count > request.budget->rows - output_rows)
 							return fail("provider.output-limit", request.task_id, "rows");
 						output_rows += batch_terminal->row_count;
+						std::vector<detached_row> rows;
+						rows.reserve(batch_terminal->row_count);
+						bool batch_sealed{true};
+						for (std::uint64_t row_index = 0U; row_index < batch_terminal->row_count;
+							 ++row_index)
+						{
+							detached_row row;
+							row.descriptor_id = batch->descriptor->id;
+							for (const auto& column : batch->descriptor->columns)
+							{
+								auto& cells = batch->column_cells.at(column.id);
+								if (cells.size() != batch_terminal->row_count)
+									return fail("provider.batch-invalid",
+												request.task_id,
+												"column-row-count");
+								row.cells.emplace(column.id, std::move(cells.at(row_index)));
+							}
+							if (auto valid = validate_row(*batch->descriptor, row); !valid)
+							{
+								if (!terminal.sealing_error_)
+									terminal.sealing_error_ = std::move(valid.error());
+								batch_sealed = false;
+							}
+							else if (batch->descriptor->domain_identity.result_column)
+							{
+								auto identity = validate_domain_identity(*batch->descriptor, row);
+								if (!identity)
+								{
+									if (!terminal.sealing_error_)
+										terminal.sealing_error_ = std::move(identity.error());
+									batch_sealed = false;
+								}
+							}
+							rows.push_back(std::move(row));
+						}
+						if (batch_sealed)
+							sealed_batches.push_back(
+								sealed_provider_batch{request.task_id,
+													  batch->descriptor->id,
+													  batch->descriptor->descriptor_digest,
+													  batch->dependency_group_id,
+													  batch->atomic_output_group_id,
+													  batch->id,
+													  batch_terminal->batch_digest,
+													  batch->ordered_chunk_digests,
+													  std::move(rows)});
 						batch.reset();
 						break;
 					}
@@ -407,6 +590,7 @@ namespace cxxlens::sdk::provider
 						}
 						if (!task_covered)
 							return fail("provider.coverage-incomplete", request.task_id, "task");
+						sealed_coverage = std::move(*records);
 						break;
 					}
 					case message_type::unresolved_chunk:
@@ -427,6 +611,7 @@ namespace cxxlens::sdk::provider
 								return fail("provider.protocol-state-invalid",
 											request.task_id,
 											"side-channel-value");
+						sealed_unresolved = std::move(*records);
 						break;
 					}
 					case message_type::progress:
@@ -443,6 +628,7 @@ namespace cxxlens::sdk::provider
 								return fail("provider.protocol-state-invalid",
 											request.task_id,
 											"side-channel-value");
+						sealed_evidence = std::move(*records);
 						break;
 					}
 					case message_type::task_complete:
@@ -453,7 +639,8 @@ namespace cxxlens::sdk::provider
 							!value.payload.empty())
 							return fail(
 								"provider.protocol-state-invalid", request.task_id, "complete");
-						terminal = {transcript_terminal_kind::complete, "provider.success"};
+						terminal.kind = transcript_terminal_kind::complete;
+						terminal.reason = "provider.success";
 						terminal_seen = true;
 						break;
 					}
@@ -471,8 +658,8 @@ namespace cxxlens::sdk::provider
 						if (!allowed_failure_terminal(metadata->error_code))
 							return fail(
 								"provider.schema-invalid", request.task_id, "failure-reason");
-						terminal = {transcript_terminal_kind::failed,
-									std::move(metadata->error_code)};
+						terminal.kind = transcript_terminal_kind::failed;
+						terminal.reason = std::move(metadata->error_code);
 						terminal_seen = true;
 						break;
 					}
@@ -495,6 +682,11 @@ namespace cxxlens::sdk::provider
 			}
 			if (!hello_seen || !schema_seen || !terminal_seen)
 				return fail("provider.truncated-stream", request.task_id, "state");
+			if (terminal.kind == transcript_terminal_kind::complete && !terminal.sealing_error_)
+				terminal.sealed_ = sealed_provider_transcript{std::move(sealed_batches),
+															  std::move(sealed_coverage),
+															  std::move(sealed_unresolved),
+															  std::move(sealed_evidence)};
 			return terminal;
 		}
 	} // namespace detail
@@ -517,6 +709,7 @@ namespace cxxlens::sdk::provider
 										   request.payload});
 		}
 
+#if !defined(CXXLENS_PROVIDER_RUNTIME_INTERNAL_ONLY)
 		[[nodiscard]] std::string transcript_projection(const std::span<const frame> frames)
 		{
 			std::ostringstream output;
@@ -527,6 +720,7 @@ namespace cxxlens::sdk::provider
 					   << content_digest(value.payload) << '\n';
 			return output.str();
 		}
+#endif
 
 		[[nodiscard]] std::string terminal_for_status(const process_status status)
 		{
@@ -594,10 +788,10 @@ namespace cxxlens::sdk::provider
 			return sandbox_requirement{minimum, authority.policy_digest};
 		}
 
-		[[nodiscard]] process_execution_report transport_failure_report(
+		[[nodiscard]] detail::provider_process_validation_outcome transport_failure_outcome(
 			const process_task_request& request, process_output output, std::string terminal)
 		{
-			process_execution_report report;
+			detail::provider_process_validation_outcome report;
 			report.terminal = stable_terminal_reason(terminal)
 				? std::move(terminal)
 				: std::string{"provider.runtime-unavailable"};
@@ -617,6 +811,7 @@ namespace cxxlens::sdk::provider
 		}
 	} // namespace
 
+#if !defined(CXXLENS_PROVIDER_RUNTIME_INTERNAL_ONLY)
 	bool process_execution_report::succeeded() const noexcept
 	{
 		return validated_success_ && terminal == "provider.success" && !frames.empty() &&
@@ -685,13 +880,12 @@ namespace cxxlens::sdk::provider
 		: processes_{&processes}
 	{
 	}
+#endif
 
-	result<process_execution_report>
-	process_provider_runtime::execute(const process_task_request& request) const
+	result<detail::provider_process_validation_outcome>
+	detail::execute_provider_process(const provider_process_port& processes,
+									 const process_task_request& request)
 	{
-		if (processes_ == nullptr)
-			return cxxlens::sdk::unexpected(
-				runtime_error("provider.runtime-unavailable", "process-port"));
 		if (auto valid = request.selection.validate(); !valid)
 			return cxxlens::sdk::unexpected(std::move(valid.error()));
 		if (request.task_id.empty() || request.task_id.contains('\0') ||
@@ -768,14 +962,14 @@ namespace cxxlens::sdk::provider
 		invocation.sandbox = *sandbox;
 		invocation.expected_binary_digest =
 			request.selection.selected_candidate().description.provider_binary_digest;
-		auto launched = processes_->run(invocation, request.cancellation);
+		auto launched = processes.run(invocation, request.cancellation);
 		if (!launched)
 			return cxxlens::sdk::unexpected(std::move(launched.error()));
 		auto output = std::move(*launched);
 		if (auto valid = output.sandbox.validate(); !valid)
 			return cxxlens::sdk::unexpected(std::move(valid.error()));
 		if (output.sandbox.policy_digest != sandbox->policy_digest)
-			return transport_failure_report(
+			return transport_failure_outcome(
 				request, std::move(output), "security.sandbox-policy-mismatch");
 		auto applied_policy = resolve_sandbox_policy(output.sandbox.policy_digest);
 		const auto& selected_binary_digest =
@@ -792,36 +986,37 @@ namespace cxxlens::sdk::provider
 			: result<std::string>{
 				  unexpected(runtime_error("security.sandbox-policy-mismatch", "unknown-policy"))};
 		if (!evidence || output.sandbox.evidence_digest != *evidence)
-			return transport_failure_report(
+			return transport_failure_outcome(
 				request, std::move(output), "security.sandbox-policy-mismatch");
 		if (sandbox_satisfies(output.sandbox.achieved, sandbox_assurance::enforced) &&
 			output.measured_executable_digest != selected_binary_digest)
-			return transport_failure_report(
+			return transport_failure_outcome(
 				request, std::move(output), "provider.binary-identity-mismatch");
 		if (sandbox_satisfies(output.sandbox.achieved, sandbox_assurance::enforced))
 		{
 			auto actual_mechanisms = output.sandbox.mechanisms;
 			std::ranges::sort(actual_mechanisms);
 			if (actual_mechanisms != applied_policy->mechanisms)
-				return transport_failure_report(
+				return transport_failure_outcome(
 					request, std::move(output), "security.sandbox-policy-mismatch");
 		}
 		if (output.status != process_status::exited)
 		{
 			const auto terminal = output.failure_code.empty() ? terminal_for_status(output.status)
 															  : output.failure_code;
-			return transport_failure_report(request, std::move(output), terminal);
+			return transport_failure_outcome(request, std::move(output), terminal);
 		}
 		if (!sandbox_satisfies(output.sandbox.achieved, sandbox->minimum))
-			return transport_failure_report(
+			return transport_failure_outcome(
 				request, std::move(output), "security.sandbox-insufficient");
 		if (output.exit_code != 0)
-			return transport_failure_report(request, std::move(output), "provider.crash");
+			return transport_failure_outcome(request, std::move(output), "provider.crash");
 
 		auto frames = decode_frame_stream(output.standard_output, *session_limits);
 		if (!frames)
 		{
-			auto report = transport_failure_report(request, std::move(output), frames.error().code);
+			auto report =
+				transport_failure_outcome(request, std::move(output), frames.error().code);
 			report.diagnostics.push_back(
 				{frames.error().code, request.task_id, frames.error().field});
 			return report;
@@ -842,7 +1037,7 @@ namespace cxxlens::sdk::provider
 		{
 			auto validation_error = std::move(terminal.error());
 			auto report =
-				transport_failure_report(request, std::move(output), validation_error.code);
+				transport_failure_outcome(request, std::move(output), validation_error.code);
 			report.frames = std::move(*frames);
 			report.diagnostics.push_back(
 				{validation_error.code, validation_error.field, validation_error.detail});
@@ -850,9 +1045,12 @@ namespace cxxlens::sdk::provider
 		}
 		const auto& manifest = selected_manifest;
 
-		process_execution_report report;
-		report.terminal = terminal->reason;
-		report.validated_success_ = terminal->kind == detail::transcript_terminal_kind::complete;
+		detail::provider_process_validation_outcome report;
+		report.terminal = std::move(terminal->reason);
+		report.validated_transcript_success =
+			terminal->kind == detail::transcript_terminal_kind::complete;
+		report.sealed = std::move(*terminal).take_sealed();
+		report.sealing_error = std::move(*terminal).take_sealing_error();
 		report.provider = manifest;
 		report.task_input_digest = request.task_input_digest;
 		report.normalized_invocation_digest = request.normalized_invocation_digest;
@@ -868,4 +1066,33 @@ namespace cxxlens::sdk::provider
 				{"provider.worker-stderr", request.task_id, std::move(output.standard_error)});
 		return report;
 	}
+
+#if !defined(CXXLENS_PROVIDER_RUNTIME_INTERNAL_ONLY)
+	result<process_execution_report>
+	process_provider_runtime::execute(const process_task_request& request) const
+	{
+		if (processes_ == nullptr)
+			return cxxlens::sdk::unexpected(
+				runtime_error("provider.runtime-unavailable", "process-port"));
+		auto outcome = detail::execute_provider_process(*processes_, request);
+		if (!outcome)
+			return cxxlens::sdk::unexpected(std::move(outcome.error()));
+
+		process_execution_report report;
+		report.terminal = std::move(outcome->terminal);
+		report.provider = std::move(outcome->provider);
+		report.task_input_digest = std::move(outcome->task_input_digest);
+		report.normalized_invocation_digest = std::move(outcome->normalized_invocation_digest);
+		report.toolchain_digest = std::move(outcome->toolchain_digest);
+		report.environment_digest = std::move(outcome->environment_digest);
+		report.measured_executable_digest = std::move(outcome->measured_executable_digest);
+		report.sandbox = std::move(outcome->sandbox);
+		report.frames = std::move(outcome->frames);
+		report.diagnostics = std::move(outcome->diagnostics);
+		report.exit_code = outcome->exit_code;
+		report.termination_signal = outcome->termination_signal;
+		report.validated_success_ = outcome->validated_transcript_success;
+		return report;
+	}
+#endif
 } // namespace cxxlens::sdk::provider

@@ -10,6 +10,7 @@
 #include <iterator>
 #include <limits>
 #include <optional>
+#include <ranges>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -18,10 +19,13 @@
 #include <utility>
 #include <vector>
 
+#include <cxxlens/relations/cc_call_direct_target.hpp>
 #include <cxxlens/relations/company_lock_acquire.hpp>
 #include <cxxlens/sdk.hpp>
 #include <sys/socket.h>
 #include <unistd.h>
+
+#include "sdk/provider_validation_internal.hpp"
 
 namespace
 {
@@ -90,6 +94,46 @@ namespace
 		return std::move(*row);
 	}
 
+	[[nodiscard]] detached_row identity_valid_protocol_test_row()
+	{
+		auto row = protocol_test_row();
+		const auto& descriptor = cxxlens::company::relations::lock_acquire::descriptor();
+		auto identity = derive_domain_identity(descriptor, row);
+		require(identity.has_value(), "protocol row identity derivation failed");
+		row.cells.at("company.lock.acquire.v1.acquire") =
+			detached_cell::typed("company_lock_acquire_id", std::move(*identity));
+		require(validate_domain_identity(descriptor, row).has_value(),
+				"protocol row identity setup failed");
+		return row;
+	}
+
+	[[nodiscard]] detached_row resultless_protocol_test_row()
+	{
+		using relation = cxxlens::cc::relations::call_direct_target;
+		relation::builder builder;
+		require(builder.set<relation::call>(detached_cell::typed("cc_call_id", "call:direct-1"))
+					.has_value(),
+				"resultless call setup failed");
+		require(
+			builder.set<relation::target>(detached_cell::typed("cc_entity_id", "entity:target-1"))
+				.has_value(),
+			"resultless target setup failed");
+		require(builder
+					.set<relation::resolution>(detached_cell{
+						{scalar_kind::open_symbol, "cc.direct-target-resolution/1", false},
+						cell_state::present,
+						scalar_value{std::string{"exact"}},
+						std::nullopt})
+					.has_value(),
+				"resultless resolution setup failed");
+		auto row = std::move(builder).finish();
+		require(row.has_value() &&
+					!cxxlens::cc::relations::call_direct_target::descriptor()
+						 .domain_identity.result_column,
+				"resultless protocol row validation failed");
+		return std::move(*row);
+	}
+
 	class transcript_sink final : public frame_sink
 	{
 	  public:
@@ -137,6 +181,50 @@ namespace
 			if (auto pushed = output.push(protocol_test_row()); !pushed)
 				return pushed;
 			if (auto ended = output.end(); !ended)
+				return ended;
+			context.coverage().request("task", task_value.task_id);
+			return context.coverage().classify({"task", task_value.task_id, "covered", {}});
+		}
+	};
+
+	class sealed_parity_provider final : public portable_provider
+	{
+	  public:
+		[[nodiscard]] std::string_view id() const noexcept override
+		{
+			return "company.test.process-provider";
+		}
+		[[nodiscard]] semantic_version version() const noexcept override
+		{
+			return {1U, 0U, 0U};
+		}
+		[[nodiscard]] std::string_view semantic_contract_digest() const noexcept override
+		{
+			return fixture_contract_digest;
+		}
+		result<void> run(const cxxlens::sdk::provider::task& task_value,
+						 cxxlens::sdk::provider::context& context) override
+		{
+			auto output = context.relation(cxxlens::company::relations::lock_acquire::descriptor());
+			if (auto begun = output.begin("dependency-1", "atomic-1", "batch-1"); !begun)
+				return begun;
+			if (auto pushed = output.push(identity_valid_protocol_test_row()); !pushed)
+				return pushed;
+			if (auto pushed = output.push(identity_valid_protocol_test_row()); !pushed)
+				return pushed;
+			if (auto ended = output.end(); !ended)
+				return ended;
+			if (auto begun = output.begin("dependency-2", "atomic-2", "batch-2"); !begun)
+				return begun;
+			if (auto ended = output.end(); !ended)
+				return ended;
+			auto resultless =
+				context.relation(cxxlens::cc::relations::call_direct_target::descriptor());
+			if (auto begun = resultless.begin("dependency-3", "atomic-3", "batch-3"); !begun)
+				return begun;
+			if (auto pushed = resultless.push(resultless_protocol_test_row()); !pushed)
+				return pushed;
+			if (auto ended = resultless.end(); !ended)
 				return ended;
 			context.coverage().request("task", task_value.task_id);
 			return context.coverage().classify({"task", task_value.task_id, "covered", {}});
@@ -919,6 +1007,213 @@ namespace
 				"host credit boundary did not reject decimal overflow or preserve uint64 max");
 	}
 
+	void check_sealed_provider_validation()
+	{
+		sealed_parity_provider provider;
+		const auto& descriptor = cxxlens::company::relations::lock_acquire::descriptor();
+		const auto& resultless_descriptor =
+			cxxlens::cc::relations::call_direct_target::descriptor();
+		auto catalog = project_catalog::make(
+			".",
+			"sha256:3333333333333333333333333333333333333333333333333333333333333333",
+			{{"unit.cpp",
+			  "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+			  std::string{binary_digest},
+			  "sha256:3333333333333333333333333333333333333333333333333333333333333333"}});
+		require(catalog.has_value(), "sealed validator catalog setup failed");
+		auto task_value =
+			cxxlens::sdk::provider::task::make({std::string{provider.id()},
+												provider.version(),
+												std::string{provider.semantic_contract_digest()},
+												{descriptor, resultless_descriptor},
+												{},
+												{"company.test.canonical-1"},
+												"observation",
+												"assertion"},
+											   std::move(*catalog),
+											   {descriptor, resultless_descriptor},
+											   "condition:all",
+											   "company.test.canonical-1",
+											   {"dependency-1", "dependency-2", "dependency-3"});
+		require(task_value.has_value(), "sealed validator task setup failed");
+		const auto task = std::move(*task_value);
+
+		transcript_sink sink;
+		protocol_writer writer{sink};
+		const protocol_credit credit{64U * 1024U * 1024U, 65536U};
+		writer.grant_credit(credit);
+		execution_context execution;
+		execution.budget.output_bytes = 64U * 1024U * 1024U;
+		execution.budget.rows = 4U;
+		execution.budget.diagnostics = 16U;
+		require(run_worker(provider, task, writer, execution).has_value(),
+				"sealed validator provider run failed");
+		auto frames = decode_frame_stream(sink.transcript);
+		require(frames.has_value(), "sealed validator transcript decode failed");
+		const cxxlens::sdk::provider::detail::transcript_validation_request request{
+			task.task_id,
+			std::string{provider.id()},
+			provider.version(),
+			nullptr,
+			task.outputs,
+			credit,
+			&execution.budget,
+			false,
+		};
+		const auto validate = [&](const std::vector<frame>& candidate)
+		{
+			return cxxlens::sdk::provider::detail::validate_provider_transcript(
+				request, candidate, protocol_limits{});
+		};
+
+		auto positive = validate(*frames);
+		require(positive &&
+					positive->kind ==
+						cxxlens::sdk::provider::detail::transcript_terminal_kind::complete &&
+					positive->reason == "provider.success" && positive->sealed() &&
+					!positive->sealing_error(),
+				"valid transcript did not produce an adoption seal");
+		const auto batches = positive->sealed()->batches();
+		require(batches.size() == 3U && batches[0U].task_id() == task.task_id &&
+					batches[0U].descriptor_id() == descriptor.id &&
+					batches[0U].descriptor_digest() == descriptor.descriptor_digest &&
+					batches[0U].dependency_group_id() == "dependency-1" &&
+					batches[0U].atomic_output_group_id() == "atomic-1" &&
+					batches[0U].batch_id() == "batch-1" && !batches[0U].batch_digest().empty() &&
+					batches[0U].rows().size() == 2U &&
+					batches[0U].ordered_chunk_digests().size() == descriptor.columns.size(),
+				"sealed positive batch lost exact binding or reconstructed rows");
+		for (const auto& row : batches[0U].rows())
+			require(validate_row(descriptor, row).has_value() &&
+						validate_domain_identity(descriptor, row).has_value(),
+					"sealed row was not SDK-valid");
+		require(batches[1U].dependency_group_id() == "dependency-2" &&
+					batches[1U].atomic_output_group_id() == "atomic-2" &&
+					batches[1U].batch_id() == "batch-2" && batches[1U].rows().empty() &&
+					batches[1U].ordered_chunk_digests().empty(),
+				"zero-row batch was omitted or retained nonempty leaves");
+		require(batches[2U].descriptor_id() == resultless_descriptor.id &&
+					batches[2U].descriptor_digest() == resultless_descriptor.descriptor_digest &&
+					batches[2U].dependency_group_id() == "dependency-3" &&
+					batches[2U].atomic_output_group_id() == "atomic-3" &&
+					batches[2U].batch_id() == "batch-3" && batches[2U].rows().size() == 1U &&
+					batches[2U].ordered_chunk_digests().size() ==
+						resultless_descriptor.columns.size() &&
+					validate_row(resultless_descriptor, batches[2U].rows().front()).has_value() &&
+					!resultless_descriptor.domain_identity.result_column,
+				"nonzero resultless descriptor batch did not produce a strict adoption seal");
+		require(positive->sealed()->coverage().size() == 1U &&
+					positive->sealed()->coverage().front().id == task.task_id &&
+					positive->sealed()->unresolved().empty() &&
+					positive->sealed()->evidence().empty(),
+				"decoded side channels were not retained exactly");
+
+		auto failed_terminal = *frames;
+		failed_terminal.back().type = message_type::task_failed;
+		failed_terminal.back().control =
+			*encode_task_failed_metadata({"provider.cancelled", task.task_id, "test"});
+		failed_terminal.back().payload.clear();
+		auto failed_verdict = validate(failed_terminal);
+		require(failed_verdict &&
+					failed_verdict->kind ==
+						cxxlens::sdk::provider::detail::transcript_terminal_kind::failed &&
+					failed_verdict->reason == "provider.cancelled" && !failed_verdict->sealed(),
+				"failed task terminal retained an adoption seal");
+
+		const auto rebind_first_identity_cell = [&](detached_cell replacement)
+		{
+			auto mutated = *frames;
+			const auto first_chunk =
+				std::ranges::find(mutated, message_type::column_chunk, &frame::type);
+			require(first_chunk != mutated.end(), "sealed transcript has no column chunk");
+			const auto first_chunk_index = static_cast<std::size_t>(first_chunk - mutated.begin());
+			auto identity_chunk = decode_column_chunk(
+				first_chunk->control, first_chunk->payload, descriptor.columns.front());
+			require(identity_chunk && identity_chunk->cells.size() == 2U,
+					"sealed identity chunk decode failed");
+			identity_chunk->cells.front() = std::move(replacement);
+			identity_chunk->chunk_digest.clear();
+			auto encoded_identity_chunk =
+				encode_column_chunk(*identity_chunk, descriptor.columns.front());
+			require(encoded_identity_chunk.has_value(), "sealed identity chunk mutation failed");
+			const auto old_identity_payload_bytes = first_chunk->payload.size();
+			first_chunk->control = encoded_identity_chunk->control;
+			first_chunk->payload = encoded_identity_chunk->payload;
+			const auto first_end =
+				std::ranges::find(mutated | std::views::drop(first_chunk_index + 1U),
+								  message_type::batch_end,
+								  &frame::type);
+			require(first_end != mutated.end(), "sealed transcript has no batch terminal");
+			auto identity_terminal =
+				decode_columnar_batch_end(first_end->control, first_end->payload);
+			require(identity_terminal.has_value(), "sealed batch terminal decode failed");
+			auto& identity_summary = identity_terminal->columns.front();
+			require(identity_summary.payload_bytes >= old_identity_payload_bytes,
+					"sealed batch summary underflow");
+			identity_summary.payload_bytes -= old_identity_payload_bytes;
+			identity_summary.payload_bytes += encoded_identity_chunk->payload.size();
+			identity_terminal->ordered_chunk_digests.front() = encoded_identity_chunk->chunk_digest;
+			identity_terminal->batch_digest = columnar_batch_digest(*identity_terminal);
+			auto encoded_identity_terminal = encode_columnar_batch_end(*identity_terminal);
+			require(encoded_identity_terminal.has_value(), "sealed batch terminal mutation failed");
+			first_end->control = std::move(encoded_identity_terminal->control);
+			first_end->payload = std::move(encoded_identity_terminal->payload);
+			return mutated;
+		};
+
+		auto identity_omission = rebind_first_identity_cell(
+			detached_cell::unknown(descriptor.columns.front().type, "provider omitted result"));
+		auto identity_missing = validate(identity_omission);
+		require(
+			identity_missing &&
+				identity_missing->kind ==
+					cxxlens::sdk::provider::detail::transcript_terminal_kind::complete &&
+				identity_missing->reason == "provider.success" && !identity_missing->sealed() &&
+				identity_missing->sealing_error() &&
+				identity_missing->sealing_error()->code == "sdk.domain-identity-missing",
+			"missing result-bearing identity produced an adoption seal or changed public verdict");
+
+		auto identity_mutation = rebind_first_identity_cell(
+			detached_cell::typed("company_lock_acquire_id", "company_lock_acquire_id:invalid"));
+		auto identity_rejected = validate(identity_mutation);
+		require(identity_rejected &&
+					identity_rejected->kind ==
+						cxxlens::sdk::provider::detail::transcript_terminal_kind::complete &&
+					identity_rejected->reason == "provider.success" &&
+					!identity_rejected->sealed() && identity_rejected->sealing_error() &&
+					identity_rejected->sealing_error()->code == "sdk.domain-identity-mismatch",
+				"domain identity mismatch produced an adoption seal or changed public verdict");
+
+		auto count_mutation = *frames;
+		const auto first_count_chunk =
+			std::ranges::find(count_mutation, message_type::column_chunk, &frame::type);
+		require(first_count_chunk != count_mutation.end(),
+				"sealed transcript has no first column chunk");
+		const auto first_chunk_index =
+			static_cast<std::size_t>(first_count_chunk - count_mutation.begin());
+		const auto second_chunk =
+			std::ranges::find(count_mutation | std::views::drop(first_chunk_index + 1U),
+							  message_type::column_chunk,
+							  &frame::type);
+		require(second_chunk != count_mutation.end(),
+				"sealed transcript has no second column chunk");
+		auto shortened = decode_column_chunk(
+			second_chunk->control, second_chunk->payload, descriptor.columns.at(1U));
+		require(shortened && shortened->cells.size() == 2U,
+				"sealed second column chunk decode failed");
+		shortened->cells.pop_back();
+		shortened->row_count = 1U;
+		shortened->chunk_digest.clear();
+		auto encoded_shortened = encode_column_chunk(*shortened, descriptor.columns.at(1U));
+		require(encoded_shortened.has_value(), "sealed short column mutation failed");
+		second_chunk->control = std::move(encoded_shortened->control);
+		second_chunk->payload = std::move(encoded_shortened->payload);
+		auto count_rejected = validate(count_mutation);
+		require(!count_rejected && count_rejected.error().code == "provider.batch-invalid" &&
+					count_rejected.error().detail == "chunk-binding",
+				"cross-column row count mismatch reached an adoption seal");
+	}
+
 	void check_process_faults(const std::string& executable)
 	{
 		auto processes = make_system_provider_process_port();
@@ -1453,12 +1748,18 @@ namespace
 
 int main(const int argument_count, const char* const* arguments)
 {
+	if (argument_count == 2 && std::string_view{arguments[1]} == "--sealed-only")
+	{
+		check_sealed_provider_validation();
+		return 0;
+	}
 	require(argument_count == 2, "provider process fixture path missing");
 	const std::string executable{arguments[1]};
 	check_selection(executable);
 	check_verified_executable_binding();
 	check_sandbox_closed_enum(executable);
 	check_host_transcript_validator(executable);
+	check_sealed_provider_validation();
 	check_process_faults(executable);
 	check_prior_snapshot_preserved(executable);
 }

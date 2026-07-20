@@ -24,6 +24,7 @@
 #include <cxxlens/sdk/store.hpp>
 
 #include "claim_internal.hpp"
+#include "store_identity_internal.hpp"
 
 namespace cxxlens::sdk
 {
@@ -173,52 +174,13 @@ namespace cxxlens::sdk
 
 		[[nodiscard]] std::string snapshot_identity(const snapshot_manifest& value)
 		{
-			std::vector<canonical_value> partitions;
-			partitions.reserve(value.partitions.size());
-			for (const auto& partition : value.partitions)
-				partitions.push_back(
-					canonical_value::from_tuple({text(partition.partition_id),
-												 text(partition.content_digest),
-												 text(partition.coverage_digest)}));
-			std::ranges::sort(partitions,
-							  [](const canonical_value& left, const canonical_value& right)
-							  {
-								  return left.tuple.front().text < right.tuple.front().text;
-							  });
-			auto closures = value.closure_ids;
-			std::ranges::sort(closures);
-			const std::array fields{
-				text(value.snapshot_semantics_version.string()),
-				text(value.catalog_semantic_digest),
-				text(value.condition_universe_id),
-				text(value.relation_registry_digest),
-				text(value.interpretation_policy_digest),
-				canonical_value::from_tuple(std::move(partitions)),
-				texts(closures),
-			};
-			return *canonical_identity_digest("snapshot", fields);
-		}
-
-		[[nodiscard]] constexpr std::int64_t
-		canonical_counter_integer(const std::uint64_t value) noexcept
-		{
-			constexpr auto signed_max =
-				static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
-			if (value <= signed_max)
-				return static_cast<std::int64_t>(value);
-			return -1 -
-				static_cast<std::int64_t>(std::numeric_limits<std::uint64_t>::max() - value);
+			return *detail::snapshot_manifest_identity(value);
 		}
 
 		[[nodiscard]] std::string publication_identity(const publication_record& value)
 		{
-			const std::array fields{
-				text(value.series_id),
-				text(value.snapshot_id),
-				canonical_value::from_integer(canonical_counter_integer(value.sequence)),
-				text(value.parent_publication.value_or("")),
-			};
-			return *canonical_identity_digest("publication", fields);
+			return *detail::publication_record_identity(
+				value.series_id, value.snapshot_id, value.sequence, value.parent_publication);
 		}
 
 		[[nodiscard]] result<void> validate_publication_identity(const publication_record& value)
@@ -2674,6 +2636,9 @@ namespace cxxlens::sdk
 		std::vector<closure_candidate> closures;
 		std::shared_ptr<snapshot_handle::data> candidate;
 	};
+
+	snapshot_writer::snapshot_writer(snapshot_writer&&) noexcept = default;
+	snapshot_writer& snapshot_writer::operator=(snapshot_writer&&) noexcept = default;
 
 	snapshot_store::snapshot_store(std::shared_ptr<implementation> implementation)
 		: implementation_{std::move(implementation)}

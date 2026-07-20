@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-07-19
 - Issue: #182; machine-v2 amendment #181
-- Design feedback: DF-0182 / #182; DF-0187 / #187; DF-0191 / #191; DF-0192 / #192
+- Design feedback: DF-0182 / #182; DF-0187 / #187; DF-0191 / #191; DF-0192 / #192; DF-0194 / #194
 - Amends: ADR 0015, ADR 0038, ADR 0064, ADR 0091, ADR 0095
 - Depends on: ADR 0010, ADR 0043, ADR 0044, ADR 0083, ADR 0084
 
@@ -59,10 +59,24 @@ missing response は release evidence にならない。stdout に schema-valid 
 error kind は exit status や stderr ではなく response の typed field で決める。
 
 1 GiB request を一つの DOM として保持せず、raw request は bounded chunk reader から private spool へ保存する。task は最大 4096、task ごとの decoded
-source は 16 MiB、全 source は 512 MiB、response は 1 GiB とする。base64 は streaming decode して task/aggregate 上限を decode 中に検査し、report は
-publication 前に bounded private spool 上で完全な schema-valid bytes まで構築する。allocation/spool/write failure で typed response を完成できなければ
-exit 2 とし、stdout や stderr の断片を authority にしない。SQLite の post-commit exit 2 は blind retry せず、exact selector、observed parent、candidate
-snapshot/publication を read-only で調べる。memory backend の process-local Store は復元不能なので fresh run だけを許す。
+source は 16 MiB、全 source は 512 MiB、response は 1 GiB とする。base64 は streaming decode して task/aggregate 上限を decode 中に検査する。
+
+DF-0194 の pre-qualification erratum として、report construction は irreversible な Store publication boundary を挟む bounded two-phase とする。
+publication 前には sealed materialization DAG と Store candidate を完成・検証し、publication-independent な detailed projection を bounded private spool
+へ構築して独立検証し、final JSON framing、全 applicable detailed outcome、exact SDK record/receipt、bounded diagnostic の checked maximum を加えても
+response 上限を越えない capacity を予約する。この phase で completed
+schema-valid report、予測または placeholder の publication record/physical generation、架空の reopen receipt を主張してはならない。ここでの
+construction failure は compact response 自体を完成できる場合だけ `report-construction` / publication-not-attempted / zero-commit とし、それも完成できなければ
+exit 2 とする。
+
+exactly one `publish()` call の開始をもって publication-attempted boundary を越える。その後は actual SDK outcome、publish が返した exact record、SQLite
+close/reopen または memory Store の exact three-path receipt、最初の typed failure または verification mismatch だけから一つの final private report spool を
+完成し、report v2 full schema と独立 semantic validator の両方を通してから stdout の最初の byte を書く。boundary 後の finalization、validation、allocation、
+spool、stdout failure は commit の有無にかかわらず compact zero-effect response へ downgrade せず、exit 2 / no authoritative response / no release evidence
+とする。commit 済みなら committed Store record だけを recovery authority とし、unknown または rejected outcome も phase-authentic Store proof なしに
+zero-commit と主張しない。SQLite の post-attempt exit 2 は blind retry せず、exact selector、observed parent、candidate snapshot/publication を read-only で
+調べる。stdout の authoritative unit は exactly one complete JSON response とし、short/partial write の bytes は non-authoritative、OS-level
+all-or-nothing atomicity は non-claimed とする。memory backend の process-local Store は復元不能なので fresh run だけを許す。
 
 この tool は installed process/machine surface であり、新しい public C++ Clang host bridge ではない。既存の
 `process_execution_report`、`provider_session`、native SDK に Clang 22 task authoring、sealed result、Store publication method を追加しない。

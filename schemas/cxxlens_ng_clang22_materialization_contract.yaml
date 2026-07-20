@@ -62,8 +62,50 @@ surface:
     raw_request_storage: bounded-chunk-read-and-private-spool
     json_processing: streaming-strict-utf8-duplicate-aware-no-one-gib-dom
     source_decoding: streaming-base64-to-bounded-private-spool
-    report_construction: bounded-spool-before-publication
-    allocation_failure: exit-two-no-response-authority
+    report_construction:
+      lifecycle: bounded-two-phase-report-lifecycle
+      lifecycle_order:
+        - publication-independent-projection-and-validation
+        - final-response-capacity-reservation
+        - publication-attempt
+        - exact-outcome-capture
+        - outcome-specific-reopen-or-recovery
+        - complete-response-finalization
+        - selected-v2-full-schema-validation
+        - bottom-up-cross-binding-validation
+        - stdout-publication
+      prepublication_projection: publication-independent-only
+      prepublication_forbidden_claims:
+        - complete-response-authority
+        - publication-outcome
+        - invocation-publication-record
+        - physical-generation
+        - reopen-path-status-or-projection
+      capacity_reservation:
+        bound: checked-maximum-over-every-applicable-detailed-outcome-within-response-limit
+        includes:
+          - final-json-framing
+          - exact-publication-outcome
+          - exact-sdk-records-and-receipts
+          - maximum-bounded-diagnostics
+        failure: compact-only-if-schema-valid-zero-effect-otherwise-exit-two
+      publication_attempt_boundary: immediately-before-exactly-one-snapshot-writer-publish-call
+      publication_dependent_source: exact-sdk-return-values-and-typed-errors-only
+      committed_verified_reopen_order:
+        - capture-publish-returned-record
+        - backend-appropriate-reopen
+        - current-selector
+        - open-publication
+        - open-snapshot
+      stdout_authority:
+        before-full-validation: forbidden
+        authoritative-unit: exactly-one-complete-json-response
+        partial-or-short-write: non-authoritative
+        operating-system-atomicity: not-claimed
+    allocation_failure:
+      prepublication_report_construction: schema-valid-compact-zero-effect-if-completable-otherwise-exit-two-no-response
+      after_publication_attempt: exit-two-no-response-no-compact-downgrade
+      partial_response: non-authoritative
     boundary_tests: [zero, limit-minus-one, limit, limit-plus-one, limit-plus-two, fragmented-short-reads]
     injected_small_limit_state_machine_test: required
   process_exit:
@@ -71,6 +113,10 @@ surface:
     schema_valid_failure: 1
     stdout_transport_failure_no_response_authority: 2
     error_kind_from_exit_or_stderr: forbidden
+    prepublication_report_failure: schema-valid-compact-zero-effect-exit-one-or-exit-two-no-response
+    post_publication_attempt_finalization_failure: exit-two-no-response-authority-no-compact-downgrade
+    post_commit_finalization_or_stdout_failure: exit-two-no-response-store-record-only-recovery-authority-and-no-release-evidence
+    partial_stdout: parsed-response-count-zero-and-non-authoritative
     post_commit_broken_stdout: exit-two-no-response-store-record-only-recovery-authority-and-no-release-evidence
     sqlite_blind_retry_after_exit_two: forbidden
     sqlite_recovery: read-only-exact-selector-parent-candidate-snapshot-and-publication-inspection
@@ -810,7 +856,7 @@ report:
       exact_effects: [worker-launch-attempt-count, worker-launch-success-count, store-draft-state, head-observation, publication-attempted, committed-transaction-count, prior-history-retained]
       detailed_execution_sections: forbidden
       release_evidence: forbidden
-      report_construction_phase: prepublication-zero-effect-only
+      report_construction_phase: prepublication-zero-effect-only-before-publish-call
   request_binding: exact-request-id-request-digest-and-semantic-request-digest
   required_bindings:
     - exact-source-revision-and-tree
@@ -988,7 +1034,9 @@ lifetime:
   public_handle: none
 acceptance:
   - bounded-phase-authentic-response-union
-  - streaming-bounded-request-source-and-report-construction
+  - streaming-bounded-request-source-and-two-phase-report-construction
+  - no-completed-report-or-fabricated-publication-values-before-publication
+  - no-compact-downgrade-after-publication-attempt
   - exact-three-registry-identity-axes
   - descriptor-id-based-twelve-descriptor-engine
   - complete-seven-field-store-selector

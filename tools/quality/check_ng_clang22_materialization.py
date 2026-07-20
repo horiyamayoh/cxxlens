@@ -7,6 +7,7 @@ import argparse
 import base64
 import copy
 import datetime
+import decimal
 import functools
 import hashlib
 import json
@@ -38,6 +39,12 @@ PORTABLE_PROVIDER_TASK = pathlib.Path(
 PROVIDER_PROTOCOL = pathlib.Path("schemas/cxxlens_ng_provider_protocol.yaml")
 PROVIDER_RUNTIME = pathlib.Path("schemas/cxxlens_ng_provider_runtime_contract.yaml")
 SNAPSHOT_STORE = pathlib.Path("schemas/cxxlens_ng_snapshot_store_contract.yaml")
+DECISION_ADR = pathlib.Path(
+    "docs/design/adr/0096-clang22-installed-materialization-boundary.md"
+)
+INTEGRATED_DESIGN = pathlib.Path(
+    "docs/design/cxxlens_next_generation_integrated_design_ja.md"
+)
 GENERIC_DEPENDENCIES = [
     REGISTRY,
     PROJECT_CATALOG,
@@ -47,6 +54,12 @@ GENERIC_DEPENDENCIES = [
     SNAPSHOT_STORE,
 ]
 AUTHORITY_PATHS = [CONTRACT, CONTRACT_SCHEMA, REQUEST_SCHEMA, REPORT_SCHEMA, REGISTRY]
+FORBIDDEN_REPORT_LIFECYCLE_TEXT = (
+    "bounded-spool-before-publication",
+    "publication 前に bounded private spool 上で完全な schema-valid bytes まで構築する",
+    "complete-report-before-publication",
+    "schema-valid-report-before-publication",
+)
 
 DESCRIPTOR_IDS = [
     "cc.call_direct_target.v1",
@@ -85,6 +98,58 @@ EXPECTED_JSON_LEXICAL_POLICY = {
     "trailing_or_second_value": "reject",
     "non_finite_numbers": "reject",
     "yaml_authority_loading": "separate",
+}
+EXPECTED_REPORT_CONSTRUCTION = {
+    "lifecycle": "bounded-two-phase-report-lifecycle",
+    "lifecycle_order": [
+        "publication-independent-projection-and-validation",
+        "final-response-capacity-reservation",
+        "publication-attempt",
+        "exact-outcome-capture",
+        "outcome-specific-reopen-or-recovery",
+        "complete-response-finalization",
+        "selected-v2-full-schema-validation",
+        "bottom-up-cross-binding-validation",
+        "stdout-publication",
+    ],
+    "prepublication_projection": "publication-independent-only",
+    "prepublication_forbidden_claims": [
+        "complete-response-authority",
+        "publication-outcome",
+        "invocation-publication-record",
+        "physical-generation",
+        "reopen-path-status-or-projection",
+    ],
+    "capacity_reservation": {
+        "bound": (
+            "checked-maximum-over-every-applicable-detailed-outcome-within-response-"
+            "limit"
+        ),
+        "includes": [
+            "final-json-framing",
+            "exact-publication-outcome",
+            "exact-sdk-records-and-receipts",
+            "maximum-bounded-diagnostics",
+        ],
+        "failure": "compact-only-if-schema-valid-zero-effect-otherwise-exit-two",
+    },
+    "publication_attempt_boundary": (
+        "immediately-before-exactly-one-snapshot-writer-publish-call"
+    ),
+    "publication_dependent_source": "exact-sdk-return-values-and-typed-errors-only",
+    "committed_verified_reopen_order": [
+        "capture-publish-returned-record",
+        "backend-appropriate-reopen",
+        "current-selector",
+        "open-publication",
+        "open-snapshot",
+    ],
+    "stdout_authority": {
+        "before-full-validation": "forbidden",
+        "authoritative-unit": "exactly-one-complete-json-response",
+        "partial-or-short-write": "non-authoritative",
+        "operating-system-atomicity": "not-claimed",
+    },
 }
 EXPECTED_BASE_CLAIM_CONTRACT = {
     "owner": "installed-tool",
@@ -752,10 +817,27 @@ def load_strict_json_bytes(
     def reject_constant(value: str) -> Any:
         raise ValueError(f"non-finite number {value}")
 
+    def parse_exact_integer(value: str) -> int:
+        """Honor JSON Schema's mathematical integer domain without binary floats."""
+
+        try:
+            parsed = decimal.Decimal(value)
+        except decimal.InvalidOperation as error:
+            raise ValueError(f"invalid number {value}") from error
+        if not parsed.is_finite() or parsed != parsed.to_integral_value():
+            raise ValueError(f"non-integral number {value}")
+        minimum = decimal.Decimal(-(1 << 63))
+        maximum = decimal.Decimal((1 << 64) - 1)
+        if parsed < minimum or parsed > maximum:
+            raise ValueError(f"integer outside JSON machine domain {value}")
+        return int(parsed)
+
     try:
         value = json.loads(
             text,
             object_pairs_hook=object_pairs,
+            parse_float=parse_exact_integer,
+            parse_int=parse_exact_integer,
             parse_constant=reject_constant,
         )
     except _DuplicateJsonMember as error:
@@ -2505,6 +2587,29 @@ def bind_request_identity(request: dict[str, Any]) -> None:
 
 def validate_contract_exact(contract: dict[str, Any]) -> None:
     validate_materialization_contract_dependencies(contract)
+
+    def contains_legacy_report_lifecycle(value: Any) -> bool:
+        if isinstance(value, dict):
+            return any(contains_legacy_report_lifecycle(item) for item in value.values())
+        if isinstance(value, list):
+            return any(contains_legacy_report_lifecycle(item) for item in value)
+        return value == "bounded-spool-before-publication"
+
+    if contains_legacy_report_lifecycle(contract):
+        fail(
+            "materialization.report-invalid",
+            "legacy prepublication-complete report lifecycle was reintroduced",
+        )
+    report_construction = (
+        contract.get("surface", {})
+        .get("resource_limits", {})
+        .get("report_construction")
+    )
+    if report_construction != EXPECTED_REPORT_CONSTRUCTION:
+        fail(
+            "materialization.report-invalid",
+            "bounded two-phase report lifecycle differs",
+        )
     if contract["surface"] != {
         "selected_option": "installed-provider-owned-machine-contract",
         "executable": "cxxlens-clang22-materialize",
@@ -2553,8 +2658,17 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
             "raw_request_storage": "bounded-chunk-read-and-private-spool",
             "json_processing": "streaming-strict-utf8-duplicate-aware-no-one-gib-dom",
             "source_decoding": "streaming-base64-to-bounded-private-spool",
-            "report_construction": "bounded-spool-before-publication",
-            "allocation_failure": "exit-two-no-response-authority",
+            "report_construction": EXPECTED_REPORT_CONSTRUCTION,
+            "allocation_failure": {
+                "prepublication_report_construction": (
+                    "schema-valid-compact-zero-effect-if-completable-otherwise-exit-two-"
+                    "no-response"
+                ),
+                "after_publication_attempt": (
+                    "exit-two-no-response-no-compact-downgrade"
+                ),
+                "partial_response": "non-authoritative",
+            },
             "boundary_tests": [
                 "zero",
                 "limit-minus-one",
@@ -2570,6 +2684,17 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
             "schema_valid_failure": 1,
             "stdout_transport_failure_no_response_authority": 2,
             "error_kind_from_exit_or_stderr": "forbidden",
+            "prepublication_report_failure": (
+                "schema-valid-compact-zero-effect-exit-one-or-exit-two-no-response"
+            ),
+            "post_publication_attempt_finalization_failure": (
+                "exit-two-no-response-authority-no-compact-downgrade"
+            ),
+            "post_commit_finalization_or_stdout_failure": (
+                "exit-two-no-response-store-record-only-recovery-authority-and-no-"
+                "release-evidence"
+            ),
+            "partial_stdout": "parsed-response-count-zero-and-non-authoritative",
             "post_commit_broken_stdout": (
                 "exit-two-no-response-store-record-only-recovery-authority-and-no-release-evidence"
             ),
@@ -2594,6 +2719,28 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
         "migration": "v1-unimplemented-unqualified-superseded-no-implicit-upgrade",
     }:
         fail("materialization.version-unsupported", "version/fallback policy is not exact")
+    compact_report_construction = contract["report"]["response_union"][
+        "compact_failure"
+    ].get("report_construction_phase")
+    if (
+        compact_report_construction
+        != "prepublication-zero-effect-only-before-publish-call"
+    ):
+        fail(
+            "materialization.report-invalid",
+            "compact report-construction boundary differs",
+        )
+    required_lifecycle_acceptance = {
+        "streaming-bounded-request-source-and-two-phase-report-construction",
+        "no-completed-report-or-fabricated-publication-values-before-publication",
+        "no-compact-downgrade-after-publication-attempt",
+    }
+    if not required_lifecycle_acceptance.issubset(set(contract["acceptance"])):
+        fail(
+            "materialization.report-invalid",
+            "two-phase report lifecycle acceptance is incomplete",
+        )
+
     if contract["identity"]["verification_ownership"] != {
         "authority_checker_proves": [
             "machine-shape",
@@ -8388,7 +8535,55 @@ def validate_qualification_matrix(
         fail("materialization.report-invalid", "backend/configuration semantic parity differs")
 
 
+def validate_report_lifecycle_authority_text(
+    design_text: str,
+    adr_text: str,
+    contract_text: str,
+) -> None:
+    normalized_design = " ".join(design_text.split())
+    normalized_adr = " ".join(adr_text.split())
+    normalized_contract = " ".join(contract_text.split())
+    for forbidden in FORBIDDEN_REPORT_LIFECYCLE_TEXT:
+        if (
+            forbidden in normalized_design
+            or forbidden in normalized_adr
+            or forbidden in normalized_contract
+        ):
+            fail(
+                "materialization.report-invalid",
+                f"legacy report lifecycle text was reintroduced: {forbidden}",
+            )
+    for required in (
+        "DF-0194",
+        "bounded two-phase",
+        "short/partial write",
+        "OS-level all-or-nothing atomicity",
+    ):
+        if required not in normalized_adr:
+            fail(
+                "materialization.report-invalid",
+                f"ADR two-phase report lifecycle marker is missing: {required}",
+            )
+    for required in (
+        "DF-0194",
+        "bounded two-phase",
+        "publish attempt 後",
+        "request/report v2 shape、identity、public Store API は変更しない",
+    ):
+        if required not in normalized_design:
+            fail(
+                "materialization.report-invalid",
+                f"integrated design two-phase report lifecycle marker is missing: {required}",
+            )
+
+
 def validate_documents(root: pathlib.Path) -> dict[str, Any]:
+    contract_text = (root / CONTRACT).read_text(encoding="utf-8")
+    validate_report_lifecycle_authority_text(
+        (root / INTEGRATED_DESIGN).read_text(encoding="utf-8"),
+        (root / DECISION_ADR).read_text(encoding="utf-8"),
+        contract_text,
+    )
     contract = load(root / CONTRACT)
     contract_schema = load(root / CONTRACT_SCHEMA)
     request_schema = load(root / REQUEST_SCHEMA)

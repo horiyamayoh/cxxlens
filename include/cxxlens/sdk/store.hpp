@@ -380,8 +380,8 @@ namespace cxxlens::sdk
 	class snapshot_writer
 	{
 	  public:
-		snapshot_writer(snapshot_writer&&) noexcept = default;
-		snapshot_writer& operator=(snapshot_writer&&) noexcept = default;
+		snapshot_writer(snapshot_writer&&) noexcept;
+		snapshot_writer& operator=(snapshot_writer&&) noexcept;
 		snapshot_writer(const snapshot_writer&) = delete;
 		snapshot_writer& operator=(const snapshot_writer&) = delete;
 		~snapshot_writer();

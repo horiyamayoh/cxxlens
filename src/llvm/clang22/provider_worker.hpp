@@ -11,6 +11,9 @@
 
 #include <cxxlens/sdk/provider.hpp>
 
+#include "llvm/clang22/observation_v2.hpp"
+#include "llvm/clang22/provider_task_v3.hpp"
+
 namespace cxxlens::detail::clang22
 {
 	enum class observation_kind : std::uint8_t
@@ -26,8 +29,8 @@ namespace cxxlens::detail::clang22
 		std::string compile_unit;
 		std::string semantic_key;
 		std::map<std::string, std::string, std::less<>> payload;
-		std::optional<std::string> source_span_id;
-		std::vector<std::string> source_origin_chain;
+		std::optional<materialization::observation_v2_primary_span> primary_span;
+		std::vector<materialization::observation_v2_origin> origins;
 
 		[[nodiscard]] sdk::result<void> validate() const;
 		[[nodiscard]] std::string canonical_form() const;
@@ -40,25 +43,13 @@ namespace cxxlens::detail::clang22
 		std::vector<detached_observation> observations;
 		std::uint64_t failed_count{};
 		std::vector<std::string> diagnostics;
+		std::optional<materialization::observation_v2_task_authority> materialization_authority;
 
 		[[nodiscard]] sdk::result<void> validate() const;
 	};
 
 	/** @brief Canonical pre-normalization dedup key retaining macro spelling occurrences. */
 	[[nodiscard]] std::string observation_dedup_key(const detached_observation& observation);
-
-	struct clang22_task_input
-	{
-		std::string compile_unit;
-		std::string variant;
-		std::string source_snapshot;
-		std::string file;
-		std::string logical_path;
-		std::string source;
-		std::vector<std::string> arguments;
-
-		[[nodiscard]] sdk::result<void> validate() const;
-	};
 
 	struct declaration_identity_input
 	{
@@ -94,10 +85,32 @@ namespace cxxlens::detail::clang22
 		std::vector<std::string> equivalence_limitations;
 	};
 
-	[[nodiscard]] sdk::result<std::vector<std::byte>>
-	encode_task_input(const clang22_task_input& input);
-	[[nodiscard]] sdk::result<clang22_task_input>
-	decode_task_input(std::span<const std::byte> input);
+	/** Closed worker output slots in the contract's exact sealed-batch order. */
+	enum class provider_output_slot : std::uint8_t
+	{
+		call_direct_target = 1,
+		call_site = 2,
+		entity = 3,
+		call_observation = 4,
+		entity_observation = 5,
+		type_observation = 6,
+	};
+
+	/** One exact descriptor/dependency-group binding in the worker output plan. */
+	struct provider_output_binding
+	{
+		provider_output_slot slot{provider_output_slot::call_direct_target};
+		std::string descriptor_id;
+		std::string dependency_group;
+
+		[[nodiscard]] bool operator==(const provider_output_binding&) const = default;
+	};
+
+	/** Return canonical descriptors first, then observations, with no optional slots. */
+	[[nodiscard]] std::vector<provider_output_binding> provider_output_plan();
+	/** Fail closed on missing, duplicate, extra, reordered, or regrouped output slots. */
+	[[nodiscard]] sdk::result<void>
+	validate_provider_output_plan(std::span<const provider_output_binding> plan);
 
 	[[nodiscard]] sdk::relation_descriptor entity_observation_descriptor();
 	[[nodiscard]] sdk::relation_descriptor type_observation_descriptor();

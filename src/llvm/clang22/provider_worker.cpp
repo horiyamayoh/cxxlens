@@ -4,7 +4,6 @@
 #include <array>
 #include <charconv>
 #include <cstdlib>
-#include <limits>
 #include <map>
 #include <memory>
 #include <ostream>
@@ -41,12 +40,28 @@ namespace cxxlens::detail::clang22
 		using sdk::provider::message_type;
 
 		constexpr std::string_view provider_id = "cxxlens.clang22.reference";
-		constexpr std::string_view task_magic = "cxxlens.clang22.task.v2";
 		const sdk::semantic_version provider_version{1U, 0U, 0U};
-		constexpr std::string_view provider_semantic_contract{
-			"sha256:1111111111111111111111111111111111111111111111111111111111111111"};
-		constexpr std::uint32_t maximum_string_bytes = 64U * 1024U * 1024U;
-		constexpr std::uint32_t maximum_arguments = 1024U;
+		struct output_plan_authority
+		{
+			provider_output_slot slot;
+			std::string_view descriptor_id;
+			std::string_view dependency_group;
+		};
+		constexpr std::array exact_output_plan{
+			output_plan_authority{
+				provider_output_slot::call_direct_target, "cc.call_direct_target.v1", "canonical"},
+			output_plan_authority{provider_output_slot::call_site, "cc.call_site.v1", "canonical"},
+			output_plan_authority{provider_output_slot::entity, "cc.entity.v1", "canonical"},
+			output_plan_authority{provider_output_slot::call_observation,
+								  "frontend.clang22.call_observation.v2",
+								  "observation"},
+			output_plan_authority{provider_output_slot::entity_observation,
+								  "frontend.clang22.entity_observation.v2",
+								  "observation"},
+			output_plan_authority{provider_output_slot::type_observation,
+								  "frontend.clang22.type_observation.v2",
+								  "observation"},
+		};
 
 		[[nodiscard]] sdk::error
 		provider_error(std::string code, std::string field, std::string detail = {})
@@ -104,162 +119,84 @@ namespace cxxlens::detail::clang22
 			return output.str();
 		}
 
-		[[nodiscard, maybe_unused]] std::string
-		origin_canonical(const provider::clang22::detached_source_origin& origin)
+		void append_canonical_text(std::ostringstream& output, const std::string_view value)
+		{
+			output << value.size() << ':' << value;
+		}
+
+		[[nodiscard]] std::string primary_span_canonical(
+			const std::optional<materialization::observation_v2_primary_span>& primary_span)
 		{
 			std::ostringstream output;
-			output << origin.kind.size() << ':' << origin.kind << origin.logical_path.size() << ':'
-				   << origin.logical_path << ':' << origin.begin << ':' << origin.end << ':'
-				   << (origin.read_only ? '1' : '0');
+			if (!primary_span)
+			{
+				append_canonical_text(output, "absent");
+				return output.str();
+			}
+			append_canonical_text(output, "present");
+			append_canonical_text(output, primary_span->span_id);
+			append_canonical_text(output, primary_span->snapshot);
+			append_canonical_text(output, primary_span->file);
+			append_canonical_text(output, std::to_string(primary_span->begin));
+			append_canonical_text(output, std::to_string(primary_span->end));
+			append_canonical_text(output, primary_span->role);
+			append_canonical_text(output, primary_span->read_only ? "1" : "0");
 			return output.str();
 		}
 
-		[[nodiscard]] std::string origin_chain_canonical(const std::vector<std::string>& origins)
+		[[nodiscard]] std::string
+		origin_chain_canonical(const std::vector<materialization::observation_v2_origin>& origins)
 		{
 			std::ostringstream output;
+			append_canonical_text(output, std::to_string(origins.size()));
 			for (const auto& origin : origins)
-				output << origin.size() << ':' << origin;
+			{
+				append_canonical_text(output, origin.kind);
+				append_canonical_text(output, origin.logical_path);
+				append_canonical_text(output, std::to_string(origin.begin));
+				append_canonical_text(output, std::to_string(origin.end));
+				append_canonical_text(output, origin.read_only ? "1" : "0");
+			}
 			return output.str();
 		}
 
-		[[nodiscard]] sdk::relation_descriptor observation_descriptor(const std::string& name)
+		[[nodiscard]] std::optional<std::string_view>
+		source_span_id(const detached_observation& observation)
 		{
-			sdk::relation_descriptor descriptor;
-			descriptor.id = name + ".v1";
-			descriptor.name = name;
-			descriptor.version = {1U, 0U, 0U};
-			descriptor.semantic_major = 1U;
-			descriptor.semantics = name + "/1";
-			descriptor.owner_namespace = "cxxlens.provider.clang22";
-			const auto prefix = descriptor.id + ".";
-			descriptor.columns = {
-				{prefix + "observation",
-				 "observation",
-				 {sdk::scalar_kind::typed_id, "clang22_observation_id", false},
-				 true,
-				 sdk::column_role::claim_key},
-				{prefix + "compile_unit",
-				 "compile_unit",
-				 {sdk::scalar_kind::typed_id, "compile_unit_id", false},
-				 true,
-				 sdk::column_role::authoritative_payload},
-				{prefix + "semantic_key",
-				 "semantic_key",
-				 {sdk::scalar_kind::bytes, {}, false},
-				 true,
-				 sdk::column_role::authoritative_payload},
-				{prefix + "payload_digest",
-				 "payload_digest",
-				 {sdk::scalar_kind::digest, {}, false},
-				 true,
-				 sdk::column_role::authoritative_payload},
-				{prefix + "source",
-				 "source",
-				 {sdk::scalar_kind::typed_id, "source_span_id", true},
-				 false,
-				 sdk::column_role::authoritative_payload},
-				{prefix + "source_origin_chain",
-				 "source_origin_chain",
-				 {sdk::scalar_kind::bytes, {}, true},
-				 false,
-				 sdk::column_role::authoritative_payload},
-				{prefix + "exact_equivalence",
-				 "exact_equivalence",
-				 {sdk::scalar_kind::boolean, {}, false},
-				 true,
-				 sdk::column_role::authoritative_payload},
-				{prefix + "limitation",
-				 "limitation",
-				 {sdk::scalar_kind::utf8_string, {}, true},
-				 false,
-				 sdk::column_role::authoritative_payload},
-			};
-			descriptor.key_columns = {prefix + "observation"};
-			descriptor.merge = sdk::merge_mode::functional_assertion;
-			descriptor.conflict_columns = {
-				prefix + "compile_unit",
-				prefix + "semantic_key",
-				prefix + "payload_digest",
-				prefix + "source",
-				prefix + "source_origin_chain",
-				prefix + "exact_equivalence",
-				prefix + "limitation",
-			};
-			descriptor.descriptor_digest = *sdk::semantic_digest(
-				"cxxlens.relation-descriptor-binding.v2",
-				descriptor.contract_digest + "\n" + descriptor.canonical_form());
-			return descriptor;
+			if (!observation.primary_span)
+				return std::nullopt;
+			return observation.primary_span->span_id;
 		}
 
 		[[nodiscard]] sdk::result<sdk::detached_row>
-		observation_row(const sdk::relation_descriptor& descriptor,
-						const detached_observation& observation,
-						const bool exact,
-						const std::string_view limitation)
+		observation_v2_row(const detached_observation& observation,
+						   const materialization::observation_v2_task_authority& authority,
+						   const bool exact,
+						   const std::string_view limitation)
 		{
-			sdk::row_builder builder{descriptor};
-			const auto projection = observation.canonical_form();
-			const auto prefix = descriptor.id + ".";
-			for (auto result : {
-					 builder.set({descriptor.id,
-								  prefix + "observation",
-								  {sdk::scalar_kind::typed_id, "clang22_observation_id", false}},
-								 sdk::detached_cell::typed(
-									 "clang22_observation_id",
-									 *sdk::semantic_digest("clang22.observation.v1", projection))),
-					 builder.set(
-						 {descriptor.id,
-						  prefix + "compile_unit",
-						  {sdk::scalar_kind::typed_id, "compile_unit_id", false}},
-						 sdk::detached_cell::typed("compile_unit_id", observation.compile_unit)),
-					 builder.set({descriptor.id,
-								  prefix + "semantic_key",
-								  {sdk::scalar_kind::bytes, {}, false}},
-								 sdk::detached_cell::bytes(bytes(observation.semantic_key))),
-					 builder.set({descriptor.id,
-								  prefix + "payload_digest",
-								  {sdk::scalar_kind::digest, {}, false}},
-								 symbol_cell(sdk::scalar_kind::digest,
-											 {},
-											 *sdk::semantic_digest("clang22.observation-payload.v1",
-																   projection))),
-					 builder.set({descriptor.id,
-								  prefix + "exact_equivalence",
-								  {sdk::scalar_kind::boolean, {}, false}},
-								 sdk::detached_cell::boolean(exact)),
-				 })
-				if (!result)
-					return sdk::unexpected(std::move(result.error()));
-			if (observation.source_span_id)
+			materialization::native_observation_v2 record;
+			switch (observation.kind)
 			{
-				auto result =
-					builder.set({descriptor.id,
-								 prefix + "source",
-								 {sdk::scalar_kind::typed_id, "source_span_id", true}},
-								optional_typed("source_span_id", *observation.source_span_id));
-				if (!result)
-					return sdk::unexpected(std::move(result.error()));
+				case observation_kind::entity:
+					record.kind = materialization::observation_v2_kind::entity;
+					break;
+				case observation_kind::type:
+					record.kind = materialization::observation_v2_kind::type;
+					break;
+				case observation_kind::call:
+					record.kind = materialization::observation_v2_kind::call;
+					break;
 			}
-			if (!observation.source_origin_chain.empty())
-			{
-				auto result = builder.set(
-					{descriptor.id,
-					 prefix + "source_origin_chain",
-					 {sdk::scalar_kind::bytes, {}, true}},
-					optional_bytes(bytes(origin_chain_canonical(observation.source_origin_chain))));
-				if (!result)
-					return sdk::unexpected(std::move(result.error()));
-			}
+			record.final_relation_compile_unit_id = observation.compile_unit;
+			record.semantic_key = observation.semantic_key;
+			for (const auto& [key, value] : observation.payload)
+				record.payload.push_back({key, value});
+			record.primary_span = observation.primary_span;
+			record.origin_chain = observation.origins;
+			record.exact_equivalence = exact;
 			if (!limitation.empty())
-			{
-				auto result = builder.set({descriptor.id,
-										   prefix + "limitation",
-										   {sdk::scalar_kind::utf8_string, {}, true}},
-										  optional_utf8(std::string{limitation}));
-				if (!result)
-					return sdk::unexpected(std::move(result.error()));
-			}
-			return std::move(builder).finish();
+				record.limitation = std::string{limitation};
+			return materialization::make_observation_v2_row(record, authority);
 		}
 
 		[[nodiscard]] sdk::result<sdk::detached_row> entity_row(
@@ -332,8 +269,8 @@ namespace cxxlens::detail::clang22
 						 sdk::detached_cell::typed("compile_unit_id", observation.compile_unit)),
 					 builder.set<relation::kind>(
 						 symbol_cell(sdk::scalar_kind::open_symbol, "cc.call-kind/1", kind)),
-					 builder.set<relation::source>(
-						 sdk::detached_cell::typed("source_span_id", *observation.source_span_id)),
+					 builder.set<relation::source>(sdk::detached_cell::typed(
+						 "source_span_id", observation.primary_span->span_id)),
 					 builder.set<relation::ordinal>(sdk::detached_cell::unsigned_integer(ordinal)),
 				 })
 				if (!result)
@@ -460,8 +397,7 @@ namespace cxxlens::detail::clang22
 			std::ostringstream output;
 			for (const auto value : {
 					 std::string_view{observation.compile_unit},
-					 observation.source_span_id ? std::string_view{*observation.source_span_id}
-												: std::string_view{},
+					 source_span_id(observation).value_or(std::string_view{}),
 					 entity_field(observation, "call.kind"),
 					 entity_field(observation, "call.caller"),
 				 })
@@ -469,74 +405,19 @@ namespace cxxlens::detail::clang22
 			return output.str();
 		}
 
-		class binary_writer
+		[[nodiscard]] bool canonical_digest(const std::string_view value)
 		{
-		  public:
-			void string(const std::string_view value)
-			{
-				integer(static_cast<std::uint32_t>(value.size()));
-				const auto data = std::as_bytes(std::span{value});
-				output_.insert(output_.end(), data.begin(), data.end());
-			}
-
-			void integer(const std::uint32_t value)
-			{
-				for (std::uint32_t shift = 0U; shift < 32U; shift += 8U)
-					output_.push_back(static_cast<std::byte>((value >> shift) & 0xffU));
-			}
-
-			[[nodiscard]] std::vector<std::byte> finish() &&
-			{
-				return std::move(output_);
-			}
-
-		  private:
-			std::vector<std::byte> output_;
-		};
-
-		class binary_reader
-		{
-		  public:
-			explicit binary_reader(const std::span<const std::byte> input) : input_{input} {}
-
-			[[nodiscard]] sdk::result<std::uint32_t> integer()
-			{
-				if (remaining() < 4U)
-					return sdk::unexpected(
-						provider_error("provider.frontend-request-invalid", "length"));
-				std::uint32_t output{};
-				for (std::uint32_t shift = 0U; shift < 32U; shift += 8U)
-					output |= std::to_integer<std::uint32_t>(input_[offset_++]) << shift;
-				return output;
-			}
-
-			[[nodiscard]] sdk::result<std::string> string()
-			{
-				auto length = integer();
-				if (!length)
-					return sdk::unexpected(std::move(length.error()));
-				if (*length > maximum_string_bytes || remaining() < *length)
-					return sdk::unexpected(
-						provider_error("provider.frontend-request-invalid", "string"));
-				const auto* data = reinterpret_cast<const char*>(input_.data() + offset_);
-				std::string output{data, *length};
-				offset_ += *length;
-				return output;
-			}
-
-			[[nodiscard]] bool empty() const noexcept
-			{
-				return offset_ == input_.size();
-			}
-
-		  private:
-			[[nodiscard]] std::size_t remaining() const noexcept
-			{
-				return input_.size() - offset_;
-			}
-			std::span<const std::byte> input_;
-			std::size_t offset_{};
-		};
+			const auto hex = value.starts_with("sha256:")  ? value.substr(7U)
+				: value.starts_with("semantic-v2:sha256:") ? value.substr(19U)
+														   : std::string_view{};
+			return hex.size() == 64U &&
+				std::ranges::all_of(hex,
+									[](const char byte)
+									{
+										return (byte >= '0' && byte <= '9') ||
+											(byte >= 'a' && byte <= 'f');
+									});
+		}
 
 		class stream_sink final : public sdk::provider::frame_sink
 		{
@@ -764,9 +645,23 @@ namespace cxxlens::detail::clang22
 														{source_snapshot_, file_, "declaration"});
 				if (source)
 				{
-					entity.source_span_id = std::move(source->id);
+					entity.primary_span = materialization::observation_v2_primary_span{
+						source->id,
+						source->source_snapshot,
+						source->file,
+						source->begin,
+						source->end,
+						source->role,
+						source->read_only,
+					};
 					for (const auto& origin : source->origin_chain)
-						entity.source_origin_chain.push_back(origin_canonical(origin));
+					{
+						entity.origins.push_back({origin.kind,
+												  origin.logical_path,
+												  static_cast<std::int64_t>(origin.begin),
+												  static_cast<std::int64_t>(origin.end),
+												  origin.read_only});
+					}
 				}
 				insert(std::move(entity));
 
@@ -834,15 +729,44 @@ namespace cxxlens::detail::clang22
 				{
 					++output_->failed_count;
 					output_->diagnostics.push_back(source.error().code);
+					std::ostringstream unavailable_key;
+					append_canonical_text(unavailable_key,
+										  "cxxlens.clang22.call-source-unavailable.v1");
+					append_canonical_text(unavailable_key, output_->unit);
+					append_canonical_text(unavailable_key, current_function_);
+					append_canonical_text(unavailable_key,
+										  std::to_string(source_unavailable_call_index_++));
+					for (const auto& [key, value] : call.payload)
+					{
+						append_canonical_text(unavailable_key, key);
+						append_canonical_text(unavailable_key, value);
+					}
+					call.semantic_key = *sdk::semantic_digest(
+						"cxxlens.clang22.call-source-unavailable.v1", unavailable_key.str());
+					insert(std::move(call));
 					return true;
 				}
-				call.source_span_id = std::move(source->id);
+				call.primary_span = materialization::observation_v2_primary_span{
+					source->id,
+					source->source_snapshot,
+					source->file,
+					source->begin,
+					source->end,
+					source->role,
+					source->read_only,
+				};
 				for (const auto& origin : source->origin_chain)
-					call.source_origin_chain.push_back(origin_canonical(origin));
+				{
+					call.origins.push_back({origin.kind,
+											origin.logical_path,
+											static_cast<std::int64_t>(origin.begin),
+											static_cast<std::int64_t>(origin.end),
+											origin.read_only});
+				}
 				call.semantic_key =
 					*sdk::semantic_digest("clang22.call.v1",
-										  current_function_ + "\n" + *call.source_span_id + "\n" +
-											  call.payload["call.direct_callee"]);
+										  current_function_ + "\n" + call.primary_span->span_id +
+											  "\n" + call.payload["call.direct_callee"]);
 				insert(std::move(call));
 				return true;
 			}
@@ -862,6 +786,7 @@ namespace cxxlens::detail::clang22
 			std::string toolchain_digest_;
 			std::string current_function_;
 			std::map<std::string, std::size_t, std::less<>> seen_;
+			std::uint64_t source_unavailable_call_index_{};
 		};
 #endif
 
@@ -871,6 +796,8 @@ namespace cxxlens::detail::clang22
 			observation_batch output;
 			output.unit = input.compile_unit;
 			output.variant = input.variant;
+			output.materialization_authority = materialization::observation_v2_task_authority{
+				input.compile_unit, input.source_snapshot, input.file, input.source_size_bytes};
 			provider::clang22::translation_unit_input native_input{input.source_snapshot,
 																   input.file,
 																   input.logical_path,
@@ -912,11 +839,35 @@ namespace cxxlens::detail::clang22
 			return output;
 		}
 
+		[[nodiscard]] sdk::result<sdk::relation_descriptor>
+		output_descriptor(const provider_output_slot slot)
+		{
+			switch (slot)
+			{
+				case provider_output_slot::call_direct_target:
+					return cc::relations::call_direct_target::descriptor();
+				case provider_output_slot::call_site:
+					return cc::relations::call_site::descriptor();
+				case provider_output_slot::entity:
+					return cc::relations::entity::descriptor();
+				case provider_output_slot::call_observation:
+					return call_observation_descriptor();
+				case provider_output_slot::entity_observation:
+					return entity_observation_descriptor();
+				case provider_output_slot::type_observation:
+					return type_observation_descriptor();
+			}
+			return sdk::unexpected(provider_error("provider.output-plan-invalid", "slot"));
+		}
+
 		class canonical_provider final : public sdk::provider::portable_provider
 		{
 		  public:
-			canonical_provider(clang22_task_input request, std::string toolchain_digest)
-				: request_{std::move(request)}, toolchain_digest_{std::move(toolchain_digest)}
+			canonical_provider(clang22_task_input request,
+							   std::string toolchain_digest,
+							   std::string semantic_contract_digest)
+				: request_{std::move(request)}, toolchain_digest_{std::move(toolchain_digest)},
+				  semantic_contract_digest_{std::move(semantic_contract_digest)}
 			{
 			}
 
@@ -932,7 +883,7 @@ namespace cxxlens::detail::clang22
 
 			[[nodiscard]] std::string_view semantic_contract_digest() const noexcept override
 			{
-				return provider_semantic_contract;
+				return semantic_contract_digest_;
 			}
 
 			sdk::result<void> run(const sdk::provider::task& task,
@@ -964,28 +915,41 @@ namespace cxxlens::detail::clang22
 					return sink.end();
 				};
 
-				for (const auto& [descriptor, rows, group] : {
-						 std::tuple{entity_observation_descriptor(),
-									&normalized->entity_observations,
-									std::string_view{"observation"}},
-						 std::tuple{type_observation_descriptor(),
-									&normalized->type_observations,
-									std::string_view{"observation"}},
-						 std::tuple{call_observation_descriptor(),
-									&normalized->call_observations,
-									std::string_view{"observation"}},
-						 std::tuple{cc::relations::entity::descriptor(),
-									&normalized->entities,
-									std::string_view{"canonical"}},
-						 std::tuple{cc::relations::call_site::descriptor(),
-									&normalized->call_sites,
-									std::string_view{"canonical"}},
-						 std::tuple{cc::relations::call_direct_target::descriptor(),
-									&normalized->direct_targets,
-									std::string_view{"canonical"}},
-					 })
-					if (auto emitted = emit(descriptor, *rows, group); !emitted)
+				const auto plan = provider_output_plan();
+				if (auto valid = validate_provider_output_plan(plan); !valid)
+					return valid;
+				const auto rows =
+					[&](const provider_output_slot slot) -> const std::vector<sdk::detached_row>*
+				{
+					switch (slot)
+					{
+						case provider_output_slot::call_direct_target:
+							return &normalized->direct_targets;
+						case provider_output_slot::call_site:
+							return &normalized->call_sites;
+						case provider_output_slot::entity:
+							return &normalized->entities;
+						case provider_output_slot::call_observation:
+							return &normalized->call_observations;
+						case provider_output_slot::entity_observation:
+							return &normalized->entity_observations;
+						case provider_output_slot::type_observation:
+							return &normalized->type_observations;
+					}
+					return nullptr;
+				};
+				for (const auto& binding : plan)
+				{
+					auto descriptor = output_descriptor(binding.slot);
+					const auto* output_rows = rows(binding.slot);
+					if (!descriptor || descriptor->id != binding.descriptor_id ||
+						output_rows == nullptr)
+						return sdk::unexpected(
+							provider_error("provider.output-plan-invalid", "descriptor-binding"));
+					if (auto emitted = emit(*descriptor, *output_rows, binding.dependency_group);
+						!emitted)
 						return emitted;
+				}
 
 				for (auto item : normalized->unresolved)
 					context.unresolved().add(std::move(item));
@@ -1015,6 +979,7 @@ namespace cxxlens::detail::clang22
 		  private:
 			clang22_task_input request_;
 			std::string toolchain_digest_;
+			std::string semantic_contract_digest_;
 		};
 	} // namespace
 
@@ -1022,11 +987,34 @@ namespace cxxlens::detail::clang22
 	{
 		if (compile_unit.empty() || semantic_key.empty())
 			return sdk::unexpected(provider_error("provider.observation-invalid", "identity"));
-		if (source_span_id && source_span_id->empty())
+		if (kind == observation_kind::type && (primary_span || !origins.empty()))
 			return sdk::unexpected(
-				provider_error("provider.observation-invalid", "source_span_id"));
-		for (const auto& origin : source_origin_chain)
-			if (origin.empty() || origin.find('\0') != std::string::npos)
+				provider_error("provider.observation-invalid", "type_source_authority"));
+		if (primary_span)
+		{
+			if (primary_span->span_id.empty() || primary_span->snapshot.empty() ||
+				primary_span->file.empty() || primary_span->role.empty() ||
+				primary_span->begin > primary_span->end ||
+				!sdk::validate_utf8_text(primary_span->span_id) ||
+				!sdk::validate_utf8_text(primary_span->snapshot) ||
+				!sdk::validate_utf8_text(primary_span->file) ||
+				!sdk::validate_utf8_text(primary_span->role))
+				return sdk::unexpected(
+					provider_error("provider.observation-invalid", "primary_span"));
+			auto expected = sdk::source_span_identity(primary_span->snapshot,
+													  primary_span->file,
+													  primary_span->begin,
+													  primary_span->end,
+													  primary_span->role);
+			if (!expected || *expected != primary_span->span_id)
+				return sdk::unexpected(
+					provider_error("provider.observation-invalid", "primary_span_binding"));
+		}
+		for (const auto& origin : origins)
+			if (origin.kind.empty() || origin.logical_path.empty() ||
+				!sdk::validate_utf8_text(origin.kind) ||
+				!sdk::validate_utf8_text(origin.logical_path) || origin.begin < 0 ||
+				origin.end < origin.begin || !origin.read_only)
 				return sdk::unexpected(
 					provider_error("provider.observation-invalid", "source_origin_chain"));
 		for (const auto& [key, value] : payload)
@@ -1064,37 +1052,34 @@ namespace cxxlens::detail::clang22
 	std::string detached_observation::canonical_form() const
 	{
 		std::ostringstream output;
-		output << static_cast<unsigned>(kind) << '\n'
-			   << compile_unit << '\n'
-			   << semantic_key << '\n';
+		append_canonical_text(output, "cxxlens.clang22.observation-native-order.v2");
+		append_canonical_text(output, std::to_string(static_cast<unsigned>(kind)));
+		append_canonical_text(output, compile_unit);
+		append_canonical_text(output, semantic_key);
+		append_canonical_text(output, std::to_string(payload.size()));
 		for (const auto& [key, value] : payload)
-			output << key.size() << ':' << key << value.size() << ':' << value;
-		output << '\n'
-			   << source_span_id.value_or(std::string{}) << '\n'
-			   << origin_chain_canonical(source_origin_chain);
+		{
+			append_canonical_text(output, key);
+			append_canonical_text(output, value);
+		}
+		append_canonical_text(output, primary_span_canonical(primary_span));
+		append_canonical_text(output, origin_chain_canonical(origins));
 		return output.str();
 	}
 
 	std::string observation_dedup_key(const detached_observation& observation)
 	{
-		std::ostringstream output;
-		const auto append = [&output](const std::string_view value)
-		{
-			output << value.size() << ':' << value;
-		};
-		const auto kind = std::to_string(static_cast<unsigned>(observation.kind));
-		const auto origin = origin_chain_canonical(observation.source_origin_chain);
-		append(kind);
-		append(observation.semantic_key);
-		append(observation.source_span_id.value_or(std::string{}));
-		append(origin);
-		return output.str();
+		return observation.canonical_form();
 	}
 
 	sdk::result<void> observation_batch::validate() const
 	{
 		if (unit.empty() || variant.empty())
 			return sdk::unexpected(provider_error("provider.batch-invalid", "identity"));
+		if (materialization_authority &&
+			materialization_authority->final_relation_compile_unit_id != unit)
+			return sdk::unexpected(
+				provider_error("provider.batch-invalid", "materialization_authority"));
 		for (const auto& observation : observations)
 		{
 			if (auto valid = observation.validate(); !valid)
@@ -1108,88 +1093,56 @@ namespace cxxlens::detail::clang22
 		return {};
 	}
 
-	sdk::result<void> clang22_task_input::validate() const
+	std::vector<provider_output_binding> provider_output_plan()
 	{
-		if (compile_unit.empty() || variant.empty())
-			return sdk::unexpected(provider_error("provider.frontend-request-invalid", "identity"));
-		return provider::clang22::translation_unit_input{
-			source_snapshot, file, logical_path, source, arguments}
-			.validate();
-	}
-
-	sdk::result<std::vector<std::byte>> encode_task_input(const clang22_task_input& input)
-	{
-		if (auto valid = input.validate(); !valid)
-			return sdk::unexpected(std::move(valid.error()));
-		if (input.source.size() > maximum_string_bytes)
-			return sdk::unexpected(
-				provider_error("provider.frontend-request-invalid", "source-size"));
-		binary_writer writer;
-		writer.string(task_magic);
-		writer.string(input.compile_unit);
-		writer.string(input.variant);
-		writer.string(input.source_snapshot);
-		writer.string(input.file);
-		writer.string(input.logical_path);
-		writer.string(input.source);
-		writer.integer(static_cast<std::uint32_t>(input.arguments.size()));
-		for (const auto& argument : input.arguments)
-			writer.string(argument);
-		return std::move(writer).finish();
-	}
-
-	sdk::result<clang22_task_input> decode_task_input(const std::span<const std::byte> input)
-	{
-		binary_reader reader{input};
-		auto magic = reader.string();
-		auto compile_unit = reader.string();
-		auto variant = reader.string();
-		auto source_snapshot = reader.string();
-		auto file = reader.string();
-		auto logical_path = reader.string();
-		auto source = reader.string();
-		auto count = reader.integer();
-		if (!magic || !compile_unit || !variant || !source_snapshot || !file || !logical_path ||
-			!source || !count || *magic != task_magic || *count > maximum_arguments)
-			return sdk::unexpected(provider_error("provider.frontend-request-invalid", "payload"));
-		clang22_task_input output{
-			std::move(*compile_unit),
-			std::move(*variant),
-			std::move(*source_snapshot),
-			std::move(*file),
-			std::move(*logical_path),
-			std::move(*source),
-			{},
-		};
-		output.arguments.reserve(*count);
-		for (std::uint32_t index = 0U; index < *count; ++index)
-		{
-			auto argument = reader.string();
-			if (!argument)
-				return sdk::unexpected(std::move(argument.error()));
-			output.arguments.push_back(std::move(*argument));
-		}
-		if (!reader.empty())
-			return sdk::unexpected(
-				provider_error("provider.frontend-request-invalid", "trailing-bytes"));
-		if (auto valid = output.validate(); !valid)
-			return sdk::unexpected(std::move(valid.error()));
+		std::vector<provider_output_binding> output;
+		output.reserve(exact_output_plan.size());
+		for (const auto& binding : exact_output_plan)
+			output.push_back({binding.slot,
+							  std::string{binding.descriptor_id},
+							  std::string{binding.dependency_group}});
 		return output;
+	}
+
+	sdk::result<void>
+	validate_provider_output_plan(const std::span<const provider_output_binding> plan)
+	{
+		if (plan.size() != exact_output_plan.size())
+			return sdk::unexpected(provider_error(
+				"provider.output-plan-invalid", "descriptor-count", "missing-or-extra"));
+		for (std::size_t left{}; left < plan.size(); ++left)
+			for (std::size_t right = left + 1U; right < plan.size(); ++right)
+				if (plan[left].slot == plan[right].slot ||
+					plan[left].descriptor_id == plan[right].descriptor_id)
+					return sdk::unexpected(
+						provider_error("provider.output-plan-invalid", "descriptor", "duplicate"));
+		for (std::size_t index{}; index < plan.size(); ++index)
+		{
+			const auto& actual = plan[index];
+			const auto& expected = exact_output_plan[index];
+			if (actual.slot != expected.slot || actual.descriptor_id != expected.descriptor_id)
+				return sdk::unexpected(provider_error(
+					"provider.output-plan-invalid", "descriptor", "membership-or-order"));
+			if (actual.dependency_group != expected.dependency_group)
+				return sdk::unexpected(
+					provider_error("provider.output-plan-invalid", "dependency-group", "order"));
+		}
+		return {};
 	}
 
 	sdk::relation_descriptor entity_observation_descriptor()
 	{
-		return observation_descriptor("frontend.clang22.entity_observation");
+		return materialization::entity_observation_v2_descriptor();
 	}
 
 	sdk::relation_descriptor type_observation_descriptor()
 	{
-		return observation_descriptor("frontend.clang22.type_observation");
+		return materialization::type_observation_v2_descriptor();
 	}
 
 	sdk::relation_descriptor call_observation_descriptor()
 	{
-		return observation_descriptor("frontend.clang22.call_observation");
+		return materialization::call_observation_v2_descriptor();
 	}
 
 	bool invocation_has_exact_equivalence(const std::span<const std::string> arguments,
@@ -1278,6 +1231,12 @@ namespace cxxlens::detail::clang22
 						  {
 							  return left->canonical_form() < right->canonical_form();
 						  });
+		for (const auto* observation : ordered_observations)
+			if (observation->kind != observation_kind::type && !observation->primary_span)
+				output.unresolved.push_back(
+					{"provider.source-unavailable",
+					 observation->semantic_key,
+					 observation->kind == observation_kind::entity ? "cc.entity" : "cc.call_site"});
 		std::map<std::string, std::vector<const detached_observation*>, std::less<>> entity_groups;
 		for (const auto& observation : batch.observations)
 			if (observation.kind == observation_kind::entity)
@@ -1309,6 +1268,12 @@ namespace cxxlens::detail::clang22
 		}
 		for (const auto& observation : batch.observations)
 		{
+			if (observation.kind != observation_kind::type && !observation.primary_span)
+				output.equivalence_limitations.push_back(
+					"source-authority-unavailable:" +
+					std::string{observation.kind == observation_kind::entity ? "entity:"
+																			 : "call:"} +
+					observation.semantic_key);
 			if (observation.kind != observation_kind::call)
 				continue;
 			const auto kind = entity_field(observation, "call.kind");
@@ -1325,15 +1290,15 @@ namespace cxxlens::detail::clang22
 		output.exact_equivalence =
 			invocation_exact && output.equivalence_limitations.empty() && batch.failed_count == 0U;
 		const auto limitation = limitation_text(output.equivalence_limitations);
+		const auto observation_authority = batch.materialization_authority.value_or(
+			materialization::observation_v2_task_authority{batch.unit, {}, {}, 0U});
 
 		std::map<std::string, std::string, std::less<>> entity_ids;
 		for (const auto* observation : ordered_observations)
 			if (observation->kind == observation_kind::entity)
 			{
-				auto local = observation_row(entity_observation_descriptor(),
-											 *observation,
-											 output.exact_equivalence,
-											 limitation);
+				auto local = observation_v2_row(
+					*observation, observation_authority, output.exact_equivalence, limitation);
 				if (!local)
 					return sdk::unexpected(std::move(local.error()));
 				output.entity_observations.push_back(std::move(*local));
@@ -1354,8 +1319,8 @@ namespace cxxlens::detail::clang22
 		{
 			if (observation->kind != observation_kind::type)
 				continue;
-			auto local = observation_row(
-				type_observation_descriptor(), *observation, output.exact_equivalence, limitation);
+			auto local = observation_v2_row(
+				*observation, observation_authority, output.exact_equivalence, limitation);
 			if (!local)
 				return sdk::unexpected(std::move(local.error()));
 			output.type_observations.push_back(std::move(*local));
@@ -1382,17 +1347,13 @@ namespace cxxlens::detail::clang22
 				previous_class = occurrence_class;
 				call_ordinal = 0U;
 			}
-			auto local = observation_row(
-				call_observation_descriptor(), observation, output.exact_equivalence, limitation);
+			auto local = observation_v2_row(
+				observation, observation_authority, output.exact_equivalence, limitation);
 			if (!local)
 				return sdk::unexpected(std::move(local.error()));
 			output.call_observations.push_back(std::move(*local));
-			if (!observation.source_span_id)
-			{
-				output.unresolved.push_back(
-					{"provider.source-unavailable", observation.semantic_key, "cc.call_site"});
+			if (!observation.primary_span)
 				continue;
-			}
 			auto site = call_site_row(observation, entity_ids, call_ordinal++);
 			if (!site)
 				return sdk::unexpected(std::move(site.error()));
@@ -1458,6 +1419,8 @@ namespace cxxlens::detail::clang22
 			return value == nullptr ? std::nullopt : std::optional<std::string>{value};
 		};
 		auto expected_manifest = environment("CXXLENS_PROVIDER_MANIFEST");
+		auto expected_provider_id = environment("CXXLENS_PROVIDER_ID");
+		auto expected_semantic_contract = environment("CXXLENS_PROVIDER_SEMANTIC_CONTRACT_DIGEST");
 		auto expected_task_id = environment("CXXLENS_PROVIDER_TASK_ID");
 		auto expected_task_digest = environment("CXXLENS_PROVIDER_TASK_INPUT_DIGEST");
 		auto expected_invocation = environment("CXXLENS_PROVIDER_NORMALIZED_INVOCATION_DIGEST");
@@ -1465,9 +1428,11 @@ namespace cxxlens::detail::clang22
 		auto expected_environment = environment("CXXLENS_PROVIDER_ENVIRONMENT_DIGEST");
 		auto expected_major = environment("CXXLENS_PROVIDER_PROTOCOL_MAJOR");
 		auto expected_minor = environment("CXXLENS_PROVIDER_PROTOCOL_MINOR");
-		if (!expected_manifest || !expected_task_id || !expected_task_digest ||
-			!expected_invocation || !expected_toolchain || !expected_environment ||
-			!expected_major || !expected_minor)
+		if (!expected_manifest || !expected_provider_id || !expected_semantic_contract ||
+			*expected_provider_id != provider_id ||
+			!canonical_digest(*expected_semantic_contract) || !expected_task_id ||
+			!expected_task_digest || !expected_invocation || !expected_toolchain ||
+			!expected_environment || !expected_major || !expected_minor)
 			return EXIT_FAILURE;
 		sdk::provider::protocol_limits input_limits;
 		const auto parse_version = [](const std::string_view text, std::uint16_t& output)
@@ -1519,45 +1484,43 @@ namespace cxxlens::detail::clang22
 		}
 		const std::string toolchain_digest{task_control.toolchain_digest};
 		const std::string environment_digest{task_control.environment_digest};
-		const auto source_digest = sdk::content_digest(std::as_bytes(std::span{request->source}));
-		auto catalog = sdk::project_catalog::make(".",
-												  environment_digest,
-												  {{request->compile_unit,
-													task_control.normalized_invocation_digest,
-													source_digest,
-													environment_digest}});
-		if (!catalog)
+		if (request->normalized_invocation_digest != task_control.normalized_invocation_digest ||
+			request->toolchain_digest != toolchain_digest ||
+			request->environment_digest != environment_digest)
 		{
-			send_frontend_failure("project");
+			send_frontend_failure("task-binding");
 			return EXIT_SUCCESS;
 		}
-		std::vector outputs{entity_observation_descriptor(),
-							type_observation_descriptor(),
-							call_observation_descriptor(),
-							cc::relations::entity::descriptor(),
-							cc::relations::call_site::descriptor(),
-							cc::relations::call_direct_target::descriptor()};
-		auto session = sdk::provider::provider_session{std::string{provider_id},
-													   provider_version,
-													   std::string{provider_semantic_contract},
-													   outputs,
-													   {},
-													   {"cc.clang22-canonical-1"},
-													   "observation",
-													   "assertion"};
-		auto task = sdk::provider::task::make(std::move(session),
-											  std::move(*catalog),
-											  std::move(outputs),
-											  "condition:all",
-											  "cc.clang22-canonical-1",
-											  {"canonical", "observation"});
+		const auto output_plan = provider_output_plan();
+		if (auto valid = validate_provider_output_plan(output_plan); !valid)
+		{
+			send_frontend_failure("output-plan");
+			return EXIT_SUCCESS;
+		}
+		std::vector<sdk::relation_descriptor> outputs;
+		outputs.reserve(output_plan.size());
+		for (const auto& binding : output_plan)
+		{
+			auto descriptor = output_descriptor(binding.slot);
+			if (!descriptor || descriptor->id != binding.descriptor_id)
+			{
+				send_frontend_failure("output-plan");
+				return EXIT_SUCCESS;
+			}
+			outputs.push_back(std::move(*descriptor));
+		}
+		auto task =
+			reconstruct_provider_task(*request, std::move(outputs), *expected_semantic_contract);
 		if (!task || task->task_id != task_id)
 		{
 			send_frontend_failure("task-id");
 			return EXIT_SUCCESS;
 		}
-		canonical_provider provider{std::move(*request), toolchain_digest};
-		(void)sdk::provider::run_worker(provider, *task, writer);
+		auto execution = sdk::provider::execution_context{};
+		execution.budget = request->budget;
+		canonical_provider provider{
+			std::move(*request), toolchain_digest, *expected_semantic_contract};
+		(void)sdk::provider::run_worker(provider, *task, writer, std::move(execution));
 		return EXIT_SUCCESS;
 	}
 } // namespace cxxlens::detail::clang22

@@ -17,6 +17,19 @@ class ContractError(ValueError):
     pass
 
 
+WORKER_TASK_CODEC_V3 = "cxxlens.clang22.task.v3"
+LEGACY_WORKER_TASK_CODEC_V2 = "cxxlens.clang22.task.v2"
+
+
+def validate_task_codec_markers(codec: str) -> None:
+    if codec.count(WORKER_TASK_CODEC_V3) != 1:
+        raise ContractError(
+            "Clang 22 task codec must bind exactly one installed task.v3 codec marker"
+        )
+    if LEGACY_WORKER_TASK_CODEC_V2 in codec:
+        raise ContractError("legacy Clang 22 task.v2 codec remains adoptable")
+
+
 def load(path: pathlib.Path) -> dict[str, Any]:
     value = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
@@ -272,7 +285,6 @@ def validate(root: pathlib.Path) -> None:
             "native.source-origin-invalid",
         ),
         "src/llvm/clang22/provider_worker.cpp": (
-            "frontend.clang22.entity_observation",
             "cc.call_site",
             "ignored-or-gcc-specific-option",
             "derive_domain_identity",
@@ -288,7 +300,6 @@ def validate(root: pathlib.Path) -> None:
             "const auto key = observation_dedup_key(observation);",
             "call_occurrence_class",
             "ordered_observations",
-            "cxxlens.clang22.task.v2",
             "source_snapshot",
             "clang22.declaration-fallback.v2",
             "make_declaration_identity",
@@ -299,8 +310,18 @@ def validate(root: pathlib.Path) -> None:
             "validate_host_transcript",
             "CXXLENS_PROVIDER_PROTOCOL_MINOR",
         ),
+        "src/llvm/clang22/observation_v2.cpp": (
+            "frontend.clang22.entity_observation",
+            "make_observation_v2_row",
+        ),
+        "src/llvm/clang22/provider_task_v3.cpp": (
+            WORKER_TASK_CODEC_V3,
+            "task_v3_projection",
+            "reconstruct_provider_task",
+        ),
         "CMakeLists.txt": (
             "cxxlens-clang-worker-22",
+            "cxxlens_clang22_materialization_codecs",
             "cxxlens_ng_provider_runtime_contract.yaml",
         ),
         "tests/fixtures/provider_process_fixture.cpp": (
@@ -328,6 +349,8 @@ def validate(root: pathlib.Path) -> None:
         if missing:
             raise ContractError(f"{relative} lacks markers: {missing}")
 
+    codec = (root / "src/llvm/clang22/provider_task_v3.cpp").read_text(encoding="utf-8")
+    validate_task_codec_markers(codec)
     worker = (root / "src/llvm/clang22/provider_worker.cpp").read_text(encoding="utf-8")
     for forbidden in ("call.direct_callee_anchor", "builder.set<relation::anchor>"):
         if forbidden in worker:

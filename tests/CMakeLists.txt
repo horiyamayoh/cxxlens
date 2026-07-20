@@ -72,20 +72,30 @@ cxxlens_add_test_executable(cxxlens-unit-sdk-provider-runtime
                             unit/sdk/provider_runtime_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-provider-runtime
                       PRIVATE cxxlens::provider_sdk)
+target_include_directories(cxxlens-unit-sdk-provider-runtime
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+if(CXXLENS_BUILD_SHARED)
+  target_sources(cxxlens-unit-sdk-provider-runtime
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
 add_test(NAME unit.sdk-provider-runtime
          COMMAND cxxlens-unit-sdk-provider-runtime
                  "$<TARGET_FILE:cxxlens-provider-process-fixture>")
+add_test(NAME unit.sdk-provider-runtime-sealed
+         COMMAND cxxlens-unit-sdk-provider-runtime --sealed-only)
 set_tests_properties(
   unit.sdk-provider-runtime
   PROPERTIES
     LABELS
     "unit;sdk;provider;process;sandbox;security;budget;cancellation;slow"
     PROCESSORS 2)
+set_tests_properties(unit.sdk-provider-runtime-sealed
+                     PROPERTIES LABELS "unit;sdk;provider;sealed;adoption")
 
 cxxlens_add_test_executable(cxxlens-clang22-provider-normalizer
                             adapter/clang22/provider_normalizer_test.cpp)
 target_link_libraries(cxxlens-clang22-provider-normalizer
-                      PRIVATE cxxlens::clang22_provider_sdk)
+                      PRIVATE cxxlens_clang22_worker_core)
 target_include_directories(cxxlens-clang22-provider-normalizer
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME adapter.clang22-provider-normalizer
@@ -109,10 +119,110 @@ set_tests_properties(
   PROPERTIES LABELS
              "adapter;provider;clang22;process;protocol;sandbox;security")
 
+cxxlens_add_test_executable(cxxlens-clang22-materialization-json
+                            adapter/clang22/materialization_json_test.cpp)
+target_link_libraries(cxxlens-clang22-materialization-json
+                      PRIVATE cxxlens_clang22_materializer_core)
+add_test(NAME adapter.clang22-materialization-json
+         COMMAND cxxlens-clang22-materialization-json)
+set_tests_properties(
+  adapter.clang22-materialization-json
+  PROPERTIES LABELS "adapter;provider;clang22;materialization;json;security")
+
+cxxlens_add_test_executable(cxxlens-clang22-materialization-identity
+                            adapter/clang22/materialization_identity_test.cpp)
+target_link_libraries(cxxlens-clang22-materialization-identity
+                      PRIVATE cxxlens_clang22_materializer_core)
+add_test(NAME adapter.clang22-materialization-identity
+         COMMAND cxxlens-clang22-materialization-identity)
+set_tests_properties(
+  adapter.clang22-materialization-identity
+  PROPERTIES LABELS "adapter;provider;clang22;materialization;identity")
+
+cxxlens_add_test_executable(cxxlens-clang22-materialization-request-driver
+                            adapter/clang22/materialization_request_driver.cpp)
+target_link_libraries(cxxlens-clang22-materialization-request-driver
+                      PRIVATE cxxlens_clang22_materializer_core)
+add_test(
+  NAME adapter.clang22-materialization-request
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${PROJECT_SOURCE_DIR}/tests/adapter/clang22/materialization_request_test.py"
+    --root "${PROJECT_SOURCE_DIR}" --driver
+    "$<TARGET_FILE:cxxlens-clang22-materialization-request-driver>")
+set_tests_properties(
+  adapter.clang22-materialization-request
+  PROPERTIES
+    LABELS "adapter;provider;clang22;materialization;request;identity;security")
+
+cxxlens_add_test_executable(cxxlens-clang22-materialization-io
+                            adapter/clang22/materialization_io_test.cpp)
+target_link_libraries(cxxlens-clang22-materialization-io
+                      PRIVATE cxxlens_clang22_materializer_core)
+add_test(NAME adapter.clang22-materialization-io
+         COMMAND cxxlens-clang22-materialization-io)
+set_tests_properties(
+  adapter.clang22-materialization-io
+  PROPERTIES LABELS
+             "adapter;provider;clang22;materialization;streaming;security")
+
+cxxlens_add_test_executable(cxxlens-clang22-materialization-seal
+                            adapter/clang22/materialization_seal_test.cpp)
+target_link_libraries(cxxlens-clang22-materialization-seal
+                      PRIVATE cxxlens_clang22_materializer_core)
+add_test(NAME adapter.clang22-materialization-seal
+         COMMAND cxxlens-clang22-materialization-seal)
+set_tests_properties(
+  adapter.clang22-materialization-seal
+  PROPERTIES LABELS
+             "adapter;provider;clang22;materialization;seal;identity;security")
+
+cxxlens_add_test_executable(cxxlens-clang22-materialization-claims
+                            adapter/clang22/materialization_claims_test.cpp)
+target_link_libraries(cxxlens-clang22-materialization-claims
+                      PRIVATE cxxlens_clang22_materializer_core)
+add_test(NAME adapter.clang22-materialization-claims
+         COMMAND cxxlens-clang22-materialization-claims "${PROJECT_SOURCE_DIR}")
+set_tests_properties(
+  adapter.clang22-materialization-claims
+  PROPERTIES
+    LABELS "adapter;provider;clang22;materialization;claims;partition;identity")
+
+cxxlens_add_test_executable(cxxlens-clang22-materialization-store
+                            adapter/clang22/materialization_store_test.cpp)
+target_link_libraries(cxxlens-clang22-materialization-store
+                      PRIVATE cxxlens_clang22_materializer_core)
+add_test(NAME adapter.clang22-materialization-store
+         COMMAND cxxlens-clang22-materialization-store)
+set_tests_properties(
+  adapter.clang22-materialization-store
+  PROPERTIES LABELS
+             "adapter;provider;clang22;materialization;store;transaction;sqlite"
+)
+
+cxxlens_add_test_executable(cxxlens-clang22-observation-v2
+                            adapter/clang22/observation_v2_test.cpp)
+target_link_libraries(cxxlens-clang22-observation-v2
+                      PRIVATE cxxlens_clang22_worker_core)
+add_test(NAME adapter.clang22-observation-v2
+         COMMAND cxxlens-clang22-observation-v2)
+set_tests_properties(
+  adapter.clang22-observation-v2
+  PROPERTIES LABELS "adapter;provider;clang22;materialization;observation")
+
+cxxlens_add_test_executable(cxxlens-clang22-unicode-nfc
+                            adapter/clang22/unicode_nfc_test.cpp)
+target_link_libraries(cxxlens-clang22-unicode-nfc
+                      PRIVATE cxxlens_clang22_worker_core)
+add_test(NAME adapter.clang22-unicode-nfc COMMAND cxxlens-clang22-unicode-nfc)
+set_tests_properties(
+  adapter.clang22-unicode-nfc
+  PROPERTIES LABELS "adapter;provider;clang22;materialization;unicode;security")
+
 cxxlens_add_test_executable(cxxlens-r2-vertical-slice
                             integration/r2_vertical_slice_test.cpp)
 target_link_libraries(cxxlens-r2-vertical-slice
-                      PRIVATE cxxlens::clang22_provider_sdk)
+                      PRIVATE cxxlens_clang22_worker_core)
 target_include_directories(cxxlens-r2-vertical-slice
                            PRIVATE "${PROJECT_SOURCE_DIR}/src")
 add_test(NAME integration.r2-vertical-slice COMMAND cxxlens-r2-vertical-slice)
@@ -317,6 +427,15 @@ add_dependencies(
   cxxlens-clang-worker-22
   cxxlens-clang22-provider-normalizer
   cxxlens-clang22-provider-worker-protocol
+  cxxlens-clang22-materialization-json
+  cxxlens-clang22-materialization-identity
+  cxxlens-clang22-materialization-request-driver
+  cxxlens-clang22-materialization-io
+  cxxlens-clang22-materialization-claims
+  cxxlens-clang22-materialization-seal
+  cxxlens-clang22-materialization-store
+  cxxlens-clang22-observation-v2
+  cxxlens-clang22-unicode-nfc
   cxxlens-r2-vertical-slice
   cxxlens-provider-process-fixture
   cxxlens-public-header-cxxlens

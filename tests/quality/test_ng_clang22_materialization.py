@@ -117,10 +117,16 @@ class NgClang22MaterializationTests(unittest.TestCase):
     def test_strict_json_loader_rejects_lexical_ambiguity(self) -> None:
         self.assertEqual(
             materialization.load_strict_json_bytes(
-                b' {"outer":{"value":1},"items":[true,null]} \n',
+                b' {"outer":{"value":1.0},"items":[true,null],"exponent":1e2,'
+                b'"uint64":18446744073709551615} \n',
                 "request",
             ),
-            {"outer": {"value": 1}, "items": [True, None]},
+            {
+                "outer": {"value": 1},
+                "items": [True, None],
+                "exponent": 100,
+                "uint64": (1 << 64) - 1,
+            },
         )
         invalid = {
             "top-duplicate": b'{"value":1,"value":2}',
@@ -130,6 +136,12 @@ class NgClang22MaterializationTests(unittest.TestCase):
             "trailing-garbage": b'{}x',
             "bom": b'\xef\xbb\xbf{}',
             "non-finite": b'{"value":NaN}',
+            "fractional": b'{"value":1.5}',
+            "positive-integer-overflow": b'{"value":18446744073709551616}',
+            "negative-integer-overflow": b'{"value":-9223372036854775809}',
+            "huge-exponent": b'{"value":1e400}',
+            "adversarial-positive-exponent": b'{"value":1e1000000000}',
+            "adversarial-negative-exponent": b'{"value":-1e1000000000}',
             "invalid-unicode-scalar": b'{"value":"\\ud800"}',
         }
         for label, raw in invalid.items():
@@ -2645,6 +2657,210 @@ class NgClang22MaterializationTests(unittest.TestCase):
             "installed qualification matrix differs",
         ):
             materialization.validate_contract_exact(contract)
+
+    def test_machine_contract_requires_bounded_two_phase_report_lifecycle(self) -> None:
+        accepted = materialization.load(ROOT / materialization.CONTRACT)
+        materialization.validate_contract_exact(copy.deepcopy(accepted))
+
+        contract = copy.deepcopy(accepted)
+        contract["surface"]["resource_limits"]["report_construction"].pop(
+            "lifecycle_order"
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "bounded two-phase report lifecycle differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["surface"]["resource_limits"]["report_construction"][
+            "prepublication_forbidden_claims"
+        ].remove("physical-generation")
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "bounded two-phase report lifecycle differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["surface"]["resource_limits"]["report_construction"][
+            "publication_dependent_source"
+        ] = "caller-projection-permitted"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "bounded two-phase report lifecycle differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["surface"]["resource_limits"]["report_construction"][
+            "publication_attempt_boundary"
+        ] = "after-publish-return"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "bounded two-phase report lifecycle differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["surface"]["resource_limits"]["report_construction"][
+            "capacity_reservation"
+        ]["bound"] = "unchecked-current-outcome-only"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "bounded two-phase report lifecycle differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["surface"]["resource_limits"]["report_construction"][
+            "committed_verified_reopen_order"
+        ].reverse()
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "bounded two-phase report lifecycle differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["surface"]["resource_limits"]["report_construction"][
+            "stdout_authority"
+        ]["operating-system-atomicity"] = "required"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "bounded two-phase report lifecycle differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["surface"]["resource_limits"]["report_construction"][
+            "stdout_authority"
+        ]["partial-or-short-write"] = "authoritative"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "bounded two-phase report lifecycle differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["surface"]["process_exit"][
+            "post_publication_attempt_finalization_failure"
+        ] = "compact-zero-effect-permitted"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "installed machine surface is not exact",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["surface"]["resource_limits"]["allocation_failure"][
+            "prepublication_report_construction"
+        ] = "exit-two-only"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "installed machine surface is not exact",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["report"]["response_union"]["compact_failure"][
+            "report_construction_phase"
+        ] = "prepublication-zero-effect-only"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "compact report-construction boundary differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["acceptance"].append("bounded-spool-before-publication")
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "legacy prepublication-complete report lifecycle was reintroduced",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract_schema = materialization.load(ROOT / materialization.CONTRACT_SCHEMA)
+        contract = copy.deepcopy(accepted)
+        contract["surface"]["resource_limits"]["report_construction"][
+            "legacy_complete_report"
+        ] = "allowed"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "Additional properties are not allowed",
+        ):
+            materialization.validate_schema(
+                contract,
+                contract_schema,
+                "materialization contract",
+                error_code="materialization.report-invalid",
+            )
+
+        contract = copy.deepcopy(accepted)
+        contract["surface"]["resource_limits"]["report_construction"] = (
+            "bounded-spool-before-publication"
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "is not of type 'object'",
+        ):
+            materialization.validate_schema(
+                contract,
+                contract_schema,
+                "materialization contract",
+                error_code="materialization.report-invalid",
+            )
+
+    def test_authority_text_rejects_legacy_complete_report_before_publication(self) -> None:
+        design_text = (ROOT / materialization.INTEGRATED_DESIGN).read_text(
+            encoding="utf-8"
+        )
+        adr_text = (ROOT / materialization.DECISION_ADR).read_text(encoding="utf-8")
+        contract_text = (ROOT / materialization.CONTRACT).read_text(encoding="utf-8")
+        materialization.validate_report_lifecycle_authority_text(
+            design_text,
+            adr_text,
+            contract_text,
+        )
+
+        for legacy in materialization.FORBIDDEN_REPORT_LIFECYCLE_TEXT:
+            for source in ("design", "adr", "contract"):
+                with self.subTest(legacy=legacy, source=source):
+                    texts = {
+                        "design": design_text,
+                        "adr": adr_text,
+                        "contract": contract_text,
+                    }
+                    texts[source] += "\n" + legacy
+                    with self.assertRaisesRegex(
+                        materialization.MaterializationError,
+                        "legacy report lifecycle text was reintroduced",
+                    ):
+                        materialization.validate_report_lifecycle_authority_text(
+                            texts["design"],
+                            texts["adr"],
+                            texts["contract"],
+                        )
+
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "ADR two-phase report lifecycle marker is missing: DF-0194",
+        ):
+            materialization.validate_report_lifecycle_authority_text(
+                design_text,
+                adr_text.replace("DF-0194", "DF-missing"),
+                contract_text,
+            )
+
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "integrated design two-phase report lifecycle marker is missing: DF-0194",
+        ):
+            materialization.validate_report_lifecycle_authority_text(
+                design_text.replace("DF-0194", "DF-missing"),
+                adr_text,
+                contract_text,
+            )
 
 
 if __name__ == "__main__":

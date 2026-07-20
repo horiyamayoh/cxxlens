@@ -57,7 +57,7 @@ properties:
     type: object
     minProperties: 1
     additionalProperties: true
-    required: [json_lexical_policy, json_lexical_errors]
+    required: [json_lexical_policy, json_lexical_errors, resource_limits]
     properties:
       json_lexical_policy:
         const:
@@ -71,6 +71,74 @@ properties:
         const:
           request: materialization.request-invalid
           report: materialization.report-invalid
+      resource_limits:
+        type: object
+        required: [report_construction, allocation_failure]
+        additionalProperties: true
+        properties:
+          report_construction:
+            type: object
+            additionalProperties: false
+            required:
+              - lifecycle
+              - lifecycle_order
+              - prepublication_projection
+              - prepublication_forbidden_claims
+              - capacity_reservation
+              - publication_attempt_boundary
+              - publication_dependent_source
+              - committed_verified_reopen_order
+              - stdout_authority
+            properties:
+              lifecycle: {const: bounded-two-phase-report-lifecycle}
+              lifecycle_order:
+                const:
+                  - publication-independent-projection-and-validation
+                  - final-response-capacity-reservation
+                  - publication-attempt
+                  - exact-outcome-capture
+                  - outcome-specific-reopen-or-recovery
+                  - complete-response-finalization
+                  - selected-v2-full-schema-validation
+                  - bottom-up-cross-binding-validation
+                  - stdout-publication
+              prepublication_projection: {const: publication-independent-only}
+              prepublication_forbidden_claims:
+                const:
+                  - complete-response-authority
+                  - publication-outcome
+                  - invocation-publication-record
+                  - physical-generation
+                  - reopen-path-status-or-projection
+              capacity_reservation:
+                const:
+                  bound: checked-maximum-over-every-applicable-detailed-outcome-within-response-limit
+                  includes:
+                    - final-json-framing
+                    - exact-publication-outcome
+                    - exact-sdk-records-and-receipts
+                    - maximum-bounded-diagnostics
+                  failure: compact-only-if-schema-valid-zero-effect-otherwise-exit-two
+              publication_attempt_boundary: {const: immediately-before-exactly-one-snapshot-writer-publish-call}
+              publication_dependent_source: {const: exact-sdk-return-values-and-typed-errors-only}
+              committed_verified_reopen_order:
+                const:
+                  - capture-publish-returned-record
+                  - backend-appropriate-reopen
+                  - current-selector
+                  - open-publication
+                  - open-snapshot
+              stdout_authority:
+                const:
+                  before-full-validation: forbidden
+                  authoritative-unit: exactly-one-complete-json-response
+                  partial-or-short-write: non-authoritative
+                  operating-system-atomicity: not-claimed
+          allocation_failure:
+            const:
+              prepublication_report_construction: schema-valid-compact-zero-effect-if-completable-otherwise-exit-two-no-response
+              after_publication_attempt: exit-two-no-response-no-compact-downgrade
+              partial_response: non-authoritative
   versioning: {$ref: '#/$defs/nonempty_object'}
   identity: {$ref: '#/$defs/nonempty_object'}
   relation_outputs:

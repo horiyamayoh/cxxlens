@@ -2244,6 +2244,13 @@ task ID を共有し得るが、task input digest と provider execution ID は 
 provider execution ID は installed binary occurrence を含む physical report identity であり、base claim の semantic producer/provenance/set digest
 には入れない。base semantic mapping は task/input/selected catalog entry/final relation ID を保持し、static/shared execution evidence は別に bind する。
 
+DF-0194 により、complete detailed report は Store publication boundary を挟む bounded two-phase で完成させる。publication 前には sealed DAG、Store
+candidate、publication-independent report projection の独立検証と bounded postpublication tail capacity の予約までを必須とし、未確定の publication record、
+physical generation、reopen receipt を予測または placeholder で埋めない。exactly one publish attempt 後に actual outcome と exact reopen evidence を加えて
+一つの final private spool を full schema/semantic validation し、その完了前には stdout を書かない。publish attempt 後の report finalization または transport
+failure は compact zero-effect response に downgrade せず exit 2 / no authoritative response とし、commit 済みなら Store record だけを recovery authority
+とする。request/report v2 shape、identity、public Store API は変更しない。
+
 installed specialization の portable condition は ordered `(condition universe ID, condition ID)` を
 `["cxxlens.clang22.condition-ref.v1", condition universe ID, condition ID]` として
 `cxxlens-canonical-tuple-v1` で encode し、同名 semantic-digest-v2 domain から導出した
