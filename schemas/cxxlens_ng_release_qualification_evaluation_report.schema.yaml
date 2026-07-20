@@ -200,7 +200,7 @@ $defs:
       feedback:
         type: array
         uniqueItems: true
-        items: {enum: [DF-0182, DF-0187, DF-0191, DF-0192]}
+        items: {enum: [DF-0182, DF-0187, DF-0191, DF-0192, DF-0195, DF-0196, DF-0197]}
     allOf:
       - if:
           properties: {state: {const: tracked-gap-empty}}
@@ -211,7 +211,7 @@ $defs:
             report_count: {const: 0}
             report_set_count: {const: 0}
             owner_issue: {const: '#181'}
-            feedback: {const: [DF-0182, DF-0187, DF-0191, DF-0192]}
+            feedback: {const: [DF-0182, DF-0187, DF-0191, DF-0192, DF-0195, DF-0196, DF-0197]}
         else:
           properties:
             request_count: {const: 4}

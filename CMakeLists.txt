@@ -389,6 +389,7 @@ install(
         schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
         schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
         schemas/cxxlens_ng_clang22_materialization_execution_receipt.schema.yaml
+        schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
 install(FILES README.md SECURITY.md LICENSE NOTICE
         DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cxxlens")

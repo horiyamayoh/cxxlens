@@ -19,6 +19,34 @@ import check_ng_production_scope_closure as scope  # noqa: E402
 
 
 class NgReleaseQualificationTests(unittest.TestCase):
+    def test_clang22_production_source_decomposition_is_exact(self) -> None:
+        worker = "\n".join(
+            (
+                "cc::relations::entity::descriptor()",
+                "cc::relations::call_site::descriptor()",
+                "cc::relations::call_direct_target::descriptor()",
+                "auto task = decode_task_input(payload);",
+            )
+        )
+        decoder = "\n".join(
+            (
+                'auto interpretation = "cc.clang22-canonical-1";',
+                "auto catalog = sdk::project_catalog::make(root, digest, units);",
+            )
+        )
+        release.validate_clang22_production_source_decomposition(worker, decoder)
+
+        with self.assertRaisesRegex(
+            release.ReleaseQualificationError, "decode_task_input"
+        ):
+            release.validate_clang22_production_source_decomposition(
+                worker.replace("decode_task_input", "legacy_decode"), decoder
+            )
+        with self.assertRaisesRegex(
+            release.ReleaseQualificationError, "task.v3 production surface"
+        ):
+            release.validate_clang22_production_source_decomposition(worker, "")
+
     def write_materialization_report(
         self,
         path: pathlib.Path,
@@ -245,6 +273,14 @@ class NgReleaseQualificationTests(unittest.TestCase):
             prefix_digest = "sha256:" + ("c" if configuration == "static" else "d") * 64
             tool_digest = "sha256:" + ("e" if configuration == "static" else "f") * 64
             worker_digest = "sha256:" + ("1" if configuration == "static" else "2") * 64
+            occurrence = release.materialization.fixture_occurrence_measurement(
+                ROOT,
+                source_revision=git["revision"],
+                source_tree=git["tree"],
+                configuration=configuration,
+                tool_digest=tool_digest,
+                worker_digest=worker_digest,
+            )
             install_values[configuration] = {
                 "manifest_digest": manifest_digest,
                 "prefix_digest": prefix_digest,
@@ -256,6 +292,10 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     {
                         "path": "bin/cxxlens-clang-worker-22",
                         "digest": worker_digest,
+                    },
+                    {
+                        "path": release.MATERIALIZATION_OCCURRENCE_MANIFEST_PATH,
+                        "digest": occurrence["manifest_file_digest"],
                     },
                 ],
             }
@@ -271,8 +311,9 @@ class NgReleaseQualificationTests(unittest.TestCase):
                         "source_revision": git["revision"],
                         "source_tree": git["tree"],
                         "installed_executable_digest": tool_digest,
-                        "prefix_manifest_digest": manifest_digest,
-                        "relocated_prefix_digest": prefix_digest,
+                        "occurrence_manifest_digest": occurrence[
+                            "manifest_file_digest"
+                        ],
                     }
                 )
                 request["worker"]["installed_binary_digest"] = worker_digest
@@ -282,9 +323,6 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 ).encode("utf-8")
                 report = release.materialization.sample_report(
                     ROOT, request, request_bytes=request_bytes
-                )
-                report["installation"]["platform"] = (
-                    f"linux-{release.platform.machine().lower()}-{configuration}"
                 )
                 directory = evidence / configuration / backend
                 directory.mkdir(parents=True)
@@ -321,6 +359,170 @@ class NgReleaseQualificationTests(unittest.TestCase):
             release.MATERIALIZATION_EXECUTION_RECEIPT_SCHEMA.name,
             (ROOT / "CMakeLists.txt").read_text(encoding="utf-8"),
         )
+        occurrence_schema = release.MATERIALIZATION_OCCURRENCE_MANIFEST_SCHEMA
+        self.assertIn(occurrence_schema.as_posix(), manifest["required_artifacts"])
+        self.assertIn(
+            "share/cxxlens/schemas/" + occurrence_schema.name,
+            manifest["package"]["required_files"],
+        )
+        self.assertIn(
+            release.MATERIALIZATION_OCCURRENCE_MANIFEST_PATH,
+            manifest["package"]["required_files"],
+        )
+        self.assertEqual(
+            manifest["materialization"]["occurrence_manifest_schema"],
+            occurrence_schema.as_posix(),
+        )
+        self.assertEqual(
+            manifest["materialization"]["occurrence_manifest_path"],
+            release.MATERIALIZATION_OCCURRENCE_MANIFEST_PATH,
+        )
+        self.assertIn(occurrence_schema, release.RELEASE_AUTHORITY_PATHS)
+        self.assertIn(
+            occurrence_schema.name,
+            (ROOT / "CMakeLists.txt").read_text(encoding="utf-8"),
+        )
+        acceptance = release.load(ROOT / release.ACCEPTANCE)
+        release_gate = next(
+            entry for entry in acceptance["entries"] if entry["id"] == "gate.release"
+        )
+        self.assertIn(occurrence_schema.as_posix(), release_gate["evidence"])
+
+    def test_materialization_request_machine_rejects_stale_versions_and_prefixes(
+        self,
+    ) -> None:
+        def remove_occurrence(request: dict) -> None:
+            del request["tool"]["occurrence_manifest_digest"]
+
+        cases = (
+            (
+                "request-version",
+                lambda request: request.update({"request_version": "2.0.0"}),
+                "machine 2.1",
+            ),
+            (
+                "tool-interface",
+                lambda request: request["tool"].update(
+                    {"interface_version": "2.0.0"}
+                ),
+                "machine 2.1",
+            ),
+            (
+                "occurrence-digest",
+                remove_occurrence,
+                "machine 2.1",
+            ),
+            (
+                "worker-minor",
+                lambda request: request["worker"].update({"protocol_minor": 0}),
+                "machine 2.1",
+            ),
+            (
+                "worker-features",
+                lambda request: request["worker"].update({"required_features": []}),
+                "machine 2.1",
+            ),
+            (
+                "trust-minor",
+                lambda request: request["trust_policy"].update(
+                    {"protocol_minor": 0}
+                ),
+                "machine 2.1",
+            ),
+            (
+                "trust-features",
+                lambda request: request["trust_policy"].update(
+                    {"required_features": []}
+                ),
+                "machine 2.1",
+            ),
+            (
+                "prefix-manifest",
+                lambda request: request["tool"].update(
+                    {"prefix_manifest_digest": "sha256:" + "0" * 64}
+                ),
+                "legacy prefix",
+            ),
+            (
+                "relocated-prefix",
+                lambda request: request["tool"].update(
+                    {"relocated_prefix_digest": "sha256:" + "0" * 64}
+                ),
+                "legacy prefix",
+            ),
+        )
+        for label, mutate, message in cases:
+            with self.subTest(label=label):
+                request = release.materialization.sample_request(ROOT)
+                mutate(request)
+                with self.assertRaisesRegex(
+                    release.ReleaseQualificationError, message
+                ):
+                    release.validate_release_materialization_request_machine(request)
+
+    def test_materialization_occurrence_binding_is_fixed_and_prefix_free(self) -> None:
+        request = release.materialization.sample_request(ROOT)
+        occurrence = release.materialization.fixture_occurrence_measurement(
+            ROOT,
+            source_revision=request["tool"]["source_revision"],
+            source_tree=request["tool"]["source_tree"],
+            configuration=request["tool"]["package_configuration"],
+            tool_digest=request["tool"]["installed_executable_digest"],
+            worker_digest=request["worker"]["installed_binary_digest"],
+        )
+        report = {
+            "installation": {
+                "requested": {
+                    "occurrence_manifest_digest": occurrence[
+                        "manifest_file_digest"
+                    ]
+                },
+                "measured": occurrence,
+            }
+        }
+        install = {
+            "files": [
+                {
+                    "path": release.MATERIALIZATION_OCCURRENCE_MANIFEST_PATH,
+                    "digest": occurrence["manifest_file_digest"],
+                },
+                {
+                    "path": "bin/cxxlens-clang22-materialize",
+                    "digest": request["tool"]["installed_executable_digest"],
+                },
+                {
+                    "path": "bin/cxxlens-clang-worker-22",
+                    "digest": request["worker"]["installed_binary_digest"],
+                },
+            ]
+        }
+        git = {
+            "revision": request["tool"]["source_revision"],
+            "tree": request["tool"]["source_tree"],
+        }
+        release.validate_release_occurrence_binding(
+            request, report, install, git, "static/memory"
+        )
+
+        stale_report = copy.deepcopy(report)
+        stale_report["installation"]["prefix_manifest_digest"] = (
+            "sha256:" + "0" * 64
+        )
+        with self.assertRaisesRegex(
+            release.ReleaseQualificationError, "legacy prefix"
+        ):
+            release.validate_release_occurrence_binding(
+                request, stale_report, install, git, "static/memory"
+            )
+
+        relocated_install = copy.deepcopy(install)
+        relocated_install["files"][0]["path"] = "relocated/occurrence-v1.json"
+        with self.assertRaisesRegex(
+            release.ReleaseQualificationError, "occurrence manifest census"
+        ):
+            release.validate_release_occurrence_binding(
+                request, report, relocated_install, git, "static/memory"
+            )
 
     def test_release_schemas_require_static_and_shared_exactly_once(self) -> None:
         evaluation_schema = release.load(ROOT / release.EVALUATION_REPORT_SCHEMA)
@@ -624,7 +826,15 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 "report_count": 0,
                 "report_set_count": 0,
                 "owner_issue": "#181",
-                "feedback": ["DF-0182", "DF-0187", "DF-0191", "DF-0192"],
+                "feedback": [
+                    "DF-0182",
+                    "DF-0187",
+                    "DF-0191",
+                    "DF-0192",
+                    "DF-0195",
+                    "DF-0196",
+                    "DF-0197",
+                ],
             },
         )
 
@@ -655,7 +865,9 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     scope, "validate_repository", return_value=model
                 ), self.assertRaisesRegex(
                     release.ReleaseQualificationError,
-                    "neither the exact #181/DF-0182/DF-0187/DF-0191/DF-0192 tracked gap",
+                    "neither the exact "
+                    "#181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/DF-0197 "
+                    "tracked gap",
                 ):
                     release.materialization_assignment_transition(ROOT)
 
@@ -671,7 +883,15 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 "report_count": 0,
                 "report_set_count": 0,
                 "owner_issue": "#181",
-                "feedback": ["DF-0182", "DF-0187", "DF-0191", "DF-0192"],
+                "feedback": [
+                    "DF-0182",
+                    "DF-0187",
+                    "DF-0191",
+                    "DF-0192",
+                    "DF-0195",
+                    "DF-0196",
+                    "DF-0197",
+                ],
             },
         }
         required = release.materialization_required_install_files(
@@ -859,6 +1079,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
             path = written[("static", "sqlite")]
             report = release.load(path)
             report["publication"]["backend"] = "memory"
+            report["publication"]["sqlite_effect_root_receipt"] = None
             report["publication"]["sqlite_reopen_status"] = "not_applicable"
             self.write_materialization_report(path, report, manifest)
             with self.assertRaisesRegex(
@@ -885,25 +1106,25 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 "authority digest",
             ),
             (
-                "manifest",
-                lambda report: report["installation"].update(
-                    {"prefix_manifest_digest": "sha256:" + "0" * 64}
+                "occurrence",
+                lambda report: report["installation"]["requested"].update(
+                    {"occurrence_manifest_digest": "sha256:" + "0" * 64}
                 ),
-                "install/prefix/tool/worker",
+                "installed occurrence binding",
             ),
             (
                 "tool",
-                lambda report: report["installation"].update(
-                    {"tool_digest": "sha256:" + "0" * 64}
+                lambda report: report["installation"]["measured"]["tool"].update(
+                    {"digest": "sha256:" + "0" * 64}
                 ),
-                "install/prefix/tool/worker",
+                "installed occurrence binding",
             ),
             (
                 "worker",
-                lambda report: report["installation"].update(
-                    {"worker_digest": "sha256:" + "0" * 64}
+                lambda report: report["installation"]["measured"]["worker"].update(
+                    {"digest": "sha256:" + "0" * 64}
                 ),
-                "install/prefix/tool/worker",
+                "installed occurrence binding",
             ),
         )
         for label, mutate, message in mutations:
@@ -1445,9 +1666,6 @@ class NgReleaseQualificationTests(unittest.TestCase):
             report = release.materialization.sample_report(
                 ROOT, request, request_bytes=request_bytes
             )
-            report["installation"]["platform"] = (
-                f"linux-{release.platform.machine().lower()}-static"
-            )
             self.write_materialization_report(report_path, report, manifest)
             with self.assertRaisesRegex(
                 release.ReleaseQualificationError,
@@ -1647,7 +1865,15 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 "report_count": 0,
                 "report_set_count": 0,
                 "owner_issue": "#181",
-                "feedback": ["DF-0182", "DF-0187", "DF-0191", "DF-0192"],
+                "feedback": [
+                    "DF-0182",
+                    "DF-0187",
+                    "DF-0191",
+                    "DF-0192",
+                    "DF-0195",
+                    "DF-0196",
+                    "DF-0197",
+                ],
             }
             with mock.patch.object(
                 release, "collect_release_evidence", return_value=evidence

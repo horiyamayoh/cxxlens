@@ -1,5 +1,5 @@
 {
-  "asset_count": 439,
+  "asset_count": 477,
   "assets": [
     {
       "authority": "active",
@@ -1277,6 +1277,34 @@
     },
     {
       "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0194-two-phase-materialization-report-lifecycle.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0195-sealed-provider-report-leaf-authority.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0196-materializer-runtime-occurrence-and-store-outcomes.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0197-materialization-task-transport-streaming-bounds.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/doxygen-main.md",
       "removal_issue": null,
       "replacement": null,
@@ -1691,6 +1719,13 @@
     {
       "authority": "active",
       "path": "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2292,7 +2327,133 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/materialization_claims.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_claims.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_identity.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_identity.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_io.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_io.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_json.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_json.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_request.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_request.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_seal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_seal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_store.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_store.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/observation_v2.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/observation_v2.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/provider_sdk.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/provider_task_v3.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/provider_task_v3.hpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2314,6 +2475,20 @@
     {
       "authority": "active",
       "path": "src/llvm/clang22/provider_worker_main.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/unicode_nfc.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/unicode_nfc.hpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2376,7 +2551,21 @@
     },
     {
       "authority": "active",
+      "path": "src/sdk/provider_runtime_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/sdk/provider_validation_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/sdk/provider_visibility_internal.hpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2432,6 +2621,13 @@
     },
     {
       "authority": "active",
+      "path": "src/sdk/store_identity_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/sdk/testing.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -2446,6 +2642,69 @@
     },
     {
       "authority": "active",
+      "path": "tests/adapter/clang22/materialization_claims_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/materialization_identity_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/materialization_io_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/materialization_json_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/materialization_request_driver.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/materialization_request_test.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/materialization_seal_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/materialization_store_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/observation_v2_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/adapter/clang22/provider_normalizer_test.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -2454,6 +2713,13 @@
     {
       "authority": "active",
       "path": "tests/adapter/clang22/provider_worker_protocol_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/unicode_nfc_test.cpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -3076,7 +3342,7 @@
     }
   ],
   "classifications": {
-    "active": 403,
+    "active": 441,
     "archived": 35,
     "generated": 1
   },

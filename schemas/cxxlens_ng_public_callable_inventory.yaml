@@ -1526,7 +1526,7 @@ allocator:
   - fully_qualified_name: cxxlens::source::relations::span::span_column::ref
     callable_kind: static
     next_overload_slot: 1
-inventory_digest: sha256:fe51a6fe65908fd5df4bc0f380cfd1fa86168c261b2fbdc2a2145dddf5f83538
+inventory_digest: sha256:8c80098be336552820f4c7e247105e3b28cf1c361b4e7a2ada8403190743d4a9
 callables:
 - id: cpp.callable.00100ca7a0bda4b73503b24a4e6f6d33be47b954c7553cab8f70e85f9e77f492
   identity:
@@ -17116,7 +17116,7 @@ callables:
   fully_qualified_name: cxxlens::sdk::snapshot_writer::operator=
   callable_kind: operator
   signature:
-    source: 'snapshot_writer & cxxlens :: sdk :: snapshot_writer :: operator = ( snapshot_writer && ) noexcept = default'
+    source: 'snapshot_writer & cxxlens :: sdk :: snapshot_writer :: operator = ( snapshot_writer && ) noexcept'
     return_type: snapshot_writer &
     parameters:
     - type: snapshot_writer &&
@@ -17138,9 +17138,9 @@ callables:
       cv: none
       ref: none
       noexcept: noexcept
-    declaration_state: defaulted
+    declaration_state: declared
   declaring_header: include/cxxlens/sdk/store.hpp
-  origin: defaulted
+  origin: out-of-line
   status: implemented
   stability: source-versioned
   qualification: NG0
@@ -17150,7 +17150,7 @@ callables:
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
-    doxygen_key: sha256:256add93dac0d46d661d88c4b54ae23c0490de7da0ad47b838454735deb0f15a
+    doxygen_key: sha256:700d140c26bdbb4e26678bcfef415e81d58430322a00d6e9e4e4e73c936a4a15
     doxygen_name: 'cxxlens :: sdk :: snapshot_writer :: operator ='
     source_anchor:
       ast:
@@ -19769,7 +19769,7 @@ callables:
   fully_qualified_name: cxxlens::sdk::snapshot_writer::snapshot_writer
   callable_kind: constructor
   signature:
-    source: 'cxxlens :: sdk :: snapshot_writer :: snapshot_writer ( snapshot_writer && ) noexcept = default'
+    source: 'cxxlens :: sdk :: snapshot_writer :: snapshot_writer ( snapshot_writer && ) noexcept'
     return_type: ''
     parameters:
     - type: snapshot_writer &&
@@ -19791,9 +19791,9 @@ callables:
       cv: none
       ref: none
       noexcept: noexcept
-    declaration_state: defaulted
+    declaration_state: declared
   declaring_header: include/cxxlens/sdk/store.hpp
-  origin: defaulted
+  origin: out-of-line
   status: implemented
   stability: source-versioned
   qualification: NG0
@@ -19803,7 +19803,7 @@ callables:
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
-    doxygen_key: sha256:47a035e298041cece97f229965f94d8d3f8a94eb6de45f93c6dfd55b95582d70
+    doxygen_key: sha256:c76ffcf642f839ed6650e91ccd73b078fb4778248ad0a9a4193d58041ebf74ab
     doxygen_name: 'cxxlens :: sdk :: snapshot_writer :: snapshot_writer'
     source_anchor:
       ast:

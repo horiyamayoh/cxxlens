@@ -64,6 +64,15 @@ MATERIALIZATION_REPORT_SCHEMA = pathlib.Path(
 MATERIALIZATION_EXECUTION_RECEIPT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_clang22_materialization_execution_receipt.schema.yaml"
 )
+MATERIALIZATION_OCCURRENCE_MANIFEST_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml"
+)
+MATERIALIZATION_OCCURRENCE_MANIFEST_PATH = (
+    "share/cxxlens/materialization/clang22/occurrence-v1.json"
+)
+MATERIALIZATION_REQUEST_VERSION = "2.1.0"
+MATERIALIZATION_PROTOCOL_MINOR = 1
+MATERIALIZATION_REQUIRED_FEATURES = ["task-input-chunks-v1"]
 RELEASE_AUTHORITY_PATHS = (
     MANIFEST,
     MATERIALIZATION_CONTRACT,
@@ -71,6 +80,7 @@ RELEASE_AUTHORITY_PATHS = (
     MATERIALIZATION_REQUEST_SCHEMA,
     MATERIALIZATION_REPORT_SCHEMA,
     MATERIALIZATION_EXECUTION_RECEIPT_SCHEMA,
+    MATERIALIZATION_OCCURRENCE_MANIFEST_SCHEMA,
     RELEASE,
     ACCEPTANCE,
     SUPPORT,
@@ -91,7 +101,15 @@ MATERIALIZATION_MATRIX = (
 MATERIALIZATION_TOOL_FILE = "bin/cxxlens-clang22-materialize"
 MATERIALIZATION_ASSIGNMENT_ID = "scope.clang22-installed-adoption-gap"
 MATERIALIZATION_ASSIGNMENT_OWNER = "#181"
-MATERIALIZATION_ASSIGNMENT_FEEDBACK = ("DF-0182", "DF-0187", "DF-0191", "DF-0192")
+MATERIALIZATION_ASSIGNMENT_FEEDBACK = (
+    "DF-0182",
+    "DF-0187",
+    "DF-0191",
+    "DF-0192",
+    "DF-0195",
+    "DF-0196",
+    "DF-0197",
+)
 MATERIALIZATION_ASSIGNMENT_SURFACES = (
     ("distribution.consumer-configuration", "shared/real-project"),
     ("distribution.consumer-configuration", "static/real-project"),
@@ -103,6 +121,7 @@ MATERIALIZATION_ASSIGNMENT_SURFACES = (
     ("provider.production-tuple-template", "static/cc.call_direct_target@1"),
     ("provider.production-tuple-template", "static/cc.call_site@1"),
     ("provider.production-tuple-template", "static/cc.entity@1"),
+    ("provider.profile-feature", "NG0/task-input-chunks-v1"),
     ("relation.descriptor", "frontend.clang22.call_observation.v2"),
     ("relation.descriptor", "frontend.clang22.entity_observation.v2"),
     ("relation.descriptor", "frontend.clang22.type_observation.v2"),
@@ -258,6 +277,76 @@ def validate_schema(value: Any, schema: dict[str, Any], label: str) -> None:
         fail(f"{label} schema validation failed: {error.message}")
 
 
+def validate_release_materialization_request_machine(request: dict[str, Any]) -> None:
+    tool = request.get("tool")
+    worker = request.get("worker")
+    trust = request.get("trust_policy")
+    if not all(isinstance(value, dict) for value in (tool, worker, trust)):
+        fail("release materialization request machine projection is malformed")
+    legacy_fields = {"prefix_manifest_digest", "relocated_prefix_digest"}
+    if legacy_fields.intersection(tool):
+        fail("release materialization request retains legacy prefix digest authority")
+    if (
+        request.get("schema") != "cxxlens.clang22-materialization-request.v2"
+        or request.get("request_version") != MATERIALIZATION_REQUEST_VERSION
+        or tool.get("interface_version") != MATERIALIZATION_REQUEST_VERSION
+        or "occurrence_manifest_digest" not in tool
+        or worker.get("protocol_major") != 1
+        or worker.get("protocol_minor") != MATERIALIZATION_PROTOCOL_MINOR
+        or worker.get("required_features") != MATERIALIZATION_REQUIRED_FEATURES
+        or trust.get("protocol_major") != 1
+        or trust.get("protocol_minor") != MATERIALIZATION_PROTOCOL_MINOR
+        or trust.get("required_features") != MATERIALIZATION_REQUIRED_FEATURES
+    ):
+        fail("release materialization request machine 2.1 projection differs")
+
+
+def validate_release_occurrence_binding(
+    request: dict[str, Any],
+    report: dict[str, Any],
+    install: dict[str, Any],
+    git: dict[str, Any],
+    label: str,
+) -> None:
+    installation = report["installation"]
+    if {"prefix_manifest_digest", "relocated_prefix_digest"}.intersection(
+        installation
+    ):
+        fail("materialization report retains legacy prefix digest authority")
+    file_rows = [
+        row
+        for row in install["files"]
+        if row["path"] == MATERIALIZATION_OCCURRENCE_MANIFEST_PATH
+    ]
+    if len(file_rows) != 1:
+        fail(f"installed occurrence manifest census differs: {label}")
+    occurrence_manifest_digest = file_rows[0]["digest"]
+    files = {row["path"]: row["digest"] for row in install["files"]}
+    tool_digest = files.get("bin/cxxlens-clang22-materialize")
+    worker_digest = files.get("bin/cxxlens-clang-worker-22")
+    requested = installation["requested"]
+    measured = installation["measured"]
+    configuration = request["tool"]["package_configuration"]
+    if (
+        request["tool"]["occurrence_manifest_digest"]
+        != occurrence_manifest_digest
+        or request["tool"]["installed_executable_digest"] != tool_digest
+        or request["worker"]["installed_binary_digest"] != worker_digest
+        or requested
+        != {"occurrence_manifest_digest": occurrence_manifest_digest}
+        or measured["manifest_path"] != MATERIALIZATION_OCCURRENCE_MANIFEST_PATH
+        or measured["manifest_file_digest"] != occurrence_manifest_digest
+        or measured["source_revision"] != git["revision"]
+        or measured["source_tree"] != git["tree"]
+        or measured["configuration"] != configuration
+        or measured["tool"]
+        != {"path": "bin/cxxlens-clang22-materialize", "digest": tool_digest}
+        or measured["worker"]
+        != {"path": "bin/cxxlens-clang-worker-22", "digest": worker_digest}
+    ):
+        fail(f"materialization installed occurrence binding differs: {label}")
+
+
 def digest_bytes(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
 
@@ -357,10 +446,10 @@ def materialization_assignment_shape(qualification: str) -> dict[str, Any]:
                 "gap": {
                     "finding": "scope.tracked-gap.clang22-installed-adoption",
                     "remediation": (
-                        "Accept DF-0191/DF-0192 machine-v2 response and Store identity "
-                        "bindings, then complete installed actual-source worker output "
-                        "adoption with tool-private independent all-or-none span-bundle "
-                        "validation, exact publication, and query evidence; do not claim "
+                        "Accept the DF-0195/DF-0196/DF-0197 sealed-evidence, "
+                        "measured-occurrence, and authenticated-streaming authority "
+                        "amendments, then complete installed actual-source worker output "
+                        "adoption with exact publication and query evidence; do not claim "
                         "generic relation-row reference enforcement."
                     ),
                 },
@@ -421,7 +510,8 @@ def materialization_assignment_transition(root: pathlib.Path) -> dict[str, Any]:
         }
     fail(
         "Clang 22 materializer assignment is neither the exact "
-        "#181/DF-0182/DF-0187/DF-0191/DF-0192 tracked gap nor the exact included+qualified assignment"
+        "#181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/DF-0197 "
+        "tracked gap nor the exact included+qualified assignment"
     )
 
 
@@ -476,7 +566,8 @@ def collect_materialization_evidence(
     if state == "tracked-gap":
         if report_paths or request_paths or receipt_paths:
             fail(
-                "the exact #181/DF-0182/DF-0187/DF-0191/DF-0192 tracked gap requires zero materialization "
+                "the exact #181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/DF-0197 "
+                "tracked gap requires zero materialization "
                 f"requests and reports, found {len(request_paths)} requests and "
                 f"{len(report_paths)} reports and {len(receipt_paths)} execution receipts"
             )
@@ -674,6 +765,12 @@ def validate_documents(
         fail("distribution package is not version 1.0.0 with license/notice")
     if MATERIALIZATION_EXECUTION_RECEIPT_SCHEMA.name not in cmake:
         fail("CMake install omits the materialization execution receipt schema")
+    if MATERIALIZATION_OCCURRENCE_MANIFEST_SCHEMA.name not in cmake:
+        fail("CMake install omits the materializer occurrence manifest schema")
+    if MATERIALIZATION_OCCURRENCE_MANIFEST_PATH not in manifest["package"][
+        "required_files"
+    ]:
+        fail("release package omits the fixed materializer occurrence manifest")
 
     try:
         materialization.validate_documents(root)
@@ -685,6 +782,10 @@ def validate_documents(
         "contract_schema": MATERIALIZATION_CONTRACT_SCHEMA.as_posix(),
         "request_schema": MATERIALIZATION_REQUEST_SCHEMA.as_posix(),
         "report_schema": MATERIALIZATION_REPORT_SCHEMA.as_posix(),
+        "occurrence_manifest_schema": (
+            MATERIALIZATION_OCCURRENCE_MANIFEST_SCHEMA.as_posix()
+        ),
+        "occurrence_manifest_path": MATERIALIZATION_OCCURRENCE_MANIFEST_PATH,
         "request_filename": "cxxlens-clang22-materialization-request.json",
         "report_filename": "cxxlens-clang22-materialization-report.json",
         "execution_receipt_filename": (
@@ -834,15 +935,14 @@ def validate_documents(
     if not set(manifest["provider"]["relation_descriptors"]).issubset(descriptors):
         fail("release provider relation is absent from registry")
     worker_source = (root / "src/llvm/clang22/provider_worker.cpp").read_text(encoding="utf-8")
-    for marker in (
-        "cc::relations::entity::descriptor()",
-        "cc::relations::call_site::descriptor()",
-        "cc::relations::call_direct_target::descriptor()",
-        '"cc.clang22-canonical-1"',
-    ):
-        if marker not in worker_source:
-            fail(f"Clang 22 worker production surface marker is missing: {marker}")
+    task_decoder_source = (root / "src/llvm/clang22/provider_task_v3.cpp").read_text(
+        encoding="utf-8"
+    )
+    validate_clang22_production_source_decomposition(
+        worker_source, task_decoder_source
+    )
     workflow = (root / ".github/workflows/quality.yml").read_text(encoding="utf-8")
+
     def workflow_job(name: str) -> re.Match[str] | None:
         return re.search(
             rf"(?ms)^  {re.escape(name)}:\n(?P<body>.*?)(?=^  [a-zA-Z0-9_-]+:|\Z)",
@@ -876,6 +976,22 @@ def validate_documents(
         if marker not in install:
             fail(f"release install qualification marker is missing: {marker}")
     return manifest
+
+
+def validate_clang22_production_source_decomposition(
+    worker_source: str, task_decoder_source: str
+) -> None:
+    for marker in (
+        "cc::relations::entity::descriptor()",
+        "cc::relations::call_site::descriptor()",
+        "cc::relations::call_direct_target::descriptor()",
+        "decode_task_input(",
+    ):
+        if marker not in worker_source:
+            fail(f"Clang 22 worker production surface marker is missing: {marker}")
+    for marker in ('"cc.clang22-canonical-1"', "sdk::project_catalog::make("):
+        if marker not in task_decoder_source:
+            fail(f"Clang 22 task.v3 production surface marker is missing: {marker}")
 
 
 def find_one(root: pathlib.Path, name: str) -> pathlib.Path:
@@ -1433,6 +1549,7 @@ def verify_materialization_reports(
         request, request_bytes = load_materialization_json(
             request_path, "materialization request"
         )
+        validate_release_materialization_request_machine(request)
         try:
             materialization.validate_request(root, request)
         except materialization.MaterializationError as error:
@@ -1472,9 +1589,8 @@ def verify_materialization_reports(
         if report["registry"] != expected_registry:
             fail(f"materialization registry/descriptor binding differs: {path}")
 
-        installation = report["installation"]
         publication = report["publication"]
-        configuration = installation["configuration"]
+        configuration = request["tool"]["package_configuration"]
         backend = publication["backend"]
         key = (configuration, backend)
         if key not in MATERIALIZATION_MATRIX:
@@ -1485,21 +1601,13 @@ def verify_materialization_reports(
             fail(f"materialization report has no install manifest: {configuration}")
 
         install = install_values[configuration]
-        files = {row["path"]: row["digest"] for row in install["files"]}
-        expected_installation = {
-            "prefix_manifest_digest": install["manifest_digest"],
-            "relocated_prefix_digest": install["prefix_digest"],
-            "tool_digest": files["bin/cxxlens-clang22-materialize"],
-            "worker_digest": files["bin/cxxlens-clang-worker-22"],
-        }
-        if any(
-            installation[field] != expected
-            for field, expected in expected_installation.items()
-        ):
-            fail(
-                "materialization install/prefix/tool/worker digest binding differs: "
-                f"{configuration}/{backend}"
-            )
+        validate_release_occurrence_binding(
+            request,
+            report,
+            install,
+            git,
+            f"{configuration}/{backend}",
+        )
         validate_release_task_execution_census(request, report)
         validate_release_span_census(report)
         validate_release_observation_equivalence(report)
@@ -1513,13 +1621,6 @@ def verify_materialization_reports(
                 "materialization request/report binding is invalid: "
                 f"{configuration}/{backend}: {error}"
             )
-        expected_platform = f"linux-{platform.machine().lower()}-{configuration}"
-        if installation["platform"] != expected_platform:
-            fail(
-                "materialization platform/configuration binding differs: "
-                f"expected={expected_platform}, actual={installation['platform']}"
-            )
-
         task_results = report["task_results"]
         descriptor_bindings = {
             row["descriptor_id"]: row for row in expected_descriptors

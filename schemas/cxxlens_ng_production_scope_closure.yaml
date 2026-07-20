@@ -21,7 +21,7 @@ source_contracts:
   - schemas/cxxlens_ng_release_bundle.yaml
   - schemas/cxxlens_ng_release_qualification.yaml
   - schemas/cxxlens_ng_security_profile.yaml
-authority_census_digest: sha256:63e4e607654180454b8442ee6e6b55415933fbd647c747d259a832614d1fbff5
+authority_census_digest: sha256:9a28fab54887d69c9792e4b9a2f14bdeb552cb870d279c801aa2fa1025822c2f
 assignments:
   - id: scope.qualified-baseline
     owner_issue: '#179'
@@ -228,8 +228,8 @@ assignments:
     qualification: tracked-gap
     gap:
       finding: scope.tracked-gap.clang22-installed-adoption
-      remediation: Accept DF-0191/DF-0192 machine-v2 response and Store identity bindings, then complete installed actual-source worker output adoption with tool-private independent all-or-none span-bundle validation, exact publication, and query evidence; do not claim generic relation-row reference enforcement.
-    feedback: [DF-0182, DF-0187, DF-0191, DF-0192]
+      remediation: Implement the accepted DF-0195/DF-0196/DF-0197 sealed-evidence, measured-occurrence, and authenticated-streaming authority, then complete installed actual-source worker output adoption with exact publication and query evidence; do not claim generic relation-row reference enforcement.
+    feedback: [DF-0182, DF-0187, DF-0191, DF-0192, DF-0195, DF-0196, DF-0197]
     surfaces:
       - {domain: distribution.consumer-configuration, id: shared/real-project}
       - {domain: distribution.consumer-configuration, id: static/real-project}
@@ -241,6 +241,7 @@ assignments:
       - {domain: provider.production-tuple-template, id: static/cc.call_direct_target@1}
       - {domain: provider.production-tuple-template, id: static/cc.call_site@1}
       - {domain: provider.production-tuple-template, id: static/cc.entity@1}
+      - {domain: provider.profile-feature, id: NG0/task-input-chunks-v1}
       - {domain: relation.descriptor, id: frontend.clang22.call_observation.v2}
       - {domain: relation.descriptor, id: frontend.clang22.entity_observation.v2}
       - {domain: relation.descriptor, id: frontend.clang22.type_observation.v2}

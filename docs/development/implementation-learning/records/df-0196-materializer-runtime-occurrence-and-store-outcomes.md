@@ -1,11 +1,11 @@
 ---
 id: DF-0196
 title: Bind installed materializer occurrence and Store outcomes
-status: observed
+status: accepted
 kind: missing-assumption
 impact: security
 confidence: high
-implementation_disposition: blocked
+implementation_disposition: may-proceed
 scope:
   - provider.clang22-materializer-cli-effect-root
   - provider.clang22-materializer-installation-binding
@@ -24,13 +24,35 @@ authority_refs:
 tracking_issue: '#196'
 implementation_issues:
   - '#181'
-resolution_refs: []
+resolution_refs:
+  - CMakeLists.txt
+  - docs/design/cxxlens_next_generation_integrated_design_ja.md
+  - docs/design/adr/0096-clang22-installed-materialization-boundary.md
+  - docs/design/catalogs/README.md
+  - schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml
+  - schemas/cxxlens_ng_clang22_materialization_contract.yaml
+  - schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
+  - schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
+  - schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
+  - schemas/cxxlens_ng_release_qualification.yaml
+  - schemas/cxxlens_ng_release_qualification.schema.yaml
+  - schemas/cxxlens_ng_release_qualification_evaluation_report.schema.yaml
+  - schemas/cxxlens_ng_production_scope_closure.yaml
+  - schemas/cxxlens_ng_acceptance_manifest.yaml
+  - tests/install/run_install_test.cmake.in
+  - tools/quality/check_ng_clang22_materialization.py
+  - tests/quality/test_ng_clang22_materialization.py
+  - tools/quality/check_ng_release_qualification.py
+  - tests/quality/test_ng_release_qualification.py
+  - tools/quality/check_ng_production_scope_closure.py
+  - tests/quality/test_ng_production_scope_closure.py
 review:
   mode: independent
-  status: pending
+  status: complete
   author: codex-agent-runtime-authority-df
-  reviewer: null
-  refs: []
+  reviewer: codex-agent-final-df195-197-review
+  refs:
+    - https://github.com/horiyamayoh/cxxlens/issues/196#issuecomment-5020652167
 created: '2026-07-20'
 ---
 
@@ -190,8 +212,9 @@ Independent review should reject the resolution unless it proves all of the foll
 
 ## Disposition
 
-2026-07-20: Opened as a blocking security/attribution assumption discovered during Issue #181
-installed runtime planning. `resolution_refs` and canonical review refs are intentionally empty until
-the normative occurrence/effect contract is amended and an independent reviewer posts a concrete
-review on Issue #196. Pure codec, claim, and Store-mechanics work that does not claim installed
-occurrence or publication outcome authority may continue.
+2026-07-20: Accepted after the normative occurrence/effect-root and operation-first Store outcome
+amendment plus independent post-change review. The final review required every
+`committed_unverified` mismatch cause to bind its expected digest to the recomputed Store projection
+and its actual digest to the exact retained successful path projection, including closure and
+cross-path evidence. The closed mapping, rooted SQLite rules, occurrence inventory, writer exit-two
+disposition, and adversarial negatives now pass. Issue #181 may proceed for this scope.

@@ -1,11 +1,11 @@
 ---
 id: DF-0197
 title: Close materialization task transport and streaming bounds
-status: observed
+status: accepted
 kind: contract-contradiction
 impact: invariant
 confidence: high
-implementation_disposition: blocked
+implementation_disposition: may-proceed
 scope:
   - provider.clang22-materialization-request-streaming
   - provider.clang22-task-v3-input-transfer
@@ -24,13 +24,38 @@ authority_refs:
 tracking_issue: '#197'
 implementation_issues:
   - '#181'
-resolution_refs: []
+resolution_refs:
+  - docs/design/cxxlens_next_generation_integrated_design_ja.md
+  - docs/design/adr/0010-provider-wire-streaming-atomicity.md
+  - docs/design/adr/0044-shared-provider-transcript-validation.md
+  - docs/design/adr/0064-portable-provider-task-session-binding.md
+  - docs/design/adr/0071-host-to-provider-transcript-validation.md
+  - docs/design/adr/0096-clang22-installed-materialization-boundary.md
+  - schemas/cxxlens_ng_provider_protocol.yaml
+  - schemas/cxxlens_ng_provider_protocol.schema.yaml
+  - schemas/cxxlens_ng_provider_fuzz_corpus.yaml
+  - schemas/cxxlens_ng_provider_fuzz_corpus.schema.yaml
+  - schemas/cxxlens_ng_provider_runtime_contract.yaml
+  - schemas/cxxlens_ng_provider_runtime_contract.schema.yaml
+  - schemas/cxxlens_ng_clang22_materialization_contract.yaml
+  - schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
+  - schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
+  - schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
+  - tools/quality/check_ng_provider_protocol.py
+  - tests/quality/test_ng_provider_protocol.py
+  - tools/quality/check_ng_provider_runtime.py
+  - tests/quality/test_ng_provider_runtime.py
+  - tools/quality/check_ng_clang22_materialization.py
+  - tests/quality/test_ng_clang22_materialization.py
+  - tools/quality/check_ng_sdk_contract.py
+  - tests/quality/test_ng_sdk_contract.py
 review:
   mode: independent
-  status: pending
+  status: complete
   author: codex-agent-streaming-request-architecture
-  reviewer: null
-  refs: []
+  reviewer: codex-agent-final-df195-197-review
+  refs:
+    - https://github.com/horiyamayoh/cxxlens/issues/197#issuecomment-5020653069
 created: '2026-07-20'
 ---
 
@@ -150,8 +175,8 @@ measured peak retained memory independent of task/source aggregate size.
 
 ## Disposition
 
-2026-07-20: Opened as a blocking invariant contradiction during Issue #181's production request
-architecture audit. Normative authority is intentionally unchanged and `resolution_refs` and review
-refs remain empty. Issue #181 may continue work outside production request ingestion and
-host-to-worker launch, but must not complete or qualify the installed streaming boundary until this
-record is resolved by accepted authority and independent review.
+2026-07-20: Accepted after Provider Protocol 1.1 authenticated input chunks, the shared incremental
+runtime contract, exact task.v3 bound derivation, and spool-backed request authority were amended and
+independently reviewed. The recursive required/property census, checked bound
+`41,530,256 <= 67,108,864`, independently decoded saturated witness, minor-0 compatibility, and
+negative transfer/schema cases pass. Issue #181 may proceed for this scope.

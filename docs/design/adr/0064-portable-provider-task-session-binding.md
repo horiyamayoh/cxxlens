@@ -4,7 +4,7 @@
 - Date: 2026-07-17
 - Decision owner: steward.ng-provider-runtime
 - Decision issue: #122
-- Clarification feedback: DF-0187 / #187
+- Clarification feedback: DF-0187 / #187; DF-0197 / #197
 - Depends on: ADR 0010, ADR 0012, ADR 0043, ADR 0044, ADR 0045, ADR 0063
 
 ## Context
@@ -40,6 +40,12 @@ exact tuple で対応付ける。異なる task projection を同じ task ID と
 requested descriptor と dependency group だけを relation sink に許可する。provider が rejection を無視して success を返しても context は違反を
 記憶し、task を failure にする。`batch_begin` control は task ID、descriptor ID/digest、dependency/atomic group、batch ID を持ち、shared logical/process
 validator が exact task binding を検証する。
+
+DF-0197 / Issue #197 により Provider Protocol 1.1 で input を chunk 化しても task identity と `task_input_digest` の意味は変えない。
+`input_descriptor` と ordered `input_chunk` の連結 bytes が従来の logical input payload そのものであり、shared incremental validator が
+exact total length と streaming SHA-256 を `open_task.task_input_digest` に一致させて seal した後だけ decoder と bottom-up task/session
+binding を実行する。`task_accepted` は両方の成功後だけ許す。path、FD、environment、shared memory による ambient payload side channel と、
+raw frame/spool を detached task の代わりに semantic authority とすることを禁止する。minor 0 の public factory/session/task signature は変更しない。
 
 ## Verification
 

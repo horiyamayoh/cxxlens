@@ -13,6 +13,8 @@ required:
   - message_types
   - state_machine_validation
   - host_to_provider_state_machine
+  - task_input_transfer
+  - shared_transcript_coverage
   - structured_control_metadata
   - handshake
   - columnar_chunks
@@ -27,7 +29,7 @@ required:
   - backend_authority
 properties:
   schema: {const: cxxlens.provider-protocol.v1}
-  document_version: {const: 1.11.0}
+  document_version: {const: 1.13.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -43,7 +45,7 @@ properties:
   compatibility:
     const:
       version_axis: provider-protocol
-      current: 1.0.0
+      current: 1.1.0
       major_mismatch: reject
       same_major_minor: feature-negotiation
       relation_schema_axis: independent
@@ -54,6 +56,7 @@ properties:
         required:
           - framed-wire
           - deterministic-cbor-control
+          - task-input-chunks-v1
           - streamed-column-chunks
           - credit-backpressure
           - ack-and-connection-resume
@@ -180,17 +183,100 @@ properties:
     additionalProperties: true
   host_to_provider_state_machine:
     const:
-      implementation: shared-public-encoder-and-validator
+      implementation: single-shared-incremental-encoder-and-validator-core
       consumers: [process-runtime, clang22-worker, process-fixture, testing-reference]
-      exact_frames: [hello_ack, schema_negotiate, open_task, credit, close]
-      stream_id: 1
-      sequence: [0, 1, 2, 3, 4]
-      flags: zero
-      payload_policy: open-task-only
-      control_policy: typed-canonical-cbor-nonempty
-      exact_authority: [canonical-manifest, protocol-major-minor, task-id, task-input-digest, normalized-invocation-digest, toolchain-digest, environment-digest, payload-content-digest, close-task-id]
-      credit: [cbor-uint64, bytes-nonzero, frames-nonzero, overflow-reject]
-      invalid_action: fail-before-payload-decode-without-output
+      common:
+        stream_id: 1
+        sequence: contiguous-from-zero
+        flags: zero
+        control_policy: typed-canonical-cbor-nonempty
+        exact_authority: [canonical-manifest, protocol-major-minor, task-id, task-input-digest, normalized-invocation-digest, toolchain-digest, environment-digest, payload-content-digest, close-task-id]
+        credit: [cbor-uint64, bytes-nonzero, frames-nonzero, overflow-reject, provider-output-only]
+        invalid_action: fail-before-task-acceptance-and-payload-semantic-use-without-output
+      minor_profiles:
+        '1.0':
+          required_features: []
+          exact_frames: [hello_ack, schema_negotiate, open_task, credit, close]
+          sequence: [0, 1, 2, 3, 4]
+          payload_policy: open-task-only
+          compatibility: existing-public-five-frame-vector-api-unchanged-wrapper
+        '1.1':
+          required_features: [task-input-chunks-v1]
+          exact_frame_pattern: [hello_ack, schema_negotiate, open_task, input_descriptor, input_chunk-zero-or-more, credit, close]
+          fixed_prefix_sequence: [0, 1, 2, 3]
+          chunk_sequence: four-plus-chunk-index
+          credit_sequence: four-plus-chunk-count
+          close_sequence: five-plus-chunk-count
+          payload_policy: input-chunk-only
+          open_task_payload: empty
+          task_accepted_precondition: input-sealed-exact-length-and-digest-and-semantic-task-decoded
+  task_input_transfer:
+    const:
+      feature: task-input-chunks-v1
+      activation: {protocol_minor: 1, required_features: [task-input-chunks-v1]}
+      message_ids: {input_descriptor: 6, input_chunk: 7}
+      limits:
+        maximum_chunk_payload_bytes: 1048576
+        maximum_logical_input_bytes: 67108864
+        maximum_input_chunks: 64
+        per_frame_payload_bytes_unchanged: 16777216
+      input_descriptor_control:
+        schema: cxxlens.provider-control.input-descriptor.v1
+        exact_fields: [task_id, input_digest, total_bytes, chunk_bytes, chunk_count]
+        unsigned_fields: [total_bytes, chunk_bytes, chunk_count]
+        chunk_bytes: one-through-1048576
+        binding: task-id-and-input-digest-exact-open-task-match
+      input_chunk_control:
+        schema: cxxlens.provider-control.input-chunk.v1
+        exact_fields: [task_id, input_digest, chunk_index, offset, byte_count]
+        unsigned_fields: [chunk_index, offset, byte_count]
+        binding: task-id-and-input-digest-exact-descriptor-match
+        payload_binding: exact-byte-count-and-fixed-header-payload-sha256
+      shape:
+        chunk_count: zero-if-empty-otherwise-ceiling-total-bytes-divided-by-chunk-bytes
+        chunk_index: contiguous-zero-through-chunk-count-minus-one
+        offset: contiguous-sum-of-prior-byte-counts
+        nonfinal_byte_count: exact-chunk-bytes
+        final_byte_count: exact-positive-remainder-through-chunk-bytes
+        zero_input: {total_bytes: 0, chunk_count: 0, input_chunks: 0, input_digest: 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'}
+        terminal: exact-total-bytes-and-streaming-sha256-equal-input-digest
+      rejection:
+        before_task_accepted: [missing, duplicate, reordered, overlapping, extra, short, truncated, descriptor-mismatch, chunk-mismatch, payload-digest-mismatch, terminal-digest-mismatch, limit-exceeded]
+        post_terminal_chunk: reject
+        allocation: validate-descriptor-and-negotiated-limits-before-allocation
+      authority_boundary:
+        logical_input: exact-ordered-concatenated-chunk-payload-bytes
+        semantic_authority: detached-task-after-shared-seal-and-task-decoder-validation
+        raw_frames_and_spool: diagnostic-transport-occurrences-only
+        ambient_path-fd-environment-shared-memory-side-channel: forbidden
+      budget_separation:
+        input_bytes_and_frames: descriptor-profile-limits-not-credit
+        credit: provider-output-only
+        execution_budget_transport_bytes: stdout-stderr-process-accounting-only
+      shared_incremental_core:
+        owners: [host-encoder, worker-decoder, process-runtime, conformance-validator]
+        state: transition-digest-length-and-budget
+        full-input-vector-materialization-in-production: forbidden
+        existing_public_signatures: unchanged
+        minor_0_public_vector_api: bounded-wrapper-over-this-core
+  shared_transcript_coverage:
+    const:
+      validator: single-shared-provider-transcript-validator
+      specialization_awareness: forbidden
+      exact_record_fields: [kind, id, state, reason]
+      accepted_states: [covered, excluded, failed, not_applicable, unresolved]
+      record_identity: [kind, id]
+      duplicate_identity: reject
+      task_transport_record:
+        exact_projection: {kind: task, id: exact-provider-task-id, state: covered, reason: empty}
+        cardinality: exactly-one
+        mutation_rejection: [missing, duplicate, renamed, wrong-task, non-covered, nonempty-reason]
+      non_transport_records:
+        retention: exact-decoded-records-in-wire-order
+        unknown_or_extra_semantic: retain-losslessly-without-interpretation
+        discard: forbidden
+        reclassification: forbidden
+      immutable_seal: complete-retained-record-set-value-owned-by-shared-validation-pass
   structured_control_metadata:
     const:
       encoding: deterministic-typed-cbor-map
@@ -199,13 +285,15 @@ properties:
       single_records:
         schema_negotiate: [protocol_schema, protocol_minor]
         open_task: [task_id, task_input_digest, normalized_invocation_digest, toolchain_digest, environment_digest]
+        input_descriptor: [task_id, input_digest, total_bytes, chunk_bytes, chunk_count]
+        input_chunk: [task_id, input_digest, chunk_index, offset, byte_count]
         credit: [bytes, frames]
         close: [task_id]
         task_accepted: [provider_id, provider_version, task_id]
         batch_begin: [task_id, descriptor_id, descriptor_digest, dependency_group_id, atomic_output_group_id, batch_id]
         task_complete: [task_id, status]
         task_failed: [error_code, task_id, error_field]
-      unsigned_fields: [schema_negotiate.protocol_minor, credit.bytes, credit.frames]
+      unsigned_fields: [schema_negotiate.protocol_minor, input_descriptor.total_bytes, input_descriptor.chunk_bytes, input_descriptor.chunk_count, input_chunk.chunk_index, input_chunk.offset, input_chunk.byte_count, credit.bytes, credit.frames]
       record_sets:
         common: [schema, record_count, indexed-exact-fields]
         coverage: [kind, id, state, reason]

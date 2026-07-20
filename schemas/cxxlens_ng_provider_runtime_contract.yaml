@@ -1,5 +1,5 @@
 schema: cxxlens.provider-runtime-contract.v1
-document_version: 1.17.0
+document_version: 1.19.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md#17-provider-model
@@ -36,6 +36,12 @@ runtime:
     cancellation_kills_process_group: true
     stdout_stderr_combined_limit: required
   budget:
+    host_input_transfer:
+      logical_input_bytes: provider-protocol-profile-limit-before-task-acceptance
+      chunk_payload_bytes: provider-protocol-per-chunk-limit-before-allocation
+      chunk_frames: provider-protocol-count-limit-and-contiguous-state
+      accounting: shared-incremental-host-input-core
+      exhaustion: fail-before-task-accepted-without-semantic-adoption
     logical_surface_independent:
       output_bytes: sum-control-and-payload-for-non-lifecycle-provider-output-frames
       rows: task-global-sum-of-validated-batch-end-row-count
@@ -49,7 +55,7 @@ runtime:
       transport_bytes: combined-stdout-stderr-drain-and-rlimit-fsize
       open_files: rlimit-nofile
       subprocesses: rlimit-nproc
-    wire_credit: independent-from-logical-and-transport-byte-budgets
+    wire_credit: provider-output-only-independent-from-host-input-logical-and-transport-byte-budgets
     direct_run_worker: trusted-callback-logical-limits-and-cooperative-cancellation-only
     unsupported_created_file_count: omitted-not-claimed
   sandbox:
@@ -136,12 +142,80 @@ protocol_session:
     protocol_minor: highest-compatible-then-exact-per-frame
     flags: retained-and-validated
     semantic_transcript_projection: [protocol-major, protocol-minor, flags, message-type, stream-id, sequence, control-digest, payload-digest]
-  host_input:
-    - hello_ack
-    - schema_negotiate
-    - open_task
-    - credit
-    - close
+  host_input_profiles:
+    '1.0':
+      protocol_minor: 0
+      required_features: []
+      exact_frames: [hello_ack, schema_negotiate, open_task, credit, close]
+      exact_sequences: [0, 1, 2, 3, 4]
+      payload_policy: open-task-only
+      compatibility: existing-public-five-frame-vector-api-unchanged-wrapper
+    '1.1':
+      protocol_minor: 1
+      required_features: [task-input-chunks-v1]
+      exact_frame_pattern: [hello_ack, schema_negotiate, open_task, input_descriptor, input_chunk-zero-or-more, credit, close]
+      fixed_prefix_sequences: [0, 1, 2, 3]
+      chunk_sequence: four-plus-chunk-index
+      credit_sequence: four-plus-chunk-count
+      close_sequence: five-plus-chunk-count
+      payload_policy: input-chunk-only
+      open_task_payload: empty
+  host_input_transfer:
+    activation: {protocol_minor: 1, required_features: [task-input-chunks-v1]}
+    limits: {chunk_payload_bytes: 1048576, logical_input_bytes: 67108864, chunks: 64}
+    descriptor_control: cxxlens.provider-control.input-descriptor.v1-exact-five-fields
+    chunk_control: cxxlens.provider-control.input-chunk.v1-exact-five-fields
+    sequence_and_shape: contiguous-index-offset-length-nonfinal-size-and-final-remainder
+    zero_input: {total_bytes: 0, chunk_count: 0, input_chunks: 0, input_digest: 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'}
+    final_seal: exact-total-length-and-streaming-sha256-equal-open-task-input-digest
+    task_accepted: only-after-shared-seal-task-decode-and-bottom-up-binding
+    output_credit: separate-provider-output-only
+    execution_transport_bytes: separate-stdout-stderr-accounting-only
+    ambient_input_side_channel: forbidden
+    raw_frames_and_spool: diagnostic-transport-occurrences-only
+    semantic_authority: detached-decoded-task-and-existing-output-seal-only
+    shared_incremental_core: host-encoder-worker-decoder-process-runtime-conformance-validator
+    production_full_input_vector_adapter: forbidden
+    existing_public_signatures: unchanged
+    minor_0_public_vector_api: bounded-wrapper-over-shared-incremental-core
+  runtime_private_receipt:
+    visibility: runtime-private
+    exact_fields: [raw_stdout_byte_count, raw_stdout_sha256, decoded_frame_count, frame_transcript_digest, sealed_transcript_digest]
+    additional_fields: reject
+    construction: same-shared-validation-pass-that-constructs-immutable-seal
+    verification_source: runtime-observed-raw-bytes-decoded-frame-values-and-immutable-seal-only
+    report-supplied-digest-or-self-consistency: forbidden
+    expected_provider_identity:
+      exact_fields: [provider_id, provider_version, provider_binary_digest, provider_semantic_contract_digest, protocol_major, protocol_minor, required_features, sandbox_policy_digest, offered_relations]
+      source: independently-validated-selected-manifest-session-and-launcher-authority-never-provider-stdout
+      hello: exact-closed-projection-before-task-acceptance
+      task_accepted: exact-provider-id-version-cross-binding
+    raw_stdout:
+      observation_order: before-frame-decode-or-move
+      byte_count: exact-uint64
+      digest: sha256-of-exact-observed-bytes
+    frame_transcript:
+      domain: cxxlens.provider-frame-transcript.v2
+      digest: cxxlens-semantic-digest-v2
+      encoding: cxxlens-canonical-tuple-v1
+      exact_frame_fields: [protocol_major, protocol_minor, flags, message_type, stream_id, sequence, control_digest, payload_digest]
+      order: decoded-wire-order-with-explicit-count
+      source: same-decoded-frame-values-consumed-by-shared-validator
+    sealed_transcript:
+      domain: cxxlens.provider-sealed-transcript.v1
+      digest: cxxlens-semantic-digest-v2
+      encoding: cxxlens-canonical-tuple-v1
+      exact_fields: [task_id, terminal, batches, coverage_records, unresolved_records, evidence_records]
+      exact_batch_fields: [task_id, descriptor_id, descriptor_digest, dependency_group_id, atomic_output_group_id, batch_id, batch_digest, ordered_chunk_digests, row_canonical_forms]
+      exact_coverage_fields: [kind, id, state, reason]
+      exact_unresolved_fields: [code, subject, detail]
+      exact_evidence_fields: [kind, subject, producer, summary]
+      ordering: [batch-seal-order, row-order, retained-coverage-wire-order, retained-unresolved-wire-order, retained-evidence-wire-order]
+      source: immutable-value-owned-seal-from-same-shared-validation-pass
+    public_process_execution_report_semantic_digest:
+      role: diagnostic-public-report-identity-only
+      alias_for_any_receipt_field: false
+      raw-frame-frame-transcript-sealed-transcript-or-adoption-authority: false
   provider_output:
     - hello
     - schema_negotiate
@@ -186,10 +260,15 @@ protocol_session:
     control_text: strict-utf8-scalar-byte-preserving
     typed_control_text: schema-allowed-pipe-lf-cr-nul-and-multibyte-preserved
     evidence_summary: required-wire-field-bound-by-transcript-control-digest
-    host_transcript_encoder: shared-public-exact-five-frame
-    host_transcript_validator: exact-direction-type-order-stream-sequence-flags-control-payload-and-binding
+    host_transcript_encoder: shared-public-profiled-incremental-core
+    host_transcript_validator: exact-negotiated-profile-direction-type-order-stream-sequence-flags-control-payload-length-digest-and-binding
     host_transcript_authority: launcher-manifest-task-digests-and-negotiated-version
-    host_transcript_invalid: fail-before-payload-decode-without-output
+    host_input_incremental_core: same-transition-digest-length-and-budget-state-for-host-worker-runtime-and-conformance
+    host_input_seal: required-before-task-accepted-and-semantic-task-use
+    host_input_side_channel: ambient-path-fd-environment-shared-memory-forbidden
+    host_input_credit: provider-output-only-never-input-accounting
+    host_input_raw_occurrence: diagnostic-only-never-task-or-adoption-authority
+    host_transcript_invalid: fail-before-task-acceptance-and-semantic-payload-use-without-output
     validator_bypass: forbidden
     adoption_projection:
       validated_frames: diagnostic-only-non-authoritative
@@ -311,6 +390,7 @@ report:
   measured_executable_digest: exact-sealed-image-digest-or-null-before-measurement
   frames_authority: diagnostic-only
   adoption_authority: none
+  public_semantic_digest_role: diagnostic-report-identity-only-never-runtime-private-receipt-or-adoption-authority
 acceptance:
   - kernel-query-store-link-closure-is-llvm-free
   - native-object-never-crosses-callback-thread-process
@@ -325,6 +405,12 @@ acceptance:
   - control-text-strict-utf8-and-typed-nul-policy
   - structured-control-metadata-lossless-and-delimiter-independent
   - host-to-provider-shared-state-validator-and-runtime-worker-fixture-parity
+  - provider-protocol-minor-zero-exact-five-frame-compatibility
+  - provider-protocol-minor-one-authenticated-bounded-task-input-chunks
+  - provider-task-accepted-only-after-shared-input-seal
+  - shared-validator-requires-one-task-transport-record-and-losslessly-retains-unknown-semantic-coverage
+  - runtime-private-receipt-is-derived-in-the-same-shared-validation-pass
+  - public-process-semantic-digest-never-aliases-runtime-private-receipt-authority
   - immutable-selection-token-revalidated-before-process-effect
   - public-raw-frames-never-authorize-claim-or-snapshot-adoption
   - clang22-installed-materializer-owns-exact-task-and-sealed-adoption

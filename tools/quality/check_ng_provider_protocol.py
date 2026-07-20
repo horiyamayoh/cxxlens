@@ -9,6 +9,7 @@ import hashlib
 import json
 import pathlib
 import random
+import re
 import struct
 import sys
 from typing import Any
@@ -35,6 +36,43 @@ FUZZ_SCHEMA = pathlib.Path("schemas/cxxlens_ng_provider_fuzz_corpus.schema.yaml"
 FRAME = struct.Struct(">4sHHHHQQIQ32s32s")
 MAX_CONTROL = 65536
 MAX_PAYLOAD = 16777216
+MAX_TASK_INPUT_CHUNK = 1048576
+MAX_LOGICAL_TASK_INPUT = 67108864
+MAX_TASK_INPUT_CHUNKS = 64
+SHARED_COVERAGE_AUTHORITY = {
+    "validator": "single-shared-provider-transcript-validator",
+    "specialization_awareness": "forbidden",
+    "exact_record_fields": ["kind", "id", "state", "reason"],
+    "accepted_states": ["covered", "excluded", "failed", "not_applicable", "unresolved"],
+    "record_identity": ["kind", "id"],
+    "duplicate_identity": "reject",
+    "task_transport_record": {
+        "exact_projection": {
+            "kind": "task",
+            "id": "exact-provider-task-id",
+            "state": "covered",
+            "reason": "empty",
+        },
+        "cardinality": "exactly-one",
+        "mutation_rejection": [
+            "missing",
+            "duplicate",
+            "renamed",
+            "wrong-task",
+            "non-covered",
+            "nonempty-reason",
+        ],
+    },
+    "non_transport_records": {
+        "retention": "exact-decoded-records-in-wire-order",
+        "unknown_or_extra_semantic": "retain-losslessly-without-interpretation",
+        "discard": "forbidden",
+        "reclassification": "forbidden",
+    },
+    "immutable_seal": (
+        "complete-retained-record-set-value-owned-by-shared-validation-pass"
+    ),
+}
 REUSE_FIELDS = (
     "provider_id",
     "provider_version",
@@ -89,6 +127,281 @@ def canonical_json(value: Any) -> bytes:
 
 def digest(value: Any) -> str:
     return "sha256:" + hashlib.sha256(canonical_json(value)).hexdigest()
+
+
+def byte_digest(value: bytes) -> str:
+    return "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+def _require_exact_keys(value: dict[str, Any], expected: set[str], label: str) -> None:
+    if set(value) != expected:
+        fail("provider.task-input-invalid", f"{label} exact fields")
+
+
+def _require_uint(value: Any, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        fail("provider.task-input-invalid", f"{label} unsigned integer")
+    return value
+
+
+def validate_shared_coverage_records(
+    task_id: str, records: Any
+) -> list[dict[str, str]]:
+    """Validate generic transport coverage and retain every opaque semantic record."""
+
+    if not isinstance(task_id, str) or not task_id or "\0" in task_id:
+        fail("provider.coverage-incomplete", "task identity")
+    if not isinstance(records, list):
+        fail("provider.coverage-incomplete", "coverage record set")
+    retained: list[dict[str, str]] = []
+    identities: set[tuple[str, str]] = set()
+    task_records = 0
+    accepted_states = set(SHARED_COVERAGE_AUTHORITY["accepted_states"])
+    for record in records:
+        if not isinstance(record, dict) or set(record) != {
+            "kind",
+            "id",
+            "state",
+            "reason",
+        }:
+            fail("provider.coverage-incomplete", "coverage exact fields")
+        if not all(isinstance(record[field], str) for field in record):
+            fail("provider.coverage-incomplete", "coverage text field")
+        if (
+            not record["kind"]
+            or not record["id"]
+            or "\0" in record["kind"]
+            or "\0" in record["id"]
+            or record["state"] not in accepted_states
+        ):
+            fail("provider.coverage-incomplete", "coverage value")
+        identity = (record["kind"], record["id"])
+        if identity in identities:
+            fail("provider.coverage-incomplete", "duplicate coverage identity")
+        identities.add(identity)
+        if record["kind"] == "task":
+            task_records += 1
+            if record != {
+                "kind": "task",
+                "id": task_id,
+                "state": "covered",
+                "reason": "",
+            }:
+                fail("provider.coverage-incomplete", "task transport record")
+        retained.append(copy.deepcopy(record))
+    if task_records != 1:
+        fail("provider.coverage-incomplete", "exactly one task transport record")
+    return retained
+
+
+def validate_shared_coverage_authority(contract: dict[str, Any]) -> None:
+    if contract.get("shared_transcript_coverage") != SHARED_COVERAGE_AUTHORITY:
+        fail("provider.coverage-authority-invalid", "shared coverage authority")
+    coverage_fields = contract["structured_control_metadata"]["record_sets"].get(
+        "coverage"
+    )
+    if coverage_fields != SHARED_COVERAGE_AUTHORITY["exact_record_fields"]:
+        fail("provider.coverage-authority-invalid", "coverage record projection")
+
+
+def validate_task_input_chunks(value: dict[str, Any]) -> dict[str, Any]:
+    """Independent executable oracle for the Provider Protocol 1.1 input seal."""
+    _require_exact_keys(
+        value,
+        {
+            "protocol_minor",
+            "features",
+            "task_id",
+            "input_digest",
+            "descriptor",
+            "chunks",
+            "credit_sequence",
+            "close_sequence",
+        },
+        "transfer",
+    )
+    if value["protocol_minor"] != 1:
+        fail("provider.protocol-minor-mismatch", str(value["protocol_minor"]))
+    if value["features"] != ["task-input-chunks-v1"]:
+        fail("provider.required-feature-missing", "task-input-chunks-v1")
+    task_id = value["task_id"]
+    input_digest = value["input_digest"]
+    if not isinstance(task_id, str) or not task_id:
+        fail("provider.task-input-invalid", "task_id")
+    if not isinstance(input_digest, str) or not re.fullmatch(
+        r"sha256:[0-9a-f]{64}", input_digest
+    ):
+        fail("provider.task-input-invalid", "input_digest")
+
+    descriptor = value["descriptor"]
+    if not isinstance(descriptor, dict):
+        fail("provider.task-input-invalid", "descriptor occurrence")
+    _require_exact_keys(descriptor, {"sequence", "control"}, "descriptor occurrence")
+    if _require_uint(descriptor["sequence"], "descriptor sequence") != 3:
+        fail("provider.protocol-state-invalid", "input_descriptor sequence")
+    control = descriptor["control"]
+    if not isinstance(control, dict):
+        fail("provider.task-input-invalid", "descriptor control")
+    _require_exact_keys(
+        control,
+        {
+            "schema",
+            "task_id",
+            "input_digest",
+            "total_bytes",
+            "chunk_bytes",
+            "chunk_count",
+        },
+        "descriptor control",
+    )
+    if control["schema"] != "cxxlens.provider-control.input-descriptor.v1":
+        fail("provider.task-input-invalid", "descriptor schema")
+    if control["task_id"] != task_id or control["input_digest"] != input_digest:
+        fail("provider.task-binding-mismatch", "input descriptor")
+    total_bytes = _require_uint(control["total_bytes"], "total_bytes")
+    chunk_bytes = _require_uint(control["chunk_bytes"], "chunk_bytes")
+    chunk_count = _require_uint(control["chunk_count"], "chunk_count")
+    if total_bytes > MAX_LOGICAL_TASK_INPUT:
+        fail("provider.task-input-invalid", "logical input limit")
+    if chunk_bytes < 1 or chunk_bytes > MAX_TASK_INPUT_CHUNK:
+        fail("provider.task-input-invalid", "chunk payload limit")
+    expected_count = 0 if total_bytes == 0 else (total_bytes + chunk_bytes - 1) // chunk_bytes
+    if chunk_count != expected_count or chunk_count > MAX_TASK_INPUT_CHUNKS:
+        fail("provider.task-input-invalid", "chunk count")
+
+    chunks = value["chunks"]
+    if not isinstance(chunks, list) or len(chunks) != chunk_count:
+        fail("provider.protocol-state-invalid", "missing or extra input chunk")
+    streamed = hashlib.sha256()
+    offset = 0
+    for index, occurrence in enumerate(chunks):
+        if not isinstance(occurrence, dict):
+            fail("provider.task-input-invalid", "chunk occurrence")
+        _require_exact_keys(
+            occurrence,
+            {"sequence", "control", "payload", "payload_digest"},
+            "chunk occurrence",
+        )
+        if _require_uint(occurrence["sequence"], "chunk sequence") != 4 + index:
+            fail("provider.protocol-state-invalid", "input chunk sequence")
+        chunk_control = occurrence["control"]
+        if not isinstance(chunk_control, dict):
+            fail("provider.task-input-invalid", "chunk control")
+        _require_exact_keys(
+            chunk_control,
+            {
+                "schema",
+                "task_id",
+                "input_digest",
+                "chunk_index",
+                "offset",
+                "byte_count",
+            },
+            "chunk control",
+        )
+        if chunk_control["schema"] != "cxxlens.provider-control.input-chunk.v1":
+            fail("provider.task-input-invalid", "chunk schema")
+        if (
+            chunk_control["task_id"] != task_id
+            or chunk_control["input_digest"] != input_digest
+        ):
+            fail("provider.task-binding-mismatch", "input chunk")
+        chunk_index = _require_uint(chunk_control["chunk_index"], "chunk_index")
+        chunk_offset = _require_uint(chunk_control["offset"], "offset")
+        byte_count = _require_uint(chunk_control["byte_count"], "byte_count")
+        if chunk_index != index or chunk_offset != offset:
+            fail("provider.protocol-state-invalid", "input chunk index or offset")
+        expected_bytes = min(chunk_bytes, total_bytes - offset)
+        if byte_count != expected_bytes or byte_count < 1:
+            fail("provider.task-input-invalid", "input chunk byte_count")
+        payload = occurrence["payload"]
+        if not isinstance(payload, bytes) or len(payload) != byte_count:
+            fail("provider.task-input-invalid", "input chunk payload length")
+        if occurrence["payload_digest"] != byte_digest(payload):
+            fail("provider.checksum-mismatch", "input chunk payload")
+        streamed.update(payload)
+        offset += byte_count
+
+    if offset != total_bytes or "sha256:" + streamed.hexdigest() != input_digest:
+        fail("provider.task-binding-mismatch", "terminal input seal")
+    credit_sequence = _require_uint(value["credit_sequence"], "credit_sequence")
+    close_sequence = _require_uint(value["close_sequence"], "close_sequence")
+    if credit_sequence != 4 + chunk_count or close_sequence != 5 + chunk_count:
+        fail("provider.protocol-state-invalid", "credit or close sequence")
+    return {
+        "task_id": task_id,
+        "input_digest": input_digest,
+        "total_bytes": total_bytes,
+        "chunk_count": chunk_count,
+        "sealed": True,
+    }
+
+
+def _task_input_fixture_transfer(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        fail("provider.fuzz-case-invalid", "minor 1 task input transfer")
+    transfer = copy.deepcopy(value)
+    chunks = transfer.get("chunks")
+    if not isinstance(chunks, list):
+        fail("provider.fuzz-case-invalid", "minor 1 chunks")
+    for chunk in chunks:
+        if not isinstance(chunk, dict) or "payload_hex" not in chunk:
+            fail("provider.fuzz-case-invalid", "minor 1 chunk payload")
+        payload_hex = chunk.pop("payload_hex")
+        if not isinstance(payload_hex, str):
+            fail("provider.fuzz-case-invalid", "minor 1 payload hex")
+        try:
+            chunk["payload"] = bytes.fromhex(payload_hex)
+        except ValueError as error:
+            fail("provider.fuzz-case-invalid", str(error))
+    return transfer
+
+
+def validate_task_input_corpus(corpus: dict[str, Any]) -> dict[str, int]:
+    cases = corpus.get("minor_1_task_input_cases")
+    if not isinstance(cases, list):
+        fail("provider.fuzz-case-invalid", "minor 1 task input cases")
+    expected_mutations = {
+        "positive",
+        "missing",
+        "duplicate",
+        "reordered",
+        "overlap",
+        "digest",
+        "limit",
+    }
+    if (
+        len(cases) != len(expected_mutations)
+        or {case.get("mutation") for case in cases if isinstance(case, dict)}
+        != expected_mutations
+        or len({case.get("id") for case in cases if isinstance(case, dict)})
+        != len(cases)
+    ):
+        fail("provider.fuzz-case-invalid", "minor 1 mutation census")
+    accepted = rejected = 0
+    for case in cases:
+        if not isinstance(case, dict):
+            fail("provider.fuzz-case-invalid", "minor 1 case")
+        try:
+            validate_task_input_chunks(_task_input_fixture_transfer(case["transfer"]))
+            decision = "accepted"
+            reason = "provider.task-input-valid"
+            accepted += 1
+        except ProviderContractError as error:
+            decision = "rejected"
+            reason = error.code
+            rejected += 1
+        if decision != case["expected_decision"] or reason != case["expected_reason"]:
+            fail(
+                "provider.fuzz-reason-mismatch",
+                f"{case['id']}: {decision}/{reason}",
+            )
+    if accepted != 1 or rejected != 6:
+        fail(
+            "provider.fuzz-case-invalid",
+            f"minor 1 accepted={accepted}, rejected={rejected}",
+        )
+    return {"cases": len(cases), "accepted": accepted, "stable_rejections": rejected}
 
 
 def reference_bool_column_payload(values: list[bool]) -> bytes:
@@ -735,8 +1048,132 @@ def sample_task() -> dict[str, Any]:
     }
 
 
+def validate_task_input_authority(contract: dict[str, Any]) -> None:
+    if contract["compatibility"]["current"] != "1.1.0":
+        fail("provider.task-input-authority-invalid", "current protocol version")
+    if "task-input-chunks-v1" not in contract["profiles"]["NG0"]["required"]:
+        fail("provider.task-input-authority-invalid", "current required feature")
+    state_machine = contract["host_to_provider_state_machine"]
+    if state_machine["implementation"] != (
+        "single-shared-incremental-encoder-and-validator-core"
+    ):
+        fail("provider.task-input-authority-invalid", "shared incremental core")
+    minor_zero = state_machine["minor_profiles"].get("1.0")
+    if minor_zero != {
+        "required_features": [],
+        "exact_frames": [
+            "hello_ack",
+            "schema_negotiate",
+            "open_task",
+            "credit",
+            "close",
+        ],
+        "sequence": [0, 1, 2, 3, 4],
+        "payload_policy": "open-task-only",
+        "compatibility": "existing-public-five-frame-vector-api-unchanged-wrapper",
+    }:
+        fail("provider.task-input-authority-invalid", "minor 0 exact transcript")
+    minor_one = state_machine["minor_profiles"].get("1.1")
+    if minor_one != {
+        "required_features": ["task-input-chunks-v1"],
+        "exact_frame_pattern": [
+            "hello_ack",
+            "schema_negotiate",
+            "open_task",
+            "input_descriptor",
+            "input_chunk-zero-or-more",
+            "credit",
+            "close",
+        ],
+        "fixed_prefix_sequence": [0, 1, 2, 3],
+        "chunk_sequence": "four-plus-chunk-index",
+        "credit_sequence": "four-plus-chunk-count",
+        "close_sequence": "five-plus-chunk-count",
+        "payload_policy": "input-chunk-only",
+        "open_task_payload": "empty",
+        "task_accepted_precondition": (
+            "input-sealed-exact-length-and-digest-and-semantic-task-decoded"
+        ),
+    }:
+        fail("provider.task-input-authority-invalid", "minor 1 exact transcript")
+
+    transfer = contract["task_input_transfer"]
+    limits = transfer["limits"]
+    if limits != {
+        "maximum_chunk_payload_bytes": MAX_TASK_INPUT_CHUNK,
+        "maximum_logical_input_bytes": MAX_LOGICAL_TASK_INPUT,
+        "maximum_input_chunks": MAX_TASK_INPUT_CHUNKS,
+        "per_frame_payload_bytes_unchanged": MAX_PAYLOAD,
+    }:
+        fail("provider.task-input-authority-invalid", "input limits")
+    if (
+        MAX_TASK_INPUT_CHUNK * MAX_TASK_INPUT_CHUNKS != MAX_LOGICAL_TASK_INPUT
+        or limits["per_frame_payload_bytes_unchanged"]
+        != contract["wire"]["limits"]["payload_bytes"]
+    ):
+        fail("provider.task-input-authority-invalid", "input limit proof")
+    if transfer["feature"] != "task-input-chunks-v1" or transfer["activation"] != {
+        "protocol_minor": 1,
+        "required_features": ["task-input-chunks-v1"],
+    }:
+        fail("provider.task-input-authority-invalid", "feature activation")
+    if transfer["message_ids"] != {"input_descriptor": 6, "input_chunk": 7}:
+        fail("provider.task-input-authority-invalid", "message IDs")
+    descriptor = transfer["input_descriptor_control"]
+    if descriptor["schema"] != "cxxlens.provider-control.input-descriptor.v1" or descriptor[
+        "exact_fields"
+    ] != ["task_id", "input_digest", "total_bytes", "chunk_bytes", "chunk_count"]:
+        fail("provider.task-input-authority-invalid", "descriptor control")
+    chunk = transfer["input_chunk_control"]
+    if chunk["schema"] != "cxxlens.provider-control.input-chunk.v1" or chunk[
+        "exact_fields"
+    ] != ["task_id", "input_digest", "chunk_index", "offset", "byte_count"]:
+        fail("provider.task-input-authority-invalid", "chunk control")
+    if transfer["shape"]["zero_input"] != {
+        "total_bytes": 0,
+        "chunk_count": 0,
+        "input_chunks": 0,
+        "input_digest": (
+            "sha256:e3b0c44298fc1c149afbf4c8996fb924"
+            "27ae41e4649b934ca495991b7852b855"
+        ),
+    }:
+        fail("provider.task-input-authority-invalid", "zero input")
+    boundary = transfer["authority_boundary"]
+    if boundary["ambient_path-fd-environment-shared-memory-side-channel"] != "forbidden":
+        fail("provider.task-input-authority-invalid", "ambient side channel")
+    budgets = transfer["budget_separation"]
+    if budgets != {
+        "input_bytes_and_frames": "descriptor-profile-limits-not-credit",
+        "credit": "provider-output-only",
+        "execution_budget_transport_bytes": "stdout-stderr-process-accounting-only",
+    }:
+        fail("provider.task-input-authority-invalid", "budget separation")
+    shared = transfer["shared_incremental_core"]
+    if shared != {
+        "owners": [
+            "host-encoder",
+            "worker-decoder",
+            "process-runtime",
+            "conformance-validator",
+        ],
+        "state": "transition-digest-length-and-budget",
+        "full-input-vector-materialization-in-production": "forbidden",
+        "existing_public_signatures": "unchanged",
+        "minor_0_public_vector_api": "bounded-wrapper-over-this-core",
+    }:
+        fail("provider.task-input-authority-invalid", "incremental API authority")
+    controls = contract["structured_control_metadata"]["single_records"]
+    if controls.get("input_descriptor") != descriptor["exact_fields"] or controls.get(
+        "input_chunk"
+    ) != chunk["exact_fields"]:
+        fail("provider.task-input-authority-invalid", "structured control binding")
+
+
 def validate_contract_shape(contract: dict[str, Any]) -> None:
     validate_columnar_reference()
+    validate_task_input_authority(contract)
+    validate_shared_coverage_authority(contract)
     if FRAME.size != 104 or contract["wire"]["fixed_header_bytes"] != FRAME.size:
         fail("provider.wire-header-size-invalid", str(FRAME.size))
     if sum(row["bytes"] for row in contract["wire"]["fixed_header_fields"]) != FRAME.size:
@@ -789,6 +1226,7 @@ def validate_all(root: pathlib.Path) -> tuple[dict[str, Any], list[dict[str, Any
     schema_validate(sample_task(), load_yaml(root / TASK_SCHEMA), "provider task")
     corpus = load_yaml(root / FUZZ)
     schema_validate(corpus, load_yaml(root / FUZZ_SCHEMA), "provider fuzz corpus")
+    validate_task_input_corpus(corpus)
     validate_contract_shape(contract)
     validate_design(root)
     vectors = load_yaml(root / VECTORS)

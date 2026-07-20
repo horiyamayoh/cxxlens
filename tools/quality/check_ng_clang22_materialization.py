@@ -14,10 +14,12 @@ import json
 import pathlib
 import sys
 import unicodedata
-from typing import Any, Iterable
+from typing import Any, Iterable, NoReturn
 
 import jsonschema
 import yaml
+
+import check_ng_provider_runtime as provider_runtime
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -30,6 +32,9 @@ REQUEST_SCHEMA = pathlib.Path(
 )
 REPORT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_clang22_materialization_report.schema.yaml"
+)
+OCCURRENCE_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml"
 )
 REGISTRY = pathlib.Path("schemas/cxxlens_ng_relation_registry.yaml")
 PROJECT_CATALOG = pathlib.Path("schemas/cxxlens_ng_project_catalog_contract.yaml")
@@ -53,7 +58,73 @@ GENERIC_DEPENDENCIES = [
     PROVIDER_RUNTIME,
     SNAPSHOT_STORE,
 ]
-AUTHORITY_PATHS = [CONTRACT, CONTRACT_SCHEMA, REQUEST_SCHEMA, REPORT_SCHEMA, REGISTRY]
+AUTHORITY_PATHS = [
+    CONTRACT,
+    CONTRACT_SCHEMA,
+    REQUEST_SCHEMA,
+    REPORT_SCHEMA,
+    REGISTRY,
+]
+OCCURRENCE_AUTHORITY_FILES = [
+    (
+        "relation-registry",
+        "share/cxxlens/schemas/cxxlens_ng_relation_registry.yaml",
+        REGISTRY,
+    ),
+    (
+        "project-catalog-contract",
+        "share/cxxlens/schemas/cxxlens_ng_project_catalog_contract.yaml",
+        PROJECT_CATALOG,
+    ),
+    (
+        "portable-provider-task-contract",
+        "share/cxxlens/schemas/cxxlens_ng_portable_provider_task_contract.yaml",
+        PORTABLE_PROVIDER_TASK,
+    ),
+    (
+        "provider-protocol",
+        "share/cxxlens/schemas/cxxlens_ng_provider_protocol.yaml",
+        PROVIDER_PROTOCOL,
+    ),
+    (
+        "provider-runtime-contract",
+        "share/cxxlens/schemas/cxxlens_ng_provider_runtime_contract.yaml",
+        PROVIDER_RUNTIME,
+    ),
+    (
+        "snapshot-store-contract",
+        "share/cxxlens/schemas/cxxlens_ng_snapshot_store_contract.yaml",
+        SNAPSHOT_STORE,
+    ),
+    (
+        "materialization-contract",
+        "share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.yaml",
+        CONTRACT,
+    ),
+    (
+        "materialization-contract-schema",
+        "share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml",
+        CONTRACT_SCHEMA,
+    ),
+    (
+        "materialization-request-schema",
+        "share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request.schema.yaml",
+        REQUEST_SCHEMA,
+    ),
+    (
+        "materialization-report-schema",
+        "share/cxxlens/schemas/cxxlens_ng_clang22_materialization_report.schema.yaml",
+        REPORT_SCHEMA,
+    ),
+]
+SHARED_OCCURRENCE_RUNTIME_FILES = [
+    ("base", "lib/libcxxlens_base.so"),
+    ("kernel", "lib/libcxxlens_kernel.so"),
+    ("query", "lib/libcxxlens_query.so"),
+    ("recipes", "lib/libcxxlens_recipes.so"),
+    ("provider-sdk", "lib/libcxxlens_provider_sdk.so"),
+    ("clang22-provider-sdk", "lib/libcxxlens_clang22_provider_sdk.so"),
+]
 FORBIDDEN_REPORT_LIFECYCLE_TEXT = (
     "bounded-spool-before-publication",
     "publication 前に bounded private spool 上で完全な schema-valid bytes まで構築する",
@@ -83,6 +154,43 @@ INTERPRETATION_POLICY_ID = "cxxlens.clang22-interpretation-policy.v1"
 INTERPRETATION_DOMAIN = "cc.clang22-canonical-1"
 TRUST_POLICY_ID = "cxxlens.clang22-installed-native-worker-trust.v1"
 RAW_INPUT_BYTE_LIMIT = 1_073_741_824
+MATERIALIZATION_VERSION = "2.1.0"
+PROVIDER_PROTOCOL_MINOR = 1
+TASK_INPUT_FEATURE = "task-input-chunks-v1"
+TASK_INPUT_CHUNK_BYTES = 1_048_576
+MAXIMUM_TASK_INPUT_BYTES = 67_108_864
+MAXIMUM_TASK_INPUT_CHUNKS = 64
+MAXIMUM_STRONG_ID_UTF8_BYTES = 2_048
+MAXIMUM_LOGICAL_PATH_UTF8_BYTES = 4_096
+MAXIMUM_SQLITE_RELATIVE_PATH_UTF8_BYTES = 4_095
+MAXIMUM_ARGV_ITEMS = 4_096
+MAXIMUM_ARGV_ITEM_UTF8_BYTES = 2_048
+OCCURRENCE_MANIFEST_PATH = (
+    "share/cxxlens/materialization/clang22/occurrence-v1.json"
+)
+GUARANTEE_PROFILE_ID = "cxxlens.clang22-materialization-guarantee-profile.v1"
+GUARANTEE_ASSUMPTIONS: list[str] = []
+GUARANTEE_MODALITIES = [
+    "clang22.materialization-sealed.v1",
+    "provider.transcript-sealed.v1",
+    "sdk.claim-envelope-validated.v1",
+]
+TRANSPORT_COVERAGE_KIND = "task"
+SEMANTIC_COVERAGE_KINDS = [
+    "cc.call-extraction",
+    "cc.entity",
+    "frontend.clang22.observation",
+]
+COVERAGE_STATES = [
+    "covered",
+    "excluded",
+    "not_applicable",
+    "failed",
+    "unresolved",
+    "unsupported",
+    "stale",
+    "truncated",
+]
 BASE_RESULT_FIELDS = {
     "build.project.v1": "project",
     "build.toolchain_context.v1": "toolchain",
@@ -232,6 +340,218 @@ EXPECTED_SOURCE_IDENTITY_CONTRACT = {
         ),
     },
     "validation": "recompute-before-source-file-and-task-adoption",
+}
+EXPECTED_INSTALLED_OCCURRENCE = {
+    "schema": "cxxlens.clang22-materializer-occurrence-manifest.v1",
+    "fixed_path": OCCURRENCE_MANIFEST_PATH,
+    "request_authority": "expected-exact-manifest-file-digest",
+    "manifest_payload": {
+        "fields": [
+            "schema",
+            "manifest_version",
+            "source_revision",
+            "source_tree",
+            "package_configuration",
+            "files",
+            "occurrence_payload_digest",
+        ],
+        "files": (
+            "configuration-closed-exact-ordered-role-prefix-relative-path-and-"
+            "sha256-digest-records"
+        ),
+        "configuration_inventories": {
+            "static": {
+                "count": 12,
+                "ordered_roles": [
+                    "materializer-executable",
+                    "worker-executable",
+                    *[role for role, _, _ in OCCURRENCE_AUTHORITY_FILES],
+                ],
+            },
+            "shared": {
+                "count": 18,
+                "ordered_roles": [
+                    "materializer-executable",
+                    "worker-executable",
+                    *[role for role, _, _ in OCCURRENCE_AUTHORITY_FILES],
+                    *[role for role, _ in SHARED_OCCURRENCE_RUNTIME_FILES],
+                ],
+                "package_owned_runtime_dso_paths": (
+                    "safe-prefix-relative-lib-or-lib64-soname"
+                ),
+            },
+        },
+        "external_system_libraries": (
+            "excluded-toolchain-and-runtime-evidence-only"
+        ),
+        "self_entry": "forbidden",
+        "digest": (
+            "sha256-of-utf8-canonical-json-sorted-keys-no-whitespace-exact-"
+            "manifest-fields-excluding-occurrence_payload_digest"
+        ),
+        "inventory_digest": (
+            "sha256-of-utf8-canonical-json-sorted-keys-no-whitespace-ordered-"
+            "role-path-digest-records"
+        ),
+    },
+    "runtime_measurement": {
+        "executable_object": "proc-self-exe-opened-regular-not-deleted",
+        "prefix_derivation": (
+            "exact-kernel-executable-object-at-bin-cxxlens-clang22-materialize"
+        ),
+        "lookup": (
+            "prefix-dirfd-openat2-resolve-beneath-no-symlinks-no-magiclinks"
+        ),
+        "file_digest": "stable-before-after-stat-over-opened-fd",
+        "before_worker_or_store_effect": "required",
+        "argv0_or_path_authority": "forbidden",
+    },
+    "trust_claim": "measured-self-consistency-and-invocation-attribution-only",
+    "external_trust_witness": (
+        "full-prefix-install-artifact-manifest-including-occurrence-manifest-bytes"
+    ),
+    "external-full-prefix-digest-in-request-or-semantic-identity": "forbidden",
+}
+EXPECTED_COVERAGE_CONTRACT = {
+    "record_type": "typed-coverage-unit",
+    "complete_worker_record_set_per_task": {
+        "transport": [
+            {
+                "kind": TRANSPORT_COVERAGE_KIND,
+                "id": "exact-provider-task-id",
+                "state": "covered",
+                "reason": "empty",
+            }
+        ],
+        "semantic_kinds": SEMANTIC_COVERAGE_KINDS,
+        "semantic_id": "exact-provider-task-id",
+        "qualified_semantic_state_and_reason": "covered-and-empty",
+        "canonical_order": "kind-id-state-reason",
+        "missing-duplicate-extra-renamed-wrong-task-or-state": "reject",
+    },
+    "generic_validator": "transport-required-specialization-blind-and-lossless",
+    "specialization_seal": (
+        "exact-three-semantic-records-plus-retained-transport-record"
+    ),
+    "report_planes": ["transport", "semantic"],
+    "global_transport_count": "exact-task-count",
+    "global_semantic_count": "exact-three-times-task-count",
+    "filtering-or-plane-substitution": "forbidden",
+    "balance": "requested-semantic-fragments-exact-partition",
+    "empty-success": "forbidden",
+}
+EXPECTED_SQLITE_EFFECT_ROOT = {
+    "capture": (
+        "startup-current-working-directory-opened-once-before-request-parsing"
+    ),
+    "request_path": (
+        "canonical-relative-utf8-no-empty-dot-dotdot-root-drive-nul-backslash-or-"
+        "normalization-change"
+    ),
+    "implementation": "source-private-rooted-sqlite-vfs",
+    "resolution": (
+        "openat2-beneath-no-symlinks-no-magiclinks-for-database-wal-shm-and-journal"
+    ),
+    "unsupported-kernel-or-vfs": "fail-before-store-effect",
+    "operational_receipt": [
+        "rooted-vfs-v1",
+        "mount-device-inode-observation-digest",
+        "exact-relative-path",
+        "parent-and-leaf-resolution-verdict",
+    ],
+    "semantic-snapshot-claim-backend-parity-identity": "excluded",
+}
+EXPECTED_SDK_PUBLISH_MAPPING = {
+    "classification_key": [
+        "authenticated-operation",
+        "backend",
+        "exact-sdk-code",
+        "exact-sdk-field",
+        "authority-declared-stable-detail",
+    ],
+    "diagnostic-prose-parsing": "forbidden",
+    "prepublication_operations": [
+        "configuration",
+        "store_open",
+        "head_current",
+        "writer_begin",
+        "partition_stage",
+        "closure_stage",
+        "writer_validate",
+    ],
+    "prepublication_failure": (
+        "compact-phase-authentic-publication-not-attempted-zero-commit"
+    ),
+    "writer_publish_sqlite": {
+        "store.publication-conflict": {
+            "field": "exact-series-id",
+            "detail": "empty",
+            "outcome": "rejected_stale",
+        },
+        "store.counter-overflow": {
+            "fields": ["publication_sequence", "physical_generation"],
+            "detail": "empty",
+            "outcome": "rejected_store_failure-counter_overflow",
+        },
+        "store.hash-collision": {
+            "field": "exact-candidate-snapshot-id",
+            "detail": "empty",
+            "outcome": "rejected_store_failure-hash_collision",
+        },
+        "store.snapshot-ambiguous": {
+            "field": "exact-snapshot-id",
+            "detail": "empty",
+            "outcome": "rejected_store_failure-persistence-corrupt",
+        },
+        "store.sqlite-failure": {
+            "field": "database",
+            "detail": "opaque",
+            "outcome": "publication_outcome_unknown-persistence_io",
+        },
+        "store.corrupt": {
+            "exact_fields_and_details": {
+                "sqlite": [
+                    "backend",
+                    "column-count",
+                    "publication-row",
+                    "series-head-count",
+                    "series-head",
+                    "series-head-sequence",
+                ],
+                "exact-publication-id": [
+                    "authority-record",
+                    "duplicate-publication-id",
+                    "parent",
+                    "parent-sequence",
+                ],
+                "exact-series-id": [
+                    "duplicate-sequence",
+                    "series-roots",
+                    "series-head-cas",
+                ],
+            },
+            "outcome": "rejected_store_failure-persistence-corrupt",
+        },
+    },
+    "publish_returned_handle": "exact-returned-record-is-commit-proof",
+    "postpublish_operations": [
+        "store_reopen",
+        "verify_current",
+        "verify_open_publication",
+        "verify_open_snapshot",
+        "verify_projection",
+    ],
+    "postpublish-error-or-mismatch": (
+        "committed_unverified-preserve-first-cause"
+    ),
+    "invariant_breach_exit_two": [
+        "store.transaction-state/publish/empty",
+        "store.corrupt/publication/identity",
+        "store.publish-stale-parent",
+        "any-memory-backend-publish-error",
+        "every-unlisted-writer-publish-tuple",
+    ],
+    "recovery-observation-reclassification": "forbidden",
 }
 RECOMPUTED_IDS_AND_DIGESTS = [
     "materialization_request_id",
@@ -543,19 +863,115 @@ EXPECTED_REPORT_DIGEST_CHAIN = {
         "result_domain": "cxxlens.clang22-task-result.v1",
         "result_set_domain": "cxxlens.clang22-task-result-set.v1",
         "raw_frame_set_domain": "cxxlens.clang22-raw-frame-set.v1",
+        "transcript_receipt": {
+            "raw_frame_stream": (
+                "exact-provider-stdout-byte-count-and-sha256-before-decode-or-move"
+            ),
+            "expected_provider_identity": {
+                "exact_fields": [
+                    "provider_id",
+                    "provider_version",
+                    "provider_binary_digest",
+                    "provider_semantic_contract_digest",
+                    "protocol_major",
+                    "protocol_minor",
+                    "required_features",
+                    "sandbox_policy_digest",
+                    "offered_relations",
+                ],
+                "source": (
+                    "exact-request-worker-identity-negotiated-session-measured-worker-"
+                    "binary-and-authorized-descriptor-order"
+                ),
+                "report_cross_binding": (
+                    "provider-report-plus-measured-worker-occurrence-plus-registry-"
+                    "descriptor-set"
+                ),
+                "provider-output-self-consistency": "forbidden",
+            },
+            "frame_transcript_domain": "cxxlens.provider-frame-transcript.v2",
+            "sealed_transcript_domain": "cxxlens.provider-sealed-transcript.v1",
+            "sealed_transcript_exact_fields": [
+                "task_id",
+                "terminal",
+                "batches",
+                "coverage_records",
+                "unresolved_records",
+                "evidence_records",
+            ],
+            "sealed_transcript_exact_batch_fields": [
+                "task_id",
+                "descriptor_id",
+                "descriptor_digest",
+                "dependency_group_id",
+                "atomic_output_group_id",
+                "batch_id",
+                "batch_digest",
+                "ordered_chunk_digests",
+                "row_canonical_forms",
+            ],
+            "sealed_transcript_exact_coverage_fields": [
+                "kind",
+                "id",
+                "state",
+                "reason",
+            ],
+            "sealed_transcript_exact_unresolved_fields": [
+                "code",
+                "subject",
+                "detail",
+            ],
+            "sealed_transcript_exact_evidence_fields": [
+                "kind",
+                "subject",
+                "producer",
+                "summary",
+            ],
+            "sealed_transcript_digest_projection": [
+                "task-id",
+                "terminal",
+                "batches",
+                "full-flat-coverage-records",
+                "full-unresolved-records",
+                "full-evidence-records",
+            ],
+            "materialization-specialization-projection": "none",
+            "construction": (
+                "same-shared-validation-pass-that-constructs-immutable-seal"
+            ),
+            "public-process-semantic-digest-alias": "forbidden",
+        },
+        "input_transfer_receipt": {
+            "protocol": "1.1.0-task-input-chunks-v1",
+            "fields": [
+                "task-input-codec",
+                "logical-byte-count",
+                "logical-task-input-digest",
+                "canonical-chunk-size",
+                "chunk-count",
+                "ordered-chunk-payload-digest-set-digest",
+            ],
+            "raw-host-frames-authorize-task-or-adoption": False,
+        },
     },
     "global_side_channels": {
         "domains": [
+            "cxxlens.clang22-global-transport-coverage.v1",
             "cxxlens.clang22-global-coverage.v1",
             "cxxlens.clang22-global-unresolved.v1",
             "cxxlens.clang22-global-evidence.v1",
         ],
+        "transport-versus-semantic-coverage": (
+            "separate-recomputable-record-planes"
+        ),
         "task_order": "semantic-task-key-byte-order",
         "physical_provider_execution": "excluded",
     },
     "guarantee": {
         "domain": "cxxlens.clang22-materialization-guarantee.v1",
+        "profile_domain": GUARANTEE_PROFILE_ID,
         "inputs": [
+            "exact-profile-id-and-digest",
             "global-side-channel-digests",
             "task-guarantee-fragments",
             "canonical-three-observation-descriptor-censuses",
@@ -654,6 +1070,42 @@ EXPECTED_REPORT_DIGEST_CHAIN = {
             "first-failure": (
                 "exact-stage-path-and-sdk-error-or-projection-mismatch"
             ),
+            "mismatch_digest_binding": {
+                "expected": "recomputed-exact-store-handle-projection",
+                "actual": (
+                    "retained-successful-handle-projection-at-exact-access-path"
+                ),
+                "retained_digest_fields": [
+                    "snapshot-manifest",
+                    "partition-bindings",
+                    "rows",
+                    "claim-annotations",
+                    "coverage",
+                    "unresolved",
+                    "closure",
+                    "cursor-projection",
+                    "canonical-export",
+                ],
+                "computed_domains": {
+                    "publication-semantic-fields": (
+                        "cxxlens.clang22-reopened-publication-semantic-fields.v1"
+                    ),
+                    "physical-generation-transition": (
+                        "cxxlens.clang22-reopened-physical-generation.v1"
+                    ),
+                    "descriptor-inventory": (
+                        "cxxlens.clang22-reopened-descriptor-inventory.v1"
+                    ),
+                    "open-snapshot-return-binding": (
+                        "cxxlens.clang22-reopened-open-snapshot-return.v1"
+                    ),
+                },
+                "cross-path-equality": (
+                    "first-fixed-path-semantic-projection-digest-that-differs-"
+                    "from-expected"
+                ),
+                "cause-expected-actual-exact-equality": "required",
+            },
         },
         "exact_compare": [
             "selector",
@@ -663,6 +1115,7 @@ EXPECTED_REPORT_DIGEST_CHAIN = {
             "claim-annotation-multiset",
             "coverage-multiset",
             "unresolved",
+            "closure",
             "descriptor-inventory",
         ],
         "canonical_export_digest": (
@@ -898,6 +1351,170 @@ def validate_schema(
         fail(error_code, f"{label}: {error.message}")
 
 
+def _utf8_size(value: str, label: str) -> int:
+    try:
+        return len(value.encode("utf-8", errors="strict"))
+    except UnicodeEncodeError as error:
+        fail(
+            "materialization.request-invalid",
+            f"{label} is not strict UTF-8: {error}",
+        )
+
+
+def _enforce_request_schema_utf8_limits(
+    value: Any,
+    schema: dict[str, Any],
+    root_schema: dict[str, Any],
+    path: str = "$",
+) -> None:
+    """Enforce contract byte caps that JSON Schema maxLength cannot express."""
+
+    reference = schema.get("$ref")
+    if isinstance(reference, str) and reference.startswith("#/$defs/"):
+        definition = reference.removeprefix("#/$defs/")
+        if isinstance(value, str):
+            limit = {
+                "strong_id": MAXIMUM_STRONG_ID_UTF8_BYTES,
+                "logical_path": MAXIMUM_LOGICAL_PATH_UTF8_BYTES,
+            }.get(definition)
+            if limit is not None and _utf8_size(value, path) > limit:
+                fail(
+                    "materialization.request-invalid",
+                    f"{path} exceeds the {definition} UTF-8 byte limit",
+                )
+        target = root_schema.get("$defs", {}).get(definition)
+        if isinstance(target, dict):
+            _enforce_request_schema_utf8_limits(value, target, root_schema, path)
+
+    if isinstance(value, dict):
+        properties = schema.get("properties", {})
+        if isinstance(properties, dict):
+            for key, child in value.items():
+                child_schema = properties.get(key)
+                if isinstance(child_schema, dict):
+                    _enforce_request_schema_utf8_limits(
+                        child,
+                        child_schema,
+                        root_schema,
+                        f"{path}.{key}",
+                    )
+    elif isinstance(value, list):
+        prefix_items = schema.get("prefixItems")
+        if isinstance(prefix_items, list):
+            for index, (child, child_schema) in enumerate(zip(value, prefix_items)):
+                if isinstance(child_schema, dict):
+                    _enforce_request_schema_utf8_limits(
+                        child,
+                        child_schema,
+                        root_schema,
+                        f"{path}[{index}]",
+                    )
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            for index, child in enumerate(value):
+                _enforce_request_schema_utf8_limits(
+                    child,
+                    item_schema,
+                    root_schema,
+                    f"{path}[{index}]",
+                )
+
+    for keyword in ("allOf", "anyOf", "oneOf"):
+        branches = schema.get(keyword)
+        if isinstance(branches, list):
+            for branch in branches:
+                if isinstance(branch, dict):
+                    _enforce_request_schema_utf8_limits(
+                        value,
+                        branch,
+                        root_schema,
+                        path,
+                    )
+
+
+def validate_request_utf8_byte_limits(
+    request: dict[str, Any],
+    request_schema: dict[str, Any],
+) -> None:
+    logical_paths: list[tuple[str, Any]] = [
+        ("$.project.logical_root", request["project"]["logical_root"]),
+    ]
+    for index, task in enumerate(request["tasks"]):
+        logical_paths.extend(
+            [
+                (f"$.tasks[{index}].working_directory", task["working_directory"]),
+                (f"$.tasks[{index}].source.logical_path", task["source"]["logical_path"]),
+            ]
+        )
+        sysroot = task["toolchain"]["sysroot"]
+        if sysroot is not None:
+            logical_paths.append((f"$.tasks[{index}].toolchain.sysroot", sysroot))
+        if len(task["effective_argv"]) > MAXIMUM_ARGV_ITEMS:
+            fail(
+                "materialization.request-invalid",
+                f"$.tasks[{index}].effective_argv exceeds the item limit",
+            )
+        for argument_index, argument in enumerate(task["effective_argv"]):
+            if _utf8_size(
+                argument,
+                f"$.tasks[{index}].effective_argv[{argument_index}]",
+            ) > MAXIMUM_ARGV_ITEM_UTF8_BYTES:
+                fail(
+                    "materialization.request-invalid",
+                    f"$.tasks[{index}].effective_argv[{argument_index}] exceeds the UTF-8 byte limit",
+                )
+    for label, logical_path in logical_paths:
+        if _utf8_size(logical_path, label) > MAXIMUM_LOGICAL_PATH_UTF8_BYTES:
+            fail(
+                "materialization.request-invalid",
+                f"{label} exceeds the logical-path UTF-8 byte limit",
+            )
+
+    sqlite_path = request["publication"]["sqlite_path"]
+    if (
+        sqlite_path is not None
+        and _utf8_size(sqlite_path, "$.publication.sqlite_path")
+        > MAXIMUM_SQLITE_RELATIVE_PATH_UTF8_BYTES
+    ):
+        fail(
+            "materialization.request-invalid",
+            "$.publication.sqlite_path exceeds the UTF-8 byte limit",
+        )
+    _enforce_request_schema_utf8_limits(request, request_schema, request_schema)
+
+
+def canonical_sqlite_relative_path(value: Any) -> str:
+    """Validate the exact effect-root-relative SQLite path before any effect."""
+
+    if (
+        not isinstance(value, str)
+        or not value
+        or value != unicodedata.normalize("NFC", value)
+        or "\x00" in value
+        or "\\" in value
+        or value.startswith("/")
+        or (
+            len(value) >= 2
+            and value[0].isascii()
+            and value[0].isalpha()
+            and value[1] == ":"
+        )
+        or _utf8_size(value, "SQLite relative path")
+        > MAXIMUM_SQLITE_RELATIVE_PATH_UTF8_BYTES
+    ):
+        fail(
+            "materialization.request-invalid",
+            "SQLite path is not canonical effect-root-relative UTF-8",
+        )
+    segments = value.split("/")
+    if any(segment in {"", ".", ".."} for segment in segments):
+        fail(
+            "materialization.request-invalid",
+            "SQLite path is not canonical effect-root-relative UTF-8",
+        )
+    return value
+
+
 def canonical_json(value: Any) -> bytes:
     return json.dumps(
         value,
@@ -994,6 +1611,8 @@ def normalized_project_logical_path(value: Any) -> tuple[str, str]:
         not isinstance(value, str)
         or not value.startswith(prefix)
         or value != unicodedata.normalize("NFC", value)
+        or _utf8_size(value, "source logical path")
+        > MAXIMUM_LOGICAL_PATH_UTF8_BYTES
     ):
         fail("materialization.identity-mismatch", "source logical path is not canonical")
     relative = value[len(prefix) :]
@@ -1041,10 +1660,10 @@ def _valid_strong_id(value: Any) -> bool:
     if not isinstance(value, str) or not 0 < len(value) <= 512:
         return False
     try:
-        value.encode("utf-8")
+        encoded = value.encode("utf-8")
     except UnicodeEncodeError:
         return False
-    return all(
+    return len(encoded) <= MAXIMUM_STRONG_ID_UTF8_BYTES and all(
         ord(character) >= 0x20 and ord(character) != 0x7F
         for character in value
     )
@@ -1342,6 +1961,10 @@ def expected_trust_policy_digest(policy: dict[str, Any]) -> str:
             _canonical_string(policy["semantic_contract_digest"]),
             _canonical_integer(policy["protocol_major"]),
             _canonical_integer(policy["protocol_minor"]),
+            _canonical_tuple(
+                _canonical_string(feature)
+                for feature in policy["required_features"]
+            ),
             _canonical_string(policy["required_qualification"]),
             _canonical_string(policy["worker_sandbox_policy_digest"]),
             _canonical_tuple(
@@ -1401,6 +2024,7 @@ def bind_engine_policy_and_selector_identities(request: dict[str, Any]) -> None:
         "semantic_contract_digest": request["worker"]["semantic_contract_digest"],
         "protocol_major": request["worker"]["protocol_major"],
         "protocol_minor": request["worker"]["protocol_minor"],
+        "required_features": list(request["worker"]["required_features"]),
         "required_qualification": "canonical-semantic-qualified",
         "worker_sandbox_policy_digest": request["worker"]["sandbox_policy_digest"],
         "task_sandbox_requirements": task_sandbox_requirements(request["tasks"]),
@@ -1483,12 +2107,23 @@ def effective_invocation_projection(
 ) -> bytes:
     """Encode the installed specialization's exact executed invocation."""
 
-    if not isinstance(working_directory, str) or not working_directory:
+    if (
+        not isinstance(working_directory, str)
+        or not working_directory
+        or _utf8_size(working_directory, "working directory")
+        > MAXIMUM_LOGICAL_PATH_UTF8_BYTES
+    ):
         fail("materialization.request-invalid", "working directory is invalid")
     if (
         not isinstance(effective_argv, list)
         or not effective_argv
+        or len(effective_argv) > MAXIMUM_ARGV_ITEMS
         or any(not isinstance(argument, str) or not argument for argument in effective_argv)
+        or any(
+            _utf8_size(argument, "effective argv item")
+            > MAXIMUM_ARGV_ITEM_UTF8_BYTES
+            for argument in effective_argv
+        )
     ):
         fail("materialization.request-invalid", "effective argv is invalid")
     return _canonical_tuple(
@@ -1639,6 +2274,657 @@ def worker_task_v3_projection(
             _canonical_projection_value(per_tu_payload),
         )
     )
+
+
+_PROJECTION_UTF8_BOUND = "x-cxxlens-max-utf8-bytes"
+_PROJECTION_ARITHMETIC_MAX = (1 << 64) - 1
+_TASK_V3_PAYLOAD_EXCLUDED_FIELDS = {
+    "provider_task_id",
+    "provider_execution_id",
+    "task_input_digest",
+    "selected_catalog_compile_unit_id",
+    "compile_unit_id",
+}
+
+
+def _checked_projection_add(*values: int) -> int:
+    total = 0
+    for value in values:
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            fail(
+                "materialization.task-binding-mismatch",
+                "task.v3 projection proof has a non-canonical arithmetic operand",
+            )
+        if value > _PROJECTION_ARITHMETIC_MAX - total:
+            fail(
+                "materialization.task-binding-mismatch",
+                "task.v3 projection proof checked uint64 addition overflowed",
+            )
+        total += value
+    return total
+
+
+def _checked_projection_multiply(left: int, right: int) -> int:
+    if (
+        isinstance(left, bool)
+        or not isinstance(left, int)
+        or left < 0
+        or isinstance(right, bool)
+        or not isinstance(right, int)
+        or right < 0
+    ):
+        fail(
+            "materialization.task-binding-mismatch",
+            "task.v3 projection proof has a non-canonical arithmetic operand",
+        )
+    if left and right > _PROJECTION_ARITHMETIC_MAX // left:
+        fail(
+            "materialization.task-binding-mismatch",
+            "task.v3 projection proof checked uint64 multiplication overflowed",
+        )
+    return left * right
+
+
+def _task_v3_projection_component_schemas(
+    request_schema: dict[str, Any],
+) -> list[tuple[str, dict[str, Any]]]:
+    properties = request_schema.get("properties")
+    if not isinstance(properties, dict):
+        fail(
+            "materialization.task-binding-mismatch",
+            "request schema lacks task.v3 projection properties",
+        )
+    project_schema = properties.get("project")
+    tasks_schema = properties.get("tasks")
+    if not isinstance(project_schema, dict) or not isinstance(tasks_schema, dict):
+        fail(
+            "materialization.task-binding-mismatch",
+            "request schema lacks task.v3 project/task authority",
+        )
+    project_properties = project_schema.get("properties")
+    project_required = project_schema.get("required")
+    task_schema = tasks_schema.get("items")
+    if (
+        not isinstance(project_properties, dict)
+        or not isinstance(project_required, list)
+        or len(project_required) != len(set(project_required))
+        or not isinstance(task_schema, dict)
+    ):
+        fail(
+            "materialization.task-binding-mismatch",
+            "request schema task.v3 project/task shape is not closed",
+        )
+    task_properties = task_schema.get("properties")
+    task_required = task_schema.get("required")
+    if not isinstance(task_properties, dict) or not isinstance(task_required, list):
+        fail(
+            "materialization.task-binding-mismatch",
+            "request schema task.v3 per-TU payload shape is not closed",
+        )
+
+    catalog_fields = (
+        "catalog_id",
+        "catalog_digest",
+        "logical_root",
+        "catalog_environment_digest",
+        "catalog_compile_units",
+    )
+    if any(
+        field not in project_properties or field not in project_required
+        for field in catalog_fields
+    ):
+        fail(
+            "materialization.task-binding-mismatch",
+            "request schema lacks an exact required task.v3 global catalog field census",
+        )
+    global_catalog_schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": list(catalog_fields),
+        "properties": {
+            field: copy.deepcopy(project_properties[field]) for field in catalog_fields
+        },
+    }
+
+    payload_fields = [
+        field
+        for field in task_required
+        if field not in _TASK_V3_PAYLOAD_EXCLUDED_FIELDS
+    ]
+    if set(task_properties) != set(task_required) or any(
+        field not in task_properties for field in payload_fields
+    ):
+        fail(
+            "materialization.task-binding-mismatch",
+            "request schema task.v3 per-TU field census is not exact",
+        )
+    payload_schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": payload_fields,
+        "properties": {
+            field: copy.deepcopy(task_properties[field]) for field in payload_fields
+        },
+    }
+    for field in ("selected_catalog_compile_unit_id", "compile_unit_id"):
+        if field not in task_properties:
+            fail(
+                "materialization.task-binding-mismatch",
+                f"request schema lacks task.v3 {field}",
+            )
+    return [
+        ("contract_tag", {"const": "cxxlens.clang22.task.v3"}),
+        ("full_global_project_catalog", global_catalog_schema),
+        (
+            "selected_catalog_compile_unit_id",
+            copy.deepcopy(task_properties["selected_catalog_compile_unit_id"]),
+        ),
+        (
+            "final_relation_compile_unit_id",
+            copy.deepcopy(task_properties["compile_unit_id"]),
+        ),
+        ("exact_per_tu_task_payload", payload_schema),
+    ]
+
+
+def _projection_schema_bound(
+    schema: dict[str, Any],
+    root_schema: dict[str, Any],
+    path: str,
+) -> dict[str, Any]:
+    reference = schema.get("$ref")
+    if reference is not None:
+        if not isinstance(reference, str) or not reference.startswith("#/$defs/"):
+            fail(
+                "materialization.task-binding-mismatch",
+                f"task.v3 projection proof has a non-local schema reference at {path}",
+            )
+        definition = reference.removeprefix("#/$defs/")
+        target = root_schema.get("$defs", {}).get(definition)
+        if not isinstance(target, dict):
+            fail(
+                "materialization.task-binding-mismatch",
+                f"task.v3 projection proof has an unresolved schema reference at {path}",
+            )
+        target_bound = _projection_schema_bound(target, root_schema, path)
+        return {
+            "kind": "ref",
+            "path": path,
+            "reference": reference,
+            "maximum_canonical_bytes": target_bound["maximum_canonical_bytes"],
+            "target": target_bound,
+        }
+
+    if "const" in schema:
+        encoded = _canonical_projection_value(schema["const"])
+        return {
+            "kind": "const",
+            "path": path,
+            "value": schema["const"],
+            "maximum_canonical_bytes": len(encoded),
+        }
+    enum = schema.get("enum")
+    if isinstance(enum, list) and enum:
+        encoded_values = [_canonical_projection_value(value) for value in enum]
+        return {
+            "kind": "enum",
+            "path": path,
+            "values": enum,
+            "maximum_canonical_bytes": max(map(len, encoded_values)),
+        }
+
+    branches = schema.get("oneOf")
+    if isinstance(branches, list) and branches:
+        branch_bounds = [
+            _projection_schema_bound(branch, root_schema, f"{path}.oneOf[{index}]")
+            for index, branch in enumerate(branches)
+            if isinstance(branch, dict)
+        ]
+        if len(branch_bounds) != len(branches):
+            fail(
+                "materialization.task-binding-mismatch",
+                f"task.v3 projection proof has a non-schema oneOf branch at {path}",
+            )
+        selected = max(
+            range(len(branch_bounds)),
+            key=lambda index: branch_bounds[index]["maximum_canonical_bytes"],
+        )
+        return {
+            "kind": "oneOf",
+            "path": path,
+            "selected_branch": selected,
+            "maximum_canonical_bytes": branch_bounds[selected][
+                "maximum_canonical_bytes"
+            ],
+            "branches": branch_bounds,
+        }
+
+    schema_type = schema.get("type")
+    if schema_type == "string":
+        maximum_utf8_bytes = schema.get(_PROJECTION_UTF8_BOUND)
+        if (
+            isinstance(maximum_utf8_bytes, bool)
+            or not isinstance(maximum_utf8_bytes, int)
+            or maximum_utf8_bytes < 0
+        ):
+            fail(
+                "materialization.task-binding-mismatch",
+                f"task.v3 projection proof is missing a finite UTF-8 byte bound at {path}",
+            )
+        maximum = _checked_projection_add(1, 8, maximum_utf8_bytes)
+        return {
+            "kind": "string",
+            "path": path,
+            "maximum_utf8_bytes": maximum_utf8_bytes,
+            "maximum_unicode_scalars": schema.get("maxLength"),
+            "pattern": schema.get("pattern"),
+            "maximum_canonical_bytes": maximum,
+        }
+    if schema_type == "integer":
+        minimum = schema.get("minimum")
+        maximum_value = schema.get("maximum")
+        if (
+            isinstance(minimum, bool)
+            or not isinstance(minimum, int)
+            or isinstance(maximum_value, bool)
+            or not isinstance(maximum_value, int)
+            or minimum < -(1 << 63)
+            or maximum_value > (1 << 63) - 1
+            or minimum > maximum_value
+        ):
+            fail(
+                "materialization.task-binding-mismatch",
+                f"task.v3 projection proof lacks a finite signed-int64 bound at {path}",
+            )
+        maximum = max(len(_canonical_integer(minimum)), len(_canonical_integer(maximum_value)))
+        return {
+            "kind": "integer",
+            "path": path,
+            "minimum": minimum,
+            "maximum": maximum_value,
+            "maximum_canonical_bytes": maximum,
+        }
+    if schema_type == "boolean":
+        return {"kind": "boolean", "path": path, "maximum_canonical_bytes": 2}
+    if schema_type == "null":
+        return {"kind": "null", "path": path, "maximum_canonical_bytes": 1}
+    if schema_type == "array":
+        maximum_items = schema.get("maxItems")
+        item_schema = schema.get("items")
+        if (
+            isinstance(maximum_items, bool)
+            or not isinstance(maximum_items, int)
+            or maximum_items < 0
+            or not isinstance(item_schema, dict)
+            or "prefixItems" in schema
+        ):
+            fail(
+                "materialization.task-binding-mismatch",
+                f"task.v3 projection proof lacks one finite homogeneous array bound at {path}",
+            )
+        item_bound = _projection_schema_bound(item_schema, root_schema, f"{path}[]")
+        maximum = _checked_projection_add(
+            1,
+            8,
+            _checked_projection_multiply(
+                maximum_items,
+                _checked_projection_add(8, item_bound["maximum_canonical_bytes"]),
+            ),
+        )
+        return {
+            "kind": "array",
+            "path": path,
+            "maximum_items": maximum_items,
+            "unique_items": schema.get("uniqueItems") is True,
+            "maximum_canonical_bytes": maximum,
+            "item": item_bound,
+        }
+    if schema_type == "object":
+        properties = schema.get("properties")
+        required = schema.get("required")
+        if (
+            schema.get("additionalProperties") is not False
+            or not isinstance(properties, dict)
+            or not isinstance(required, list)
+            or len(required) != len(set(required))
+            or set(required) != set(properties)
+        ):
+            fail(
+                "materialization.task-binding-mismatch",
+                f"task.v3 projection proof lacks an exact object field census at {path}",
+            )
+        fields: list[dict[str, Any]] = []
+        maximum = 9
+        for field in sorted(properties):
+            child = _projection_schema_bound(
+                properties[field], root_schema, f"{path}.{field}"
+            )
+            key_size = len(_canonical_string(field))
+            pair_size = _checked_projection_add(
+                9,
+                8,
+                key_size,
+                8,
+                child["maximum_canonical_bytes"],
+            )
+            maximum = _checked_projection_add(maximum, 8, pair_size)
+            fields.append({"name": field, "key_bytes": key_size, "value": child})
+        return {
+            "kind": "object",
+            "path": path,
+            "field_count": len(fields),
+            "maximum_canonical_bytes": maximum,
+            "fields": fields,
+        }
+    fail(
+        "materialization.task-binding-mismatch",
+        f"task.v3 projection proof has an unsupported schema shape at {path}",
+    )
+
+
+def _projection_bound_counts(bound: dict[str, Any]) -> tuple[int, int, int, int]:
+    kind = bound["kind"]
+    if kind == "ref":
+        return _projection_bound_counts(bound["target"])
+    if kind == "oneOf":
+        return _projection_bound_counts(bound["branches"][bound["selected_branch"]])
+    if kind == "object":
+        totals = [0, 0, 0, 0]
+        for field in bound["fields"]:
+            counts = _projection_bound_counts(field["value"])
+            totals = [
+                _checked_projection_add(total, count)
+                for total, count in zip(totals, counts)
+            ]
+        return tuple(totals)  # type: ignore[return-value]
+    if kind == "array":
+        structural, expanded, utf8_structural, utf8_expanded = (
+            _projection_bound_counts(bound["item"])
+        )
+        return (
+            structural,
+            _checked_projection_multiply(bound["maximum_items"], expanded),
+            utf8_structural,
+            _checked_projection_multiply(
+                bound["maximum_items"], utf8_expanded
+            ),
+        )
+    is_string = 1 if kind == "string" else 0
+    return (1, 1, is_string, is_string)
+
+
+def _maximum_string_witness(
+    bound: dict[str, Any],
+    *,
+    salt: int,
+) -> str:
+    maximum = bound["maximum_utf8_bytes"]
+    pattern = bound.get("pattern")
+    if pattern == '^[^\\u0000-\\u001f\\u007f]+$':
+        scalar_count = bound.get("maximum_unicode_scalars")
+        if not isinstance(scalar_count, int) or maximum != scalar_count * 4:
+            fail(
+                "materialization.task-binding-mismatch",
+                f"task.v3 saturated vector lacks a maximum strong-ID witness at {bound['path']}",
+            )
+        first = chr(0x10000 + (salt % 0xE0000))
+        witness = first + chr(0x10000) * (scalar_count - 1)
+    elif pattern == '^(?:sha256|semantic-v2:sha256):[0-9a-f]{64}$':
+        witness = "semantic-v2:sha256:" + "f" * 64
+    elif pattern == '^semantic-v2:sha256:[0-9a-f]{64}$':
+        witness = "semantic-v2:sha256:" + "f" * 64
+    elif pattern == '^file:sha256:[0-9a-f]{64}$':
+        witness = "file:sha256:" + "f" * 64
+    elif pattern == '^line-index:sha256:[0-9a-f]{64}$':
+        witness = "line-index:sha256:" + "f" * 64
+    elif pattern == '^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$':
+        witness = "A" * (maximum - 2) + "=="
+    elif isinstance(pattern, str) and pattern.startswith("^(?:project|build|"):
+        prefix = "project://"
+        witness = prefix + "p" * (maximum - len(prefix))
+    elif isinstance(pattern, str) and pattern.startswith("^project://"):
+        prefix = "project://"
+        witness = prefix + "p" * (maximum - len(prefix))
+    else:
+        fail(
+            "materialization.task-binding-mismatch",
+            f"task.v3 saturated vector lacks a finite string witness at {bound['path']}",
+        )
+    witness_schema = {
+        key: value
+        for key, value in {
+            "type": "string",
+            "maxLength": bound.get("maximum_unicode_scalars"),
+            "pattern": pattern,
+        }.items()
+        if value is not None
+    }
+    try:
+        if salt > 0:
+            pass
+        elif len(witness) <= 1_000_000:
+            jsonschema.Draft202012Validator(witness_schema).validate(witness)
+        elif (
+            pattern
+            != '^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$'
+            or maximum % 4 != 0
+            or not isinstance(bound.get("maximum_unicode_scalars"), int)
+            or len(witness) > bound["maximum_unicode_scalars"]
+        ):
+            raise jsonschema.ValidationError("large saturated string is invalid")
+    except jsonschema.ValidationError:
+        fail(
+            "materialization.task-binding-mismatch",
+            f"task.v3 saturated vector string is not schema-valid at {bound['path']}",
+        )
+    return witness
+
+
+def _emit_projection_saturated_witness(
+    bound: dict[str, Any],
+    emit: Any,
+    *,
+    salt: int = 0,
+) -> None:
+    kind = bound["kind"]
+    if kind == "ref":
+        _emit_projection_saturated_witness(bound["target"], emit, salt=salt)
+        return
+    if kind == "oneOf":
+        _emit_projection_saturated_witness(
+            bound["branches"][bound["selected_branch"]], emit, salt=salt
+        )
+        return
+    if kind == "const":
+        emit(_canonical_projection_value(bound["value"]))
+        return
+    if kind == "enum":
+        encoded = max(
+            (_canonical_projection_value(value) for value in bound["values"]),
+            key=len,
+        )
+        emit(encoded)
+        return
+    if kind == "string":
+        witness = _maximum_string_witness(bound, salt=salt)
+        encoded = witness.encode("utf-8", errors="strict")
+        if len(encoded) != bound["maximum_utf8_bytes"]:
+            fail(
+                "materialization.task-binding-mismatch",
+                f"task.v3 saturated vector string size differs at {bound['path']}",
+            )
+        emit(b"\x04" + _length(len(encoded)))
+        emit(encoded)
+        return
+    if kind == "integer":
+        candidates = (bound["minimum"], bound["maximum"])
+        encoded = max((_canonical_integer(value) for value in candidates), key=len)
+        emit(encoded)
+        return
+    if kind == "boolean":
+        emit(_canonical_boolean(False))
+        return
+    if kind == "null":
+        emit(b"\x00")
+        return
+    if kind == "array":
+        count = bound["maximum_items"]
+        emit(b"\x05" + _length(count))
+        item_size = bound["item"]["maximum_canonical_bytes"]
+        for index in range(count):
+            emit(_length(item_size))
+            _emit_projection_saturated_witness(
+                bound["item"], emit, salt=index
+            )
+        return
+    if kind == "object":
+        emit(b"\x05" + _length(bound["field_count"]))
+        for field in bound["fields"]:
+            key = _canonical_string(field["name"])
+            child = field["value"]
+            pair_size = _checked_projection_add(
+                9, 8, len(key), 8, child["maximum_canonical_bytes"]
+            )
+            emit(_length(pair_size))
+            emit(b"\x05" + _length(2))
+            emit(_length(len(key)))
+            emit(key)
+            emit(_length(child["maximum_canonical_bytes"]))
+            _emit_projection_saturated_witness(child, emit, salt=salt)
+        return
+    fail(
+        "materialization.task-binding-mismatch",
+        f"task.v3 saturated vector has an unsupported bound kind at {bound['path']}",
+    )
+
+
+def _task_v3_projection_component_bounds(
+    request_schema: dict[str, Any],
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": name,
+            "bound": _projection_schema_bound(schema, request_schema, f"$.{name}"),
+        }
+        for name, schema in _task_v3_projection_component_schemas(request_schema)
+    ]
+
+
+def _stream_task_v3_saturated_bounds(
+    component_bounds: list[dict[str, Any]],
+    emit: Any,
+) -> int:
+    emitted = 0
+
+    def counted_emit(value: bytes) -> None:
+        nonlocal emitted
+        emitted = _checked_projection_add(emitted, len(value))
+        emit(value)
+
+    counted_emit(b"\x05" + _length(len(component_bounds)))
+    for component in component_bounds:
+        bound = component["bound"]
+        counted_emit(_length(bound["maximum_canonical_bytes"]))
+        _emit_projection_saturated_witness(bound, counted_emit)
+    return emitted
+
+
+def stream_worker_task_v3_saturated_vector(
+    request_schema: dict[str, Any],
+    emit: Any,
+) -> int:
+    """Stream the maximum schema-valid task.v3 witness to an independent sink."""
+
+    if not callable(emit):
+        fail(
+            "materialization.task-binding-mismatch",
+            "task.v3 saturated vector sink is not callable",
+        )
+    return _stream_task_v3_saturated_bounds(
+        _task_v3_projection_component_bounds(request_schema), emit
+    )
+
+
+def maximum_worker_task_v3_projection_proof(
+    request_schema: dict[str, Any],
+    *,
+    transfer_limit: int = MAXIMUM_TASK_INPUT_BYTES,
+) -> dict[str, Any]:
+    """Derive and witness the finite task.v3 maximum from request-schema authority."""
+
+    if (
+        isinstance(transfer_limit, bool)
+        or not isinstance(transfer_limit, int)
+        or transfer_limit < 0
+        or transfer_limit > _PROJECTION_ARITHMETIC_MAX
+    ):
+        fail(
+            "materialization.task-binding-mismatch",
+            "task.v3 projection proof transfer limit is outside checked uint64",
+        )
+    component_bounds = _task_v3_projection_component_bounds(request_schema)
+    outer_framing = _checked_projection_add(
+        1, 8, _checked_projection_multiply(len(component_bounds), 8)
+    )
+    maximum = outer_framing
+    for component in component_bounds:
+        maximum = _checked_projection_add(
+            maximum, component["bound"]["maximum_canonical_bytes"]
+        )
+    if maximum > transfer_limit:
+        fail(
+            "materialization.task-binding-mismatch",
+            f"maximum task.v3 projection {maximum} exceeds transfer limit {transfer_limit}",
+        )
+
+    counts = [0, 0, 0, 0]
+    for component in component_bounds:
+        component_counts = _projection_bound_counts(component["bound"])
+        counts = [
+            _checked_projection_add(total, count)
+            for total, count in zip(counts, component_counts)
+        ]
+
+    hasher = hashlib.sha256()
+    emitted = _stream_task_v3_saturated_bounds(component_bounds, hasher.update)
+    if emitted != maximum:
+        fail(
+            "materialization.task-binding-mismatch",
+            "task.v3 saturated vector does not attain the derived maximum",
+        )
+
+    derivation = {
+        "codec": "cxxlens.clang22.task.v3",
+        "canonical_codec": "cxxlens-canonical-tuple-v1",
+        "components": component_bounds,
+    }
+    return {
+        "authority": (
+            "checker-derived-from-every-projected-request-field-count-and-utf8-byte-bound"
+        ),
+        "request_schema": REQUEST_SCHEMA.as_posix(),
+        "derivation_digest": content_digest(canonical_json(derivation)),
+        "arithmetic": "checked-uint64-add-and-multiply",
+        "canonical_length_field_bytes": 8,
+        "component_maximum_bytes": {
+            component["name"]: component["bound"]["maximum_canonical_bytes"]
+            for component in component_bounds
+        },
+        "outer_tuple_framing_bytes": outer_framing,
+        "structural_leaf_schema_count": counts[0],
+        "maximum_expanded_leaf_value_count": counts[1],
+        "bounded_utf8_leaf_schema_count": counts[2],
+        "maximum_expanded_bounded_utf8_value_count": counts[3],
+        "maximum_projection_bytes": maximum,
+        "transfer_limit_bytes": transfer_limit,
+        "margin_bytes": transfer_limit - maximum,
+        "saturated_vector": {
+            "construction": "schema-maximal-canonical-task-v3-stream",
+            "byte_count": emitted,
+            "digest": "sha256:" + hasher.hexdigest(),
+        },
+        "runtime_magic_constant_only": "forbidden",
+    }
 
 
 def expected_task_input_digest(
@@ -1910,6 +3196,8 @@ def _detached_scalar_json(type_name: str, value: Any) -> Any:
 def detached_row_canonical_form(
     relation: dict[str, Any],
     row: dict[str, Any],
+    *,
+    include_absent_optional: bool = False,
 ) -> str:
     """Mirror detached_row::canonical_form() for one validated Registry row."""
 
@@ -1921,6 +3209,11 @@ def detached_row_canonical_form(
                     "materialization.claim-invalid",
                     f"detached row omits required cell {column['id']}",
                 )
+            if include_absent_optional:
+                cells[column["id"]] = {
+                    "state": "absent",
+                    "type": column["type"],
+                }
             continue
         value = row[column["name"]]
         if value is None:
@@ -2545,6 +3838,216 @@ def authority_bindings(root: pathlib.Path) -> list[dict[str, str]]:
     ]
 
 
+@functools.lru_cache(maxsize=None)
+def occurrence_authority_bindings(root: pathlib.Path) -> list[dict[str, str]]:
+    return [
+        {
+            "role": role,
+            "path": installed_path,
+            "digest": content_digest((root / source_path).read_bytes()),
+        }
+        for role, installed_path, source_path in OCCURRENCE_AUTHORITY_FILES
+    ]
+
+
+def fixture_occurrence_manifest(
+    root: pathlib.Path,
+    *,
+    source_revision: str,
+    source_tree: str,
+    configuration: str,
+    tool_digest: str,
+    worker_digest: str,
+    shared_runtime_files: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    """Build the exact closed, ordered, self-excluding occurrence manifest."""
+
+    files: list[dict[str, str]] = [
+        {
+            "role": "materializer-executable",
+            "path": "bin/cxxlens-clang22-materialize",
+            "digest": tool_digest,
+        },
+        {
+            "role": "worker-executable",
+            "path": "bin/cxxlens-clang-worker-22",
+            "digest": worker_digest,
+        },
+        *occurrence_authority_bindings(root),
+    ]
+    if configuration == "shared":
+        runtime_files = shared_runtime_files or [
+            {
+                "role": role,
+                "path": path,
+                "digest": content_digest(
+                    f"cxxlens fixture shared runtime {role}".encode("utf-8")
+                ),
+            }
+            for role, path in SHARED_OCCURRENCE_RUNTIME_FILES
+        ]
+        files.extend(copy.deepcopy(runtime_files))
+    payload = {
+        "schema": "cxxlens.clang22-materializer-occurrence-manifest.v1",
+        "manifest_version": "1.0.0",
+        "source_revision": source_revision,
+        "source_tree": source_tree,
+        "package_configuration": configuration,
+        "files": files,
+    }
+    return {
+        **payload,
+        "occurrence_payload_digest": content_digest(canonical_json(payload)),
+    }
+
+
+def validate_occurrence_manifest(
+    root: pathlib.Path,
+    manifest: dict[str, Any],
+) -> None:
+    """Validate occurrence schema, closed inventory and both digest boundaries."""
+
+    validate_schema(
+        manifest,
+        load(root / OCCURRENCE_SCHEMA),
+        "materializer occurrence manifest",
+    )
+    if any(row["path"] == OCCURRENCE_MANIFEST_PATH for row in manifest["files"]):
+        fail(
+            "materialization.identity-mismatch",
+            "occurrence manifest inventories its own bytes",
+        )
+    if manifest["files"][2:12] != occurrence_authority_bindings(root):
+        fail(
+            "materialization.identity-mismatch",
+            "occurrence authority role/path/digest inventory differs",
+        )
+    payload = {
+        key: copy.deepcopy(value)
+        for key, value in manifest.items()
+        if key != "occurrence_payload_digest"
+    }
+    if manifest["occurrence_payload_digest"] != content_digest(
+        canonical_json(payload)
+    ):
+        fail(
+            "materialization.identity-mismatch",
+            "occurrence payload digest differs",
+        )
+
+
+def fixture_occurrence_measurement(
+    root: pathlib.Path,
+    *,
+    source_revision: str,
+    source_tree: str,
+    configuration: str,
+    tool_digest: str,
+    worker_digest: str,
+) -> dict[str, Any]:
+    """Build one deterministic measured-occurrence receipt from typed inventory."""
+
+    manifest = fixture_occurrence_manifest(
+        root,
+        source_revision=source_revision,
+        source_tree=source_tree,
+        configuration=configuration,
+        tool_digest=tool_digest,
+        worker_digest=worker_digest,
+    )
+    validate_occurrence_manifest(root, manifest)
+    return {
+        "manifest_path": OCCURRENCE_MANIFEST_PATH,
+        "manifest_file_digest": content_digest(canonical_json(manifest)),
+        "occurrence_payload_digest": manifest["occurrence_payload_digest"],
+        "inventory_digest": content_digest(canonical_json(manifest["files"])),
+        "source_revision": source_revision,
+        "source_tree": source_tree,
+        "configuration": configuration,
+        "files": copy.deepcopy(manifest["files"]),
+        "tool": {
+            "path": "bin/cxxlens-clang22-materialize",
+            "digest": tool_digest,
+        },
+        "worker": {
+            "path": "bin/cxxlens-clang-worker-22",
+            "digest": worker_digest,
+        },
+    }
+
+
+def measured_occurrence_manifest(measured: dict[str, Any]) -> dict[str, Any]:
+    """Recover manifest bytes from explicit measured fields, never from a digest."""
+
+    return {
+        "schema": "cxxlens.clang22-materializer-occurrence-manifest.v1",
+        "manifest_version": "1.0.0",
+        "source_revision": measured["source_revision"],
+        "source_tree": measured["source_tree"],
+        "package_configuration": measured["configuration"],
+        "files": copy.deepcopy(measured["files"]),
+        "occurrence_payload_digest": measured["occurrence_payload_digest"],
+    }
+
+
+def validate_measured_occurrence(
+    root: pathlib.Path,
+    request: dict[str, Any],
+    measured: dict[str, Any],
+) -> None:
+    manifest = measured_occurrence_manifest(measured)
+    validate_occurrence_manifest(root, manifest)
+    manifest_bytes = canonical_json(manifest)
+    files = manifest["files"]
+    if (
+        measured["manifest_path"] != OCCURRENCE_MANIFEST_PATH
+        or measured["manifest_file_digest"] != content_digest(manifest_bytes)
+        or measured["inventory_digest"] != content_digest(canonical_json(files))
+        or measured["manifest_file_digest"]
+        != request["tool"]["occurrence_manifest_digest"]
+        or measured["source_revision"] != request["tool"]["source_revision"]
+        or measured["source_tree"] != request["tool"]["source_tree"]
+        or measured["configuration"]
+        != request["tool"]["package_configuration"]
+        or measured["tool"]
+        != {"path": files[0]["path"], "digest": files[0]["digest"]}
+        or measured["worker"]
+        != {"path": files[1]["path"], "digest": files[1]["digest"]}
+        or files[0]["digest"]
+        != request["tool"]["installed_executable_digest"]
+        or files[1]["digest"] != request["worker"]["installed_binary_digest"]
+    ):
+        fail(
+            "materialization.identity-mismatch",
+            "requested/measured installed occurrence binding differs across explicit files",
+        )
+
+
+def expected_sqlite_effect_root_receipt(
+    request: dict[str, Any],
+) -> dict[str, Any] | None:
+    if request["publication"]["backend"] == "memory":
+        return None
+    relative_path = request["publication"]["sqlite_path"]
+    return {
+        "contract": "rooted-vfs-v1",
+        "root_observation_digest": semantic_digest(
+            "cxxlens.clang22-rooted-sqlite-effect-root.v1",
+            _canonical_projection_value(
+                {
+                    "materialization_request_id": request[
+                        "materialization_request_id"
+                    ],
+                    "relative_path": relative_path,
+                }
+            ),
+        ),
+        "relative_path": relative_path,
+        "parent_resolution": "openat2-beneath-no-symlinks-no-magiclinks",
+        "leaf_resolution": "database-and-sidecars-rooted-no-follow",
+    }
+
+
 def _request_projection(request: dict[str, Any], *, semantic: bool) -> dict[str, Any]:
     value = copy.deepcopy(request)
     for field in (
@@ -2585,8 +4088,13 @@ def bind_request_identity(request: dict[str, Any]) -> None:
     request["materialization_request_id"] = "materialization:" + request["request_digest"]
 
 
-def validate_contract_exact(contract: dict[str, Any]) -> None:
+def validate_contract_exact(
+    contract: dict[str, Any],
+    request_schema: dict[str, Any] | None = None,
+) -> None:
     validate_materialization_contract_dependencies(contract)
+    if request_schema is None:
+        request_schema = load(ROOT / REQUEST_SCHEMA)
 
     def contains_legacy_report_lifecycle(value: Any) -> bool:
         if isinstance(value, dict):
@@ -2622,6 +4130,15 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
         "transport": "one-json-request-on-stdin-one-json-response-on-stdout",
         "stderr": "diagnostic-only",
         "shell": "forbidden",
+        "cli": {
+            "accepted": "argc-exactly-one-no-options-no-operands",
+            "argv0": "diagnostic-only",
+            "invalid": (
+                "before-stdin-authentication-exit-two-zero-stdout-zero-worker-and-"
+                "store-effects"
+            ),
+            "diagnostic": "bounded-stderr-only",
+        },
         "json_lexical_policy": EXPECTED_JSON_LEXICAL_POLICY,
         "json_lexical_errors": {
             "request": "materialization.request-invalid",
@@ -2641,6 +4158,21 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
             "supported_version_schema_failure_phase": "request-schema",
             "identity_or_binding_failure_phase": "request-binding",
             "first-failing-boundary-is-authoritative": True,
+            "streaming_lifecycle": [
+                "capture-limit-plus-one-into-one-immutable-raw-spool",
+                "pass-one-strict-utf8-json-duplicates-envelope-and-version",
+                "pass-two-selected-v2-schema-and-bottom-up-binding",
+                "streaming-base64-validation-and-source-receipts",
+                "seal-complete-request-before-effects",
+                "replay-one-canonical-task-at-a-time",
+            ],
+            "pass_one_dom": "forbidden",
+            "pass_two_global_catalog_owner": "exactly-one-immutable-value",
+            "task_index": "compact-spool-backed",
+            "raw_json_token_is_decoded_string_authority": False,
+            "replay": (
+                "same-strict-json-string-decoder-and-receipt-revalidation"
+            ),
         },
         "input_observation": {
             "maximum_request_bytes": RAW_INPUT_BYTE_LIMIT,
@@ -2655,9 +4187,35 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
             "maximum_aggregate_decoded_source_bytes": 536870912,
             "maximum_content_base64_characters_per_task": 22369624,
             "maximum_response_bytes": RAW_INPUT_BYTE_LIMIT,
+            "maximum_json_depth": 64,
+            "maximum_json_member_name_utf8_bytes": 256,
+            "maximum_strong_id_unicode_scalars": 512,
+            "maximum_strong_id_utf8_bytes": 2048,
+            "maximum_logical_path_utf8_bytes": 4096,
+            "maximum_sqlite_relative_path_utf8_bytes": 4095,
+            "maximum_argv_items": 4096,
+            "maximum_argv_item_utf8_bytes": 2048,
+            "provider_input_chunk_bytes": TASK_INPUT_CHUNK_BYTES,
+            "maximum_provider_task_input_bytes": MAXIMUM_TASK_INPUT_BYTES,
+            "maximum_provider_input_chunks": MAXIMUM_TASK_INPUT_CHUNKS,
             "raw_request_storage": "bounded-chunk-read-and-private-spool",
             "json_processing": "streaming-strict-utf8-duplicate-aware-no-one-gib-dom",
             "source_decoding": "streaming-base64-to-bounded-private-spool",
+            "retained_memory_claim": {
+                "excluded_resident_sets": [
+                    "raw-one-gib-request",
+                    "aggregate-source-bytes",
+                    "all-task-payloads",
+                    "task-count-times-catalog-count-copies",
+                ],
+                "bound": (
+                    "one-shared-catalog-plus-fixed-parser-and-chunk-buffers-plus-one-"
+                    "task-index-window-plus-one-decoded-source-plus-one-output-"
+                    "validation-window"
+                ),
+                "task_count_independent_absolute-rss": "not-claimed",
+                "task_index_and_bulk-occurrences": "private-spool",
+            },
             "report_construction": EXPECTED_REPORT_CONSTRUCTION,
             "allocation_failure": {
                 "prepublication_report_construction": (
@@ -2707,21 +4265,22 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
     }:
         fail("materialization.request-invalid", "installed machine surface is not exact")
     if contract["versioning"] != {
-        "machine_contract": "2.0.0",
-        "request": "2.0.0",
-        "report": "2.0.0",
+        "machine_contract": MATERIALIZATION_VERSION,
+        "request": MATERIALIZATION_VERSION,
+        "report": MATERIALIZATION_VERSION,
         "provider_task_input_codec": "cxxlens.clang22.task.v3",
         "observation_native_codec": "cxxlens.clang22.observation-native.v2",
-        "provider_protocol": "1.0.0",
+        "provider_protocol": "1.1.0",
+        "provider_protocol_required_feature": TASK_INPUT_FEATURE,
+        "provider_protocol_minor_zero_fallback": "forbidden",
         "unknown_member": "reject",
         "missing_required_member": "reject",
         "adjacent_version_fallback": "forbidden",
         "migration": "v1-unimplemented-unqualified-superseded-no-implicit-upgrade",
     }:
         fail("materialization.version-unsupported", "version/fallback policy is not exact")
-    compact_report_construction = contract["report"]["response_union"][
-        "compact_failure"
-    ].get("report_construction_phase")
+    compact_failure = contract["report"]["response_union"]["compact_failure"]
+    compact_report_construction = compact_failure.get("report_construction_phase")
     if (
         compact_report_construction
         != "prepublication-zero-effect-only-before-publish-call"
@@ -2729,6 +4288,40 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
         fail(
             "materialization.report-invalid",
             "compact report-construction boundary differs",
+        )
+    if compact_failure.get("exact_effects") != [
+        "worker-launch-attempt-count",
+        "worker-launch-success-count",
+        "store-draft-state",
+        "head-observation",
+        "publication-attempted",
+        "committed-transaction-count",
+        "prior-history-retained",
+        "first-store-failure-cause-or-null",
+    ] or compact_failure.get("prepublication_store_failure_cause") != {
+        "exact_fields": [
+            "authenticated-operation",
+            "access-path-or-null",
+            "exact-sdk-code",
+            "exact-sdk-field",
+            "stable-or-opaque-exact-detail-observation",
+        ],
+        "operations": [
+            "store_open",
+            "head_current",
+            "writer_begin",
+            "partition_stage",
+            "closure_stage",
+            "writer_validate",
+        ],
+        "verification_source": (
+            "source-private-first-sdk-error-observation-not-report-self-consistency"
+        ),
+        "non_store_compact_failure": None,
+    }:
+        fail(
+            "materialization.store-failure",
+            "compact prepublication Store cause authority differs",
         )
     required_lifecycle_acceptance = {
         "streaming-bounded-request-source-and-two-phase-report-construction",
@@ -2814,6 +4407,11 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
         fail("materialization.claim-invalid", "base claim construction contract differs")
     if contract["source_identity"] != EXPECTED_SOURCE_IDENTITY_CONTRACT:
         fail("materialization.identity-mismatch", "source identity contract differs")
+    if contract["identity"].get("installed_occurrence") != EXPECTED_INSTALLED_OCCURRENCE:
+        fail(
+            "materialization.identity-mismatch",
+            "installed occurrence measurement contract differs",
+        )
     topology = contract["group_topology"]
     expected_topology = {
         "dependency_groups": ["canonical", "observation"],
@@ -3009,6 +4607,28 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
         "payload_authority": "installed-tool-derived-only",
         "task_input_digest": "sha256-content-digest-of-exact-projection-bytes",
         "old_codec_or_caller_payload": "reject",
+        "logical_transfer": {
+            "authority": "exact-canonical-task-v3-bytes-and-task-input-digest",
+            "fragmentation_changes-logical-identity": False,
+            "ambient-path-or-fd-authority": "forbidden",
+        },
+        "physical_transfer": {
+            "provider_protocol": "1.1.0",
+            "required_feature": TASK_INPUT_FEATURE,
+            "mode": "authenticated-input-descriptor-and-canonical-chunks",
+            "open_task_payload": "empty",
+            "canonical_chunk_bytes": TASK_INPUT_CHUNK_BYTES,
+            "maximum_task_input_bytes": MAXIMUM_TASK_INPUT_BYTES,
+            "maximum_chunk_count": MAXIMUM_TASK_INPUT_CHUNKS,
+            "task_accepted": (
+                "only-after-length-order-final-digest-task-v3-and-portable-task-"
+                "validation"
+            ),
+            "minor-zero-inline-fallback": "forbidden",
+        },
+        "maximum_projection_proof": maximum_worker_task_v3_projection_proof(
+            request_schema
+        ),
     }:
         fail("materialization.task-binding-mismatch", "worker task v3 binding differs")
     if project_tasks["task_execution_matching"] != {
@@ -3077,6 +4697,11 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
         ),
     }:
         fail("materialization.coverage-incomplete", "unresolved accounting differs")
+    if contract["side_channels"].get("coverage") != EXPECTED_COVERAGE_CONTRACT:
+        fail(
+            "materialization.coverage-incomplete",
+            "transport/semantic coverage plane contract differs",
+        )
     if contract["report"].get("digest_chain") != EXPECTED_REPORT_DIGEST_CHAIN:
         fail("materialization.report-invalid", "report digest chain differs")
     adoption = contract["claim_adoption"]
@@ -3117,16 +4742,29 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
             "hard-reference validation mapping differs",
         )
     if adoption["guarantee"] != {
+        "profile": {
+            "id": GUARANTEE_PROFILE_ID,
+            "digest_domain": GUARANTEE_PROFILE_ID,
+            "owner": "exact-materialization-contract-version",
+            "assumptions": GUARANTEE_ASSUMPTIONS,
+            "verification_modalities": GUARANTEE_MODALITIES,
+            "caller-or-report-builder-mutation": "forbidden",
+        },
         "exact_preconditions": [
             "zero-non-exact-in-each-observation-descriptor-census",
-            "complete-balanced-coverage",
+            "complete-balanced-semantic-coverage",
+            "exact-transport-task-coverage",
             "no-blocking-unresolved",
             "no-absent-primary-span-bundle",
             "exact-task-census",
             "exact-six-batches",
             "full-span-validation",
             "complete-provenance",
+        ],
+        "postpublication_evidence_excluded": [
             "successful-publication",
+            "query-parity",
+            "store-reopen",
         ],
         "non_exact": (
             "preserve-typed-approximation-assumptions-modalities-and-unresolved"
@@ -3136,12 +4774,29 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
         fail("materialization.coverage-incomplete", "guarantee preconditions differ")
     if contract["side_channels"]["guarantee"] != {
         "record_type": "typed-guarantee",
+        "profile": GUARANTEE_PROFILE_ID,
         "fields": [
+            "profile_id",
+            "profile_digest",
             "approximation",
             "scope",
             "assumptions",
             "verification_modalities",
             "observation_descriptor_censuses",
+        ],
+        "task_fragment_inputs": [
+            "closed-profile",
+            "actual-semantic-coverage-census",
+            "unresolved",
+            "evidence",
+            "batch-completeness",
+            "observation-equivalence-census",
+        ],
+        "global_digest_inputs": [
+            "profile-id-and-digest",
+            "semantic-and-transport-side-channel-digests",
+            "task-guarantee-fragments",
+            "observation-descriptor-censuses",
         ],
     }:
         fail("materialization.report-invalid", "typed guarantee fields differ")
@@ -3157,6 +4812,37 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
     }
     if any(publication.get(key) != value for key, value in required_publication.items()):
         fail("materialization.store-failure", "publication/CAS contract differs")
+    if publication.get("sdk_publish_mapping") != EXPECTED_SDK_PUBLISH_MAPPING:
+        fail(
+            "materialization.store-failure",
+            "operation-authentic SDK publication mapping differs",
+        )
+    if publication.get("store_failure_cause_union") != {
+        "sdk_error": [
+            "authenticated-operation",
+            "access-path-or-null",
+            "exact-sdk-code",
+            "exact-sdk-field",
+            "stable-or-opaque-exact-detail-observation",
+        ],
+        "verification_mismatch": [
+            "authenticated-operation",
+            "access-path-or-null",
+            "named-projection",
+            "expected-digest",
+            "actual-digest",
+        ],
+        "fabricated-sdk-error-for-successful-call-mismatch": "forbidden",
+    }:
+        fail(
+            "materialization.store-failure",
+            "Store failure cause union differs",
+        )
+    if publication.get("sqlite_effect_root") != EXPECTED_SQLITE_EFFECT_ROOT:
+        fail(
+            "materialization.store-failure",
+            "rooted SQLite effect authority differs",
+        )
     if contract["qualification"] != {
         "configurations": ["static", "shared"],
         "backends": ["memory", "sqlite"],
@@ -3167,6 +4853,27 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
         "memory_sqlite_semantic_parity": "required",
         "static_shared_semantic_parity": "required",
         "exact_observation_equivalence": "required-zero-non-exact-per-descriptor",
+        "scale_and_resource_evidence": {
+            "cases": [
+                "one-task",
+                "four-thousand-ninety-six-tasks",
+                "sixteen-mib-source",
+                "five-hundred-twelve-mib-aggregate-source",
+                "one-gib-raw-request",
+                "arbitrary-short-reads",
+            ],
+            "retained_memory_formula": (
+                "one-shared-catalog-plus-fixed-buffers-plus-one-task-window-plus-one-"
+                "source-plus-one-output-window"
+            ),
+            "forbidden_residency": [
+                "raw-request",
+                "aggregate-source",
+                "all-task-payloads",
+                "task-count-times-catalog-count",
+            ],
+            "spool-failure": "zero-effect-before-publication",
+        },
         "execution_receipt": {
             "fields": [
                 "actual-exit-status",
@@ -3196,7 +4903,10 @@ def validate_contract_exact(contract: dict[str, Any]) -> None:
         fail("materialization.report-invalid", "stable error registry differs")
     if contract["errors"]["diagnostic_prose_control_flow"] != "forbidden":
         fail("materialization.report-invalid", "diagnostic prose became control authority")
-    if contract["lifetime"]["raw_frames"] != "diagnostic-only-and-destroyed-before-process-exit":
+    if contract["lifetime"]["raw_frames"] != (
+        "diagnostic-only-and-destroyed-after-shared-runtime-receipt-and-"
+        "immutable-seal"
+    ):
         fail("materialization.claim-invalid", "raw-frame lifetime carve-out differs")
 
 
@@ -3296,22 +5006,29 @@ def sample_request(
         **variant_payload,
     }
     variant_id = derive_base_row_identity(relations["build.variant.v1"], variant_row)
+    occurrence = fixture_occurrence_measurement(
+        root,
+        source_revision="1" * 40,
+        source_tree="2" * 40,
+        configuration=configuration,
+        tool_digest="sha256:" + digit * 64,
+        worker_digest="sha256:" + digit * 64,
+    )
     request = {
         "schema": "cxxlens.clang22-materialization-request.v2",
-        "request_version": "2.0.0",
+        "request_version": MATERIALIZATION_VERSION,
         "materialization_request_id": "pending",
         "request_digest": semantic_digest("cxxlens.fixture.v1", "pending-request"),
         "semantic_request_digest": semantic_digest("cxxlens.fixture.v1", "pending-semantic"),
         "tool": {
             "executable": "cxxlens-clang22-materialize",
-            "interface_version": "2.0.0",
+            "interface_version": MATERIALIZATION_VERSION,
             "distribution_version": "1.0.0",
             "source_revision": "1" * 40,
             "source_tree": "2" * 40,
             "installed_executable_digest": "sha256:" + digit * 64,
             "package_configuration": configuration,
-            "prefix_manifest_digest": "sha256:" + digit * 64,
-            "relocated_prefix_digest": "sha256:" + digit * 64,
+            "occurrence_manifest_digest": occurrence["manifest_file_digest"],
         },
         "worker": {
             "executable": "cxxlens-clang-worker-22",
@@ -3320,7 +5037,8 @@ def sample_request(
             "installed_binary_digest": "sha256:" + digit * 64,
             "semantic_contract_digest": "sha256:" + "a" * 64,
             "protocol_major": 1,
-            "protocol_minor": 0,
+            "protocol_minor": PROVIDER_PROTOCOL_MINOR,
+            "required_features": [TASK_INPUT_FEATURE],
             "sandbox_policy_digest": "sha256:" + "b" * 64,
         },
         "project": project,
@@ -3537,7 +5255,11 @@ def rebind_request_base_identities(
 
 
 def validate_request(root: pathlib.Path, request: dict[str, Any]) -> None:
-    validate_schema(request, load(root / REQUEST_SCHEMA), "materialization request")
+    request_schema = load(root / REQUEST_SCHEMA)
+    validate_schema(request, request_schema, "materialization request")
+    validate_request_utf8_byte_limits(request, request_schema)
+    if request["publication"]["sqlite_path"] is not None:
+        canonical_sqlite_relative_path(request["publication"]["sqlite_path"])
     semantic_request = expected_semantic_request_digest(request)
     request_digest = expected_request_digest(request)
     if request["semantic_request_digest"] != semantic_request:
@@ -3592,6 +5314,7 @@ def validate_request(root: pathlib.Path, request: dict[str, Any]) -> None:
         "semantic_contract_digest": request["worker"]["semantic_contract_digest"],
         "protocol_major": request["worker"]["protocol_major"],
         "protocol_minor": request["worker"]["protocol_minor"],
+        "required_features": request["worker"]["required_features"],
         "worker_sandbox_policy_digest": request["worker"]["sandbox_policy_digest"],
     }
     if (
@@ -3930,13 +5653,486 @@ def _fixture_worker_row(
             if column["id"] == result_column
         )
         row[result_name] = derive_registry_row_identity(relation, row)
-    canonical_form = detached_row_canonical_form(relation, row)
+    canonical_form = detached_row_canonical_form(
+        relation,
+        row,
+        include_absent_optional=True,
+    )
     row_digest = content_digest(canonical_form.encode("utf-8"))
     cache_key = (descriptor_id, row_digest)
     previous = _FIXTURE_WORKER_ROW_CANONICAL.setdefault(cache_key, canonical_form)
     if previous != canonical_form:
         fail("materialization.claim-invalid", "fixture row digest collision")
     return row_digest, canonical_form
+
+
+def expected_guarantee_profile_digest() -> str:
+    return semantic_digest(
+        GUARANTEE_PROFILE_ID,
+        _canonical_projection_value(
+            {
+                "profile_id": GUARANTEE_PROFILE_ID,
+                "materialization_contract_version": MATERIALIZATION_VERSION,
+                "assumptions": GUARANTEE_ASSUMPTIONS,
+                "verification_modalities": GUARANTEE_MODALITIES,
+            }
+        ),
+    )
+
+
+def coverage_record_key(record: dict[str, Any]) -> tuple[str, str, str, str]:
+    return (
+        record["kind"],
+        record["id"],
+        record["state"],
+        record["reason"],
+    )
+
+
+def coverage_record_set_digest(
+    task: dict[str, Any],
+    plane: str,
+    records: list[dict[str, Any]],
+) -> str:
+    return semantic_digest(
+        f"cxxlens.clang22-task-{plane}-coverage.v1",
+        _canonical_projection_value(
+            {
+                "semantic_task_key": semantic_result_key(task),
+                "records": records,
+            }
+        ),
+    )
+
+
+def expected_task_coverage(task: dict[str, Any]) -> dict[str, Any]:
+    transport_records = [
+        {
+            "kind": TRANSPORT_COVERAGE_KIND,
+            "id": task["provider_task_id"],
+            "state": "covered",
+            "reason": "",
+        }
+    ]
+    semantic_records = [
+        {
+            "kind": kind,
+            "id": task["provider_task_id"],
+            "state": "covered",
+            "reason": "",
+        }
+        for kind in SEMANTIC_COVERAGE_KINDS
+    ]
+    return {
+        "transport_records": transport_records,
+        "transport_record_set_digest": coverage_record_set_digest(
+            task,
+            "transport",
+            transport_records,
+        ),
+        "semantic_records": semantic_records,
+        "semantic_record_set_digest": coverage_record_set_digest(
+            task,
+            "semantic",
+            semantic_records,
+        ),
+    }
+
+
+def expected_input_transfer_receipt(
+    request: dict[str, Any],
+    task: dict[str, Any],
+) -> dict[str, Any]:
+    logical_input = worker_task_v3_projection(request, task)
+    logical_digest = content_digest(logical_input)
+    if logical_digest != task["task_input_digest"]:
+        fail(
+            "materialization.task-binding-mismatch",
+            "task-input transfer differs from exact task.v3 digest",
+        )
+    if len(logical_input) > MAXIMUM_TASK_INPUT_BYTES:
+        fail(
+            "materialization.task-binding-mismatch",
+            "task.v3 exceeds the negotiated logical input limit",
+        )
+    chunks = [
+        logical_input[offset : offset + TASK_INPUT_CHUNK_BYTES]
+        for offset in range(0, len(logical_input), TASK_INPUT_CHUNK_BYTES)
+    ]
+    if len(chunks) > MAXIMUM_TASK_INPUT_CHUNKS:
+        fail(
+            "materialization.task-binding-mismatch",
+            "task.v3 exceeds the negotiated input chunk count",
+        )
+    chunk_digests = [content_digest(chunk) for chunk in chunks]
+    return {
+        "protocol_version": "1.1.0",
+        "required_feature": TASK_INPUT_FEATURE,
+        "task_input_codec": "cxxlens.clang22.task.v3",
+        "logical_input_bytes": len(logical_input),
+        "logical_input_digest": logical_digest,
+        "canonical_chunk_bytes": TASK_INPUT_CHUNK_BYTES,
+        "chunk_count": len(chunks),
+        "ordered_chunk_payload_digest_set_digest": semantic_digest(
+            "cxxlens.provider-input-chunk-payload-set.v1",
+            _canonical_projection_value(
+                {
+                    "task_id": task["provider_task_id"],
+                    "input_digest": logical_digest,
+                    "chunk_digests": chunk_digests,
+                }
+            ),
+        ),
+    }
+
+
+def expected_task_guarantee_fragment_digest(result: dict[str, Any]) -> str:
+    observation_censuses = [
+        {
+            "descriptor_id": batch["descriptor_id"],
+            "census": batch["observation_equivalence_census"],
+        }
+        for batch in result["batches"]
+        if batch["descriptor_id"] in DESCRIPTOR_IDS[3:]
+    ]
+    components = result["side_channel_components"]
+    return semantic_digest(
+        "cxxlens.clang22-task-guarantee-fragment.v1",
+        _canonical_projection_value(
+            {
+                "semantic_task_key": semantic_result_key(result),
+                "profile_id": components["guarantee_profile_id"],
+                "profile_digest": components["guarantee_profile_digest"],
+                "semantic_coverage_set_digest": components[
+                    "semantic_coverage_set_digest"
+                ],
+                "unresolved_set_digest": components["unresolved_set_digest"],
+                "evidence_set_digest": components["evidence_set_digest"],
+                "groups": [
+                    {
+                        "dependency_group_id": group["dependency_group_id"],
+                        "atomic_output_group_id": group[
+                            "atomic_output_group_id"
+                        ],
+                        "descriptor_ids": group["descriptor_ids"],
+                        "sealed": group["sealed"],
+                    }
+                    for group in sorted(
+                        result["groups"],
+                        key=lambda row: row["dependency_group_id"],
+                    )
+                ],
+                "observation_censuses": observation_censuses,
+            }
+        ),
+    )
+
+
+def fixture_task_unresolved_records(result: dict[str, Any]) -> list[dict[str, Any]]:
+    return []
+
+
+def fixture_task_evidence_records(result: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "kind": kind,
+            "subject": result["compile_unit_id"],
+            "producer": result["provider_task_id"],
+            "summary": f"{kind}-retained",
+        }
+        for kind in (
+            "canonicalization",
+            "provider_execution",
+            "source_observation",
+        )
+    ]
+
+
+def runtime_authorized_batches(
+    root: pathlib.Path,
+    request: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Project exact Registry authority into the generic runtime batch input."""
+
+    bindings = {
+        binding["descriptor_id"]: binding
+        for binding in request["registry"]["descriptors"]
+    }
+    relations = admitted_registry_relations(root)
+    return [
+        {
+            "descriptor_id": descriptor_id,
+            "descriptor_digest": bindings[descriptor_id][
+                "runtime_descriptor_digest"
+            ],
+            "dependency_group_id": bindings[descriptor_id][
+                "dependency_group_id"
+            ],
+            "atomic_output_group_id": bindings[descriptor_id][
+                "atomic_output_group_id"
+            ],
+            "batch_id": bindings[descriptor_id]["batch_id"],
+            "columns": [
+                {
+                    "id": column["id"],
+                    "type": column["type"],
+                    "required": column["required"],
+                }
+                for column in relations[descriptor_id]["columns"]
+            ],
+        }
+        for descriptor_id in DESCRIPTOR_IDS
+    ]
+
+
+def expected_runtime_provider_identity(
+    root: pathlib.Path,
+    request: dict[str, Any],
+) -> dict[str, Any]:
+    """Project the independently validated installed worker/session authority."""
+
+    worker = request["worker"]
+    return {
+        "provider_id": worker["provider_id"],
+        "provider_version": worker["provider_version"],
+        "provider_binary_digest": worker["installed_binary_digest"],
+        "provider_semantic_contract_digest": worker["semantic_contract_digest"],
+        "protocol_major": worker["protocol_major"],
+        "protocol_minor": worker["protocol_minor"],
+        "required_features": copy.deepcopy(worker["required_features"]),
+        "sandbox_policy_digest": worker["sandbox_policy_digest"],
+        "offered_relations": sorted(
+            batch["descriptor_id"]
+            for batch in runtime_authorized_batches(root, request)
+        ),
+    }
+
+
+def report_runtime_provider_identity(report: dict[str, Any]) -> dict[str, Any]:
+    """Project the report leaves that must match the raw-validated provider identity."""
+
+    provider = report["provider"]
+    return {
+        "provider_id": provider["provider_id"],
+        "provider_version": provider["provider_version"],
+        "provider_binary_digest": report["installation"]["measured"]["worker"][
+            "digest"
+        ],
+        "provider_semantic_contract_digest": provider["semantic_contract_digest"],
+        "protocol_major": provider["protocol_major"],
+        "protocol_minor": provider["protocol_minor"],
+        "required_features": copy.deepcopy(provider["required_features"]),
+        "sandbox_policy_digest": provider["sandbox_policy_digest"],
+        "offered_relations": sorted(
+            binding["descriptor_id"] for binding in report["registry"]["descriptors"]
+        ),
+    }
+
+
+def validate_runtime_provider_identity_cross_binding(
+    validated_provider_identity: Any,
+    expected_provider_identity: dict[str, Any],
+    report_provider_identity: dict[str, Any] | None = None,
+) -> None:
+    """Require one identity across selection, raw hello/task acceptance, and report."""
+
+    if validated_provider_identity != expected_provider_identity:
+        fail(
+            "materialization.transcript-invalid",
+            "runtime-validated provider identity differs from installed authority",
+        )
+    if (
+        report_provider_identity is not None
+        and report_provider_identity != validated_provider_identity
+    ):
+        fail(
+            "materialization.identity-mismatch",
+            "report provider leaves differ from runtime-validated provider identity",
+        )
+
+
+def validate_runtime_seal_cross_binding(
+    sealed: dict[str, Any],
+    result: dict[str, Any],
+) -> None:
+    """Bind every report-visible provider leaf to the raw-derived generic seal."""
+
+    if not isinstance(sealed, dict) or not isinstance(sealed.get("batches"), list):
+        fail(
+            "materialization.transcript-invalid",
+            "runtime-private immutable seal shape differs",
+        )
+    actual_batches = sealed["batches"]
+    if len(actual_batches) != len(result["batches"]):
+        fail(
+            "materialization.transcript-invalid",
+            "runtime-private immutable seal batch census differs",
+        )
+    expected_batches = []
+    for report_batch, actual_batch in zip(
+        result["batches"], actual_batches, strict=True
+    ):
+        if not isinstance(actual_batch, dict) or not isinstance(
+            actual_batch.get("batch_digest"), str
+        ):
+            fail(
+                "materialization.transcript-invalid",
+                "runtime-private immutable seal batch shape differs",
+            )
+        expected_batches.append(
+            {
+                "task_id": result["provider_task_id"],
+                "descriptor_id": report_batch["descriptor_id"],
+                "descriptor_digest": report_batch["runtime_descriptor_digest"],
+                "dependency_group_id": report_batch["dependency_group_id"],
+                "atomic_output_group_id": report_batch["atomic_output_group_id"],
+                "batch_id": report_batch["batch_id"],
+                "batch_digest": actual_batch["batch_digest"],
+                "ordered_chunk_digests": report_batch["ordered_chunk_digests"],
+                "row_canonical_forms": [
+                    row["row_canonical_form"]
+                    for row in report_batch["row_bindings"]
+                ],
+            }
+        )
+    expected = {
+        "task_id": result["provider_task_id"],
+        "terminal": result["terminal"],
+        "batches": expected_batches,
+        "coverage_records": sorted(
+            result["coverage"]["transport_records"]
+            + result["coverage"]["semantic_records"],
+            key=coverage_record_key,
+        ),
+        "unresolved_records": fixture_task_unresolved_records(result),
+        "evidence_records": fixture_task_evidence_records(result),
+    }
+    if sealed != expected:
+        fail(
+            "materialization.transcript-invalid",
+            "report semantic transcript differs from runtime-private immutable seal",
+        )
+def materialization_runtime_receipt(
+    generic_receipt: dict[str, Any],
+) -> dict[str, Any]:
+    """Map the generic runtime-owned receipt into the report's stable field names."""
+
+    return {
+        "raw_frame_stream_bytes": generic_receipt["raw_stdout_byte_count"],
+        "raw_frame_stream_digest": generic_receipt["raw_stdout_sha256"],
+        "frame_count": generic_receipt["decoded_frame_count"],
+        "frame_transcript_digest": generic_receipt["frame_transcript_digest"],
+        "sealed_transcript_digest": generic_receipt["sealed_transcript_digest"],
+    }
+
+
+def encode_fixture_runtime_raw(
+    root: pathlib.Path,
+    request: dict[str, Any],
+    task: dict[str, Any],
+    result: dict[str, Any],
+) -> bytes:
+    """Encode deterministic real provider wire through the shared runtime codec."""
+
+    batch_rows = {
+        batch["batch_id"]: [
+            row["row_canonical_form"] for row in batch["row_bindings"]
+        ]
+        for batch in result["batches"]
+    }
+    try:
+        return provider_runtime.encode_runtime_private_fixture(
+            load(root / PROVIDER_PROTOCOL),
+            expected_runtime_provider_identity(root, request),
+            task["provider_task_id"],
+            runtime_authorized_batches(root, request),
+            batch_rows,
+            result["coverage"]["transport_records"]
+            + result["coverage"]["semantic_records"],
+            fixture_task_unresolved_records(result),
+            fixture_task_evidence_records(result),
+        )
+    except ValueError as error:
+        fail(
+            "materialization.transcript-invalid",
+            f"fixture provider wire construction failed: {error}",
+        )
+
+
+def derive_runtime_observation(
+    root: pathlib.Path,
+    request: dict[str, Any],
+    task: dict[str, Any],
+    raw_stdout: bytes,
+) -> dict[str, Any]:
+    """Decode, validate and seal one runtime-owned raw stdout occurrence once."""
+
+    try:
+        expected_identity = expected_runtime_provider_identity(root, request)
+        return provider_runtime.derive_runtime_private_observation(
+            load(root / PROVIDER_PROTOCOL),
+            raw_stdout,
+            task["provider_task_id"],
+            expected_provider_identity=expected_identity,
+            authorized_batches=runtime_authorized_batches(root, request),
+        )
+    except provider_runtime.ContractError as error:
+        fail(
+            "materialization.transcript-invalid",
+            f"runtime-owned provider observation failed: {error}",
+        )
+
+
+def bind_fixture_runtime_observation(
+    root: pathlib.Path,
+    request: dict[str, Any],
+    task: dict[str, Any],
+    result: dict[str, Any],
+) -> bytes:
+    """Create raw fixture wire first, then derive and bind its receipt and seal."""
+
+    raw_stdout = encode_fixture_runtime_raw(root, request, task, result)
+    observation = derive_runtime_observation(
+        root,
+        request,
+        task,
+        raw_stdout,
+    )
+    sealed_batches = {
+        batch["batch_id"]: batch
+        for batch in observation["sealed_transcript"]["batches"]
+    }
+    for batch in result["batches"]:
+        sealed_batch = sealed_batches.get(batch["batch_id"])
+        if sealed_batch is None or sealed_batch["row_canonical_forms"] != [
+            row["row_canonical_form"] for row in batch["row_bindings"]
+        ]:
+            fail(
+                "materialization.transcript-invalid",
+                "fixture provider rows differ after shared raw-wire validation",
+            )
+        batch["ordered_chunk_digests"] = sealed_batch[
+            "ordered_chunk_digests"
+        ]
+        bind_batch_digests(task, batch)
+    groups = {
+        group["dependency_group_id"]: group for group in result["groups"]
+    }
+    for group_id in GROUP_DESCRIPTORS:
+        groups[group_id]["batch_set_digest"] = expected_group_batch_set_digest(
+            task,
+            groups[group_id],
+            result["batches"],
+        )
+    result["runtime_receipt"] = materialization_runtime_receipt(
+        observation["receipt"]
+    )
+    validate_runtime_provider_identity_cross_binding(
+        observation["validated_provider_identity"],
+        expected_runtime_provider_identity(root, request),
+    )
+    validate_runtime_seal_cross_binding(observation["sealed_transcript"], result)
+    return raw_stdout
 
 
 def _task_report(
@@ -4056,22 +6252,30 @@ def _task_report(
             batches,
         )
         groups.append(group_result)
+    coverage = expected_task_coverage(task)
     side_components = {
-        component: semantic_digest(
-            f"cxxlens.clang22-task-{component.replace('_set_digest', '').replace('_fragment_digest', '')}.v1",
+        "transport_coverage_set_digest": coverage[
+            "transport_record_set_digest"
+        ],
+        "semantic_coverage_set_digest": coverage["semantic_record_set_digest"],
+        "unresolved_set_digest": semantic_digest(
+            "cxxlens.clang22-task-unresolved.v1",
+            _canonical_projection_value(
+                {"originating_task": context, "records": []}
+            ),
+        ),
+        "evidence_set_digest": semantic_digest(
+            "cxxlens.clang22-task-evidence.v1",
             _canonical_projection_value(
                 {
                     "originating_task": context,
-                    "component": component,
+                    "records": fixture_task_evidence_records(task),
                 }
             ),
-        )
-        for component in (
-            "coverage_set_digest",
-            "unresolved_set_digest",
-            "evidence_set_digest",
-            "guarantee_fragment_digest",
-        )
+        ),
+        "guarantee_profile_id": GUARANTEE_PROFILE_ID,
+        "guarantee_profile_digest": expected_guarantee_profile_digest(),
+        "guarantee_fragment_digest": "pending",
     }
     result = {
         "provider_task_id": task["provider_task_id"],
@@ -4082,29 +6286,61 @@ def _task_report(
         "compile_unit_id": task["compile_unit_id"],
         "task_input_digest": task["task_input_digest"],
         "terminal": "provider.success",
-        "transcript": {
-            "frame_count": 32,
-            "transcript_digest": "sha256:" + "9" * 64,
-            "semantic_digest": semantic_digest(
-                "cxxlens.provider-transcript.v1",
-                _canonical_projection_value(
-                    {
-                        field: task[field]
-                        for field in TASK_EXECUTION_KEY_FIELDS
-                    }
-                ),
-            ),
-            "raw_frame_digest": "sha256:" + "a" * 64,
-        },
+        "input_transfer": expected_input_transfer_receipt(request, task),
+        "runtime_receipt": {},
+        "coverage": coverage,
         "groups": groups,
         "batches": batches,
         "side_channel_components": side_components,
         "side_channel_digest": "pending",
         "task_result_digest": "pending",
     }
+    bind_fixture_runtime_observation(root, request, task, result)
+    side_components["guarantee_fragment_digest"] = (
+        expected_task_guarantee_fragment_digest(result)
+    )
     result["side_channel_digest"] = expected_task_side_channel_digest(result)
     result["task_result_digest"] = expected_task_result_digest(result)
     return result
+
+
+def fixture_runtime_raw_occurrences(
+    root: pathlib.Path,
+    request: dict[str, Any],
+) -> dict[tuple[str, str, str], bytes]:
+    """Build deterministic exact worker stdout occurrences from the request."""
+
+    occurrences: dict[tuple[str, str, str], bytes] = {}
+    for task in request["tasks"]:
+        private_result = _task_report(root, request, task)
+        key = task_execution_key(task)
+        occurrences[key] = encode_fixture_runtime_raw(
+            root,
+            request,
+            task,
+            private_result,
+        )
+    return occurrences
+
+
+def bind_fixture_runtime_occurrences_for_report(
+    root: pathlib.Path,
+    request: dict[str, Any],
+    report: dict[str, Any],
+) -> dict[tuple[str, str, str], bytes]:
+    """Test-only adapter: emit raw wire first and bind its derived observation."""
+
+    tasks = {task_execution_key(task): task for task in request["tasks"]}
+    occurrences: dict[tuple[str, str, str], bytes] = {}
+    for result in report["task_results"]:
+        key = task_execution_key(result)
+        occurrences[key] = bind_fixture_runtime_observation(
+            root,
+            request,
+            tasks[key],
+            result,
+        )
+    return occurrences
 
 
 def _digest_projection(domain: str, value: Any) -> str:
@@ -4443,7 +6679,9 @@ def expected_task_result_digest(result: dict[str, Any]) -> str:
             ],
             "compile_unit_id": result["compile_unit_id"],
             "terminal": result["terminal"],
-            "transcript": result["transcript"],
+            "input_transfer": result["input_transfer"],
+            "runtime_receipt": result["runtime_receipt"],
+            "coverage": result["coverage"],
             "groups": [
                 {
                     "dependency_group_id": group["dependency_group_id"],
@@ -4475,8 +6713,16 @@ def expected_raw_frame_set_digest(results: Iterable[dict[str, Any]]) -> str:
         (
             {
                 "task_execution_key": list(task_execution_key(result)),
-                "frame_count": result["transcript"]["frame_count"],
-                "raw_frame_digest": result["transcript"]["raw_frame_digest"],
+                "raw_frame_stream_bytes": result["runtime_receipt"][
+                    "raw_frame_stream_bytes"
+                ],
+                "raw_frame_stream_digest": result["runtime_receipt"][
+                    "raw_frame_stream_digest"
+                ],
+                "frame_count": result["runtime_receipt"]["frame_count"],
+                "frame_transcript_digest": result["runtime_receipt"][
+                    "frame_transcript_digest"
+                ],
             }
             for result in results
         ),
@@ -5094,16 +7340,60 @@ def expected_global_side_channel_digest(
     results: Iterable[dict[str, Any]],
 ) -> str:
     component = {
-        "coverage": "coverage_set_digest",
+        "transport_coverage": "transport_coverage_set_digest",
+        "coverage": "semantic_coverage_set_digest",
         "unresolved": "unresolved_set_digest",
         "evidence": "evidence_set_digest",
     }[channel]
     projection = {key: value for key, value in summary.items() if key != "digest"}
     projection["task_components"] = _task_component_rows(results, component)
-    return _digest_projection(
-        f"cxxlens.clang22-global-{channel}.v1",
-        projection,
+    domain = {
+        "transport_coverage": "cxxlens.clang22-global-transport-coverage.v1",
+        "coverage": "cxxlens.clang22-global-coverage.v1",
+        "unresolved": "cxxlens.clang22-global-unresolved.v1",
+        "evidence": "cxxlens.clang22-global-evidence.v1",
+    }[channel]
+    return _digest_projection(domain, projection)
+
+
+def expected_coverage_summary(
+    results: Iterable[dict[str, Any]],
+    plane: str,
+) -> dict[str, Any]:
+    result_list = list(results)
+    records_key = f"{plane}_records"
+    records = [
+        record
+        for result in result_list
+        for record in result["coverage"][records_key]
+    ]
+    state_counts = {state: 0 for state in COVERAGE_STATES}
+    for record in records:
+        state = record["state"]
+        if state not in state_counts:
+            fail(
+                "materialization.coverage-incomplete",
+                f"unknown {plane} coverage state",
+            )
+        state_counts[state] += 1
+    channel = "transport_coverage" if plane == "transport" else "coverage"
+    summary = {
+        "record_type": (
+            "typed-transport-coverage-unit"
+            if plane == "transport"
+            else "typed-coverage-unit"
+        ),
+        "record_count": len(records),
+        "state_counts": state_counts,
+        "balance": "exact",
+        "digest": "pending",
+    }
+    summary["digest"] = expected_global_side_channel_digest(
+        channel,
+        summary,
+        result_list,
     )
+    return summary
 
 
 def aggregate_observation_equivalence_census(
@@ -5151,7 +7441,12 @@ def expected_guarantee_digest(
     projection = {key: value for key, value in guarantee.items() if key != "digest"}
     projection["global_side_channel_digests"] = {
         channel: side_channels[channel]["digest"]
-        for channel in ("coverage", "unresolved", "evidence")
+        for channel in (
+            "transport_coverage",
+            "coverage",
+            "unresolved",
+            "evidence",
+        )
     }
     projection["task_guarantee_fragments"] = _task_component_rows(
         results,
@@ -5521,6 +7816,14 @@ def _claim_guarantee(
     report: dict[str, Any],
 ) -> dict[str, Any]:
     guarantee = report["side_channels"]["guarantee"]
+    guarantee.update(
+        {
+            "profile_id": GUARANTEE_PROFILE_ID,
+            "profile_digest": expected_guarantee_profile_digest(),
+            "assumptions": list(GUARANTEE_ASSUMPTIONS),
+            "verification_modalities": list(GUARANTEE_MODALITIES),
+        }
+    )
     modalities = guarantee["verification_modalities"]
     if modalities != sorted(set(modalities)):
         fail("materialization.claim-invalid", "report modalities are not canonical")
@@ -6705,6 +9008,7 @@ def bind_committed_verified_publication(
         "prior_history_retained": True,
         "head_effect": "advanced_to_candidate",
         "store_failure": None,
+        "sqlite_effect_root_receipt": expected_sqlite_effect_root_receipt(request),
         "sqlite_reopen_status": "opened" if backend == "sqlite" else "not_applicable",
         "recovery_receipt": None,
     }
@@ -6763,18 +9067,54 @@ def rebind_report_digest_chain(
                 groups[group],
                 result["batches"],
             )
+        result["input_transfer"] = expected_input_transfer_receipt(request, task)
+        result["coverage"]["transport_record_set_digest"] = (
+            coverage_record_set_digest(
+                result,
+                "transport",
+                result["coverage"]["transport_records"],
+            )
+        )
+        result["coverage"]["semantic_record_set_digest"] = coverage_record_set_digest(
+            result,
+            "semantic",
+            result["coverage"]["semantic_records"],
+        )
+        result["side_channel_components"].update(
+            {
+                "transport_coverage_set_digest": result["coverage"][
+                    "transport_record_set_digest"
+                ],
+                "semantic_coverage_set_digest": result["coverage"][
+                    "semantic_record_set_digest"
+                ],
+                "guarantee_profile_id": GUARANTEE_PROFILE_ID,
+                "guarantee_profile_digest": expected_guarantee_profile_digest(),
+            }
+        )
+        result["side_channel_components"]["guarantee_fragment_digest"] = (
+            expected_task_guarantee_fragment_digest(result)
+        )
         result["side_channel_digest"] = expected_task_side_channel_digest(result)
         result["task_result_digest"] = expected_task_result_digest(result)
     report["adoption"]["task_result_set_digest"] = expected_task_result_set_digest(
         results
     )
     report["adoption"]["raw_frames"]["frame_count"] = sum(
-        result["transcript"]["frame_count"] for result in results
+        result["runtime_receipt"]["frame_count"] for result in results
     )
     report["adoption"]["raw_frames"][
         "frame_set_digest"
     ] = expected_raw_frame_set_digest(results)
-    for channel in ("coverage", "unresolved", "evidence"):
+    report["side_channels"]["transport_coverage"] = expected_coverage_summary(
+        results,
+        "transport",
+    )
+    report["side_channels"]["coverage"] = expected_coverage_summary(
+        results,
+        "semantic",
+    )
+    for channel in ("unresolved", "evidence"):
         report["side_channels"][channel][
             "digest"
         ] = expected_global_side_channel_digest(
@@ -6844,22 +9184,8 @@ def sample_report(
         observation_rows,
     )
     span_digests = span_report_digests(span_bindings, span_rows)
-    coverage = {
-        "record_type": "typed-coverage-unit",
-        "record_count": 3 * task_count,
-        "state_counts": {
-            "covered": 3 * task_count,
-            "excluded": 0,
-            "not_applicable": 0,
-            "failed": 0,
-            "unresolved": 0,
-            "unsupported": 0,
-            "stale": 0,
-            "truncated": 0,
-        },
-        "balance": "exact",
-        "digest": "pending",
-    }
+    transport_coverage = expected_coverage_summary(task_results, "transport")
+    coverage = expected_coverage_summary(task_results, "semantic")
     unresolved = {
         "record_type": "typed-unresolved-item",
         "record_count": 0,
@@ -6885,11 +9211,12 @@ def sample_report(
         "digest": "pending",
     }
     side_channels: dict[str, Any] = {
+        "transport_coverage": transport_coverage,
         "coverage": coverage,
         "unresolved": unresolved,
         "evidence": evidence,
     }
-    for channel in ("coverage", "unresolved", "evidence"):
+    for channel in ("unresolved", "evidence"):
         side_channels[channel]["digest"] = expected_global_side_channel_digest(
             channel,
             side_channels[channel],
@@ -6897,14 +9224,12 @@ def sample_report(
         )
     guarantee = {
         "record_type": "typed-guarantee",
+        "profile_id": GUARANTEE_PROFILE_ID,
+        "profile_digest": expected_guarantee_profile_digest(),
         "approximation": "exact",
         "scope": "project:fixture",
-        "assumptions": [],
-        "verification_modalities": [
-            "clang22-parse",
-            "query-parity",
-            "store-reopen",
-        ],
+        "assumptions": list(GUARANTEE_ASSUMPTIONS),
+        "verification_modalities": list(GUARANTEE_MODALITIES),
         "observation_descriptor_censuses": observation_descriptor_censuses(
             task_results
         ),
@@ -6930,7 +9255,7 @@ def sample_report(
     exact_request_bytes = canonical_json(request) if request_bytes is None else request_bytes
     report = {
         "schema": "cxxlens.clang22-materialization-report.v2",
-        "report_version": "2.0.0",
+        "report_version": MATERIALIZATION_VERSION,
         "response_kind": "detailed",
         "result": "passed",
         "generated_at": datetime.datetime(
@@ -6948,15 +9273,19 @@ def sample_report(
             "semantic_request_digest": request["semantic_request_digest"],
         },
         "installation": {
-            "configuration": configuration,
-            "platform": f"linux-x86_64-{configuration}",
-            "prefix_manifest_digest": request["tool"]["prefix_manifest_digest"],
-            "relocated_prefix_digest": request["tool"]["relocated_prefix_digest"],
-            "tool_digest": request["tool"]["installed_executable_digest"],
-            "worker_digest": request["worker"]["installed_binary_digest"],
-            "relocated": True,
-            "runtime_dependency_policy": "self-contained-prefix",
-            "tool_worker_same_prefix": True,
+            "requested": {
+                "occurrence_manifest_digest": request["tool"][
+                    "occurrence_manifest_digest"
+                ]
+            },
+            "measured": fixture_occurrence_measurement(
+                root,
+                source_revision=request["tool"]["source_revision"],
+                source_tree=request["tool"]["source_tree"],
+                configuration=configuration,
+                tool_digest=request["tool"]["installed_executable_digest"],
+                worker_digest=request["worker"]["installed_binary_digest"],
+            ),
         },
         "provider": {
             "tool_executable": request["tool"]["executable"],
@@ -6967,6 +9296,9 @@ def sample_report(
             "semantic_contract_digest": request["worker"]["semantic_contract_digest"],
             "protocol_major": request["worker"]["protocol_major"],
             "protocol_minor": request["worker"]["protocol_minor"],
+            "required_features": copy.deepcopy(
+                request["worker"]["required_features"]
+            ),
             "sandbox_policy_digest": request["worker"]["sandbox_policy_digest"],
         },
         "project": {
@@ -7005,7 +9337,10 @@ def sample_report(
             "raw_frames": {
                 "authority": "diagnostic-only-non-authoritative",
                 "retained": False,
-                "frame_count": 32 * task_count,
+                "frame_count": sum(
+                    result["runtime_receipt"]["frame_count"]
+                    for result in task_results
+                ),
                 "frame_set_digest": expected_raw_frame_set_digest(task_results),
             },
         },
@@ -7063,6 +9398,9 @@ def sample_report(
             "prior_history_retained": True,
             "head_effect": "advanced_to_candidate",
             "store_failure": None,
+            "sqlite_effect_root_receipt": expected_sqlite_effect_root_receipt(
+                request
+            ),
             "sqlite_reopen_status": "opened" if backend == "sqlite" else "not_applicable",
             "recovery_receipt": None,
         },
@@ -7350,11 +9688,15 @@ def stale_parent_report(root: pathlib.Path, request: dict[str, Any]) -> dict[str
             "category": "stale_parent",
             "cause": {
                 "kind": "sdk_error",
+                "operation": "writer_publish",
+                "access_path": None,
                 "code": "store.publication-conflict",
-                "field": "publication",
+                "field": request["publication"]["series_id"],
+                "detail": {"kind": "stable", "value": ""},
             },
             "diagnostic_digest": content_digest(b"fixture stale parent"),
         },
+        "sqlite_effect_root_receipt": expected_sqlite_effect_root_receipt(request),
         "sqlite_reopen_status": "opened",
         "recovery_receipt": {
             "selector": copy.deepcopy(store["selector"]),
@@ -7400,6 +9742,7 @@ def compact_failure_report(
     phase: str,
     code: str,
     subject: str = "materialization-request",
+    store_failure_cause: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     request_bound = request is not None
     launch_attempt_count = int(
@@ -7425,7 +9768,7 @@ def compact_failure_report(
     )
     return {
         "schema": "cxxlens.clang22-materialization-report.v2",
-        "report_version": "2.0.0",
+        "report_version": MATERIALIZATION_VERSION,
         "response_kind": "compact_failure",
         "result": "failed",
         "generated_at": datetime.datetime(
@@ -7450,6 +9793,7 @@ def compact_failure_report(
             "publication_attempted": False,
             "committed_transaction_count": 0,
             "prior_history_retained": True,
+            "store_failure_cause": copy.deepcopy(store_failure_cause),
         },
         "error": {
             "code": code,
@@ -7461,9 +9805,12 @@ def compact_failure_report(
 
 
 def _exact_task_result(
+    root: pathlib.Path,
     request: dict[str, Any],
     task: dict[str, Any],
     result: dict[str, Any],
+    raw_stdout: bytes,
+    report_provider_identity: dict[str, Any],
 ) -> None:
     for field in (
         "provider_task_id",
@@ -7476,6 +9823,75 @@ def _exact_task_result(
             fail("materialization.task-binding-mismatch", f"task report differs at {field}")
     if result["terminal"] != "provider.success":
         fail("materialization.worker-failure", "passed report has non-success terminal")
+    if result["input_transfer"] != expected_input_transfer_receipt(request, task):
+        fail(
+            "materialization.task-binding-mismatch",
+            "authenticated task-input transfer receipt differs",
+        )
+    runtime_observation = derive_runtime_observation(
+        root,
+        request,
+        task,
+        raw_stdout,
+    )
+    expected_runtime_receipt = materialization_runtime_receipt(
+        runtime_observation["receipt"]
+    )
+    validate_runtime_provider_identity_cross_binding(
+        runtime_observation["validated_provider_identity"],
+        expected_runtime_provider_identity(root, request),
+        report_provider_identity,
+    )
+    if result["runtime_receipt"] != expected_runtime_receipt:
+        fail(
+            "materialization.transcript-invalid",
+            "runtime receipt differs from independent raw wire/frame/seal authority",
+        )
+    validate_runtime_seal_cross_binding(
+        runtime_observation["sealed_transcript"],
+        result,
+    )
+    expected_coverage = expected_task_coverage(task)
+    if result["coverage"] != expected_coverage:
+        fail(
+            "materialization.coverage-incomplete",
+            "transport or semantic coverage record plane differs",
+        )
+    components = result["side_channel_components"]
+    context = task_semantic_context(task)
+    expected_unresolved_digest = semantic_digest(
+        "cxxlens.clang22-task-unresolved.v1",
+        _canonical_projection_value(
+            {
+                "originating_task": context,
+                "records": fixture_task_unresolved_records(result),
+            }
+        ),
+    )
+    expected_evidence_digest = semantic_digest(
+        "cxxlens.clang22-task-evidence.v1",
+        _canonical_projection_value(
+            {
+                "originating_task": context,
+                "records": fixture_task_evidence_records(result),
+            }
+        ),
+    )
+    if (
+        components["transport_coverage_set_digest"]
+        != expected_coverage["transport_record_set_digest"]
+        or components["semantic_coverage_set_digest"]
+        != expected_coverage["semantic_record_set_digest"]
+        or components["unresolved_set_digest"] != expected_unresolved_digest
+        or components["evidence_set_digest"] != expected_evidence_digest
+        or components["guarantee_profile_id"] != GUARANTEE_PROFILE_ID
+        or components["guarantee_profile_digest"]
+        != expected_guarantee_profile_digest()
+    ):
+        fail(
+            "materialization.coverage-incomplete",
+            "task coverage/unresolved/evidence/profile side-channel binding differs",
+        )
     groups = {row["dependency_group_id"]: row for row in result["groups"]}
     if set(groups) != set(GROUP_DESCRIPTORS):
         fail("materialization.group-incomplete", "task report group set differs")
@@ -7589,6 +10005,13 @@ def _exact_task_result(
                 "materialization.group-incomplete",
                 f"group {group} batch-set digest differs",
             )
+    if components["guarantee_fragment_digest"] != (
+        expected_task_guarantee_fragment_digest(result)
+    ):
+        fail(
+            "materialization.claim-invalid",
+            "task guarantee fragment differs from sealed semantic evidence",
+        )
     if result["side_channel_digest"] != expected_task_side_channel_digest(result):
         fail("materialization.report-invalid", "task side-channel digest differs")
     if result["task_result_digest"] != expected_task_result_digest(result):
@@ -7630,6 +10053,52 @@ COMPACT_BOUND_PHASE_CODES = {
     "report-construction": {"materialization.report-invalid"},
 }
 
+PREPUBLICATION_STORE_OPERATIONS = {
+    "store-open": {"store_open"},
+    "store-stage": {
+        "head_current",
+        "writer_begin",
+        "partition_stage",
+        "closure_stage",
+        "writer_validate",
+    },
+}
+
+
+def validate_compact_store_failure_cause(
+    error: dict[str, Any],
+    effects: dict[str, Any],
+    store_failure_authority: dict[str, Any] | None,
+) -> None:
+    """Retain only an authentic first prepublication Store SDK failure."""
+
+    cause = effects["store_failure_cause"]
+    store_failure = (
+        error["code"] == "materialization.store-failure"
+        and error["phase"] in PREPUBLICATION_STORE_OPERATIONS
+    )
+    if not store_failure:
+        if cause is not None or store_failure_authority is not None:
+            fail(
+                "materialization.report-invalid",
+                "non-Store compact failure retained a Store failure cause",
+            )
+        return
+    if (
+        cause is None
+        or store_failure_authority is None
+        or cause != store_failure_authority
+        or cause["kind"] != "sdk_error"
+        or cause["operation"]
+        not in PREPUBLICATION_STORE_OPERATIONS[error["phase"]]
+        or cause["access_path"] is not None
+    ):
+        fail(
+            "materialization.store-failure",
+            "compact Store failure cause phase/operation/access-path differs",
+        )
+    _validate_store_detail_observation(cause["detail"])
+
 
 def validate_raw_input_observation(
     observation: dict[str, Any],
@@ -7657,6 +10126,9 @@ def validate_report(
     report: dict[str, Any],
     *,
     request_bytes: bytes,
+    runtime_raw_occurrences: dict[tuple[str, str, str], bytes] | None = None,
+    store_failure_authority: dict[str, Any] | None = None,
+    postpublish_failure_authority: dict[str, Any] | None = None,
 ) -> None:
     validate_schema(
         report,
@@ -7669,6 +10141,11 @@ def validate_report(
         binding = report["binding"]
         effects = report["effects"]
         error = report["error"]
+        validate_compact_store_failure_cause(
+            error,
+            effects,
+            store_failure_authority,
+        )
         expected_launch_attempt_count = int(
             error["phase"]
             in {
@@ -7770,18 +10247,14 @@ def validate_report(
         fail("materialization.identity-mismatch", "report source revision/tree differs")
     if report["authority_digests"] != authority_bindings(root):
         fail("materialization.report-invalid", "materialization authority digests differ")
-    expected_installation = {
-        "configuration": request["tool"]["package_configuration"],
-        "prefix_manifest_digest": request["tool"]["prefix_manifest_digest"],
-        "relocated_prefix_digest": request["tool"]["relocated_prefix_digest"],
-        "tool_digest": request["tool"]["installed_executable_digest"],
-        "worker_digest": request["worker"]["installed_binary_digest"],
-    }
-    if any(report["installation"][key] != value for key, value in expected_installation.items()):
-        fail("materialization.identity-mismatch", "installed tool/worker binding differs")
-    configuration = request["tool"]["package_configuration"]
-    if not report["installation"]["platform"].endswith("-" + configuration):
-        fail("materialization.report-invalid", "platform/configuration binding differs")
+    if report["installation"]["requested"] != {
+        "occurrence_manifest_digest": request["tool"]["occurrence_manifest_digest"]
+    }:
+        fail(
+            "materialization.identity-mismatch",
+            "requested installed occurrence binding differs",
+        )
+    validate_measured_occurrence(root, request, report["installation"]["measured"])
     expected_provider = {
         "tool_executable": request["tool"]["executable"],
         "tool_interface_version": request["tool"]["interface_version"],
@@ -7791,6 +10264,7 @@ def validate_report(
         "semantic_contract_digest": request["worker"]["semantic_contract_digest"],
         "protocol_major": request["worker"]["protocol_major"],
         "protocol_minor": request["worker"]["protocol_minor"],
+        "required_features": request["worker"]["required_features"],
         "sandbox_policy_digest": request["worker"]["sandbox_policy_digest"],
     }
     if report["provider"] != expected_provider:
@@ -7837,6 +10311,26 @@ def validate_report(
         != request_publication["expected_parent_publication"]
     ):
         fail("materialization.stale-parent", "report publication request binding differs")
+    effect_receipt = publication["sqlite_effect_root_receipt"]
+    if publication["backend"] == "memory":
+        if effect_receipt is not None:
+            fail(
+                "materialization.store-failure",
+                "memory publication retained a SQLite effect-root receipt",
+            )
+    elif (
+        effect_receipt is None
+        or effect_receipt["contract"] != "rooted-vfs-v1"
+        or effect_receipt["relative_path"] != request_publication["sqlite_path"]
+        or effect_receipt["parent_resolution"]
+        != "openat2-beneath-no-symlinks-no-magiclinks"
+        or effect_receipt["leaf_resolution"]
+        != "database-and-sidecars-rooted-no-follow"
+    ):
+        fail(
+            "materialization.store-failure",
+            "SQLite effect-root receipt differs from the authenticated request",
+        )
     spans = report["span_validation"]
     if (
         spans["absent_bundle_count"]
@@ -7888,8 +10382,25 @@ def validate_report(
         or set(results) != set(tasks)
     ):
         fail("materialization.group-incomplete", "not every requested task has one result")
+    runtime_occurrences = (
+        fixture_runtime_raw_occurrences(root, request)
+        if runtime_raw_occurrences is None
+        else runtime_raw_occurrences
+    )
+    if set(runtime_occurrences) != set(tasks):
+        fail(
+            "materialization.transcript-invalid",
+            "runtime-private raw occurrence task census differs",
+        )
     for execution_key, task in tasks.items():
-        _exact_task_result(request, task, results[execution_key])
+        _exact_task_result(
+            root,
+            request,
+            task,
+            results[execution_key],
+            runtime_occurrences[execution_key],
+            report_runtime_provider_identity(report),
+        )
     if report["adoption"]["task_result_set_digest"] != expected_task_result_set_digest(
         results.values()
     ):
@@ -7931,9 +10442,21 @@ def validate_report(
             "validated span row census differs from bundle bindings",
         )
     if report["adoption"]["raw_frames"]["frame_count"] != sum(
-        result["transcript"]["frame_count"] for result in results.values()
+        result["runtime_receipt"]["frame_count"] for result in results.values()
     ):
         fail("materialization.transcript-invalid", "raw-frame/task transcript count differs")
+    raw_occurrences = [
+        (
+            result["runtime_receipt"]["raw_frame_stream_bytes"],
+            result["runtime_receipt"]["raw_frame_stream_digest"],
+        )
+        for result in results.values()
+    ]
+    if len(raw_occurrences) != len(set(raw_occurrences)):
+        fail(
+            "materialization.transcript-invalid",
+            "distinct task executions reused one raw-frame occurrence receipt",
+        )
     call_observation_rows = sum(
         next(
             batch["row_count"]
@@ -7986,20 +10509,27 @@ def validate_report(
     )
     if base != expected_base:
         fail("materialization.claim-invalid", "base-claim census/binding differs")
+    transport_coverage = report["side_channels"]["transport_coverage"]
     coverage = report["side_channels"]["coverage"]
-    if sum(coverage["state_counts"].values()) != coverage["record_count"] or coverage[
-        "balance"
-    ] != "exact":
-        fail("materialization.coverage-incomplete", "coverage balance differs")
-    if coverage["record_count"] != 3 * len(request["tasks"]):
-        fail("materialization.coverage-incomplete", "task coverage census differs")
+    if transport_coverage != expected_coverage_summary(
+        results.values(), "transport"
+    ) or coverage != expected_coverage_summary(results.values(), "semantic"):
+        fail(
+            "materialization.coverage-incomplete",
+            "global transport/semantic coverage summaries differ from actual records",
+        )
     evidence = report["side_channels"]["evidence"]
     if (
         evidence["kinds"] != sorted(evidence["kind_counts"])
         or sum(evidence["kind_counts"].values()) != evidence["record_count"]
     ):
         fail("materialization.claim-invalid", "evidence kind accounting differs")
-    for channel in ("coverage", "unresolved", "evidence"):
+    for channel in (
+        "transport_coverage",
+        "coverage",
+        "unresolved",
+        "evidence",
+    ):
         if report["side_channels"][channel][
             "digest"
         ] != expected_global_side_channel_digest(
@@ -8015,6 +10545,16 @@ def validate_report(
     if unresolved["blocking_count"] != 0:
         fail("materialization.coverage-incomplete", "passed report has blocking unresolved")
     expected_descriptor_censuses = observation_descriptor_censuses(results.values())
+    if (
+        guarantee["profile_id"] != GUARANTEE_PROFILE_ID
+        or guarantee["profile_digest"] != expected_guarantee_profile_digest()
+        or guarantee["assumptions"] != GUARANTEE_ASSUMPTIONS
+        or guarantee["verification_modalities"] != GUARANTEE_MODALITIES
+    ):
+        fail(
+            "materialization.claim-invalid",
+            "closed prepublication guarantee profile differs",
+        )
     if guarantee["observation_descriptor_censuses"] != expected_descriptor_censuses:
         fail(
             "materialization.claim-invalid",
@@ -8030,6 +10570,8 @@ def validate_report(
         unresolved["record_count"] != 0
         or spans["absent_bundle_count"] != 0
         or coverage["state_counts"]["covered"] != coverage["record_count"]
+        or transport_coverage["state_counts"]["covered"]
+        != transport_coverage["record_count"]
         or any(
             census["non_exact_equivalence_count"] != 0
             for census in expected_descriptor_censuses
@@ -8111,6 +10653,7 @@ def validate_report(
         request,
         report,
         expected_store,
+        postpublish_failure_authority=postpublish_failure_authority,
     )
 
 
@@ -8172,6 +10715,8 @@ def _validate_reopened_handle_projection(
 def _validate_committed_unverified_attempt(
     request: dict[str, Any],
     report: dict[str, Any],
+    *,
+    postpublish_failure_authority: dict[str, Any] | None,
 ) -> None:
     publication = report["publication"]
     verification = report["semantic_verification"]
@@ -8201,46 +10746,504 @@ def _validate_committed_unverified_attempt(
                 "committed verification lookup input differs",
             )
         if receipt["status"] == "present":
+            projection = receipt["projection"]
             _validate_reopened_handle_projection(
-                receipt["projection"],
-                expected_series_id=publication["series_id"],
+                projection,
+                expected_series_id=(
+                    projection["publication_record"]["series_id"]
+                    if receipt["access_path"] == "open-snapshot"
+                    else publication["series_id"]
+                ),
             )
         elif receipt["status"] != "not_attempted" and first_non_present is None:
             first_non_present = receipt
+    classify_postpublish_failure(
+        attempt,
+        failure_record,
+        first_non_present,
+        first_cause_authority=postpublish_failure_authority,
+    )
+    _validate_postpublish_projection_mismatch_binding(
+        request,
+        report,
+        failure_record,
+    )
+
+
+POSTPUBLISH_ACCESS_PATHS = (
+    "current-selector",
+    "open-publication",
+    "open-snapshot",
+)
+POSTPUBLISH_PATH_OPERATIONS = {
+    "current-selector": "verify_current",
+    "open-publication": "verify_open_publication",
+    "open-snapshot": "verify_open_snapshot",
+}
+POSTPUBLISH_MISMATCH_BINDINGS = {
+    "publication-binding": {
+        "current-selector": {
+            "publication-semantic-fields",
+            "physical-generation-transition",
+        },
+        "open-publication": {
+            "publication-semantic-fields",
+            "physical-generation-transition",
+        },
+    },
+    "snapshot-binding": {
+        "current-selector": {"snapshot-manifest"},
+        "open-publication": {"snapshot-manifest"},
+        "open-snapshot": {
+            "snapshot-manifest",
+            "open-snapshot-return-binding",
+        },
+    },
+    "descriptor-inventory": {
+        path: {"descriptor-inventory"} for path in POSTPUBLISH_ACCESS_PATHS
+    },
+    "partition-bindings": {
+        path: {"partition-bindings"} for path in POSTPUBLISH_ACCESS_PATHS
+    },
+    "rows": {path: {"rows"} for path in POSTPUBLISH_ACCESS_PATHS},
+    "claim-annotations": {
+        path: {"claim-annotations"} for path in POSTPUBLISH_ACCESS_PATHS
+    },
+    "coverage": {path: {"coverage"} for path in POSTPUBLISH_ACCESS_PATHS},
+    "unresolved": {path: {"unresolved"} for path in POSTPUBLISH_ACCESS_PATHS},
+    "closure": {path: {"closure"} for path in POSTPUBLISH_ACCESS_PATHS},
+    "cursor-projection": {
+        path: {"cursor-projection"} for path in POSTPUBLISH_ACCESS_PATHS
+    },
+    "canonical-export": {
+        path: {"canonical-export"} for path in POSTPUBLISH_ACCESS_PATHS
+    },
+    "cross-path-equality": {None: {"cross-path-semantic-projection"}},
+}
+
+POSTPUBLISH_RETAINED_DIGEST_FIELDS = {
+    "snapshot-manifest": "snapshot_manifest_digest",
+    "partition-bindings": "partition_binding_multiset_digest",
+    "rows": "row_multiset_digest",
+    "claim-annotations": "claim_annotation_multiset_digest",
+    "coverage": "coverage_multiset_digest",
+    "unresolved": "unresolved_digest",
+    "closure": "closure_digest",
+    "cursor-projection": "cursor_projection_digest",
+    "canonical-export": "canonical_export_digest",
+}
+
+
+def _postpublish_named_projection_digest(
+    name: str,
+    projection: dict[str, Any],
+) -> str:
+    """Recompute one named mismatch digest from a retained handle projection."""
+
+    retained_field = POSTPUBLISH_RETAINED_DIGEST_FIELDS.get(name)
+    if retained_field is not None:
+        return projection[retained_field]
+    record = projection["publication_record"]
+    if name == "publication-semantic-fields":
+        return _digest_projection(
+            "cxxlens.clang22-reopened-publication-semantic-fields.v1",
+            {
+                field: record[field]
+                for field in (
+                    "publication_id",
+                    "series_id",
+                    "snapshot_id",
+                    "sequence",
+                    "parent_publication",
+                    "state",
+                    "corrupt",
+                )
+            },
+        )
+    if name == "physical-generation-transition":
+        return _digest_projection(
+            "cxxlens.clang22-reopened-physical-generation.v1",
+            record["physical_generation"],
+        )
+    if name == "descriptor-inventory":
+        return _digest_projection(
+            "cxxlens.clang22-reopened-descriptor-inventory.v1",
+            projection["descriptors"],
+        )
+    if name == "open-snapshot-return-binding":
+        return _digest_projection(
+            "cxxlens.clang22-reopened-open-snapshot-return.v1",
+            record["snapshot_id"],
+        )
+    fail(
+        "materialization.store-failure",
+        f"post-publish named projection has no digest binding: {name}",
+    )
+
+
+def _validate_postpublish_projection_mismatch_binding(
+    request: dict[str, Any],
+    report: dict[str, Any],
+    failure_record: dict[str, Any],
+) -> None:
+    """Bind mismatch digests to expected Store state and retained SDK receipts."""
+
+    cause = failure_record["cause"]
+    if cause["kind"] != "verification_mismatch":
+        return
+    attempt = report["semantic_verification"]["reopen_attempt"]
+    receipts = attempt["handle_receipts"]
+    if any(receipt["status"] != "present" for receipt in receipts):
+        fail(
+            "materialization.store-failure",
+            "projection mismatch has a non-present retained handle",
+        )
+    invocation_record = report["publication"]["invocation_committed_record"]
+    expected_projection, _ = _reopened_handle_projection(
+        request,
+        report["store"],
+        invocation_record,
+    )
+    name = cause["projection"]
+    if name == "cross-path-semantic-projection":
+        expected_digest = expected_projection["semantic_projection_digest"]
+        actual_digest = next(
+            (
+                receipt["projection"]["semantic_projection_digest"]
+                for receipt in receipts
+                if receipt["projection"]["semantic_projection_digest"]
+                != expected_digest
+            ),
+            None,
+        )
+        if actual_digest is None:
+            fail(
+                "materialization.store-failure",
+                "cross-path mismatch has no retained differing projection",
+            )
+    else:
+        access_path = cause["access_path"]
+        receipt = next(
+            (
+                candidate
+                for candidate in receipts
+                if candidate["access_path"] == access_path
+            ),
+            None,
+        )
+        if receipt is None:
+            fail(
+                "materialization.store-failure",
+                "projection mismatch access path has no retained receipt",
+            )
+        expected_digest = _postpublish_named_projection_digest(
+            name,
+            expected_projection,
+        )
+        actual_digest = _postpublish_named_projection_digest(
+            name,
+            receipt["projection"],
+        )
+        if name == "physical-generation-transition":
+            expected_generation = expected_projection["publication_record"][
+                "physical_generation"
+            ]
+            actual_generation = receipt["projection"]["publication_record"][
+                "physical_generation"
+            ]
+            if actual_generation >= expected_generation:
+                fail(
+                    "materialization.store-failure",
+                    "physical generation mismatch describes an allowed transition",
+                )
+    if (
+        expected_digest == actual_digest
+        or cause["expected_digest"] != expected_digest
+        or cause["actual_digest"] != actual_digest
+    ):
+        fail(
+            "materialization.store-failure",
+            "post-publish cause and retained projection mismatch digests differ",
+        )
+
+
+def _postpublish_first_cause_authority(
+    failure_record: dict[str, Any],
+) -> dict[str, Any]:
+    """Project the source-private first observation retained by the report."""
+
+    return {
+        "stage": failure_record["stage"],
+        "access_path": failure_record["access_path"],
+        "cause": failure_record["cause"],
+    }
+
+
+def _validate_postpublish_first_cause_authority(
+    failure_record: dict[str, Any],
+    first_cause_authority: dict[str, Any] | None,
+) -> None:
+    if (
+        first_cause_authority is None
+        or first_cause_authority
+        != _postpublish_first_cause_authority(failure_record)
+    ):
+        fail(
+            "materialization.store-failure",
+            "post-publish first cause differs from the source-private observation",
+        )
+
+
+def classify_postpublish_failure(
+    attempt: dict[str, Any],
+    failure_record: dict[str, Any],
+    first_non_present: dict[str, Any] | None = None,
+    *,
+    first_cause_authority: dict[str, Any] | None,
+) -> str:
+    """Classify the exact first post-publish SDK or projection observation."""
+
+    receipts = attempt.get("handle_receipts")
+    if (
+        not isinstance(receipts, list)
+        or len(receipts) != len(POSTPUBLISH_ACCESS_PATHS)
+        or tuple(receipt.get("access_path") for receipt in receipts)
+        != POSTPUBLISH_ACCESS_PATHS
+        or failure_record.get("code") != "materialization.store-failure"
+    ):
+        fail(
+            "materialization.store-failure",
+            "post-publish verification path census or stable code differs",
+        )
+    cause = failure_record["cause"]
     if attempt["close_reopen_status"] == "open_failed":
         if (
-            failure_record["stage"] != "close-reopen"
+            any(receipt.get("status") != "not_attempted" for receipt in receipts)
+            or first_non_present is not None
+            or failure_record["stage"] != "close-reopen"
             or failure_record["access_path"] is not None
-            or failure_record["cause"]
-            != {
-                "kind": "sdk_error",
-                "code": attempt["open_error_code"],
-                "field": attempt["open_error_field"],
-            }
+            or cause["kind"] != "sdk_error"
+            or cause["operation"] != "store_reopen"
+            or cause["access_path"] is not None
+            or cause["code"] != attempt["open_error_code"]
+            or cause["field"] != attempt["open_error_field"]
         ):
             fail(
                 "materialization.store-failure",
                 "close/reopen verification failure differs",
             )
-    elif first_non_present is not None:
+        _validate_store_detail_observation(cause["detail"])
+        _validate_postpublish_first_cause_authority(
+            failure_record,
+            first_cause_authority,
+        )
+        return "committed_unverified"
+    if (
+        attempt["close_reopen_status"] not in {"opened", "not_applicable"}
+        or attempt["open_error_code"] is not None
+        or attempt["open_error_field"] is not None
+        or any(receipt.get("status") == "not_attempted" for receipt in receipts)
+    ):
+        fail(
+            "materialization.store-failure",
+            "post-publish reopen attempt state differs",
+        )
+    recomputed_first_non_present = next(
+        (receipt for receipt in receipts if receipt.get("status") != "present"),
+        None,
+    )
+    if (
+        first_non_present is not None
+        and first_non_present != recomputed_first_non_present
+    ):
+        fail(
+            "materialization.store-failure",
+            "caller-provided first reopened handle failure is not first",
+        )
+    first_non_present = recomputed_first_non_present
+    if first_non_present is not None:
+        access_path = first_non_present["access_path"]
+        expected_operation = POSTPUBLISH_PATH_OPERATIONS[access_path]
         if (
-            failure_record["stage"] != first_non_present["access_path"]
-            or failure_record["access_path"] != first_non_present["access_path"]
-            or failure_record["cause"]
-            != {
-                "kind": "sdk_error",
-                "code": first_non_present["sdk_code"],
-                "field": first_non_present["sdk_field"],
-            }
+            failure_record["stage"] != access_path
+            or failure_record["access_path"] != access_path
+            or cause["kind"] != "sdk_error"
+            or cause["operation"] != expected_operation
+            or cause["access_path"] != access_path
+            or cause["code"] != first_non_present["sdk_code"]
+            or cause["field"] != first_non_present["sdk_field"]
         ):
             fail(
                 "materialization.store-failure",
                 "first reopened handle failure differs",
             )
-    elif failure_record["cause"]["kind"] != "verification_mismatch":
+        _validate_store_detail_observation(cause["detail"])
+        _validate_postpublish_first_cause_authority(
+            failure_record,
+            first_cause_authority,
+        )
+        return "committed_unverified"
+    stage_bindings = POSTPUBLISH_MISMATCH_BINDINGS.get(failure_record["stage"], {})
+    allowed_projections = stage_bindings.get(failure_record["access_path"], set())
+    if (
+        cause["kind"] != "verification_mismatch"
+        or cause["operation"] != "verify_projection"
+        or cause["access_path"] != failure_record["access_path"]
+        or cause["projection"] not in allowed_projections
+        or cause["expected_digest"] == cause["actual_digest"]
+    ):
         fail(
             "materialization.store-failure",
             "all-present reopen failure lacks an exact projection mismatch",
+        )
+    _validate_postpublish_first_cause_authority(
+        failure_record,
+        first_cause_authority,
+    )
+    return "committed_unverified"
+
+
+def _validate_store_detail_observation(detail: dict[str, Any]) -> None:
+    if detail["kind"] == "stable":
+        return
+    diagnostic_bytes = detail["diagnostic"].encode("utf-8")
+    if (
+        detail["byte_count"] != len(diagnostic_bytes)
+        or detail["digest"] != content_digest(diagnostic_bytes)
+    ):
+        fail(
+            "materialization.store-failure",
+            "opaque Store detail receipt differs from observed bytes",
+        )
+
+
+class WriterPublishInvariantBreach(MaterializationError):
+    """A publish tuple that must terminate without an authoritative response."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__("materialization.store-failure", message)
+
+
+def _writer_publish_invariant_breach(message: str) -> NoReturn:
+    raise WriterPublishInvariantBreach(message)
+
+
+def classify_writer_publish_failure(
+    request: dict[str, Any],
+    publication: dict[str, Any],
+) -> tuple[str, str]:
+    """Classify the complete registered SQLite writer_publish tuple table."""
+
+    cause = publication["store_failure"]["cause"]
+    if (
+        publication["backend"] != "sqlite"
+        or cause["kind"] != "sdk_error"
+        or cause["operation"] != "writer_publish"
+        or cause["access_path"] is not None
+    ):
+        _writer_publish_invariant_breach(
+            "writer_publish tuple is an invariant breach requiring exit two",
+        )
+    _validate_store_detail_observation(cause["detail"])
+    empty_detail = {"kind": "stable", "value": ""}
+    candidate_snapshot = publication["candidate_snapshot_id"]
+    candidate_identity = publication["candidate_identity"]
+    if not isinstance(candidate_identity, dict) or not isinstance(
+        candidate_identity.get("publication_id"), str
+    ):
+        _writer_publish_invariant_breach(
+            "writer_publish tuple lacks a constructed candidate identity and is an invariant breach",
+        )
+    candidate_publication = candidate_identity["publication_id"]
+    exact = (cause["code"], cause["field"], cause["detail"])
+    if exact == (
+        "store.publication-conflict",
+        request["publication"]["series_id"],
+        empty_detail,
+    ):
+        return "stale_parent", "rejected_stale"
+    if (
+        cause["code"] == "store.counter-overflow"
+        and cause["field"] in {"publication_sequence", "physical_generation"}
+        and cause["detail"] == empty_detail
+    ):
+        return "counter_overflow", "rejected_store_failure"
+    if exact == ("store.hash-collision", candidate_snapshot, empty_detail):
+        return "hash_collision", "rejected_store_failure"
+    if exact == ("store.snapshot-ambiguous", candidate_snapshot, empty_detail):
+        return "persistence_corrupt", "rejected_store_failure"
+    if (
+        cause["code"] == "store.sqlite-failure"
+        and cause["field"] == "database"
+        and cause["detail"]["kind"] == "opaque"
+    ):
+        return "persistence_io", "publication_outcome_unknown"
+    allowed_corruption = {
+        "sqlite": {
+            "backend",
+            "column-count",
+            "publication-row",
+            "series-head-count",
+            "series-head",
+            "series-head-sequence",
+        },
+        candidate_publication: {
+            "authority-record",
+            "duplicate-publication-id",
+            "parent",
+            "parent-sequence",
+        },
+        request["publication"]["series_id"]: {
+            "duplicate-sequence",
+            "series-roots",
+            "series-head-cas",
+        },
+    }
+    if (
+        cause["code"] == "store.corrupt"
+        and cause["detail"]["kind"] == "stable"
+        and cause["detail"]["value"]
+        in allowed_corruption.get(cause["field"], set())
+    ):
+        return "persistence_corrupt", "rejected_store_failure"
+    _writer_publish_invariant_breach(
+        "writer_publish tuple is unlisted or an invariant breach requiring exit two",
+    )
+
+
+def writer_publish_invariant_breach_disposition(
+    request: dict[str, Any],
+    publication: dict[str, Any],
+) -> dict[str, Any]:
+    """Exercise the required process boundary for an invariant-breach tuple."""
+
+    try:
+        classify_writer_publish_failure(request, publication)
+    except WriterPublishInvariantBreach as error:
+        diagnostic_bytes = str(error).encode("utf-8")
+        return {
+            "schema": "cxxlens.clang22-materialization-execution-receipt.v1",
+            "actual_exit_status": 2,
+            "exact_stdout_byte_count": 0,
+            "stdout_sha256": content_digest(b""),
+            "parsed_response_count": 0,
+            "stderr_sha256": content_digest(diagnostic_bytes),
+        }
+    raise ValueError("writer_publish tuple is classified and may use a typed response")
+
+
+def _validate_writer_publish_failure_cause(
+    request: dict[str, Any],
+    publication: dict[str, Any],
+) -> None:
+    category, outcome = classify_writer_publish_failure(request, publication)
+    if (
+        publication["store_failure"]["category"] != category
+        or publication["outcome"] != outcome
+    ):
+        fail(
+            "materialization.store-failure",
+            "writer_publish tuple category/outcome mapping differs",
         )
 
 
@@ -8248,6 +11251,8 @@ def validate_failed_publication_outcome(
     request: dict[str, Any],
     report: dict[str, Any],
     expected_store: dict[str, Any],
+    *,
+    postpublish_failure_authority: dict[str, Any] | None,
 ) -> None:
     publication = report["publication"]
     outcome = publication["outcome"]
@@ -8283,7 +11288,6 @@ def validate_failed_publication_outcome(
         expected_category = publication["store_failure"]["category"]
         if expected_category not in {
             "counter_overflow",
-            "identity_validation",
             "hash_collision",
             "persistence_corrupt",
         }:
@@ -8306,6 +11310,12 @@ def validate_failed_publication_outcome(
         or semantic["reopened_store"] is not None
     ):
         fail("materialization.store-failure", "failed Store outcome binding differs")
+    if outcome in {
+        "rejected_stale",
+        "rejected_store_failure",
+        "publication_outcome_unknown",
+    }:
+        _validate_writer_publish_failure_cause(request, publication)
     if outcome in {"rejected_stale", "rejected_store_failure"}:
         if (
             publication["invocation_commit_state"] != "not_committed"
@@ -8324,12 +11334,6 @@ def validate_failed_publication_outcome(
             or publication["invocation_commit_state"] != "unknown"
             or publication["committed_transaction_count"] is not None
             or publication["invocation_committed_record"] is not None
-            or publication["store_failure"]["cause"]
-            != {
-                "kind": "sdk_error",
-                "code": "store.sqlite-failure",
-                "field": publication["store_failure"]["cause"]["field"],
-            }
             or semantic["reopen_attempt"] is not None
             or semantic["failure"] is not None
         ):
@@ -8356,7 +11360,11 @@ def validate_failed_publication_outcome(
                 "materialization.store-failure",
                 "committed-unverified invocation evidence differs",
             )
-        _validate_committed_unverified_attempt(request, report)
+        _validate_committed_unverified_attempt(
+            request,
+            report,
+            postpublish_failure_authority=postpublish_failure_authority,
+        )
     if publication["backend"] == "sqlite":
         _validate_publication_recovery_receipt(request, publication)
         if publication["sqlite_reopen_status"] != publication["recovery_receipt"][
@@ -8401,6 +11409,7 @@ def _semantic_matrix_projection(request: dict[str, Any]) -> dict[str, Any]:
                 "semantic_contract_digest",
                 "protocol_major",
                 "protocol_minor",
+                "required_features",
                 "sandbox_policy_digest",
             )
         },
@@ -8588,10 +11597,12 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
     contract_schema = load(root / CONTRACT_SCHEMA)
     request_schema = load(root / REQUEST_SCHEMA)
     report_schema = load(root / REPORT_SCHEMA)
+    occurrence_schema = load(root / OCCURRENCE_SCHEMA)
     for label, schema in (
         ("contract", contract_schema),
         ("request", request_schema),
         ("report", report_schema),
+        ("materializer occurrence manifest", occurrence_schema),
     ):
         try:
             jsonschema.Draft202012Validator.check_schema(schema)
@@ -8601,7 +11612,18 @@ def validate_documents(root: pathlib.Path) -> dict[str, Any]:
                 f"materialization {label} schema: {error.message}",
             )
     validate_schema(contract, contract_schema, "materialization contract")
-    validate_contract_exact(contract)
+    validate_occurrence_manifest(
+        root,
+        fixture_occurrence_manifest(
+            root,
+            source_revision="1" * 40,
+            source_tree="2" * 40,
+            configuration="static",
+            tool_digest="sha256:" + "1" * 64,
+            worker_digest="sha256:" + "1" * 64,
+        ),
+    )
+    validate_contract_exact(contract, request_schema)
     validate_project_catalog_authority(root)
     validate_materialization_dependency_graph(
         contract,

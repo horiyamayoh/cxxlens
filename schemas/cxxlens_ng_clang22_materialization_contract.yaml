@@ -1,5 +1,5 @@
 schema: cxxlens.clang22-materialization-contract.v2
-document_version: 2.0.0
+document_version: 2.1.0
 maturity: accepted
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -30,6 +30,11 @@ surface:
   transport: one-json-request-on-stdin-one-json-response-on-stdout
   stderr: diagnostic-only
   shell: forbidden
+  cli:
+    accepted: argc-exactly-one-no-options-no-operands
+    argv0: diagnostic-only
+    invalid: before-stdin-authentication-exit-two-zero-stdout-zero-worker-and-store-effects
+    diagnostic: bounded-stderr-only
   json_lexical_policy:
     encoding: strict-utf8-no-bom
     document: exactly-one-top-level-object
@@ -47,6 +52,18 @@ surface:
     supported_version_schema_failure_phase: request-schema
     identity_or_binding_failure_phase: request-binding
     first-failing-boundary-is-authoritative: true
+    streaming_lifecycle:
+      - capture-limit-plus-one-into-one-immutable-raw-spool
+      - pass-one-strict-utf8-json-duplicates-envelope-and-version
+      - pass-two-selected-v2-schema-and-bottom-up-binding
+      - streaming-base64-validation-and-source-receipts
+      - seal-complete-request-before-effects
+      - replay-one-canonical-task-at-a-time
+    pass_one_dom: forbidden
+    pass_two_global_catalog_owner: exactly-one-immutable-value
+    task_index: compact-spool-backed
+    raw_json_token_is_decoded_string_authority: false
+    replay: same-strict-json-string-decoder-and-receipt-revalidation
   input_observation:
     maximum_request_bytes: 1073741824
     maximum_consumed_bytes: 1073741825
@@ -59,9 +76,25 @@ surface:
     maximum_aggregate_decoded_source_bytes: 536870912
     maximum_content_base64_characters_per_task: 22369624
     maximum_response_bytes: 1073741824
+    maximum_json_depth: 64
+    maximum_json_member_name_utf8_bytes: 256
+    maximum_strong_id_unicode_scalars: 512
+    maximum_strong_id_utf8_bytes: 2048
+    maximum_logical_path_utf8_bytes: 4096
+    maximum_sqlite_relative_path_utf8_bytes: 4095
+    maximum_argv_items: 4096
+    maximum_argv_item_utf8_bytes: 2048
+    provider_input_chunk_bytes: 1048576
+    maximum_provider_task_input_bytes: 67108864
+    maximum_provider_input_chunks: 64
     raw_request_storage: bounded-chunk-read-and-private-spool
     json_processing: streaming-strict-utf8-duplicate-aware-no-one-gib-dom
     source_decoding: streaming-base64-to-bounded-private-spool
+    retained_memory_claim:
+      excluded_resident_sets: [raw-one-gib-request, aggregate-source-bytes, all-task-payloads, task-count-times-catalog-count-copies]
+      bound: one-shared-catalog-plus-fixed-parser-and-chunk-buffers-plus-one-task-index-window-plus-one-decoded-source-plus-one-output-validation-window
+      task_count_independent_absolute-rss: not-claimed
+      task_index_and_bulk-occurrences: private-spool
     report_construction:
       lifecycle: bounded-two-phase-report-lifecycle
       lifecycle_order:
@@ -122,12 +155,14 @@ surface:
     sqlite_recovery: read-only-exact-selector-parent-candidate-snapshot-and-publication-inspection
     memory_after_exit_two: process-local-store-lost-fresh-rerun-only
 versioning:
-  machine_contract: 2.0.0
-  request: 2.0.0
-  report: 2.0.0
+  machine_contract: 2.1.0
+  request: 2.1.0
+  report: 2.1.0
   provider_task_input_codec: cxxlens.clang22.task.v3
   observation_native_codec: cxxlens.clang22.observation-native.v2
-  provider_protocol: 1.0.0
+  provider_protocol: 1.1.0
+  provider_protocol_required_feature: task-input-chunks-v1
+  provider_protocol_minor_zero_fallback: forbidden
   unknown_member: reject
   missing_required_member: reject
   adjacent_version_fallback: forbidden
@@ -144,8 +179,7 @@ identity:
     - source_revision
     - source_tree
     - package_configuration
-    - prefix_manifest_digest
-    - relocated_prefix_digest
+    - occurrence_manifest_digest
   exact_worker_identity:
     - executable
     - provider_id
@@ -154,7 +188,37 @@ identity:
     - semantic_contract_digest
     - protocol_major
     - protocol_minor
+    - required_features
     - sandbox_policy_digest
+  installed_occurrence:
+    schema: cxxlens.clang22-materializer-occurrence-manifest.v1
+    fixed_path: share/cxxlens/materialization/clang22/occurrence-v1.json
+    request_authority: expected-exact-manifest-file-digest
+    manifest_payload:
+      fields: [schema, manifest_version, source_revision, source_tree, package_configuration, files, occurrence_payload_digest]
+      files: configuration-closed-exact-ordered-role-prefix-relative-path-and-sha256-digest-records
+      configuration_inventories:
+        static:
+          count: 12
+          ordered_roles: [materializer-executable, worker-executable, relation-registry, project-catalog-contract, portable-provider-task-contract, provider-protocol, provider-runtime-contract, snapshot-store-contract, materialization-contract, materialization-contract-schema, materialization-request-schema, materialization-report-schema]
+        shared:
+          count: 18
+          ordered_roles: [materializer-executable, worker-executable, relation-registry, project-catalog-contract, portable-provider-task-contract, provider-protocol, provider-runtime-contract, snapshot-store-contract, materialization-contract, materialization-contract-schema, materialization-request-schema, materialization-report-schema, base, kernel, query, recipes, provider-sdk, clang22-provider-sdk]
+          package_owned_runtime_dso_paths: safe-prefix-relative-lib-or-lib64-soname
+      external_system_libraries: excluded-toolchain-and-runtime-evidence-only
+      self_entry: forbidden
+      digest: sha256-of-utf8-canonical-json-sorted-keys-no-whitespace-exact-manifest-fields-excluding-occurrence_payload_digest
+      inventory_digest: sha256-of-utf8-canonical-json-sorted-keys-no-whitespace-ordered-role-path-digest-records
+    runtime_measurement:
+      executable_object: proc-self-exe-opened-regular-not-deleted
+      prefix_derivation: exact-kernel-executable-object-at-bin-cxxlens-clang22-materialize
+      lookup: prefix-dirfd-openat2-resolve-beneath-no-symlinks-no-magiclinks
+      file_digest: stable-before-after-stat-over-opened-fd
+      before_worker_or_store_effect: required
+      argv0_or_path_authority: forbidden
+    trust_claim: measured-self-consistency-and-invocation-attribution-only
+    external_trust_witness: full-prefix-install-artifact-manifest-including-occurrence-manifest-bytes
+    external-full-prefix-digest-in-request-or-semantic-identity: forbidden
   derived_ids_and_digests_recomputed_and_compared:
     - materialization_request_id
     - authority_registry_digest
@@ -310,7 +374,7 @@ registry_engine_binding:
     execution_profile: trust.native-worker
     required_qualification: canonical-semantic-qualified
     digest_domain: cxxlens.clang22-installed-native-worker-trust.v1
-    projection: [policy-id, execution-profile, provider-id, provider-version, provider-semantic-contract-digest, protocol-major, protocol-minor, required-qualification, worker-sandbox-policy-digest, sorted-unique-task-minimum-and-policy-digest-tuples]
+    projection: [policy-id, execution-profile, provider-id, provider-version, provider-semantic-contract-digest, protocol-major, protocol-minor, required-features, required-qualification, worker-sandbox-policy-digest, sorted-unique-task-minimum-and-policy-digest-tuples]
     physical_binary_configuration_prefix_backend_and-path: excluded
   selector:
     exact_fields: [catalog-id, channel-id, engine-generation-id, condition-universe-id, engine-registry-digest, interpretation-policy-digest, trust-policy-digest]
@@ -453,6 +517,45 @@ project_and_tasks:
     payload_authority: installed-tool-derived-only
     task_input_digest: sha256-content-digest-of-exact-projection-bytes
     old_codec_or_caller_payload: reject
+    logical_transfer:
+      authority: exact-canonical-task-v3-bytes-and-task-input-digest
+      fragmentation_changes-logical-identity: false
+      ambient-path-or-fd-authority: forbidden
+    physical_transfer:
+      provider_protocol: 1.1.0
+      required_feature: task-input-chunks-v1
+      mode: authenticated-input-descriptor-and-canonical-chunks
+      open_task_payload: empty
+      canonical_chunk_bytes: 1048576
+      maximum_task_input_bytes: 67108864
+      maximum_chunk_count: 64
+      task_accepted: only-after-length-order-final-digest-task-v3-and-portable-task-validation
+      minor-zero-inline-fallback: forbidden
+    maximum_projection_proof:
+      authority: checker-derived-from-every-projected-request-field-count-and-utf8-byte-bound
+      request_schema: schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
+      derivation_digest: sha256:d74c62f50f3344e86ac4f32d9be9a8305902e28fee2876faac41d783e28a5f61
+      arithmetic: checked-uint64-add-and-multiply
+      canonical_length_field_bytes: 8
+      component_maximum_bytes:
+        contract_tag: 32
+        full_global_project_catalog: 10652161
+        selected_catalog_compile_unit_id: 2057
+        final_relation_compile_unit_id: 2057
+        exact_per_tu_task_payload: 30873900
+      outer_tuple_framing_bytes: 49
+      structural_leaf_schema_count: 60
+      maximum_expanded_leaf_value_count: 20535
+      bounded_utf8_leaf_schema_count: 43
+      maximum_expanded_bounded_utf8_value_count: 20518
+      maximum_projection_bytes: 41530256
+      transfer_limit_bytes: 67108864
+      margin_bytes: 25578608
+      saturated_vector:
+        construction: schema-maximal-canonical-task-v3-stream
+        byte_count: 41530256
+        digest: sha256:7bcc875ee4b64ee779c9afc0986e54cefc57afe6a9a7b6abeee8b8eaf6877b0e
+      runtime_magic_constant_only: forbidden
   task_execution_matching:
     key: [provider_task_id, task_input_digest, provider_execution_id]
     provider_task_id_uniqueness: not-required
@@ -555,14 +658,22 @@ claim_adoption:
     staged_claims: exact-two-groups
     missing: reject-entire-materialization
   guarantee:
-    exact_preconditions: [zero-non-exact-in-each-observation-descriptor-census, complete-balanced-coverage, no-blocking-unresolved, no-absent-primary-span-bundle, exact-task-census, exact-six-batches, full-span-validation, complete-provenance, successful-publication]
+    profile:
+      id: cxxlens.clang22-materialization-guarantee-profile.v1
+      digest_domain: cxxlens.clang22-materialization-guarantee-profile.v1
+      owner: exact-materialization-contract-version
+      assumptions: []
+      verification_modalities: [clang22.materialization-sealed.v1, provider.transcript-sealed.v1, sdk.claim-envelope-validated.v1]
+      caller-or-report-builder-mutation: forbidden
+    exact_preconditions: [zero-non-exact-in-each-observation-descriptor-census, complete-balanced-semantic-coverage, exact-transport-task-coverage, no-blocking-unresolved, no-absent-primary-span-bundle, exact-task-census, exact-six-batches, full-span-validation, complete-provenance]
+    postpublication_evidence_excluded: [successful-publication, query-parity, store-reopen]
     non_exact: preserve-typed-approximation-assumptions-modalities-and-unresolved
     inference_from-success-or-prose: forbidden
 store_binding:
   materializer_semantics:
     digest_domain: cxxlens.clang22-materializer-semantics.v1
     projection: [tool-executable, tool-interface-version, tool-distribution-version, source-revision, source-tree, sorted-materialization-authority-path-and-digest-tuples]
-    excludes: [installed-tool-digest, installed-worker-digest, package-configuration, prefix-digests, backend, sqlite-path]
+    excludes: [installed-tool-digest, installed-worker-digest, package-configuration, occurrence-manifest-and-inventory-digests, backend, sqlite-path]
   direct_basis:
     projection_version: cxxlens.clang22-direct-materialization-basis.v1
     digest_domain: cxxlens.clang22-direct-materialization-basis.v1
@@ -570,11 +681,11 @@ store_binding:
     projection:
       - projection-version
       - materializer-semantics-digest
-      - [worker-provider-id, worker-provider-version, worker-semantic-contract-digest, protocol-major, protocol-minor]
+      - [worker-provider-id, worker-provider-version, worker-semantic-contract-digest, protocol-major, protocol-minor, required-features]
       - [project-id, catalog-id, catalog-digest]
       - [engine-generation-contract, engine-generation-id, engine-registry-digest, sorted-descriptor-id-runtime-digest-tuples]
       - sorted-exact-seven-field-semantic-task-context-and-task-input-digest-tuples
-    excludes: [provider-execution-id, installed-binary-and-prefix-digests, package-configuration, backend, sqlite-path, series-parent-publication, timestamp, task-arrival-order]
+    excludes: [provider-execution-id, installed-binary-and-occurrence-digests, package-configuration, backend, sqlite-path, series-parent-publication, timestamp, task-arrival-order]
     sdk_direct_input_basis: claim-input-basis-digest-of-direct-claim-basis
   producers:
     worker_assertion: [worker-provider-id, worker-semantic-contract-digest]
@@ -643,12 +754,15 @@ store_binding:
       approximation: exact
       scope: request-project-id
       assumptions: derived-assumption-set-id
-      verification-modalities: exact-canonical-sorted-report-modalities
+      verification-modalities: exact-closed-guarantee-profile-modalities
     assumption_set_id:
       domain: cxxlens.clang22-assumption-set.v1
-      projection: canonical-sorted-report-assumption-ids
+      projection: canonical-exact-empty-profile-assumptions
       value: assumption-set-prefix-plus-semantic-digest-v2
-    verification_modalities: canonical-sorted-report-modalities
+    verification_modalities: [clang22.materialization-sealed.v1, provider.transcript-sealed.v1, sdk.claim-envelope-validated.v1]
+    registered_symbol_grammar: sdk-validate-registered-symbol-equivalent
+    caller_supplied_guarantee_authority: forbidden
+    postpublication_modalities: semantic-verification-and-release-occurrence-only
   partition:
     identity_fields: [relation-descriptor-id, scope, condition-canonical-form, interpretation, producer-semantic-contract, actual-claim-input-basis-digest, precision-profile, assumption-set-id]
     grouping: exact-all-eight-fields
@@ -708,7 +822,20 @@ store_binding:
 side_channels:
   coverage:
     record_type: typed-coverage-unit
-    balance: requested-fragments-exact-partition
+    complete_worker_record_set_per_task:
+      transport: [{kind: task, id: exact-provider-task-id, state: covered, reason: empty}]
+      semantic_kinds: [cc.call-extraction, cc.entity, frontend.clang22.observation]
+      semantic_id: exact-provider-task-id
+      qualified_semantic_state_and_reason: covered-and-empty
+      canonical_order: kind-id-state-reason
+      missing-duplicate-extra-renamed-wrong-task-or-state: reject
+    generic_validator: transport-required-specialization-blind-and-lossless
+    specialization_seal: exact-three-semantic-records-plus-retained-transport-record
+    report_planes: [transport, semantic]
+    global_transport_count: exact-task-count
+    global_semantic_count: exact-three-times-task-count
+    filtering-or-plane-substitution: forbidden
+    balance: requested-semantic-fragments-exact-partition
     empty-success: forbidden
   unresolved:
     record_type: typed-unresolved-item
@@ -731,7 +858,10 @@ side_channels:
     canonical_without-input-edge: reject
   guarantee:
     record_type: typed-guarantee
-    fields: [approximation, scope, assumptions, verification_modalities, observation_descriptor_censuses]
+    profile: cxxlens.clang22-materialization-guarantee-profile.v1
+    fields: [profile_id, profile_digest, approximation, scope, assumptions, verification_modalities, observation_descriptor_censuses]
+    task_fragment_inputs: [closed-profile, actual-semantic-coverage-census, unresolved, evidence, batch-completeness, observation-equivalence-census]
+    global_digest_inputs: [profile-id-and-digest, semantic-and-transport-side-channel-digests, task-guarantee-fragments, observation-descriptor-censuses]
 publication:
   target_per_request: exactly-one-of-memory-or-sqlite
   transaction_per_request: exactly-one-all-tasks-all-groups
@@ -757,7 +887,7 @@ publication:
       backend: sqlite-only
       invocation_commit_state: not_committed
       invocation_commit_count: 0
-      sdk_codes: [store.publish-stale-parent, store.publication-conflict]
+      sdk_codes: [store.publication-conflict]
       candidate_identity_and_visibility:
         not-constructed: not_applicable
         constructed: [absent, present_external, unknown-on-typed-recovery-error]
@@ -767,7 +897,7 @@ publication:
       backend: sqlite-only
       invocation_commit_state: not_committed
       invocation_commit_count: 0
-      categories: [counter_overflow, identity_validation, hash_collision, persistence_corrupt]
+      categories: [counter_overflow, hash_collision, persistence_corrupt]
       candidate_identity_and_visibility:
         not-constructed: not_applicable
         constructed: [absent, present_external, unknown-on-typed-recovery-error]
@@ -797,19 +927,44 @@ publication:
   memory_outcomes: [committed_verified, committed_unverified]
   materializer-memory-precommit-sdk-error: exit-two-no-authoritative-response
   sdk_publish_mapping:
-    store.transaction-state: materializer-invariant-breach-exit-two
-    store.publish-stale-parent: rejected_stale-not-constructed
-    store.publication-conflict: rejected_stale-constructed-only-after-exact-parent-authority-validation
-    store.counter-overflow: rejected_store_failure
-    store.corrupt-publication-identity: rejected_store_failure-identity_validation
-    store.hash-collision: rejected_store_failure-hash_collision
-    store.corrupt-persisted-authority: rejected_store_failure-persistence_corrupt
-    store.sqlite-failure-after-reopen: publication_outcome_unknown-persistence_io-regardless-of-candidate-visibility
-    publish-returned-handle-then-any-verification-failure: committed_unverified
+    classification_key: [authenticated-operation, backend, exact-sdk-code, exact-sdk-field, authority-declared-stable-detail]
+    diagnostic-prose-parsing: forbidden
+    prepublication_operations: [configuration, store_open, head_current, writer_begin, partition_stage, closure_stage, writer_validate]
+    prepublication_failure: compact-phase-authentic-publication-not-attempted-zero-commit
+    writer_publish_sqlite:
+      store.publication-conflict: {field: exact-series-id, detail: empty, outcome: rejected_stale}
+      store.counter-overflow: {fields: [publication_sequence, physical_generation], detail: empty, outcome: rejected_store_failure-counter_overflow}
+      store.hash-collision: {field: exact-candidate-snapshot-id, detail: empty, outcome: rejected_store_failure-hash_collision}
+      store.snapshot-ambiguous: {field: exact-snapshot-id, detail: empty, outcome: rejected_store_failure-persistence-corrupt}
+      store.sqlite-failure: {field: database, detail: opaque, outcome: publication_outcome_unknown-persistence_io}
+      store.corrupt:
+        exact_fields_and_details:
+          sqlite: [backend, column-count, publication-row, series-head-count, series-head, series-head-sequence]
+          exact-publication-id: [authority-record, duplicate-publication-id, parent, parent-sequence]
+          exact-series-id: [duplicate-sequence, series-roots, series-head-cas]
+        outcome: rejected_store_failure-persistence-corrupt
+    publish_returned_handle: exact-returned-record-is-commit-proof
+    postpublish_operations: [store_reopen, verify_current, verify_open_publication, verify_open_snapshot, verify_projection]
+    postpublish-error-or-mismatch: committed_unverified-preserve-first-cause
+    invariant_breach_exit_two:
+      - store.transaction-state/publish/empty
+      - store.corrupt/publication/identity
+      - store.publish-stale-parent
+      - any-memory-backend-publish-error
+      - every-unlisted-writer-publish-tuple
+    recovery-observation-reclassification: forbidden
   store_failure_cause_union:
-    sdk_error: [exact-sdk-code, exact-sdk-field]
-    verification_mismatch: [access-path-or-null, named-projection, expected-digest, actual-digest]
+    sdk_error: [authenticated-operation, access-path-or-null, exact-sdk-code, exact-sdk-field, stable-or-opaque-exact-detail-observation]
+    verification_mismatch: [authenticated-operation, access-path-or-null, named-projection, expected-digest, actual-digest]
     fabricated-sdk-error-for-successful-call-mismatch: forbidden
+  sqlite_effect_root:
+    capture: startup-current-working-directory-opened-once-before-request-parsing
+    request_path: canonical-relative-utf8-no-empty-dot-dotdot-root-drive-nul-backslash-or-normalization-change
+    implementation: source-private-rooted-sqlite-vfs
+    resolution: openat2-beneath-no-symlinks-no-magiclinks-for-database-wal-shm-and-journal
+    unsupported-kernel-or-vfs: fail-before-store-effect
+    operational_receipt: [rooted-vfs-v1, mount-device-inode-observation-digest, exact-relative-path, parent-and-leaf-resolution-verdict]
+    semantic-snapshot-claim-backend-parity-identity: excluded
   definitive-zero-commit-claim: requires-precommit-phase-authentic-typed-sdk-code
   sqlite-candidate-absence-after-phase-opaque-error: recovery-evidence-not-zero-commit-proof
   rollback-call-success-assumption: forbidden
@@ -853,7 +1008,12 @@ report:
     compact_failure:
       binding_states: [raw-input-only, request-bound]
       phases: [input-limit, json-decode, request-envelope, request-version, request-schema, request-binding, installation-binding, worker-launch, transcript, materialization-validation, store-open, store-stage, report-construction]
-      exact_effects: [worker-launch-attempt-count, worker-launch-success-count, store-draft-state, head-observation, publication-attempted, committed-transaction-count, prior-history-retained]
+      exact_effects: [worker-launch-attempt-count, worker-launch-success-count, store-draft-state, head-observation, publication-attempted, committed-transaction-count, prior-history-retained, first-store-failure-cause-or-null]
+      prepublication_store_failure_cause:
+        exact_fields: [authenticated-operation, access-path-or-null, exact-sdk-code, exact-sdk-field, stable-or-opaque-exact-detail-observation]
+        operations: [store_open, head_current, writer_begin, partition_stage, closure_stage, writer_validate]
+        verification_source: source-private-first-sdk-error-observation-not-report-self-consistency
+        non_store_compact_failure: null
       detailed_execution_sections: forbidden
       release_evidence: forbidden
       report_construction_phase: prepublication-zero-effect-only-before-publish-call
@@ -866,19 +1026,22 @@ report:
     - exact-registry-and-six-descriptor-digests
     - exact-three-registry-identity-axes-and-twelve-descriptor-engine-inventory
     - exact-engine-generation-interpretation-trust-and-seven-field-selector
-    - every-task-input-and-transcript-digest
+    - every-task-logical-input-and-authenticated-chunk-transfer-receipt
+    - every-task-raw-frame-frame-transcript-and-sealed-transcript-runtime-receipt
+    - exact-transport-and-semantic-coverage-record-planes
     - every-group-and-batch-digest
     - typed-side-channel-digests
     - base-claim-and-span-validation-digests
     - exact-base-descriptor-row-envelope-and-edge-censuses
     - claim-stage-and-provenance-digests
-    - guarantee-digest
+    - closed-prepublication-guarantee-profile-and-digest
     - expected-parent-and-publication-identities
     - exact-sdk-claim-rows-full-envelopes-hidden-precursor-edges-and-origin-associations
     - exact-complete-final-claim-batch-zero-conflict-verdict
     - exact-claim-basis-eight-field-partitions-snapshot-manifest-and-store-publication-record
     - exact-reopened-descriptor-manifest-binding-row-annotation-coverage-unresolved-and-cursor-projection
-    - installed-prefix-and-configuration
+    - requested-and-measured-installed-occurrence-and-configuration
+    - rooted-sqlite-effect-receipt-outside-semantic-identities
   passed: detailed-sealed-result-and-committed-single-transaction-only
   failed: compact-phase-authentic-or-detailed-complete-closed-publication-outcome
   digest_chain:
@@ -899,13 +1062,37 @@ report:
       result_domain: cxxlens.clang22-task-result.v1
       result_set_domain: cxxlens.clang22-task-result-set.v1
       raw_frame_set_domain: cxxlens.clang22-raw-frame-set.v1
+      transcript_receipt:
+        raw_frame_stream: exact-provider-stdout-byte-count-and-sha256-before-decode-or-move
+        expected_provider_identity:
+          exact_fields: [provider_id, provider_version, provider_binary_digest, provider_semantic_contract_digest, protocol_major, protocol_minor, required_features, sandbox_policy_digest, offered_relations]
+          source: exact-request-worker-identity-negotiated-session-measured-worker-binary-and-authorized-descriptor-order
+          report_cross_binding: provider-report-plus-measured-worker-occurrence-plus-registry-descriptor-set
+          provider-output-self-consistency: forbidden
+        frame_transcript_domain: cxxlens.provider-frame-transcript.v2
+        sealed_transcript_domain: cxxlens.provider-sealed-transcript.v1
+        sealed_transcript_exact_fields: [task_id, terminal, batches, coverage_records, unresolved_records, evidence_records]
+        sealed_transcript_exact_batch_fields: [task_id, descriptor_id, descriptor_digest, dependency_group_id, atomic_output_group_id, batch_id, batch_digest, ordered_chunk_digests, row_canonical_forms]
+        sealed_transcript_exact_coverage_fields: [kind, id, state, reason]
+        sealed_transcript_exact_unresolved_fields: [code, subject, detail]
+        sealed_transcript_exact_evidence_fields: [kind, subject, producer, summary]
+        sealed_transcript_digest_projection: [task-id, terminal, batches, full-flat-coverage-records, full-unresolved-records, full-evidence-records]
+        materialization-specialization-projection: none
+        construction: same-shared-validation-pass-that-constructs-immutable-seal
+        public-process-semantic-digest-alias: forbidden
+      input_transfer_receipt:
+        protocol: 1.1.0-task-input-chunks-v1
+        fields: [task-input-codec, logical-byte-count, logical-task-input-digest, canonical-chunk-size, chunk-count, ordered-chunk-payload-digest-set-digest]
+        raw-host-frames-authorize-task-or-adoption: false
     global_side_channels:
-      domains: [cxxlens.clang22-global-coverage.v1, cxxlens.clang22-global-unresolved.v1, cxxlens.clang22-global-evidence.v1]
+      domains: [cxxlens.clang22-global-transport-coverage.v1, cxxlens.clang22-global-coverage.v1, cxxlens.clang22-global-unresolved.v1, cxxlens.clang22-global-evidence.v1]
+      transport-versus-semantic-coverage: separate-recomputable-record-planes
       task_order: semantic-task-key-byte-order
       physical_provider_execution: excluded
     guarantee:
       domain: cxxlens.clang22-materialization-guarantee.v1
-      inputs: [global-side-channel-digests, task-guarantee-fragments, canonical-three-observation-descriptor-censuses]
+      profile_domain: cxxlens.clang22-materialization-guarantee-profile.v1
+      inputs: [exact-profile-id-and-digest, global-side-channel-digests, task-guarantee-fragments, canonical-three-observation-descriptor-censuses]
       base-or-claim-stage-back-edge: forbidden
     claim_stage:
       content_domain: cxxlens.clang22-claim-stage-content-set.v1
@@ -939,7 +1126,18 @@ report:
         closed-mixture: present-or-typed-non-present-for-all-three-paths
         retain-every-successful-projection: true
         first-failure: exact-stage-path-and-sdk-error-or-projection-mismatch
-      exact_compare: [selector, snapshot-manifest, eight-field-partition-bindings, rows, claim-annotation-multiset, coverage-multiset, unresolved, descriptor-inventory]
+        mismatch_digest_binding:
+          expected: recomputed-exact-store-handle-projection
+          actual: retained-successful-handle-projection-at-exact-access-path
+          retained_digest_fields: [snapshot-manifest, partition-bindings, rows, claim-annotations, coverage, unresolved, closure, cursor-projection, canonical-export]
+          computed_domains:
+            publication-semantic-fields: cxxlens.clang22-reopened-publication-semantic-fields.v1
+            physical-generation-transition: cxxlens.clang22-reopened-physical-generation.v1
+            descriptor-inventory: cxxlens.clang22-reopened-descriptor-inventory.v1
+            open-snapshot-return-binding: cxxlens.clang22-reopened-open-snapshot-return.v1
+          cross-path-equality: first-fixed-path-semantic-projection-digest-that-differs-from-expected
+          cause-expected-actual-exact-equality: required
+      exact_compare: [selector, snapshot-manifest, eight-field-partition-bindings, rows, claim-annotation-multiset, coverage-multiset, unresolved, closure, descriptor-inventory]
       canonical_export_digest: sha256-of-exact-utf8-bytes-returned-by-sdk-canonical-export
       snapshot_manifest_digest: sha256-of-exact-canonical-json-utf8-bytes
       receipt_leaf_digests: domain-separated-canonical-tuples-in-named-field-order
@@ -963,6 +1161,11 @@ qualification:
   memory_sqlite_semantic_parity: required
   static_shared_semantic_parity: required
   exact_observation_equivalence: required-zero-non-exact-per-descriptor
+  scale_and_resource_evidence:
+    cases: [one-task, four-thousand-ninety-six-tasks, sixteen-mib-source, five-hundred-twelve-mib-aggregate-source, one-gib-raw-request, arbitrary-short-reads]
+    retained_memory_formula: one-shared-catalog-plus-fixed-buffers-plus-one-task-window-plus-one-source-plus-one-output-window
+    forbidden_residency: [raw-request, aggregate-source, all-task-payloads, task-count-times-catalog-count]
+    spool-failure: zero-effect-before-publication
   execution_receipt:
     fields: [actual-exit-status, exact-stdout-byte-count, stdout-sha256, parsed-response-count, stderr-sha256-diagnostic-only]
     cross_binding: stdout-bytes-are-the-exact-report-artifact
@@ -1010,31 +1213,45 @@ errors:
       post-publication-verification: [materialization.store-failure]
   compact_effect_matrix:
     raw-input-only:
-      all-phases: [launch-attempts-zero, launch-successes-zero, draft-not-created, head-not-observed, publication-not-attempted, commit-zero]
+      all-phases: [launch-attempts-zero, launch-successes-zero, draft-not-created, head-not-observed, publication-not-attempted, commit-zero, store-failure-cause-null]
       input-limit: raw-prefix-exact-limit-plus-one-complete-false
       non-input-limit: exact-complete-raw-bytes
-    installation-binding: [launch-attempts-zero, launch-successes-zero, draft-not-created, head-not-observed]
-    worker-launch: [launch-attempts-one-through-task-count, launch-successes-equals-attempts-minus-one, draft-not-created, head-not-observed]
-    transcript: [launch-attempts-task-count, launch-successes-task-count, draft-not-created, head-not-observed]
-    materialization-validation: [launch-attempts-task-count, launch-successes-task-count, draft-not-created, head-not-observed]
-    store-open: [launch-attempts-task-count, launch-successes-task-count, draft-not-created, head-not-observed]
-    store-stage: [launch-attempts-task-count, launch-successes-task-count, draft-discarded, head-observed-absent-or-present]
-    report-construction: [launch-attempts-task-count, launch-successes-task-count, draft-discarded, head-observed-absent-or-present, publication-not-attempted]
+    installation-binding: [launch-attempts-zero, launch-successes-zero, draft-not-created, head-not-observed, store-failure-cause-null]
+    worker-launch: [launch-attempts-one-through-task-count, launch-successes-equals-attempts-minus-one, draft-not-created, head-not-observed, store-failure-cause-null]
+    transcript: [launch-attempts-task-count, launch-successes-task-count, draft-not-created, head-not-observed, store-failure-cause-null]
+    materialization-validation: [launch-attempts-task-count, launch-successes-task-count, draft-not-created, head-not-observed, store-failure-cause-null]
+    store-open: [launch-attempts-task-count, launch-successes-task-count, draft-not-created, head-not-observed, exact-first-store-open-sdk-error]
+    store-stage: [launch-attempts-task-count, launch-successes-task-count, draft-discarded, head-observed-absent-or-present, exact-first-stage-sdk-error-for-store-failure-otherwise-null]
+    report-construction: [launch-attempts-task-count, launch-successes-task-count, draft-discarded, head-observed-absent-or-present, publication-not-attempted, store-failure-cause-null]
     successful-launch-count-not-attempt-count: required
   diagnostic_prose_control_flow: forbidden
   unknown_error_code: materialization.report-invalid
 lifetime:
   request_bytes: bounded-limit-plus-one-observation-valid-until-response-write-completes
-  source_bytes: owned-until-corresponding-worker-task-terminal
+  raw_request: immutable-private-spool-until-response-write-completes
+  catalog: one-shared-immutable-owner
+  task_index: compact-spool-backed-until-all-tasks-terminal
+  source_bytes: at-most-one-private-spool-owned-until-corresponding-worker-task-terminal
+  task_input_bytes: at-most-one-sealed-replayable-private-spool-until-corresponding-worker-task-terminal
+  provider_input_chunks: fixed-buffer-streamed-and-not-retained-as-authority
   decoded_rows: owned-only-inside-sealed-result-builder
   sealed_result: immutable-until-transaction-terminal
   native_clang_objects: worker-job-thread-process-confined
-  raw_frames: diagnostic-only-and-destroyed-before-process-exit
+  raw_frames: diagnostic-only-and-destroyed-after-shared-runtime-receipt-and-immutable-seal
   store_claims: value-owned-after-commit
   public_handle: none
 acceptance:
   - bounded-phase-authentic-response-union
   - streaming-bounded-request-source-and-two-phase-report-construction
+  - two-pass-spool-request-without-one-gib-dom-or-all-task-payloads
+  - protocol-minor-one-authenticated-task-input-chunks-without-inline-fallback
+  - exact-task-v3-logical-identity-independent-of-fragmentation
+  - separate-transport-and-semantic-coverage-planes
+  - runtime-owned-raw-frame-frame-transcript-and-sealed-transcript-receipt
+  - contract-owned-prepublication-guarantee-profile
+  - measured-installed-occurrence-plus-external-full-prefix-witness
+  - closed-argc-one-cli-and-rooted-sqlite-vfs
+  - operation-first-exact-sdk-store-outcome-mapping
   - no-completed-report-or-fabricated-publication-values-before-publication
   - no-compact-downgrade-after-publication-attempt
   - exact-three-registry-identity-axes

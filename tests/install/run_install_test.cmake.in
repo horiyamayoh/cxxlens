@@ -59,6 +59,7 @@ if(PHASE STREQUAL "prepare")
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request.schema.yaml"
       "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materialization_report.schema.yaml"
+      "${install_prefix}/share/cxxlens/schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml"
       "${install_prefix}/share/doc/cxxlens/LICENSE"
       "${install_prefix}/share/doc/cxxlens/NOTICE"
       "${install_prefix}/bin/cxxlens-provider-scaffold"

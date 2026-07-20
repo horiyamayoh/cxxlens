@@ -26,6 +26,8 @@ from check_ng_sdk_contract import (  # noqa: E402
     validate_boundaries,
     validate_catalog,
     validate_generated_relation_header,
+    validate_project_catalog_worker_decomposition,
+    validate_store_identity_decomposition,
 )
 
 
@@ -206,6 +208,53 @@ class NgSdkContractTest(unittest.TestCase):
         contract["consumers"].pop("build_compile_unit")
         with self.assertRaises(jsonschema.ValidationError):
             jsonschema.Draft202012Validator(self.project_catalog_schema).validate(contract)
+
+    def test_project_catalog_worker_decomposition_is_exact(self) -> None:
+        worker = "auto request = decode_task_input(validated->payload);"
+        decoder = "auto catalog = sdk::project_catalog::make(root, digest, units);"
+        validate_project_catalog_worker_decomposition(worker, decoder)
+
+        with self.assertRaisesRegex(SdkContractError, "task.v3 decoder"):
+            validate_project_catalog_worker_decomposition("", decoder)
+        with self.assertRaisesRegex(SdkContractError, "shared project catalog loader"):
+            validate_project_catalog_worker_decomposition(worker, "")
+
+    def test_store_identity_decomposition_is_exact(self) -> None:
+        store = """
+#include "store_identity_internal.hpp"
+std::string snapshot_identity(const snapshot_manifest& value) {
+    return *detail::snapshot_manifest_identity(value);
+}
+std::string publication_identity(const publication_record& value) {
+    return *detail::publication_record_identity(value.series_id, value.snapshot_id, 1, {});
+}
+"""
+        identity = """
+result<std::string> snapshot_manifest_identity(const snapshot_manifest& value) {
+    return canonical_identity_digest("snapshot", fields);
+}
+result<std::string> publication_record_identity(const std::string& series_id) {
+    return canonical_identity_digest("publication", fields);
+}
+"""
+        validate_store_identity_decomposition(store, identity)
+
+        with self.assertRaisesRegex(SdkContractError, "snapshot identity wrapper bypasses"):
+            validate_store_identity_decomposition(
+                store.replace(
+                    "detail::snapshot_manifest_identity(value)",
+                    'canonical_identity_digest("snapshot", fields)',
+                ),
+                identity,
+            )
+        with self.assertRaisesRegex(SdkContractError, "canonical snapshot tuple"):
+            validate_store_identity_decomposition(
+                store,
+                identity.replace(
+                    'canonical_identity_digest("snapshot", fields)',
+                    'canonical_identity_digest("legacy-snapshot", fields)',
+                ),
+            )
 
     def test_provider_task_projection_cannot_drop_condition(self) -> None:
         contract = copy.deepcopy(self.provider_task_contract)

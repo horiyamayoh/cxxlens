@@ -78,6 +78,7 @@ PACKAGE_PATHS = (
     "schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml",
     "schemas/cxxlens_ng_clang22_materialization_request.schema.yaml",
     "schemas/cxxlens_ng_clang22_materialization_report.schema.yaml",
+    "schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml",
     "schemas/cxxlens_ng_public_api_catalog.yaml",
     "schemas/cxxlens_ng_public_api_catalog.schema.yaml",
     "schemas/cxxlens_ng_public_callable_inventory.yaml",

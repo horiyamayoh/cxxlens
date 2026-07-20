@@ -1,11 +1,11 @@
 ---
 id: DF-0195
 title: Bind sealed provider transcript evidence to materialization report leaves
-status: observed
+status: accepted
 kind: contract-contradiction
 impact: invariant
 confidence: high
-implementation_disposition: blocked
+implementation_disposition: may-proceed
 scope:
   - provider.clang22-materialization-report-leaves
   - provider.transcript-coverage-plane
@@ -21,13 +21,36 @@ authority_refs:
 tracking_issue: '#195'
 implementation_issues:
   - '#181'
-resolution_refs: []
+resolution_refs:
+  - docs/design/cxxlens_next_generation_integrated_design_ja.md
+  - docs/design/adr/0044-shared-provider-transcript-validation.md
+  - docs/design/adr/0071-host-to-provider-transcript-validation.md
+  - docs/design/adr/0096-clang22-installed-materialization-boundary.md
+  - docs/design/catalogs/README.md
+  - schemas/cxxlens_ng_provider_protocol.yaml
+  - schemas/cxxlens_ng_provider_protocol.schema.yaml
+  - schemas/cxxlens_ng_provider_runtime_contract.yaml
+  - schemas/cxxlens_ng_provider_runtime_contract.schema.yaml
+  - schemas/cxxlens_ng_clang22_materialization_contract.yaml
+  - schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
+  - schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
+  - schemas/cxxlens_ng_release_qualification.yaml
+  - schemas/cxxlens_ng_release_qualification.schema.yaml
+  - tools/quality/check_ng_provider_protocol.py
+  - tests/quality/test_ng_provider_protocol.py
+  - tools/quality/check_ng_provider_runtime.py
+  - tests/quality/test_ng_provider_runtime.py
+  - tools/quality/check_ng_clang22_materialization.py
+  - tests/quality/test_ng_clang22_materialization.py
+  - tools/quality/check_ng_release_qualification.py
+  - tests/quality/test_ng_release_qualification.py
 review:
   mode: independent
-  status: pending
+  status: complete
   author: codex-agent-runtime-authority-df
-  reviewer: null
-  refs: []
+  reviewer: codex-agent-final-df195-197-review
+  refs:
+    - https://github.com/horiyamayoh/cxxlens/issues/195#issuecomment-5020651186
 created: '2026-07-20'
 ---
 
@@ -166,7 +189,9 @@ Independent review should reject the resolution unless it proves all of the foll
 
 ## Disposition
 
-2026-07-20: Opened as a blocking invariant contradiction discovered during Issue #181 runtime
-integration. `resolution_refs` and canonical review refs are intentionally empty until normative
-authority is amended and an independent reviewer posts a concrete review on Issue #195. Pure work
-outside worker success sealing, report leaf construction, and release qualification may continue.
+2026-07-20: Accepted after the normative two-plane receipt/guarantee amendment, raw-only shared
+validation integration, and independent post-change review. The final review additionally required
+an independently supplied closed provider identity projection; the accepted implementation now
+binds raw hello/task acceptance to provider ID/version, measured binary and semantic-contract
+digests, negotiated protocol/features, sandbox policy, and Registry-derived offers. Issue #181 may
+proceed for this scope.

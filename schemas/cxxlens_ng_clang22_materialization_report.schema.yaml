@@ -13,7 +13,7 @@ required:
   - raw_input_observation
 properties:
   schema: {const: cxxlens.clang22-materialization-report.v2}
-  report_version: {const: 2.0.0}
+  report_version: {const: 2.1.0}
   response_kind: {enum: [detailed, compact_failure]}
   result: {enum: [passed, failed]}
   generated_at: {type: string, format: date-time}
@@ -50,30 +50,66 @@ properties:
   installation:
     type: object
     additionalProperties: false
-    required: [configuration, platform, prefix_manifest_digest, relocated_prefix_digest, tool_digest, worker_digest, relocated, runtime_dependency_policy, tool_worker_same_prefix]
+    required: [requested, measured]
     properties:
-      configuration: {enum: [static, shared]}
-      platform: {type: string, pattern: '^linux-[A-Za-z0-9_.-]+-(?:static|shared)$'}
-      prefix_manifest_digest: {$ref: '#/$defs/content_digest'}
-      relocated_prefix_digest: {$ref: '#/$defs/content_digest'}
-      tool_digest: {$ref: '#/$defs/content_digest'}
-      worker_digest: {$ref: '#/$defs/content_digest'}
-      relocated: {const: true}
-      runtime_dependency_policy: {const: self-contained-prefix}
-      tool_worker_same_prefix: {const: true}
+      requested:
+        type: object
+        additionalProperties: false
+        required: [occurrence_manifest_digest]
+        properties:
+          occurrence_manifest_digest: {$ref: '#/$defs/content_digest'}
+      measured:
+        type: object
+        additionalProperties: false
+        required: [manifest_path, manifest_file_digest, occurrence_payload_digest, inventory_digest, source_revision, source_tree, configuration, files, tool, worker]
+        properties:
+          manifest_path: {const: share/cxxlens/materialization/clang22/occurrence-v1.json}
+          manifest_file_digest: {$ref: '#/$defs/content_digest'}
+          occurrence_payload_digest: {$ref: '#/$defs/content_digest'}
+          inventory_digest: {$ref: '#/$defs/content_digest'}
+          source_revision: {$ref: '#/$defs/revision'}
+          source_tree: {$ref: '#/$defs/revision'}
+          configuration: {enum: [static, shared]}
+          files:
+            type: array
+            minItems: 12
+            maxItems: 18
+            uniqueItems: true
+            items: {$ref: '#/$defs/measured_occurrence_inventory_file'}
+          tool:
+            allOf:
+              - {$ref: '#/$defs/measured_occurrence_file'}
+              - properties:
+                  path: {const: bin/cxxlens-clang22-materialize}
+                required: [path]
+          worker:
+            allOf:
+              - {$ref: '#/$defs/measured_occurrence_file'}
+              - properties:
+                  path: {const: bin/cxxlens-clang-worker-22}
+                required: [path]
+        allOf:
+          - if:
+              properties: {configuration: {const: static}}
+              required: [configuration]
+            then:
+              properties: {files: {minItems: 12, maxItems: 12}}
+            else:
+              properties: {files: {minItems: 18, maxItems: 18}}
   provider:
     type: object
     additionalProperties: false
-    required: [tool_executable, tool_interface_version, worker_executable, provider_id, provider_version, semantic_contract_digest, protocol_major, protocol_minor, sandbox_policy_digest]
+    required: [tool_executable, tool_interface_version, worker_executable, provider_id, provider_version, semantic_contract_digest, protocol_major, protocol_minor, required_features, sandbox_policy_digest]
     properties:
       tool_executable: {const: cxxlens-clang22-materialize}
-      tool_interface_version: {const: 2.0.0}
+      tool_interface_version: {const: 2.1.0}
       worker_executable: {const: cxxlens-clang-worker-22}
       provider_id: {const: cxxlens.clang22.reference}
       provider_version: {const: 1.0.0}
       semantic_contract_digest: {$ref: '#/$defs/content_digest'}
       protocol_major: {const: 1}
-      protocol_minor: {const: 0}
+      protocol_minor: {const: 1}
+      required_features: {const: [task-input-chunks-v1]}
       sandbox_policy_digest: {$ref: '#/$defs/content_digest'}
   project:
     type: object
@@ -83,7 +119,7 @@ properties:
       project_id: {$ref: '#/$defs/strong_id'}
       catalog_id: {$ref: '#/$defs/strong_id'}
       catalog_digest: {$ref: '#/$defs/content_digest'}
-      logical_root: {$ref: '#/$defs/strong_id'}
+      logical_root: {$ref: '#/$defs/project_logical_path'}
       catalog_environment_digest: {$ref: '#/$defs/content_digest'}
       catalog_compile_unit_census_digest: {$ref: '#/$defs/semantic_digest'}
       catalog_compile_units:
@@ -188,30 +224,20 @@ properties:
   side_channels:
     type: object
     additionalProperties: false
-    required: [coverage, unresolved, evidence, guarantee]
+    required: [transport_coverage, coverage, unresolved, evidence, guarantee]
     properties:
+      transport_coverage:
+        allOf:
+          - {$ref: '#/$defs/coverage_summary'}
+          - properties:
+              record_type: {const: typed-transport-coverage-unit}
+            required: [record_type]
       coverage:
-        type: object
-        additionalProperties: false
-        required: [record_type, record_count, state_counts, balance, digest]
-        properties:
-          record_type: {const: typed-coverage-unit}
-          record_count: {type: integer, minimum: 0}
-          state_counts:
-            type: object
-            additionalProperties: false
-            required: [covered, excluded, not_applicable, failed, unresolved, unsupported, stale, truncated]
-            properties:
-              covered: {type: integer, minimum: 0}
-              excluded: {type: integer, minimum: 0}
-              not_applicable: {type: integer, minimum: 0}
-              failed: {type: integer, minimum: 0}
-              unresolved: {type: integer, minimum: 0}
-              unsupported: {type: integer, minimum: 0}
-              stale: {type: integer, minimum: 0}
-              truncated: {type: integer, minimum: 0}
-          balance: {enum: [exact, incomplete]}
-          digest: {$ref: '#/$defs/content_digest'}
+        allOf:
+          - {$ref: '#/$defs/coverage_summary'}
+          - properties:
+              record_type: {const: typed-coverage-unit}
+            required: [record_type]
       unresolved:
         type: object
         additionalProperties: false
@@ -251,20 +277,32 @@ properties:
       guarantee:
         type: object
         additionalProperties: false
-        required: [record_type, approximation, scope, assumptions, verification_modalities, observation_descriptor_censuses, digest]
+        required: [record_type, profile_id, profile_digest, approximation, scope, assumptions, verification_modalities, observation_descriptor_censuses, digest]
         properties:
           record_type: {const: typed-guarantee}
+          profile_id: {const: cxxlens.clang22-materialization-guarantee-profile.v1}
+          profile_digest: {$ref: '#/$defs/semantic_digest'}
           approximation: {enum: [unknown, under_approximation, over_approximation, exact]}
           scope: {$ref: '#/$defs/strong_id'}
           assumptions:
             type: array
-            uniqueItems: true
-            items: {$ref: '#/$defs/strong_id'}
+            maxItems: 0
           verification_modalities:
             type: array
-            minItems: 1
+            minItems: 3
+            maxItems: 3
             uniqueItems: true
-            items: {$ref: '#/$defs/strong_id'}
+            prefixItems:
+              - allOf:
+                  - {$ref: '#/$defs/registered_symbol'}
+                  - {const: clang22.materialization-sealed.v1}
+              - allOf:
+                  - {$ref: '#/$defs/registered_symbol'}
+                  - {const: provider.transcript-sealed.v1}
+              - allOf:
+                  - {$ref: '#/$defs/registered_symbol'}
+                  - {const: sdk.claim-envelope-validated.v1}
+            items: false
           observation_descriptor_censuses:
             type: array
             minItems: 3
@@ -399,7 +437,7 @@ properties:
   publication:
     type: object
     additionalProperties: false
-    required: [backend, selector, series_id, genesis, expected_parent_publication, observed_parent_publication, observed_parent_record, head_observation, publication_attempted, outcome, partial_policy, candidate_snapshot_id, candidate_identity_state, candidate_identity, invocation_commit_state, committed_transaction_count, invocation_committed_record, terminal_head, candidate_visibility, prior_history_retained, head_effect, store_failure, sqlite_reopen_status, recovery_receipt]
+    required: [backend, selector, series_id, genesis, expected_parent_publication, observed_parent_publication, observed_parent_record, head_observation, publication_attempted, outcome, partial_policy, candidate_snapshot_id, candidate_identity_state, candidate_identity, invocation_commit_state, committed_transaction_count, invocation_committed_record, terminal_head, candidate_visibility, prior_history_retained, head_effect, store_failure, sqlite_effect_root_receipt, sqlite_reopen_status, recovery_receipt]
     properties:
       backend: {enum: [memory, sqlite]}
       selector: {$ref: '#/$defs/series_selector_fields'}
@@ -441,6 +479,10 @@ properties:
         oneOf:
           - {type: 'null'}
           - {$ref: '#/$defs/store_failure'}
+      sqlite_effect_root_receipt:
+        oneOf:
+          - {type: 'null'}
+          - {$ref: '#/$defs/sqlite_effect_root_receipt'}
       sqlite_reopen_status: {enum: [not_applicable, opened, open_failed]}
       recovery_receipt:
         oneOf:
@@ -694,6 +736,30 @@ allOf:
           properties:
             phase: {enum: [installation-binding, worker-launch, transcript, materialization-validation, store-open, store-stage, report-construction]}
   - if:
+      properties:
+        response_kind: {const: compact_failure}
+        error:
+          properties:
+            code: {const: materialization.store-failure}
+            phase: {enum: [store-open, store-stage]}
+          required: [code, phase]
+      required: [response_kind, error]
+    then:
+      properties:
+        effects:
+          properties:
+            store_failure_cause:
+              allOf:
+                - {$ref: '#/$defs/store_failure_cause'}
+                - properties:
+                    kind: {const: sdk_error}
+                    access_path: {type: 'null'}
+                  required: [kind, access_path]
+    else:
+      properties:
+        effects:
+          properties: {store_failure_cause: {type: 'null'}}
+  - if:
       properties: {response_kind: {const: detailed}}
       required: [response_kind]
     then:
@@ -829,7 +895,7 @@ allOf:
               allOf:
                 - {$ref: '#/$defs/store_failure'}
                 - properties:
-                    category: {enum: [counter_overflow, identity_validation, hash_collision, persistence_corrupt]}
+                    category: {enum: [counter_overflow, hash_collision, persistence_corrupt]}
         semantic_verification:
           properties:
             status: {const: not_published}
@@ -1070,8 +1136,21 @@ allOf:
             observed_parent_publication: {type: 'null'}
             observed_parent_record: {type: 'null'}
             head_observation: {const: absent}
+            sqlite_effect_root_receipt: {type: 'null'}
             sqlite_reopen_status: {const: not_applicable}
             recovery_receipt: {type: 'null'}
+  - if:
+      properties:
+        response_kind: {const: detailed}
+        publication:
+          properties: {backend: {const: sqlite}}
+          required: [backend]
+      required: [response_kind, publication]
+    then:
+      properties:
+        publication:
+          properties:
+            sqlite_effect_root_receipt: {$ref: '#/$defs/sqlite_effect_root_receipt'}
   - if:
       properties:
         response_kind: {const: detailed}
@@ -1093,6 +1172,82 @@ allOf:
             prior_history_retained: {const: true}
             head_effect: {const: advanced_to_candidate}
 $defs:
+  measured_occurrence_file:
+    type: object
+    additionalProperties: false
+    required: [path, digest]
+    properties:
+      path:
+        type: string
+        minLength: 1
+        maxLength: 4096
+        pattern: '^(?!/)(?!.*(?:^|/)\.\.?/)(?!.*//)[^\\\u0000]+$'
+      digest: {$ref: '#/$defs/content_digest'}
+  measured_occurrence_inventory_file:
+    type: object
+    additionalProperties: false
+    required: [role, path, digest]
+    properties:
+      role: {$ref: '#/$defs/registered_symbol'}
+      path:
+        type: string
+        minLength: 1
+        maxLength: 4095
+        pattern: '^(?!/)(?!.*(?:^|/)\.\.?(?:/|$))(?!.*//)[^\\\u0000]+$'
+      digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+  coverage_summary:
+    type: object
+    additionalProperties: false
+    required: [record_type, record_count, state_counts, balance, digest]
+    properties:
+      record_type: {type: string}
+      record_count: {type: integer, minimum: 0}
+      state_counts:
+        type: object
+        additionalProperties: false
+        required: [covered, excluded, not_applicable, failed, unresolved, unsupported, stale, truncated]
+        properties:
+          covered: {type: integer, minimum: 0}
+          excluded: {type: integer, minimum: 0}
+          not_applicable: {type: integer, minimum: 0}
+          failed: {type: integer, minimum: 0}
+          unresolved: {type: integer, minimum: 0}
+          unsupported: {type: integer, minimum: 0}
+          stale: {type: integer, minimum: 0}
+          truncated: {type: integer, minimum: 0}
+      balance: {enum: [exact, incomplete]}
+      digest: {$ref: '#/$defs/content_digest'}
+  coverage_record:
+    type: object
+    additionalProperties: false
+    required: [kind, id, state, reason]
+    properties:
+      kind: {$ref: '#/$defs/registered_symbol'}
+      id: {$ref: '#/$defs/strong_id'}
+      state: {enum: [covered, excluded, not_applicable, failed, unresolved, unsupported, stale, truncated]}
+      reason: {type: string, maxLength: 4096}
+    allOf:
+      - if:
+          properties: {state: {const: covered}}
+          required: [state]
+        then:
+          properties: {reason: {const: ''}}
+        else:
+          properties: {reason: {type: string, minLength: 1}}
+  sqlite_effect_root_receipt:
+    type: object
+    additionalProperties: false
+    required: [contract, root_observation_digest, relative_path, parent_resolution, leaf_resolution]
+    properties:
+      contract: {const: rooted-vfs-v1}
+      root_observation_digest: {$ref: '#/$defs/content_digest'}
+      relative_path:
+        type: string
+        minLength: 1
+        maxLength: 4095
+        pattern: '^(?!/)(?!.*(?:^|/)\.\.?(?:/|$))(?!.*//)[^\\\u0000]+$'
+      parent_resolution: {const: openat2-beneath-no-symlinks-no-magiclinks}
+      leaf_resolution: {const: database-and-sidecars-rooted-no-follow}
   raw_input_observation:
     type: object
     additionalProperties: false
@@ -1121,7 +1276,7 @@ $defs:
   effect_ledger:
     type: object
     additionalProperties: false
-    required: [worker_launch_attempt_count, worker_launch_success_count, store_draft_state, head_observation, observed_head_publication, publication_attempted, committed_transaction_count, prior_history_retained]
+    required: [worker_launch_attempt_count, worker_launch_success_count, store_draft_state, head_observation, observed_head_publication, publication_attempted, committed_transaction_count, prior_history_retained, store_failure_cause]
     properties:
       worker_launch_attempt_count: {type: integer, minimum: 0}
       worker_launch_success_count: {type: integer, minimum: 0}
@@ -1131,6 +1286,10 @@ $defs:
       publication_attempted: {const: false}
       committed_transaction_count: {const: 0}
       prior_history_retained: {const: true}
+      store_failure_cause:
+        oneOf:
+          - {type: 'null'}
+          - {$ref: '#/$defs/store_failure_cause'}
     allOf:
       - if:
           properties: {head_observation: {enum: [not-observed, absent]}}
@@ -1162,7 +1321,7 @@ $defs:
     additionalProperties: false
     required: [category, cause, diagnostic_digest]
     properties:
-      category: {enum: [stale_parent, counter_overflow, identity_validation, hash_collision, persistence_io, persistence_corrupt, post_commit_verification]}
+      category: {enum: [stale_parent, counter_overflow, hash_collision, persistence_io, persistence_corrupt, post_commit_verification]}
       cause: {$ref: '#/$defs/store_failure_cause'}
       diagnostic_digest: {$ref: '#/$defs/content_digest'}
     allOf:
@@ -1174,7 +1333,8 @@ $defs:
             cause:
               properties:
                 kind: {const: sdk_error}
-                code: {enum: [store.publish-stale-parent, store.publication-conflict]}
+                operation: {const: writer_publish}
+                code: {const: store.publication-conflict}
       - if:
           properties: {category: {const: counter_overflow}}
           required: [category]
@@ -1183,18 +1343,9 @@ $defs:
             cause:
               properties:
                 kind: {const: sdk_error}
+                operation: {const: writer_publish}
                 code: {const: store.counter-overflow}
                 field: {enum: [publication_sequence, physical_generation]}
-      - if:
-          properties: {category: {const: identity_validation}}
-          required: [category]
-        then:
-          properties:
-            cause:
-              properties:
-                kind: {const: sdk_error}
-                code: {const: store.corrupt}
-                field: {const: publication}
       - if:
           properties: {category: {const: hash_collision}}
           required: [category]
@@ -1203,6 +1354,7 @@ $defs:
             cause:
               properties:
                 kind: {const: sdk_error}
+                operation: {const: writer_publish}
                 code: {const: store.hash-collision}
       - if:
           properties: {category: {const: persistence_io}}
@@ -1212,7 +1364,11 @@ $defs:
             cause:
               properties:
                 kind: {const: sdk_error}
+                operation: {const: writer_publish}
                 code: {const: store.sqlite-failure}
+                field: {const: database}
+                detail:
+                  properties: {kind: {const: opaque}}
       - if:
           properties: {category: {const: persistence_corrupt}}
           required: [category]
@@ -1221,21 +1377,29 @@ $defs:
             cause:
               properties:
                 kind: {const: sdk_error}
-                code: {const: store.corrupt}
+                operation: {const: writer_publish}
+                code: {enum: [store.corrupt, store.snapshot-ambiguous]}
   store_failure_cause:
     oneOf:
       - type: object
         additionalProperties: false
-        required: [kind, code, field]
+        required: [kind, operation, access_path, code, field, detail]
         properties:
           kind: {const: sdk_error}
+          operation: {$ref: '#/$defs/store_operation'}
+          access_path:
+            oneOf:
+              - {type: 'null'}
+              - {enum: [current-selector, open-publication, open-snapshot]}
           code: {type: string, pattern: '^(?:store|sdk)\.[a-z0-9.-]+$'}
           field: {$ref: '#/$defs/strong_id'}
+          detail: {$ref: '#/$defs/store_detail_observation'}
       - type: object
         additionalProperties: false
-        required: [kind, access_path, projection, expected_digest, actual_digest]
+        required: [kind, operation, access_path, projection, expected_digest, actual_digest]
         properties:
           kind: {const: verification_mismatch}
+          operation: {$ref: '#/$defs/store_operation'}
           access_path:
             oneOf:
               - {type: 'null'}
@@ -1243,6 +1407,24 @@ $defs:
           projection: {enum: [publication-semantic-fields, physical-generation-transition, snapshot-manifest, descriptor-inventory, partition-bindings, rows, claim-annotations, coverage, unresolved, closure, cursor-projection, canonical-export, open-snapshot-return-binding, cross-path-semantic-projection]}
           expected_digest: {$ref: '#/$defs/content_digest'}
           actual_digest: {$ref: '#/$defs/content_digest'}
+  store_operation:
+    enum: [configuration, store_open, head_current, writer_begin, partition_stage, closure_stage, writer_validate, writer_publish, store_reopen, verify_current, verify_open_publication, verify_open_snapshot, verify_projection]
+  store_detail_observation:
+    oneOf:
+      - type: object
+        additionalProperties: false
+        required: [kind, value]
+        properties:
+          kind: {const: stable}
+          value: {type: string, maxLength: 4096}
+      - type: object
+        additionalProperties: false
+        required: [kind, byte_count, digest, diagnostic]
+        properties:
+          kind: {const: opaque}
+          byte_count: {type: integer, minimum: 0}
+          digest: {$ref: '#/$defs/content_digest'}
+          diagnostic: {type: string, maxLength: 4096}
   claim_producer:
     type: object
     additionalProperties: false
@@ -1260,9 +1442,20 @@ $defs:
       assumptions: {$ref: '#/$defs/strong_id'}
       verification_modalities:
         type: array
-        minItems: 1
+        minItems: 3
+        maxItems: 3
         uniqueItems: true
-        items: {$ref: '#/$defs/strong_id'}
+        prefixItems:
+          - allOf:
+              - {$ref: '#/$defs/registered_symbol'}
+              - {const: clang22.materialization-sealed.v1}
+          - allOf:
+              - {$ref: '#/$defs/registered_symbol'}
+              - {const: provider.transcript-sealed.v1}
+          - allOf:
+              - {$ref: '#/$defs/registered_symbol'}
+              - {const: sdk.claim-envelope-validated.v1}
+        items: false
   direct_claim_basis:
     type: object
     additionalProperties: false
@@ -1391,7 +1584,7 @@ $defs:
   trust_policy:
     type: object
     additionalProperties: false
-    required: [policy_id, execution_profile, provider_id, provider_version, semantic_contract_digest, protocol_major, protocol_minor, required_qualification, worker_sandbox_policy_digest, task_sandbox_requirements, trust_policy_digest]
+    required: [policy_id, execution_profile, provider_id, provider_version, semantic_contract_digest, protocol_major, protocol_minor, required_features, required_qualification, worker_sandbox_policy_digest, task_sandbox_requirements, trust_policy_digest]
     properties:
       policy_id: {const: cxxlens.clang22-installed-native-worker-trust.v1}
       execution_profile: {const: trust.native-worker}
@@ -1399,7 +1592,8 @@ $defs:
       provider_version: {const: 1.0.0}
       semantic_contract_digest: {$ref: '#/$defs/content_digest'}
       protocol_major: {const: 1}
-      protocol_minor: {const: 0}
+      protocol_minor: {const: 1}
+      required_features: {const: [task-input-chunks-v1]}
       required_qualification: {const: canonical-semantic-qualified}
       worker_sandbox_policy_digest: {$ref: '#/$defs/content_digest'}
       task_sandbox_requirements:
@@ -1810,7 +2004,7 @@ $defs:
     additionalProperties: false
     required: [stage, access_path, code, cause, diagnostic_digest]
     properties:
-      stage: {enum: [close-reopen, current-selector, open-publication, open-snapshot, descriptor-inventory, partition-bindings, rows, claim-annotations, coverage, unresolved, cursor-projection, canonical-export, cross-path-equality, publication-binding, snapshot-binding]}
+      stage: {enum: [close-reopen, current-selector, open-publication, open-snapshot, descriptor-inventory, partition-bindings, rows, claim-annotations, coverage, unresolved, closure, cursor-projection, canonical-export, cross-path-equality, publication-binding, snapshot-binding]}
       access_path:
         oneOf:
           - {type: 'null'}
@@ -1999,6 +2193,16 @@ $defs:
     minLength: 1
     maxLength: 512
     pattern: '^[^\u0000-\u001f\u007f]+$'
+  project_logical_path:
+    type: string
+    minLength: 1
+    maxLength: 4096
+    pattern: '^project://[^\u0000-\u001f\u007f]+$'
+  registered_symbol:
+    type: string
+    minLength: 2
+    maxLength: 512
+    pattern: '^[a-z][a-z0-9_.-]+$'
   content_digest:
     type: string
     pattern: '^(?:sha256|semantic-v2:sha256):[0-9a-f]{64}$'
@@ -2321,7 +2525,7 @@ $defs:
   task_result:
     type: object
     additionalProperties: false
-    required: [provider_task_id, provider_execution_id, selected_catalog_compile_unit_id, compile_unit_id, task_input_digest, terminal, transcript, groups, batches, side_channel_components, side_channel_digest, task_result_digest]
+    required: [provider_task_id, provider_execution_id, selected_catalog_compile_unit_id, compile_unit_id, task_input_digest, terminal, input_transfer, runtime_receipt, coverage, groups, batches, side_channel_components, side_channel_digest, task_result_digest]
     properties:
       provider_task_id: {type: string, pattern: '^task:semantic-v2:sha256:[0-9a-f]{64}$'}
       provider_execution_id: {$ref: '#/$defs/strong_id'}
@@ -2330,15 +2534,66 @@ $defs:
       task_input_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
       terminal:
         enum: [provider.success, provider.timeout, provider.cancelled, provider.output-limit, provider.crash, provider.malformed-frame, provider.checksum-mismatch, provider.truncated-stream, provider.schema-invalid, provider.coverage-incomplete, provider.runtime-unavailable, provider.binary-identity-mismatch, provider.protocol-state-invalid, provider.credit-exceeded, provider.backpressure, provider.task-binding-mismatch, provider.batch-invalid, provider.batch-state-invalid, provider.relation-incompatible, provider.required-feature-missing, provider.protocol-minor-mismatch, provider.unknown-required-extension, provider.invalid-frame-flags, provider.unsupported-compression, provider.frontend-request-invalid, security.sandbox-insufficient, security.sandbox-policy-mismatch]
-      transcript:
+      input_transfer:
         type: object
         additionalProperties: false
-        required: [frame_count, transcript_digest, semantic_digest, raw_frame_digest]
+        required: [protocol_version, required_feature, task_input_codec, logical_input_bytes, logical_input_digest, canonical_chunk_bytes, chunk_count, ordered_chunk_payload_digest_set_digest]
         properties:
+          protocol_version: {const: 1.1.0}
+          required_feature: {const: task-input-chunks-v1}
+          task_input_codec: {const: cxxlens.clang22.task.v3}
+          logical_input_bytes: {type: integer, minimum: 0, maximum: 67108864}
+          logical_input_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+          canonical_chunk_bytes: {const: 1048576}
+          chunk_count: {type: integer, minimum: 0, maximum: 64}
+          ordered_chunk_payload_digest_set_digest: {$ref: '#/$defs/semantic_digest'}
+      runtime_receipt:
+        type: object
+        additionalProperties: false
+        required: [raw_frame_stream_bytes, raw_frame_stream_digest, frame_count, frame_transcript_digest, sealed_transcript_digest]
+        properties:
+          raw_frame_stream_bytes: {type: integer, minimum: 1}
+          raw_frame_stream_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
           frame_count: {type: integer, minimum: 1}
-          transcript_digest: {$ref: '#/$defs/content_digest'}
-          semantic_digest: {$ref: '#/$defs/semantic_digest'}
-          raw_frame_digest: {$ref: '#/$defs/content_digest'}
+          frame_transcript_digest: {$ref: '#/$defs/semantic_digest'}
+          sealed_transcript_digest: {$ref: '#/$defs/semantic_digest'}
+      coverage:
+        type: object
+        additionalProperties: false
+        required: [transport_records, transport_record_set_digest, semantic_records, semantic_record_set_digest]
+        properties:
+          transport_records:
+            type: array
+            minItems: 1
+            maxItems: 1
+            prefixItems:
+              - allOf:
+                  - {$ref: '#/$defs/coverage_record'}
+                  - properties:
+                      kind: {const: task}
+                    required: [kind]
+            items: false
+          transport_record_set_digest: {$ref: '#/$defs/semantic_digest'}
+          semantic_records:
+            type: array
+            minItems: 3
+            maxItems: 3
+            uniqueItems: true
+            prefixItems:
+              - allOf:
+                  - {$ref: '#/$defs/coverage_record'}
+                  - properties: {kind: {const: cc.call-extraction}}
+                    required: [kind]
+              - allOf:
+                  - {$ref: '#/$defs/coverage_record'}
+                  - properties: {kind: {const: cc.entity}}
+                    required: [kind]
+              - allOf:
+                  - {$ref: '#/$defs/coverage_record'}
+                  - properties: {kind: {const: frontend.clang22.observation}}
+                    required: [kind]
+            items: false
+          semantic_record_set_digest: {$ref: '#/$defs/semantic_digest'}
       groups:
         type: array
         minItems: 2
@@ -2354,11 +2609,14 @@ $defs:
       side_channel_components:
         type: object
         additionalProperties: false
-        required: [coverage_set_digest, unresolved_set_digest, evidence_set_digest, guarantee_fragment_digest]
+        required: [transport_coverage_set_digest, semantic_coverage_set_digest, unresolved_set_digest, evidence_set_digest, guarantee_profile_id, guarantee_profile_digest, guarantee_fragment_digest]
         properties:
-          coverage_set_digest: {$ref: '#/$defs/content_digest'}
+          transport_coverage_set_digest: {$ref: '#/$defs/semantic_digest'}
+          semantic_coverage_set_digest: {$ref: '#/$defs/semantic_digest'}
           unresolved_set_digest: {$ref: '#/$defs/content_digest'}
           evidence_set_digest: {$ref: '#/$defs/content_digest'}
+          guarantee_profile_id: {const: cxxlens.clang22-materialization-guarantee-profile.v1}
+          guarantee_profile_digest: {$ref: '#/$defs/semantic_digest'}
           guarantee_fragment_digest: {$ref: '#/$defs/content_digest'}
       side_channel_digest: {$ref: '#/$defs/content_digest'}
       task_result_digest: {$ref: '#/$defs/content_digest'}

@@ -1,6 +1,6 @@
 schema: cxxlens.ng-acceptance-manifest.v1
 kind: acceptance-manifest
-document_version: 1.21.0
+document_version: 1.22.0
 maturity: implemented
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -251,6 +251,7 @@ entries:
       - schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
       - schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
       - schemas/cxxlens_ng_clang22_materialization_execution_receipt.schema.yaml
+      - schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml
       - schemas/cxxlens_ng_production_scope_closure.yaml
       - schemas/cxxlens_ng_production_scope_closure.schema.yaml
       - schemas/cxxlens_ng_production_scope_closure_report.schema.yaml

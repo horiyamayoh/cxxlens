@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import codecs
 import copy
+import hashlib
 import pathlib
 import sys
 import unittest
@@ -47,6 +49,9 @@ class NgClang22MaterializationTests(unittest.TestCase):
         report: dict,
         *,
         request_bytes: bytes | None = None,
+        runtime_raw_occurrences: dict | None = None,
+        store_failure_authority: dict | None = None,
+        postpublish_failure_authority: dict | None = None,
     ) -> None:
         if request_bytes is None:
             if request is None:
@@ -57,6 +62,9 @@ class NgClang22MaterializationTests(unittest.TestCase):
             request,
             report,
             request_bytes=request_bytes,
+            runtime_raw_occurrences=runtime_raw_occurrences,
+            store_failure_authority=store_failure_authority,
+            postpublish_failure_authority=postpublish_failure_authority,
         )
 
     def matrix(self) -> list[tuple[dict, dict]]:
@@ -412,7 +420,23 @@ class NgClang22MaterializationTests(unittest.TestCase):
             request["schema"],
             "cxxlens.clang22-materialization-request.v2",
         )
-        self.assertEqual(request["request_version"], "2.0.0")
+        self.assertEqual(request["request_version"], "2.1.0")
+        self.assertEqual(request["tool"]["interface_version"], "2.1.0")
+        self.assertEqual(request["worker"]["protocol_minor"], 1)
+        self.assertEqual(
+            request["worker"]["required_features"],
+            ["task-input-chunks-v1"],
+        )
+        self.assertEqual(
+            request["trust_policy"]["required_features"],
+            request["worker"]["required_features"],
+        )
+        report = self.report(request)
+        self.assertEqual(report["report_version"], "2.1.0")
+        self.assertEqual(
+            report["provider"]["required_features"],
+            request["worker"]["required_features"],
+        )
         inventory = request["engine"]["admitted_descriptors"]
         self.assertEqual(
             [binding["descriptor_id"] for binding in inventory],
@@ -1144,14 +1168,1557 @@ class NgClang22MaterializationTests(unittest.TestCase):
         ):
             self.validate_report(request, report)
 
-    def test_platform_configuration_binding_is_fail_closed(self) -> None:
+    def test_measured_occurrence_configuration_binding_is_fail_closed(self) -> None:
         request = self.request("static", "memory")
         report = self.report(request)
-        report["installation"]["platform"] = "linux-x86_64-shared"
+        report["installation"]["measured"]["configuration"] = "shared"
         with self.assertRaisesRegex(
-            materialization.MaterializationError, "platform/configuration"
+            materialization.MaterializationError,
+            "installed occurrence binding|materialization report",
         ):
             self.validate_report(request, report)
+
+    def test_occurrence_manifest_is_closed_ordered_and_digest_bound(self) -> None:
+        manifest = materialization.fixture_occurrence_manifest(
+            ROOT,
+            source_revision="1" * 40,
+            source_tree="2" * 40,
+            configuration="static",
+            tool_digest="sha256:" + "1" * 64,
+            worker_digest="sha256:" + "1" * 64,
+        )
+        materialization.validate_occurrence_manifest(ROOT, manifest)
+        self.assertEqual(
+            [row["role"] for row in manifest["files"]],
+            [
+                "materializer-executable",
+                "worker-executable",
+                "relation-registry",
+                "project-catalog-contract",
+                "portable-provider-task-contract",
+                "provider-protocol",
+                "provider-runtime-contract",
+                "snapshot-store-contract",
+                "materialization-contract",
+                "materialization-contract-schema",
+                "materialization-request-schema",
+                "materialization-report-schema",
+            ],
+        )
+        self.assertNotIn(
+            materialization.OCCURRENCE_MANIFEST_PATH,
+            [row["path"] for row in manifest["files"]],
+        )
+
+        mutations = []
+        self_entry = copy.deepcopy(manifest)
+        self_entry["files"][-1]["path"] = materialization.OCCURRENCE_MANIFEST_PATH
+        mutations.append(self_entry)
+        wrong_role = copy.deepcopy(manifest)
+        wrong_role["files"][2]["role"] = "authority"
+        mutations.append(wrong_role)
+        wrong_order = copy.deepcopy(manifest)
+        wrong_order["files"][2], wrong_order["files"][3] = (
+            wrong_order["files"][3],
+            wrong_order["files"][2],
+        )
+        mutations.append(wrong_order)
+        digest_drift = copy.deepcopy(manifest)
+        digest_drift["occurrence_payload_digest"] = "sha256:" + "0" * 64
+        mutations.append(digest_drift)
+        authority_digest_drift = copy.deepcopy(manifest)
+        authority_digest_drift["files"][2]["digest"] = "sha256:" + "0" * 64
+        authority_digest_drift["occurrence_payload_digest"] = (
+            materialization.content_digest(
+                materialization.canonical_json(
+                    {
+                        key: value
+                        for key, value in authority_digest_drift.items()
+                        if key != "occurrence_payload_digest"
+                    }
+                )
+            )
+        )
+        mutations.append(authority_digest_drift)
+        for mutated in mutations:
+            with self.subTest(files=mutated["files"][:3]):
+                with self.assertRaises(materialization.MaterializationError):
+                    materialization.validate_occurrence_manifest(ROOT, mutated)
+
+        request = self.request()
+        for legacy_field in ("prefix_manifest_digest", "relocated_prefix_digest"):
+            legacy = self.report(request)
+            legacy["installation"][legacy_field] = "sha256:" + "0" * 64
+            with self.subTest(legacy_field=legacy_field):
+                with self.assertRaises(materialization.MaterializationError):
+                    self.validate_report(request, legacy)
+
+    def test_occurrence_inventory_is_configuration_closed_and_explicitly_measured(self) -> None:
+        shared = materialization.fixture_occurrence_manifest(
+            ROOT,
+            source_revision="1" * 40,
+            source_tree="2" * 40,
+            configuration="shared",
+            tool_digest="sha256:" + "2" * 64,
+            worker_digest="sha256:" + "2" * 64,
+        )
+        materialization.validate_occurrence_manifest(ROOT, shared)
+        self.assertEqual(len(shared["files"]), 18)
+        self.assertEqual(
+            [row["role"] for row in shared["files"][12:]],
+            [
+                "base",
+                "kernel",
+                "query",
+                "recipes",
+                "provider-sdk",
+                "clang22-provider-sdk",
+            ],
+        )
+
+        lib64 = copy.deepcopy(shared)
+        for row in lib64["files"][12:]:
+            row["path"] = row["path"].replace("lib/", "lib64/") + ".22.1"
+        lib64["occurrence_payload_digest"] = materialization.content_digest(
+            materialization.canonical_json(
+                {
+                    key: value
+                    for key, value in lib64.items()
+                    if key != "occurrence_payload_digest"
+                }
+            )
+        )
+        materialization.validate_occurrence_manifest(ROOT, lib64)
+
+        for label, path in (
+            ("external-system-library", "lib/libstdc++.so.6"),
+            ("absolute", "/usr/lib/libcxxlens_base.so"),
+            ("escape", "lib/../libcxxlens_base.so"),
+            ("wrong-prefix", "share/libcxxlens_base.so"),
+        ):
+            changed = copy.deepcopy(shared)
+            changed["files"][12]["path"] = path
+            changed["occurrence_payload_digest"] = materialization.content_digest(
+                materialization.canonical_json(
+                    {
+                        key: value
+                        for key, value in changed.items()
+                        if key != "occurrence_payload_digest"
+                    }
+                )
+            )
+            with self.subTest(path=label):
+                with self.assertRaises(materialization.MaterializationError):
+                    materialization.validate_occurrence_manifest(ROOT, changed)
+
+        request = self.request("shared", "memory")
+        report = self.report(request)
+        measured = report["installation"]["measured"]
+        self.assertEqual(measured["files"], shared["files"])
+        drift = copy.deepcopy(report)
+        drift_files = drift["installation"]["measured"]["files"]
+        drift_files[12]["digest"] = "sha256:" + "f" * 64
+        drift["installation"]["measured"]["inventory_digest"] = (
+            materialization.content_digest(
+                materialization.canonical_json(drift_files)
+            )
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "installed occurrence binding|occurrence payload digest",
+        ):
+            self.validate_report(request, drift)
+
+    def test_sqlite_path_is_canonical_relative_utf8_even_after_digest_rebind(self) -> None:
+        invalid_paths = [
+            ".",
+            "./x",
+            "a//b",
+            "a\\b",
+            "C:/x",
+            "",
+            "a/./b",
+            "a/../b",
+            "/root/store.sqlite",
+            "D:store.sqlite",
+            "a/\x00/b",
+            "db/e\u0301.sqlite",
+        ]
+        for path in invalid_paths:
+            request = self.request("static", "sqlite")
+            request["publication"]["sqlite_path"] = path
+            materialization.bind_request_identity(request)
+            with self.subTest(path=repr(path)):
+                with self.assertRaises(materialization.MaterializationError):
+                    materialization.validate_request(ROOT, request)
+
+        boundary = self.request("static", "sqlite")
+        boundary["publication"]["sqlite_path"] = (
+            "a" * materialization.MAXIMUM_SQLITE_RELATIVE_PATH_UTF8_BYTES
+        )
+        materialization.bind_request_identity(boundary)
+        materialization.validate_request(ROOT, boundary)
+
+        over = copy.deepcopy(boundary)
+        over["publication"]["sqlite_path"] += "a"
+        materialization.bind_request_identity(over)
+        with self.assertRaises(materialization.MaterializationError):
+            materialization.validate_request(ROOT, over)
+
+    def test_request_v21_features_and_utf8_byte_caps_are_fail_closed(self) -> None:
+        for path, value in (
+            (("tool", "interface_version"), "2.0.0"),
+            (("worker", "protocol_minor"), 0),
+            (("worker", "required_features"), []),
+            (("trust_policy", "protocol_minor"), 0),
+            (("trust_policy", "required_features"), ["legacy-input"]),
+        ):
+            request = self.request()
+            request[path[0]][path[1]] = value
+            with self.subTest(path=path):
+                with self.assertRaises(materialization.MaterializationError):
+                    materialization.validate_request(ROOT, request)
+
+        legacy_occurrence = self.request()
+        legacy_occurrence["tool"]["prefix_manifest_digest"] = "sha256:" + "0" * 64
+        with self.assertRaises(materialization.MaterializationError):
+            materialization.validate_request(ROOT, legacy_occurrence)
+
+        request_schema = materialization.load(ROOT / materialization.REQUEST_SCHEMA)
+        boundary = self.request("static", "sqlite")
+        boundary["project"]["logical_root"] = "project://" + "a" * (
+            materialization.MAXIMUM_LOGICAL_PATH_UTF8_BYTES - len("project://")
+        )
+        boundary["publication"]["sqlite_path"] = (
+            "a" * materialization.MAXIMUM_SQLITE_RELATIVE_PATH_UTF8_BYTES
+        )
+        boundary["tasks"][0]["effective_argv"][0] = "\U0001f600" * 512
+        materialization.validate_request_utf8_byte_limits(boundary, request_schema)
+
+        too_long_logical = copy.deepcopy(boundary)
+        too_long_logical["project"]["logical_root"] += "a"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "logical-path UTF-8 byte limit",
+        ):
+            materialization.validate_request_utf8_byte_limits(
+                too_long_logical,
+                request_schema,
+            )
+
+        too_long_sqlite = copy.deepcopy(boundary)
+        too_long_sqlite["publication"]["sqlite_path"] += "a"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "sqlite_path exceeds the UTF-8 byte limit",
+        ):
+            materialization.validate_request_utf8_byte_limits(
+                too_long_sqlite,
+                request_schema,
+            )
+
+        too_long_argv = copy.deepcopy(boundary)
+        too_long_argv["tasks"][0]["effective_argv"][0] += "a"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            r"effective_argv\[0\].*UTF-8 byte limit",
+        ):
+            materialization.validate_request_utf8_byte_limits(
+                too_long_argv,
+                request_schema,
+            )
+
+    def test_task_input_and_runtime_receipts_reject_every_leaf_drift(self) -> None:
+        request = self.request()
+
+        def changed_digest(value: str) -> str:
+            return value[:-1] + ("0" if value[-1] != "0" else "1")
+
+        input_mutations = {
+            "protocol_version": "1.0.0",
+            "required_feature": "legacy-input",
+            "task_input_codec": "cxxlens.clang22.task.v2",
+            "logical_input_bytes": lambda value: value + 1,
+            "logical_input_digest": changed_digest,
+            "canonical_chunk_bytes": lambda value: value - 1,
+            "chunk_count": lambda value: value + 1,
+            "ordered_chunk_payload_digest_set_digest": changed_digest,
+        }
+        for field, replacement in input_mutations.items():
+            report = self.report(request)
+            receipt = report["task_results"][0]["input_transfer"]
+            receipt[field] = (
+                replacement(receipt[field]) if callable(replacement) else replacement
+            )
+            with self.subTest(input_transfer=field):
+                with self.assertRaises(materialization.MaterializationError):
+                    self.validate_report(request, report)
+
+        runtime_mutations = {
+            "raw_frame_stream_bytes": lambda value: value + 1,
+            "raw_frame_stream_digest": changed_digest,
+            "frame_count": lambda value: value + 1,
+            "frame_transcript_digest": changed_digest,
+            "sealed_transcript_digest": changed_digest,
+        }
+        for field, replacement in runtime_mutations.items():
+            report = self.report(request)
+            receipt = report["task_results"][0]["runtime_receipt"]
+            receipt[field] = replacement(receipt[field])
+            with self.subTest(runtime_receipt=field):
+                with self.assertRaises(materialization.MaterializationError):
+                    self.validate_report(request, report)
+
+        for legacy_field in ("transcript", "transcript_digest", "raw_frame_digest"):
+            report = self.report(request)
+            report["task_results"][0][legacy_field] = {}
+            with self.subTest(legacy_field=legacy_field):
+                with self.assertRaises(materialization.MaterializationError):
+                    self.validate_report(request, report)
+
+    def test_runtime_raw_occurrence_is_the_only_seal_authority(self) -> None:
+        request = self.request()
+        raw_occurrences = materialization.fixture_runtime_raw_occurrences(
+            ROOT,
+            request,
+        )
+        task = request["tasks"][0]
+        key = materialization.task_execution_key(task)
+        raw_observation = materialization.derive_runtime_observation(
+            ROOT,
+            request,
+            task,
+            raw_occurrences[key],
+        )
+        sealed = raw_observation["sealed_transcript"]
+        self.assertEqual(
+            sealed["unresolved_records"],
+            materialization.fixture_task_unresolved_records(task),
+        )
+        self.assertEqual(
+            sealed["evidence_records"],
+            materialization.fixture_task_evidence_records(task),
+        )
+        self.assertEqual(len(sealed["evidence_records"]), 3)
+
+        report = self.report(request)
+        batch = next(
+            row
+            for row in report["task_results"][0]["batches"]
+            if row["descriptor_id"] == "cc.call_direct_target.v1"
+        )
+        batch.update(
+            {
+                "row_count": 0,
+                "ordered_chunk_digests": [],
+                "row_bindings": [],
+                "provenance_edge_digests": [],
+            }
+        )
+        report["provenance"].update(
+            {
+                "edge_count": 2,
+                "canonical_claim_count": 2,
+                "canonical_claims_with_exact_input_edges": 2,
+            }
+        )
+        materialization.rebind_report_digest_chain(ROOT, request, report)
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "materialization.transcript-invalid",
+        ):
+            self.validate_report(
+                request,
+                report,
+                runtime_raw_occurrences=raw_occurrences,
+            )
+
+        receipt_forgery = self.report(request)
+        receipt = receipt_forgery["task_results"][0]["runtime_receipt"]
+        receipt["sealed_transcript_digest"] = (
+            receipt["sealed_transcript_digest"][:-1]
+            + ("0" if receipt["sealed_transcript_digest"][-1] != "0" else "1")
+        )
+        materialization.rebind_report_digest_chain(
+            ROOT,
+            request,
+            receipt_forgery,
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "materialization.transcript-invalid",
+        ):
+            self.validate_report(
+                request,
+                receipt_forgery,
+                runtime_raw_occurrences=raw_occurrences,
+            )
+
+        corrupt_raw = dict(raw_occurrences)
+        corrupt_raw[key] = corrupt_raw[key][:-1]
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "materialization.transcript-invalid",
+        ):
+            self.validate_report(
+                request,
+                self.report(request),
+                runtime_raw_occurrences=corrupt_raw,
+            )
+
+    def test_runtime_raw_identity_cannot_replace_installed_provider_authority(self) -> None:
+        request = self.request()
+        trusted_identity = materialization.expected_runtime_provider_identity(
+            ROOT,
+            request,
+        )
+        attacks = (
+            {
+                "provider_id": "evil.provider",
+                "provider_version": "9.9.9",
+            },
+            {"provider_binary_digest": "sha256:" + "d" * 64},
+            {"provider_semantic_contract_digest": "sha256:" + "e" * 64},
+        )
+        for attack in attacks:
+            with self.subTest(attack=attack):
+                report = self.report(request)
+                result = report["task_results"][0]
+                task = request["tasks"][0]
+                identity = copy.deepcopy(trusted_identity)
+                identity.update(attack)
+                authorized_batches = materialization.runtime_authorized_batches(
+                    ROOT,
+                    request,
+                )
+                raw_stdout = materialization.provider_runtime.encode_runtime_private_fixture(
+                    materialization.load(ROOT / materialization.PROVIDER_PROTOCOL),
+                    identity,
+                    task["provider_task_id"],
+                    authorized_batches,
+                    {
+                        batch["batch_id"]: [
+                            row["row_canonical_form"]
+                            for row in batch["row_bindings"]
+                        ]
+                        for batch in result["batches"]
+                    },
+                    result["coverage"]["transport_records"]
+                    + result["coverage"]["semantic_records"],
+                    materialization.fixture_task_unresolved_records(result),
+                    materialization.fixture_task_evidence_records(result),
+                )
+                attacker_observation = (
+                    materialization.provider_runtime.derive_runtime_private_observation(
+                        materialization.load(ROOT / materialization.PROVIDER_PROTOCOL),
+                        raw_stdout,
+                        task["provider_task_id"],
+                        expected_provider_identity=identity,
+                        authorized_batches=authorized_batches,
+                    )
+                )
+                result["runtime_receipt"] = (
+                    materialization.materialization_runtime_receipt(
+                        attacker_observation["receipt"]
+                    )
+                )
+                materialization.rebind_report_digest_chain(ROOT, request, report)
+                runtime_occurrences = (
+                    materialization.fixture_runtime_raw_occurrences(ROOT, request)
+                )
+                runtime_occurrences[
+                    materialization.task_execution_key(task)
+                ] = raw_stdout
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "provider hello differs from independent expected identity",
+                ):
+                    self.validate_report(
+                        request,
+                        report,
+                        runtime_raw_occurrences=runtime_occurrences,
+                    )
+
+    def test_transport_and_semantic_coverage_are_exact_separate_planes(self) -> None:
+        request = self.request()
+
+        def mutations(report: dict) -> list[tuple[str, dict]]:
+            result = report["task_results"][0]
+            coverage = result["coverage"]
+            values: list[tuple[str, dict]] = []
+            missing = copy.deepcopy(report)
+            missing["task_results"][0]["coverage"]["semantic_records"].pop()
+            values.append(("missing", missing))
+            duplicate = copy.deepcopy(report)
+            duplicate["task_results"][0]["coverage"]["semantic_records"][1] = (
+                copy.deepcopy(
+                    duplicate["task_results"][0]["coverage"]["semantic_records"][0]
+                )
+            )
+            values.append(("duplicate", duplicate))
+            extra = copy.deepcopy(report)
+            extra["task_results"][0]["coverage"]["semantic_records"].append(
+                copy.deepcopy(coverage["semantic_records"][-1])
+            )
+            values.append(("extra", extra))
+            for name, field, replacement in (
+                ("renamed", "kind", "cc.renamed"),
+                ("wrong-task", "id", "task:semantic-v2:sha256:" + "0" * 64),
+                ("state", "state", "failed"),
+                ("reason", "reason", "filtered"),
+            ):
+                changed = copy.deepcopy(report)
+                changed["task_results"][0]["coverage"]["semantic_records"][0][
+                    field
+                ] = replacement
+                values.append((name, changed))
+            swapped = copy.deepcopy(report)
+            swapped_coverage = swapped["task_results"][0]["coverage"]
+            (
+                swapped_coverage["transport_records"],
+                swapped_coverage["semantic_records"],
+            ) = (
+                swapped_coverage["semantic_records"],
+                swapped_coverage["transport_records"],
+            )
+            values.append(("plane-swap", swapped))
+            return values
+
+        for name, report in mutations(self.report(request)):
+            with self.subTest(mutation=name):
+                with self.assertRaises(materialization.MaterializationError):
+                    self.validate_report(request, report)
+
+        two_task_request = self.request(translation_unit_count=2)
+        filtered = self.report(two_task_request)
+        filtered["side_channels"]["coverage"]["record_count"] -= 1
+        with self.assertRaises(materialization.MaterializationError):
+            self.validate_report(two_task_request, filtered)
+
+    def test_guarantee_profile_and_modalities_are_closed_everywhere(self) -> None:
+        request = self.request()
+        report = self.report(request)
+        guarantee = report["side_channels"]["guarantee"]
+        self.assertEqual(guarantee["assumptions"], [])
+        self.assertEqual(
+            guarantee["verification_modalities"],
+            materialization.GUARANTEE_MODALITIES,
+        )
+        self.assertEqual(
+            report["task_results"][0]["side_channel_components"][
+                "guarantee_profile_digest"
+            ],
+            materialization.expected_guarantee_profile_digest(),
+        )
+
+        for modality in (
+            "future-modality.v1",
+            "query-parity.v1",
+            "store-reopen.v1",
+            "successful-publication.v1",
+        ):
+            changed = self.report(request)
+            changed["side_channels"]["guarantee"]["verification_modalities"][
+                -1
+            ] = modality
+            with self.subTest(global_modality=modality):
+                with self.assertRaises(materialization.MaterializationError):
+                    self.validate_report(request, changed)
+
+            embedded = self.report(request)
+            embedded["store"]["claim_envelopes"][0]["guarantee"][
+                "verification_modalities"
+            ][-1] = modality
+            with self.subTest(embedded_modality=modality):
+                with self.assertRaises(materialization.MaterializationError):
+                    self.validate_report(request, embedded)
+
+        assumed = self.report(request)
+        assumed["side_channels"]["guarantee"]["assumptions"] = ["hidden"]
+        with self.assertRaises(materialization.MaterializationError):
+            self.validate_report(request, assumed)
+
+        wrong_profile = self.report(request)
+        wrong_profile["task_results"][0]["side_channel_components"][
+            "guarantee_profile_id"
+        ] = "other.profile.v1"
+        with self.assertRaises(materialization.MaterializationError):
+            self.validate_report(request, wrong_profile)
+
+    def test_store_failure_causes_use_only_registered_operation_tuples(self) -> None:
+        request = self.request("static", "sqlite")
+        report = materialization.stale_parent_report(ROOT, request)
+        self.validate_report(request, report)
+        cause = report["publication"]["store_failure"]["cause"]
+        self.assertEqual(cause["operation"], "writer_publish")
+        self.assertIsNone(cause["access_path"])
+        self.assertEqual(cause["field"], request["publication"]["series_id"])
+        self.assertEqual(cause["detail"], {"kind": "stable", "value": ""})
+
+        for field, replacement in (
+            ("operation", "writer_validate"),
+            ("code", "store.imaginary"),
+            ("field", "publication"),
+            ("detail", {"kind": "stable", "value": "diagnostic prose"}),
+        ):
+            changed = materialization.stale_parent_report(ROOT, request)
+            changed["publication"]["store_failure"]["cause"][field] = replacement
+            with self.subTest(cause_field=field):
+                with self.assertRaises(materialization.MaterializationError):
+                    self.validate_report(request, changed)
+
+        opaque = {
+            "kind": "opaque",
+            "byte_count": 4,
+            "digest": materialization.content_digest(b"disk"),
+            "diagnostic": "disk",
+        }
+        materialization._validate_store_detail_observation(opaque)
+        opaque["byte_count"] += 1
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "opaque Store detail receipt differs",
+        ):
+            materialization._validate_store_detail_observation(opaque)
+
+        report_schema = materialization.load(ROOT / materialization.REPORT_SCHEMA)
+        cause_schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$ref": "#/$defs/store_failure_cause",
+            "$defs": report_schema["$defs"],
+        }
+        mismatch = {
+            "kind": "verification_mismatch",
+            "operation": "verify_projection",
+            "access_path": "open-snapshot",
+            "projection": "snapshot-manifest",
+            "expected_digest": "sha256:" + "1" * 64,
+            "actual_digest": "sha256:" + "2" * 64,
+        }
+        materialization.validate_schema(mismatch, cause_schema, "mismatch cause")
+        fabricated = copy.deepcopy(mismatch)
+        fabricated["code"] = "store.corrupt"
+        with self.assertRaises(materialization.MaterializationError):
+            materialization.validate_schema(
+                fabricated,
+                cause_schema,
+                "mismatch cause",
+            )
+
+    def test_prepublication_compact_store_failure_retains_exact_first_cause(self) -> None:
+        request = self.request("static", "sqlite")
+        request_bytes = materialization.canonical_json(request)
+        report_schema = materialization.load(ROOT / materialization.REPORT_SCHEMA)
+        operations = {
+            "store-open": ["store_open"],
+            "store-stage": [
+                "head_current",
+                "writer_begin",
+                "partition_stage",
+                "closure_stage",
+                "writer_validate",
+            ],
+        }
+        for phase, phase_operations in operations.items():
+            for operation in phase_operations:
+                cause = {
+                    "kind": "sdk_error",
+                    "operation": operation,
+                    "access_path": None,
+                    "code": "store.sqlite-failure",
+                    "field": operation,
+                    "detail": {"kind": "stable", "value": "fixture-code"},
+                }
+                report = materialization.compact_failure_report(
+                    request_bytes,
+                    request=request,
+                    phase=phase,
+                    code="materialization.store-failure",
+                    store_failure_cause=cause,
+                )
+                with self.subTest(phase=phase, operation=operation):
+                    self.validate_report(
+                        request,
+                        report,
+                        request_bytes=request_bytes,
+                        store_failure_authority=cause,
+                    )
+                    changed = copy.deepcopy(report)
+                    changed["effects"]["store_failure_cause"]["operation"] = (
+                        "writer_publish"
+                    )
+                    with self.assertRaises(materialization.MaterializationError):
+                        self.validate_report(
+                            request,
+                            changed,
+                            request_bytes=request_bytes,
+                            store_failure_authority=cause,
+                        )
+
+                    tuple_mutations = {
+                        "access-path": ("access_path", "current-selector"),
+                        "sdk-code": ("code", "diagnostic prose"),
+                        "sdk-field": ("field", ""),
+                        "detail-shape": (
+                            "detail",
+                            {"kind": "stable", "value": "x", "extra": "x"},
+                        ),
+                    }
+                    for label, (field, value) in tuple_mutations.items():
+                        tuple_drift = copy.deepcopy(report)
+                        tuple_drift["effects"]["store_failure_cause"][field] = value
+                        with self.subTest(tuple_field=label):
+                            with self.assertRaises(
+                                materialization.MaterializationError
+                            ):
+                                self.validate_report(
+                                    request,
+                                    tuple_drift,
+                                    request_bytes=request_bytes,
+                                    store_failure_authority=cause,
+                                )
+
+                    valid_tuple_mutations = {
+                        "alternate-valid-code": ("code", "store.corrupt"),
+                        "alternate-valid-field": ("field", "database"),
+                        "alternate-valid-detail": (
+                            "detail",
+                            {"kind": "stable", "value": "alternate-sdk-detail"},
+                        ),
+                    }
+                    for label, (field, value) in valid_tuple_mutations.items():
+                        tuple_attack = copy.deepcopy(report)
+                        tuple_attack["effects"]["store_failure_cause"][field] = value
+                        materialization.validate_schema(
+                            tuple_attack,
+                            report_schema,
+                            "materialization report",
+                        )
+                        with self.subTest(valid_tuple_attack=label):
+                            with self.assertRaisesRegex(
+                                materialization.MaterializationError,
+                                "compact Store failure cause",
+                            ):
+                                self.validate_report(
+                                    request,
+                                    tuple_attack,
+                                    request_bytes=request_bytes,
+                                    store_failure_authority=cause,
+                                )
+
+        missing = materialization.compact_failure_report(
+            request_bytes,
+            request=request,
+            phase="store-open",
+            code="materialization.store-failure",
+        )
+        with self.assertRaises(materialization.MaterializationError):
+            self.validate_report(request, missing, request_bytes=request_bytes)
+
+        non_store = materialization.compact_failure_report(
+            request_bytes,
+            request=request,
+            phase="worker-launch",
+            code="materialization.worker-failure",
+        )
+        non_store["effects"]["store_failure_cause"] = {
+            "kind": "sdk_error",
+            "operation": "store_open",
+            "access_path": None,
+            "code": "store.sqlite-failure",
+            "field": "database",
+            "detail": {"kind": "stable", "value": ""},
+        }
+        with self.assertRaises(materialization.MaterializationError):
+            self.validate_report(request, non_store, request_bytes=request_bytes)
+
+        bad_opaque = materialization.compact_failure_report(
+            request_bytes,
+            request=request,
+            phase="store-open",
+            code="materialization.store-failure",
+            store_failure_cause={
+                "kind": "sdk_error",
+                "operation": "store_open",
+                "access_path": None,
+                "code": "store.sqlite-failure",
+                "field": "database",
+                "detail": {
+                    "kind": "opaque",
+                    "byte_count": 5,
+                    "digest": materialization.content_digest(b"disk"),
+                    "diagnostic": "disk",
+                },
+            },
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "opaque Store detail receipt differs",
+        ):
+            self.validate_report(
+                request,
+                bad_opaque,
+                request_bytes=request_bytes,
+                store_failure_authority=bad_opaque["effects"][
+                    "store_failure_cause"
+                ],
+            )
+
+    def test_writer_publish_tuple_classifier_is_complete_and_fail_closed(self) -> None:
+        request = self.request("static", "sqlite")
+        execution_receipt_schema = materialization.load(
+            ROOT
+            / "schemas/cxxlens_ng_clang22_materialization_execution_receipt.schema.yaml"
+        )
+        publication = materialization.stale_parent_report(
+            ROOT, request
+        )["publication"]
+        candidate_snapshot = publication["candidate_snapshot_id"]
+        candidate_publication = publication["candidate_identity"]["publication_id"]
+        series = request["publication"]["series_id"]
+        empty = {"kind": "stable", "value": ""}
+        opaque = {
+            "kind": "opaque",
+            "byte_count": 4,
+            "digest": materialization.content_digest(b"disk"),
+            "diagnostic": "disk",
+        }
+
+        cases = [
+            ("store.publication-conflict", series, empty, "stale_parent", "rejected_stale"),
+            ("store.counter-overflow", "publication_sequence", empty, "counter_overflow", "rejected_store_failure"),
+            ("store.counter-overflow", "physical_generation", empty, "counter_overflow", "rejected_store_failure"),
+            ("store.hash-collision", candidate_snapshot, empty, "hash_collision", "rejected_store_failure"),
+            ("store.snapshot-ambiguous", candidate_snapshot, empty, "persistence_corrupt", "rejected_store_failure"),
+            ("store.sqlite-failure", "database", opaque, "persistence_io", "publication_outcome_unknown"),
+        ]
+        corruption = {
+            "sqlite": [
+                "backend",
+                "column-count",
+                "publication-row",
+                "series-head-count",
+                "series-head",
+                "series-head-sequence",
+            ],
+            candidate_publication: [
+                "authority-record",
+                "duplicate-publication-id",
+                "parent",
+                "parent-sequence",
+            ],
+            series: ["duplicate-sequence", "series-roots", "series-head-cas"],
+        }
+        cases.extend(
+            (
+                "store.corrupt",
+                field,
+                {"kind": "stable", "value": detail},
+                "persistence_corrupt",
+                "rejected_store_failure",
+            )
+            for field, details in corruption.items()
+            for detail in details
+        )
+        for code, field, detail, category, outcome in cases:
+            changed = copy.deepcopy(publication)
+            changed["store_failure"]["cause"] = {
+                "kind": "sdk_error",
+                "operation": "writer_publish",
+                "access_path": None,
+                "code": code,
+                "field": field,
+                "detail": copy.deepcopy(detail),
+            }
+            with self.subTest(code=code, field=field, detail=detail):
+                self.assertEqual(
+                    materialization.classify_writer_publish_failure(request, changed),
+                    (category, outcome),
+                )
+
+        invariant_breaches = [
+            ("store.transaction-state", "publish", empty),
+            ("store.corrupt", "publication", {"kind": "stable", "value": "identity"}),
+            ("store.publish-stale-parent", series, empty),
+            ("store.imaginary", "database", empty),
+        ]
+        for code, field, detail in invariant_breaches:
+            changed = copy.deepcopy(publication)
+            changed["store_failure"]["cause"] = {
+                "kind": "sdk_error",
+                "operation": "writer_publish",
+                "access_path": None,
+                "code": code,
+                "field": field,
+                "detail": detail,
+            }
+            with self.subTest(invariant=code):
+                with self.assertRaisesRegex(
+                    materialization.WriterPublishInvariantBreach,
+                    "invariant breach",
+                ):
+                    materialization.classify_writer_publish_failure(request, changed)
+                disposition = (
+                    materialization.writer_publish_invariant_breach_disposition(
+                        request, changed
+                    )
+                )
+                self.assertEqual(
+                    disposition,
+                    {
+                        "schema": (
+                            "cxxlens.clang22-materialization-execution-receipt.v1"
+                        ),
+                        "actual_exit_status": 2,
+                        "exact_stdout_byte_count": 0,
+                        "stdout_sha256": materialization.content_digest(b""),
+                        "parsed_response_count": 0,
+                        "stderr_sha256": materialization.content_digest(
+                            str(
+                                materialization.WriterPublishInvariantBreach(
+                                    "writer_publish tuple is unlisted or an invariant breach requiring exit two"
+                                )
+                            ).encode("utf-8")
+                        ),
+                    },
+                )
+                materialization.validate_schema(
+                    disposition,
+                    execution_receipt_schema,
+                    "writer-publish invariant execution receipt",
+                )
+
+        memory = copy.deepcopy(publication)
+        memory["backend"] = "memory"
+        with self.assertRaisesRegex(
+            materialization.WriterPublishInvariantBreach,
+            "invariant breach",
+        ):
+            materialization.classify_writer_publish_failure(request, memory)
+        memory_disposition = (
+            materialization.writer_publish_invariant_breach_disposition(
+                request, memory
+            )
+        )
+        self.assertEqual(
+            memory_disposition,
+            {
+                "schema": "cxxlens.clang22-materialization-execution-receipt.v1",
+                "actual_exit_status": 2,
+                "exact_stdout_byte_count": 0,
+                "stdout_sha256": materialization.content_digest(b""),
+                "parsed_response_count": 0,
+                "stderr_sha256": materialization.content_digest(
+                    str(
+                        materialization.WriterPublishInvariantBreach(
+                            "writer_publish tuple is an invariant breach requiring exit two"
+                        )
+                    ).encode("utf-8")
+                ),
+            },
+        )
+        materialization.validate_schema(
+            memory_disposition,
+            execution_receipt_schema,
+            "memory writer-publish invariant execution receipt",
+        )
+        with self.assertRaisesRegex(ValueError, "typed response"):
+            materialization.writer_publish_invariant_breach_disposition(
+                request,
+                publication,
+            )
+
+    def test_postpublish_classifier_preserves_first_sdk_or_projection_cause(self) -> None:
+        paths = list(materialization.POSTPUBLISH_ACCESS_PATHS)
+        matrix_projections = {
+            projection
+            for path_bindings in materialization.POSTPUBLISH_MISMATCH_BINDINGS.values()
+            for projections in path_bindings.values()
+            for projection in projections
+        }
+        self.assertEqual(
+            matrix_projections,
+            set(materialization.POSTPUBLISH_RETAINED_DIGEST_FIELDS)
+            | {
+                "publication-semantic-fields",
+                "physical-generation-transition",
+                "descriptor-inventory",
+                "open-snapshot-return-binding",
+                "cross-path-semantic-projection",
+            },
+        )
+
+        def receipt(path: str, status: str = "present") -> dict:
+            return {
+                "access_path": path,
+                "status": status,
+                "sdk_code": (
+                    None if status in {"present", "not_attempted"}
+                    else "store.sqlite-failure"
+                ),
+                "sdk_field": (
+                    None if status in {"present", "not_attempted"} else "database"
+                ),
+            }
+
+        def authority(failure: dict) -> dict:
+            return copy.deepcopy(
+                materialization._postpublish_first_cause_authority(failure)
+            )
+
+        opened = {
+            "close_reopen_status": "opened",
+            "open_error_code": None,
+            "open_error_field": None,
+            "handle_receipts": [receipt(path) for path in paths],
+        }
+        reopen_failed = {
+            "close_reopen_status": "open_failed",
+            "open_error_code": "store.sqlite-failure",
+            "open_error_field": "open",
+            "handle_receipts": [receipt(path, "not_attempted") for path in paths],
+        }
+        reopen_failure = {
+            "stage": "close-reopen",
+            "access_path": None,
+            "code": "materialization.store-failure",
+            "cause": {
+                "kind": "sdk_error",
+                "operation": "store_reopen",
+                "access_path": None,
+                "code": "store.sqlite-failure",
+                "field": "open",
+                "detail": {"kind": "stable", "value": "reopen-observation"},
+            },
+            "diagnostic_digest": "sha256:" + "0" * 64,
+        }
+        self.assertEqual(
+            materialization.classify_postpublish_failure(
+                reopen_failed,
+                reopen_failure,
+                first_cause_authority=authority(reopen_failure),
+            ),
+            "committed_unverified",
+        )
+        reopen_detail_drift = copy.deepcopy(reopen_failure)
+        reopen_detail_drift["cause"]["detail"]["value"] += "-forged"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "source-private observation",
+        ):
+            materialization.classify_postpublish_failure(
+                reopen_failed,
+                reopen_detail_drift,
+                first_cause_authority=authority(reopen_failure),
+            )
+
+        for index, access_path in enumerate(paths):
+            attempt = copy.deepcopy(opened)
+            attempt["handle_receipts"][index] = receipt(access_path, "error")
+            failure = {
+                "stage": access_path,
+                "access_path": access_path,
+                "code": "materialization.store-failure",
+                "cause": {
+                    "kind": "sdk_error",
+                    "operation": materialization.POSTPUBLISH_PATH_OPERATIONS[
+                        access_path
+                    ],
+                    "access_path": access_path,
+                    "code": "store.sqlite-failure",
+                    "field": "database",
+                    "detail": {
+                        "kind": "stable",
+                        "value": f"exact-{access_path}-detail",
+                    },
+                },
+                "diagnostic_digest": "sha256:" + str(index + 1) * 64,
+            }
+            observed = authority(failure)
+            with self.subTest(operation=failure["cause"]["operation"]):
+                self.assertEqual(
+                    materialization.classify_postpublish_failure(
+                        attempt,
+                        failure,
+                        first_cause_authority=observed,
+                    ),
+                    "committed_unverified",
+                )
+                detail_drift = copy.deepcopy(failure)
+                detail_drift["cause"]["detail"]["value"] += "-forged"
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "source-private observation",
+                ):
+                    materialization.classify_postpublish_failure(
+                        attempt,
+                        detail_drift,
+                        first_cause_authority=observed,
+                    )
+
+        first_attempt = copy.deepcopy(opened)
+        first_attempt["handle_receipts"][0] = receipt("current-selector", "error")
+        first_attempt["handle_receipts"][1] = receipt("open-publication", "error")
+        later_failure = {
+            "stage": "open-publication",
+            "access_path": "open-publication",
+            "code": "materialization.store-failure",
+            "cause": {
+                "kind": "sdk_error",
+                "operation": "verify_open_publication",
+                "access_path": "open-publication",
+                "code": "store.sqlite-failure",
+                "field": "database",
+                "detail": {"kind": "stable", "value": "later"},
+            },
+            "diagnostic_digest": "sha256:" + "4" * 64,
+        }
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "first reopened handle failure",
+        ):
+            materialization.classify_postpublish_failure(
+                first_attempt,
+                later_failure,
+                first_cause_authority=authority(later_failure),
+            )
+        first_failure = copy.deepcopy(later_failure)
+        first_failure["stage"] = "current-selector"
+        first_failure["access_path"] = "current-selector"
+        first_failure["cause"]["operation"] = "verify_current"
+        first_failure["cause"]["access_path"] = "current-selector"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "caller-provided.*is not first",
+        ):
+            materialization.classify_postpublish_failure(
+                first_attempt,
+                first_failure,
+                first_attempt["handle_receipts"][1],
+                first_cause_authority=authority(first_failure),
+            )
+
+        for stage, path_bindings in materialization.POSTPUBLISH_MISMATCH_BINDINGS.items():
+            for access_path, projections in path_bindings.items():
+                for projection in projections:
+                    mismatch = {
+                        "stage": stage,
+                        "access_path": access_path,
+                        "code": "materialization.store-failure",
+                        "cause": {
+                            "kind": "verification_mismatch",
+                            "operation": "verify_projection",
+                            "access_path": access_path,
+                            "projection": projection,
+                            "expected_digest": "sha256:" + "a" * 64,
+                            "actual_digest": "sha256:" + "b" * 64,
+                        },
+                        "diagnostic_digest": "sha256:" + "5" * 64,
+                    }
+                    with self.subTest(
+                        stage=stage,
+                        access_path=access_path,
+                        projection=projection,
+                    ):
+                        self.assertEqual(
+                            materialization.classify_postpublish_failure(
+                                opened,
+                                mismatch,
+                                first_cause_authority=authority(mismatch),
+                            ),
+                            "committed_unverified",
+                        )
+
+        invalid_bindings = []
+        wrong_stage = {
+            "stage": "rows",
+            "access_path": "open-snapshot",
+            "code": "materialization.store-failure",
+            "cause": {
+                "kind": "verification_mismatch",
+                "operation": "verify_projection",
+                "access_path": "open-snapshot",
+                "projection": "snapshot-manifest",
+                "expected_digest": "sha256:" + "a" * 64,
+                "actual_digest": "sha256:" + "b" * 64,
+            },
+            "diagnostic_digest": "sha256:" + "6" * 64,
+        }
+        invalid_bindings.append(wrong_stage)
+        wrong_access = copy.deepcopy(wrong_stage)
+        wrong_access["stage"] = "publication-binding"
+        wrong_access["cause"]["projection"] = "publication-semantic-fields"
+        invalid_bindings.append(wrong_access)
+        cause_path_drift = copy.deepcopy(wrong_stage)
+        cause_path_drift["stage"] = "snapshot-binding"
+        cause_path_drift["cause"]["access_path"] = "current-selector"
+        invalid_bindings.append(cause_path_drift)
+        aliased = copy.deepcopy(wrong_stage)
+        aliased["stage"] = "snapshot-binding"
+        aliased["cause"]["actual_digest"] = aliased["cause"]["expected_digest"]
+        invalid_bindings.append(aliased)
+        for index, invalid in enumerate(invalid_bindings):
+            with self.subTest(invalid_projection_binding=index):
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "exact projection mismatch",
+                ):
+                    materialization.classify_postpublish_failure(
+                        opened,
+                        invalid,
+                        first_cause_authority=authority(invalid),
+                    )
+
+        exact_mismatch = {
+            "stage": "snapshot-binding",
+            "access_path": "open-snapshot",
+            "code": "materialization.store-failure",
+            "cause": {
+                "kind": "verification_mismatch",
+                "operation": "verify_projection",
+                "access_path": "open-snapshot",
+                "projection": "snapshot-manifest",
+                "expected_digest": "sha256:" + "7" * 64,
+                "actual_digest": "sha256:" + "8" * 64,
+            },
+            "diagnostic_digest": "sha256:" + "9" * 64,
+        }
+        observed_mismatch = authority(exact_mismatch)
+        for field in ("expected_digest", "actual_digest"):
+            changed = copy.deepcopy(exact_mismatch)
+            changed["cause"][field] = "sha256:" + "f" * 64
+            with self.subTest(recomputed_digest=field):
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "source-private observation",
+                ):
+                    materialization.classify_postpublish_failure(
+                        opened,
+                        changed,
+                        first_cause_authority=observed_mismatch,
+                    )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "source-private observation",
+        ):
+            materialization.classify_postpublish_failure(
+                opened,
+                exact_mismatch,
+                first_cause_authority=None,
+            )
+
+    def test_committed_unverified_validator_binds_source_private_sdk_detail(
+        self,
+    ) -> None:
+        request = self.request("static", "sqlite")
+        report = self.report(request)
+        publication = report["publication"]
+        invocation_record = publication["invocation_committed_record"]
+        reopened = report["semantic_verification"]["reopened_store"]
+        receipts = copy.deepcopy(reopened["handle_receipts"])
+        failed_receipt = receipts[2]
+        failed_receipt.update(
+            {
+                "status": "error",
+                "sdk_code": "store.sqlite-failure",
+                "sdk_field": "database",
+                "projection": None,
+            }
+        )
+        cause = {
+            "kind": "sdk_error",
+            "operation": "verify_open_snapshot",
+            "access_path": "open-snapshot",
+            "code": "store.sqlite-failure",
+            "field": "database",
+            "detail": {
+                "kind": "opaque",
+                "byte_count": len(b"exact sdk diagnostic"),
+                "digest": materialization.content_digest(b"exact sdk diagnostic"),
+                "diagnostic": "exact sdk diagnostic",
+            },
+        }
+        diagnostic_digest = materialization.content_digest(
+            b"post-publish verification failed"
+        )
+        failure = {
+            "stage": "open-snapshot",
+            "access_path": "open-snapshot",
+            "code": "materialization.store-failure",
+            "cause": copy.deepcopy(cause),
+            "diagnostic_digest": diagnostic_digest,
+        }
+        not_applicable = {
+            "status": "not_applicable",
+            "requested_publication_id": None,
+            "record": None,
+            "error_code": None,
+            "error_field": None,
+        }
+        present_current = {
+            "status": "present",
+            "requested_publication_id": None,
+            "record": copy.deepcopy(invocation_record),
+            "error_code": None,
+            "error_field": None,
+        }
+        present_candidate = {
+            "status": "present",
+            "requested_publication_id": invocation_record["publication_id"],
+            "record": copy.deepcopy(invocation_record),
+            "error_code": None,
+            "error_field": None,
+        }
+        publication.update(
+            {
+                "outcome": "committed_unverified",
+                "store_failure": {
+                    "category": "post_commit_verification",
+                    "cause": copy.deepcopy(cause),
+                    "diagnostic_digest": diagnostic_digest,
+                },
+                "sqlite_reopen_status": "opened",
+                "recovery_receipt": {
+                    "selector": materialization._expected_recovery_selector(request),
+                    "reopen_status": "opened",
+                    "open_error_code": None,
+                    "open_error_field": None,
+                    "current": present_current,
+                    "expected_parent": not_applicable,
+                    "candidate": present_candidate,
+                },
+            }
+        )
+        report["result"] = "failed"
+        report["process_exit_status"] = 1
+        report["error"] = {
+            "code": "materialization.store-failure",
+            "phase": "post-publication-verification",
+            "subject": invocation_record["publication_id"],
+            "diagnostic": "post-publish verification failed",
+        }
+        report["semantic_verification"] = {
+            "status": "committed_unverified",
+            "reopened_store": None,
+            "reopen_attempt": {
+                "backend": "sqlite",
+                "close_reopen_status": "opened",
+                "open_error_code": None,
+                "open_error_field": None,
+                "handle_receipts": receipts,
+            },
+            "failure": failure,
+        }
+        first_cause_authority = copy.deepcopy(
+            materialization._postpublish_first_cause_authority(failure)
+        )
+        self.validate_report(
+            request,
+            report,
+            postpublish_failure_authority=first_cause_authority,
+        )
+
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "source-private observation",
+        ):
+            self.validate_report(request, report)
+
+        forged = copy.deepcopy(report)
+        forged["semantic_verification"]["failure"]["cause"]["detail"][
+            "diagnostic"
+        ] = "forged sdk diagnostic"
+        forged_detail = forged["semantic_verification"]["failure"]["cause"][
+            "detail"
+        ]
+        forged_detail["byte_count"] = len(forged_detail["diagnostic"].encode())
+        forged_detail["digest"] = materialization.content_digest(
+            forged_detail["diagnostic"].encode()
+        )
+        forged["publication"]["store_failure"]["cause"] = copy.deepcopy(
+            forged["semantic_verification"]["failure"]["cause"]
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "source-private observation",
+        ):
+            self.validate_report(
+                request,
+                forged,
+                postpublish_failure_authority=first_cause_authority,
+            )
+
+    def test_committed_unverified_retains_closure_projection_mismatch(self) -> None:
+        request = self.request("static", "sqlite")
+        report = self.report(request)
+        publication = report["publication"]
+        invocation_record = publication["invocation_committed_record"]
+        reopened = report["semantic_verification"]["reopened_store"]
+        receipts = copy.deepcopy(reopened["handle_receipts"])
+
+        current_projection = receipts[0]["projection"]
+        expected_closure_digest = current_projection["closure_digest"]
+        actual_closure_digest = materialization.semantic_digest(
+            "cxxlens.fixture.reopened-closure-mismatch.v1",
+            "observed-closure",
+        )
+        current_projection["closure_digest"] = actual_closure_digest
+        self.rebind_reopened_semantic_projection(current_projection)
+        self.rebind_reopened_handle_projection(current_projection)
+
+        cause = {
+            "kind": "verification_mismatch",
+            "operation": "verify_projection",
+            "access_path": "current-selector",
+            "projection": "closure",
+            "expected_digest": expected_closure_digest,
+            "actual_digest": actual_closure_digest,
+        }
+        diagnostic = "post-publish closure verification failed"
+        diagnostic_digest = materialization.content_digest(diagnostic.encode())
+        failure = {
+            "stage": "closure",
+            "access_path": "current-selector",
+            "code": "materialization.store-failure",
+            "cause": copy.deepcopy(cause),
+            "diagnostic_digest": diagnostic_digest,
+        }
+        not_applicable = {
+            "status": "not_applicable",
+            "requested_publication_id": None,
+            "record": None,
+            "error_code": None,
+            "error_field": None,
+        }
+        present_current = {
+            "status": "present",
+            "requested_publication_id": None,
+            "record": copy.deepcopy(invocation_record),
+            "error_code": None,
+            "error_field": None,
+        }
+        present_candidate = {
+            "status": "present",
+            "requested_publication_id": invocation_record["publication_id"],
+            "record": copy.deepcopy(invocation_record),
+            "error_code": None,
+            "error_field": None,
+        }
+        publication.update(
+            {
+                "outcome": "committed_unverified",
+                "store_failure": {
+                    "category": "post_commit_verification",
+                    "cause": copy.deepcopy(cause),
+                    "diagnostic_digest": diagnostic_digest,
+                },
+                "sqlite_reopen_status": "opened",
+                "recovery_receipt": {
+                    "selector": materialization._expected_recovery_selector(request),
+                    "reopen_status": "opened",
+                    "open_error_code": None,
+                    "open_error_field": None,
+                    "current": present_current,
+                    "expected_parent": not_applicable,
+                    "candidate": present_candidate,
+                },
+            }
+        )
+        report["result"] = "failed"
+        report["process_exit_status"] = 1
+        report["error"] = {
+            "code": "materialization.store-failure",
+            "phase": "post-publication-verification",
+            "subject": invocation_record["publication_id"],
+            "diagnostic": diagnostic,
+        }
+        report["semantic_verification"] = {
+            "status": "committed_unverified",
+            "reopened_store": None,
+            "reopen_attempt": {
+                "backend": "sqlite",
+                "close_reopen_status": "opened",
+                "open_error_code": None,
+                "open_error_field": None,
+                "handle_receipts": receipts,
+            },
+            "failure": failure,
+        }
+        first_cause_authority = copy.deepcopy(
+            materialization._postpublish_first_cause_authority(failure)
+        )
+        self.validate_report(
+            request,
+            report,
+            postpublish_failure_authority=first_cause_authority,
+        )
+
+        forged_projection = copy.deepcopy(report)
+        forged_closure = forged_projection["semantic_verification"][
+            "reopen_attempt"
+        ]["handle_receipts"][0]["projection"]
+        forged_closure["closure_digest"] = materialization.semantic_digest(
+            "cxxlens.fixture.reopened-closure-mismatch.v1",
+            "forged-retained-closure",
+        )
+        self.rebind_reopened_semantic_projection(forged_closure)
+        self.rebind_reopened_handle_projection(forged_closure)
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "retained projection mismatch",
+        ):
+            self.validate_report(
+                request,
+                forged_projection,
+                postpublish_failure_authority=first_cause_authority,
+            )
+
+        wrong_stage = copy.deepcopy(report)
+        wrong_stage["semantic_verification"]["failure"]["stage"] = "unresolved"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "exact projection mismatch",
+        ):
+            self.validate_report(
+                request,
+                wrong_stage,
+                postpublish_failure_authority=(
+                    materialization._postpublish_first_cause_authority(wrong_stage["semantic_verification"]["failure"])
+                ),
+            )
+
+        forged_actual = copy.deepcopy(report)
+        forged_actual["semantic_verification"]["failure"]["cause"][
+            "actual_digest"
+        ] = materialization.semantic_digest(
+            "cxxlens.fixture.reopened-closure-mismatch.v1",
+            "forged-closure",
+        )
+        forged_actual["publication"]["store_failure"]["cause"] = copy.deepcopy(
+            forged_actual["semantic_verification"]["failure"]["cause"]
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "source-private observation",
+        ):
+            self.validate_report(
+                request,
+                forged_actual,
+                postpublish_failure_authority=first_cause_authority,
+            )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "retained projection mismatch",
+        ):
+            self.validate_report(
+                request,
+                forged_actual,
+                postpublish_failure_authority=(
+                    materialization._postpublish_first_cause_authority(
+                        forged_actual["semantic_verification"]["failure"]
+                    )
+                ),
+            )
 
     def test_unsealed_or_partial_group_and_batch_are_rejected(self) -> None:
         request = self.request()
@@ -1203,13 +2770,31 @@ class NgClang22MaterializationTests(unittest.TestCase):
                 "canonical_claims_with_exact_input_edges": 2,
             }
         )
+        canonical_raw = (
+            materialization.bind_fixture_runtime_occurrences_for_report(
+                ROOT, request, canonical
+            )
+        )
         materialization.rebind_report_digest_chain(ROOT, request, canonical)
-        self.validate_report(request, canonical)
+        self.validate_report(
+            request,
+            canonical,
+            runtime_raw_occurrences=canonical_raw,
+        )
 
         observation = self.report(request)
         empty_batch(observation, "frontend.clang22.type_observation.v2")
+        observation_raw = (
+            materialization.bind_fixture_runtime_occurrences_for_report(
+                ROOT, request, observation
+            )
+        )
         materialization.rebind_report_digest_chain(ROOT, request, observation)
-        self.validate_report(request, observation)
+        self.validate_report(
+            request,
+            observation,
+            runtime_raw_occurrences=observation_raw,
+        )
 
     def test_zero_row_batch_normalization_is_fail_closed(self) -> None:
         request = self.request()
@@ -1964,6 +3549,218 @@ class NgClang22MaterializationTests(unittest.TestCase):
         ):
             materialization.validate_request(ROOT, overflow)
 
+    def test_worker_v3_maximum_projection_proof_is_schema_derived(self) -> None:
+        request_schema = materialization.load(ROOT / materialization.REQUEST_SCHEMA)
+        proof = materialization.maximum_worker_task_v3_projection_proof(
+            request_schema
+        )
+        contract = materialization.load(ROOT / materialization.CONTRACT)
+        self.assertEqual(
+            proof,
+            contract["project_and_tasks"]["worker_task_v3"][
+                "maximum_projection_proof"
+            ],
+        )
+        self.assertEqual(
+            proof["maximum_projection_bytes"],
+            proof["outer_tuple_framing_bytes"]
+            + sum(proof["component_maximum_bytes"].values()),
+        )
+        self.assertEqual(
+            proof["saturated_vector"]["byte_count"],
+            proof["maximum_projection_bytes"],
+        )
+        self.assertLessEqual(
+            proof["maximum_projection_bytes"],
+            materialization.MAXIMUM_TASK_INPUT_BYTES,
+        )
+
+        saturated = bytearray()
+        streamed_bytes = materialization.stream_worker_task_v3_saturated_vector(
+            request_schema, saturated.extend
+        )
+        self.assertEqual(streamed_bytes, len(saturated))
+        self.assertEqual(streamed_bytes, proof["maximum_projection_bytes"])
+        self.assertEqual(
+            "sha256:" + hashlib.sha256(saturated).hexdigest(),
+            proof["saturated_vector"]["digest"],
+        )
+
+        decoded_items = 0
+
+        def read_u64(data: memoryview, offset: int, limit: int) -> tuple[int, int]:
+            self.assertLessEqual(offset + 8, limit)
+            return int.from_bytes(data[offset : offset + 8], "big"), offset + 8
+
+        def decode_item(
+            data: memoryview,
+            offset: int,
+            limit: int,
+        ) -> tuple[int, int]:
+            nonlocal decoded_items
+            self.assertLess(offset, limit)
+            tag = data[offset]
+            decoded_items += 1
+            offset += 1
+            if tag == 0:
+                return tag, offset
+            if tag == 1:
+                self.assertLess(offset, limit)
+                self.assertIn(data[offset], (0, 1))
+                return tag, offset + 1
+            if tag == 2:
+                self.assertLess(offset, limit)
+                self.assertIn(data[offset], (0, 1))
+                width, offset = read_u64(data, offset + 1, limit)
+                self.assertGreaterEqual(width, 1)
+                self.assertLessEqual(width, 8)
+                self.assertLessEqual(offset + width, limit)
+                return tag, offset + width
+            if tag in (3, 4):
+                size, offset = read_u64(data, offset, limit)
+                end = offset + size
+                self.assertLessEqual(end, limit)
+                if tag == 4:
+                    decoder = codecs.getincrementaldecoder("utf-8")("strict")
+                    while offset < end:
+                        chunk_end = min(offset + 1_048_576, end)
+                        decoder.decode(bytes(data[offset:chunk_end]), final=False)
+                        offset = chunk_end
+                    decoder.decode(b"", final=True)
+                return tag, end
+            self.assertEqual(tag, 5)
+            count, offset = read_u64(data, offset, limit)
+            for _ in range(count):
+                item_size, offset = read_u64(data, offset, limit)
+                item_end = offset + item_size
+                self.assertLessEqual(item_end, limit)
+                _, decoded_end = decode_item(data, offset, item_end)
+                self.assertEqual(decoded_end, item_end)
+                offset = item_end
+            return tag, offset
+
+        saturated_view = memoryview(saturated)
+        top_tag, decoded_end = decode_item(
+            saturated_view, 0, len(saturated_view)
+        )
+        self.assertEqual(top_tag, 5)
+        self.assertEqual(int.from_bytes(saturated_view[1:9], "big"), 5)
+        self.assertEqual(decoded_end, len(saturated_view))
+        self.assertGreater(decoded_items, proof["maximum_expanded_leaf_value_count"])
+        saturated_view.release()
+        del saturated
+
+        bounded_request = self.request(translation_unit_count=2)
+        for task in bounded_request["tasks"]:
+            self.assertLessEqual(
+                len(
+                    materialization.worker_task_v3_projection(
+                        bounded_request, task
+                    )
+                ),
+                proof["maximum_projection_bytes"],
+            )
+
+        exact_limit = proof["maximum_projection_bytes"]
+        at_limit = materialization.maximum_worker_task_v3_projection_proof(
+            request_schema,
+            transfer_limit=exact_limit,
+        )
+        self.assertEqual(at_limit["margin_bytes"], 0)
+        plus_one = materialization.maximum_worker_task_v3_projection_proof(
+            request_schema,
+            transfer_limit=exact_limit + 1,
+        )
+        self.assertEqual(plus_one["margin_bytes"], 1)
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "exceeds transfer limit",
+        ):
+            materialization.maximum_worker_task_v3_projection_proof(
+                request_schema,
+                transfer_limit=exact_limit - 1,
+            )
+
+        missing_bound = copy.deepcopy(request_schema)
+        missing_bound["$defs"]["strong_id"].pop(
+            "x-cxxlens-max-utf8-bytes"
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "missing a finite UTF-8 byte bound",
+        ):
+            materialization.maximum_worker_task_v3_projection_proof(missing_bound)
+
+        missing_count = copy.deepcopy(request_schema)
+        missing_count["properties"]["project"]["properties"][
+            "catalog_compile_units"
+        ].pop("maxItems")
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "lacks one finite homogeneous array bound",
+        ):
+            materialization.maximum_worker_task_v3_projection_proof(missing_count)
+
+        missing_global_required = copy.deepcopy(request_schema)
+        missing_global_required["properties"]["project"]["required"].remove(
+            "catalog_id"
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "exact required task.v3 global catalog field census",
+        ):
+            materialization.maximum_worker_task_v3_projection_proof(
+                missing_global_required
+            )
+
+        missing_global_property = copy.deepcopy(request_schema)
+        missing_global_property["properties"]["project"]["properties"].pop(
+            "catalog_id"
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "exact required task.v3 global catalog field census",
+        ):
+            materialization.maximum_worker_task_v3_projection_proof(
+                missing_global_property
+            )
+
+        missing_nested_required = copy.deepcopy(request_schema)
+        missing_nested_required["properties"]["tasks"]["items"]["properties"][
+            "source"
+        ]["required"].remove("content_digest")
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "exact object field census",
+        ):
+            materialization.maximum_worker_task_v3_projection_proof(
+                missing_nested_required
+            )
+
+        missing_nested_property = copy.deepcopy(request_schema)
+        missing_nested_property["properties"]["tasks"]["items"]["properties"][
+            "source"
+        ]["properties"].pop("content_digest")
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "exact object field census",
+        ):
+            materialization.maximum_worker_task_v3_projection_proof(
+                missing_nested_property
+            )
+
+        forged_contract = copy.deepcopy(contract)
+        forged_contract["project_and_tasks"]["worker_task_v3"][
+            "maximum_projection_proof"
+        ]["maximum_projection_bytes"] += 1
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "worker task v3 binding differs",
+        ):
+            materialization.validate_contract_exact(
+                forged_contract, request_schema
+            )
+
     def test_catalog_selection_alias_census_and_payload_drift_are_rejected(self) -> None:
         unsorted = self.request(translation_unit_count=2)
         unsorted["project"]["catalog_compile_units"].reverse()
@@ -2597,8 +4394,17 @@ class NgClang22MaterializationTests(unittest.TestCase):
                 "canonical_claims_with_exact_input_edges": 4,
             }
         )
+        runtime_raw = materialization.bind_fixture_runtime_occurrences_for_report(
+            ROOT,
+            request,
+            report,
+        )
         materialization.rebind_report_digest_chain(ROOT, request, report)
-        self.validate_report(request, report)
+        self.validate_report(
+            request,
+            report,
+            runtime_raw_occurrences=runtime_raw,
+        )
 
         same_task_calls = [
             binding
@@ -2629,7 +4435,11 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.MaterializationError,
             "span bundle is not bound to its adopted observation row",
         ):
-            self.validate_report(request, report)
+            self.validate_report(
+                request,
+                report,
+                runtime_raw_occurrences=runtime_raw,
+            )
 
     def test_machine_contract_rejects_invocation_digest_and_exactness_drift(self) -> None:
         contract = copy.deepcopy(materialization.load(ROOT / materialization.CONTRACT))

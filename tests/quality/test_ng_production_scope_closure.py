@@ -201,8 +201,8 @@ class ProductionScopeClosureTest(unittest.TestCase):
     def test_repository_check_closes_exact_30_domains(self) -> None:
         self.assertEqual(tuple(sorted({key.domain for key in self.model.nodes})), tuple(sorted(closure.DOMAINS)))
         self.assertEqual(self.model.summary["domain_count"], 30)
-        self.assertEqual(self.model.summary["assignable_count"], 231)
-        self.assertEqual(self.model.summary["expanded_count"], 781)
+        self.assertEqual(self.model.summary["assignable_count"], 232)
+        self.assertEqual(self.model.summary["expanded_count"], 782)
         self.assertEqual(self.model.summary["aggregate_count"], 14)
         self.assertEqual(self.model.closure_status, "classified-with-gaps")
 
@@ -223,7 +223,7 @@ class ProductionScopeClosureTest(unittest.TestCase):
 
     def test_known_gap_and_blocker_census_is_truthful(self) -> None:
         assignments = {assignment["id"]: assignment for assignment in self.model.manifest["assignments"]}
-        self.assertEqual(len(assignments["scope.clang22-installed-adoption-gap"]["surfaces"]), 13)
+        self.assertEqual(len(assignments["scope.clang22-installed-adoption-gap"]["surfaces"]), 14)
         self.assertEqual(len(assignments["scope.ng1-provider-hardening-gap"]["surfaces"]), 6)
         self.assertEqual(len(assignments["scope.incremental-coordinator-gap"]["surfaces"]), 6)
         self.assertEqual(len(assignments["scope.nightly-qualification-gap"]["surfaces"]), 4)

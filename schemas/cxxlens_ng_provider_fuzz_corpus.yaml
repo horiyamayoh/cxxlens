@@ -1,8 +1,9 @@
 schema: cxxlens.provider-fuzz-corpus.v1
-document_version: 1.1.0
+document_version: 1.2.0
 authority:
   owner_issue: '#98'
   decision_adr: docs/design/adr/0041-provider-control-text-utf8.md
+  clarification_feedback: [DF-0197]
 cases:
   - {id: truncated-fixed-header, mutation: truncate-fixed-header, expected_reason: provider.truncated-stream}
   - {id: bad-magic, mutation: replace-magic, expected_reason: provider.malformed-frame}
@@ -23,3 +24,153 @@ cases:
   - {id: utf8-overlong-4, mutation: utf8-overlong-4, expected_reason: provider.malformed-frame}
   - {id: utf8-surrogate, mutation: utf8-surrogate, expected_reason: provider.malformed-frame}
   - {id: utf8-out-of-range, mutation: utf8-out-of-range, expected_reason: provider.malformed-frame}
+minor_1_task_input_cases:
+  - id: minor1-input-positive
+    mutation: positive
+    expected_decision: accepted
+    expected_reason: provider.task-input-valid
+    transfer:
+      protocol_minor: 1
+      features: [task-input-chunks-v1]
+      task_id: task:minor1-fixture
+      input_digest: sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c
+      descriptor:
+        sequence: 3
+        control: {schema: cxxlens.provider-control.input-descriptor.v1, task_id: 'task:minor1-fixture', input_digest: 'sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c', total_bytes: 5, chunk_bytes: 4, chunk_count: 2}
+      chunks:
+        - sequence: 4
+          control: {schema: cxxlens.provider-control.input-chunk.v1, task_id: 'task:minor1-fixture', input_digest: 'sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c', chunk_index: 0, offset: 0, byte_count: 4}
+          payload_hex: '61626364'
+          payload_digest: sha256:88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589
+        - sequence: 5
+          control: {schema: cxxlens.provider-control.input-chunk.v1, task_id: 'task:minor1-fixture', input_digest: 'sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c', chunk_index: 1, offset: 4, byte_count: 1}
+          payload_hex: '65'
+          payload_digest: sha256:3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea
+      credit_sequence: 6
+      close_sequence: 7
+  - id: minor1-input-missing
+    mutation: missing
+    expected_decision: rejected
+    expected_reason: provider.protocol-state-invalid
+    transfer:
+      protocol_minor: 1
+      features: [task-input-chunks-v1]
+      task_id: task:minor1-fixture
+      input_digest: sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c
+      descriptor:
+        sequence: 3
+        control: {schema: cxxlens.provider-control.input-descriptor.v1, task_id: 'task:minor1-fixture', input_digest: 'sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c', total_bytes: 5, chunk_bytes: 4, chunk_count: 2}
+      chunks:
+        - sequence: 4
+          control: {schema: cxxlens.provider-control.input-chunk.v1, task_id: 'task:minor1-fixture', input_digest: 'sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c', chunk_index: 0, offset: 0, byte_count: 4}
+          payload_hex: '61626364'
+          payload_digest: sha256:88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589
+      credit_sequence: 6
+      close_sequence: 7
+  - id: minor1-input-duplicate
+    mutation: duplicate
+    expected_decision: rejected
+    expected_reason: provider.protocol-state-invalid
+    transfer:
+      protocol_minor: 1
+      features: [task-input-chunks-v1]
+      task_id: task:minor1-fixture
+      input_digest: sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c
+      descriptor:
+        sequence: 3
+        control: {schema: cxxlens.provider-control.input-descriptor.v1, task_id: 'task:minor1-fixture', input_digest: 'sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c', total_bytes: 5, chunk_bytes: 4, chunk_count: 2}
+      chunks:
+        - sequence: 4
+          control: {schema: cxxlens.provider-control.input-chunk.v1, task_id: 'task:minor1-fixture', input_digest: 'sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c', chunk_index: 0, offset: 0, byte_count: 4}
+          payload_hex: '61626364'
+          payload_digest: sha256:88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589
+        - sequence: 4
+          control: {schema: cxxlens.provider-control.input-chunk.v1, task_id: 'task:minor1-fixture', input_digest: 'sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c', chunk_index: 0, offset: 0, byte_count: 4}
+          payload_hex: '61626364'
+          payload_digest: sha256:88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589
+      credit_sequence: 6
+      close_sequence: 7
+  - id: minor1-input-reordered
+    mutation: reordered
+    expected_decision: rejected
+    expected_reason: provider.protocol-state-invalid
+    transfer:
+      protocol_minor: 1
+      features: [task-input-chunks-v1]
+      task_id: task:minor1-fixture
+      input_digest: sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c
+      descriptor:
+        sequence: 3
+        control: {schema: cxxlens.provider-control.input-descriptor.v1, task_id: 'task:minor1-fixture', input_digest: 'sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c', total_bytes: 5, chunk_bytes: 4, chunk_count: 2}
+      chunks:
+        - sequence: 5
+          control: {schema: cxxlens.provider-control.input-chunk.v1, task_id: 'task:minor1-fixture', input_digest: 'sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c', chunk_index: 1, offset: 4, byte_count: 1}
+          payload_hex: '65'
+          payload_digest: sha256:3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea
+        - sequence: 4
+          control: {schema: cxxlens.provider-control.input-chunk.v1, task_id: 'task:minor1-fixture', input_digest: 'sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c', chunk_index: 0, offset: 0, byte_count: 4}
+          payload_hex: '61626364'
+          payload_digest: sha256:88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589
+      credit_sequence: 6
+      close_sequence: 7
+  - id: minor1-input-overlap
+    mutation: overlap
+    expected_decision: rejected
+    expected_reason: provider.protocol-state-invalid
+    transfer:
+      protocol_minor: 1
+      features: [task-input-chunks-v1]
+      task_id: task:minor1-fixture
+      input_digest: sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c
+      descriptor:
+        sequence: 3
+        control: {schema: cxxlens.provider-control.input-descriptor.v1, task_id: 'task:minor1-fixture', input_digest: 'sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c', total_bytes: 5, chunk_bytes: 4, chunk_count: 2}
+      chunks:
+        - sequence: 4
+          control: {schema: cxxlens.provider-control.input-chunk.v1, task_id: 'task:minor1-fixture', input_digest: 'sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c', chunk_index: 0, offset: 0, byte_count: 4}
+          payload_hex: '61626364'
+          payload_digest: sha256:88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589
+        - sequence: 5
+          control: {schema: cxxlens.provider-control.input-chunk.v1, task_id: 'task:minor1-fixture', input_digest: 'sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c', chunk_index: 1, offset: 3, byte_count: 1}
+          payload_hex: '65'
+          payload_digest: sha256:3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea
+      credit_sequence: 6
+      close_sequence: 7
+  - id: minor1-input-digest
+    mutation: digest
+    expected_decision: rejected
+    expected_reason: provider.checksum-mismatch
+    transfer:
+      protocol_minor: 1
+      features: [task-input-chunks-v1]
+      task_id: task:minor1-fixture
+      input_digest: sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c
+      descriptor:
+        sequence: 3
+        control: {schema: cxxlens.provider-control.input-descriptor.v1, task_id: 'task:minor1-fixture', input_digest: 'sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c', total_bytes: 5, chunk_bytes: 4, chunk_count: 2}
+      chunks:
+        - sequence: 4
+          control: {schema: cxxlens.provider-control.input-chunk.v1, task_id: 'task:minor1-fixture', input_digest: 'sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c', chunk_index: 0, offset: 0, byte_count: 4}
+          payload_hex: '61626364'
+          payload_digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        - sequence: 5
+          control: {schema: cxxlens.provider-control.input-chunk.v1, task_id: 'task:minor1-fixture', input_digest: 'sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c', chunk_index: 1, offset: 4, byte_count: 1}
+          payload_hex: '65'
+          payload_digest: sha256:3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea
+      credit_sequence: 6
+      close_sequence: 7
+  - id: minor1-input-limit
+    mutation: limit
+    expected_decision: rejected
+    expected_reason: provider.task-input-invalid
+    transfer:
+      protocol_minor: 1
+      features: [task-input-chunks-v1]
+      task_id: task:minor1-fixture
+      input_digest: sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c
+      descriptor:
+        sequence: 3
+        control: {schema: cxxlens.provider-control.input-descriptor.v1, task_id: 'task:minor1-fixture', input_digest: 'sha256:36bbe50ed96841d10443bcb670d6554f0a34b761be67ec9c4a8ad2c0c44ca42c', total_bytes: 67108865, chunk_bytes: 1048576, chunk_count: 65}
+      chunks: []
+      credit_sequence: 69
+      close_sequence: 70

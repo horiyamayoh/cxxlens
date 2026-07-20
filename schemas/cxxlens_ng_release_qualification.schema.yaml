@@ -5,7 +5,7 @@ additionalProperties: false
 required: [schema, document_version, maturity, authority, binding, prerequisites, package, materialization, provider, security, performance, documentation, claim_policy, required_artifacts]
 properties:
   schema: {const: cxxlens.ng-release-qualification.v1}
-  document_version: {const: 1.5.0}
+  document_version: {const: 1.6.0}
   maturity: {const: implemented}
   authority:
     type: object
@@ -65,6 +65,8 @@ properties:
       contract_schema: schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
       request_schema: schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
       report_schema: schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
+      occurrence_manifest_schema: schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml
+      occurrence_manifest_path: share/cxxlens/materialization/clang22/occurrence-v1.json
       request_filename: cxxlens-clang22-materialization-request.json
       report_filename: cxxlens-clang22-materialization-report.json
       execution_receipt_filename: cxxlens-clang22-materialization-execution-receipt.json

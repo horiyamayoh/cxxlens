@@ -31,7 +31,7 @@ required:
   - acceptance
 properties:
   schema: {const: cxxlens.clang22-materialization-contract.v2}
-  document_version: {const: 2.0.0}
+  document_version: {const: 2.1.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -315,6 +315,45 @@ properties:
         payload_authority: installed-tool-derived-only
         task_input_digest: sha256-content-digest-of-exact-projection-bytes
         old_codec_or_caller_payload: reject
+        logical_transfer:
+          authority: exact-canonical-task-v3-bytes-and-task-input-digest
+          fragmentation_changes-logical-identity: false
+          ambient-path-or-fd-authority: forbidden
+        physical_transfer:
+          provider_protocol: 1.1.0
+          required_feature: task-input-chunks-v1
+          mode: authenticated-input-descriptor-and-canonical-chunks
+          open_task_payload: empty
+          canonical_chunk_bytes: 1048576
+          maximum_task_input_bytes: 67108864
+          maximum_chunk_count: 64
+          task_accepted: only-after-length-order-final-digest-task-v3-and-portable-task-validation
+          minor-zero-inline-fallback: forbidden
+        maximum_projection_proof:
+          authority: checker-derived-from-every-projected-request-field-count-and-utf8-byte-bound
+          request_schema: schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
+          derivation_digest: sha256:d74c62f50f3344e86ac4f32d9be9a8305902e28fee2876faac41d783e28a5f61
+          arithmetic: checked-uint64-add-and-multiply
+          canonical_length_field_bytes: 8
+          component_maximum_bytes:
+            contract_tag: 32
+            full_global_project_catalog: 10652161
+            selected_catalog_compile_unit_id: 2057
+            final_relation_compile_unit_id: 2057
+            exact_per_tu_task_payload: 30873900
+          outer_tuple_framing_bytes: 49
+          structural_leaf_schema_count: 60
+          maximum_expanded_leaf_value_count: 20535
+          bounded_utf8_leaf_schema_count: 43
+          maximum_expanded_bounded_utf8_value_count: 20518
+          maximum_projection_bytes: 41530256
+          transfer_limit_bytes: 67108864
+          margin_bytes: 25578608
+          saturated_vector:
+            construction: schema-maximal-canonical-task-v3-stream
+            byte_count: 41530256
+            digest: sha256:7bcc875ee4b64ee779c9afc0986e54cefc57afe6a9a7b6abeee8b8eaf6877b0e
+          runtime_magic_constant_only: forbidden
       task_execution_matching:
         key: [provider_task_id, task_input_digest, provider_execution_id]
         provider_task_id_uniqueness: not-required
@@ -334,7 +373,15 @@ properties:
     properties:
       guarantee:
         const:
-          exact_preconditions: [zero-non-exact-in-each-observation-descriptor-census, complete-balanced-coverage, no-blocking-unresolved, no-absent-primary-span-bundle, exact-task-census, exact-six-batches, full-span-validation, complete-provenance, successful-publication]
+          profile:
+            id: cxxlens.clang22-materialization-guarantee-profile.v1
+            digest_domain: cxxlens.clang22-materialization-guarantee-profile.v1
+            owner: exact-materialization-contract-version
+            assumptions: []
+            verification_modalities: [clang22.materialization-sealed.v1, provider.transcript-sealed.v1, sdk.claim-envelope-validated.v1]
+            caller-or-report-builder-mutation: forbidden
+          exact_preconditions: [zero-non-exact-in-each-observation-descriptor-census, complete-balanced-semantic-coverage, exact-transport-task-coverage, no-blocking-unresolved, no-absent-primary-span-bundle, exact-task-census, exact-six-batches, full-span-validation, complete-provenance]
+          postpublication_evidence_excluded: [successful-publication, query-parity, store-reopen]
           non_exact: preserve-typed-approximation-assumptions-modalities-and-unresolved
           inference_from-success-or-prose: forbidden
     additionalProperties: true
@@ -364,13 +411,37 @@ properties:
             result_domain: cxxlens.clang22-task-result.v1
             result_set_domain: cxxlens.clang22-task-result-set.v1
             raw_frame_set_domain: cxxlens.clang22-raw-frame-set.v1
+            transcript_receipt:
+              raw_frame_stream: exact-provider-stdout-byte-count-and-sha256-before-decode-or-move
+              expected_provider_identity:
+                exact_fields: [provider_id, provider_version, provider_binary_digest, provider_semantic_contract_digest, protocol_major, protocol_minor, required_features, sandbox_policy_digest, offered_relations]
+                source: exact-request-worker-identity-negotiated-session-measured-worker-binary-and-authorized-descriptor-order
+                report_cross_binding: provider-report-plus-measured-worker-occurrence-plus-registry-descriptor-set
+                provider-output-self-consistency: forbidden
+              frame_transcript_domain: cxxlens.provider-frame-transcript.v2
+              sealed_transcript_domain: cxxlens.provider-sealed-transcript.v1
+              sealed_transcript_exact_fields: [task_id, terminal, batches, coverage_records, unresolved_records, evidence_records]
+              sealed_transcript_exact_batch_fields: [task_id, descriptor_id, descriptor_digest, dependency_group_id, atomic_output_group_id, batch_id, batch_digest, ordered_chunk_digests, row_canonical_forms]
+              sealed_transcript_exact_coverage_fields: [kind, id, state, reason]
+              sealed_transcript_exact_unresolved_fields: [code, subject, detail]
+              sealed_transcript_exact_evidence_fields: [kind, subject, producer, summary]
+              sealed_transcript_digest_projection: [task-id, terminal, batches, full-flat-coverage-records, full-unresolved-records, full-evidence-records]
+              materialization-specialization-projection: none
+              construction: same-shared-validation-pass-that-constructs-immutable-seal
+              public-process-semantic-digest-alias: forbidden
+            input_transfer_receipt:
+              protocol: 1.1.0-task-input-chunks-v1
+              fields: [task-input-codec, logical-byte-count, logical-task-input-digest, canonical-chunk-size, chunk-count, ordered-chunk-payload-digest-set-digest]
+              raw-host-frames-authorize-task-or-adoption: false
           global_side_channels:
-            domains: [cxxlens.clang22-global-coverage.v1, cxxlens.clang22-global-unresolved.v1, cxxlens.clang22-global-evidence.v1]
+            domains: [cxxlens.clang22-global-transport-coverage.v1, cxxlens.clang22-global-coverage.v1, cxxlens.clang22-global-unresolved.v1, cxxlens.clang22-global-evidence.v1]
+            transport-versus-semantic-coverage: separate-recomputable-record-planes
             task_order: semantic-task-key-byte-order
             physical_provider_execution: excluded
           guarantee:
             domain: cxxlens.clang22-materialization-guarantee.v1
-            inputs: [global-side-channel-digests, task-guarantee-fragments, canonical-three-observation-descriptor-censuses]
+            profile_domain: cxxlens.clang22-materialization-guarantee-profile.v1
+            inputs: [exact-profile-id-and-digest, global-side-channel-digests, task-guarantee-fragments, canonical-three-observation-descriptor-censuses]
             base-or-claim-stage-back-edge: forbidden
           claim_stage:
             content_domain: cxxlens.clang22-claim-stage-content-set.v1
@@ -404,7 +475,18 @@ properties:
               closed-mixture: present-or-typed-non-present-for-all-three-paths
               retain-every-successful-projection: true
               first-failure: exact-stage-path-and-sdk-error-or-projection-mismatch
-            exact_compare: [selector, snapshot-manifest, eight-field-partition-bindings, rows, claim-annotation-multiset, coverage-multiset, unresolved, descriptor-inventory]
+              mismatch_digest_binding:
+                expected: recomputed-exact-store-handle-projection
+                actual: retained-successful-handle-projection-at-exact-access-path
+                retained_digest_fields: [snapshot-manifest, partition-bindings, rows, claim-annotations, coverage, unresolved, closure, cursor-projection, canonical-export]
+                computed_domains:
+                  publication-semantic-fields: cxxlens.clang22-reopened-publication-semantic-fields.v1
+                  physical-generation-transition: cxxlens.clang22-reopened-physical-generation.v1
+                  descriptor-inventory: cxxlens.clang22-reopened-descriptor-inventory.v1
+                  open-snapshot-return-binding: cxxlens.clang22-reopened-open-snapshot-return.v1
+                cross-path-equality: first-fixed-path-semantic-projection-digest-that-differs-from-expected
+                cause-expected-actual-exact-equality: required
+            exact_compare: [selector, snapshot-manifest, eight-field-partition-bindings, rows, claim-annotation-multiset, coverage-multiset, unresolved, closure, descriptor-inventory]
             canonical_export_digest: sha256-of-exact-utf8-bytes-returned-by-sdk-canonical-export
             snapshot_manifest_digest: sha256-of-exact-canonical-json-utf8-bytes
             receipt_leaf_digests: domain-separated-canonical-tuples-in-named-field-order
@@ -430,6 +512,11 @@ properties:
       memory_sqlite_semantic_parity: required
       static_shared_semantic_parity: required
       exact_observation_equivalence: required-zero-non-exact-per-descriptor
+      scale_and_resource_evidence:
+        cases: [one-task, four-thousand-ninety-six-tasks, sixteen-mib-source, five-hundred-twelve-mib-aggregate-source, one-gib-raw-request, arbitrary-short-reads]
+        retained_memory_formula: one-shared-catalog-plus-fixed-buffers-plus-one-task-window-plus-one-source-plus-one-output-window
+        forbidden_residency: [raw-request, aggregate-source, all-task-payloads, task-count-times-catalog-count]
+        spool-failure: zero-effect-before-publication
       execution_receipt:
         fields: [actual-exit-status, exact-stdout-byte-count, stdout-sha256, parsed-response-count, stderr-sha256-diagnostic-only]
         cross_binding: stdout-bytes-are-the-exact-report-artifact

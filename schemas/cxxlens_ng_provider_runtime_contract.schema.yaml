@@ -18,7 +18,7 @@ required:
   - acceptance
 properties:
   schema: {const: cxxlens.provider-runtime-contract.v1}
-  document_version: {const: 1.17.0}
+  document_version: {const: 1.19.0}
   maturity: {const: accepted}
   authority:
     type: object
@@ -40,14 +40,101 @@ properties:
     type: object
     minProperties: 1
     additionalProperties: true
-    required: [typed_validation]
+    required: [host_input_profiles, host_input_transfer, runtime_private_receipt, typed_validation]
     properties:
+      host_input_profiles:
+        const:
+          '1.0':
+            protocol_minor: 0
+            required_features: []
+            exact_frames: [hello_ack, schema_negotiate, open_task, credit, close]
+            exact_sequences: [0, 1, 2, 3, 4]
+            payload_policy: open-task-only
+            compatibility: existing-public-five-frame-vector-api-unchanged-wrapper
+          '1.1':
+            protocol_minor: 1
+            required_features: [task-input-chunks-v1]
+            exact_frame_pattern: [hello_ack, schema_negotiate, open_task, input_descriptor, input_chunk-zero-or-more, credit, close]
+            fixed_prefix_sequences: [0, 1, 2, 3]
+            chunk_sequence: four-plus-chunk-index
+            credit_sequence: four-plus-chunk-count
+            close_sequence: five-plus-chunk-count
+            payload_policy: input-chunk-only
+            open_task_payload: empty
+      host_input_transfer:
+        const:
+          activation: {protocol_minor: 1, required_features: [task-input-chunks-v1]}
+          limits: {chunk_payload_bytes: 1048576, logical_input_bytes: 67108864, chunks: 64}
+          descriptor_control: cxxlens.provider-control.input-descriptor.v1-exact-five-fields
+          chunk_control: cxxlens.provider-control.input-chunk.v1-exact-five-fields
+          sequence_and_shape: contiguous-index-offset-length-nonfinal-size-and-final-remainder
+          zero_input: {total_bytes: 0, chunk_count: 0, input_chunks: 0, input_digest: 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'}
+          final_seal: exact-total-length-and-streaming-sha256-equal-open-task-input-digest
+          task_accepted: only-after-shared-seal-task-decode-and-bottom-up-binding
+          output_credit: separate-provider-output-only
+          execution_transport_bytes: separate-stdout-stderr-accounting-only
+          ambient_input_side_channel: forbidden
+          raw_frames_and_spool: diagnostic-transport-occurrences-only
+          semantic_authority: detached-decoded-task-and-existing-output-seal-only
+          shared_incremental_core: host-encoder-worker-decoder-process-runtime-conformance-validator
+          production_full_input_vector_adapter: forbidden
+          existing_public_signatures: unchanged
+          minor_0_public_vector_api: bounded-wrapper-over-shared-incremental-core
+      runtime_private_receipt:
+        const:
+          visibility: runtime-private
+          exact_fields: [raw_stdout_byte_count, raw_stdout_sha256, decoded_frame_count, frame_transcript_digest, sealed_transcript_digest]
+          additional_fields: reject
+          construction: same-shared-validation-pass-that-constructs-immutable-seal
+          verification_source: runtime-observed-raw-bytes-decoded-frame-values-and-immutable-seal-only
+          report-supplied-digest-or-self-consistency: forbidden
+          expected_provider_identity:
+            exact_fields: [provider_id, provider_version, provider_binary_digest, provider_semantic_contract_digest, protocol_major, protocol_minor, required_features, sandbox_policy_digest, offered_relations]
+            source: independently-validated-selected-manifest-session-and-launcher-authority-never-provider-stdout
+            hello: exact-closed-projection-before-task-acceptance
+            task_accepted: exact-provider-id-version-cross-binding
+          raw_stdout:
+            observation_order: before-frame-decode-or-move
+            byte_count: exact-uint64
+            digest: sha256-of-exact-observed-bytes
+          frame_transcript:
+            domain: cxxlens.provider-frame-transcript.v2
+            digest: cxxlens-semantic-digest-v2
+            encoding: cxxlens-canonical-tuple-v1
+            exact_frame_fields: [protocol_major, protocol_minor, flags, message_type, stream_id, sequence, control_digest, payload_digest]
+            order: decoded-wire-order-with-explicit-count
+            source: same-decoded-frame-values-consumed-by-shared-validator
+          sealed_transcript:
+            domain: cxxlens.provider-sealed-transcript.v1
+            digest: cxxlens-semantic-digest-v2
+            encoding: cxxlens-canonical-tuple-v1
+            exact_fields: [task_id, terminal, batches, coverage_records, unresolved_records, evidence_records]
+            exact_batch_fields: [task_id, descriptor_id, descriptor_digest, dependency_group_id, atomic_output_group_id, batch_id, batch_digest, ordered_chunk_digests, row_canonical_forms]
+            exact_coverage_fields: [kind, id, state, reason]
+            exact_unresolved_fields: [code, subject, detail]
+            exact_evidence_fields: [kind, subject, producer, summary]
+            ordering: [batch-seal-order, row-order, retained-coverage-wire-order, retained-unresolved-wire-order, retained-evidence-wire-order]
+            source: immutable-value-owned-seal-from-same-shared-validation-pass
+          public_process_execution_report_semantic_digest:
+            role: diagnostic-public-report-identity-only
+            alias_for_any_receipt_field: false
+            raw-frame-frame-transcript-sealed-transcript-or-adoption-authority: false
       typed_validation:
         type: object
         minProperties: 1
         additionalProperties: true
-        required: [adoption_projection]
+        required: [host_input_incremental_core, host_input_seal, host_input_side_channel, host_input_credit, host_input_raw_occurrence, adoption_projection]
         properties:
+          host_input_incremental_core:
+            const: same-transition-digest-length-and-budget-state-for-host-worker-runtime-and-conformance
+          host_input_seal:
+            const: required-before-task-accepted-and-semantic-task-use
+          host_input_side_channel:
+            const: ambient-path-fd-environment-shared-memory-forbidden
+          host_input_credit:
+            const: provider-output-only-never-input-accounting
+          host_input_raw_occurrence:
+            const: diagnostic-only-never-task-or-adoption-authority
           adoption_projection:
             const:
               validated_frames: diagnostic-only-non-authoritative
@@ -83,12 +170,13 @@ properties:
   report:
     type: object
     additionalProperties: false
-    required: [schema, measured_executable_digest, frames_authority, adoption_authority]
+    required: [schema, measured_executable_digest, frames_authority, adoption_authority, public_semantic_digest_role]
     properties:
       schema: {const: schemas/cxxlens_ng_provider_execution_report.schema.yaml}
       measured_executable_digest: {const: exact-sealed-image-digest-or-null-before-measurement}
       frames_authority: {const: diagnostic-only}
       adoption_authority: {const: none}
+      public_semantic_digest_role: {const: diagnostic-report-identity-only-never-runtime-private-receipt-or-adoption-authority}
   acceptance:
     type: array
     minItems: 8

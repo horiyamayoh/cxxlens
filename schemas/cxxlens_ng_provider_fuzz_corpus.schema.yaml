@@ -2,11 +2,18 @@ $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens.provider-fuzz-corpus.v1
 type: object
 additionalProperties: false
-required: [schema, document_version, authority, cases]
+required: [schema, document_version, authority, cases, minor_1_task_input_cases]
 properties:
   schema: {const: cxxlens.provider-fuzz-corpus.v1}
-  document_version: {type: string}
-  authority: {type: object, required: [owner_issue, decision_adr]}
+  document_version: {const: 1.2.0}
+  authority:
+    type: object
+    additionalProperties: false
+    required: [owner_issue, decision_adr, clarification_feedback]
+    properties:
+      owner_issue: {const: '#98'}
+      decision_adr: {const: docs/design/adr/0041-provider-control-text-utf8.md}
+      clarification_feedback: {const: [DF-0197]}
   cases:
     type: array
     minItems: 19
@@ -19,3 +26,77 @@ properties:
         id: {type: string, pattern: '^[a-z][a-z0-9_.-]+$'}
         mutation: {type: string, minLength: 1}
         expected_reason: {type: string, pattern: '^provider\.[a-z0-9_.-]+$'}
+  minor_1_task_input_cases:
+    type: array
+    minItems: 7
+    maxItems: 7
+    uniqueItems: true
+    items: {$ref: '#/$defs/task_input_case'}
+$defs:
+  digest:
+    type: string
+    pattern: '^sha256:[0-9a-f]{64}$'
+  descriptor_control:
+    type: object
+    additionalProperties: false
+    required: [schema, task_id, input_digest, total_bytes, chunk_bytes, chunk_count]
+    properties:
+      schema: {const: cxxlens.provider-control.input-descriptor.v1}
+      task_id: {type: string, minLength: 1}
+      input_digest: {$ref: '#/$defs/digest'}
+      total_bytes: {type: integer, minimum: 0}
+      chunk_bytes: {type: integer, minimum: 0}
+      chunk_count: {type: integer, minimum: 0}
+  descriptor:
+    type: object
+    additionalProperties: false
+    required: [sequence, control]
+    properties:
+      sequence: {type: integer, minimum: 0}
+      control: {$ref: '#/$defs/descriptor_control'}
+  chunk_control:
+    type: object
+    additionalProperties: false
+    required: [schema, task_id, input_digest, chunk_index, offset, byte_count]
+    properties:
+      schema: {const: cxxlens.provider-control.input-chunk.v1}
+      task_id: {type: string, minLength: 1}
+      input_digest: {$ref: '#/$defs/digest'}
+      chunk_index: {type: integer, minimum: 0}
+      offset: {type: integer, minimum: 0}
+      byte_count: {type: integer, minimum: 0}
+  chunk:
+    type: object
+    additionalProperties: false
+    required: [sequence, control, payload_hex, payload_digest]
+    properties:
+      sequence: {type: integer, minimum: 0}
+      control: {$ref: '#/$defs/chunk_control'}
+      payload_hex: {type: string, pattern: '^(?:[0-9a-f]{2})*$'}
+      payload_digest: {$ref: '#/$defs/digest'}
+  task_input_transfer:
+    type: object
+    additionalProperties: false
+    required: [protocol_minor, features, task_id, input_digest, descriptor, chunks, credit_sequence, close_sequence]
+    properties:
+      protocol_minor: {const: 1}
+      features: {const: [task-input-chunks-v1]}
+      task_id: {type: string, minLength: 1}
+      input_digest: {$ref: '#/$defs/digest'}
+      descriptor: {$ref: '#/$defs/descriptor'}
+      chunks:
+        type: array
+        maxItems: 64
+        items: {$ref: '#/$defs/chunk'}
+      credit_sequence: {type: integer, minimum: 0}
+      close_sequence: {type: integer, minimum: 0}
+  task_input_case:
+    type: object
+    additionalProperties: false
+    required: [id, mutation, expected_decision, expected_reason, transfer]
+    properties:
+      id: {type: string, pattern: '^minor1-input-[a-z0-9-]+$'}
+      mutation: {enum: [positive, missing, duplicate, reordered, overlap, digest, limit]}
+      expected_decision: {enum: [accepted, rejected]}
+      expected_reason: {enum: [provider.task-input-valid, provider.protocol-state-invalid, provider.checksum-mismatch, provider.task-input-invalid]}
+      transfer: {$ref: '#/$defs/task_input_transfer'}
