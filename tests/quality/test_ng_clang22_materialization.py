@@ -7129,6 +7129,18 @@ class NgClang22MaterializationTests(unittest.TestCase):
         ):
             validate(store=unowned_open_result)
 
+        unchecked_null_open = store_source.replace(
+            "if (open_result != 0 || connection.get() == nullptr)",
+            "if (open_result != 0)",
+            1,
+        )
+        self.assertNotEqual(unchecked_null_open, store_source)
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "raw connection RAII ownership",
+        ):
+            validate(store=unchecked_null_open)
+
         duplicate_close = lifecycle_source.replace(
             "const auto code = owned->close_v2(owned->connection);",
             "(void)owned->close_v2(owned->connection);\n"
