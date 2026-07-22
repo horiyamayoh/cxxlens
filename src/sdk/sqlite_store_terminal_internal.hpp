@@ -77,6 +77,7 @@ namespace cxxlens::sdk
 		compaction_concurrent_authority_change,
 		compaction_unexpected_census,
 		compaction_mixed_or_ambiguous,
+		sqlite_recovery_opaque,
 		recovery_handoff_opaque,
 	};
 

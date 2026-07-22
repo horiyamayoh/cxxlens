@@ -196,6 +196,9 @@ namespace cxxlens::sdk
 					if (phase == sqlite_terminal_phase::precommit)
 						return {sqlite_terminal_public_result::original_trigger,
 								sqlite_terminal_state_effect::return_no_store};
+					if (phase == sqlite_terminal_phase::successful_handoff)
+						return {sqlite_terminal_public_result::initialization_recovery_opaque,
+								sqlite_terminal_state_effect::return_no_store};
 					return {sqlite_terminal_public_result::database_opaque,
 							sqlite_terminal_state_effect::return_no_store};
 				case sqlite_store_operation::publish:
@@ -219,6 +222,9 @@ namespace cxxlens::sdk
 				case sqlite_store_operation::wal_recovery_handoff:
 					if (phase == sqlite_terminal_phase::successful_handoff)
 						return {sqlite_terminal_public_result::recovered_success, install};
+					if (phase == sqlite_terminal_phase::precommit ||
+						phase == sqlite_terminal_phase::commit_outcome_unknown)
+						return {sqlite_terminal_public_result::sqlite_recovery_opaque, install};
 					return {sqlite_terminal_public_result::recovery_handoff_opaque,
 							sqlite_terminal_state_effect::poison_result_operations};
 			}
@@ -301,7 +307,8 @@ namespace cxxlens::sdk
 						: sqlite_terminal_state_effect::preserve_last_validated};
 		}
 
-		if (context.phase == sqlite_terminal_phase::precommit &&
+		if (context.operation != sqlite_store_operation::wal_recovery_handoff &&
+			context.phase == sqlite_terminal_phase::precommit &&
 			context.cause == sqlite_terminal_cause::triggering_failure &&
 			context.terminal_class == sqlite_terminal_class::not_classified)
 		{
@@ -372,6 +379,8 @@ namespace cxxlens::sdk
 				return error{"store.corrupt", "compaction-recovery", "unexpected-census"};
 			case sqlite_terminal_public_result::compaction_mixed_or_ambiguous:
 				return error{"store.corrupt", "compaction-recovery", "mixed-or-ambiguous"};
+			case sqlite_terminal_public_result::sqlite_recovery_opaque:
+				return error{"store.sqlite-failure", "sqlite-recovery", "opaque"};
 			case sqlite_terminal_public_result::recovery_handoff_opaque:
 				return error{"store.sqlite-failure", "sqlite-recovery-handoff", "opaque"};
 		}

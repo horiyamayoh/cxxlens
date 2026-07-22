@@ -161,6 +161,32 @@ namespace
 						   sqlite_terminal_public_result::recovered_success,
 						   install,
 						   "fresh expected-v3 descendant did not recover initialization success");
+		require_resolution({sqlite_store_operation::fresh_initialization,
+							sqlite_terminal_phase::successful_handoff,
+							sqlite_terminal_cause::triggering_failure,
+							sqlite_terminal_class::authorized_post_state_with_operation_edge},
+						   sqlite_terminal_public_result::recovered_success,
+						   install,
+						   "fresh known-success handoff lost its exact initialization edge");
+		require_resolution(
+			{sqlite_store_operation::fresh_initialization,
+			 sqlite_terminal_phase::successful_handoff,
+			 sqlite_terminal_cause::triggering_failure,
+			 sqlite_terminal_class::authorized_post_state_without_operation_edge},
+			sqlite_terminal_public_result::initialization_recovery_opaque,
+			no_store,
+			"fresh known-success handoff inferred success without its initialization edge");
+		for (const auto cause : {sqlite_terminal_cause::close_non_ok_or_unknown,
+								 sqlite_terminal_cause::reopen_failure})
+		{
+			require_resolution({sqlite_store_operation::fresh_initialization,
+								sqlite_terminal_phase::successful_handoff,
+								cause,
+								sqlite_terminal_class::authorized_post_state_with_operation_edge},
+							   sqlite_terminal_public_result::initialization_recovery_opaque,
+							   no_store,
+							   "fresh known-success handoff trusted unavailable terminal evidence");
+		}
 		require_resolution(
 			{sqlite_store_operation::fresh_initialization,
 			 sqlite_terminal_phase::precommit,
@@ -238,29 +264,28 @@ namespace
 						   "COMMIT-unknown compaction invalid census lost its typed result");
 	}
 
-	void check_wal_handoff_is_fail_closed()
+	void check_wal_handoff_reclassification_precedence()
 	{
+		constexpr auto preserve = sqlite_terminal_state_effect::preserve_last_validated;
 		constexpr auto install = sqlite_terminal_state_effect::install_authorized_state;
 		constexpr auto poison = sqlite_terminal_state_effect::poison_result_operations;
-		constexpr std::array non_success_phases{sqlite_terminal_phase::pre_effect,
-												sqlite_terminal_phase::journal_transition,
-												sqlite_terminal_phase::precommit,
-												sqlite_terminal_phase::commit_outcome_unknown};
+		constexpr std::array post_arm_phases{sqlite_terminal_phase::precommit,
+											 sqlite_terminal_phase::commit_outcome_unknown};
 		constexpr std::array authorized_classes{
 			sqlite_terminal_class::authorized_pre_state,
 			sqlite_terminal_class::authorized_post_state_without_operation_edge,
 			sqlite_terminal_class::authorized_post_state_with_operation_edge};
-		for (const auto phase : non_success_phases)
+		for (const auto phase : post_arm_phases)
 		{
 			for (const auto terminal_class : authorized_classes)
 			{
 				require_resolution({sqlite_store_operation::wal_recovery_handoff,
 									phase,
-									sqlite_terminal_cause::rollback_uncertain,
+									sqlite_terminal_cause::triggering_failure,
 									terminal_class},
-								   sqlite_terminal_public_result::recovery_handoff_opaque,
-								   poison,
-								   "failed WAL handoff trusted an authorized reclassification");
+								   sqlite_terminal_public_result::sqlite_recovery_opaque,
+								   install,
+								   "WAL recovery lost an authorized post-arm reclassification");
 			}
 		}
 		for (const auto terminal_class : authorized_classes)
@@ -273,6 +298,50 @@ namespace
 				sqlite_terminal_public_result::recovered_success,
 				install,
 				"successful WAL handoff did not install the independently validated state");
+		}
+		require_resolution({sqlite_store_operation::wal_recovery_handoff,
+							sqlite_terminal_phase::pre_effect,
+							sqlite_terminal_cause::triggering_failure,
+							sqlite_terminal_class::not_classified},
+						   sqlite_terminal_public_result::original_trigger,
+						   preserve,
+						   "pre-arm WAL receipt drift did not preserve the validated eager state");
+		require_resolution({sqlite_store_operation::wal_recovery_handoff,
+							sqlite_terminal_phase::pre_effect,
+							sqlite_terminal_cause::triggering_failure,
+							sqlite_terminal_class::authorized_pre_state},
+						   sqlite_terminal_public_result::recovery_handoff_opaque,
+						   poison,
+						   "pre-arm WAL handoff installed a terminal reclassification");
+
+		constexpr std::array unsafe_classes{sqlite_terminal_class::not_classified,
+											sqlite_terminal_class::exact_logical_empty,
+											sqlite_terminal_class::valid_non_descendant,
+											sqlite_terminal_class::invalid_census,
+											sqlite_terminal_class::mixed_or_ambiguous,
+											sqlite_terminal_class::reclassifier_unavailable};
+		for (const auto terminal_class : unsafe_classes)
+		{
+			require_resolution(
+				{sqlite_store_operation::wal_recovery_handoff,
+				 sqlite_terminal_phase::precommit,
+				 sqlite_terminal_cause::triggering_failure,
+				 terminal_class},
+				sqlite_terminal_public_result::recovery_handoff_opaque,
+				poison,
+				"unsafe WAL recovery state did not remain handoff-opaque and poisoned");
+		}
+		for (const auto cause : {sqlite_terminal_cause::close_non_ok_or_unknown,
+								 sqlite_terminal_cause::terminal_observation_failure,
+								 sqlite_terminal_cause::reopen_failure})
+		{
+			require_resolution({sqlite_store_operation::wal_recovery_handoff,
+								sqlite_terminal_phase::precommit,
+								cause,
+								sqlite_terminal_class::authorized_pre_state},
+							   sqlite_terminal_public_result::recovery_handoff_opaque,
+							   poison,
+							   "WAL recovery trusted unavailable or non-OK terminal evidence");
 		}
 	}
 
@@ -368,6 +437,11 @@ namespace
 					  "compaction-recovery",
 					  "mixed-or-ambiguous",
 					  "compaction mixed mapping drifted");
+		require_error(sqlite_terminal_public_result::sqlite_recovery_opaque,
+					  "store.sqlite-failure",
+					  "sqlite-recovery",
+					  "opaque",
+					  "SQLite recovery opaque mapping drifted");
 		require_error(sqlite_terminal_public_result::recovery_handoff_opaque,
 					  "store.sqlite-failure",
 					  "sqlite-recovery-handoff",
@@ -425,7 +499,7 @@ int main()
 	check_publish_precedence();
 	check_initialization_precedence();
 	check_migration_and_compaction_precedence();
-	check_wal_handoff_is_fail_closed();
+	check_wal_handoff_reclassification_precedence();
 	check_invalid_enums_fail_closed();
 	check_public_error_mapping();
 	check_availability_and_observer_preservation();
