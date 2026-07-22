@@ -9,6 +9,7 @@
 #include <map>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -23,12 +24,14 @@
 #include "sdk/sqlite_backend_effect_gate_internal.hpp"
 #include "sdk/sqlite_default_forwarding_vfs_internal.hpp"
 #include "sdk/sqlite_private_snapshot_internal.hpp"
+#include "sdk/sqlite_source_shm_readonly_preflight_internal.hpp"
 
 namespace
 {
 	using namespace cxxlens::sdk;
 
 	constexpr int sqlite_ok = 0;
+	constexpr int sqlite_no_memory = 7;
 	constexpr int sqlite_readonly = 8;
 	constexpr int sqlite_readonly_cannot_initialize = sqlite_readonly | (5 << 8);
 	constexpr int sqlite_io_error = 10;
@@ -127,16 +130,29 @@ namespace
 	bool original_app_data_ok{true};
 	bool trailing_alignment_ok{true};
 	bool fail_next_open{};
+	bool throw_on_fake_open{};
+	bool override_next_open{};
+	int next_open_status{sqlite_ok};
+	const sqlite3_io_methods* next_open_methods{};
+	int fake_close_result{sqlite_ok};
+	bool throw_on_fake_close{};
 	bool exclusive_lock_seen{};
 	int null_find_calls{};
 	int open_calls{};
 	int close_calls{};
+	int read_calls{};
 	int write_calls{};
 	int truncate_calls{};
 	int remove_calls{};
 	int shm_map_calls{};
+	int shm_lock_calls{};
 	int shm_unmap_calls{};
+	int absent_map_trailing_lock_calls{};
+	int absent_map_trailing_barrier_calls{};
+	int absent_map_trailing_unmap_calls{};
+	int absent_fetch_trailing_unfetch_calls{};
 	int shm_unmap_result{sqlite_ok};
+	int last_shm_remove{-1};
 	int last_open_flags{};
 	int last_shm_extend{-1};
 	int shm_map_result{sqlite_ok};
@@ -315,12 +331,18 @@ namespace
 	int fake_close(sqlite3_file* base)
 	{
 		++close_calls;
+		if (throw_on_fake_close)
+		{
+			throw_on_fake_close = false;
+			throw std::runtime_error{"fake close failure"};
+		}
 		base->methods = nullptr;
-		return sqlite_ok;
+		return fake_close_result;
 	}
 
 	int fake_read(sqlite3_file*, void* output, const int count, long long)
 	{
+		++read_calls;
 		if (output != nullptr && count > 0)
 			std::memset(output, 0, static_cast<std::size_t>(count));
 		return sqlite_ok;
@@ -395,12 +417,14 @@ namespace
 	}
 	int fake_shm_lock(sqlite3_file*, int, int, int)
 	{
+		++shm_lock_calls;
 		return sqlite_ok;
 	}
 	void fake_shm_barrier(sqlite3_file*) {}
-	int fake_shm_unmap(sqlite3_file*, int)
+	int fake_shm_unmap(sqlite3_file*, const int remove_file)
 	{
 		++shm_unmap_calls;
+		last_shm_remove = remove_file;
 		return shm_unmap_result;
 	}
 	int fake_fetch(sqlite3_file*, long long, int, void** output)
@@ -411,6 +435,25 @@ namespace
 	}
 	int fake_unfetch(sqlite3_file*, long long, void*)
 	{
+		return sqlite_ok;
+	}
+	int absent_map_trailing_lock(sqlite3_file*, int, int, int)
+	{
+		++absent_map_trailing_lock_calls;
+		return sqlite_ok;
+	}
+	void absent_map_trailing_barrier(sqlite3_file*)
+	{
+		++absent_map_trailing_barrier_calls;
+	}
+	int absent_map_trailing_unmap(sqlite3_file*, int)
+	{
+		++absent_map_trailing_unmap_calls;
+		return sqlite_ok;
+	}
+	int absent_fetch_trailing_unfetch(sqlite3_file*, long long, void*)
+	{
+		++absent_fetch_trailing_unfetch_calls;
 		return sqlite_ok;
 	}
 
@@ -452,6 +495,103 @@ namespace
 											 nullptr,
 											 nullptr,
 											 nullptr};
+	const sqlite3_io_methods absent_shm_lead_trusted_trailing_methods{3,
+																	  fake_close,
+																	  fake_read,
+																	  fake_write,
+																	  fake_truncate,
+																	  fake_sync,
+																	  fake_size,
+																	  fake_lock,
+																	  fake_unlock,
+																	  fake_reserved,
+																	  fake_control,
+																	  fake_sector,
+																	  fake_characteristics,
+																	  nullptr,
+																	  absent_map_trailing_lock,
+																	  absent_map_trailing_barrier,
+																	  absent_map_trailing_unmap,
+																	  nullptr,
+																	  nullptr};
+	const sqlite3_io_methods absent_fetch_lead_trusted_trailing_methods{
+		3,
+		fake_close,
+		fake_read,
+		fake_write,
+		fake_truncate,
+		fake_sync,
+		fake_size,
+		fake_lock,
+		fake_unlock,
+		fake_reserved,
+		fake_control,
+		fake_sector,
+		fake_characteristics,
+		fake_shm_map,
+		fake_shm_lock,
+		fake_shm_barrier,
+		fake_shm_unmap,
+		nullptr,
+		absent_fetch_trailing_unfetch};
+	const sqlite3_io_methods missing_shm_trailing_methods{3,
+														  fake_close,
+														  fake_read,
+														  fake_write,
+														  fake_truncate,
+														  fake_sync,
+														  fake_size,
+														  fake_lock,
+														  fake_unlock,
+														  fake_reserved,
+														  fake_control,
+														  fake_sector,
+														  fake_characteristics,
+														  fake_shm_map,
+														  nullptr,
+														  fake_shm_barrier,
+														  fake_shm_unmap,
+														  nullptr,
+														  nullptr};
+	const sqlite3_io_methods missing_fetch_trailing_methods{3,
+															fake_close,
+															fake_read,
+															fake_write,
+															fake_truncate,
+															fake_sync,
+															fake_size,
+															fake_lock,
+															fake_unlock,
+															fake_reserved,
+															fake_control,
+															fake_sector,
+															fake_characteristics,
+															fake_shm_map,
+															fake_shm_lock,
+															fake_shm_barrier,
+															fake_shm_unmap,
+															fake_fetch,
+															nullptr};
+	const auto foreign_shm_lock = std::bit_cast<int (*)(sqlite3_file*, int, int, int)>(&::close);
+	const sqlite3_io_methods foreign_trailing_methods{3,
+													  fake_close,
+													  fake_read,
+													  fake_write,
+													  fake_truncate,
+													  fake_sync,
+													  fake_size,
+													  fake_lock,
+													  fake_unlock,
+													  fake_reserved,
+													  fake_control,
+													  fake_sector,
+													  fake_characteristics,
+													  nullptr,
+													  foreign_shm_lock,
+													  fake_shm_barrier,
+													  fake_shm_unmap,
+													  nullptr,
+													  nullptr};
 
 	int fake_open(
 		sqlite3_vfs* vfs, const char* name, sqlite3_file* output, const int flags, int* out_flags)
@@ -461,6 +601,12 @@ namespace
 		last_open_flags = flags;
 		trailing_alignment_ok = trailing_alignment_ok &&
 			reinterpret_cast<std::uintptr_t>(output) % alignof(fake_file) == 0U;
+		if (throw_on_fake_open)
+		{
+			throw_on_fake_open = false;
+			override_next_open = false;
+			throw std::runtime_error{"fake open failure"};
+		}
 		if (fail_next_open)
 		{
 			fail_next_open = false;
@@ -468,6 +614,14 @@ namespace
 				*out_flags = 0x5a5a;
 			output->methods = nullptr;
 			return sqlite_cannot_open;
+		}
+		if (override_next_open)
+		{
+			override_next_open = false;
+			output->methods = next_open_methods;
+			if (out_flags != nullptr)
+				*out_flags = next_open_status == sqlite_ok ? flags : 0x5a5a;
+			return next_open_status;
 		}
 		if (replace_open_path_on_next_open && name != nullptr)
 		{
@@ -966,9 +1120,30 @@ namespace
 											nullptr,
 											nullptr,
 											&message);
+			std::string execution_message = message != nullptr ? message : "";
 			if (message != nullptr)
 				real_free(message);
-			require(executed == sqlite_ok, "real WAL filesystem write after arm");
+			if (executed != sqlite_ok)
+			{
+				auto failed_observation = (*scope)->snapshot();
+				if (failed_observation)
+				{
+					execution_message.append("; open-events=");
+					execution_message.append(
+						std::to_string(failed_observation->open_events.size()));
+					for (const auto& event : failed_observation->open_events)
+					{
+						execution_message.push_back('/');
+						execution_message.append(std::to_string(static_cast<int>(event.role)));
+						execution_message.push_back(':');
+						execution_message.append(std::to_string(static_cast<int>(event.outcome)));
+					}
+				}
+			}
+			require(executed == sqlite_ok,
+					execution_message.empty()
+						? std::string{"real WAL filesystem write after arm"}
+						: std::string{"real WAL filesystem write after arm: "} + execution_message);
 			int persist_wal = 1;
 			require(real_file_control(
 						database, nullptr, sqlite_file_control_persist_wal, &persist_wal) ==
@@ -1300,6 +1475,10 @@ int main()
 						sqlite_readonly &&
 					mapping == shm_page.data() && shm_map_calls == maps_before_qualified + 2,
 				"qualified later map delegates after CANTINIT and preserves READONLY/non-null");
+		const auto unmaps_before_family_reset = shm_unmap_calls;
+		require(qualified_file->methods->shm_unmap(qualified_file, 1) == sqlite_ok &&
+					shm_unmap_calls == unmaps_before_family_reset + 1 && last_shm_remove == 0,
+				"successful qualified unmap is non-removing and resets transient map-family state");
 
 		return_null_shm_mapping_without_extension = true;
 		mapping = shm_page.data();
@@ -1319,29 +1498,42 @@ int main()
 		shm_map_result = sqlite_ok;
 		return_null_shm_mapping_without_extension = false;
 		mapping = shm_page.data();
+		const auto reads_before_terminal = read_calls;
+		const auto locks_before_terminal = shm_lock_calls;
 		require(qualified_file->methods->shm_map(qualified_file, 0, 4096, 1, &mapping) ==
 						sqlite_io_error &&
-					mapping == nullptr && shm_map_calls == maps_before_qualified + 5 &&
-					last_shm_extend == 0,
-				"qualified native OK/non-null is a protocol violation rather than READONLY");
+					mapping == nullptr && shm_map_calls == maps_before_qualified + 4,
+				"qualified terminal latch denies later native map delegation");
+		std::byte read_output{};
+		require(qualified_file->methods->read(qualified_file, &read_output, 1, 0) ==
+						sqlite_io_error &&
+					read_calls == reads_before_terminal &&
+					qualified_file->methods->shm_lock(
+						qualified_file, 0, 1, sqlite_shm_lock | sqlite_shm_exclusive) ==
+						sqlite_io_error &&
+					shm_lock_calls == locks_before_terminal,
+				"qualified terminal latch denies later native read and lock delegation");
 		shm_unmap_result = sqlite_io_error;
-		require(qualified_file->methods->shm_unmap(qualified_file, 0) == sqlite_io_error,
-				"failed delegated unmap does not claim a state reset");
+		const auto unmaps_before_terminal_cleanup = shm_unmap_calls;
+		require(qualified_file->methods->shm_unmap(qualified_file, 1) == sqlite_io_error &&
+					shm_unmap_calls == unmaps_before_terminal_cleanup + 1 && last_shm_remove == 0,
+				"qualified terminal cleanup forces remove zero and preserves the latch on failure");
 		shm_map_result = sqlite_readonly_cannot_initialize;
 		return_null_shm_mapping_without_extension = true;
 		mapping = shm_page.data();
 		require(qualified_file->methods->shm_map(qualified_file, 0, 4096, 0, &mapping) ==
-						sqlite_readonly_cannot_initialize &&
-					mapping == nullptr && shm_map_calls == maps_before_qualified + 6,
-				"map after failed unmap remains in the same delegated state");
+						sqlite_io_error &&
+					mapping == nullptr && shm_map_calls == maps_before_qualified + 4,
+				"map after failed cleanup remains terminal without native delegation");
 		shm_unmap_result = sqlite_ok;
-		require(qualified_file->methods->shm_unmap(qualified_file, 0) == sqlite_ok,
-				"successful delegated unmap resets qualified per-file state");
+		require(qualified_file->methods->shm_unmap(qualified_file, 1) == sqlite_ok &&
+					shm_unmap_calls == unmaps_before_terminal_cleanup + 2 && last_shm_remove == 0,
+				"successful qualified cleanup forces remove zero");
 		mapping = shm_page.data();
 		require(qualified_file->methods->shm_map(qualified_file, 0, 4096, 1, &mapping) ==
-						sqlite_readonly_cannot_initialize &&
-					mapping == nullptr && shm_map_calls == maps_before_qualified + 7,
-				"first map after successful unmap delegates from the reset state");
+						sqlite_io_error &&
+					mapping == nullptr && shm_map_calls == maps_before_qualified + 4,
+				"successful cleanup does not clear the qualified terminal latch");
 		auto qualified_snapshot = (*qualified_scope)->snapshot();
 		require(qualified_snapshot.has_value() &&
 					qualified_snapshot->source_shm_open_callback_receipt.has_value() &&
@@ -1354,21 +1546,204 @@ int main()
 							->pinned_underlying_vfs_identity == &original_vfs &&
 					qualified_snapshot->source_shm_open_callback_receipt
 							->pinned_underlying_vfs_app_data_identity == &app_data_sentinel &&
-					qualified_snapshot->shm_map_events.size() == 7U &&
+					qualified_snapshot->shm_map_events.size() == 4U &&
 					qualified_snapshot->shm_map_events[0].caller_extend == 1 &&
 					qualified_snapshot->shm_map_events[0].delegated_extend == 0 &&
 					!qualified_snapshot->shm_map_events[0].readonly_family_seen_before &&
 					qualified_snapshot->shm_map_events[0].readonly_family_seen_after &&
 					qualified_snapshot->shm_map_events[1].native_status == sqlite_readonly &&
 					qualified_snapshot->shm_map_events[1].native_mapping_nonnull &&
-					qualified_snapshot->shm_map_events[4].native_status == sqlite_ok &&
-					qualified_snapshot->shm_map_events[4].returned_status == sqlite_io_error &&
-					qualified_snapshot->shm_map_events[5].readonly_family_seen_before &&
-					!qualified_snapshot->shm_map_events[6].readonly_family_seen_before,
+					!qualified_snapshot->shm_map_events[2].readonly_family_seen_before &&
+					qualified_snapshot->shm_map_events[2].readonly_family_seen_after &&
+					qualified_snapshot->shm_map_events[3].native_status ==
+						(sqlite_readonly | (1 << 8)) &&
+					qualified_snapshot->shm_map_events[3].returned_status == sqlite_io_error,
 				"qualified callback and map transition receipts are exact");
-		require(qualified_file->methods->shm_unmap(qualified_file, 0) == sqlite_ok &&
-					qualified_file->methods->close(qualified_file) == sqlite_ok,
-				"qualified successful delegated unmap and close");
+		require(qualified_file->methods->close(qualified_file) == sqlite_ok,
+				"qualified terminal handle closes through the trusted native callback");
+		shm_map_result = sqlite_ok;
+		return_null_shm_mapping_without_extension = false;
+	}
+
+	{
+		const std::string ok_null_path{"/proc/self/fd/708/active/main.db"};
+		auto ok_null_scope =
+			bundle->connection_observation_port->begin_source_shm_qualification_observation(
+				ok_null_path, bundle->observation->capability_token());
+		require(ok_null_scope.has_value() &&
+					(*ok_null_scope)
+						->arm_source_shm_readonly_qualification_candidate(
+							make_candidate_plan(ok_null_path))
+						.has_value(),
+				"qualified native OK/null fresh scope and arm");
+		std::array<char, 256U> ok_null_full_path{};
+		require(wrapper->full_pathname(wrapper,
+									   ok_null_path.c_str(),
+									   static_cast<int>(ok_null_full_path.size()),
+									   ok_null_full_path.data()) == sqlite_ok,
+				"qualified native OK/null xFullPathname");
+		auto ok_null_filename = sqlite_uri_filename(ok_null_path, exact_uri_parameters);
+		auto ok_null_storage = file_storage(*wrapper);
+		auto* ok_null_file = reinterpret_cast<sqlite3_file*>(ok_null_storage.data());
+		int ok_null_out{};
+		require(wrapper->open(wrapper,
+							  ok_null_filename.data(),
+							  ok_null_file,
+							  source_shm_main_xopen_flags,
+							  &ok_null_out) == sqlite_ok,
+				"qualified native OK/null fresh handle open");
+
+		shm_map_result = sqlite_ok;
+		return_null_shm_mapping_without_extension = true;
+		shm_unmap_result = sqlite_ok;
+		volatile void* ok_null_mapping = shm_page.data();
+		const auto maps_before_ok_null = shm_map_calls;
+		const auto unmaps_before_ok_null = shm_unmap_calls;
+		const auto reads_before_ok_null = read_calls;
+		require(ok_null_file->methods->shm_map(ok_null_file, 0, 4096, 1, &ok_null_mapping) ==
+						sqlite_io_error &&
+					ok_null_mapping == nullptr && shm_map_calls == maps_before_ok_null + 1 &&
+					shm_unmap_calls == unmaps_before_ok_null,
+				"qualified native OK/null is a directly reached protocol violation");
+		ok_null_mapping = shm_page.data();
+		require(ok_null_file->methods->shm_map(ok_null_file, 0, 4096, 0, &ok_null_mapping) ==
+						sqlite_io_error &&
+					ok_null_mapping == nullptr && shm_map_calls == maps_before_ok_null + 1 &&
+					ok_null_file->methods->read(ok_null_file, nullptr, 0, 0) == sqlite_io_error &&
+					read_calls == reads_before_ok_null,
+				"qualified native OK/null terminal latch suppresses later native operations");
+		auto ok_null_snapshot = (*ok_null_scope)->snapshot();
+		require(ok_null_snapshot.has_value() && ok_null_snapshot->shm_map_events.size() == 1U &&
+					ok_null_snapshot->shm_map_events[0].native_status == sqlite_ok &&
+					!ok_null_snapshot->shm_map_events[0].native_mapping_nonnull &&
+					ok_null_snapshot->shm_map_events[0].returned_status == sqlite_io_error,
+				"qualified native OK/null receipt records the fresh protocol violation");
+		require(ok_null_file->methods->close(ok_null_file) == sqlite_ok,
+				"qualified native OK/null terminal handle closes");
+		return_null_shm_mapping_without_extension = false;
+	}
+
+	{
+		const std::string ok_nonnull_path{"/proc/self/fd/709/active/main.db"};
+		auto ok_nonnull_scope =
+			bundle->connection_observation_port->begin_source_shm_qualification_observation(
+				ok_nonnull_path, bundle->observation->capability_token());
+		require(ok_nonnull_scope.has_value() &&
+					(*ok_nonnull_scope)
+						->arm_source_shm_readonly_qualification_candidate(
+							make_candidate_plan(ok_nonnull_path))
+						.has_value(),
+				"qualified native OK/non-null fresh scope and arm");
+		std::array<char, 256U> ok_nonnull_full_path{};
+		require(wrapper->full_pathname(wrapper,
+									   ok_nonnull_path.c_str(),
+									   static_cast<int>(ok_nonnull_full_path.size()),
+									   ok_nonnull_full_path.data()) == sqlite_ok,
+				"qualified native OK/non-null xFullPathname");
+		auto ok_nonnull_filename = sqlite_uri_filename(ok_nonnull_path, exact_uri_parameters);
+		auto ok_nonnull_storage = file_storage(*wrapper);
+		auto* ok_nonnull_file = reinterpret_cast<sqlite3_file*>(ok_nonnull_storage.data());
+		int ok_nonnull_out{};
+		require(wrapper->open(wrapper,
+							  ok_nonnull_filename.data(),
+							  ok_nonnull_file,
+							  source_shm_main_xopen_flags,
+							  &ok_nonnull_out) == sqlite_ok,
+				"qualified native OK/non-null fresh handle open");
+
+		shm_map_result = sqlite_ok;
+		return_null_shm_mapping_without_extension = false;
+		shm_unmap_result = sqlite_ok;
+		volatile void* ok_nonnull_mapping{};
+		const auto maps_before_ok_nonnull = shm_map_calls;
+		const auto unmaps_before_ok_nonnull = shm_unmap_calls;
+		const auto locks_before_ok_nonnull = shm_lock_calls;
+		require(ok_nonnull_file->methods->shm_map(
+					ok_nonnull_file, 0, 4096, 0, &ok_nonnull_mapping) == sqlite_io_error &&
+					ok_nonnull_mapping == nullptr && shm_map_calls == maps_before_ok_nonnull + 1 &&
+					shm_unmap_calls == unmaps_before_ok_nonnull + 1 && last_shm_remove == 0,
+				"qualified native OK/non-null releases mapping once and fails terminally");
+		ok_nonnull_mapping = shm_page.data();
+		require(ok_nonnull_file->methods->shm_map(
+					ok_nonnull_file, 0, 4096, 0, &ok_nonnull_mapping) == sqlite_io_error &&
+					ok_nonnull_mapping == nullptr && shm_map_calls == maps_before_ok_nonnull + 1 &&
+					shm_unmap_calls == unmaps_before_ok_nonnull + 1 &&
+					ok_nonnull_file->methods->shm_lock(
+						ok_nonnull_file, 0, 1, sqlite_shm_lock | sqlite_shm_exclusive) ==
+						sqlite_io_error &&
+					shm_lock_calls == locks_before_ok_nonnull,
+				"qualified native OK/non-null terminal latch suppresses later delegation");
+		auto ok_nonnull_snapshot = (*ok_nonnull_scope)->snapshot();
+		require(ok_nonnull_snapshot.has_value() &&
+					ok_nonnull_snapshot->shm_map_events.size() == 1U &&
+					ok_nonnull_snapshot->shm_map_events[0].native_status == sqlite_ok &&
+					ok_nonnull_snapshot->shm_map_events[0].native_mapping_nonnull &&
+					ok_nonnull_snapshot->shm_map_events[0].returned_status == sqlite_io_error,
+				"qualified native OK/non-null receipt records the fresh protocol violation");
+		require(ok_nonnull_file->methods->close(ok_nonnull_file) == sqlite_ok,
+				"qualified native OK/non-null terminal handle closes");
+	}
+
+	{
+		const std::string capacity_path{"/proc/self/fd/707/active/main.db"};
+		auto capacity_scope =
+			bundle->connection_observation_port->begin_source_shm_qualification_observation(
+				capacity_path, bundle->observation->capability_token());
+		require(capacity_scope.has_value() &&
+					(*capacity_scope)
+						->arm_source_shm_readonly_qualification_candidate(
+							make_candidate_plan(capacity_path))
+						.has_value(),
+				"qualified map receipt capacity scope and arm");
+		std::array<char, 256U> capacity_full_path{};
+		require(wrapper->full_pathname(wrapper,
+									   capacity_path.c_str(),
+									   static_cast<int>(capacity_full_path.size()),
+									   capacity_full_path.data()) == sqlite_ok,
+				"qualified map receipt capacity xFullPathname");
+		auto capacity_filename = sqlite_uri_filename(capacity_path, exact_uri_parameters);
+		auto capacity_storage = file_storage(*wrapper);
+		auto* capacity_file = reinterpret_cast<sqlite3_file*>(capacity_storage.data());
+		int capacity_out{};
+		require(wrapper->open(wrapper,
+							  capacity_filename.data(),
+							  capacity_file,
+							  source_shm_main_xopen_flags,
+							  &capacity_out) == sqlite_ok,
+				"qualified map receipt capacity open");
+		shm_map_result = sqlite_readonly_cannot_initialize;
+		return_null_shm_mapping_without_extension = true;
+		for (int index{}; index < 64; ++index)
+		{
+			volatile void* capacity_mapping = shm_page.data();
+			require(
+				capacity_file->methods->shm_map(capacity_file, index, 4096, 0, &capacity_mapping) ==
+						sqlite_readonly_cannot_initialize &&
+					capacity_mapping == nullptr,
+				"qualified map receipt fills each bounded slot");
+		}
+		shm_map_result = sqlite_readonly;
+		return_null_shm_mapping_without_extension = false;
+		shm_unmap_result = sqlite_io_error;
+		volatile void* saturated_mapping{};
+		const auto maps_before_saturation = shm_map_calls;
+		const auto unmaps_before_saturation = shm_unmap_calls;
+		require(capacity_file->methods->shm_map(capacity_file, 64, 4096, 0, &saturated_mapping) ==
+						sqlite_io_error &&
+					saturated_mapping == nullptr && shm_map_calls == maps_before_saturation + 1 &&
+					shm_unmap_calls == unmaps_before_saturation + 1 && last_shm_remove == 0,
+				"receipt saturation releases native mapping once and latches cleanup uncertainty");
+		const auto maps_after_saturation = shm_map_calls;
+		saturated_mapping = shm_page.data();
+		require(capacity_file->methods->shm_map(capacity_file, 0, 4096, 0, &saturated_mapping) ==
+						sqlite_io_error &&
+					saturated_mapping == nullptr && shm_map_calls == maps_after_saturation,
+				"receipt saturation terminal latch denies later map delegation");
+		shm_unmap_result = sqlite_ok;
+		require(capacity_file->methods->shm_unmap(capacity_file, 1) == sqlite_ok &&
+					last_shm_remove == 0 &&
+					capacity_file->methods->close(capacity_file) == sqlite_ok,
+				"receipt saturation cleanup remains non-removing and closeable");
 		shm_map_result = sqlite_ok;
 		return_null_shm_mapping_without_extension = false;
 	}
@@ -1456,6 +1831,61 @@ int main()
 							  &unarmed_out) == sqlite_cannot_open &&
 					open_calls == opens_before_unarmed,
 				"unarmed source SHM URI retry remains fail closed");
+	}
+
+	{
+		const std::string fixture_path{"/proc/self/fd/706/producer/main.db"};
+		auto fixture_scope =
+			bundle->connection_observation_port->begin_source_shm_qualification_observation(
+				fixture_path, bundle->observation->capability_token());
+		require(fixture_scope.has_value(), "qualification fixture retry scope");
+		auto* fixture_gate = (*fixture_scope)->effect_gate_port();
+		require(fixture_gate != nullptr &&
+					fixture_gate
+						->activate_denied(bundle->observation->capability_token(),
+										  (*fixture_scope)->token(),
+										  fixture_path)
+						.has_value(),
+				"qualification fixture retry deny receipt");
+		require((*fixture_scope)
+					->arm_source_shm_qualification_fixture_fullpath(
+						{fixture_path,
+						 source_shm_alias,
+						 wrapper,
+						 &original_vfs,
+						 &app_data_sentinel,
+						 bundle->forwarding_vfs->backend_lifetime_identity(),
+						 bundle->observation->capability_token()})
+					.has_value(),
+				"qualification fixture retry fullpath arm");
+		std::array<char, 256U> fixture_full_path{};
+		require(wrapper->full_pathname(wrapper,
+									   fixture_path.c_str(),
+									   static_cast<int>(fixture_full_path.size()),
+									   fixture_full_path.data()) == sqlite_ok &&
+					std::string_view{fixture_full_path.data()} == fixture_path,
+				"qualification fixture exact xFullPathname claim");
+		auto fixture_storage = file_storage(*wrapper);
+		auto* fixture_file = reinterpret_cast<sqlite3_file*>(fixture_storage.data());
+		int fixture_out{0x7f7f};
+		const auto opens_before_fixture = open_calls;
+		fail_next_open = true;
+		constexpr auto fixture_open_flags =
+			sqlite_open_read_write | sqlite_open_create | sqlite_open_main_database;
+		require(
+			wrapper->open(
+				wrapper, fixture_path.c_str(), fixture_file, fixture_open_flags, &fixture_out) ==
+					sqlite_cannot_open &&
+				open_calls == opens_before_fixture + 1 && fixture_file->methods == nullptr,
+			"qualification fixture native xOpen failure consumes its one-shot claim");
+		fixture_out = 0x7f7f;
+		require(
+			wrapper->open(
+				wrapper, fixture_path.c_str(), fixture_file, fixture_open_flags, &fixture_out) ==
+					sqlite_cannot_open &&
+				open_calls == opens_before_fixture + 1 && fixture_out == 0 &&
+				fixture_file->methods == nullptr,
+			"qualification fixture retry cannot escape into generic native xOpen");
 	}
 
 	{
@@ -1589,6 +2019,245 @@ int main()
 	require(wrapper->get_system_call(wrapper, "fake") == fake_symbol, "get syscall delegated");
 	require(std::string_view{wrapper->next_system_call(wrapper, nullptr)} == "fake",
 			"next syscall delegated");
+
+	{
+		auto quarantine_bundle =
+			cxxlens::sdk::make_sqlite_default_ephemeral_store_bundle(registry_binding());
+		require(quarantine_bundle.has_value(), "quarantine test forwarding bundle");
+		auto* quarantine_wrapper = const_cast<sqlite3_vfs*>(static_cast<const sqlite3_vfs*>(
+			quarantine_bundle->forwarding_vfs->vfs_implementation_identity()));
+		const auto memory_flags = sqlite_open_read_only | sqlite_open_main_database;
+		const auto overridden_open = [&](const int status,
+										 const sqlite3_io_methods* methods,
+										 sqlite3_file& output,
+										 int& returned_flags)
+		{
+			override_next_open = true;
+			next_open_status = status;
+			next_open_methods = methods;
+			return quarantine_wrapper->open(quarantine_wrapper,
+											"/tmp/cxxlens-vfs-quarantine-probe.db",
+											&output,
+											memory_flags,
+											&returned_flags);
+		};
+
+		auto throwing_open_storage = file_storage(*quarantine_wrapper);
+		auto* throwing_open_file = reinterpret_cast<sqlite3_file*>(throwing_open_storage.data());
+		int throwing_open_out{0x7f7f};
+		const auto opens_before_throw = open_calls;
+		auto closes_before_quarantine = close_calls;
+		throw_on_fake_open = true;
+		require(quarantine_wrapper->open(quarantine_wrapper,
+										 "/tmp/cxxlens-vfs-quarantine-probe.db",
+										 throwing_open_file,
+										 memory_flags,
+										 &throwing_open_out) == sqlite_no_memory &&
+					throwing_open_file->methods == nullptr && throwing_open_out == 0 &&
+					open_calls == opens_before_throw + 1 && close_calls == closes_before_quarantine,
+				"throwing native xOpen quarantines without an unproven close attempt");
+
+		auto failed_with_methods_storage = file_storage(*quarantine_wrapper);
+		auto* failed_with_methods =
+			reinterpret_cast<sqlite3_file*>(failed_with_methods_storage.data());
+		int failed_with_methods_out{0x7f7f};
+		closes_before_quarantine = close_calls;
+		require(overridden_open(sqlite_cannot_open,
+								&full_methods,
+								*failed_with_methods,
+								failed_with_methods_out) == sqlite_cannot_open &&
+					failed_with_methods->methods == nullptr && failed_with_methods_out == 0 &&
+					close_calls == closes_before_quarantine + 1,
+				"failed native xOpen with trusted pMethods closes exactly once");
+
+		fake_close_result = sqlite_io_error;
+		closes_before_quarantine = close_calls;
+		failed_with_methods_out = 0x7f7f;
+		require(overridden_open(sqlite_cannot_open,
+								&full_methods,
+								*failed_with_methods,
+								failed_with_methods_out) == sqlite_cannot_open &&
+					failed_with_methods->methods == nullptr && failed_with_methods_out == 0 &&
+					close_calls == closes_before_quarantine + 1,
+				"failed native xOpen preserves status and quarantines a failed close once");
+		fake_close_result = sqlite_ok;
+		auto retry_storage = file_storage(*quarantine_wrapper);
+		auto* retry_file = reinterpret_cast<sqlite3_file*>(retry_storage.data());
+		int retry_out{};
+		require(quarantine_wrapper->open(quarantine_wrapper,
+										 "/tmp/cxxlens-vfs-quarantine-probe.db",
+										 retry_file,
+										 memory_flags,
+										 &retry_out) == sqlite_ok &&
+					retry_file->methods->close(retry_file) == sqlite_ok &&
+					close_calls == closes_before_quarantine + 2,
+				"later open never retries the quarantined failed-close node");
+
+		auto malformed_storage = file_storage(*quarantine_wrapper);
+		auto* malformed_file = reinterpret_cast<sqlite3_file*>(malformed_storage.data());
+		int malformed_out{0x7f7f};
+		closes_before_quarantine = close_calls;
+		require(overridden_open(sqlite_ok,
+								reinterpret_cast<const sqlite3_io_methods*>(std::uintptr_t{1U}),
+								*malformed_file,
+								malformed_out) == sqlite_io_error &&
+					malformed_file->methods == nullptr && malformed_out == 0 &&
+					close_calls == closes_before_quarantine,
+				"unreadable pMethods is never dereferenced or closed");
+
+		malformed_out = 0x7f7f;
+		require(overridden_open(sqlite_ok, nullptr, *malformed_file, malformed_out) ==
+						sqlite_io_error &&
+					malformed_file->methods == nullptr && malformed_out == 0 &&
+					close_calls == closes_before_quarantine,
+				"successful native xOpen without pMethods is quarantined");
+
+		for (const auto* malformed_methods : {&missing_shm_trailing_methods,
+											  &missing_fetch_trailing_methods,
+											  &foreign_trailing_methods})
+		{
+			malformed_out = 0x7f7f;
+			const auto closes_before_malformed = close_calls;
+			require(overridden_open(sqlite_ok, malformed_methods, *malformed_file, malformed_out) ==
+							sqlite_io_error &&
+						malformed_file->methods == nullptr && malformed_out == 0 &&
+						close_calls == closes_before_malformed + 1,
+					"incomplete or foreign extension callback table closes and fails");
+		}
+
+		malformed_out = 0;
+		require(overridden_open(sqlite_ok, &journal_methods, *malformed_file, malformed_out) ==
+						sqlite_ok &&
+					malformed_file->methods != nullptr && malformed_file->methods->version == 1 &&
+					malformed_file->methods->shm_map == nullptr &&
+					malformed_file->methods->fetch == nullptr &&
+					malformed_file->methods->close(malformed_file) == sqlite_ok,
+				"journal table without extensions downgrades to v1");
+
+		malformed_out = 0;
+		require(overridden_open(sqlite_ok,
+								&absent_shm_lead_trusted_trailing_methods,
+								*malformed_file,
+								malformed_out) == sqlite_ok &&
+					malformed_file->methods != nullptr && malformed_file->methods->version == 1 &&
+					malformed_file->methods->shm_map == nullptr &&
+					malformed_file->methods->shm_lock == nullptr &&
+					malformed_file->methods->shm_barrier == nullptr &&
+					malformed_file->methods->shm_unmap == nullptr &&
+					malformed_file->methods->fetch == nullptr &&
+					malformed_file->methods->unfetch == nullptr &&
+					malformed_file->methods->close(malformed_file) == sqlite_ok &&
+					absent_map_trailing_lock_calls == 0 && absent_map_trailing_barrier_calls == 0 &&
+					absent_map_trailing_unmap_calls == 0,
+				"absent xShmMap lead hides same-image trusted trailing callbacks at v1");
+
+		malformed_out = 0;
+		require(overridden_open(sqlite_ok,
+								&absent_fetch_lead_trusted_trailing_methods,
+								*malformed_file,
+								malformed_out) == sqlite_ok &&
+					malformed_file->methods != nullptr && malformed_file->methods->version == 2 &&
+					malformed_file->methods->shm_map != nullptr &&
+					malformed_file->methods->fetch == nullptr &&
+					malformed_file->methods->unfetch == nullptr &&
+					malformed_file->methods->close(malformed_file) == sqlite_ok &&
+					absent_fetch_trailing_unfetch_calls == 0,
+				"absent xFetch lead hides same-image trusted xUnfetch at v2");
+
+		auto close_failure_storage = file_storage(*quarantine_wrapper);
+		auto* close_failure_file = reinterpret_cast<sqlite3_file*>(close_failure_storage.data());
+		int close_failure_out{};
+		require(overridden_open(sqlite_ok, &full_methods, *close_failure_file, close_failure_out) ==
+					sqlite_ok,
+				"normal close-failure fixture open");
+		fake_close_result = sqlite_io_error;
+		closes_before_quarantine = close_calls;
+		require(close_failure_file->methods->close(close_failure_file) == sqlite_io_error &&
+					close_calls == closes_before_quarantine + 1,
+				"normal xClose failure quarantines without retry");
+		fake_close_result = sqlite_ok;
+
+		auto close_throw_storage = file_storage(*quarantine_wrapper);
+		auto* close_throw_file = reinterpret_cast<sqlite3_file*>(close_throw_storage.data());
+		int close_throw_out{};
+		require(overridden_open(sqlite_ok, &full_methods, *close_throw_file, close_throw_out) ==
+					sqlite_ok,
+				"throwing close fixture open");
+		throw_on_fake_close = true;
+		closes_before_quarantine = close_calls;
+		require(close_throw_file->methods->close(close_throw_file) == sqlite_io_error &&
+					close_calls == closes_before_quarantine + 1,
+				"throwing xClose quarantines without unwinding or retry");
+
+		Dl_info fake_image_information{};
+		require(::dladdr(std::bit_cast<const void*>(&fake_open), &fake_image_information) != 0 &&
+					fake_image_information.dli_fbase != nullptr,
+				"origin-probe fake runtime image");
+		auto origin_runtime = fake_source_shm_runtime(quarantine_bundle->runtime_lifetime);
+		origin_runtime.runtime_image_identity = fake_image_information.dli_fbase;
+		closes_before_quarantine = close_calls;
+		override_next_open = true;
+		next_open_status = sqlite_ok;
+		next_open_methods = &full_methods;
+		auto origin_backend_pin = std::static_pointer_cast<void>(std::make_shared<int>(17));
+		require(validate_sqlite_source_shm_readonly_origin_probe(
+					&original_vfs, origin_runtime, origin_backend_pin, "/tmp/origin-probe.db")
+						.has_value() &&
+					close_calls == closes_before_quarantine + 1,
+				"origin probe closes one fully trusted native file");
+
+		auto malformed_origin_backend = std::static_pointer_cast<void>(std::make_shared<int>(18));
+		std::weak_ptr<void> malformed_origin_backend_weak = malformed_origin_backend;
+		override_next_open = true;
+		next_open_status = sqlite_ok;
+		next_open_methods = reinterpret_cast<const sqlite3_io_methods*>(std::uintptr_t{1U});
+		closes_before_quarantine = close_calls;
+		require(
+			!validate_sqlite_source_shm_readonly_origin_probe(
+				&original_vfs, origin_runtime, malformed_origin_backend, "/tmp/origin-probe.db") &&
+				close_calls == closes_before_quarantine,
+			"origin probe never dereferences or closes pMethods 0x1");
+		malformed_origin_backend.reset();
+		require(!malformed_origin_backend_weak.expired(),
+				"origin probe quarantine retains backend and runtime pins");
+
+		auto throwing_origin_backend = std::static_pointer_cast<void>(std::make_shared<int>(20));
+		std::weak_ptr<void> throwing_origin_backend_weak = throwing_origin_backend;
+		throw_on_fake_open = true;
+		closes_before_quarantine = close_calls;
+		require(
+			!validate_sqlite_source_shm_readonly_origin_probe(
+				&original_vfs, origin_runtime, throwing_origin_backend, "/tmp/origin-probe.db") &&
+				close_calls == closes_before_quarantine,
+			"throwing origin xOpen quarantines without an unproven close attempt");
+		throwing_origin_backend.reset();
+		require(!throwing_origin_backend_weak.expired(),
+				"throwing origin xOpen retains all preallocated pins");
+
+		auto failed_origin_backend = std::static_pointer_cast<void>(std::make_shared<int>(19));
+		std::weak_ptr<void> failed_origin_backend_weak = failed_origin_backend;
+		override_next_open = true;
+		next_open_status = sqlite_cannot_open;
+		next_open_methods = &full_methods;
+		fake_close_result = sqlite_io_error;
+		closes_before_quarantine = close_calls;
+		require(!validate_sqlite_source_shm_readonly_origin_probe(
+					&original_vfs, origin_runtime, failed_origin_backend, "/tmp/origin-probe.db") &&
+					close_calls == closes_before_quarantine + 1,
+				"failed origin xOpen preserves exactly one failed close attempt");
+		fake_close_result = sqlite_ok;
+		failed_origin_backend.reset();
+		require(!failed_origin_backend_weak.expired(),
+				"failed origin close quarantines all preallocated pins without retry");
+
+		std::weak_ptr<sqlite_default_forwarding_vfs> quarantined_owner =
+			quarantine_bundle->forwarding_vfs;
+		quarantine_bundle->observation.reset();
+		quarantine_bundle->connection_observation_port.reset();
+		quarantine_bundle->forwarding_vfs.reset();
+		require(!quarantined_owner.expired(),
+				"process quarantine retains the forwarding backend and runtime pins");
+	}
 
 	auto failed_scope = bundle->observation->begin_connection_observation(main_path);
 	require(failed_scope.has_value(), "failed scope begin");

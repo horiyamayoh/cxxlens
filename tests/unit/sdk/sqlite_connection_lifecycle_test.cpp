@@ -235,6 +235,32 @@ namespace
 				"destruction released or retried a quarantined connection");
 	}
 
+	void verify_missing_callback_quarantines_without_pin_release()
+	{
+		int destroyed{};
+		observed_pins pins;
+		int connection_sentinel{};
+		{
+			sqlite_connection_lifecycle owner{
+				&connection_sentinel, nullptr, make_pins(destroyed, pins)};
+			auto outcome = owner.close_exactly_once();
+			require(std::holds_alternative<sqlite_quarantined_connection>(outcome),
+					"missing close callback did not quarantine the connection");
+			const auto& stored = std::get<sqlite_quarantined_connection>(outcome);
+			require(stored.valid() &&
+						stored.reason() ==
+							sqlite_connection_quarantine_reason::close_callback_missing &&
+						!stored.sqlite_code().has_value(),
+					"missing close callback quarantine receipt is not exact");
+			require(!pins.runtime.expired() && !pins.vfs.expired() && !pins.observation.expired() &&
+						!pins.authority_anchor.expired() && destroyed == 0,
+					"missing close callback quarantine released lifetime pins");
+		}
+		require(!pins.runtime.expired() && !pins.vfs.expired() && !pins.observation.expired() &&
+					!pins.authority_anchor.expired() && destroyed == 0,
+				"missing close callback quarantine did not survive owner destruction");
+	}
+
 	void verify_noexcept_destructor_quarantines_callback_exception()
 	{
 		int destroyed{};
@@ -275,6 +301,7 @@ int main()
 		verify_explicit_success_closes_once_and_releases_pins();
 		verify_move_and_destructor_close_exactly_once();
 		verify_non_ok_quarantines_without_retry_or_pin_release();
+		verify_missing_callback_quarantines_without_pin_release();
 		verify_noexcept_destructor_quarantines_callback_exception();
 		verify_destructor_quarantines_non_ok_without_retry();
 	}

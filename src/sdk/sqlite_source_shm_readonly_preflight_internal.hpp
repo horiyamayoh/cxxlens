@@ -26,6 +26,16 @@ namespace cxxlens::sdk
 		bool require_later_map) noexcept;
 
 	/**
+	 * Exercise the exact pinned-origin xOpen/xClose proof used by qualification. This internal
+	 * boundary keeps the SQLite ABI opaque while allowing malformed callback tables to be tested.
+	 */
+	[[nodiscard]] result<void> validate_sqlite_source_shm_readonly_origin_probe(
+		const void* pinned_underlying_vfs_identity,
+		const sqlite_source_shm_runtime_binding& runtime,
+		std::shared_ptr<void> backend_lifetime,
+		std::string_view scratch_probe_path);
+
+	/**
 	 * Construct the Linux/default-filesystem behavioral qualifier retained by one observation
 	 * capability. The qualifier never opens the target locator; it creates and removes an exact
 	 * scratch fixture beneath the already-bound target parent instead.

@@ -25,6 +25,7 @@
 #include <dirent.h>
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <link.h>
 #include <sys/inotify.h>
 #include <sys/stat.h>
 #include <sys/vfs.h>
@@ -45,6 +46,7 @@ namespace cxxlens::sdk
 		constexpr std::string_view qualification_token_profile{
 			"sqlite-source-shm-readonly-unix-uri-v1.sealed-receipt.v1"};
 		constexpr int sqlite_ok = 0;
+		constexpr int sqlite_io_error = 10;
 		constexpr int sqlite_readonly = 8;
 		constexpr int sqlite_readonly_cannot_initialize = sqlite_readonly | (5 << 8);
 		constexpr int sqlite_open_read_only = 0x00000001;
@@ -1103,6 +1105,125 @@ namespace cxxlens::sdk
 				information.dli_fbase == image;
 		}
 
+		struct image_segment_query
+		{
+			std::uintptr_t code{};
+			std::uintptr_t data_begin{};
+			std::uintptr_t data_end{};
+			bool found{};
+		};
+
+		int find_bound_image_segments(dl_phdr_info* information, std::size_t, void* opaque) noexcept
+		{
+			auto& query = *static_cast<image_segment_query*>(opaque);
+			bool executable_code{};
+			bool readable_data{};
+			for (std::size_t index{}; index < information->dlpi_phnum; ++index)
+			{
+				const auto& header = information->dlpi_phdr[index];
+				if (header.p_type != PT_LOAD ||
+					static_cast<std::uintptr_t>(information->dlpi_addr) >
+						std::numeric_limits<std::uintptr_t>::max() - header.p_vaddr)
+					continue;
+				const auto segment_begin = static_cast<std::uintptr_t>(information->dlpi_addr) +
+					static_cast<std::uintptr_t>(header.p_vaddr);
+				if (static_cast<std::uintptr_t>(header.p_memsz) >
+					std::numeric_limits<std::uintptr_t>::max() - segment_begin)
+					continue;
+				const auto segment_end =
+					segment_begin + static_cast<std::uintptr_t>(header.p_memsz);
+				if ((header.p_flags & PF_X) != 0U && query.code >= segment_begin &&
+					query.code < segment_end)
+					executable_code = true;
+				if ((header.p_flags & PF_R) != 0U && query.data_begin >= segment_begin &&
+					query.data_end <= segment_end)
+					readable_data = true;
+			}
+			if (executable_code && readable_data)
+			{
+				query.found = true;
+				return 1;
+			}
+			return 0;
+		}
+
+		[[nodiscard]] bool readable_range_bound_to_code(const void* address,
+														const std::size_t size,
+														const std::size_t alignment,
+														const void* code,
+														const void* image) noexcept
+		{
+			if (address == nullptr || code == nullptr || image == nullptr || size == 0U ||
+				alignment == 0U || reinterpret_cast<std::uintptr_t>(address) % alignment != 0U)
+				return false;
+			Dl_info data_information{};
+			Dl_info code_information{};
+			if (::dladdr(address, &data_information) == 0 || data_information.dli_fbase != image ||
+				::dladdr(code, &code_information) == 0 || code_information.dli_fbase != image)
+				return false;
+			const auto begin = reinterpret_cast<std::uintptr_t>(address);
+			if (size > std::numeric_limits<std::uintptr_t>::max() - begin)
+				return false;
+			image_segment_query query{
+				reinterpret_cast<std::uintptr_t>(code), begin, begin + size, false};
+			(void)::dl_iterate_phdr(find_bound_image_segments, &query);
+			return query.found;
+		}
+
+		struct origin_probe_file_node
+		{
+			origin_probe_file_node(const std::size_t storage_bytes,
+								   std::shared_ptr<void> runtime_pin,
+								   std::shared_ptr<void> backend_pin,
+								   sqlite3_vfs* underlying_vfs,
+								   const void* underlying_app_data,
+								   const void* runtime_image,
+								   const void* open_callback)
+				: storage_count{(storage_bytes + sizeof(std::max_align_t) - 1U) /
+								sizeof(std::max_align_t)},
+				  storage{std::make_unique<std::max_align_t[]>(storage_count)},
+				  runtime_lifetime{std::move(runtime_pin)},
+				  backend_lifetime{std::move(backend_pin)}, underlying{underlying_vfs},
+				  underlying_vfs_identity{underlying_vfs},
+				  underlying_app_data_identity{underlying_app_data},
+				  runtime_image_identity{runtime_image}, open_callback_address{open_callback}
+			{
+				std::memset(storage.get(), 0, storage_count * sizeof(std::max_align_t));
+			}
+
+			[[nodiscard]] sqlite3_file* file() noexcept
+			{
+				return reinterpret_cast<sqlite3_file*>(storage.get());
+			}
+
+			std::size_t storage_count{};
+			std::unique_ptr<std::max_align_t[]> storage;
+			std::shared_ptr<void> runtime_lifetime;
+			std::shared_ptr<void> backend_lifetime;
+			sqlite3_vfs* underlying{};
+			const void* underlying_vfs_identity{};
+			const void* underlying_app_data_identity{};
+			const void* runtime_image_identity{};
+			const void* open_callback_address{};
+			int (*trusted_close)(sqlite3_file*){};
+			std::shared_ptr<origin_probe_file_node> quarantine_self;
+			bool close_attempted{};
+		};
+
+		void quarantine_origin_probe(std::shared_ptr<origin_probe_file_node>& node) noexcept
+		{
+			// `quarantine_self` was armed before native xOpen. Dropping the external owner is
+			// allocation-free and leaves the opaque probe and its runtime/backend pins alive.
+			node.reset();
+		}
+
+		void release_known_safe_origin_probe(std::shared_ptr<origin_probe_file_node>& node) noexcept
+		{
+			if (node)
+				node->quarantine_self.reset();
+			node.reset();
+		}
+
 		[[nodiscard]] bool validate_runtime_image(const sqlite_source_shm_runtime_binding& runtime)
 		{
 			return runtime.runtime_identity != nullptr &&
@@ -1122,60 +1243,173 @@ namespace cxxlens::sdk
 				function_from_image(runtime.vfs_unregister, runtime.runtime_image_identity);
 		}
 
+		struct origin_method_inspection
+		{
+			int (*trusted_close)(sqlite3_file*){};
+			bool qualified_shm_callbacks{};
+		};
+
+		[[nodiscard]] origin_method_inspection
+		inspect_origin_methods(const origin_probe_file_node& node) noexcept
+		{
+			origin_method_inspection output{};
+			const auto* raw = const_cast<origin_probe_file_node&>(node).file();
+			const auto* methods = raw != nullptr ? raw->methods : nullptr;
+			if (!readable_range_bound_to_code(methods,
+											  sizeof(int),
+											  alignof(sqlite3_io_methods),
+											  node.open_callback_address,
+											  node.runtime_image_identity))
+				return output;
+			const auto advertised_version = methods->version;
+			constexpr auto version_one_bytes = offsetof(sqlite3_io_methods, shm_map);
+			constexpr auto version_two_bytes = offsetof(sqlite3_io_methods, fetch);
+			const auto known_prefix_bytes = advertised_version >= 3 ? sizeof(sqlite3_io_methods)
+				: advertised_version >= 2							? version_two_bytes
+																	: version_one_bytes;
+			if (!readable_range_bound_to_code(methods,
+											  known_prefix_bytes,
+											  alignof(sqlite3_io_methods),
+											  node.open_callback_address,
+											  node.runtime_image_identity))
+				return output;
+			if (function_from_image(methods->close, node.runtime_image_identity))
+				output.trusted_close = methods->close;
+			if (advertised_version < 1 || output.trusted_close == nullptr ||
+				!function_from_image(methods->read, node.runtime_image_identity) ||
+				!function_from_image(methods->write, node.runtime_image_identity) ||
+				!function_from_image(methods->truncate, node.runtime_image_identity) ||
+				!function_from_image(methods->sync, node.runtime_image_identity) ||
+				!function_from_image(methods->file_size, node.runtime_image_identity) ||
+				!function_from_image(methods->lock, node.runtime_image_identity) ||
+				!function_from_image(methods->unlock, node.runtime_image_identity) ||
+				!function_from_image(methods->check_reserved_lock, node.runtime_image_identity) ||
+				!function_from_image(methods->file_control, node.runtime_image_identity) ||
+				!function_from_image(methods->sector_size, node.runtime_image_identity) ||
+				!function_from_image(methods->device_characteristics, node.runtime_image_identity))
+				return output;
+			if (advertised_version < 2)
+				return output;
+			if ((methods->shm_lock != nullptr &&
+				 !function_from_image(methods->shm_lock, node.runtime_image_identity)) ||
+				(methods->shm_barrier != nullptr &&
+				 !function_from_image(methods->shm_barrier, node.runtime_image_identity)) ||
+				(methods->shm_unmap != nullptr &&
+				 !function_from_image(methods->shm_unmap, node.runtime_image_identity)))
+				return output;
+			if (methods->shm_map != nullptr)
+			{
+				if (methods->shm_lock == nullptr || methods->shm_barrier == nullptr ||
+					methods->shm_unmap == nullptr ||
+					!function_from_image(methods->shm_map, node.runtime_image_identity))
+					return output;
+				output.qualified_shm_callbacks = true;
+			}
+			if (advertised_version >= 3)
+			{
+				if (methods->unfetch != nullptr &&
+					!function_from_image(methods->unfetch, node.runtime_image_identity))
+					output.qualified_shm_callbacks = false;
+				if (methods->fetch != nullptr &&
+					(methods->unfetch == nullptr ||
+					 !function_from_image(methods->fetch, node.runtime_image_identity)))
+					output.qualified_shm_callbacks = false;
+			}
+			return output;
+		}
+
+		[[nodiscard]] int close_origin_probe(std::shared_ptr<origin_probe_file_node>& node,
+											 int (*close_callback)(sqlite3_file*)) noexcept
+		{
+			if (!node || close_callback == nullptr || node->close_attempted)
+			{
+				quarantine_origin_probe(node);
+				return sqlite_io_error;
+			}
+			node->close_attempted = true;
+			try
+			{
+				const auto status = close_callback(node->file());
+				if (status == sqlite_ok)
+				{
+					release_known_safe_origin_probe(node);
+					return sqlite_ok;
+				}
+				quarantine_origin_probe(node);
+				return status;
+			}
+			catch (...)
+			{
+				quarantine_origin_probe(node);
+				return sqlite_io_error;
+			}
+		}
+
 		[[nodiscard]] result<void>
 		validate_underlying_callback_image(sqlite3_vfs& underlying,
 										   const sqlite_source_shm_runtime_binding& runtime,
+										   std::shared_ptr<void> backend_lifetime,
 										   const std::string& scratch_probe_path)
 		{
-			if (underlying.version < 1 || underlying.os_file_bytes <= 0 ||
+			if (underlying.version < 1 ||
+				underlying.os_file_bytes < static_cast<int>(sizeof(sqlite3_file)) ||
 				underlying.os_file_bytes > 1024 * 1024 || underlying.name == nullptr ||
 				underlying.name[0] == '\0' || underlying.app_data == nullptr ||
 				underlying.open == nullptr ||
 				!function_from_image(underlying.open, runtime.runtime_image_identity))
 				return unexpected(qualification_error());
-			const auto storage_count = (static_cast<std::size_t>(underlying.os_file_bytes) +
-										sizeof(std::max_align_t) - 1U) /
-				sizeof(std::max_align_t);
-			auto storage = std::make_unique<std::max_align_t[]>(storage_count);
-			std::memset(storage.get(), 0, storage_count * sizeof(std::max_align_t));
-			auto* file = reinterpret_cast<sqlite3_file*>(storage.get());
-			int returned_flags{};
-			const auto open_status =
-				underlying.open(&underlying,
-								scratch_probe_path.c_str(),
-								file,
-								sqlite_open_read_only | sqlite_open_main_database,
-								&returned_flags);
-			if (open_status != sqlite_ok)
+			try
 			{
-				if (file->methods != nullptr)
-					(void)storage
-						.release(); // Unproven ownership/callback: retain storage permanently.
+				auto node = std::make_shared<origin_probe_file_node>(
+					static_cast<std::size_t>(underlying.os_file_bytes),
+					runtime.runtime_lifetime,
+					std::move(backend_lifetime),
+					&underlying,
+					underlying.app_data,
+					runtime.runtime_image_identity,
+					function_address(underlying.open));
+				// Arm the allocation-free/noexcept quarantine owner before invoking native code.
+				static_assert(
+					std::is_nothrow_copy_assignable_v<std::shared_ptr<origin_probe_file_node>>);
+				node->quarantine_self = node;
+				auto* file = node->file();
+				int returned_flags{};
+				int open_status{};
+				try
+				{
+					open_status = underlying.open(&underlying,
+												  scratch_probe_path.c_str(),
+												  file,
+												  sqlite_open_read_only | sqlite_open_main_database,
+												  &returned_flags);
+				}
+				catch (...)
+				{
+					quarantine_origin_probe(node);
+					return unexpected(qualification_error());
+				}
+				if (open_status != sqlite_ok && file->methods == nullptr)
+				{
+					release_known_safe_origin_probe(node);
+					return unexpected(qualification_error());
+				}
+				if (file->methods == nullptr)
+				{
+					quarantine_origin_probe(node);
+					return unexpected(qualification_error());
+				}
+				const auto inspection = inspect_origin_methods(*node);
+				node->trusted_close = inspection.trusted_close;
+				const auto close_status = close_origin_probe(node, inspection.trusted_close);
+				if (open_status != sqlite_ok || !inspection.qualified_shm_callbacks ||
+					close_status != sqlite_ok)
+					return unexpected(qualification_error());
+				return {};
+			}
+			catch (...)
+			{
 				return unexpected(qualification_error());
 			}
-			if (file->methods == nullptr)
-			{
-				(void)storage.release(); // Successful xOpen without a proven xClose is quarantined.
-				return unexpected(qualification_error());
-			}
-			const auto* methods = file->methods;
-			if (methods->close == nullptr ||
-				!function_from_image(methods->close, runtime.runtime_image_identity))
-			{
-				(void)storage.release();
-				return unexpected(qualification_error());
-			}
-			const auto valid = methods->version >= 2 && methods->shm_map != nullptr &&
-				methods->shm_lock != nullptr && methods->shm_unmap != nullptr &&
-				function_from_image(methods->shm_map, runtime.runtime_image_identity) &&
-				function_from_image(methods->shm_lock, runtime.runtime_image_identity) &&
-				function_from_image(methods->shm_unmap, runtime.runtime_image_identity);
-			const auto close_status = methods->close(file);
-			if (close_status != sqlite_ok)
-				(void)storage.release();
-			if (!valid || close_status != sqlite_ok)
-				return unexpected(qualification_error());
-			return {};
 		}
 
 		struct sentinel_query_evidence
@@ -1759,8 +1993,11 @@ namespace cxxlens::sdk
 				const_cast<void*>(request.pinned_underlying_vfs_identity));
 			if (underlying == nullptr ||
 				underlying->app_data != request.pinned_underlying_vfs_app_data_identity ||
-				!validate_underlying_callback_image(
-					*underlying, request.runtime, scratch->descriptor_path("origin-probe.db")) ||
+				!validate_sqlite_source_shm_readonly_origin_probe(
+					underlying,
+					request.runtime,
+					backend_lifetime_,
+					scratch->descriptor_path("origin-probe.db")) ||
 				!target_guard->recheck())
 				return unexpected(
 					qualification_error("source-shm-readonly-qualification-origin-probe"));
@@ -1987,6 +2224,37 @@ namespace cxxlens::sdk
 		}
 #endif
 	} // namespace
+
+	result<void> validate_sqlite_source_shm_readonly_origin_probe(
+		const void* pinned_underlying_vfs_identity,
+		const sqlite_source_shm_runtime_binding& runtime,
+		std::shared_ptr<void> backend_lifetime,
+		const std::string_view scratch_probe_path)
+	{
+#if defined(__linux__) && defined(F_OFD_SETLK)
+		if (pinned_underlying_vfs_identity == nullptr || !backend_lifetime ||
+			scratch_probe_path.empty() || scratch_probe_path.contains('\0') ||
+			!validate_runtime_image(runtime))
+			return unexpected(qualification_error());
+		try
+		{
+			auto* underlying =
+				static_cast<sqlite3_vfs*>(const_cast<void*>(pinned_underlying_vfs_identity));
+			return validate_underlying_callback_image(
+				*underlying, runtime, std::move(backend_lifetime), std::string{scratch_probe_path});
+		}
+		catch (...)
+		{
+			return unexpected(qualification_error());
+		}
+#else
+		(void)pinned_underlying_vfs_identity;
+		(void)runtime;
+		(void)backend_lifetime;
+		(void)scratch_probe_path;
+		return unexpected(qualification_error());
+#endif
+	}
 
 	bool validate_sqlite_source_shm_readonly_map_sequence(
 		const std::span<const sqlite_backend_shm_map_observation> events,

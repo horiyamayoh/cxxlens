@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -16,6 +17,9 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+
+#include <dlfcn.h>
+#include <link.h>
 
 #include "sqlite_backend_effect_gate_internal.hpp"
 #include "sqlite_default_forwarding_vfs_internal.hpp"
@@ -218,6 +222,89 @@ namespace cxxlens::sdk
 			return value + padding;
 		}
 
+		template <class Function>
+		[[nodiscard]] const void* function_address(const Function function) noexcept
+		{
+			static_assert(std::is_pointer_v<Function>);
+			static_assert(sizeof(Function) == sizeof(const void*));
+			return std::bit_cast<const void*>(function);
+		}
+
+		template <class Function>
+		[[nodiscard]] bool function_from_image(const Function function, const void* image) noexcept
+		{
+			if (function == nullptr || image == nullptr)
+				return false;
+			Dl_info information{};
+			return ::dladdr(function_address(function), &information) != 0 &&
+				information.dli_fbase == image;
+		}
+
+		struct image_segment_query
+		{
+			std::uintptr_t code{};
+			std::uintptr_t data_begin{};
+			std::uintptr_t data_end{};
+			bool found{};
+		};
+
+		int find_bound_image_segments(dl_phdr_info* information, std::size_t, void* opaque) noexcept
+		{
+			auto& query = *static_cast<image_segment_query*>(opaque);
+			bool executable_code{};
+			bool readable_data{};
+			for (std::size_t index{}; index < information->dlpi_phnum; ++index)
+			{
+				const auto& header = information->dlpi_phdr[index];
+				if (header.p_type != PT_LOAD ||
+					static_cast<std::uintptr_t>(information->dlpi_addr) >
+						std::numeric_limits<std::uintptr_t>::max() - header.p_vaddr)
+					continue;
+				const auto segment_begin = static_cast<std::uintptr_t>(information->dlpi_addr) +
+					static_cast<std::uintptr_t>(header.p_vaddr);
+				if (static_cast<std::uintptr_t>(header.p_memsz) >
+					std::numeric_limits<std::uintptr_t>::max() - segment_begin)
+					continue;
+				const auto segment_end =
+					segment_begin + static_cast<std::uintptr_t>(header.p_memsz);
+				if ((header.p_flags & PF_X) != 0U && query.code >= segment_begin &&
+					query.code < segment_end)
+					executable_code = true;
+				if ((header.p_flags & PF_R) != 0U && query.data_begin >= segment_begin &&
+					query.data_end <= segment_end)
+					readable_data = true;
+			}
+			if (executable_code && readable_data)
+			{
+				query.found = true;
+				return 1;
+			}
+			return 0;
+		}
+
+		[[nodiscard]] bool readable_range_bound_to_code(const void* address,
+														const std::size_t size,
+														const std::size_t alignment,
+														const void* code,
+														const void* image) noexcept
+		{
+			if (address == nullptr || code == nullptr || image == nullptr || size == 0U ||
+				alignment == 0U || reinterpret_cast<std::uintptr_t>(address) % alignment != 0U)
+				return false;
+			Dl_info data_information{};
+			Dl_info code_information{};
+			if (::dladdr(address, &data_information) == 0 || data_information.dli_fbase != image ||
+				::dladdr(code, &code_information) == 0 || code_information.dli_fbase != image)
+				return false;
+			const auto begin = reinterpret_cast<std::uintptr_t>(address);
+			if (size > std::numeric_limits<std::uintptr_t>::max() - begin)
+				return false;
+			image_segment_query query{
+				reinterpret_cast<std::uintptr_t>(code), begin, begin + size, false};
+			(void)::dl_iterate_phdr(find_bound_image_segments, &query);
+			return query.found;
+		}
+
 		[[nodiscard]] bool exact_suffix_path(const std::string_view value,
 											 const std::string_view base,
 											 const std::string_view suffix) noexcept
@@ -378,6 +465,69 @@ namespace cxxlens::sdk
 			sqlite_backend_opaque_identity entry;
 		};
 
+		struct native_file_node
+		{
+			native_file_node(const std::size_t storage_bytes,
+							 std::shared_ptr<default_forwarding_state> owner_pin,
+							 std::shared_ptr<void> runtime_pin,
+							 std::shared_ptr<default_connection_observation> observation_pin,
+							 std::shared_ptr<sqlite_source_shm_target_namespace_epoch> epoch_pin,
+							 sqlite3_vfs* underlying_vfs,
+							 const void* underlying_app_data,
+							 const void* underlying_image,
+							 const void* underlying_open_callback)
+				: storage_count{(storage_bytes + sizeof(std::max_align_t) - 1U) /
+								sizeof(std::max_align_t)},
+				  storage{std::make_unique<std::max_align_t[]>(storage_count)},
+				  owner{std::move(owner_pin)}, runtime_lifetime{std::move(runtime_pin)},
+				  observation{std::move(observation_pin)},
+				  target_namespace_epoch{std::move(epoch_pin)}, underlying{underlying_vfs},
+				  underlying_vfs_identity{underlying_vfs},
+				  underlying_app_data_identity{underlying_app_data},
+				  underlying_image_identity{underlying_image},
+				  underlying_open_callback_address{underlying_open_callback}
+			{
+				std::memset(storage.get(), 0, storage_count * sizeof(std::max_align_t));
+			}
+
+			[[nodiscard]] sqlite3_file* file() noexcept
+			{
+				return reinterpret_cast<sqlite3_file*>(storage.get());
+			}
+
+			std::size_t storage_count{};
+			std::unique_ptr<std::max_align_t[]> storage;
+			std::shared_ptr<default_forwarding_state> owner;
+			std::shared_ptr<void> runtime_lifetime;
+			std::shared_ptr<default_connection_observation> observation;
+			std::shared_ptr<sqlite_source_shm_target_namespace_epoch> target_namespace_epoch;
+			sqlite3_vfs* underlying{};
+			const void* underlying_vfs_identity{};
+			const void* underlying_app_data_identity{};
+			const void* underlying_image_identity{};
+			const void* underlying_open_callback_address{};
+			sqlite3_io_methods trusted_methods{};
+			bool trusted_methods_ready{};
+			int (*trusted_close)(sqlite3_file*){};
+			std::shared_ptr<native_file_node> quarantine_self;
+			bool close_attempted{};
+		};
+
+		void quarantine_native_file(std::shared_ptr<native_file_node>& node) noexcept
+		{
+			// `quarantine_self` was armed before native xOpen. Dropping the external owner is
+			// allocation-free and leaves the whole opaque file and every pin alive for process
+			// life.
+			node.reset();
+		}
+
+		void release_known_safe_native_file(std::shared_ptr<native_file_node>& node) noexcept
+		{
+			if (node)
+				node->quarantine_self.reset();
+			node.reset();
+		}
+
 		struct forwarding_file
 		{
 			sqlite3_file base{};
@@ -390,8 +540,10 @@ namespace cxxlens::sdk
 			bool source_shm_readonly_qualified{};
 			bool source_shm_qualification_candidate{};
 			bool source_shm_readonly_family_seen{};
+			bool source_shm_terminal_failure{};
 			std::optional<opened_object_identities> expected_source_shm_identity;
 			std::shared_ptr<sqlite_source_shm_target_namespace_epoch> target_namespace_epoch;
+			std::shared_ptr<native_file_node> native;
 		};
 
 		[[nodiscard]] forwarding_file* forwarding(sqlite3_file* value) noexcept
@@ -400,6 +552,7 @@ namespace cxxlens::sdk
 		}
 
 		[[nodiscard]] sqlite3_file* underlying_file(forwarding_file& value) noexcept;
+		[[nodiscard]] const sqlite3_io_methods* underlying_methods(forwarding_file& value) noexcept;
 
 		int forwarding_close(sqlite3_file* base) noexcept;
 		int forwarding_read(sqlite3_file* base, void* output, int count, long long offset) noexcept;
@@ -619,13 +772,18 @@ namespace cxxlens::sdk
 					!registry.runtime_lifetime)
 					return unexpected(forwarding_error("forwarding-vfs-lifetime"));
 				auto* underlying = static_cast<sqlite3_vfs*>(registry.pinned_default_vfs);
-				if (underlying->version < 1 || underlying->os_file_bytes <= 0 ||
+				if (underlying->version < 1 ||
+					underlying->os_file_bytes < static_cast<int>(sizeof(sqlite3_file)) ||
 					underlying->maximum_pathname <= 0 ||
 					std::cmp_greater(underlying->maximum_pathname, maximum_pathname_bytes) ||
 					underlying->name == nullptr || underlying->name[0] == '\0' ||
 					underlying->app_data == nullptr || underlying->open == nullptr ||
 					underlying->full_pathname == nullptr)
 					return unexpected(forwarding_error("forwarding-vfs-delegate"));
+				Dl_info underlying_image{};
+				if (::dladdr(function_address(underlying->open), &underlying_image) == 0 ||
+					underlying_image.dli_fbase == nullptr)
+					return unexpected(forwarding_error("forwarding-vfs-delegate-image"));
 				const auto file_offset =
 					checked_align_up(sizeof(forwarding_file), alignof(std::max_align_t));
 				if (!file_offset ||
@@ -637,8 +795,12 @@ namespace cxxlens::sdk
 				std::shared_ptr<default_forwarding_state> output;
 				try
 				{
-					output = std::shared_ptr<default_forwarding_state>(new default_forwarding_state(
-						std::move(registry), underlying, *file_offset));
+					output = std::shared_ptr<default_forwarding_state>(
+						new default_forwarding_state(std::move(registry),
+													 underlying,
+													 underlying->app_data,
+													 underlying_image.dli_fbase,
+													 *file_offset));
 					output->initialize_wrapper();
 					auto registered = output->register_alias();
 					if (!registered)
@@ -697,7 +859,7 @@ namespace cxxlens::sdk
 			[[nodiscard]] const void*
 			pinned_underlying_vfs_app_data_identity() const noexcept override
 			{
-				return underlying_->app_data;
+				return underlying_app_data_identity_;
 			}
 
 			[[nodiscard]] const void* runtime_identity() const noexcept override
@@ -752,6 +914,16 @@ namespace cxxlens::sdk
 			[[nodiscard]] std::size_t file_offset() const noexcept
 			{
 				return file_offset_;
+			}
+
+			[[nodiscard]] const void* underlying_image_identity() const noexcept
+			{
+				return underlying_image_identity_;
+			}
+
+			[[nodiscard]] const void* underlying_open_callback_address() const noexcept
+			{
+				return underlying_open_callback_address_;
 			}
 
 			[[nodiscard]] const sqlite_private_snapshot_registry_binding& registry() const noexcept
@@ -1328,15 +1500,16 @@ namespace cxxlens::sdk
 					}
 					auto capability = observation_capability_.lock();
 					auto* raw = underlying_file(file);
-					if (!capability || raw == nullptr || raw->methods == nullptr ||
-						raw->methods->file_control == nullptr)
+					const auto* methods = underlying_methods(file);
+					if (!capability || raw == nullptr || methods == nullptr ||
+						methods->file_control == nullptr)
 						return std::nullopt;
 					auto before = observe_sqlite_default_entry_identity_without_open(
 						*capability, canonical_locator_, file.role);
 					if (!before)
 						return std::nullopt;
 					int moved = 1;
-					if (raw->methods->file_control(raw, sqlite_file_control_has_moved, &moved) !=
+					if (methods->file_control(raw, sqlite_file_control_has_moved, &moved) !=
 							sqlite_ok ||
 						moved != 0)
 						return std::nullopt;
@@ -1385,6 +1558,7 @@ namespace cxxlens::sdk
 						{
 							std::scoped_lock observation_lock{observation->mutex};
 							claims_namespace = observation->source_shm_open_plan.has_value() ||
+								observation->source_shm_qualification_fixture_main_accepted ||
 								!observation->main_claimed || observation->main_handle_open;
 							matches_namespace =
 								exact_sqlite_family_path(path, observation->canonical_locator);
@@ -1493,8 +1667,14 @@ namespace cxxlens::sdk
 
 			default_forwarding_state(sqlite_private_snapshot_registry_binding registry,
 									 sqlite3_vfs* underlying,
+									 const void* underlying_app_data_identity,
+									 const void* underlying_image_identity,
 									 const std::size_t file_offset)
-				: registry_{std::move(registry)}, underlying_{underlying}, file_offset_{file_offset}
+				: registry_{std::move(registry)}, underlying_{underlying},
+				  underlying_app_data_identity_{underlying_app_data_identity},
+				  underlying_image_identity_{underlying_image_identity},
+				  underlying_open_callback_address_{function_address(underlying->open)},
+				  file_offset_{file_offset}
 			{
 			}
 
@@ -1585,9 +1765,6 @@ namespace cxxlens::sdk
 							observation->source_shm_qualification_open_plan ||
 							observation->source_shm_qualification_fixture_fullpath_plan ||
 							observation->source_shm_qualification_fixture_pending_open_plan;
-						const auto guarded = source_armed ||
-							observation->source_shm_open_rejected ||
-							observation->source_shm_open_callback_receipt.has_value();
 						std::string_view expected_path = observation->canonical_locator;
 						bool source_ready = true;
 						if (observation->source_shm_open_plan)
@@ -1602,6 +1779,12 @@ namespace cxxlens::sdk
 							source_ready = false;
 						else if (observation->source_shm_qualification_fixture_pending_open_plan)
 							source_ready = observation->source_shm_qualification_fullpath_preserved;
+						const auto consumed_fixture_retry =
+							observation->source_shm_qualification_fixture_main_accepted &&
+							expected_path == path;
+						const auto guarded = source_armed || consumed_fixture_retry ||
+							observation->source_shm_open_rejected ||
+							observation->source_shm_open_callback_receipt.has_value();
 						if (guarded &&
 							observation->originating_thread != std::this_thread::get_id() &&
 							(path == expected_path || path == observation->canonical_locator))
@@ -1775,6 +1958,9 @@ namespace cxxlens::sdk
 
 			sqlite_private_snapshot_registry_binding registry_;
 			sqlite3_vfs* underlying_{};
+			const void* underlying_app_data_identity_{};
+			const void* underlying_image_identity_{};
+			const void* underlying_open_callback_address_{};
 			std::size_t file_offset_{};
 			sqlite3_vfs wrapper_{};
 			std::string registered_name_;
@@ -1970,31 +2156,180 @@ namespace cxxlens::sdk
 
 		[[nodiscard]] sqlite3_file* underlying_file(forwarding_file& value) noexcept
 		{
-			if (!value.owner)
-				return nullptr;
-			auto* bytes = reinterpret_cast<std::byte*>(&value);
-			return reinterpret_cast<sqlite3_file*>(bytes + value.owner->file_offset());
+			return value.native ? value.native->file() : nullptr;
 		}
 
-		[[nodiscard]] const sqlite3_io_methods*
-		forwarding_method_table(const sqlite3_io_methods* methods) noexcept
+		[[nodiscard]] const sqlite3_io_methods* underlying_methods(forwarding_file& value) noexcept
 		{
-			if (methods == nullptr || methods->version < 1 || methods->close == nullptr ||
-				methods->read == nullptr || methods->write == nullptr ||
-				methods->truncate == nullptr || methods->sync == nullptr ||
-				methods->file_size == nullptr || methods->lock == nullptr ||
-				methods->unlock == nullptr || methods->check_reserved_lock == nullptr ||
-				methods->file_control == nullptr || methods->sector_size == nullptr ||
-				methods->device_characteristics == nullptr)
-				return nullptr;
-			const auto has_shm = methods->shm_map != nullptr && methods->shm_lock != nullptr &&
-				methods->shm_barrier != nullptr && methods->shm_unmap != nullptr;
-			const auto has_fetch = methods->fetch != nullptr && methods->unfetch != nullptr;
-			if (methods->version >= 3 && has_shm && has_fetch)
-				return &forwarding_io_v3;
-			if (methods->version >= 2 && has_shm)
-				return &forwarding_io_v2;
-			return &forwarding_io_v1;
+			return value.native && value.native->trusted_methods_ready
+				? &value.native->trusted_methods
+				: nullptr;
+		}
+
+		struct native_method_inspection
+		{
+			int (*trusted_close)(sqlite3_file*){};
+			const sqlite3_io_methods* forwarding_methods{};
+			sqlite3_io_methods callbacks{};
+		};
+
+		[[nodiscard]] native_method_inspection
+		inspect_native_methods(const native_file_node& node) noexcept
+		{
+			native_method_inspection output{};
+			const auto* raw = const_cast<native_file_node&>(node).file();
+			const auto* methods = raw != nullptr ? raw->methods : nullptr;
+			if (!readable_range_bound_to_code(methods,
+											  sizeof(int),
+											  alignof(sqlite3_io_methods),
+											  node.underlying_open_callback_address,
+											  node.underlying_image_identity))
+				return output;
+			const auto advertised_version = methods->version;
+			constexpr auto version_one_bytes = offsetof(sqlite3_io_methods, shm_map);
+			constexpr auto version_two_bytes = offsetof(sqlite3_io_methods, fetch);
+			const auto known_prefix_bytes = advertised_version >= 3 ? sizeof(sqlite3_io_methods)
+				: advertised_version >= 2							? version_two_bytes
+																	: version_one_bytes;
+			if (!readable_range_bound_to_code(methods,
+											  known_prefix_bytes,
+											  alignof(sqlite3_io_methods),
+											  node.underlying_open_callback_address,
+											  node.underlying_image_identity))
+				return output;
+			if (function_from_image(methods->close, node.underlying_image_identity))
+				output.trusted_close = methods->close;
+			if (advertised_version < 1 || output.trusted_close == nullptr ||
+				!function_from_image(methods->read, node.underlying_image_identity) ||
+				!function_from_image(methods->write, node.underlying_image_identity) ||
+				!function_from_image(methods->truncate, node.underlying_image_identity) ||
+				!function_from_image(methods->sync, node.underlying_image_identity) ||
+				!function_from_image(methods->file_size, node.underlying_image_identity) ||
+				!function_from_image(methods->lock, node.underlying_image_identity) ||
+				!function_from_image(methods->unlock, node.underlying_image_identity) ||
+				!function_from_image(methods->check_reserved_lock,
+									 node.underlying_image_identity) ||
+				!function_from_image(methods->file_control, node.underlying_image_identity) ||
+				!function_from_image(methods->sector_size, node.underlying_image_identity) ||
+				!function_from_image(methods->device_characteristics,
+									 node.underlying_image_identity))
+				return output;
+
+			output.callbacks = sqlite3_io_methods{
+				1,
+				methods->close,
+				methods->read,
+				methods->write,
+				methods->truncate,
+				methods->sync,
+				methods->file_size,
+				methods->lock,
+				methods->unlock,
+				methods->check_reserved_lock,
+				methods->file_control,
+				methods->sector_size,
+				methods->device_characteristics,
+				nullptr,
+				nullptr,
+				nullptr,
+				nullptr,
+				nullptr,
+				nullptr,
+			};
+			output.forwarding_methods = &forwarding_io_v1;
+			bool trusted_shm_group{};
+			if (advertised_version >= 2)
+			{
+				if ((methods->shm_lock != nullptr &&
+					 !function_from_image(methods->shm_lock, node.underlying_image_identity)) ||
+					(methods->shm_barrier != nullptr &&
+					 !function_from_image(methods->shm_barrier, node.underlying_image_identity)) ||
+					(methods->shm_unmap != nullptr &&
+					 !function_from_image(methods->shm_unmap, node.underlying_image_identity)))
+				{
+					output.forwarding_methods = nullptr;
+					return output;
+				}
+				if (methods->shm_map != nullptr)
+				{
+					if (methods->shm_lock == nullptr || methods->shm_barrier == nullptr ||
+						methods->shm_unmap == nullptr ||
+						!function_from_image(methods->shm_map, node.underlying_image_identity))
+					{
+						output.forwarding_methods = nullptr;
+						return output;
+					}
+					trusted_shm_group = true;
+					output.callbacks.version = 2;
+					output.callbacks.shm_map = methods->shm_map;
+					output.callbacks.shm_lock = methods->shm_lock;
+					output.callbacks.shm_barrier = methods->shm_barrier;
+					output.callbacks.shm_unmap = methods->shm_unmap;
+					output.forwarding_methods = &forwarding_io_v2;
+				}
+			}
+			if (advertised_version >= 3)
+			{
+				if (methods->unfetch != nullptr &&
+					!function_from_image(methods->unfetch, node.underlying_image_identity))
+				{
+					output.forwarding_methods = nullptr;
+					return output;
+				}
+				if (methods->fetch != nullptr &&
+					(methods->unfetch == nullptr ||
+					 !function_from_image(methods->fetch, node.underlying_image_identity)))
+				{
+					output.forwarding_methods = nullptr;
+					return output;
+				}
+				if (methods->fetch != nullptr)
+				{
+					output.callbacks.fetch = methods->fetch;
+					output.callbacks.unfetch = methods->unfetch;
+				}
+				if (trusted_shm_group && methods->fetch != nullptr)
+				{
+					output.callbacks.version = 3;
+					output.forwarding_methods = &forwarding_io_v3;
+				}
+			}
+			return output;
+		}
+
+		[[nodiscard]] int close_native_file(std::shared_ptr<native_file_node>& node,
+											int (*close_callback)(sqlite3_file*)) noexcept
+		{
+			if (!node || close_callback == nullptr || node->close_attempted)
+			{
+				quarantine_native_file(node);
+				return sqlite_io_error;
+			}
+			node->close_attempted = true;
+			try
+			{
+				const auto status = close_callback(node->file());
+				if (status == sqlite_ok)
+				{
+					release_known_safe_native_file(node);
+					return sqlite_ok;
+				}
+				quarantine_native_file(node);
+				return status;
+			}
+			catch (...)
+			{
+				// A throwing callback has an unknown cleanup outcome and cannot be retried.
+			}
+			quarantine_native_file(node);
+			return sqlite_io_error;
+		}
+
+		void cleanup_failed_forwarding_open(forwarding_file& file) noexcept
+		{
+			file.base.methods = nullptr;
+			if (file.native)
+				(void)close_native_file(file.native, file.native->trusted_close);
 		}
 
 		[[nodiscard]] std::optional<std::size_t>
@@ -2164,6 +2499,18 @@ namespace cxxlens::sdk
 				file.connection_observation->permits_persistent_effect(shm_coordination);
 		}
 
+		[[nodiscard]] bool native_operation_permitted(const forwarding_file& file) noexcept
+		{
+			return !file.source_shm_readonly_qualified || !file.source_shm_terminal_failure;
+		}
+
+		void mark_source_shm_terminal_failure(forwarding_file& file) noexcept
+		{
+			if (file.source_shm_readonly_qualified)
+				file.source_shm_terminal_failure = true;
+			mark_incomplete(file.connection_observation);
+		}
+
 		[[nodiscard]] bool effectful_file_control(const int operation) noexcept
 		{
 			return std::ranges::find(effectful_file_controls, operation) !=
@@ -2175,19 +2522,11 @@ namespace cxxlens::sdk
 			if (base == nullptr)
 				return sqlite_io_error;
 			auto* file = forwarding(base);
+			file->base.methods = nullptr;
 			auto owner = file->owner;
 			auto observation = file->connection_observation;
-			auto* raw = underlying_file(*file);
-			int status = sqlite_io_error;
-			try
-			{
-				if (raw != nullptr && raw->methods != nullptr && raw->methods->close != nullptr)
-					status = raw->methods->close(raw);
-			}
-			catch (...)
-			{
-				status = sqlite_io_error;
-			}
+			const auto close_callback = file->native ? file->native->trusted_close : nullptr;
+			const auto status = close_native_file(file->native, close_callback);
 			if (file->main_handle && observation)
 			{
 				std::scoped_lock lock{observation->mutex};
@@ -2211,9 +2550,12 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (!native_operation_permitted(*file))
+					return sqlite_io_error;
 				auto* raw = underlying_file(*file);
-				return raw != nullptr && raw->methods != nullptr && raw->methods->read != nullptr
-					? raw->methods->read(raw, output, count, offset)
+				const auto* methods = underlying_methods(*file);
+				return raw != nullptr && methods != nullptr && methods->read != nullptr
+					? methods->read(raw, output, count, offset)
 					: sqlite_io_error;
 			}
 			catch (...)
@@ -2230,11 +2572,14 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (!native_operation_permitted(*file))
+					return sqlite_io_error;
 				if (!persistent_effect_permitted(*file))
 					return sqlite_readonly;
 				auto* raw = underlying_file(*file);
-				return raw != nullptr && raw->methods != nullptr && raw->methods->write != nullptr
-					? raw->methods->write(raw, input, count, offset)
+				const auto* methods = underlying_methods(*file);
+				return raw != nullptr && methods != nullptr && methods->write != nullptr
+					? methods->write(raw, input, count, offset)
 					: sqlite_io_error;
 			}
 			catch (...)
@@ -2248,12 +2593,14 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (!native_operation_permitted(*file))
+					return sqlite_io_error;
 				if (!persistent_effect_permitted(*file))
 					return sqlite_readonly;
 				auto* raw = underlying_file(*file);
-				return raw != nullptr && raw->methods != nullptr &&
-						raw->methods->truncate != nullptr
-					? raw->methods->truncate(raw, size)
+				const auto* methods = underlying_methods(*file);
+				return raw != nullptr && methods != nullptr && methods->truncate != nullptr
+					? methods->truncate(raw, size)
 					: sqlite_io_error;
 			}
 			catch (...)
@@ -2267,9 +2614,12 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (!native_operation_permitted(*file))
+					return sqlite_io_error;
 				auto* raw = underlying_file(*file);
-				return raw != nullptr && raw->methods != nullptr && raw->methods->sync != nullptr
-					? raw->methods->sync(raw, flags)
+				const auto* methods = underlying_methods(*file);
+				return raw != nullptr && methods != nullptr && methods->sync != nullptr
+					? methods->sync(raw, flags)
 					: sqlite_io_error;
 			}
 			catch (...)
@@ -2283,10 +2633,12 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (!native_operation_permitted(*file))
+					return sqlite_io_error;
 				auto* raw = underlying_file(*file);
-				return raw != nullptr && raw->methods != nullptr &&
-						raw->methods->file_size != nullptr
-					? raw->methods->file_size(raw, output)
+				const auto* methods = underlying_methods(*file);
+				return raw != nullptr && methods != nullptr && methods->file_size != nullptr
+					? methods->file_size(raw, output)
 					: sqlite_io_error;
 			}
 			catch (...)
@@ -2300,18 +2652,21 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
-				auto* raw = underlying_file(*file);
-				if (raw == nullptr || raw->methods == nullptr || raw->methods->lock == nullptr)
+				if (!native_operation_permitted(*file))
 					return sqlite_io_error;
-				const auto status = raw->methods->lock(raw, level);
+				auto* raw = underlying_file(*file);
+				const auto* methods = underlying_methods(*file);
+				if (raw == nullptr || methods == nullptr || methods->lock == nullptr)
+					return sqlite_io_error;
+				const auto status = methods->lock(raw, level);
 				if (status != sqlite_ok || level < sqlite_lock_exclusive || !file->main_handle ||
 					!file->connection_observation || !file->connection_observation->effect_gate ||
 					!file->connection_observation->effect_gate->has_pending_exclusive_arm())
 					return status;
 
 				int moved = 1;
-				if (raw->methods->file_control == nullptr ||
-					raw->methods->file_control(raw, sqlite_file_control_has_moved, &moved) !=
+				if (methods->file_control == nullptr ||
+					methods->file_control(raw, sqlite_file_control_has_moved, &moved) !=
 						sqlite_ok ||
 					moved != 0)
 				{
@@ -2338,9 +2693,12 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (!native_operation_permitted(*file))
+					return sqlite_io_error;
 				auto* raw = underlying_file(*file);
-				return raw != nullptr && raw->methods != nullptr && raw->methods->unlock != nullptr
-					? raw->methods->unlock(raw, level)
+				const auto* methods = underlying_methods(*file);
+				return raw != nullptr && methods != nullptr && methods->unlock != nullptr
+					? methods->unlock(raw, level)
 					: sqlite_io_error;
 			}
 			catch (...)
@@ -2354,10 +2712,13 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (!native_operation_permitted(*file))
+					return sqlite_io_error;
 				auto* raw = underlying_file(*file);
-				return raw != nullptr && raw->methods != nullptr &&
-						raw->methods->check_reserved_lock != nullptr
-					? raw->methods->check_reserved_lock(raw, output)
+				const auto* methods = underlying_methods(*file);
+				return raw != nullptr && methods != nullptr &&
+						methods->check_reserved_lock != nullptr
+					? methods->check_reserved_lock(raw, output)
 					: sqlite_io_error;
 			}
 			catch (...)
@@ -2371,12 +2732,14 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (!native_operation_permitted(*file))
+					return sqlite_io_error;
 				if (effectful_file_control(operation) && !persistent_effect_permitted(*file))
 					return sqlite_readonly;
 				auto* raw = underlying_file(*file);
-				return raw != nullptr && raw->methods != nullptr &&
-						raw->methods->file_control != nullptr
-					? raw->methods->file_control(raw, operation, value)
+				const auto* methods = underlying_methods(*file);
+				return raw != nullptr && methods != nullptr && methods->file_control != nullptr
+					? methods->file_control(raw, operation, value)
 					: sqlite_not_found;
 			}
 			catch (...)
@@ -2390,10 +2753,12 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (!native_operation_permitted(*file))
+					return 0;
 				auto* raw = underlying_file(*file);
-				return raw != nullptr && raw->methods != nullptr &&
-						raw->methods->sector_size != nullptr
-					? raw->methods->sector_size(raw)
+				const auto* methods = underlying_methods(*file);
+				return raw != nullptr && methods != nullptr && methods->sector_size != nullptr
+					? methods->sector_size(raw)
 					: 0;
 			}
 			catch (...)
@@ -2407,10 +2772,13 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (!native_operation_permitted(*file))
+					return 0;
 				auto* raw = underlying_file(*file);
-				return raw != nullptr && raw->methods != nullptr &&
-						raw->methods->device_characteristics != nullptr
-					? raw->methods->device_characteristics(raw)
+				const auto* methods = underlying_methods(*file);
+				return raw != nullptr && methods != nullptr &&
+						methods->device_characteristics != nullptr
+					? methods->device_characteristics(raw)
 					: 0;
 			}
 			catch (...)
@@ -2431,11 +2799,13 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (!native_operation_permitted(*file))
+					return sqlite_io_error;
 				if (file->source_shm_readonly_qualified)
 				{
 					auto* raw = underlying_file(*file);
-					if (raw == nullptr || raw->methods == nullptr ||
-						raw->methods->shm_map == nullptr)
+					const auto* methods = underlying_methods(*file);
+					if (raw == nullptr || methods == nullptr || methods->shm_map == nullptr)
 						return sqlite_io_error;
 					const auto expected_identity = file->source_shm_qualification_candidate
 						? std::optional<opened_object_identities>{}
@@ -2444,13 +2814,46 @@ namespace cxxlens::sdk
 						(!expected_identity || !file->target_namespace_epoch ||
 						 !file->target_namespace_epoch->recheck()))
 					{
-						mark_incomplete(file->connection_observation);
+						mark_source_shm_terminal_failure(*file);
 						return sqlite_io_error;
 					}
 					const auto readonly_family_seen_before = file->source_shm_readonly_family_seen;
 					volatile void* native_mapping{};
-					const auto native_status =
-						raw->methods->shm_map(raw, page, page_size, 0, &native_mapping);
+					bool native_unmap_attempted{};
+					bool native_unmap_succeeded{true};
+					const auto release_native_mapping = [&]() noexcept
+					{
+						if (native_mapping == nullptr || native_unmap_attempted)
+							return native_unmap_succeeded;
+						native_unmap_attempted = true;
+						if (methods->shm_unmap == nullptr)
+							native_unmap_succeeded = false;
+						else
+						{
+							try
+							{
+								native_unmap_succeeded = methods->shm_unmap(raw, 0) == sqlite_ok;
+							}
+							catch (...)
+							{
+								native_unmap_succeeded = false;
+							}
+						}
+						if (!native_unmap_succeeded)
+							mark_source_shm_terminal_failure(*file);
+						return native_unmap_succeeded;
+					};
+					int native_status{};
+					try
+					{
+						native_status = methods->shm_map(raw, page, page_size, 0, &native_mapping);
+					}
+					catch (...)
+					{
+						(void)release_native_mapping();
+						mark_source_shm_terminal_failure(*file);
+						return sqlite_io_error;
+					}
 					const auto native_nonnull = native_mapping != nullptr;
 					int returned_status = native_status;
 					volatile void* returned_mapping = native_mapping;
@@ -2506,20 +2909,10 @@ namespace cxxlens::sdk
 						else
 							observed_identity = true;
 					}
-					bool native_unmap_attempted{};
-					const auto release_native_mapping = [&]() noexcept
-					{
-						if (native_nonnull && !native_unmap_attempted &&
-							raw->methods->shm_unmap != nullptr)
-						{
-							native_unmap_attempted = true;
-							(void)raw->methods->shm_unmap(raw, 0);
-						}
-					};
 					if (protocol_violation)
-						release_native_mapping();
+						(void)release_native_mapping();
 					if (protocol_violation)
-						mark_incomplete(file->connection_observation);
+						mark_source_shm_terminal_failure(*file);
 					else if (observed_identity &&
 							 !record_shared_memory_identity(file->connection_observation,
 															*expected_identity))
@@ -2527,7 +2920,8 @@ namespace cxxlens::sdk
 						protocol_violation = true;
 						returned_status = sqlite_io_error;
 						returned_mapping = nullptr;
-						release_native_mapping();
+						(void)release_native_mapping();
+						mark_source_shm_terminal_failure(*file);
 					}
 					if (!record_shm_map_event(
 							file->connection_observation,
@@ -2544,7 +2938,13 @@ namespace cxxlens::sdk
 							 file->owner->pinned_underlying_vfs_identity(),
 							 file->owner->pinned_underlying_vfs_app_data_identity()}))
 					{
-						release_native_mapping();
+						(void)release_native_mapping();
+						mark_source_shm_terminal_failure(*file);
+						*output = nullptr;
+						return sqlite_io_error;
+					}
+					if (!native_unmap_succeeded)
+					{
 						*output = nullptr;
 						return sqlite_io_error;
 					}
@@ -2572,10 +2972,11 @@ namespace cxxlens::sdk
 					delegated_extend = 0;
 				}
 				auto* raw = underlying_file(*file);
-				if (raw == nullptr || raw->methods == nullptr || raw->methods->shm_map == nullptr)
+				const auto* methods = underlying_methods(*file);
+				if (raw == nullptr || methods == nullptr || methods->shm_map == nullptr)
 					return sqlite_io_error;
 				const auto status =
-					raw->methods->shm_map(raw, page, page_size, delegated_extend, output);
+					methods->shm_map(raw, page, page_size, delegated_extend, output);
 				if (extend != 0 && delegated_extend == 0 && (status & 0xff) == sqlite_readonly)
 				{
 					*output = nullptr;
@@ -2606,8 +3007,8 @@ namespace cxxlens::sdk
 					{
 						if (output != nullptr)
 							*output = nullptr;
-						if (raw->methods->shm_unmap != nullptr)
-							(void)raw->methods->shm_unmap(raw, 0);
+						if (methods->shm_unmap != nullptr)
+							(void)methods->shm_unmap(raw, 0);
 						return sqlite_io_error;
 					}
 					return status;
@@ -2640,10 +3041,22 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
-				auto* raw = underlying_file(*file);
-				if (raw == nullptr || raw->methods == nullptr || raw->methods->shm_lock == nullptr)
+				if (!native_operation_permitted(*file))
 					return sqlite_io_error;
-				const auto status = raw->methods->shm_lock(raw, offset, count, flags);
+				auto* raw = underlying_file(*file);
+				const auto* methods = underlying_methods(*file);
+				if (raw == nullptr || methods == nullptr || methods->shm_lock == nullptr)
+					return sqlite_io_error;
+				int status{};
+				try
+				{
+					status = methods->shm_lock(raw, offset, count, flags);
+				}
+				catch (...)
+				{
+					mark_source_shm_terminal_failure(*file);
+					return sqlite_io_error;
+				}
 				if (status != sqlite_ok || !file->connection_observation)
 					return status;
 				const auto action = flags & (sqlite_shm_unlock | sqlite_shm_lock);
@@ -2654,6 +3067,11 @@ namespace cxxlens::sdk
 					(action != sqlite_shm_unlock && action != sqlite_shm_lock) ||
 					(mode != sqlite_shm_shared && mode != sqlite_shm_exclusive))
 				{
+					if (file->source_shm_readonly_qualified)
+					{
+						mark_source_shm_terminal_failure(*file);
+						return sqlite_io_error;
+					}
 					mark_incomplete(file->connection_observation);
 					return status;
 				}
@@ -2674,6 +3092,11 @@ namespace cxxlens::sdk
 						{
 							file->connection_observation->invalid = true;
 							file->connection_observation->complete = false;
+							if (file->source_shm_readonly_qualified)
+							{
+								file->source_shm_terminal_failure = true;
+								return sqlite_io_error;
+							}
 							return status;
 						}
 						held.push_back({offset,
@@ -2686,7 +3109,8 @@ namespace cxxlens::sdk
 				}
 				catch (...)
 				{
-					mark_incomplete(file->connection_observation);
+					mark_source_shm_terminal_failure(*file);
+					return sqlite_io_error;
 				}
 				return status;
 			}
@@ -2701,10 +3125,21 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (!native_operation_permitted(*file))
+					return;
 				auto* raw = underlying_file(*file);
-				if (raw != nullptr && raw->methods != nullptr &&
-					raw->methods->shm_barrier != nullptr)
-					raw->methods->shm_barrier(raw);
+				const auto* methods = underlying_methods(*file);
+				if (raw != nullptr && methods != nullptr && methods->shm_barrier != nullptr)
+				{
+					try
+					{
+						methods->shm_barrier(raw);
+					}
+					catch (...)
+					{
+						mark_source_shm_terminal_failure(*file);
+					}
+				}
 			}
 			catch (...)
 			{
@@ -2722,9 +3157,21 @@ namespace cxxlens::sdk
 					!persistent_effect_permitted(*file))
 					return sqlite_readonly;
 				auto* raw = underlying_file(*file);
-				if (raw == nullptr || raw->methods == nullptr || raw->methods->shm_unmap == nullptr)
+				const auto* methods = underlying_methods(*file);
+				if (raw == nullptr || methods == nullptr || methods->shm_unmap == nullptr)
 					return sqlite_io_error;
-				const auto status = raw->methods->shm_unmap(raw, delegated_remove);
+				int status{};
+				try
+				{
+					status = methods->shm_unmap(raw, delegated_remove);
+				}
+				catch (...)
+				{
+					mark_source_shm_terminal_failure(*file);
+					return sqlite_io_error;
+				}
+				if (file->source_shm_readonly_qualified && status != sqlite_ok)
+					mark_source_shm_terminal_failure(*file);
 				if (status == sqlite_ok)
 					file->shm_readonly_cannot_initialize = false;
 				if (status == sqlite_ok)
@@ -2752,9 +3199,12 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (!native_operation_permitted(*file))
+					return sqlite_io_error;
 				auto* raw = underlying_file(*file);
-				return raw != nullptr && raw->methods != nullptr && raw->methods->fetch != nullptr
-					? raw->methods->fetch(raw, offset, count, output)
+				const auto* methods = underlying_methods(*file);
+				return raw != nullptr && methods != nullptr && methods->fetch != nullptr
+					? methods->fetch(raw, offset, count, output)
 					: sqlite_io_error;
 			}
 			catch (...)
@@ -2768,9 +3218,12 @@ namespace cxxlens::sdk
 			try
 			{
 				auto* file = forwarding(base);
+				if (!native_operation_permitted(*file))
+					return sqlite_io_error;
 				auto* raw = underlying_file(*file);
-				return raw != nullptr && raw->methods != nullptr && raw->methods->unfetch != nullptr
-					? raw->methods->unfetch(raw, offset, value)
+				const auto* methods = underlying_methods(*file);
+				return raw != nullptr && methods != nullptr && methods->unfetch != nullptr
+					? methods->unfetch(raw, offset, value)
 					: sqlite_io_error;
 			}
 			catch (...)
@@ -2798,6 +3251,8 @@ namespace cxxlens::sdk
 			std::optional<std::size_t> event_index;
 			std::optional<opened_object_identities> expected_existing_identity;
 			forwarding_file* file{};
+			bool native_open_invoked{};
+			bool native_open_returned{};
 			auto source_shm_validation = source_shm_open_validation::generic;
 			try
 			{
@@ -2924,47 +3379,80 @@ namespace cxxlens::sdk
 					file->~forwarding_file();
 					return sqlite_cannot_open;
 				}
+				if (owner->underlying()->app_data !=
+						owner->pinned_underlying_vfs_app_data_identity() ||
+					function_address(owner->underlying()->open) !=
+						owner->underlying_open_callback_address())
+				{
+					mark_incomplete(association.observation);
+					record_open_failure(association.observation, event_index);
+					file->~forwarding_file();
+					return sqlite_cannot_open;
+				}
+				file->native = std::make_shared<native_file_node>(
+					static_cast<std::size_t>(owner->underlying()->os_file_bytes),
+					owner,
+					owner->registry().runtime_lifetime,
+					association.observation,
+					file->target_namespace_epoch,
+					owner->underlying(),
+					owner->pinned_underlying_vfs_app_data_identity(),
+					owner->underlying_image_identity(),
+					owner->underlying_open_callback_address());
+				// Copying a shared_ptr is noexcept and cannot allocate. Pre-arm the self-cycle
+				// before native xOpen so every uncertain callback outcome can retain the opaque
+				// allocation.
+				static_assert(std::is_nothrow_copy_assignable_v<std::shared_ptr<native_file_node>>);
+				file->native->quarantine_self = file->native;
 				auto* raw = underlying_file(*file);
 				if (raw == nullptr)
 					throw std::bad_alloc{};
-				std::memset(raw, 0, static_cast<std::size_t>(owner->underlying()->os_file_bytes));
 				int local_out_flags{};
+				native_open_invoked = true;
 				const auto status = owner->underlying()->open(
 					owner->underlying(), name, raw, delegated_flags, &local_out_flags);
-				if (status != sqlite_ok)
+				native_open_returned = true;
+				if (status != sqlite_ok && raw->methods == nullptr)
 				{
+					release_known_safe_native_file(file->native);
 					record_open_failure(association.observation, event_index);
 					file->~forwarding_file();
 					return status;
 				}
+				if (raw->methods == nullptr)
+				{
+					mark_incomplete(association.observation);
+					record_open_failure(association.observation, event_index);
+					quarantine_native_file(file->native);
+					file->~forwarding_file();
+					return sqlite_io_error;
+				}
+				const auto inspection = inspect_native_methods(*file->native);
+				file->native->trusted_close = inspection.trusted_close;
+				if (status != sqlite_ok)
+				{
+					record_open_failure(association.observation, event_index);
+					(void)close_native_file(file->native, inspection.trusted_close);
+					file->~forwarding_file();
+					return status;
+				}
+				if (inspection.forwarding_methods == nullptr)
+				{
+					mark_incomplete(association.observation);
+					record_open_failure(association.observation, event_index);
+					cleanup_failed_forwarding_open(*file);
+					file->~forwarding_file();
+					return sqlite_io_error;
+				}
+				file->native->trusted_methods = inspection.callbacks;
+				file->native->trusted_methods_ready = true;
 				if (file->target_namespace_epoch && !file->target_namespace_epoch->recheck())
 				{
 					mark_incomplete(association.observation);
 					record_open_failure(association.observation, event_index);
-					if (raw->methods != nullptr && raw->methods->close != nullptr)
-						(void)raw->methods->close(raw);
+					cleanup_failed_forwarding_open(*file);
 					file->~forwarding_file();
 					return sqlite_io_error;
-				}
-				const auto* method_table = forwarding_method_table(raw->methods);
-				if (method_table == nullptr)
-				{
-					mark_incomplete(association.observation);
-					record_open_failure(association.observation, event_index);
-					if (raw->methods != nullptr && raw->methods->close != nullptr)
-						(void)raw->methods->close(raw);
-					file->~forwarding_file();
-					return sqlite_io_error;
-				}
-				if (association.main_handle && association.observation)
-				{
-					std::scoped_lock lock{association.observation->mutex};
-					association.observation->main_handle_open = true;
-					association.observation->main_handle_read_only =
-						(delegated_flags & sqlite_open_read_only) != 0 &&
-						(delegated_flags & sqlite_open_read_write) == 0 &&
-						(local_out_flags & sqlite_open_read_only) != 0 &&
-						(local_out_flags & sqlite_open_read_write) == 0;
 				}
 				std::optional<opened_object_identities> identities;
 				if (file->target_namespace_epoch)
@@ -2975,7 +3463,7 @@ namespace cxxlens::sdk
 					{
 						mark_incomplete(association.observation);
 						record_open_failure(association.observation, event_index);
-						(void)raw->methods->close(raw);
+						cleanup_failed_forwarding_open(*file);
 						file->~forwarding_file();
 						return sqlite_io_error;
 					}
@@ -2991,7 +3479,7 @@ namespace cxxlens::sdk
 				{
 					mark_incomplete(association.observation);
 					record_open_failure(association.observation, event_index);
-					(void)raw->methods->close(raw);
+					cleanup_failed_forwarding_open(*file);
 					file->~forwarding_file();
 					return sqlite_io_error;
 				}
@@ -3000,14 +3488,24 @@ namespace cxxlens::sdk
 										 local_out_flags,
 										 std::move(identities)))
 				{
-					(void)raw->methods->close(raw);
+					cleanup_failed_forwarding_open(*file);
 					file->~forwarding_file();
 					return sqlite_io_error;
+				}
+				if (association.main_handle && association.observation)
+				{
+					std::scoped_lock lock{association.observation->mutex};
+					association.observation->main_handle_open = true;
+					association.observation->main_handle_read_only =
+						(delegated_flags & sqlite_open_read_only) != 0 &&
+						(delegated_flags & sqlite_open_read_write) == 0 &&
+						(local_out_flags & sqlite_open_read_only) != 0 &&
+						(local_out_flags & sqlite_open_read_write) == 0;
 				}
 				if (out_flags != nullptr)
 					*out_flags = local_out_flags;
 				owner->increment_open_file_count();
-				file->base.methods = method_table;
+				file->base.methods = inspection.forwarding_methods;
 				return status;
 			}
 			catch (...)
@@ -3016,9 +3514,16 @@ namespace cxxlens::sdk
 				record_open_failure(association.observation, event_index);
 				if (file != nullptr)
 				{
-					auto* raw = underlying_file(*file);
-					if (raw != nullptr && raw->methods != nullptr && raw->methods->close != nullptr)
-						(void)raw->methods->close(raw);
+					file->base.methods = nullptr;
+					if (file->native)
+					{
+						if (native_open_invoked && !native_open_returned)
+							quarantine_native_file(file->native);
+						else if (native_open_returned)
+							cleanup_failed_forwarding_open(*file);
+						else
+							release_known_safe_native_file(file->native);
+					}
 					file->~forwarding_file();
 				}
 				return sqlite_no_memory;

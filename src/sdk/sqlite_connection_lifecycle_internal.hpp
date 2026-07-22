@@ -115,11 +115,12 @@ namespace cxxlens::sdk
 		struct state;
 
 		[[nodiscard]] static sqlite_quarantined_connection
-		quarantine(std::unique_ptr<state> owned,
+		quarantine(std::shared_ptr<state>& owned,
 				   sqlite_connection_quarantine_reason reason,
 				   std::optional<int> sqlite_code) noexcept;
+		static void release_known_safe(std::shared_ptr<state>& owned) noexcept;
 		void cleanup_noexcept() noexcept;
 
-		std::unique_ptr<state> state_;
+		std::shared_ptr<state> state_;
 	};
 } // namespace cxxlens::sdk

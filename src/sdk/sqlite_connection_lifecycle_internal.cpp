@@ -1,24 +1,28 @@
 #include "sqlite_connection_lifecycle_internal.hpp"
 
-#include <atomic>
+#include <type_traits>
 #include <utility>
 
 namespace cxxlens::sdk
 {
 	struct sqlite_connection_lifecycle::state
 	{
+		state(void* raw_connection,
+			  const sqlite_close_v2_callback close_callback,
+			  sqlite_connection_lifetime_pins lifetime_pins)
+			: connection{raw_connection}, close_v2{close_callback}, pins{std::move(lifetime_pins)}
+		{
+		}
+
 		void* connection{};
 		sqlite_close_v2_callback close_v2{};
 		sqlite_connection_lifetime_pins pins;
-		state* quarantine_next{};
+		std::shared_ptr<state> quarantine_self;
 	};
 
 	namespace
 	{
 		constexpr int sqlite_ok = 0;
-		// Intentionally never reclaimed: every linked node retains an uncertain connection and
-		// pins.
-		std::atomic<void*> quarantine_head{};
 	} // namespace
 
 	sqlite_confirmed_close_token::sqlite_confirmed_close_token(
@@ -101,8 +105,12 @@ namespace cxxlens::sdk
 		void* connection,
 		const sqlite_close_v2_callback close_v2,
 		sqlite_connection_lifetime_pins pins)
-		: state_{std::make_unique<state>(connection, close_v2, std::move(pins), nullptr)}
+		: state_{std::make_shared<state>(connection, close_v2, std::move(pins))}
 	{
+		// The open-result slot is handed to native code after construction. Arm its quarantine
+		// owner now, while allocation can still fail without transferring the native handle.
+		static_assert(std::is_nothrow_copy_assignable_v<std::shared_ptr<state>>);
+		state_->quarantine_self = state_;
 	}
 
 	sqlite_connection_lifecycle::~sqlite_connection_lifecycle() noexcept
@@ -141,43 +149,51 @@ namespace cxxlens::sdk
 	sqlite_connection_close_outcome sqlite_connection_lifecycle::close_exactly_once() noexcept
 	{
 		auto owned = std::move(state_);
-		if (owned == nullptr || owned->connection == nullptr)
+		if (owned == nullptr)
 			return sqlite_confirmed_close_token{sqlite_confirmed_close_kind::no_connection};
+		if (owned->connection == nullptr)
+		{
+			release_known_safe(owned);
+			return sqlite_confirmed_close_token{sqlite_confirmed_close_kind::no_connection};
+		}
 
 		if (owned->close_v2 == nullptr)
-			return quarantine(std::move(owned),
-							  sqlite_connection_quarantine_reason::close_callback_missing,
-							  std::nullopt);
+			return quarantine(
+				owned, sqlite_connection_quarantine_reason::close_callback_missing, std::nullopt);
 
 		try
 		{
 			const auto code = owned->close_v2(owned->connection);
 			if (code == sqlite_ok)
+			{
+				release_known_safe(owned);
 				return sqlite_confirmed_close_token{sqlite_confirmed_close_kind::sqlite_ok};
-			return quarantine(
-				std::move(owned), sqlite_connection_quarantine_reason::close_non_ok, code);
+			}
+			return quarantine(owned, sqlite_connection_quarantine_reason::close_non_ok, code);
 		}
 		catch (...)
 		{
-			return quarantine(std::move(owned),
-							  sqlite_connection_quarantine_reason::close_callback_threw,
-							  std::nullopt);
+			return quarantine(
+				owned, sqlite_connection_quarantine_reason::close_callback_threw, std::nullopt);
 		}
 	}
 
 	sqlite_quarantined_connection
-	sqlite_connection_lifecycle::quarantine(std::unique_ptr<state> owned,
+	sqlite_connection_lifecycle::quarantine(std::shared_ptr<state>& owned,
 											const sqlite_connection_quarantine_reason reason,
 											const std::optional<int> sqlite_code) noexcept
 	{
-		auto* const node = owned.release();
-		void* observed = quarantine_head.load(std::memory_order_relaxed);
-		do
-		{
-			node->quarantine_next = static_cast<state*>(observed);
-		} while (!quarantine_head.compare_exchange_weak(
-			observed, node, std::memory_order_release, std::memory_order_relaxed));
+		// `quarantine_self` was armed before native code could fill the open-result slot.
+		// Dropping this external owner is allocation-free and leaves the connection and pins alive.
+		owned.reset();
 		return sqlite_quarantined_connection{reason, sqlite_code};
+	}
+
+	void sqlite_connection_lifecycle::release_known_safe(std::shared_ptr<state>& owned) noexcept
+	{
+		if (owned)
+			owned->quarantine_self.reset();
+		owned.reset();
 	}
 
 	void sqlite_connection_lifecycle::cleanup_noexcept() noexcept
