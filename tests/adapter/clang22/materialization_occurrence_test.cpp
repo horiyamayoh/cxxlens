@@ -420,7 +420,7 @@ namespace
 			auto bytes = manifest_bytes(shared, occurrence_files(shared));
 			auto manifest =
 				parse_materialization_occurrence_manifest(bytes, shared ? "shared" : "static");
-			require(manifest && manifest->files.size() == (shared ? 18U : 12U) &&
+			require(manifest && manifest->files.size() == (shared ? 19U : 13U) &&
 						manifest->source_revision == std::string(40U, '1') &&
 						manifest->source_tree == std::string(40U, '2') &&
 						manifest->inventory_digest.starts_with("sha256:"),
@@ -455,7 +455,7 @@ namespace
 				"occurrence manifest inventoried its own bytes");
 
 		auto unsafe_dso = occurrence_files(true);
-		unsafe_dso[12U] = object_value({
+		unsafe_dso[roles.size()] = object_value({
 			{"role", string_value("base")},
 			{"path", string_value("../lib/libcxxlens_base.so.1")},
 			{"digest", string_value("sha256:" + std::string(64U, 'f'))},

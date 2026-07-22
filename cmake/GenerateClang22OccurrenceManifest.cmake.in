@@ -1,6 +1,13 @@
 # Generate the source-private occurrence authority only after every inventoried
 # install artifact exists at its final prefix-relative path.
 
+set(CXXLENS_PROVENANCE_MODE "@CXXLENS_SOURCE_PROVENANCE_MODE@")
+set(CXXLENS_PROVENANCE_SOURCE_DIR "@CMAKE_CURRENT_SOURCE_DIR@")
+set(CXXLENS_PROVENANCE_GIT_EXECUTABLE "@CXXLENS_SOURCE_PROVENANCE_GIT@")
+set(CXXLENS_PROVENANCE_EXPECTED_REVISION "@CXXLENS_SOURCE_REVISION@")
+set(CXXLENS_PROVENANCE_EXPECTED_TREE "@CXXLENS_SOURCE_TREE@")
+include("@CMAKE_CURRENT_BINARY_DIR@/VerifyClang22SourceProvenance.cmake")
+
 set(_cxxlens_occurrence_prefix "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}")
 set(_cxxlens_occurrence_files "")
 set(_cxxlens_occurrence_separator "")
@@ -49,6 +56,10 @@ _cxxlens_occurrence_append(
 _cxxlens_occurrence_append(
   snapshot-store-contract
   "@CMAKE_INSTALL_DATADIR@/cxxlens/schemas/cxxlens_ng_snapshot_store_contract.yaml"
+)
+_cxxlens_occurrence_append(
+  sqlite-store-contract
+  "@CMAKE_INSTALL_DATADIR@/cxxlens/schemas/cxxlens_ng_sqlite_store_contract.yaml"
 )
 _cxxlens_occurrence_append(
   materialization-contract

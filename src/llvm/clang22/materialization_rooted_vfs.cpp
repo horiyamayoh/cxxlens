@@ -162,6 +162,8 @@ namespace cxxlens::detail::clang22::materialization
 						held_shm_locks,
 						complete,
 						main_handle_open,
+						{},
+						{},
 					};
 				}
 				catch (const std::bad_alloc&)
@@ -868,7 +870,7 @@ namespace cxxlens::detail::clang22::materialization
 			{
 				if (errno == ENOENT)
 					return sdk::sqlite_backend_entry_observation{
-						role, sdk::sqlite_backend_entry_state::absent, {}, {}, {}};
+						role, sdk::sqlite_backend_entry_state::absent, {}, {}, {}, {}, false};
 				return sdk::unexpected(observation_error("observation-io-failure"));
 			}
 			auto entry_identity = opaque_entry_identity(parent, leaf, entry);
@@ -881,6 +883,8 @@ namespace cxxlens::detail::clang22::materialization
 					{},
 					std::move(*entry_identity),
 					{},
+					{},
+					false,
 				};
 
 			auto opened = open_materialization_beneath(parent, leaf, O_RDONLY | O_NONBLOCK);
@@ -898,6 +902,8 @@ namespace cxxlens::detail::clang22::materialization
 					{},
 					std::move(*entry_identity),
 					{},
+					{},
+					false,
 				};
 			}
 			auto object_identity =
@@ -929,6 +935,8 @@ namespace cxxlens::detail::clang22::materialization
 					std::move(*object_identity),
 					std::move(*entry_identity),
 					std::move(held),
+					{},
+					false,
 				};
 			}
 			catch (const std::bad_alloc&)

@@ -132,9 +132,7 @@ namespace cxxlens::sdk::provider
 				return cxxlens::sdk::unexpected(process_error(
 					"provider.process-launch-failed", "executable-open", std::to_string(errno)));
 			descriptor source{source_value};
-			struct stat metadata
-			{
-			};
+			struct stat metadata{};
 			if (::fstat(source.get(), &metadata) != 0 || !S_ISREG(metadata.st_mode) ||
 				(metadata.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) == 0)
 				return cxxlens::sdk::unexpected(process_error(

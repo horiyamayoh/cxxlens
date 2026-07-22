@@ -15,6 +15,8 @@
 
 #include <cxxlens/sdk.hpp>
 
+#include "../../support/sqlite_store_fixture.hpp"
+
 namespace
 {
 	using namespace cxxlens;
@@ -513,10 +515,63 @@ namespace
 		require(current && current->publication() == *observed.publish_returned_record,
 				"publish-returned record was not the committed recovery authority");
 	}
+
+	void sqlite_v2_begin_is_phase_authentic_and_does_not_migrate()
+	{
+		using namespace cxxlens::test::sqlite_fixture;
+		temporary_working_directory working_directory;
+		const auto value = engine();
+		const auto selector_value = selector(value);
+		const auto path = std::filesystem::path{"migration-required.sqlite"};
+		const auto genesis_request =
+			publication_request(selector_value, "sqlite", std::nullopt, path.string());
+		auto genesis = execute_materialization_store(
+			value, genesis_request, plan(value, genesis_request, "item:v2-genesis"));
+		require(!genesis.first_issue && genesis.publish_returned_record &&
+					genesis.verification_store,
+				"materializer v2 fixture genesis failed");
+		const auto genesis_record = *genesis.publish_returned_record;
+		genesis.verification_store.reset();
+		downgrade_v3_to_exact_v2(path);
+		require_wal_header_and_quiescent_sidecars(path);
+		const auto before = capture_files(path);
+
+		const auto append_request = publication_request(
+			selector_value, "sqlite", genesis_record.publication_id, path.string());
+		recording_opener opener;
+		auto observed = execute_materialization_store(
+			value, append_request, plan(value, append_request, "item:v2-append"), opener);
+		const auto* failure = observed.first_issue
+			? std::get_if<materialization_store_sdk_failure>(&*observed.first_issue)
+			: nullptr;
+		require(failure && failure->operation == materialization_store_operation::writer_begin &&
+					failure->error.code == "store.migration-required" &&
+					failure->error.field == "sqlite-physical-format" &&
+					failure->error.detail == "cxxlens.sqlite-semantic-store.v2-to-v3" &&
+					observed.head_observation.status ==
+						materialization_store_receipt_status::present &&
+					observed.head_observation.projection &&
+					observed.head_observation.projection->publication == genesis_record &&
+					opener.sqlite_call_count == 1U && observed.writer_begin_call_count == 1U &&
+					!observed.publication_attempted && observed.publish_call_count == 0U &&
+					!observed.publish_returned_record && !observed.recovery_receipt &&
+					!observed.verification_store &&
+					std::ranges::all_of(observed.verification_receipts,
+										[](const materialization_store_path_receipt& receipt)
+										{
+											return receipt.status ==
+												materialization_store_receipt_status::not_attempted;
+										}),
+				"v2 materializer failure was not the exact one-shot writer_begin result");
+		const auto after = capture_files(path);
+		require(after == before,
+				"v2 materializer writer_begin implicitly migrated or changed source bytes");
+	}
 } // namespace
 
 int main()
 {
+	sqlite_v2_begin_is_phase_authentic_and_does_not_migrate();
 	memory_fresh_genesis();
 	sqlite_genesis_append_and_stale();
 	sqlite_publish_race_recovers_exact_receipts();

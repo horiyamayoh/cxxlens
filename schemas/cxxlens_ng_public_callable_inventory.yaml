@@ -1526,7 +1526,7 @@ allocator:
   - fully_qualified_name: cxxlens::source::relations::span::span_column::ref
     callable_kind: static
     next_overload_slot: 1
-inventory_digest: sha256:8c80098be336552820f4c7e247105e3b28cf1c361b4e7a2ada8403190743d4a9
+inventory_digest: sha256:afa2825147c57f65a3e6a044505d82088a95ba79c51099a8c444a3f1dce07556
 callables:
 - id: cpp.callable.00100ca7a0bda4b73503b24a4e6f6d33be47b954c7553cab8f70e85f9e77f492
   identity:
@@ -2856,10 +2856,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: snapshot_writer :: ~ snapshot_writer'
     source_anchor:
       ast:
-        line: 387
+        line: 388
         column: 3
       doxygen:
-        line: 387
+        line: 388
         column: 1
 - id: cpp.callable.105a05b3ab1807f0bf2085e95a34201fbab175caa324c0b544ce36b872c07ee6
   identity:
@@ -6731,10 +6731,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: snapshot_builder :: add'
     source_anchor:
       ast:
-        line: 416
+        line: 417
         column: 30
       doxygen:
-        line: 416
+        line: 417
         column: 9
 - id: cpp.callable.35cd9604159df0de0e20baa1e7be218d717caa12244051017860be78284bb7e2
   identity:
@@ -8431,10 +8431,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: snapshot_writer :: snapshot_writer'
     source_anchor:
       ast:
-        line: 385
+        line: 386
         column: 3
       doxygen:
-        line: 385
+        line: 386
         column: 1
 - id: cpp.callable.44c318c7ee893553b5a2d5b435c8082f42cfd46b035ee282ba56ab5a02391bfa
   identity:
@@ -8942,10 +8942,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: snapshot_builder :: snapshot_builder'
     source_anchor:
       ast:
-        line: 415
+        line: 416
         column: 12
       doxygen:
-        line: 415
+        line: 416
         column: 10
 - id: cpp.callable.47f9b85ff7f05aa14af24ae357cb1111dd2fd5de49014c2e65cd2dcf49076975
   identity:
@@ -9304,10 +9304,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: snapshot_builder :: publish'
     source_anchor:
       ast:
-        line: 417
+        line: 418
         column: 41
       doxygen:
-        line: 417
+        line: 418
         column: 9
 - id: cpp.callable.4a320a95ff52d9f4205adbbba5956bbf660c9cd44e0d4b45c9cd51cac3fd2a11
   identity:
@@ -11126,10 +11126,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: make_in_memory_snapshot_store'
     source_anchor:
       ast:
-        line: 403
+        line: 404
         column: 39
       doxygen:
-        line: 403
+        line: 404
         column: 9
 - id: cpp.callable.5f78e8781680e6ee49b613a9777c44c089e65d68b961a5069ce9cdfb9e4ea624
   identity:
@@ -15118,10 +15118,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: snapshot_writer :: state'
     source_anchor:
       ast:
-        line: 388
+        line: 389
         column: 35
       doxygen:
-        line: 388
+        line: 389
         column: 20
 - id: cpp.callable.7bde57c79c6ba450bcc0c91a0f412768ffc961ce303af87b2b238027b31bc37e
   identity:
@@ -15341,10 +15341,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: mark_publication_corrupt_for_testing'
     source_anchor:
       ast:
-        line: 409
+        line: 410
         column: 2
       doxygen:
-        line: 409
+        line: 410
         column: 1
 - id: cpp.callable.7d355e53916f62506672c7dede0ca23cfa610edf75a55e2f31c446d948535b5d
   identity:
@@ -17154,10 +17154,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: snapshot_writer :: operator ='
     source_anchor:
       ast:
-        line: 384
+        line: 385
         column: 20
       doxygen:
-        line: 384
+        line: 385
         column: 17
 - id: cpp.callable.8e7c25aadb99551160461c4ecf555097159f91210006b714d9b6388924492669
   identity:
@@ -18995,10 +18995,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: snapshot_writer :: validate'
     source_anchor:
       ast:
-        line: 391
+        line: 392
         column: 30
       doxygen:
-        line: 391
+        line: 392
         column: 9
 - id: cpp.callable.9b3b8bc863b308476aa77300e4539547790c5b4a0bf9c2cf6e96be3d77912460
   identity:
@@ -19807,10 +19807,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: snapshot_writer :: snapshot_writer'
     source_anchor:
       ast:
-        line: 383
+        line: 384
         column: 3
       doxygen:
-        line: 383
+        line: 384
         column: 1
 - id: cpp.callable.a3e8cc9ee2369a4ab728fad1be8d4136be098efa230e5b476077cee59da6c70f
   identity:
@@ -21180,10 +21180,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: open_sqlite_snapshot_store'
     source_anchor:
       ast:
-        line: 406
+        line: 407
         column: 2
       doxygen:
-        line: 406
+        line: 407
         column: 1
 - id: cpp.callable.b526530f4bc3b796221bb7ebdf477b2dd26c9c4e566294b28925572008f0ad7f
   identity:
@@ -23988,10 +23988,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: snapshot_writer :: cancel'
     source_anchor:
       ast:
-        line: 393
+        line: 394
         column: 8
       doxygen:
-        line: 393
+        line: 394
         column: 6
 - id: cpp.callable.d286e359f9e9eb82fe0f100bd76503500b7a7ee52de1a0a77f96822fa9e6608f
   identity:
@@ -24193,10 +24193,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: snapshot_writer :: publish'
     source_anchor:
       ast:
-        line: 392
+        line: 393
         column: 41
       doxygen:
-        line: 392
+        line: 393
         column: 9
 - id: cpp.callable.d39beae65e750bb07839a9cd5da478e1df00421eaec67688e0b81075bfe06236
   identity:
@@ -24245,10 +24245,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: snapshot_writer :: operator ='
     source_anchor:
       ast:
-        line: 386
+        line: 387
         column: 20
       doxygen:
-        line: 386
+        line: 387
         column: 17
 - id: cpp.callable.d3e4cee48b5af51a39884578271806f0a67a7a019278947dc2e5583d7462b3f6
   identity:
@@ -25458,10 +25458,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: snapshot_writer :: add_closure'
     source_anchor:
       ast:
-        line: 390
+        line: 391
         column: 30
       doxygen:
-        line: 390
+        line: 391
         column: 9
 - id: cpp.callable.dd9ec231dc16cadfe329f50305746d2ffca6b0c12386f977e343f3d9852533d2
   identity:
@@ -26234,10 +26234,10 @@ callables:
     doxygen_name: 'cxxlens :: sdk :: snapshot_writer :: stage'
     source_anchor:
       ast:
-        line: 389
+        line: 390
         column: 30
       doxygen:
-        line: 389
+        line: 390
         column: 9
 - id: cpp.callable.e6a0d16c9fdcb8a2e16019f6fb8dd54f41bf478076780b9253aaebc95b6c56eb
   identity:

@@ -38,29 +38,44 @@ set(CXXLENS_SOURCE_TREE
     ""
     CACHE STRING
           "Exact 40-hex source tree embedded in installed occurrence evidence")
-if(CXXLENS_SOURCE_REVISION STREQUAL "" OR CXXLENS_SOURCE_TREE STREQUAL "")
+if((CXXLENS_SOURCE_REVISION STREQUAL "" AND NOT CXXLENS_SOURCE_TREE STREQUAL "")
+   OR (NOT CXXLENS_SOURCE_REVISION STREQUAL "" AND CXXLENS_SOURCE_TREE STREQUAL
+                                                   ""))
+  message(
+    FATAL_ERROR
+      "CXXLENS_SOURCE_REVISION and CXXLENS_SOURCE_TREE must be supplied together"
+  )
+endif()
+set(CXXLENS_SOURCE_PROVENANCE_MODE explicit)
+set(CXXLENS_SOURCE_PROVENANCE_GIT "")
+if(CXXLENS_SOURCE_REVISION STREQUAL "" AND CXXLENS_SOURCE_TREE STREQUAL "")
   find_package(Git QUIET)
-  if(Git_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
-    execute_process(
-      COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
-      WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-      OUTPUT_VARIABLE _cxxlens_git_revision
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      RESULT_VARIABLE _cxxlens_git_revision_status)
-    execute_process(
-      COMMAND "${GIT_EXECUTABLE}" rev-parse "HEAD^{tree}"
-      WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-      OUTPUT_VARIABLE _cxxlens_git_tree
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      RESULT_VARIABLE _cxxlens_git_tree_status)
-    if(CXXLENS_SOURCE_REVISION STREQUAL "" AND _cxxlens_git_revision_status
-                                               EQUAL 0)
-      set(CXXLENS_SOURCE_REVISION "${_cxxlens_git_revision}")
-    endif()
-    if(CXXLENS_SOURCE_TREE STREQUAL "" AND _cxxlens_git_tree_status EQUAL 0)
-      set(CXXLENS_SOURCE_TREE "${_cxxlens_git_tree}")
-    endif()
+  if(NOT Git_FOUND OR NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+    message(
+      FATAL_ERROR
+        "Source provenance requires either an available git checkout or an explicit revision/tree pair"
+    )
   endif()
+  execute_process(
+    COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    OUTPUT_VARIABLE _cxxlens_git_revision
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE _cxxlens_git_revision_status)
+  execute_process(
+    COMMAND "${GIT_EXECUTABLE}" rev-parse "HEAD^{tree}"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    OUTPUT_VARIABLE _cxxlens_git_tree
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE _cxxlens_git_tree_status)
+  if(NOT _cxxlens_git_revision_status EQUAL 0 OR NOT _cxxlens_git_tree_status
+                                                 EQUAL 0)
+    message(FATAL_ERROR "Cannot derive exact source provenance from git")
+  endif()
+  set(CXXLENS_SOURCE_REVISION "${_cxxlens_git_revision}")
+  set(CXXLENS_SOURCE_TREE "${_cxxlens_git_tree}")
+  set(CXXLENS_SOURCE_PROVENANCE_MODE git-clean)
+  set(CXXLENS_SOURCE_PROVENANCE_GIT "${GIT_EXECUTABLE}")
 endif()
 string(LENGTH "${CXXLENS_SOURCE_REVISION}" _cxxlens_source_revision_length)
 string(LENGTH "${CXXLENS_SOURCE_TREE}" _cxxlens_source_tree_length)
@@ -78,6 +93,9 @@ if(CXXLENS_BUILD_SHARED)
 else()
   set(CXXLENS_OCCURRENCE_CONFIGURATION static)
 endif()
+configure_file(
+  cmake/VerifyClang22SourceProvenance.cmake
+  "${CMAKE_CURRENT_BINARY_DIR}/VerifyClang22SourceProvenance.cmake" COPYONLY)
 configure_file(
   cmake/GenerateClang22OccurrenceManifest.cmake.in
   "${CMAKE_CURRENT_BINARY_DIR}/GenerateClang22OccurrenceManifest.cmake" @ONLY)
@@ -137,8 +155,25 @@ add_library(cxxlens_base ${CXXLENS_LIBRARY_TYPE} src/sdk/common.cpp)
 add_library(cxxlens::base ALIAS cxxlens_base)
 cxxlens_configure_component(cxxlens_base base)
 
-add_library(cxxlens_kernel ${CXXLENS_LIBRARY_TYPE} src/sdk/relation.cpp
-                           src/sdk/claim.cpp src/sdk/store.cpp)
+add_library(
+  cxxlens_kernel
+  ${CXXLENS_LIBRARY_TYPE}
+  src/sdk/relation.cpp
+  src/sdk/claim.cpp
+  src/sdk/store.cpp
+  src/sdk/sqlite_connection_lifecycle_internal.cpp
+  src/sdk/sqlite_limit_length_control_internal.cpp
+  src/sdk/sqlite_payload_streaming_internal.cpp
+  src/sdk/sqlite_wal_receipt_internal.cpp
+  src/sdk/sqlite_wal_source_capture_internal.cpp
+  src/sdk/sqlite_wal_recovery_workspace_internal.cpp
+  src/sdk/sqlite_private_snapshot_internal.cpp
+  src/sdk/sqlite_default_observation.cpp
+  src/sdk/sqlite_source_shm_readonly_preflight_internal.cpp
+  src/sdk/sqlite_default_forwarding_vfs.cpp
+  src/sdk/sqlite_store_fault_injection_internal.cpp
+  src/sdk/sqlite_store_terminal_internal.cpp
+  src/sdk/sqlite_terminal_reclassifier_internal.cpp)
 add_library(cxxlens::kernel ALIAS cxxlens_kernel)
 cxxlens_configure_component(cxxlens_kernel kernel)
 target_link_libraries(

@@ -70,6 +70,57 @@ jobs:
             build/ci-quick/build-test-${{ matrix.shared }}.evidence.json
           if-no-files-found: error
 
+  sqlite-store-v3-qualification:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - name: Install exact Clang 22 toolchain
+        run: python3 tools/ci/bootstrap_supply_chain.py install --profile developer
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12.11"
+      - run: "python -m pip install --require-hashes --only-binary=:all: --requirement tools/quality/requirements.lock"
+      - name: Build and observe exact-SHA static/shared SQLite Store v3
+        env:
+          CXX: clang++-22
+        run: |
+          SOURCE_TREE="$(git rev-parse 'HEAD^{tree}')"
+          cmake --preset ci-quick -B build/sqlite-qualification-static \
+            -DCXXLENS_CLANG_ADAPTER=ON \
+            -DCXXLENS_BUILD_SHARED=OFF \
+            -DCXXLENS_SOURCE_REVISION="${GITHUB_SHA}" \
+            -DCXXLENS_SOURCE_TREE="${SOURCE_TREE}"
+          cmake --build build/sqlite-qualification-static --target \
+            cxxlens-sqlite-store-v3-qualification-case-runner
+          cmake --preset ci-quick -B build/sqlite-qualification-shared \
+            -DCXXLENS_CLANG_ADAPTER=ON \
+            -DCXXLENS_BUILD_SHARED=ON \
+            -DCXXLENS_SOURCE_REVISION="${GITHUB_SHA}" \
+            -DCXXLENS_SOURCE_TREE="${SOURCE_TREE}"
+          cmake --build build/sqlite-qualification-shared --target \
+            cxxlens-sqlite-store-v3-qualification-case-runner
+          python tools/quality/produce_ng_sqlite_store_v3_qualification.py produce \
+            --root . \
+            --static-runner build/sqlite-qualification-static/tests/cxxlens-sqlite-store-v3-qualification-case-runner \
+            --shared-runner build/sqlite-qualification-shared/tests/cxxlens-sqlite-store-v3-qualification-case-runner \
+            --revision "${GITHUB_SHA}" \
+            --source-tree "${SOURCE_TREE}" \
+            --work-directory "${RUNNER_TEMP}/cxxlens-sqlite-store-v3-work" \
+            --output "${RUNNER_TEMP}/cxxlens-ng-sqlite-store-v3-qualification-report.json"
+          python tools/quality/check_ng_sqlite_store_v3_qualification.py check \
+            --root . \
+            --report "${RUNNER_TEMP}/cxxlens-ng-sqlite-store-v3-qualification-report.json" \
+            --expected-revision "${GITHUB_SHA}" \
+            --expected-source-tree "${SOURCE_TREE}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cxxlens-ng-sqlite-store-v3-qualification-${{ github.sha }}
+          path: ${{ runner.temp }}/cxxlens-ng-sqlite-store-v3-qualification-report.json
+          if-no-files-found: error
+          retention-days: 365
+
   quality-contracts:
     runs-on: ubuntu-24.04
     steps:
@@ -368,7 +419,7 @@ jobs:
 
   release-evaluation:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [g5-qualification]
+    needs: [g5-qualification, sqlite-store-v3-qualification]
     runs-on: ubuntu-24.04
     outputs:
       qualification: ${{ steps.evaluate.outputs.qualification }}

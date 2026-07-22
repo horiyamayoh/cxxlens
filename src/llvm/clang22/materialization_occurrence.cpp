@@ -28,7 +28,7 @@ namespace cxxlens::detail::clang22::materialization
 {
 	namespace
 	{
-		constexpr std::array<std::string_view, 12U> static_roles{
+		constexpr std::array<std::string_view, 13U> static_roles{
 			"materializer-executable",
 			"worker-executable",
 			"relation-registry",
@@ -37,12 +37,13 @@ namespace cxxlens::detail::clang22::materialization
 			"provider-protocol",
 			"provider-runtime-contract",
 			"snapshot-store-contract",
+			"sqlite-store-contract",
 			"materialization-contract",
 			"materialization-contract-schema",
 			"materialization-request-schema",
 			"materialization-report-schema",
 		};
-		constexpr std::array<std::string_view, 12U> static_paths{
+		constexpr std::array<std::string_view, 13U> static_paths{
 			"bin/cxxlens-clang22-materialize",
 			"bin/cxxlens-clang-worker-22",
 			"share/cxxlens/schemas/cxxlens_ng_relation_registry.yaml",
@@ -51,6 +52,7 @@ namespace cxxlens::detail::clang22::materialization
 			"share/cxxlens/schemas/cxxlens_ng_provider_protocol.yaml",
 			"share/cxxlens/schemas/cxxlens_ng_provider_runtime_contract.yaml",
 			"share/cxxlens/schemas/cxxlens_ng_snapshot_store_contract.yaml",
+			"share/cxxlens/schemas/cxxlens_ng_sqlite_store_contract.yaml",
 			"share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.yaml",
 			"share/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml",
 			"share/cxxlens/schemas/cxxlens_ng_clang22_materialization_request.schema.yaml",
@@ -368,9 +370,9 @@ namespace cxxlens::detail::clang22::materialization
 		limits.max_input_bytes = 1024U * 1024U;
 		limits.max_string_bytes = 4095U;
 		limits.max_total_string_bytes = 256U * 1024U;
-		limits.max_array_elements = 18U;
+		limits.max_array_elements = 19U;
 		limits.max_object_members = 7U;
-		limits.max_total_values = 80U;
+		limits.max_total_values = 84U;
 		auto document = parse_json_object(std::move(raw), limits);
 		if (!document)
 			return sdk::unexpected(occurrence_error("manifest", document.error().detail));
@@ -400,7 +402,7 @@ namespace cxxlens::detail::clang22::materialization
 			return sdk::unexpected(occurrence_error("manifest", "authority"));
 		const auto* files_value = root.member("files");
 		const auto* files = files_value != nullptr ? files_value->as_array() : nullptr;
-		const auto expected_size = *configuration == "static" ? 12U : 18U;
+		const auto expected_size = *configuration == "static" ? 13U : 19U;
 		if (files == nullptr || files->size() != expected_size)
 			return sdk::unexpected(occurrence_error("files", "cardinality"));
 		std::vector<materialization_occurrence_file> decoded;
