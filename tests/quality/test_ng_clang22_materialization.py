@@ -7,7 +7,9 @@ import codecs
 import copy
 import hashlib
 import pathlib
+import subprocess
 import sys
+import tempfile
 import unittest
 
 
@@ -22,6 +24,108 @@ from relation_idl_compiler import (  # noqa: E402
 
 
 class NgClang22MaterializationTests(unittest.TestCase):
+    def test_source_provenance_verifier_is_fail_closed(self) -> None:
+        script = ROOT / "cmake/VerifyClang22SourceProvenance.cmake"
+        with tempfile.TemporaryDirectory() as temporary:
+            checkout = pathlib.Path(temporary)
+            tracked = checkout / "authority.txt"
+            subprocess.run(["git", "init", "--quiet"], cwd=checkout, check=True)
+            tracked.write_text("authority\n", encoding="utf-8")
+            subprocess.run(["git", "add", "authority.txt"], cwd=checkout, check=True)
+            subprocess.run(
+                [
+                    "git",
+                    "-c",
+                    "user.name=cxxlens-test",
+                    "-c",
+                    "user.email=cxxlens-test@example.invalid",
+                    "commit",
+                    "--quiet",
+                    "-m",
+                    "fixture",
+                ],
+                cwd=checkout,
+                check=True,
+            )
+            revision = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=checkout, text=True
+            ).strip()
+            tree = subprocess.check_output(
+                ["git", "rev-parse", "HEAD^{tree}"], cwd=checkout, text=True
+            ).strip()
+
+            def verify(
+                mode: str,
+                expected_revision: str = revision,
+                expected_tree: str = tree,
+            ) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    [
+                        "cmake",
+                        f"-DCXXLENS_PROVENANCE_MODE={mode}",
+                        f"-DCXXLENS_PROVENANCE_SOURCE_DIR={checkout}",
+                        "-DCXXLENS_PROVENANCE_GIT_EXECUTABLE=git",
+                        (
+                            "-DCXXLENS_PROVENANCE_EXPECTED_REVISION="
+                            f"{expected_revision}"
+                        ),
+                        f"-DCXXLENS_PROVENANCE_EXPECTED_TREE={expected_tree}",
+                        "-P",
+                        str(script),
+                    ],
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+
+            self.assertEqual(verify("git-clean").returncode, 0)
+            stale = verify("git-clean", "0" * 40)
+            self.assertNotEqual(stale.returncode, 0)
+            self.assertIn("dirty, stale, or unstable", stale.stderr)
+
+            tracked.write_text("dirty\n", encoding="utf-8")
+            dirty = verify("git-clean")
+            self.assertNotEqual(dirty.returncode, 0)
+            self.assertIn("dirty, stale, or unstable", dirty.stderr)
+            self.assertEqual(verify("explicit").returncode, 0)
+
+            tracked.write_text("authority\n", encoding="utf-8")
+            (checkout / "untracked.txt").write_text("untracked\n", encoding="utf-8")
+            untracked = verify("git-clean")
+            self.assertNotEqual(untracked.returncode, 0)
+            self.assertIn("dirty, stale, or unstable", untracked.stderr)
+
+    def test_occurrence_generation_binds_source_provenance_guard(self) -> None:
+        documents = {
+            "root_cmake": (ROOT / materialization.ROOT_CMAKE).read_text(
+                encoding="utf-8"
+            ),
+            "occurrence_generator": (
+                ROOT / materialization.OCCURRENCE_GENERATOR_CMAKE
+            ).read_text(encoding="utf-8"),
+            "source_verifier": (
+                ROOT / materialization.SOURCE_PROVENANCE_CMAKE
+            ).read_text(encoding="utf-8"),
+        }
+        materialization.validate_occurrence_build_provenance(**documents)
+        mutations = (
+            ("root_cmake", "must be supplied together"),
+            ("occurrence_generator", "CXXLENS_PROVENANCE_EXPECTED_TREE"),
+            ("source_verifier", "status --porcelain=v1"),
+            ("source_verifier", "--untracked-files=all"),
+            ("source_verifier", "_cxxlens_git_observe(after)"),
+            ("source_verifier", "dirty, stale, or unstable"),
+        )
+        for label, marker in mutations:
+            with self.subTest(label=label, marker=marker):
+                drift = copy.deepcopy(documents)
+                drift[label] = drift[label].replace(marker, "removed", 1)
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "source-provenance guard is missing",
+                ):
+                    materialization.validate_occurrence_build_provenance(**drift)
+
     def request(
         self,
         configuration: str = "static",
@@ -247,6 +351,43 @@ class NgClang22MaterializationTests(unittest.TestCase):
             code="materialization.request-invalid",
         )
         self.validate_report(None, raw_failure, request_bytes=undecodable)
+
+        # A sealed raw observation can report auxiliary infrastructure failure without
+        # misclassifying valid input as request-invalid.
+        spool_bytes = materialization.canonical_json(self.request())
+        for phase in ("json-decode", "request-schema", "request-binding"):
+            spool_failure = materialization.compact_failure_report(
+                spool_bytes,
+                request=None,
+                phase=phase,
+                code="materialization.spool-failure",
+            )
+            self.validate_report(None, spool_failure, request_bytes=spool_bytes)
+
+        report_schema = materialization.load(ROOT / materialization.REPORT_SCHEMA)
+        for code, phase in (
+            ("materialization.spool-failure", "request-version"),
+            ("materialization.request-invalid", "request-binding"),
+            ("materialization.identity-mismatch", "request-schema"),
+            ("materialization.version-unsupported", "json-decode"),
+            ("no-response", "json-decode"),
+        ):
+            invalid_cross_product = copy.deepcopy(spool_failure)
+            invalid_cross_product["error"].update({"code": code, "phase": phase})
+            with self.subTest(illegal_phase_code=(phase, code)):
+                with self.assertRaises(materialization.MaterializationError):
+                    materialization.validate_schema(
+                        invalid_cross_product,
+                        report_schema,
+                        "materialization report",
+                        error_code="materialization.report-invalid",
+                    )
+                with self.assertRaises(materialization.MaterializationError):
+                    self.validate_report(
+                        None,
+                        invalid_cross_product,
+                        request_bytes=spool_bytes,
+                    )
 
         raw_mutations = {
             "worker": lambda report: report["effects"].__setitem__(
@@ -830,6 +971,16 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.validate_contract_exact(contract)
 
         contract = copy.deepcopy(materialization.load(ROOT / materialization.CONTRACT))
+        contract["source_identity"]["base64"]["canonicality"] = (
+            "discarded-padding-bits-ignored"
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "source identity contract differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(materialization.load(ROOT / materialization.CONTRACT))
         contract["span_adoption"]["independent_validator"]["independence"].remove(
             "relation-reference-absence-shortcut"
         )
@@ -1178,6 +1329,28 @@ class NgClang22MaterializationTests(unittest.TestCase):
         ):
             self.validate_report(request, report)
 
+    def test_occurrence_role_snapshot_lifecycle_is_exact(self) -> None:
+        for member in (
+            "cardinality",
+            "construction",
+            "closure",
+            "sealing",
+            "retained_authority",
+            "consumption",
+            "postmeasurement-path-or-inode-mutation",
+            "unsupported-or-copy-write-seal-failure",
+        ):
+            contract = copy.deepcopy(materialization.load(ROOT / materialization.CONTRACT))
+            del contract["identity"]["installed_occurrence"]["runtime_measurement"][
+                "role_snapshot"
+            ][member]
+            with self.subTest(member=member):
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "installed occurrence measurement contract differs",
+                ):
+                    materialization.validate_contract_exact(contract)
+
     def test_occurrence_manifest_is_closed_ordered_and_digest_bound(self) -> None:
         manifest = materialization.fixture_occurrence_manifest(
             ROOT,
@@ -1199,6 +1372,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
                 "provider-protocol",
                 "provider-runtime-contract",
                 "snapshot-store-contract",
+                "sqlite-store-contract",
                 "materialization-contract",
                 "materialization-contract-schema",
                 "materialization-request-schema",
@@ -1263,9 +1437,9 @@ class NgClang22MaterializationTests(unittest.TestCase):
             worker_digest="sha256:" + "2" * 64,
         )
         materialization.validate_occurrence_manifest(ROOT, shared)
-        self.assertEqual(len(shared["files"]), 18)
+        self.assertEqual(len(shared["files"]), 19)
         self.assertEqual(
-            [row["role"] for row in shared["files"][12:]],
+            [row["role"] for row in shared["files"][13:]],
             [
                 "base",
                 "kernel",
@@ -1277,7 +1451,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
         )
 
         lib64 = copy.deepcopy(shared)
-        for row in lib64["files"][12:]:
+        for row in lib64["files"][13:]:
             row["path"] = row["path"].replace("lib/", "lib64/") + ".22.1"
         lib64["occurrence_payload_digest"] = materialization.content_digest(
             materialization.canonical_json(
@@ -1297,7 +1471,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
             ("wrong-prefix", "share/libcxxlens_base.so"),
         ):
             changed = copy.deepcopy(shared)
-            changed["files"][12]["path"] = path
+            changed["files"][13]["path"] = path
             changed["occurrence_payload_digest"] = materialization.content_digest(
                 materialization.canonical_json(
                     {
@@ -1317,7 +1491,7 @@ class NgClang22MaterializationTests(unittest.TestCase):
         self.assertEqual(measured["files"], shared["files"])
         drift = copy.deepcopy(report)
         drift_files = drift["installation"]["measured"]["files"]
-        drift_files[12]["digest"] = "sha256:" + "f" * 64
+        drift_files[13]["digest"] = "sha256:" + "f" * 64
         drift["installation"]["measured"]["inventory_digest"] = (
             materialization.content_digest(
                 materialization.canonical_json(drift_files)
@@ -1824,7 +1998,9 @@ class NgClang22MaterializationTests(unittest.TestCase):
                 cause = {
                     "kind": "sdk_error",
                     "operation": operation,
-                    "access_path": None,
+                    "access_path": (
+                        "current-selector" if operation == "head_current" else None
+                    ),
                     "code": "store.sqlite-failure",
                     "field": operation,
                     "detail": {"kind": "stable", "value": "fixture-code"},
@@ -1843,6 +2019,15 @@ class NgClang22MaterializationTests(unittest.TestCase):
                         request_bytes=request_bytes,
                         store_failure_authority=cause,
                     )
+                    self.assertEqual(
+                        report["effects"]["head_observation"],
+                        "sdk-error" if operation == "head_current" else (
+                            "not-observed" if phase == "store-open" else "absent"
+                        ),
+                    )
+                    self.assertIsNone(
+                        report["effects"]["observed_head_publication"]
+                    )
                     changed = copy.deepcopy(report)
                     changed["effects"]["store_failure_cause"]["operation"] = (
                         "writer_publish"
@@ -1856,7 +2041,10 @@ class NgClang22MaterializationTests(unittest.TestCase):
                         )
 
                     tuple_mutations = {
-                        "access-path": ("access_path", "current-selector"),
+                        "access-path": (
+                            "access_path",
+                            None if operation == "head_current" else "current-selector",
+                        ),
                         "sdk-code": ("code", "diagnostic prose"),
                         "sdk-field": ("field", ""),
                         "detail-shape": (
@@ -1877,6 +2065,29 @@ class NgClang22MaterializationTests(unittest.TestCase):
                                     request_bytes=request_bytes,
                                     store_failure_authority=cause,
                                 )
+
+                    if operation == "head_current":
+                        wrong_head = copy.deepcopy(report)
+                        wrong_head["effects"]["head_observation"] = "absent"
+                        with self.assertRaises(materialization.MaterializationError):
+                            self.validate_report(
+                                request,
+                                wrong_head,
+                                request_bytes=request_bytes,
+                                store_failure_authority=cause,
+                            )
+
+                        forged_head = copy.deepcopy(report)
+                        forged_head["effects"]["observed_head_publication"] = (
+                            "publication:forged"
+                        )
+                        with self.assertRaises(materialization.MaterializationError):
+                            self.validate_report(
+                                request,
+                                forged_head,
+                                request_bytes=request_bytes,
+                                store_failure_authority=cause,
+                            )
 
                     valid_tuple_mutations = {
                         "alternate-valid-code": ("code", "store.corrupt"),
@@ -1905,6 +2116,39 @@ class NgClang22MaterializationTests(unittest.TestCase):
                                     request_bytes=request_bytes,
                                     store_failure_authority=cause,
                                 )
+
+        not_found_cause = {
+            "kind": "sdk_error",
+            "operation": "head_current",
+            "access_path": "current-selector",
+            "code": "store.current-not-found",
+            "field": "exact-series-id",
+            "detail": {"kind": "stable", "value": ""},
+        }
+        not_found = materialization.compact_failure_report(
+            request_bytes,
+            request=request,
+            phase="store-stage",
+            code="materialization.store-failure",
+            store_failure_cause=not_found_cause,
+        )
+        self.assertEqual(not_found["effects"]["head_observation"], "absent")
+        self.assertIsNone(not_found["effects"]["observed_head_publication"])
+        self.validate_report(
+            request,
+            not_found,
+            request_bytes=request_bytes,
+            store_failure_authority=not_found_cause,
+        )
+        forged_not_found = copy.deepcopy(not_found)
+        forged_not_found["effects"]["head_observation"] = "sdk-error"
+        with self.assertRaises(materialization.MaterializationError):
+            self.validate_report(
+                request,
+                forged_not_found,
+                request_bytes=request_bytes,
+                store_failure_authority=not_found_cause,
+            )
 
         missing = materialization.compact_failure_report(
             request_bytes,
@@ -3277,6 +3521,71 @@ class NgClang22MaterializationTests(unittest.TestCase):
         ):
             materialization.validate_request(ROOT, request)
 
+    def test_source_base64_is_canonical_and_json_escape_is_non_authoritative(
+        self,
+    ) -> None:
+        request_schema = materialization.load(ROOT / materialization.REQUEST_SCHEMA)
+        source_schema = materialization.request_source_base64_schema(request_schema)
+        accepted = {
+            "": b"",
+            "YQ==": b"a",
+            "YWI=": b"ab",
+            "YWJj": b"abc",
+        }
+        for spelling, expected in accepted.items():
+            with self.subTest(accepted=spelling):
+                materialization.validate_schema(
+                    spelling,
+                    source_schema,
+                    "source.content_base64",
+                )
+                self.assertEqual(
+                    materialization.decode_canonical_base64(spelling), expected
+                )
+
+        for spelling in (
+            "YR==",
+            "YWJ=",
+            "YQ=",
+            "YQ",
+            "YQ===",
+            "YQ--",
+            "YQ==\n",
+        ):
+            with self.subTest(rejected=spelling):
+                with self.assertRaises(materialization.MaterializationError):
+                    materialization.validate_schema(
+                        spelling,
+                        source_schema,
+                        "source.content_base64",
+                    )
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "source.content_base64",
+                ):
+                    materialization.decode_canonical_base64(spelling)
+
+        request = self.request()
+        direct = materialization.canonical_json(request)
+        spelling = request["tasks"][0]["source"]["content_base64"]
+        escaped = direct.replace(
+            ('"' + spelling + '"').encode("ascii"),
+            ('"' + spelling.replace("=", "\\u003d") + '"').encode("ascii"),
+            1,
+        )
+        self.assertNotEqual(escaped, direct)
+        decoded = materialization.load_strict_json_bytes(escaped, "request")
+        self.assertEqual(decoded, request)
+        materialization.validate_request(ROOT, decoded)
+        self.assertEqual(
+            materialization.expected_task_input_digest(
+                decoded, decoded["tasks"][0]
+            ),
+            materialization.expected_task_input_digest(
+                request, request["tasks"][0]
+            ),
+        )
+
     def test_source_file_and_line_index_identities_are_bottom_up(self) -> None:
         request = self.request()
         source = request["tasks"][0]["source"]
@@ -3759,6 +4068,39 @@ class NgClang22MaterializationTests(unittest.TestCase):
         ):
             materialization.validate_contract_exact(
                 forged_contract, request_schema
+            )
+
+        permissive_base64 = copy.deepcopy(request_schema)
+        materialization.request_source_base64_schema(permissive_base64)["pattern"] = (
+            r"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|"
+            r"[A-Za-z0-9+/]{3}=)?$"
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "canonical Base64 request schema differs",
+        ):
+            materialization.validate_contract_exact(contract, permissive_base64)
+
+        missing_annotation = copy.deepcopy(request_schema)
+        materialization.request_source_base64_schema(missing_annotation).pop(
+            "x-cxxlens-base64-canonicality"
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "canonical Base64 request schema differs",
+        ):
+            materialization.validate_contract_exact(contract, missing_annotation)
+
+        forged_source_projection = copy.deepcopy(contract)
+        forged_source_projection["project_and_tasks"]["worker_task_v3"][
+            "source_content_base64"
+        ]["projection"] = "exact-request-spelling"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "worker task v3 binding differs",
+        ):
+            materialization.validate_contract_exact(
+                forged_source_projection, request_schema
             )
 
     def test_catalog_selection_alias_census_and_payload_drift_are_rejected(self) -> None:
@@ -4468,6 +4810,16 @@ class NgClang22MaterializationTests(unittest.TestCase):
         ):
             materialization.validate_contract_exact(contract)
 
+        contract = copy.deepcopy(materialization.load(ROOT / materialization.CONTRACT))
+        contract["errors"]["compact_phase_code_policy"]["raw_input_only"][
+            "request-schema"
+        ].remove("materialization.spool-failure")
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "compact failure phase/code policy differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
     def test_machine_contract_requires_bounded_two_phase_report_lifecycle(self) -> None:
         accepted = materialization.load(ROOT / materialization.CONTRACT)
         materialization.validate_contract_exact(copy.deepcopy(accepted))
@@ -4583,6 +4935,56 @@ class NgClang22MaterializationTests(unittest.TestCase):
             materialization.validate_contract_exact(contract)
 
         contract = copy.deepcopy(accepted)
+        contract["report"]["response_union"]["compact_failure"].pop(
+            "head_observation_states"
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "compact prepublication Store cause authority differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["report"]["response_union"]["compact_failure"].pop(
+            "store_draft_state_authority"
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "compact prepublication Store cause authority differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["report"]["response_union"]["compact_failure"][
+            "store_draft_state_authority"
+        ]["writer_begin_receipt_inference"] = "required"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "compact prepublication Store cause authority differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["report"]["response_union"]["compact_failure"][
+            "prepublication_store_failure_cause"
+        ]["access_path_by_operation"]["head_current"] = None
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "compact prepublication Store cause authority differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["errors"]["compact_effect_matrix"]["store-stage"] = [
+            "head-observed-absent-or-present"
+        ]
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "compact store-stage head observation authority differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
         contract["acceptance"].append("bounded-spool-before-publication")
         with self.assertRaisesRegex(
             materialization.MaterializationError,
@@ -4620,6 +5022,630 @@ class NgClang22MaterializationTests(unittest.TestCase):
                 "materialization contract",
                 error_code="materialization.report-invalid",
             )
+
+    def test_df_0200_accepted_resolution_is_closed_and_fail_closed(self) -> None:
+        accepted = materialization.load(ROOT / materialization.CONTRACT)
+        contract_schema = materialization.load(ROOT / materialization.CONTRACT_SCHEMA)
+        resolution = accepted["claim_adoption"]["df_0200_resolution"]
+        self.assertEqual(
+            resolution["status"], "accepted-authority-implementation-pending"
+        )
+        self.assertEqual(
+            resolution["implementation_disposition"],
+            "pending-implementation-and-qualification",
+        )
+        self.assertEqual(
+            resolution["sqlite_capacity_decision"]["status"], "accepted"
+        )
+        materialization.validate_contract_exact(
+            copy.deepcopy(accepted), contract_schema=copy.deepcopy(contract_schema)
+        )
+
+        current_policy = accepted["errors"]["compact_phase_code_policy"][
+            "request_bound"
+        ]
+        for phase in (
+            "materialization-validation",
+            "store-stage",
+            "report-construction",
+        ):
+            self.assertNotIn("materialization.spool-failure", current_policy[phase])
+
+        contract = copy.deepcopy(accepted)
+        contract["claim_adoption"].pop("df_0200_resolution")
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "DF-0200 accepted incremental residency resolution differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        def remove_d1_corpus_case(resolution: dict[str, object]) -> None:
+            resolution["d1_claim_batch_oracle"]["qualification_corpus"][
+                "cases"
+            ].remove("existing-to-existing-non-reclassification")
+
+        def share_d1_verdict_logic(resolution: dict[str, object]) -> None:
+            resolution["d1_claim_batch_oracle"][
+                "shared_commit_control_flow_or_verdict_logic"
+            ] = "allowed"
+
+        def drift_codec_header(resolution: dict[str, object]) -> None:
+            resolution["partition_event_codec"]["stream_header"][
+                "header_length_u32be"
+            ] = 85
+
+        def remove_whole_partition_rejection(resolution: dict[str, object]) -> None:
+            resolution["partition_event_codec"]["rejection"].remove(
+                "whole-partition-drop-against-external-authority"
+            )
+
+        def remove_external_partition_census(resolution: dict[str, object]) -> None:
+            resolution["d3_store_ingestion"]["external_completeness_authority"][
+                "required_global_censuses_and_digests"
+            ].remove("partition")
+
+        def reject_input_exact_duplicate(resolution: dict[str, object]) -> None:
+            resolution["d3_store_ingestion"]["external_completeness_authority"][
+                "pre_encoder_receipt_oracle"
+            ]["input_occurrence_law"]["exact_duplicate_claim_occurrence"] = (
+                "reject-provider-input"
+            )
+
+        def make_final_eof_ambiguous(resolution: dict[str, object]) -> None:
+            resolution["d4_memory_accounting"]["segment_offsets"][
+                "final_eof"
+            ] = "segment-count-zero"
+
+        def narrow_v5_collection_count(resolution: dict[str, object]) -> None:
+            resolution["d4_memory_accounting"]["canonical_v5_collection_count"][
+                "maximum"
+            ] = 4_294_967_295
+
+        def drift_ingress_overflow_tuple(resolution: dict[str, object]) -> None:
+            resolution["d5_failure_taxonomy"]["v5_collection_count_overflow"][
+                "field"
+            ] = "store-component-count"
+
+        def flatten_publish_unknown(resolution: dict[str, object]) -> None:
+            resolution["d5_failure_taxonomy"][
+                "sqlite_writer_publish_enospc_or_sqlite_toobig"
+            ]["outcome"] = "exit-two-zero-stdout"
+
+        def drift_sqlite_option(resolution: dict[str, object]) -> None:
+            resolution["sqlite_capacity_decision"]["selected_alternative"] = "B"
+
+        def regress_review_status(resolution: dict[str, object]) -> None:
+            resolution["status"] = "proposed-independent-review-pending"
+
+        authority_mutations = [
+            ("d1-frozen-corpus-case-removed", remove_d1_corpus_case),
+            ("d1-verdict-control-flow-shared", share_d1_verdict_logic),
+            ("codec-header-length-drift", drift_codec_header),
+            ("codec-whole-partition-negative-removed", remove_whole_partition_rejection),
+            ("external-partition-census-removed", remove_external_partition_census),
+            ("oracle-input-exact-duplicate-law-drift", reject_input_exact_duplicate),
+            ("final-eof-pair-made-ambiguous", make_final_eof_ambiguous),
+            ("v5-collection-count-narrowed-to-u32", narrow_v5_collection_count),
+            ("private-ingress-overflow-tuple-drift", drift_ingress_overflow_tuple),
+            ("writer-publish-outcome-flattened", flatten_publish_unknown),
+            ("sqlite-option-a-binding-drift", drift_sqlite_option),
+            ("accepted-review-status-regressed", regress_review_status),
+        ]
+        for name, mutate in authority_mutations:
+            with self.subTest(authority=name):
+                contract = copy.deepcopy(accepted)
+                mutate(
+                    contract["claim_adoption"]["df_0200_resolution"]
+                )
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "DF-0200 accepted incremental residency resolution differs",
+                ):
+                    materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["claim_adoption"]["df_0200_resolution"][
+            "d1_claim_batch_oracle"
+        ]["production_path"] = "resident-vector-digest-retarget"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "DF-0200 accepted incremental residency resolution differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        contract = copy.deepcopy(accepted)
+        contract["claim_adoption"]["df_0200_resolution"][
+            "unexpected_extension"
+        ] = "allowed"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "DF-0200 accepted incremental residency resolution differs",
+        ):
+            materialization.validate_contract_exact(contract)
+
+        schema = copy.deepcopy(contract_schema)
+        schema["$defs"]["df_0200_resolution"]["const"][
+            "d4_memory_accounting"
+        ].pop("maximum_record_count")
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "DF-0200 accepted incremental residency resolution differs",
+        ):
+            materialization.validate_contract_exact(
+                copy.deepcopy(accepted), contract_schema=schema
+            )
+
+        for mutation in ("remove", "drift"):
+            with self.subTest(binding="contract-report-schema-digest", mutation=mutation):
+                contract = copy.deepcopy(accepted)
+                compatibility = contract["claim_adoption"][
+                    "df_0200_resolution"
+                ]["d6_compatibility"]
+                if mutation == "remove":
+                    compatibility.pop("report_schema_canonical_json_digest")
+                else:
+                    compatibility["report_schema_canonical_json_digest"] = (
+                        "sha256:" + "0" * 64
+                    )
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "DF-0200 accepted incremental residency resolution differs",
+                ):
+                    materialization.validate_contract_exact(contract)
+
+        for mutation in ("remove", "drift"):
+            with self.subTest(
+                binding="contract-schema-report-schema-digest", mutation=mutation
+            ):
+                schema = copy.deepcopy(contract_schema)
+                compatibility = schema["$defs"]["df_0200_resolution"][
+                    "const"
+                ]["d6_compatibility"]
+                if mutation == "remove":
+                    compatibility.pop("report_schema_canonical_json_digest")
+                else:
+                    compatibility["report_schema_canonical_json_digest"] = (
+                        "sha256:" + "0" * 64
+                    )
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "DF-0200 accepted incremental residency resolution differs",
+                ):
+                    materialization.validate_contract_exact(
+                        copy.deepcopy(accepted), contract_schema=schema
+                    )
+
+        legacy_digest = (
+            "sha256:96c11ba8518075abed8e57c08bd38c10907b9d195ec1daafdb4fd0d57a583941"
+        )
+        for document in ("contract", "contract-schema"):
+            with self.subTest(binding="legacy-report-schema-digest", document=document):
+                contract = copy.deepcopy(accepted)
+                schema = copy.deepcopy(contract_schema)
+                target = (
+                    contract["claim_adoption"]["df_0200_resolution"]
+                    if document == "contract"
+                    else schema["$defs"]["df_0200_resolution"]["const"]
+                )
+                target["d6_compatibility"][
+                    "report_schema_canonical_json_digest"
+                ] = legacy_digest
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "DF-0200 accepted incremental residency resolution differs",
+                ):
+                    materialization.validate_contract_exact(
+                        contract, contract_schema=schema
+                    )
+
+        for document in ("contract", "contract-schema"):
+            with self.subTest(binding="legacy-unchanged-report-shape", document=document):
+                contract = copy.deepcopy(accepted)
+                schema = copy.deepcopy(contract_schema)
+                target = (
+                    contract["claim_adoption"]["df_0200_resolution"]
+                    if document == "contract"
+                    else schema["$defs"]["df_0200_resolution"]["const"]
+                )
+                target["d6_compatibility"]["request_and_report_shape"] = "unchanged"
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "DF-0200 accepted incremental residency resolution differs",
+                ):
+                    materialization.validate_contract_exact(
+                        contract, contract_schema=schema
+                    )
+
+        for document in ("contract", "contract-schema"):
+            with self.subTest(binding="legacy-catalog-omits-behavior-entry", document=document):
+                contract = copy.deepcopy(accepted)
+                schema = copy.deepcopy(contract_schema)
+                target = (
+                    contract["claim_adoption"]["df_0200_resolution"]
+                    if document == "contract"
+                    else schema["$defs"]["df_0200_resolution"]["const"]
+                )
+                target["d6_compatibility"]["public_catalog"] = (
+                    "additive-store.migration-required-only"
+                )
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "DF-0200 accepted incremental residency resolution differs",
+                ):
+                    materialization.validate_contract_exact(
+                        contract, contract_schema=schema
+                    )
+
+        schema = copy.deepcopy(contract_schema)
+        schema["properties"]["claim_adoption"]["required"].remove(
+            "df_0200_resolution"
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "DF-0200 accepted incremental residency resolution differs",
+        ):
+            materialization.validate_contract_exact(
+                copy.deepcopy(accepted), contract_schema=schema
+            )
+
+        store_accepted = materialization.load(ROOT / materialization.SNAPSHOT_STORE)
+        store_mutations: list[tuple[str, dict[str, object]]] = []
+
+        store_contract = copy.deepcopy(store_accepted)
+        store_contract["df_0200_materialization_ingress"][
+            "resolution_id"
+        ] = "cxxlens.df-0200.drifted"
+        store_mutations.append(("resolution-id", store_contract))
+
+        store_contract = copy.deepcopy(store_accepted)
+        store_contract["df_0200_materialization_ingress"]["source"][
+            "codec"
+        ]["event_kind_codes"]["partition-end"] = 8
+        store_mutations.append(("event-codec", store_contract))
+
+        store_contract = copy.deepcopy(store_accepted)
+        store_contract["df_0200_materialization_ingress"]["source"][
+            "codec"
+        ]["authority_binding"]["canonical_json_sha256"] = "sha256:" + "0" * 64
+        store_mutations.append(("full-codec-authority-digest", store_contract))
+
+        store_contract = copy.deepcopy(store_accepted)
+        store_contract["df_0200_materialization_ingress"]["source"][
+            "external_completeness_authority"
+        ]["whole_partition_drop"] = "trust-self-reported-trailer"
+        store_mutations.append(("external-completeness", store_contract))
+
+        store_contract = copy.deepcopy(store_accepted)
+        store_contract["df_0200_materialization_ingress"][
+            "counter_model"
+        ]["collection_overflow_failure"]["field"] = "store-component-count"
+        store_mutations.append(("collection-overflow", store_contract))
+
+        store_contract = copy.deepcopy(store_accepted)
+        store_contract["df_0200_materialization_ingress"][
+            "sqlite_capacity_decision"
+        ]["selected_alternative"] = "B"
+        store_mutations.append(("sqlite-decision", store_contract))
+
+        for name, store_contract in store_mutations:
+            with self.subTest(store_binding=name):
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "DF-0200 materialization/Store resolution binding differs",
+                ):
+                    materialization.validate_contract_exact(
+                        copy.deepcopy(accepted),
+                        snapshot_store_contract=store_contract,
+                    )
+
+    def test_df_0200_frozen_corpus_bytes_census_and_driver_are_bound(self) -> None:
+        contract = materialization.load(ROOT / materialization.CONTRACT)
+        binding = contract["claim_adoption"]["df_0200_resolution"][
+            "d1_claim_batch_oracle"
+        ]["qualification_corpus"]
+        normalized = materialization.validate_df_0200_claim_batch_corpus(
+            ROOT, copy.deepcopy(binding)
+        )
+        self.assertEqual(len(normalized["cases"]), 10)
+        self.assertEqual(normalized["census"]["success_count"], 9)
+        self.assertEqual(normalized["census"]["error_count"], 1)
+
+        artifact = (ROOT / materialization.DF_0200_CORPUS).read_bytes()
+        corrupted = artifact.replace(b"hard-missing", b"hard-missinG", 1)
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "DF-0200 corpus raw SHA-256 differs"
+        ):
+            materialization.validate_df_0200_claim_batch_corpus(
+                ROOT, copy.deepcopy(binding), artifact_bytes=corrupted
+            )
+
+        schema = materialization.load(ROOT / materialization.DF_0200_CORPUS_SCHEMA)
+        drifted_schema = copy.deepcopy(schema)
+        drifted_schema["x-cxxlens-artifact-binding"]["raw_sha256"] = (
+            "sha256:" + "0" * 64
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "DF-0200 corpus schema binding differs"
+        ):
+            materialization.validate_df_0200_claim_batch_corpus(
+                ROOT,
+                copy.deepcopy(binding),
+                artifact_bytes=artifact,
+                corpus_schema=drifted_schema,
+            )
+
+        rows = artifact.decode("ascii").splitlines()
+        fields = rows[-1].split("\t")
+        fields[-1] = fields[-1][:-1] + ("0" if fields[-1][-1] != "0" else "1")
+        rows[-1] = "\t".join(fields)
+        projection_corrupted = ("\n".join(rows) + "\n").encode("ascii")
+        projection_binding = copy.deepcopy(binding)
+        projection_binding["artifact"]["raw_sha256"] = materialization.content_digest(
+            projection_corrupted
+        )
+        projection_schema = copy.deepcopy(schema)
+        projection_schema["x-cxxlens-artifact-binding"]["raw_sha256"] = (
+            projection_binding["artifact"]["raw_sha256"]
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "DF-0200 projection digest differs"
+        ):
+            materialization.validate_df_0200_claim_batch_corpus(
+                ROOT,
+                projection_binding,
+                artifact_bytes=projection_corrupted,
+                corpus_schema=projection_schema,
+            )
+
+        driver = (ROOT / materialization.DF_0200_CORPUS_DRIVER).read_text(
+            encoding="utf-8"
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, r"DF-0200 C\+\+ driver binding differs"
+        ):
+            materialization.validate_df_0200_claim_batch_corpus(
+                ROOT,
+                copy.deepcopy(binding),
+                artifact_bytes=artifact,
+                corpus_schema=copy.deepcopy(schema),
+                driver_text=driver.replace("commit(*engine, existing)", "commit(engine)"),
+            )
+
+        cmake = (ROOT / materialization.TESTS_CMAKE).read_text(encoding="utf-8")
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "DF-0200 CMake/CTest binding differs"
+        ):
+            materialization.validate_df_0200_claim_batch_corpus(
+                ROOT,
+                copy.deepcopy(binding),
+                artifact_bytes=artifact,
+                corpus_schema=copy.deepcopy(schema),
+                driver_text=driver,
+                cmake_text=cmake.replace(
+                    "qualification.df0200-claim-batch-corpus",
+                    "qualification.df0200-unregistered",
+                ),
+            )
+
+    def test_df_0200_codec_receipt_oracle_rejects_correlated_omission(self) -> None:
+        contract = materialization.load(ROOT / materialization.CONTRACT)
+        resolution = contract["claim_adoption"]["df_0200_resolution"]
+        codec = resolution["partition_event_codec"]
+        external = resolution["d3_store_ingestion"][
+            "external_completeness_authority"
+        ]
+        materialization.validate_df_0200_codec_receipt_closure(
+            copy.deepcopy(codec), copy.deepcopy(external)
+        )
+
+        changed_codec = copy.deepcopy(codec)
+        changed_codec["field_catalog"]["utf8-string-exactly-one"].remove("task-id")
+        changed_codec["field_catalog"]["canonical-bytes-exactly-one"].append(
+            "task-id"
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "event field type/cardinality"
+        ):
+            materialization.validate_df_0200_codec_receipt_closure(
+                changed_codec, copy.deepcopy(external)
+            )
+
+        changed_external = copy.deepcopy(external)
+        changed_external["pre_encoder_receipt_oracle"]["receipt_field_catalog"][
+            "task-event-count-and-digest"
+        ]["domain_id"] = "cxxlens.df-0200.partition-event-full-projection.v1"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "field-to-codec-domain mapping"
+        ):
+            materialization.validate_df_0200_codec_receipt_closure(
+                copy.deepcopy(codec), changed_external
+            )
+
+        changed_external = copy.deepcopy(external)
+        changed_external["pre_encoder_receipt_oracle"]["receipt_seal"][
+            "projection"
+        ].remove("successful-seal")
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "seal/journal field closure"
+        ):
+            materialization.validate_df_0200_codec_receipt_closure(
+                copy.deepcopy(codec), changed_external
+            )
+
+        changed_external = copy.deepcopy(external)
+        task_projection = changed_external["pre_encoder_receipt_oracle"][
+            "receipt_seal"
+        ]["projection"]
+        task_projection[task_projection.index("selected-request-entry-binding-digest")] = (
+            "execution-journal-receipt-set-digest"
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "acyclicity differs"
+        ):
+            materialization.validate_df_0200_codec_receipt_closure(
+                copy.deepcopy(codec), changed_external
+            )
+
+        changed_external = copy.deepcopy(external)
+        changed_external["validated_request"]["selected_request_entry_binding"][
+            "cardinality"
+        ] = "one-per-request"
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "per-task selected request entry"
+        ):
+            materialization.validate_df_0200_codec_receipt_closure(
+                copy.deepcopy(codec), changed_external
+            )
+
+        events = [
+            ("partition:1", b"partition-begin:1"),
+            ("partition:1", b"claim:1"),
+            ("partition:1", b"partition-end:1"),
+            ("partition:2", b"partition-begin:2"),
+            ("partition:2", b"claim:2"),
+            ("partition:2", b"partition-end:2"),
+        ]
+        selected_entry = materialization.df_0200_selected_request_entry_digest(
+            "request:df0200",
+            "task:0",
+            0,
+            "sha256:" + "1" * 64,
+            1024,
+            128,
+        )
+        receipt, immutable_journal = materialization.df_0200_build_receipt_fixture(
+            events, selected_request_entry_binding_digest=selected_entry
+        )
+        materialization.validate_df_0200_stream_receipt_fixture(
+            events,
+            copy.deepcopy(receipt),
+            immutable_journal,
+            immutable_journal,
+            selected_entry,
+        )
+
+        # Stream-owned partition-end/trailer claims can be edited with the dropped
+        # partition; the fixed pre-encoder receipt still rejects the omission.
+        omitted = [event for event in events if event[0] != "partition:2"]
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "fixed pre-encoder receipt"
+        ):
+            materialization.validate_df_0200_stream_receipt_fixture(
+                omitted,
+                copy.deepcopy(receipt),
+                immutable_journal,
+                immutable_journal,
+                selected_entry,
+            )
+
+        # Even coordinated edits of stream, task receipt, task seal, and the claimed
+        # final set cannot replace the independently retained immutable journal seal.
+        edited_receipt, edited_claimed_journal = (
+            materialization.df_0200_build_receipt_fixture(
+                omitted, selected_request_entry_binding_digest=selected_entry
+            )
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "immutable execution journal receipt-set digest",
+        ):
+            materialization.validate_df_0200_stream_receipt_fixture(
+                omitted,
+                edited_receipt,
+                edited_claimed_journal,
+                immutable_journal,
+                selected_entry,
+            )
+
+        wrong_selected_receipt, wrong_selected_journal = (
+            materialization.df_0200_build_receipt_fixture(
+                events,
+                selected_request_entry_binding_digest="semantic-v2:sha256:" + "9" * 64,
+            )
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "selected request entry/task receipt"
+        ):
+            materialization.validate_df_0200_stream_receipt_fixture(
+                events,
+                wrong_selected_receipt,
+                wrong_selected_journal,
+                immutable_journal,
+                selected_entry,
+            )
+
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "duplicate final event"
+        ):
+            materialization.df_0200_build_receipt_fixture(events + [events[-1]])
+
+    def test_full_report_schema_digest_precedes_partial_schema_checks(self) -> None:
+        accepted = materialization.load(ROOT / materialization.CONTRACT)
+        request_schema = materialization.load(ROOT / materialization.REQUEST_SCHEMA)
+        report_schema = materialization.load(ROOT / materialization.REPORT_SCHEMA)
+        contract_schema = materialization.load(ROOT / materialization.CONTRACT_SCHEMA)
+        snapshot_store_contract = materialization.load(
+            ROOT / materialization.SNAPSHOT_STORE
+        )
+
+        mutations: list[tuple[str, dict[str, object]]] = []
+
+        changed_report = copy.deepcopy(report_schema)
+        changed_report["properties"]["report_version"] = {
+            "enum": ["2.1.0", "2.1.1"]
+        }
+        mutations.append(("report-version-const-widened-to-enum", changed_report))
+
+        changed_report = copy.deepcopy(report_schema)
+        changed_report["required"].remove("raw_input_observation")
+        mutations.append(("root-required-removed", changed_report))
+
+        def is_request_bound_condition(condition: object) -> bool:
+            try:
+                return (
+                    condition["if"]["properties"]["binding"]["properties"][
+                        "state"
+                    ]["const"]
+                    == "request-bound"
+                )
+            except (KeyError, TypeError):
+                return False
+
+        request_bound_conditions = [
+            condition
+            for condition in report_schema["allOf"]
+            if is_request_bound_condition(condition)
+        ]
+        self.assertEqual(len(request_bound_conditions), 1)
+        changed_report = copy.deepcopy(report_schema)
+        changed_report["allOf"] = [
+            condition
+            for condition in changed_report["allOf"]
+            if not is_request_bound_condition(condition)
+        ]
+        mutations.append(("request-bound-all-of-removed", changed_report))
+
+        changed_report = copy.deepcopy(report_schema)
+        changed_report["$defs"]["error"]["properties"]["phase"]["enum"].append(
+            "future-phase"
+        )
+        mutations.append(("error-phase-enum-widened", changed_report))
+
+        for name, changed_report in mutations:
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "full report schema canonical digest differs",
+                ):
+                    materialization.validate_contract_exact(
+                        copy.deepcopy(accepted),
+                        request_schema=copy.deepcopy(request_schema),
+                        report_schema=changed_report,
+                        contract_schema=copy.deepcopy(contract_schema),
+                        snapshot_store_contract=copy.deepcopy(
+                            snapshot_store_contract
+                        ),
+                    )
 
     def test_authority_text_rejects_legacy_complete_report_before_publication(self) -> None:
         design_text = (ROOT / materialization.INTEGRATED_DESIGN).read_text(
@@ -4670,6 +5696,1614 @@ class NgClang22MaterializationTests(unittest.TestCase):
                 design_text.replace("DF-0194", "DF-missing"),
                 adr_text,
                 contract_text,
+            )
+
+    def test_authority_text_requires_canonical_base64_and_version_rationale(
+        self,
+    ) -> None:
+        design_text = (ROOT / materialization.INTEGRATED_DESIGN).read_text(
+            encoding="utf-8"
+        )
+        adr_text = (ROOT / materialization.DECISION_ADR).read_text(encoding="utf-8")
+        materialization.validate_base64_authority_text(design_text, adr_text)
+
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "integrated design canonical Base64 marker is missing: sealed source bytes",
+        ):
+            materialization.validate_base64_authority_text(
+                design_text.replace("sealed source bytes", "source byte receipt"),
+                adr_text,
+            )
+
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "ADR canonical Base64 marker is missing: sealed source bytes",
+        ):
+            materialization.validate_base64_authority_text(
+                design_text,
+                adr_text.replace("sealed source bytes", "source byte receipt"),
+            )
+
+    def test_authority_text_requires_immutable_occurrence_role_snapshots(self) -> None:
+        design_text = (ROOT / materialization.INTEGRATED_DESIGN).read_text(
+            encoding="utf-8"
+        )
+        adr_text = (ROOT / materialization.DECISION_ADR).read_text(encoding="utf-8")
+        materialization.validate_occurrence_snapshot_authority_text(
+            design_text, adr_text
+        )
+        mutations = (
+            ("design", "exactly one の private memfd snapshot"),
+            ("design", "retained sealed snapshot の独立 read-only handle"),
+            ("design", "artifact bytes を再 copy しない"),
+            ("design", "measurement 後の rename または in-place mutation"),
+            ("adr", "F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL"),
+            ("adr", "exactly one の immutable snapshot"),
+            ("adr", "同一 role の再 copy"),
+            ("adr", "measurement 完了後の path replacement"),
+        )
+        for label, marker in mutations:
+            with self.subTest(label=label, marker=marker):
+                changed_design = design_text
+                changed_adr = adr_text
+                if label == "design":
+                    changed_design = design_text.replace(marker, "removed")
+                else:
+                    changed_adr = adr_text.replace(marker, "removed")
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "immutable occurrence snapshot marker is missing",
+                ):
+                    materialization.validate_occurrence_snapshot_authority_text(
+                        changed_design, changed_adr
+                    )
+
+    def test_private_spool_is_memfd_only_and_kernel_seal_verified(self) -> None:
+        design_text = (ROOT / materialization.INTEGRATED_DESIGN).read_text(
+            encoding="utf-8"
+        )
+        adr_text = (ROOT / materialization.DECISION_ADR).read_text(encoding="utf-8")
+        source = (ROOT / materialization.MATERIALIZATION_IO_SOURCE).read_text(
+            encoding="utf-8"
+        )
+        io_header = (ROOT / materialization.MATERIALIZATION_IO_HEADER).read_text(
+            encoding="utf-8"
+        )
+        materialization.validate_private_spool_authority_text(design_text, adr_text)
+        materialization.validate_materialization_io_taxonomy_header(io_header)
+        materialization.validate_private_spool_implementation_text(source)
+
+        taxonomy_mutations = (
+            io_header.replace(
+                "failure.kind == materialization_io_failure_kind::read;",
+                "failure.kind == materialization_io_failure_kind::spool;",
+                1,
+            ),
+            io_header.replace(
+                "case materialization_io_operation::configuration:\n"
+                "\t\t\tcase materialization_io_operation::buffer_allocation:\n"
+                "\t\t\t\treturn false;",
+                "case materialization_io_operation::configuration:\n"
+                "\t\t\tcase materialization_io_operation::buffer_allocation:\n"
+                "\t\t\t\treturn true;",
+                1,
+            ),
+        )
+        for changed in taxonomy_mutations:
+            self.assertNotEqual(changed, io_header)
+            with self.assertRaisesRegex(
+                materialization.MaterializationError,
+                "kind-by-operation authenticity matrix",
+            ):
+                materialization.validate_materialization_io_taxonomy_header(changed)
+
+        authority_mutations = (
+            ("design", "`memfd_create(..., MFD_CLOEXEC | MFD_ALLOW_SEALING)`"),
+            ("design", "`mkstemp`"),
+            ("design", "`F_ADD_SEALS`"),
+            ("design", "`F_GET_SEALS`"),
+            ("design", "`fstat` の actual size と append census"),
+            (
+                "design",
+                "sealed bytes の SHA-256 と append transcript の incremental",
+            ),
+            ("design", "size/content binding の不一致を source-private no-response"),
+            ("design", "compile-time absence と missing-bit contradiction は no-response"),
+            ("adr", "`memfd_create(..., MFD_CLOEXEC | MFD_ALLOW_SEALING)`"),
+            ("adr", "`mkstemp`"),
+            ("adr", "`F_ADD_SEALS`"),
+            ("adr", "`F_GET_SEALS`"),
+            ("adr", "`fstat` の actual size と append census"),
+            (
+                "adr",
+                "sealed bytes の SHA-256 と append transcript の incremental SHA-256",
+            ),
+            ("adr", "drift は worker、Store、file effect 前の source-private no-response"),
+            ("adr", "compile-time absence と missing-bit contradiction は no-response"),
+        )
+        for label, marker in authority_mutations:
+            changed_design = design_text
+            changed_adr = adr_text
+            if label == "design":
+                changed_design = design_text.replace(marker, "removed", 1)
+            else:
+                changed_adr = adr_text.replace(marker, "removed", 1)
+            with self.subTest(label=label, marker=marker):
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "private-spool sealing marker is missing",
+                ):
+                    materialization.validate_private_spool_authority_text(
+                        changed_design, changed_adr
+                    )
+
+        implementation_mutations = (
+            source + "\nvoid unsafe() { char path[] = \"XXXXXX\"; ::mkstemp(path); }\n",
+            source.replace(
+                "const auto observed_seals = ::fcntl(descriptor_, F_GET_SEALS);",
+                "const auto observed_seals = required_memfd_seals;",
+                1,
+            ),
+            source.replace(
+                "MFD_CLOEXEC | MFD_ALLOW_SEALING", "MFD_CLOEXEC", 1
+            ),
+            source.replace(
+                "F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL",
+                "F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK",
+                1,
+            ),
+            source.replace(
+                "const auto observed_seals = ::fcntl(descriptor_, F_GET_SEALS);",
+                "sealed_ = true;\n"
+                "\t\t\t\tconst auto observed_seals = "
+                "::fcntl(descriptor_, F_GET_SEALS);",
+                1,
+            ),
+            source.replace(
+                "::fstat(descriptor_, &status)",
+                "0",
+                1,
+            ),
+            source.replace(
+                "auto updated = expected_digest_->update(bytes);",
+                "materialization_io_result<void> updated{};",
+                1,
+            ),
+            source.replace(
+                "auto verified = verify_sealed_bytes();",
+                "materialization_io_result<void> verified{};",
+                1,
+            ),
+            source.replace(
+                "poisoned_ = true;\n\t\t\t\t\treturn verified.error();",
+                "return verified.error();",
+                1,
+            ),
+            source.replace(
+                "if (*observed != *expected)",
+                "if (false)",
+                1,
+            ),
+            source.replace(
+                "ssize_t count{};",
+                "ssize_t count{-1};",
+                1,
+            ),
+        )
+        for index, changed in enumerate(implementation_mutations):
+            self.assertNotEqual(changed, source)
+            with self.subTest(mutation=index):
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "private-spool",
+                ):
+                    materialization.validate_private_spool_implementation_text(changed)
+
+        contract = materialization.load(ROOT / materialization.CONTRACT)
+        for member in tuple(contract["surface"]["private_spool"]):
+            changed = copy.deepcopy(contract)
+            del changed["surface"]["private_spool"][member]
+            with self.subTest(contract_member=member):
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "installed machine surface is not exact",
+                ):
+                    materialization.validate_contract_exact(changed)
+
+    def test_v2_1_admission_limits_equality_and_spool_phases_are_bound(self) -> None:
+        design_text = (ROOT / materialization.INTEGRATED_DESIGN).read_text(
+            encoding="utf-8"
+        )
+        adr_text = (ROOT / materialization.DECISION_ADR).read_text(encoding="utf-8")
+        stream_header = (
+            ROOT / materialization.MATERIALIZATION_REQUEST_STREAM_HEADER
+        ).read_text(encoding="utf-8")
+        stream_source = (
+            ROOT / materialization.MATERIALIZATION_REQUEST_STREAM_SOURCE
+        ).read_text(encoding="utf-8")
+        admission_source = (
+            ROOT / materialization.MATERIALIZATION_REQUEST_V2_1_SOURCE
+        ).read_text(encoding="utf-8")
+        admission_error_header = (
+            ROOT / materialization.MATERIALIZATION_ADMISSION_ERROR_HEADER
+        ).read_text(encoding="utf-8")
+        identity_source = (
+            ROOT / materialization.MATERIALIZATION_REQUEST_IDENTITY_SOURCE
+        ).read_text(encoding="utf-8")
+        task_spool_source = (
+            ROOT / materialization.MATERIALIZATION_TASK_SPOOL_SOURCE
+        ).read_text(encoding="utf-8")
+        request_driver = (
+            ROOT / materialization.MATERIALIZATION_REQUEST_DRIVER
+        ).read_text(encoding="utf-8")
+
+        materialization.validate_v2_1_admission_authority_text(
+            design_text, adr_text
+        )
+        materialization.validate_v2_1_admission_implementation_text(
+            stream_header,
+            stream_source,
+            admission_source,
+            admission_error_header,
+            identity_source,
+            task_spool_source,
+            request_driver,
+        )
+
+        authority_mutations = (
+            (
+                "design-generic-array",
+                design_text.replace(
+                    "generic array count と non-envelope string length",
+                    "generic array count",
+                    1,
+                ),
+                adr_text,
+            ),
+            (
+                "design-digest-equality",
+                design_text.replace("digest-only equality", "digest equality", 1),
+                adr_text,
+            ),
+            (
+                "design-spool-phase",
+                design_text.replace(
+                    "lexical raw/task-index は `json-decode`",
+                    "lexical raw/task-index は implementation-defined",
+                    1,
+                ),
+                adr_text,
+            ),
+            (
+                "design-semantic-replay-bound",
+                design_text.replace("`10,420,985`", "`10,420,984`", 1),
+                adr_text,
+            ),
+            (
+                "adr-tasks-overflow",
+                design_text,
+                adr_text.replace(
+                    "4097 件目を観測しても残りの strict lexical scan",
+                    "4097 件目で停止し",
+                    1,
+                ),
+            ),
+            (
+                "adr-exact-equality",
+                design_text,
+                adr_text.replace(
+                    "digest match だけを JSON Schema equality authority にしない",
+                    "digest match を equality authority にする",
+                    1,
+                ),
+            ),
+            (
+                "adr-spool-phase",
+                design_text,
+                adr_text.replace(
+                    "selected-schema global/task/source/index/\nuniqueItems は `request-schema`",
+                    "selected-schema auxiliary phases are implementation-defined",
+                    1,
+                ),
+            ),
+            (
+                "adr-semantic-replay-raw-spelling",
+                design_text,
+                adr_text.replace(
+                    "raw-spelling inflation", "raw occurrence inflation", 1
+                ),
+            ),
+            (
+                "design-legacy-report-schema-digest",
+                design_text.replace(
+                    "sha256:f321e25f72bf8c6312dfe1e36fe6b6573239db697c2cfabd60e2c0546f9ee98b",
+                    "sha256:96c11ba8518075abed8e57c08bd38c10907b9d195ec1daafdb4fd0d57a583941",
+                    1,
+                ),
+                adr_text,
+            ),
+            (
+                "adr-pending-unchanged-report-shape",
+                design_text,
+                adr_text.replace(
+                    "accepted Option A; report-schema activation applied, qualification pending",
+                    "user-selected Option A, independent review pending",
+                    1,
+                ).replace(
+                    "request 2.1.0 shape は不変",
+                    "request/report 2.1 shape は unchanged",
+                    1,
+                ),
+            ),
+        )
+        for label, changed_design, changed_adr in authority_mutations:
+            with self.subTest(authority=label):
+                self.assertTrue(
+                    changed_design != design_text or changed_adr != adr_text
+                )
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "v2.1 admission authority marker is missing",
+                ):
+                    materialization.validate_v2_1_admission_authority_text(
+                        changed_design, changed_adr
+                    )
+
+        implementation_mutations = (
+            (
+                "generic-array-ceiling",
+                stream_header.replace(
+                    "maximum_elements_per_array{static_cast<std::size_t>("
+                    "maximum_raw_request_bytes)}",
+                    "maximum_elements_per_array{4096U}",
+                    1,
+                ),
+                stream_source,
+                admission_source,
+                admission_error_header,
+                identity_source,
+                task_spool_source,
+                request_driver,
+            ),
+            (
+                "schema-capture-bound",
+                stream_header.replace(
+                    "materialization_request_schema_v2.size() + 1U",
+                    "materialization_request_schema_v2.size() + 2U",
+                    1,
+                ),
+                stream_source,
+                admission_source,
+                admission_error_header,
+                identity_source,
+                task_spool_source,
+                request_driver,
+            ),
+            (
+                "global-semantic-window-shrink",
+                stream_header.replace(
+                    "maximum_materialization_global_request_window_bytes =\n"
+                    "\t\t64U * 1024U * 1024U",
+                    "maximum_materialization_global_request_window_bytes =\n"
+                    "\t\t32U * 1024U * 1024U",
+                    1,
+                ),
+                stream_source,
+                admission_source,
+                admission_error_header,
+                identity_source,
+                task_spool_source,
+                request_driver,
+            ),
+            (
+                "semantic-token-replayer-removed",
+                stream_header,
+                stream_source.replace(
+                    "class semantic_json_replayer",
+                    "class raw_json_replayer",
+                    1,
+                ),
+                admission_source,
+                admission_error_header,
+                identity_source,
+                task_spool_source,
+                request_driver,
+            ),
+            (
+                "task-source-substitution-removed",
+                stream_header,
+                stream_source.replace(
+                    'replay.append("\\"\\"");',
+                    'replay.append("bulk-source");',
+                    1,
+                ),
+                admission_source,
+                admission_error_header,
+                identity_source,
+                task_spool_source,
+                request_driver,
+            ),
+            (
+                "global-task-substitution-removed",
+                stream_header,
+                stream_source.replace(
+                    'replay.append("[]");',
+                    'replay.append("raw-tasks");',
+                    1,
+                ),
+                admission_source,
+                admission_error_header,
+                identity_source,
+                task_spool_source,
+                request_driver,
+            ),
+            (
+                "raw-range-copy-restored",
+                stream_header,
+                stream_source + "\n// append_replayed_range(\n",
+                admission_source,
+                admission_error_header,
+                identity_source,
+                task_spool_source,
+                request_driver,
+            ),
+            (
+                "global-array-window",
+                stream_header,
+                stream_source.replace(
+                    "limits.max_array_elements = maximum_window_bytes;",
+                    "limits.max_array_elements = 4096U;",
+                    1,
+                ),
+                admission_source,
+                admission_error_header,
+                identity_source,
+                task_spool_source,
+                request_driver,
+            ),
+            (
+                "task-index-seal-phase",
+                stream_header,
+                stream_source.replace(
+                    'task_index_io_error("request-schema", "seal", 0U, sealed.error())',
+                    'task_index_io_error("json-decode", "seal", 0U, sealed.error())',
+                    1,
+                ),
+                admission_source,
+                admission_error_header,
+                identity_source,
+                task_spool_source,
+                request_driver,
+            ),
+            (
+                "selected-shape-schema-phase",
+                stream_header,
+                stream_source.replace(
+                    'if (phase == "request-schema")\n'
+                    '\t\t\t\treturn scan_error("request-schema", std::move(reason), offset);',
+                    'if (phase == "request-schema")\n'
+                    '\t\t\t\treturn materialization_admission_no_response();',
+                    1,
+                ),
+                admission_source,
+                admission_error_header,
+                identity_source,
+                task_spool_source,
+                request_driver,
+            ),
+            (
+                "collision-left-reverse-closure",
+                stream_header,
+                stream_source.replace(
+                    "while (verified_left < canonical_left.size())",
+                    "while (false)",
+                    1,
+                ),
+                admission_source,
+                admission_error_header,
+                identity_source,
+                task_spool_source,
+                request_driver,
+            ),
+            (
+                "central-io-classifier",
+                stream_header,
+                stream_source,
+                admission_source,
+                admission_error_header.replace(
+                    "if (!is_materialization_actual_io_or_hash_failure(failure))",
+                    "if (false)",
+                    1,
+                ),
+                identity_source,
+                task_spool_source,
+                request_driver,
+            ),
+            (
+                "trust-exact-sort",
+                stream_header,
+                stream_source,
+                admission_source.replace(
+                    "std::ranges::sort(exact_requirements);",
+                    "// removed exact trust sort",
+                    1,
+                ),
+                admission_error_header,
+                identity_source,
+                task_spool_source,
+                request_driver,
+            ),
+            (
+                "catalog-adjacent-compare",
+                stream_header,
+                stream_source,
+                admission_source.replace(
+                    "std::ranges::adjacent_find(exact_catalog_entries)",
+                    "exact_catalog_entries.end()",
+                    1,
+                ),
+                admission_error_header,
+                identity_source,
+                task_spool_source,
+                request_driver,
+            ),
+            (
+                "source-private-code",
+                stream_header,
+                stream_source,
+                admission_source,
+                admission_error_header.replace(
+                    'materialization_admission_no_response_code = "no-response"',
+                    'materialization_admission_no_response_code = "materialization.internal-failure"',
+                    1,
+                ),
+                identity_source,
+                task_spool_source,
+                request_driver,
+            ),
+            (
+                "task-spool-allocation",
+                stream_header,
+                stream_source,
+                admission_source,
+                admission_error_header,
+                identity_source,
+                task_spool_source.replace(
+                    "return materialization_admission_no_response();",
+                    'return spool_error("source", "allocation");',
+                    1,
+                ),
+                request_driver,
+            ),
+            (
+                "driver-no-response",
+                stream_header,
+                stream_source,
+                admission_source,
+                admission_error_header,
+                identity_source,
+                task_spool_source,
+                request_driver.replace(
+                    "return is_materialization_admission_no_response(error) ? 2 : fail(error);",
+                    "return fail(error);",
+                    1,
+                ),
+            ),
+            (
+                "legacy-unique-path",
+                stream_header,
+                stream_source,
+                admission_source + "\n// seal_and_validate_unique_records\n",
+                admission_error_header,
+                identity_source,
+                task_spool_source,
+                request_driver,
+            ),
+        )
+        for (
+            label,
+            changed_header,
+            changed_stream,
+            changed_admission,
+            changed_error_header,
+            changed_identity,
+            changed_task_spool,
+            changed_driver,
+        ) in implementation_mutations:
+            self.assertTrue(
+                changed_header != stream_header
+                or changed_stream != stream_source
+                or changed_admission != admission_source
+                or changed_error_header != admission_error_header
+                or changed_identity != identity_source
+                or changed_task_spool != task_spool_source
+                or changed_driver != request_driver
+            )
+            with self.subTest(implementation=label):
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "marker|projection|taxonomy|allocation|driver|v2.1|forbidden|"
+                    "raw-spelling replay shortcut",
+                ):
+                    materialization.validate_v2_1_admission_implementation_text(
+                        changed_header,
+                        changed_stream,
+                        changed_admission,
+                        changed_error_header,
+                        changed_identity,
+                        changed_task_spool,
+                        changed_driver,
+                    )
+
+    def test_admission_schema_limits_and_phase_matrix_fail_closed(self) -> None:
+        contract = materialization.load(ROOT / materialization.CONTRACT)
+        request_schema = materialization.load(ROOT / materialization.REQUEST_SCHEMA)
+        report_schema = materialization.load(ROOT / materialization.REPORT_SCHEMA)
+        contract_schema = materialization.load(ROOT / materialization.CONTRACT_SCHEMA)
+        materialization.validate_contract_exact(
+            contract,
+            request_schema,
+            report_schema,
+            contract_schema,
+        )
+
+        mutations = []
+        baseline_bounds = materialization.selected_schema_semantic_replay_bounds(
+            request_schema
+        )
+
+        changed_request = copy.deepcopy(request_schema)
+        del changed_request["properties"]["tasks"]["uniqueItems"]
+        self.assertEqual(
+            materialization.selected_schema_semantic_replay_bounds(changed_request),
+            baseline_bounds,
+        )
+        mutations.append(
+            (
+                "request-schema-fingerprint-tasks-uniqueItems-removed",
+                contract,
+                changed_request,
+                report_schema,
+                contract_schema,
+            )
+        )
+
+        changed_request = copy.deepcopy(request_schema)
+        changed_request["$defs"]["base_descriptor_binding"]["properties"][
+            "stage_order"
+        ]["maximum"] = 9
+        self.assertEqual(
+            materialization.selected_schema_semantic_replay_bounds(changed_request),
+            baseline_bounds,
+        )
+        mutations.append(
+            (
+                "request-schema-fingerprint-stage-order-widened",
+                contract,
+                changed_request,
+                report_schema,
+                contract_schema,
+            )
+        )
+
+        changed_request = copy.deepcopy(request_schema)
+        del changed_request["properties"]["trust_policy"]["properties"][
+            "task_sandbox_requirements"
+        ]["maxItems"]
+        mutations.append(
+            ("request-maxItems-removed", contract, changed_request, report_schema, contract_schema)
+        )
+
+        changed_request = copy.deepcopy(request_schema)
+        changed_request["properties"]["trust_policy"]["properties"][
+            "task_sandbox_requirements"
+        ]["maxItems"] = 4095
+        mutations.append(
+            ("request-maxItems-drift", contract, changed_request, report_schema, contract_schema)
+        )
+
+        changed_request = copy.deepcopy(request_schema)
+        changed_request["properties"]["project"]["properties"][
+            "catalog_compile_units"
+        ]["maxItems"] = 32768
+        mutations.append(
+            (
+                "semantic-replay-catalog-bound-drift",
+                contract,
+                changed_request,
+                report_schema,
+                contract_schema,
+            )
+        )
+
+        changed_request = copy.deepcopy(request_schema)
+        del changed_request["$defs"]["strong_id"]["maxLength"]
+        mutations.append(
+            (
+                "semantic-replay-string-bound-removed",
+                contract,
+                changed_request,
+                report_schema,
+                contract_schema,
+            )
+        )
+
+        changed_request = copy.deepcopy(request_schema)
+        del changed_request["properties"]["tasks"]["items"]["properties"]["source"][
+            "properties"
+        ]["size_bytes"]["maximum"]
+        mutations.append(
+            (
+                "semantic-replay-integer-maximum-removed",
+                contract,
+                changed_request,
+                report_schema,
+                contract_schema,
+            )
+        )
+
+        changed_request = copy.deepcopy(request_schema)
+        changed_request["$defs"]["strong_id"]["pattern"] = (
+            r"^(?:[^\u0000-\u001f\u007f]+|[0-9a-f]+)$"
+        )
+        mutations.append(
+            (
+                "semantic-replay-regex-class-drift",
+                contract,
+                changed_request,
+                report_schema,
+                contract_schema,
+            )
+        )
+
+        changed_request = copy.deepcopy(request_schema)
+        changed_request["properties"]["project"]["additionalProperties"] = True
+        mutations.append(
+            (
+                "semantic-replay-object-opened",
+                contract,
+                changed_request,
+                report_schema,
+                contract_schema,
+            )
+        )
+
+        changed_report = copy.deepcopy(report_schema)
+        del changed_report["$defs"]["trust_policy"]["properties"][
+            "task_sandbox_requirements"
+        ]["maxItems"]
+        mutations.append(
+            ("report-maxItems-removed", contract, request_schema, changed_report, contract_schema)
+        )
+
+        for name, value in (
+            ("maximum_task_sandbox_requirements", 4095),
+            ("maximum_json_members_per_object", 4095),
+            ("maximum_request_schema_capture_utf8_bytes", 44),
+            ("maximum_request_version_capture_utf8_bytes", 7),
+        ):
+            changed_contract = copy.deepcopy(contract)
+            changed_contract["surface"]["resource_limits"][name] = value
+            mutations.append(
+                (
+                    f"contract-{name}-drift",
+                    changed_contract,
+                    request_schema,
+                    report_schema,
+                    contract_schema,
+                )
+            )
+
+        changed_contract = copy.deepcopy(contract)
+        changed_contract["surface"]["resource_limits"]["admission_failure"][
+            "phase_authentic_spool_failure"
+        ]["selected_schema_global_task_source_and_uniqueness"] = "json-decode"
+        mutations.append(
+            (
+                "contract-spool-phase-drift",
+                changed_contract,
+                request_schema,
+                report_schema,
+                contract_schema,
+            )
+        )
+
+        changed_contract = copy.deepcopy(contract)
+        changed_contract["surface"]["resource_limits"]["semantic_replay"][
+            "window_bytes"
+        ] = 33554432
+        mutations.append(
+            (
+                "contract-semantic-replay-window-drift",
+                changed_contract,
+                request_schema,
+                report_schema,
+                contract_schema,
+            )
+        )
+
+        changed_contract = copy.deepcopy(contract)
+        del changed_contract["surface"]["resource_limits"]["semantic_replay"][
+            "request_schema_canonical_digest"
+        ]
+        mutations.append(
+            (
+                "contract-request-schema-fingerprint-removed",
+                changed_contract,
+                request_schema,
+                report_schema,
+                contract_schema,
+            )
+        )
+
+        changed_contract = copy.deepcopy(contract)
+        changed_contract["surface"]["resource_limits"]["semantic_replay"][
+            "request_schema_canonical_digest"
+        ] = "sha256:" + "0" * 64
+        mutations.append(
+            (
+                "contract-request-schema-fingerprint-drift",
+                changed_contract,
+                request_schema,
+                report_schema,
+                contract_schema,
+            )
+        )
+
+        changed_contract = copy.deepcopy(contract)
+        del changed_contract["surface"]["resource_limits"]["semantic_replay"]
+        mutations.append(
+            (
+                "contract-semantic-replay-proof-removed",
+                changed_contract,
+                request_schema,
+                report_schema,
+                contract_schema,
+            )
+        )
+
+        changed_contract_schema = copy.deepcopy(contract_schema)
+        changed_contract_schema["properties"]["surface"]["properties"][
+            "resource_limits"
+        ]["required"].remove("maximum_json_members_per_object")
+        mutations.append(
+            (
+                "contract-schema-required-removed",
+                contract,
+                request_schema,
+                report_schema,
+                changed_contract_schema,
+            )
+        )
+
+        changed_contract_schema = copy.deepcopy(contract_schema)
+        changed_contract_schema["properties"]["surface"]["properties"][
+            "resource_limits"
+        ]["properties"]["semantic_replay"]["const"]["global_margin_bytes"] -= 1
+        mutations.append(
+            (
+                "contract-schema-semantic-replay-proof-drift",
+                contract,
+                request_schema,
+                report_schema,
+                changed_contract_schema,
+            )
+        )
+
+        changed_contract_schema = copy.deepcopy(contract_schema)
+        changed_contract_schema["properties"]["surface"]["properties"][
+            "resource_limits"
+        ]["properties"]["semantic_replay"]["const"][
+            "request_schema_canonical_digest"
+        ] = "sha256:" + "0" * 64
+        mutations.append(
+            (
+                "contract-schema-request-schema-fingerprint-drift",
+                contract,
+                request_schema,
+                report_schema,
+                changed_contract_schema,
+            )
+        )
+
+        changed_report = copy.deepcopy(report_schema)
+
+        def constrained_phase(condition: dict[str, object]) -> object:
+            try:
+                return condition["if"]["properties"]["error"]["properties"][
+                    "phase"
+                ]["const"]  # type: ignore[index]
+            except (KeyError, TypeError):
+                return None
+
+        changed_report["allOf"] = [
+            condition
+            for condition in changed_report["allOf"]
+            if constrained_phase(condition) != "request-binding"
+        ]
+        mutations.append(
+            (
+                "report-request-binding-code-matrix-removed",
+                contract,
+                request_schema,
+                changed_report,
+                contract_schema,
+            )
+        )
+
+        def constrained_code(condition: dict[str, object]) -> object:
+            try:
+                return condition["if"]["properties"]["error"]["properties"][
+                    "code"
+                ]["const"]  # type: ignore[index]
+            except (KeyError, TypeError):
+                return None
+
+        spool_closures = [
+            condition
+            for condition in report_schema["allOf"]
+            if constrained_code(condition) == "materialization.spool-failure"
+        ]
+        self.assertEqual(len(spool_closures), 1)
+
+        changed_report = copy.deepcopy(report_schema)
+        changed_report["allOf"] = [
+            condition
+            for condition in changed_report["allOf"]
+            if constrained_code(condition) != "materialization.spool-failure"
+        ]
+        mutations.append(
+            (
+                "report-spool-reverse-closure-removed",
+                contract,
+                request_schema,
+                changed_report,
+                contract_schema,
+            )
+        )
+
+        changed_report = copy.deepcopy(report_schema)
+        changed_spool_closures = [
+            condition
+            for condition in changed_report["allOf"]
+            if constrained_code(condition) == "materialization.spool-failure"
+        ]
+        self.assertEqual(len(changed_spool_closures), 1)
+        changed_spool_closures[0]["then"]["properties"]["binding"]["properties"][
+            "state"
+        ]["const"] = "request-bound"
+        mutations.append(
+            (
+                "report-spool-reverse-closure-drift",
+                contract,
+                request_schema,
+                changed_report,
+                contract_schema,
+            )
+        )
+
+        for label, changed_contract, changed_request, changed_report, changed_schema in mutations:
+            with self.subTest(mutation=label):
+                with self.assertRaises(materialization.MaterializationError):
+                    materialization.validate_contract_exact(
+                        changed_contract,
+                        changed_request,
+                        changed_report,
+                        changed_schema,
+                    )
+
+    def test_authority_text_requires_rooted_vfs_lifetime_and_closed_roles(self) -> None:
+        design_text = (ROOT / materialization.INTEGRATED_DESIGN).read_text(
+            encoding="utf-8"
+        )
+        adr_text = (ROOT / materialization.DECISION_ADR).read_text(encoding="utf-8")
+        materialization.validate_sqlite_effect_root_authority_text(
+            design_text, adr_text
+        )
+        normalized_design = " ".join(design_text.split())
+        normalized_adr = " ".join(adr_text.split())
+        markers = (
+            "named non-default VFS",
+            "type-erased backend lifetime token",
+            "backend lifetime bridge は installed public header に callable signature を追加せず",
+            "source-private default-visibility access class",
+            "catalog 対象の public C++ API または supported external ABI ではない",
+            "`snapshot_store` の bridge-specific な唯一の friend type",
+            "exactly one static `open_sqlite` member",
+            "method 単体の visibility override を禁止",
+            "required static/shared build-test",
+            "`sqlite3_open_v2` が返した raw connection",
+            "stack RAII guard",
+            "SQLite connection close、VFS unregister、captured root dirfd close、SQLite library release",
+            "最後の main-database close",
+            "named `xOpen`",
+            "anonymous `xOpen`",
+            "`xShmMap` / `xShmUnmap`",
+            "`xAccess` / `xDelete`",
+            "suffix-only path、unknown suffix",
+            "`/cxxlens-rooted-vfs-v1/` synthetic name",
+            "leading `:` / `file:` reserved name",
+            "`xDlOpen` / `xDlSym` / `xDlClose` / `xDlError`",
+            "`xSetSystemCall` / `xGetSystemCall` / `xNextSystemCall`",
+            "named `SQLITE_OPEN_DELETEONCLOSE`",
+            "anonymous pathname-unreachable private memfd",
+            "pending reservation、file create、noexcept active commit",
+            "`sqlite3_file.pMethods = nullptr`",
+            "C ABI callback は C++ exception を外へ漏らさず",
+            "authority lease",
+            "最後の close は新規 lease を原子的に拒否",
+            "既に取得済みの lease は effect 完了後に drain",
+            "`xRead`、`xWrite`、`xTruncate`",
+            "`xClose` だけは無条件に owned resource を解放",
+            "transactional rollback を一律には主張せず",
+            "pMethods null / flags zero",
+            "FIFO、device、directory",
+            "parent directory は captured root dirfd 自身の duplicate、または captured root dirfd から `openat2` beneath で取得時に認証",
+            "retained authenticated parent-directory capability 相対",
+            "concurrent ancestor rename / mount relocation",
+            "current namespace の captured-root path 下から到達可能であることは主張しない",
+            "`SQLITE_FCNTL_HAS_MOVED`",
+            "missing、rename、replacement、 再認証 failure を moved",
+        )
+        for label, marker in (
+            *(("design", marker) for marker in markers),
+            *(("adr", marker) for marker in markers),
+        ):
+            with self.subTest(label=label, marker=marker):
+                changed_design = normalized_design
+                changed_adr = normalized_adr
+                if label == "design":
+                    changed_design = normalized_design.replace(marker, "removed")
+                else:
+                    changed_adr = normalized_adr.replace(marker, "removed")
+                with self.assertRaisesRegex(
+                    materialization.MaterializationError,
+                    "rooted VFS authority marker is missing",
+                ):
+                    materialization.validate_sqlite_effect_root_authority_text(
+                        changed_design, changed_adr
+                    )
+
+    def test_rooted_vfs_teardown_order_is_source_bound(self) -> None:
+        rooted_source = (ROOT / materialization.ROOTED_VFS_SOURCE).read_text(
+            encoding="utf-8"
+        )
+        store_source = (ROOT / materialization.STORE_SOURCE).read_text(
+            encoding="utf-8"
+        )
+        lifecycle_header = (
+            ROOT / materialization.SQLITE_CONNECTION_LIFECYCLE_INTERNAL
+        ).read_text(encoding="utf-8")
+        lifecycle_source = (
+            ROOT / materialization.SQLITE_CONNECTION_LIFECYCLE_SOURCE
+        ).read_text(encoding="utf-8")
+
+        def validate(
+            rooted: str = rooted_source,
+            store: str = store_source,
+            lifecycle_contract: str = lifecycle_header,
+            lifecycle_implementation: str = lifecycle_source,
+        ) -> None:
+            materialization.validate_sqlite_effect_root_implementation_text(
+                rooted,
+                store,
+                lifecycle_contract,
+                lifecycle_implementation,
+            )
+
+        validate()
+
+        swapped_root = rooted_source.replace(
+            "sqlite_library_handle sqlite_library;\n\t\t\tmaterialization_owned_fd root;",
+            "materialization_owned_fd root;\n\t\t\tsqlite_library_handle sqlite_library;",
+            1,
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "captured root is not destroyed before the SQLite library owner",
+        ):
+            validate(rooted=swapped_root)
+
+        early_dlclose = rooted_source.replace(
+            "registered = false;",
+            "registered = false;\n\t\t\t\t\t(void)::dlclose(sqlite_library.get());",
+            1,
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "releases SQLite before captured-root member destruction",
+        ):
+            validate(rooted=early_dlclose)
+
+        swapped_store = store_source.replace(
+            "std::shared_ptr<void> backend_lifetime;\n\t\tstd::unique_ptr<sqlite_database> database;",
+            "std::unique_ptr<sqlite_database> database;\n\t\tstd::shared_ptr<void> backend_lifetime;",
+            1,
+        )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "backend token would be destroyed before its SQLite connection",
+        ):
+            validate(store=swapped_store)
+
+        def reject_rooted_mutation(changed: str, pattern: str) -> None:
+            self.assertNotEqual(changed, rooted_source)
+            with self.assertRaisesRegex(
+                materialization.MaterializationError, pattern
+            ):
+                validate(rooted=changed)
+
+        def mutate_rooted_function(signature: str, old: str, new: str) -> str:
+            search_from = 0
+            while True:
+                start = rooted_source.index(signature, search_from)
+                opening = rooted_source.index("{", start)
+                declaration_end = rooted_source.find(";", start, opening)
+                if declaration_end < 0:
+                    break
+                search_from = start + len(signature)
+            depth = 0
+            for index in range(opening, len(rooted_source)):
+                if rooted_source[index] == "{":
+                    depth += 1
+                elif rooted_source[index] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        end = index + 1
+                        break
+            else:
+                self.fail(f"unterminated rooted function: {signature}")
+            body = rooted_source[start:end]
+            self.assertIn(old, body)
+            changed_body = body.replace(old, new, 1)
+            return rooted_source[:start] + changed_body + rooted_source[end:]
+
+        reject_rooted_mutation(
+            mutate_rooted_function(
+                "reserve_database_path(",
+                "catch (const std::bad_alloc&)\n"
+                "\t\t\t{\n"
+                "\t\t\t\treturn false;\n"
+                "\t\t\t}",
+                "catch (const std::bad_alloc&)\n"
+                "\t\t\t{\n"
+                "\t\t\t\tstd::terminate();\n"
+                "\t\t\t}",
+            ),
+            "rooted database-path reservation typed exception result differs",
+        )
+        reject_rooted_mutation(
+            mutate_rooted_function(
+                "reserve_database_path(",
+                "catch (const std::length_error&)\n"
+                "\t\t\t{\n"
+                "\t\t\t\treturn false;\n"
+                "\t\t\t}",
+                "catch (const std::length_error&)\n"
+                "\t\t\t{\n"
+                "\t\t\t\treturn true;\n"
+                "\t\t\t}",
+            ),
+            "rooted database-path reservation typed exception result differs",
+        )
+        reject_rooted_mutation(
+            mutate_rooted_function(
+                "acquire_file_effect_authority(",
+                "return {std::nullopt, sqlite_no_memory};",
+                "std::terminate();",
+            ),
+            "rooted file-effect authority typed exception result differs",
+        )
+        reject_rooted_mutation(
+            mutate_rooted_function(
+                "rooted_vfs_access(",
+                "return sqlite_no_memory;",
+                "std::terminate();",
+            ),
+            "terminates or rethrows across its C ABI boundary: rooted_vfs_access",
+        )
+        reject_rooted_mutation(
+            mutate_rooted_function(
+                "rooted_vfs_open(",
+                "if (database_path_reserved)\n"
+                "\t\t\t\t\tcancel_database_path_reservation(*owner, relative);\n"
+                "\t\t\t\treturn sqlite_no_memory;",
+                "return sqlite_no_memory;\n"
+                "\t\t\t\tif (database_path_reserved)\n"
+                "\t\t\t\t\tcancel_database_path_reservation(*owner, relative);",
+            ),
+            "rooted_vfs_open typed exception result differs",
+        )
+        reject_rooted_mutation(
+            mutate_rooted_function(
+                "rooted_vfs_remove(",
+                "catch (...)\n\t\t\t{\n\t\t\t\treturn sqlite_io_error;\n\t\t\t}",
+                "catch (...)\n\t\t\t{\n\t\t\t\treturn sqlite_cannot_open;\n\t\t\t}",
+            ),
+            "rooted_vfs_remove typed exception result differs",
+        )
+        reject_rooted_mutation(
+            mutate_rooted_function(
+                "rooted_shm_map(",
+                "catch (const std::bad_alloc&)\n"
+                "\t\t\t{\n"
+                "\t\t\t\treturn sqlite_no_memory;\n"
+                "\t\t\t}",
+                "catch (const std::bad_alloc&)\n"
+                "\t\t\t{\n"
+                "\t\t\t\treturn sqlite_io_error;\n"
+                "\t\t\t}",
+            ),
+            "rooted_shm_map typed exception result differs",
+        )
+        reject_rooted_mutation(
+            mutate_rooted_function(
+                "rooted_vfs_full_path(",
+                "catch (...)\n\t\t\t{\n\t\t\t\treturn sqlite_cannot_open;\n\t\t\t}",
+                "catch (...)\n\t\t\t{\n\t\t\t\treturn sqlite_io_error;\n\t\t\t}",
+            ),
+            "rooted_vfs_full_path typed exception result differs",
+        )
+
+        reject_rooted_mutation(
+            rooted_source.replace("output->methods = nullptr;", "/* removed */", 1),
+            "xOpen preeffect/commit/publication order",
+        )
+        reject_rooted_mutation(
+            rooted_source.replace(
+                "reserve_database_path(*owner, relative)",
+                "database_path_reservation_removed(*owner, relative)",
+                1,
+            ),
+            "xOpen preeffect/commit/publication order",
+        )
+        reject_rooted_mutation(
+            rooted_source.replace(
+                "void rooted_dl_close(sqlite3_vfs*, void*) noexcept {}",
+                "void rooted_dl_close(sqlite3_vfs*, void*) noexcept { /* delegate */ }",
+                1,
+            ),
+            "delegated a closed loader/syscall capability",
+        )
+        reject_rooted_mutation(
+            rooted_source.replace(
+                "void rooted_dl_close(sqlite3_vfs*, void*) noexcept {}",
+                "void rooted_dl_close(sqlite3_vfs*, void* handle) noexcept "
+                "{ if (handle != nullptr) (void)::dlclose(handle); }",
+                1,
+            ),
+            "closed callback body differs: rooted_dl_close",
+        )
+        reject_rooted_mutation(
+            rooted_source.replace(
+                "if (output_flags != nullptr)\n"
+                "\t\t\t\t*output_flags = 0;\n"
+                "\t\t\tif (output == nullptr)\n"
+                "\t\t\t\treturn sqlite_cannot_open;",
+                "if (output == nullptr)\n"
+                "\t\t\t\treturn sqlite_cannot_open;\n"
+                "\t\t\tif (output_flags != nullptr)\n"
+                "\t\t\t\t*output_flags = 0;",
+                1,
+            ),
+            "xOpen preeffect/commit/publication order",
+        )
+        reject_rooted_mutation(
+            rooted_source.replace(
+                "authenticated = std::move(*opened);\n\t\t\t\t}",
+                "authenticated = std::move(*opened);\n"
+                "\t\t\t\t\tstd::string fallible_after_create{relative};\n"
+                "\t\t\t\t}",
+                1,
+            ),
+            "retained fallible work after create",
+        )
+        reject_rooted_mutation(
+            rooted_source.replace(
+                "!opened || !rooted_regular_file(opened->get())", "!opened"
+            ),
+            "xOpen preeffect/commit/publication order",
+        )
+        reject_rooted_mutation(
+            rooted_source.replace(
+                "case sqlite_file_control_lock_state:\n",
+                "case sqlite_file_control_lock_state:\n"
+                "\t\t\t\t\t(void)::ftruncate(file->authenticated_descriptor, 0);\n",
+                1,
+            ),
+            "file-control effect precedes authority",
+        )
+        reject_rooted_mutation(
+            rooted_source.replace(
+                "if (!authority)\n\t\t\t\t\t\t\t\treturn sqlite_ok;",
+                "if (!authority)\n"
+                "\t\t\t\t\t\t\t{ moved = 0; return sqlite_ok; }",
+                1,
+            ),
+            "HAS_MOVED reauthentication failure is not moved-one",
+        )
+        reject_rooted_mutation(
+            rooted_source.replace(
+                "O_RDWR : O_RDONLY) | O_NONBLOCK;",
+                "O_RDWR : O_RDONLY);",
+                1,
+            ),
+            "named xOpen nonblocking flags",
+        )
+
+        access_begin = rooted_source.index("rooted_vfs_access(")
+        access_end = rooted_source.index("rooted_vfs_full_path(", access_begin)
+        access_body = rooted_source[access_begin:access_end]
+        self.assertEqual(access_body.count("O_NONBLOCK"), 2)
+        access_without_nonblocking = access_body.replace(" | O_NONBLOCK", "")
+        reject_rooted_mutation(
+            rooted_source[:access_begin]
+            + access_without_nonblocking
+            + rooted_source[access_end:],
+            "xAccess named branches are not nonblocking",
+        )
+
+        reject_rooted_mutation(
+            rooted_source.replace(
+                "owner.root.get(), relative.substr(0U, separator), "
+                "O_RDONLY | O_DIRECTORY",
+                "owner.root.get(), leaf, O_RDONLY | O_DIRECTORY",
+                1,
+            ),
+            "parent capability acquisition beneath the captured root",
+        )
+        reject_rooted_mutation(
+            rooted_source.replace(
+                "parent->get(), leaf, flags, creation_mode",
+                "owner.root.get(), relative, flags, creation_mode",
+                1,
+            ),
+            "rooted open parent capability and leaf effect order",
+        )
+        reject_rooted_mutation(
+            rooted_source.replace(
+                "parent->get(), leaf, identity_open_flags",
+                "owner.root.get(), relative, identity_open_flags",
+                1,
+            ),
+            "xDelete parent capability and leaf effect order",
+        )
+        reject_rooted_mutation(
+            rooted_source.replace(
+                "return 4096;",
+                "(void)::fsync(0);\n\t\t\treturn 4096;",
+                1,
+            ),
+            "no-effect advisory callback body differs: rooted_sector",
+        )
+        reject_rooted_mutation(
+            rooted_source.replace(
+                "existing->active_open_count == 0U ||\n"
+                "\t\t\t\texisting->authority_lease_count",
+                "false ||\n\t\t\t\texisting->authority_lease_count",
+                1,
+            ),
+            "database authority acquisition",
+        )
+        reject_rooted_mutation(
+            rooted_source.replace(
+                "auto authority = acquire_file_effect_authority(*file);",
+                "rooted_file_effect_authority authority{};",
+                1,
+            ),
+            "opened sidecar effect authority",
+        )
+        reject_rooted_mutation(
+            rooted_source.replace(
+                "!S_ISREG(authenticated_identity.st_mode)", "false", 1
+            ),
+            "xDelete lacks its immediate regular-file observation",
+        )
+        reject_rooted_mutation(
+            rooted_source.replace(
+                "rooted_sqlite_path,",
+                "exact_path,",
+                1,
+            ),
+            "passed an untrusted raw SQLite filename",
+        )
+        reject_rooted_mutation(
+            rooted_source.replace(
+                "rooted_vfs_access(sqlite3_vfs* vfs, const char* name, const int flags, int* output) noexcept",
+                "rooted_vfs_access(sqlite3_vfs* vfs, const char* name, const int flags, int* output)",
+                1,
+            ),
+            "not a no-throw C ABI boundary",
+        )
+
+        unowned_open_result = store_source.replace(
+            "auto** database_slot = connection.open_handle_out_parameter();",
+            "void** database_slot = nullptr;",
+            1,
+        )
+        self.assertNotEqual(unowned_open_result, store_source)
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "raw connection RAII ownership",
+        ):
+            validate(store=unowned_open_result)
+
+        duplicate_close = lifecycle_source.replace(
+            "const auto code = owned->close_v2(owned->connection);",
+            "(void)owned->close_v2(owned->connection);\n"
+            "\t\t\tconst auto code = owned->close_v2(owned->connection);",
+            1,
+        )
+        self.assertNotEqual(duplicate_close, lifecycle_source)
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "close at most once",
+        ):
+            validate(lifecycle_implementation=duplicate_close)
+
+        destructor_without_cleanup = lifecycle_source.replace(
+            "sqlite_connection_lifecycle::~sqlite_connection_lifecycle() noexcept\n"
+            "\t{\n"
+            "\t\tcleanup_noexcept();\n"
+            "\t}",
+            "sqlite_connection_lifecycle::~sqlite_connection_lifecycle() noexcept\n"
+            "\t{\n"
+            "\t\t(void)state_.release();\n"
+            "\t}",
+            1,
+        )
+        self.assertNotEqual(destructor_without_cleanup, lifecycle_source)
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "destructor does not use exact-once cleanup",
+        ):
+            validate(
+                lifecycle_implementation=destructor_without_cleanup,
+            )
+
+    def test_store_backend_lifetime_bridge_is_source_private(self) -> None:
+        public_header = (ROOT / materialization.STORE_HEADER).read_text(
+            encoding="utf-8"
+        )
+        internal_header = (
+            ROOT / materialization.STORE_BACKEND_LIFETIME_INTERNAL
+        ).read_text(encoding="utf-8")
+        rooted_source = (ROOT / materialization.ROOTED_VFS_SOURCE).read_text(
+            encoding="utf-8"
+        )
+        store_source = (ROOT / materialization.STORE_SOURCE).read_text(
+            encoding="utf-8"
+        )
+
+        def validate(
+            public: str = public_header,
+            internal: str = internal_header,
+            rooted: str = rooted_source,
+            store: str = store_source,
+        ) -> None:
+            materialization.validate_store_backend_lifetime_bridge_text(
+                public, internal, rooted, store
+            )
+
+        validate()
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "leaked a namespace callable"
+        ):
+            validate(
+                public=public_header.replace(
+                    "friend struct snapshot_store_backend_lifetime_access;",
+                    "friend result<snapshot_store> "
+                    "open_sqlite_snapshot_store_with_backend_lifetime_internal();",
+                    1,
+                )
+            )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "source-private Store bridge marker is missing",
+        ):
+            validate(
+                internal=internal_header.replace(
+                    '__attribute__((visibility("default"))) ', "", 1
+                )
+            )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "exact bridge-specific friend boundary",
+        ):
+            validate(
+                public=public_header.replace(
+                    "friend struct snapshot_store_backend_lifetime_access;",
+                    "friend struct snapshot_store_backend_lifetime_access;\n"
+                    "\t\tfriend struct snapshot_store_unbound_access;",
+                    1,
+                )
+            )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "exact bridge-specific friend boundary",
+        ):
+            validate(
+                public=public_header.replace(
+                    "friend struct snapshot_store_backend_lifetime_access;",
+                    "friend struct snapshot_store_backend_lifetime_access;\n"
+                    "\t\tfriend class arbitrary_store_access;",
+                    1,
+                )
+            )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "exact-one-member or visibility authority",
+        ):
+            validate(
+                internal=internal_header.replace(
+                    "\t\t\tstd::shared_ptr<sqlite_backend_observation_capability> "
+                    "observation);\n\t};",
+                    "\t\t\tstd::shared_ptr<sqlite_backend_observation_capability> "
+                    "observation);\n"
+                    "\t\t[[nodiscard]] static snapshot_store "
+                    "extract(snapshot_store& store);\n\t};",
+                    1,
+                )
+            )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "exact-one-member or visibility authority",
+        ):
+            validate(
+                internal=internal_header.replace(
+                    "\t\t\tstd::shared_ptr<sqlite_backend_observation_capability> "
+                    "observation);\n\t};",
+                    "\t\t\tstd::shared_ptr<sqlite_backend_observation_capability> "
+                    "observation);\n"
+                    "\t\tstatic void privileged_inline() {}\n\t};",
+                    1,
+                )
+            )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "exact-one-member or visibility authority",
+        ):
+            validate(
+                internal=internal_header.replace(
+                    "\t\t[[nodiscard]] static result<snapshot_store>",
+                    "\t\t[[nodiscard]] __attribute__((visibility(\"hidden\"))) "
+                    "static result<snapshot_store>",
+                    1,
+                )
+            )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "definition/call binding differs"
+        ):
+            validate(
+                rooted=rooted_source.replace(
+                    "sdk::snapshot_store_backend_lifetime_access::open_sqlite(",
+                    "sdk::snapshot_store_backend_lifetime_access::open_unbound(",
+                    1,
+                )
+            )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError,
+            "definition violates exact visibility authority",
+        ):
+            validate(
+                store=store_source.replace(
+                    "\n\tresult<snapshot_store> "
+                    "snapshot_store_backend_lifetime_access::open_sqlite(",
+                    "\n\t__attribute__((visibility(\"hidden\"))) result<snapshot_store> "
+                    "snapshot_store_backend_lifetime_access::open_sqlite(",
+                    1,
+                )
+            )
+        with self.assertRaisesRegex(
+            materialization.MaterializationError, "definition/call binding differs"
+        ):
+            validate(
+                store=store_source.replace(
+                    "snapshot_store_backend_lifetime_access::open_sqlite(",
+                    "snapshot_store_backend_lifetime_access::open_unbound(",
+                    1,
+                )
             )
 
 

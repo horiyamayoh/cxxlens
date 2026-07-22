@@ -55,6 +55,7 @@ properties:
       - g5_report_digest
       - security_report_digest
       - materialization_contract_digest
+      - sqlite_store_v3_qualification
       - materialization_evidence
       - install_manifests
       - materialization_reports
@@ -67,6 +68,7 @@ properties:
       g5_report_digest: {$ref: '#/$defs/digest'}
       security_report_digest: {$ref: '#/$defs/digest'}
       materialization_contract_digest: {$ref: '#/$defs/digest'}
+      sqlite_store_v3_qualification: {$ref: '#/$defs/sqlite_store_v3_qualification'}
       materialization_evidence: {$ref: '#/$defs/materialization_evidence'}
       install_manifests:
         type: array
@@ -184,6 +186,17 @@ $defs:
   revision:
     type: string
     pattern: '^[0-9a-f]{40}$'
+  sqlite_store_v3_qualification:
+    type: object
+    additionalProperties: false
+    required: [revision, source_tree, report_digest, report_set_digest, report_schema_digest, sqlite_contract_digest]
+    properties:
+      revision: {$ref: '#/$defs/revision'}
+      source_tree: {$ref: '#/$defs/revision'}
+      report_digest: {$ref: '#/$defs/digest'}
+      report_set_digest: {$ref: '#/$defs/digest'}
+      report_schema_digest: {$ref: '#/$defs/digest'}
+      sqlite_contract_digest: {$ref: '#/$defs/digest'}
   materialization_evidence:
     type: object
     additionalProperties: false
@@ -200,7 +213,7 @@ $defs:
       feedback:
         type: array
         uniqueItems: true
-        items: {enum: [DF-0182, DF-0187, DF-0191, DF-0192, DF-0195, DF-0196, DF-0197]}
+        items: {enum: [DF-0182, DF-0187, DF-0191, DF-0192, DF-0195, DF-0196, DF-0197, DF-0198, DF-0199, DF-0200]}
     allOf:
       - if:
           properties: {state: {const: tracked-gap-empty}}
@@ -211,7 +224,7 @@ $defs:
             report_count: {const: 0}
             report_set_count: {const: 0}
             owner_issue: {const: '#181'}
-            feedback: {const: [DF-0182, DF-0187, DF-0191, DF-0192, DF-0195, DF-0196, DF-0197]}
+            feedback: {const: [DF-0182, DF-0187, DF-0191, DF-0192, DF-0195, DF-0196, DF-0197, DF-0198, DF-0199, DF-0200]}
         else:
           properties:
             request_count: {const: 4}

@@ -401,7 +401,7 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
         (
             "release-evaluation",
             evaluation_config,
-            ["g5-qualification"],
+            ["g5-qualification", "sqlite-store-v3-qualification"],
             "github.event_name == 'push' && github.ref == 'refs/heads/main'",
             {"if", "needs", "runs-on", "outputs", "steps"},
         ),
@@ -549,7 +549,7 @@ def validate_workflow(root: pathlib.Path, manifest: dict[str, Any]) -> None:
     terminal_job = workflow_job("production-scope-closure")
     required_job_markers = {
         "release-evaluation": (
-            "needs: [g5-qualification]",
+            "needs: [g5-qualification, sqlite-store-v3-qualification]",
             "qualification: ${{ steps.evaluate.outputs.qualification }}",
             '--github-output "${GITHUB_OUTPUT}"',
         ),

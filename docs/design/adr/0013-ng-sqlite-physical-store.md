@@ -5,6 +5,7 @@
 - Decision owner: store-kernel
 - Decision issue: #68
 - Tracking issue: #56
+- Current-layout amendment: ADR 0097 / #200
 
 ## Context
 
@@ -38,6 +39,16 @@ Issue #132 で physical minor を 2.5.0 とし、connection/process 間 publicat
   database commit 成功後だけ更新する。
 - compaction は payload を新 physical generation へ copy-on-write し、既存 handle が pin する generation は
   shared token の最終解放まで保持する。
+
+ADR 0097 はこの hybrid と logical payload policy を維持しつつ、current physical layout を
+`cxxlens.sqlite-semantic-store.v3` / `3.0.0` の bounded chunk table に置き換える。本 ADR の v2.6.0 schema は
+read-only direct-open predecessor と registered migration source としてのみ authority を保つ。新規 DB と write は
+v3 を使用し、v2 open は DDL/metadata/PRAGMA write を行わない。v2→v3 は既存 `snapshot_store::compact()` の
+single-transaction COW migration だけを許し、open-time migration と新 public migration surface を禁止する。
+v3 のlocator/VFS observation、closed format classifier、fresh file+parent durability、rollback/COMMIT terminal recovery、
+same-main descendant判定はADR 0097と`cxxlens.sqlite-authority-state.v1`、
+`cxxlens.sqlite-authorized-descendant.v1`、`cxxlens.sqlite-terminal-reclassifier.v1`が所有する。本ADRの旧open/compaction記述を
+これらのfail-closed境界より優先したり、generic VFS、implicit recovery、diagnostic row rewriteを認可する根拠にしない。
 
 ## Consequences
 

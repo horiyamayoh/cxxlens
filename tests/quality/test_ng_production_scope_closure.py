@@ -82,6 +82,14 @@ class ProductionScopeClosureTest(unittest.TestCase):
                 "g5_report_digest": digest,
                 "security_report_digest": digest,
                 "materialization_contract_digest": digest,
+                "sqlite_store_v3_qualification": {
+                    "revision": REVISION,
+                    "source_tree": TREE,
+                    "report_digest": digest,
+                    "report_set_digest": digest,
+                    "report_schema_digest": digest,
+                    "sqlite_contract_digest": digest,
+                },
                 "materialization_evidence": {
                     "state": "exact-matrix",
                     "request_count": 4,
@@ -147,6 +155,14 @@ class ProductionScopeClosureTest(unittest.TestCase):
                 "public_callable_report_digest": digest,
                 "g5_report_digest": digest,
                 "materialization_contract_digest": digest,
+                "sqlite_store_v3_qualification": {
+                    "revision": REVISION,
+                    "source_tree": TREE,
+                    "report_digest": digest,
+                    "report_set_digest": digest,
+                    "report_schema_digest": digest,
+                    "sqlite_contract_digest": digest,
+                },
                 "release_evaluation_report_digest": "sha256:" + "e" * 64,
                 "same_revision": True,
             },
@@ -201,8 +217,8 @@ class ProductionScopeClosureTest(unittest.TestCase):
     def test_repository_check_closes_exact_30_domains(self) -> None:
         self.assertEqual(tuple(sorted({key.domain for key in self.model.nodes})), tuple(sorted(closure.DOMAINS)))
         self.assertEqual(self.model.summary["domain_count"], 30)
-        self.assertEqual(self.model.summary["assignable_count"], 232)
-        self.assertEqual(self.model.summary["expanded_count"], 782)
+        self.assertEqual(self.model.summary["assignable_count"], 233)
+        self.assertEqual(self.model.summary["expanded_count"], 783)
         self.assertEqual(self.model.summary["aggregate_count"], 14)
         self.assertEqual(self.model.closure_status, "classified-with-gaps")
 

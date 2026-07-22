@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "tools" / "quality"))
 
 from check_ng_snapshot_store_contract import (  # noqa: E402
     CONTRACT,
+    CONTRACT_SCHEMA,
     CLOSURE_FIELDS,
     SELECTOR_FIELDS,
     StoreContractError,
@@ -36,6 +37,7 @@ from check_ng_snapshot_store_contract import (  # noqa: E402
     unsigned_counter_canonical_integer,
     validate_all,
     validate_contract_shape,
+    validate_df_0200_ingress_schema,
     validate_identity_graph,
 )
 
@@ -48,6 +50,17 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
     def test_contract_and_exact_vector_set(self) -> None:
         contract, results, comparisons = validate_all(ROOT)
         self.assertEqual(contract["maturity"], "accepted")
+        ingress = contract["df_0200_materialization_ingress"]
+        self.assertEqual(
+            ingress["status"], "accepted-authority-implementation-pending"
+        )
+        self.assertEqual(
+            ingress["implementation_disposition"],
+            "pending-implementation-and-qualification",
+        )
+        self.assertEqual(
+            ingress["sqlite_capacity_decision"]["status"], "accepted"
+        )
         self.assertEqual(len(results), 31)
         self.assertEqual(comparisons, 36)
 
@@ -107,6 +120,40 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 ].remove("full-committed-authority-census"),
             ),
             (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"][
+                    "sqlite_terminal_recovery"
+                ].update(reclassifier_id="unbound"),
+            ),
+            (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"][
+                    "sqlite_terminal_recovery"
+                ]["sealed_receipt_profiles"]["post_format_prewrite"].remove(
+                    "no-candidate-yet"
+                ),
+            ),
+            (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"][
+                    "sqlite_terminal_recovery"
+                ].update(post_format_candidate_extension="candidate-may-be-partial"),
+            ),
+            (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"][
+                    "sqlite_terminal_recovery"
+                ]["sealed_receipt_profiles"]["fresh_initialization"].remove(
+                    "actual-target-main-open-file-instance-identity-and-directory-entry-binding"
+                ),
+            ),
+            (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"][
+                    "sqlite_terminal_recovery"
+                ].update(fresh_initialization_receipt_seal="after-journal-arming"),
+            ),
+            (
                 "store.counter-allocation-invalid",
                 lambda value: value["publication_counters"]["sqlite_allocation"][
                     "compaction_range"
@@ -116,6 +163,57 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 "store.compaction-contract-invalid",
                 lambda value: value["compaction"].update(
                     sqlite_process_memory_update="before-database-commit"
+                ),
+            ),
+            (
+                "store.compaction-contract-invalid",
+                lambda value: value["compaction"]["generation_allocation"].update(
+                    committed_nonempty="allocate-from-zero"
+                ),
+            ),
+            (
+                "store.compaction-contract-invalid",
+                lambda value: value["compaction"]["generation_allocation"].update(
+                    committed_empty_operation="commit-empty-transaction"
+                ),
+            ),
+            (
+                "store.compaction-contract-invalid",
+                lambda value: value["compaction"]["generation_allocation"][
+                    "committed_empty_operation"
+                ].update(
+                    failure="return-original-error-without-close-or-reclassification"
+                ),
+            ),
+            (
+                "store.compaction-contract-invalid",
+                lambda value: value["compaction"]["sqlite_v2_to_v3_migration"][
+                    "commit_outcome_unknown"
+                ]["post_classification_state"].update(
+                    valid_non_descendant_or_invalid_or_mixed=(
+                        "install-reopened-state"
+                    )
+                ),
+            ),
+            (
+                "store.compaction-contract-invalid",
+                lambda value: value["compaction"]
+                ["sqlite_v3_compaction_commit_outcome_unknown"]
+                ["post_classification_state"].update(
+                    exact_pre_or_valid_uncompacted="return-opaque-with-stale-state"
+                ),
+            ),
+            (
+                "store.compaction-contract-invalid",
+                lambda value: value["compaction"]["sqlite_v2_to_v3_migration"].update(
+                    diagnostic_projection="semantic-only"
+                ),
+            ),
+            (
+                "store.compaction-contract-invalid",
+                lambda value: value["compaction"]
+                ["sqlite_v3_compaction_commit_outcome_unknown"].update(
+                    zero_anchor="commit-outcome-unknown"
                 ),
             ),
             (
@@ -131,6 +229,136 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 mutate(changed)
                 with self.assertRaisesRegex(StoreContractError, code):
                     validate_contract_shape(changed)
+
+    def test_df_0200_accepted_materialization_ingress_is_closed(self) -> None:
+        validate_contract_shape(copy.deepcopy(self.contract))
+
+        changed = copy.deepcopy(self.contract)
+        changed.pop("df_0200_materialization_ingress")
+        with self.assertRaisesRegex(
+            StoreContractError, "materialization-ingress-contract-invalid"
+        ):
+            validate_contract_shape(changed)
+
+        ingress_mutations: list[tuple[str, dict[str, object]]] = []
+
+        changed = copy.deepcopy(self.contract)
+        changed["df_0200_materialization_ingress"]["source"]["codec"][
+            "event_kind_codes"
+        ]["partition-end"] = 8
+        ingress_mutations.append(("codec-kind-code", changed))
+
+        changed = copy.deepcopy(self.contract)
+        changed["df_0200_materialization_ingress"]["source"]["codec"][
+            "authority_binding"
+        ]["canonical_json_sha256"] = "sha256:" + "0" * 64
+        ingress_mutations.append(("codec-full-authority-digest", changed))
+
+        changed = copy.deepcopy(self.contract)
+        changed["df_0200_materialization_ingress"]["source"][
+            "external_completeness_authority"
+        ]["whole_partition_drop"] = "trust-self-reported-trailer"
+        ingress_mutations.append(("whole-partition-drop", changed))
+
+        changed = copy.deepcopy(self.contract)
+        changed["df_0200_materialization_ingress"]["source"][
+            "external_completeness_authority"
+        ]["pre_encoder_receipt_oracle"]["receipt_seal"]["projection"].remove(
+            "successful-seal"
+        )
+        ingress_mutations.append(("receipt-successful-seal", changed))
+
+        changed = copy.deepcopy(self.contract)
+        receipt_projection = changed["df_0200_materialization_ingress"][
+            "source"
+        ]["external_completeness_authority"]["pre_encoder_receipt_oracle"][
+            "receipt_seal"
+        ]["projection"]
+        receipt_projection[
+            receipt_projection.index("selected-request-entry-binding-digest")
+        ] = "execution-journal-receipt-set-digest"
+        ingress_mutations.append(("receipt-journal-cycle", changed))
+
+        changed = copy.deepcopy(self.contract)
+        changed["df_0200_materialization_ingress"]["counter_model"][
+            "canonical_v5_collection_counts"
+        ]["maximum"] = 4_294_967_295
+        ingress_mutations.append(("collection-count-u32-narrowing", changed))
+
+        changed = copy.deepcopy(self.contract)
+        changed["df_0200_materialization_ingress"]["counter_model"][
+            "collection_overflow_failure"
+        ]["operation"] = "writer_publish"
+        ingress_mutations.append(("overflow-operation", changed))
+
+        changed = copy.deepcopy(self.contract)
+        changed["df_0200_materialization_ingress"][
+            "sqlite_capacity_decision"
+        ]["selected_alternative"] = "B"
+        ingress_mutations.append(("sqlite-option-a-binding", changed))
+
+        changed = copy.deepcopy(self.contract)
+        changed["df_0200_materialization_ingress"][
+            "sqlite_capacity_decision"
+        ].pop("decision_ref")
+        ingress_mutations.append(("sqlite-option-a-authority", changed))
+
+        for name, changed in ingress_mutations:
+            with self.subTest(ingress=name):
+                with self.assertRaisesRegex(
+                    StoreContractError, "materialization-ingress-contract-invalid"
+                ):
+                    validate_contract_shape(changed)
+
+        changed = copy.deepcopy(self.contract)
+        changed["df_0200_materialization_ingress"]["source"][
+            "store-validation"
+        ]["required-recomputation"].remove("canonical-claim-and-row-identity")
+        with self.assertRaisesRegex(
+            StoreContractError, "materialization-ingress-contract-invalid"
+        ):
+            validate_contract_shape(changed)
+
+        changed = copy.deepcopy(self.contract)
+        changed["df_0200_materialization_ingress"][
+            "unexpected-extension"
+        ] = "allowed"
+        with self.assertRaisesRegex(
+            StoreContractError, "materialization-ingress-contract-invalid"
+        ):
+            validate_contract_shape(changed)
+
+        schema = load_yaml(ROOT / CONTRACT_SCHEMA)
+        validate_df_0200_ingress_schema(copy.deepcopy(schema))
+        changed_schema = copy.deepcopy(schema)
+        changed_schema["$defs"]["df_0200_materialization_ingress"][
+            "const"
+        ]["compatibility"].pop("snapshot_payload_v5_schema_and_semantic_projection")
+        with self.assertRaisesRegex(
+            StoreContractError, "materialization-ingress-contract-invalid"
+        ):
+            validate_df_0200_ingress_schema(changed_schema)
+
+        changed_schema = copy.deepcopy(schema)
+        changed_schema["required"].remove(
+            "df_0200_materialization_ingress"
+        )
+        with self.assertRaisesRegex(
+            StoreContractError, "materialization-ingress-contract-invalid"
+        ):
+            validate_df_0200_ingress_schema(changed_schema)
+
+    def test_generic_store_checker_has_no_materialization_reverse_dependency(
+        self,
+    ) -> None:
+        checker = (
+            ROOT / "tools/quality/check_ng_snapshot_store_contract.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("MATERIALIZATION_CONTRACT", checker)
+        self.assertNotIn("validate_df_0200_cross_contract_binding", checker)
+        self.assertNotIn(
+            "cxxlens_ng_clang22_materialization_contract.yaml", checker
+        )
 
     def test_domain_separation_changes_digest(self) -> None:
         fields = ["same", 1]

@@ -19,6 +19,7 @@ required:
   - production_scope_closure
   - provider_protocol_boundary
   - version_axes
+  - snapshot_format_binding
   - compatibility_contexts
   - compatibility_rules
   - migrations
@@ -315,7 +316,7 @@ properties:
   release_qualification:
     type: object
     additionalProperties: false
-    required: [gate, authority, materialization_contract, materialization_report_matrix, materialization_report_set_binding, checker, ci_job, status, claim_scope, report_artifact, required_evidence]
+    required: [gate, authority, materialization_contract, materialization_report_matrix, materialization_report_set_binding, sqlite_store_v3_qualification, checker, ci_job, status, claim_scope, report_artifact, required_evidence]
     properties:
       gate: {const: gate.release}
       authority: {const: schemas/cxxlens_ng_release_qualification.yaml}
@@ -327,13 +328,21 @@ properties:
           - {configuration: shared, backend: memory}
           - {configuration: shared, backend: sqlite}
       materialization_report_set_binding: {const: exact-configuration-two-report-set-digest}
+      sqlite_store_v3_qualification:
+        const:
+          authority: docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
+          report_schema: schemas/cxxlens_ng_sqlite_store_v3_qualification_report.schema.yaml
+          checker: tools/quality/check_ng_sqlite_store_v3_qualification.py
+          artifact: cxxlens-ng-sqlite-store-v3-qualification-${revision}
+          maximum_bytes: 16777216
+          binding: exact-revision-source-tree-schema-contract-artifact-and-report-set-digests
       checker: {const: tools/quality/check_ng_release_qualification.py}
       ci_job: {const: release-qualification}
       status: {const: implemented}
       claim_scope: {const: exact-gr-report-tuples-only}
       report_artifact: {const: 'cxxlens-ng-release-qualification-${revision}'}
       required_evidence:
-        const: [same-sha-foundation-report, same-sha-wave0-readiness-report, same-sha-public-callable-report-and-review, same-sha-g5-report, static-relocated-install-artifact, shared-relocated-install-artifact, static-shared-runtime-junit, static-shared-clang22-materialization-reports-and-execution-receipts, real-project-memory-sqlite-and-major-rejection, security-conformance-and-negative-paths, doxygen-contract-and-support-matrix, license-and-notice]
+        const: [same-sha-foundation-report, same-sha-wave0-readiness-report, same-sha-public-callable-report-and-review, same-sha-g5-report, same-sha-sqlite-store-v3-qualification-report, static-relocated-install-artifact, shared-relocated-install-artifact, static-shared-runtime-junit, static-shared-clang22-materialization-reports-and-execution-receipts, real-project-memory-sqlite-and-major-rejection, security-conformance-and-negative-paths, doxygen-contract-and-support-matrix, license-and-notice]
   production_scope_closure:
     type: object
     additionalProperties: false
@@ -392,6 +401,61 @@ properties:
         migration:
           type: string
           minLength: 1
+  snapshot_format_binding:
+    const:
+      authority: schemas/cxxlens_ng_sqlite_store_contract.yaml
+      decision_adr: docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
+      axis: snapshot-format
+      axis_semantics: release-capability-bundle-version-not-a-direct-store-readable-format-tuple
+      axis_current: 3.0.0
+      axis_projection: [version, features, contract-digest]
+      backend_store_compatibility_projection: backend-qualified-features-only-memory-and-sqlite-readable-tuples-do-not-replace-axis-version
+      contract_digest: exact-sqlite-store-contract-canonical-json-sha256
+      current_binary_capability_features: [memory-readable-2.6.0-direct, sqlite-readable-3.0.0-direct, sqlite-v2.6.0-read-only-migration-required, compact-v2.6.0-to-v3.0.0-explicit]
+      artifact_context_rule: exact-backend-qualified-feature-never-axis-version-substitution
+      memory_current:
+        backend: memory
+        readable_format: 2.6.0
+        direct_open: true
+        migration_required: false
+      sqlite_current:
+        backend: sqlite
+        id: cxxlens.sqlite-semantic-store.v3
+        readable_format: 3.0.0
+        direct_open: true
+        migration_required: false
+        mutation: allowed-after-full-validation
+      sqlite_predecessor:
+        backend: sqlite
+        id: cxxlens.sqlite-semantic-store.v2
+        readable_format: 2.6.0
+        direct_open: true
+        migration_required: true
+        mutation: read-only
+        capability_feature: sqlite-v2.6.0-read-only-migration-required
+        artifact_context_feature: sqlite-store-artifact-v2.6.0-pre-migration
+      registered_migration:
+        id: compact-v2.6.0-to-v3.0.0
+        handler: snapshot-store-compact
+        coordinate: sqlite-store-readable-format
+        backend: sqlite
+        from: 2.6.0
+        to: 3.0.0
+        source_context_feature: sqlite-store-artifact-v2.6.0-pre-migration
+        required_capability_features: [sqlite-v2.6.0-read-only-migration-required, compact-v2.6.0-to-v3.0.0-explicit]
+        implicit: false
+        authority_status: accepted
+      qualification_evidence:
+        status: required
+        current_authority: independently-validated-exact-2x4-release-evidence
+        report_schema: schemas/cxxlens_ng_sqlite_store_v3_qualification_report.schema.yaml
+        checker: tools/quality/check_ng_sqlite_store_v3_qualification.py
+        report_filename: cxxlens-ng-sqlite-store-v3-qualification-report.json
+        artifact: cxxlens-ng-sqlite-store-v3-qualification-${revision}
+        maximum_bytes: 16777216
+        revision_binding: exact-revision-source-tree-schema-contract-artifact-and-report-set-digests
+        configurations: [static, shared]
+        required_cases: [current-v3.0.0-cold-reopen, v2.6.0-read-only-zero-mutation, compact-v2.6.0-to-v3.0.0-same-semantic-digest, limit-length-exceeding-valid-canonical-v5-reopened-parity]
   compatibility_contexts:
     type: array
     minItems: 4
@@ -417,6 +481,7 @@ properties:
       - unknown_optional_feature
       - missing_required_axis
       - major_mismatch
+      - backend_artifact_major_migration
       - older_offered_minor
       - newer_compatible_minor
       - report_schema
@@ -439,6 +504,8 @@ properties:
         const: unsupported
       major_mismatch:
         const: unsupported
+      backend_artifact_major_migration:
+        const: exact-registered-sqlite-store-readable-format-only
       older_offered_minor:
         const: migration-required-only-with-explicit-path
       newer_compatible_minor:
@@ -453,11 +520,17 @@ properties:
     items:
       type: object
       additionalProperties: false
-      required: [id, axis, from, to, handler, state]
+      required: [id, axis, from, to, handler, implicit, state]
       properties:
         id:
           $ref: '#/$defs/id'
         axis:
+          $ref: '#/$defs/id'
+        coordinate:
+          $ref: '#/$defs/id'
+        backend:
+          $ref: '#/$defs/id'
+        source_context_feature:
           $ref: '#/$defs/id'
         from:
           $ref: '#/$defs/semver'
@@ -465,8 +538,25 @@ properties:
           $ref: '#/$defs/semver'
         handler:
           $ref: '#/$defs/id'
+        implicit:
+          type: boolean
         state:
           enum: [planned, implemented, qualified]
+      allOf:
+        - if:
+            properties:
+              axis:
+                const: snapshot-format
+            required: [axis]
+          then:
+            required: [coordinate, backend, source_context_feature]
+            properties:
+              coordinate:
+                const: sqlite-store-readable-format
+              backend:
+                const: sqlite
+              source_context_feature:
+                const: sqlite-store-artifact-v2.6.0-pre-migration
   inspection:
     type: object
     additionalProperties: false

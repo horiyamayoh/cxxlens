@@ -246,6 +246,8 @@ entries:
       - schemas/cxxlens_ng_release_qualification.schema.yaml
       - schemas/cxxlens_ng_release_qualification_report.schema.yaml
       - schemas/cxxlens_ng_release_qualification_evaluation_report.schema.yaml
+      - schemas/cxxlens_ng_sqlite_store_contract.yaml
+      - schemas/cxxlens_ng_sqlite_store_v3_qualification_report.schema.yaml
       - schemas/cxxlens_ng_clang22_materialization_contract.yaml
       - schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
       - schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
@@ -275,6 +277,8 @@ entries:
       - tests/unit/sdk/provider_runtime_test.cpp
       - examples/sdk/clang22_native_provider.cpp
       - tools/quality/check_ng_release_qualification.py
+      - tools/quality/check_ng_sqlite_store_v3_qualification.py
+      - tools/quality/produce_ng_sqlite_store_v3_qualification.py
       - tools/quality/check_ng_clang22_materialization.py
       - tests/quality/test_ng_clang22_materialization.py
       - tests/quality/test_ng_release_qualification.py
@@ -284,6 +288,7 @@ entries:
       - docs/design/adr/0091-distribution-1-production-qualification.md
       - docs/design/adr/0095-production-scope-closure.md
       - docs/design/adr/0096-clang22-installed-materialization-boundary.md
+      - docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
       - docs/design/adr/0061-relocatable-static-shared-install-package.md
       - docs/design/adr/0062-first-party-sanitizer-closure.md
       - schemas/cxxlens_ng_sanitizer_coverage.yaml

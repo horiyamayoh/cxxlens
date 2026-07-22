@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import pathlib
 import sys
@@ -119,6 +120,86 @@ EXPECTED_PRODUCTION_SCOPE_CLOSURE = {
         "not_qualified_satisfies_gate_release": False,
     },
 }
+EXPECTED_SNAPSHOT_FORMAT_BINDING = {
+    "authority": "schemas/cxxlens_ng_sqlite_store_contract.yaml",
+    "decision_adr": "docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md",
+    "axis": "snapshot-format",
+    "axis_semantics": "release-capability-bundle-version-not-a-direct-store-readable-format-tuple",
+    "axis_current": "3.0.0",
+    "axis_projection": ["version", "features", "contract-digest"],
+    "backend_store_compatibility_projection": (
+        "backend-qualified-features-only-memory-and-sqlite-readable-tuples-"
+        "do-not-replace-axis-version"
+    ),
+    "contract_digest": "exact-sqlite-store-contract-canonical-json-sha256",
+    "current_binary_capability_features": [
+        "memory-readable-2.6.0-direct",
+        "sqlite-readable-3.0.0-direct",
+        "sqlite-v2.6.0-read-only-migration-required",
+        "compact-v2.6.0-to-v3.0.0-explicit",
+    ],
+    "artifact_context_rule": (
+        "exact-backend-qualified-feature-never-axis-version-substitution"
+    ),
+    "memory_current": {
+        "backend": "memory",
+        "readable_format": "2.6.0",
+        "direct_open": True,
+        "migration_required": False,
+    },
+    "sqlite_current": {
+        "backend": "sqlite",
+        "id": "cxxlens.sqlite-semantic-store.v3",
+        "readable_format": "3.0.0",
+        "direct_open": True,
+        "migration_required": False,
+        "mutation": "allowed-after-full-validation",
+    },
+    "sqlite_predecessor": {
+        "backend": "sqlite",
+        "id": "cxxlens.sqlite-semantic-store.v2",
+        "readable_format": "2.6.0",
+        "direct_open": True,
+        "migration_required": True,
+        "mutation": "read-only",
+        "capability_feature": "sqlite-v2.6.0-read-only-migration-required",
+        "artifact_context_feature": "sqlite-store-artifact-v2.6.0-pre-migration",
+    },
+    "registered_migration": {
+        "id": "compact-v2.6.0-to-v3.0.0",
+        "handler": "snapshot-store-compact",
+        "coordinate": "sqlite-store-readable-format",
+        "backend": "sqlite",
+        "from": "2.6.0",
+        "to": "3.0.0",
+        "source_context_feature": "sqlite-store-artifact-v2.6.0-pre-migration",
+        "required_capability_features": [
+            "sqlite-v2.6.0-read-only-migration-required",
+            "compact-v2.6.0-to-v3.0.0-explicit",
+        ],
+        "implicit": False,
+        "authority_status": "accepted",
+    },
+    "qualification_evidence": {
+        "status": "required",
+        "current_authority": "independently-validated-exact-2x4-release-evidence",
+        "report_schema": "schemas/cxxlens_ng_sqlite_store_v3_qualification_report.schema.yaml",
+        "checker": "tools/quality/check_ng_sqlite_store_v3_qualification.py",
+        "report_filename": "cxxlens-ng-sqlite-store-v3-qualification-report.json",
+        "artifact": "cxxlens-ng-sqlite-store-v3-qualification-${revision}",
+        "maximum_bytes": 16777216,
+        "revision_binding": (
+            "exact-revision-source-tree-schema-contract-artifact-and-report-set-digests"
+        ),
+        "configurations": ["static", "shared"],
+        "required_cases": [
+            "current-v3.0.0-cold-reopen",
+            "v2.6.0-read-only-zero-mutation",
+            "compact-v2.6.0-to-v3.0.0-same-semantic-digest",
+            "limit-length-exceeding-valid-canonical-v5-reopened-parity",
+        ],
+    },
+}
 
 
 class ReleaseContractError(ValueError):
@@ -135,6 +216,18 @@ def load_document(path: pathlib.Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         fail(f"expected mapping: {path}")
     return value
+
+
+def canonical_document_digest(document: dict[str, Any]) -> str:
+    payload = json.dumps(
+        document, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
+def snapshot_contract_digest(bundle: dict[str, Any], root: pathlib.Path) -> str:
+    authority = bundle["snapshot_format_binding"]["authority"]
+    return canonical_document_digest(load_document(root / authority))
 
 
 def schema_validate(document: Any, schema: dict[str, Any], label: str) -> None:
@@ -334,6 +427,16 @@ def validate_release_mapping(bundle: dict[str, Any], root: pathlib.Path) -> None
             {"configuration": "shared", "backend": "sqlite"},
         ],
         "materialization_report_set_binding": "exact-configuration-two-report-set-digest",
+        "sqlite_store_v3_qualification": {
+            "authority": "docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md",
+            "report_schema": "schemas/cxxlens_ng_sqlite_store_v3_qualification_report.schema.yaml",
+            "checker": "tools/quality/check_ng_sqlite_store_v3_qualification.py",
+            "artifact": "cxxlens-ng-sqlite-store-v3-qualification-${revision}",
+            "maximum_bytes": 16777216,
+            "binding": (
+                "exact-revision-source-tree-schema-contract-artifact-and-report-set-digests"
+            ),
+        },
         "checker": "tools/quality/check_ng_release_qualification.py",
         "ci_job": "release-qualification",
         "status": "implemented",
@@ -344,6 +447,7 @@ def validate_release_mapping(bundle: dict[str, Any], root: pathlib.Path) -> None
             "same-sha-wave0-readiness-report",
             "same-sha-public-callable-report-and-review",
             "same-sha-g5-report",
+            "same-sha-sqlite-store-v3-qualification-report",
             "static-relocated-install-artifact",
             "shared-relocated-install-artifact",
             "static-shared-runtime-junit",
@@ -378,6 +482,14 @@ def validate_version_contract(bundle: dict[str, Any], root: pathlib.Path) -> Non
     axes = rows_by_id(bundle["version_axes"], "version axes")
     if set(axes) != EXPECTED_AXES:
         fail("independent version axis set differs")
+    if bundle.get("snapshot_format_binding") != EXPECTED_SNAPSHOT_FORMAT_BINDING:
+        fail("snapshot-format physical Store binding differs")
+    if axes["snapshot-format"] != {
+        "id": "snapshot-format",
+        "compatibility": "exact-current-with-registered-backend-artifact-migration",
+        "migration": "snapshot-store-compact-backend-artifact-only",
+    }:
+        fail("snapshot-format compatibility policy differs")
     contexts = rows_by_id(bundle["compatibility_contexts"], "compatibility contexts")
     if set(contexts) != {"provider-handshake", "snapshot-open", "query-load", "release-startup"}:
         fail("compatibility context set differs")
@@ -398,10 +510,36 @@ def validate_version_contract(bundle: dict[str, Any], root: pathlib.Path) -> Non
         if key in migration_keys:
             fail(f"migration path is ambiguous: {key}")
         migration_keys.add(key)
-        if semver(migration["from"])[0] != semver(migration["to"])[0]:
-            fail(f"runtime migration must not cross an axis major: {migration['id']}")
+        registered = EXPECTED_SNAPSHOT_FORMAT_BINDING["registered_migration"]
+        registered_snapshot_migration = (
+            migration["id"] == registered["id"]
+            and migration["axis"] == "snapshot-format"
+            and migration.get("coordinate") == registered["coordinate"]
+            and migration.get("backend") == registered["backend"]
+            and migration.get("source_context_feature")
+            == registered["source_context_feature"]
+            and migration["from"] == registered["from"]
+            and migration["to"] == registered["to"]
+            and migration["handler"] == registered["handler"]
+            and migration["implicit"] is False
+        )
+        if migration["implicit"] is not False:
+            fail(f"runtime migration must be explicit: {migration['id']}")
+        if migration["axis"] == "snapshot-format" and not registered_snapshot_migration:
+            fail(
+                "snapshot-format migration must be the exact registered SQLite "
+                f"artifact path: {migration['id']}"
+            )
+        if (
+            semver(migration["from"])[0] != semver(migration["to"])[0]
+            and not registered_snapshot_migration
+        ):
+            fail(
+                "runtime migration must not cross a coordinate major unless it is "
+                f"the exact registered SQLite artifact path: {migration['id']}"
+            )
         if semver(migration["from"]) >= semver(migration["to"]):
-            fail(f"migration must advance an axis version: {migration['id']}")
+            fail(f"migration must advance its declared coordinate: {migration['id']}")
     for relative in (BUNDLE_SCHEMA, REQUEST_SCHEMA, REPORT_SCHEMA):
         if not (root / relative).is_file():
             fail(f"release contract schema is missing: {relative}")
@@ -451,7 +589,10 @@ def grouped_axes(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
 
 
 def make_axis_result(
-    bundle: dict[str, Any], required: dict[str, Any], offered_rows: list[dict[str, Any]]
+    bundle: dict[str, Any],
+    required: dict[str, Any],
+    offered_rows: list[dict[str, Any]],
+    root: pathlib.Path,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     axis = required["axis"]
     base = {
@@ -483,6 +624,110 @@ def make_axis_result(
     offered_features = {row["id"] for row in offered["features"]}
     base["missing_required_features"] = sorted(required_features - offered_features)
     base["unavailable_optional_features"] = sorted(optional_features - offered_features)
+    required_version = semver(required["version"])
+    offered_version = semver(offered["version"])
+    if axis == "snapshot-format":
+        authority_digest = snapshot_contract_digest(bundle, root)
+        if (
+            required["contract_digest"] != authority_digest
+            or offered["contract_digest"] != authority_digest
+        ):
+            base["reason_codes"] = ["compat.contract-digest-mismatch"]
+            return base, []
+        binding = bundle["snapshot_format_binding"]
+        predecessor = binding["sqlite_predecessor"]
+        registered = binding["registered_migration"]
+        axis_current = binding["axis_current"]
+        current_features = set(binding["current_binary_capability_features"])
+        artifact_context_feature = predecessor["artifact_context_feature"]
+        required_feature_rows = {
+            row["id"]: row["requirement"] for row in required["features"]
+        }
+        offered_feature_rows = {
+            row["id"]: row["requirement"] for row in offered["features"]
+        }
+        if required["version"] != axis_current:
+            base["reason_codes"] = ["compat.axis-version-mismatch"]
+            return base, []
+        if offered["version"] != axis_current:
+            base["reason_codes"] = [
+                "compat.axis-major-mismatch"
+                if offered_version[0] != required_version[0]
+                else "compat.axis-version-mismatch"
+            ]
+            return base, []
+        if (
+            required_features != current_features
+            or optional_features
+            or set(required_feature_rows.values()) != {"required"}
+        ):
+            base["missing_required_features"] = sorted(
+                current_features - required_features
+            )
+            base["reason_codes"] = [
+                "compat.required-feature-missing"
+                if base["missing_required_features"]
+                else "compat.request-invalid"
+            ]
+            return base, []
+        missing_current_features = current_features - offered_features
+        if missing_current_features:
+            base["missing_required_features"] = sorted(
+                missing_current_features
+            )
+            base["reason_codes"] = ["compat.required-feature-missing"]
+            return base, []
+        if (
+            offered_features == current_features | {artifact_context_feature}
+            and set(required_feature_rows.values()) == {"required"}
+            and set(offered_feature_rows.values()) == {"required"}
+            and set(registered["required_capability_features"]).issubset(
+                offered_features
+            )
+        ):
+            migration = next(
+                (
+                    row
+                    for row in bundle["migrations"]
+                    if row["id"] == registered["id"]
+                    and row["axis"] == axis
+                    and row["coordinate"] == registered["coordinate"]
+                    and row["backend"] == registered["backend"]
+                    and row["source_context_feature"]
+                    == registered["source_context_feature"]
+                    and row["from"] == registered["from"]
+                    and row["to"] == registered["to"]
+                    and row["handler"] == registered["handler"]
+                    and row["implicit"] is False
+                ),
+                None,
+            )
+            if migration is not None:
+                base["missing_required_features"] = []
+                base["unavailable_optional_features"] = []
+                base["status"] = "migration-required"
+                base["reason_codes"] = ["compat.migration-required"]
+                return base, [
+                    {
+                        "axis": axis,
+                        "migration_id": migration["id"],
+                        "handler": migration["handler"],
+                        "state": migration["state"],
+                    }
+                ]
+        if (
+            offered_features == current_features
+            and set(offered_feature_rows.values()) == {"required"}
+        ):
+            base["missing_required_features"] = []
+            base["unavailable_optional_features"] = []
+            base["status"] = "supported"
+            base["reason_codes"] = ["compat.exact"]
+            return base, []
+        base["missing_required_features"] = []
+        base["unavailable_optional_features"] = []
+        base["reason_codes"] = ["compat.request-invalid"]
+        return base, []
     if base["missing_required_features"]:
         base["reason_codes"] = ["compat.required-feature-missing"]
         return base, []
@@ -491,6 +736,7 @@ def make_axis_result(
         "certified-tuple",
         "exact-provider-major-and-toolchain",
         "exact-digest",
+        "exact-current-with-registered-backend-artifact-migration",
     }
     if (
         digest_required
@@ -505,29 +751,17 @@ def make_axis_result(
     ):
         base["reason_codes"] = ["compat.contract-digest-mismatch"]
         return base, []
-    required_version = semver(required["version"])
-    offered_version = semver(offered["version"])
-    if required_version[0] != offered_version[0]:
-        base["reason_codes"] = ["compat.axis-major-mismatch"]
-        return base, []
-    exact_version = policy in {
-        "exact-selected-release",
-        "certified-tuple",
-        "exact-provider-major-and-toolchain",
-    }
-    if exact_version and offered_version != required_version:
-        base["reason_codes"] = ["compat.axis-version-mismatch"]
-        return base, []
-    if offered_version < required_version:
-        migrations = [
-            row
-            for row in bundle["migrations"]
-            if row["axis"] == axis
-            and row["from"] == offered["version"]
-            and row["to"] == required["version"]
-        ]
-        if len(migrations) == 1:
-            migration = migrations[0]
+    migrations = [
+        row
+        for row in bundle["migrations"]
+        if row["axis"] == axis
+        and row["from"] == offered["version"]
+        and row["to"] == required["version"]
+    ]
+    if offered_version < required_version and len(migrations) == 1:
+        migration = migrations[0]
+        cross_major = offered_version[0] != required_version[0]
+        if not cross_major:
             base["status"] = "migration-required"
             base["reason_codes"] = ["compat.migration-required"]
             return base, [
@@ -538,6 +772,19 @@ def make_axis_result(
                     "state": migration["state"],
                 }
             ]
+    if required_version[0] != offered_version[0]:
+        base["reason_codes"] = ["compat.axis-major-mismatch"]
+        return base, []
+    exact_version = policy in {
+        "exact-selected-release",
+        "certified-tuple",
+        "exact-provider-major-and-toolchain",
+        "exact-current-with-registered-backend-artifact-migration",
+    }
+    if exact_version and offered_version != required_version:
+        base["reason_codes"] = ["compat.axis-version-mismatch"]
+        return base, []
+    if offered_version < required_version:
         base["reason_codes"] = ["compat.axis-version-too-old"]
         return base, []
     base["status"] = "supported"
@@ -598,7 +845,7 @@ def decide(bundle: dict[str, Any], request: dict[str, Any], root: pathlib.Path) 
     if not invalid_reasons:
         for axis in sorted(expected_axes):
             result, steps = make_axis_result(
-                bundle, required_grouped[axis][0], offered_grouped.get(axis, [])
+                bundle, required_grouped[axis][0], offered_grouped.get(axis, []), root
             )
             axis_results.append(result)
             migration_steps.extend(steps)

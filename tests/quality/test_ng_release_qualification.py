@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import pathlib
 import sys
 import tempfile
@@ -99,11 +100,30 @@ class NgReleaseQualificationTests(unittest.TestCase):
     def evaluation_evidence(
         self, directory: pathlib.Path, closure_status: str
     ) -> dict:
+        revision = "1" * 40
+        source_tree = "2" * 40
         paths = {}
         for name in ("foundation", "readiness", "g5", "security"):
             path = directory / f"{name}.json"
             path.write_text(f"{name}\n", encoding="utf-8")
             paths[name] = path
+        sqlite_artifact_root = directory / (
+            f"cxxlens-ng-sqlite-store-v3-qualification-{revision}"
+        )
+        sqlite_artifact_root.mkdir(exist_ok=True)
+        sqlite_report_path = (
+            sqlite_artifact_root
+            / release.SQLITE_STORE_V3_QUALIFICATION_REPORT_FILENAME
+        )
+        sqlite_report_path.write_text("sqlite qualification\n", encoding="utf-8")
+        sqlite_binding = {
+            "revision": revision,
+            "source_tree": source_tree,
+            "report_digest": release.digest(sqlite_report_path),
+            "report_set_digest": "sha256:" + "d" * 64,
+            "report_schema_digest": "sha256:" + "e" * 64,
+            "sqlite_contract_digest": "sha256:" + "f" * 64,
+        }
         install_values = {}
         materialization_reports = {}
         for configuration, digit in (("static", "a"), ("shared", "b")):
@@ -156,8 +176,8 @@ class NgReleaseQualificationTests(unittest.TestCase):
         return {
             "root": ROOT,
             "git": {
-                "revision": "1" * 40,
-                "tree": "2" * 40,
+                "revision": revision,
+                "tree": source_tree,
                 "branch": "main",
                 "clean": True,
             },
@@ -183,6 +203,11 @@ class NgReleaseQualificationTests(unittest.TestCase):
             "g5": {},
             "security_path": paths["security"],
             "security": {},
+            "sqlite_store_v3_qualification": {
+                "path": sqlite_report_path,
+                "report": {},
+                "binding": sqlite_binding,
+            },
         }
 
     def make_callable_evidence(
@@ -255,6 +280,227 @@ class NgReleaseQualificationTests(unittest.TestCase):
             }
         }
         return manifest, readiness, git, report_path, review_path
+
+    def test_sqlite_store_v3_qualification_report_is_required_exactly_once(
+        self,
+    ) -> None:
+        manifest = release.load(ROOT / release.MANIFEST)
+        git = {
+            "revision": "1" * 40,
+            "tree": "2" * 40,
+            "branch": "main",
+            "clean": True,
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = pathlib.Path(temporary)
+            with self.assertRaisesRegex(
+                release.ReleaseQualificationError,
+                "expected exactly one cxxlens-ng-sqlite-store-v3-qualification-report.json",
+            ):
+                release.verify_sqlite_store_v3_qualification(
+                    ROOT, manifest, evidence, git
+                )
+
+    def test_sqlite_store_v3_qualification_rejects_revision_and_tree_mismatch(
+        self,
+    ) -> None:
+        manifest = release.load(ROOT / release.MANIFEST)
+        git = {
+            "revision": "1" * 40,
+            "tree": "2" * 40,
+            "branch": "main",
+            "clean": True,
+        }
+        base_report = {
+            "revision": git["revision"],
+            "source_tree": git["tree"],
+            "report_set_digest": "sha256:" + "3" * 64,
+            "report_schema_digest": "sha256:" + "4" * 64,
+            "sqlite_contract_digest": "sha256:" + "5" * 64,
+        }
+        mutations = (
+            ("revision", "revision", "6" * 40),
+            ("source tree", "source_tree", "7" * 40),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = pathlib.Path(temporary)
+            artifact_root = evidence / manifest["sqlite_store_v3_qualification"][
+                "report_artifact"
+            ].replace("${revision}", git["revision"])
+            artifact_root.mkdir()
+            report_path = (
+                artifact_root
+                / release.SQLITE_STORE_V3_QUALIFICATION_REPORT_FILENAME
+            )
+            for label, field, replacement in mutations:
+                with self.subTest(label=label):
+                    report = copy.deepcopy(base_report)
+                    report[field] = replacement
+                    report_path.write_text(
+                        json.dumps(report, sort_keys=True) + "\n", encoding="utf-8"
+                    )
+                    with mock.patch.object(
+                        release.sqlite_qualification, "validate_report"
+                    ), self.assertRaisesRegex(
+                        release.ReleaseQualificationError,
+                        f"SQLite Store v3 qualification {label} differs",
+                    ):
+                        release.verify_sqlite_store_v3_qualification(
+                            ROOT, manifest, evidence, git
+                        )
+
+    def test_sqlite_store_v3_qualification_rejects_wrong_artifact_root(self) -> None:
+        manifest = release.load(ROOT / release.MANIFEST)
+        git = {
+            "revision": "1" * 40,
+            "tree": "2" * 40,
+            "branch": "main",
+            "clean": True,
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = pathlib.Path(temporary)
+            report_path = (
+                evidence / release.SQLITE_STORE_V3_QUALIFICATION_REPORT_FILENAME
+            )
+            report_path.write_text("{}\n", encoding="utf-8")
+            with self.assertRaisesRegex(
+                release.ReleaseQualificationError,
+                "qualification report artifact root differs",
+            ):
+                release.verify_sqlite_store_v3_qualification(
+                    ROOT, manifest, evidence, git
+                )
+
+    def test_sqlite_store_v3_qualification_holds_one_bounded_nofollow_report(
+        self,
+    ) -> None:
+        manifest = release.load(ROOT / release.MANIFEST)
+        git = {
+            "revision": "1" * 40,
+            "tree": "2" * 40,
+            "branch": "main",
+            "clean": True,
+        }
+        report = {
+            "revision": git["revision"],
+            "source_tree": git["tree"],
+            "report_set_digest": "sha256:" + "3" * 64,
+            "report_schema_digest": "sha256:" + "4" * 64,
+            "sqlite_contract_digest": "sha256:" + "5" * 64,
+        }
+        artifact_name = manifest["sqlite_store_v3_qualification"][
+            "report_artifact"
+        ].replace("${revision}", git["revision"])
+        report_name = release.SQLITE_STORE_V3_QUALIFICATION_REPORT_FILENAME
+
+        with self.subTest(case="symlink-artifact-directory-outside-evidence"):
+            with tempfile.TemporaryDirectory() as temporary:
+                temporary_root = pathlib.Path(temporary)
+                evidence = temporary_root / "evidence"
+                outside = temporary_root / "outside"
+                evidence.mkdir()
+                outside.mkdir()
+                (outside / report_name).write_text("{}\n", encoding="utf-8")
+                (evidence / artifact_name).symlink_to(
+                    outside, target_is_directory=True
+                )
+                with self.assertRaisesRegex(
+                    release.ReleaseQualificationError,
+                    "artifact directory is not a no-follow directory",
+                ):
+                    release.verify_sqlite_store_v3_qualification(
+                        ROOT, manifest, evidence, git
+                    )
+
+        with self.subTest(case="symlink-report-outside-evidence"):
+            with tempfile.TemporaryDirectory() as temporary:
+                temporary_root = pathlib.Path(temporary)
+                evidence = temporary_root / "evidence"
+                artifact_root = evidence / artifact_name
+                outside = temporary_root / "outside.json"
+                artifact_root.mkdir(parents=True)
+                outside.write_text("{}\n", encoding="utf-8")
+                (artifact_root / report_name).symlink_to(outside)
+                with self.assertRaisesRegex(
+                    release.ReleaseQualificationError,
+                    "report is not a no-follow regular file",
+                ):
+                    release.verify_sqlite_store_v3_qualification(
+                        ROOT, manifest, evidence, git
+                    )
+
+        with self.subTest(case="nonregular-report"):
+            with tempfile.TemporaryDirectory() as temporary:
+                evidence = pathlib.Path(temporary)
+                report_path = evidence / artifact_name / report_name
+                report_path.mkdir(parents=True)
+                with self.assertRaisesRegex(
+                    release.ReleaseQualificationError,
+                    "report is not a no-follow regular file",
+                ):
+                    release.verify_sqlite_store_v3_qualification(
+                        ROOT, manifest, evidence, git
+                    )
+
+        with self.subTest(case="duplicate-report"):
+            with tempfile.TemporaryDirectory() as temporary:
+                evidence = pathlib.Path(temporary)
+                report_path = evidence / artifact_name / report_name
+                report_path.parent.mkdir()
+                report_path.write_text("{}\n", encoding="utf-8")
+                duplicate = evidence / "duplicate" / report_name
+                duplicate.parent.mkdir()
+                duplicate.write_text("{}\n", encoding="utf-8")
+                with self.assertRaisesRegex(
+                    release.ReleaseQualificationError,
+                    f"expected exactly one {report_name}, found 2",
+                ):
+                    release.verify_sqlite_store_v3_qualification(
+                        ROOT, manifest, evidence, git
+                    )
+
+        with self.subTest(case="bounded-read"):
+            with tempfile.TemporaryDirectory() as temporary:
+                evidence = pathlib.Path(temporary)
+                report_path = evidence / artifact_name / report_name
+                report_path.parent.mkdir()
+                with report_path.open("wb") as stream:
+                    stream.truncate(
+                        release.SQLITE_STORE_V3_QUALIFICATION_REPORT_MAX_BYTES + 1
+                    )
+                with self.assertRaisesRegex(
+                    release.ReleaseQualificationError,
+                    "exceeds the bounded byte limit",
+                ):
+                    release.verify_sqlite_store_v3_qualification(
+                        ROOT, manifest, evidence, git
+                    )
+
+        with self.subTest(case="replace-between-parse-and-digest"):
+            with tempfile.TemporaryDirectory() as temporary:
+                evidence = pathlib.Path(temporary)
+                report_path = evidence / artifact_name / report_name
+                report_path.parent.mkdir()
+                report_path.write_text(
+                    json.dumps(report, sort_keys=True) + "\n", encoding="utf-8"
+                )
+
+                def replace_report(*_args, **_kwargs) -> None:
+                    replacement = report_path.with_name("replacement.json")
+                    replacement.write_text("{}\n", encoding="utf-8")
+                    os.replace(replacement, report_path)
+
+                with mock.patch.object(
+                    release.sqlite_qualification,
+                    "validate_report",
+                    side_effect=replace_report,
+                ), self.assertRaisesRegex(
+                    release.ReleaseQualificationError,
+                    "path changed",
+                ):
+                    release.verify_sqlite_store_v3_qualification(
+                        ROOT, manifest, evidence, git
+                    )
 
     def make_materialization_matrix(
         self, evidence: pathlib.Path
@@ -834,6 +1080,9 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     "DF-0195",
                     "DF-0196",
                     "DF-0197",
+                    "DF-0198",
+                    "DF-0199",
+                    "DF-0200",
                 ],
             },
         )
@@ -866,7 +1115,8 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 ), self.assertRaisesRegex(
                     release.ReleaseQualificationError,
                     "neither the exact "
-                    "#181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/DF-0197 "
+                    "#181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/"
+                    "DF-0197/DF-0198/DF-0199/DF-0200 "
                     "tracked gap",
                 ):
                     release.materialization_assignment_transition(ROOT)
@@ -891,6 +1141,9 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     "DF-0195",
                     "DF-0196",
                     "DF-0197",
+                    "DF-0198",
+                    "DF-0199",
+                    "DF-0200",
                 ],
             },
         }
@@ -1873,6 +2126,9 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     "DF-0195",
                     "DF-0196",
                     "DF-0197",
+                    "DF-0198",
+                    "DF-0199",
+                    "DF-0200",
                 ],
             }
             with mock.patch.object(
@@ -2007,6 +2263,12 @@ class NgReleaseQualificationTests(unittest.TestCase):
                         {"report_set_digest": "sha256:" + "a" * 64}
                     ),
                 ),
+                (
+                    "sqlite-qualification-report-digest",
+                    lambda value: value["evidence"][
+                        "sqlite_store_v3_qualification"
+                    ].update({"report_digest": "sha256:" + "b" * 64}),
+                ),
             )
             evaluation_schema = release.load(ROOT / release.EVALUATION_REPORT_SCHEMA)
             for label, mutate in schema_valid_mutations:
@@ -2060,13 +2322,24 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 "git": git,
                 "qualification": "qualified",
                 "qualified": True,
+                "evidence": {
+                    "sqlite_store_v3_qualification": {
+                        "revision": git["revision"],
+                        "source_tree": git["tree"],
+                        "report_digest": "sha256:" + "3" * 64,
+                        "report_set_digest": "sha256:" + "4" * 64,
+                        "report_schema_digest": "sha256:" + "5" * 64,
+                        "sqlite_contract_digest": "sha256:" + "6" * 64,
+                    }
+                },
             }
             gr = {
                 "git": git,
                 "prerequisites": {
-                    "release_evaluation_report_digest": release.digest(
-                        evaluation_path
-                    )
+                    "release_evaluation_report_digest": release.digest(evaluation_path),
+                    "sqlite_store_v3_qualification": evaluation["evidence"][
+                        "sqlite_store_v3_qualification"
+                    ],
                 },
             }
 
@@ -2092,6 +2365,21 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 with self.assertRaisesRegex(
                     release.ReleaseQualificationError,
                     "artifact digest differs",
+                ):
+                    release.verify_gr_evaluation_artifact_binding(
+                        ROOT, evaluation_path, gr_path
+                    )
+
+                gr["prerequisites"]["release_evaluation_report_digest"] = (
+                    release.digest(evaluation_path)
+                )
+                gr["prerequisites"]["sqlite_store_v3_qualification"] = {
+                    **evaluation["evidence"]["sqlite_store_v3_qualification"],
+                    "report_digest": "sha256:" + "0" * 64,
+                }
+                with self.assertRaisesRegex(
+                    release.ReleaseQualificationError,
+                    "SQLite qualification report binding differs",
                 ):
                     release.verify_gr_evaluation_artifact_binding(
                         ROOT, evaluation_path, gr_path
@@ -2143,6 +2431,10 @@ class NgReleaseQualificationTests(unittest.TestCase):
             self.assertEqual(
                 report["prerequisites"]["release_evaluation_report_digest"],
                 release.digest(evaluation_path),
+            )
+            self.assertEqual(
+                report["prerequisites"]["sqlite_store_v3_qualification"],
+                evidence["sqlite_store_v3_qualification"]["binding"],
             )
 
     def test_strict_report_rejects_scope_gaps_before_tuple_derivation(self) -> None:

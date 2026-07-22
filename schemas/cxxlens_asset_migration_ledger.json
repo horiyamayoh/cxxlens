@@ -1,5 +1,5 @@
 {
-  "asset_count": 477,
+  "asset_count": 510,
   "assets": [
     {
       "authority": "active",
@@ -179,6 +179,20 @@
     {
       "authority": "active",
       "path": "cmake/CxxlensWarnings.cmake",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "cmake/GenerateClang22OccurrenceManifest.cmake.in",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "cmake/VerifyClang22SourceProvenance.cmake",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -1305,6 +1319,27 @@
     },
     {
       "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0198-materialization-head-observation-failure.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0199-materialization-base64-spelling-authority.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "docs/development/implementation-learning/records/df-0200-materialization-claim-store-residency.md",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "docs/doxygen-main.md",
       "removal_issue": null,
       "replacement": null,
@@ -2341,6 +2376,20 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/materialization_execution_journal.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_execution_journal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/materialization_identity.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -2383,6 +2432,48 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/materialization_occurrence.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_occurrence.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_pipeline.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_pipeline.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_report.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_report.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/materialization_request.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -2391,6 +2482,62 @@
     {
       "authority": "active",
       "path": "src/llvm/clang22/materialization_request.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_request_identity.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_request_identity.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_request_stream.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_request_stream.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_request_v2_1.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_request_v2_1.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_rooted_vfs.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_rooted_vfs.hpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2411,6 +2558,13 @@
     },
     {
       "authority": "active",
+      "path": "src/llvm/clang22/materialization_sqlite_abi.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/llvm/clang22/materialization_store.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -2419,6 +2573,20 @@
     {
       "authority": "active",
       "path": "src/llvm/clang22/materialization_store.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_task_spool.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "src/llvm/clang22/materialization_task_spool.hpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2621,6 +2789,13 @@
     },
     {
       "authority": "active",
+      "path": "src/sdk/store_backend_lifetime_internal.hpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "src/sdk/store_identity_internal.hpp",
       "removal_issue": null,
       "replacement": null,
@@ -2670,6 +2845,27 @@
     },
     {
       "authority": "active",
+      "path": "tests/adapter/clang22/materialization_occurrence_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/materialization_report_schema_test.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/materialization_report_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/adapter/clang22/materialization_request_driver.cpp",
       "removal_issue": null,
       "replacement": null,
@@ -2677,7 +2873,35 @@
     },
     {
       "authority": "active",
+      "path": "tests/adapter/clang22/materialization_request_identity_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/materialization_request_stream_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
       "path": "tests/adapter/clang22/materialization_request_test.py",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/materialization_request_v2_1_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/materialization_rooted_vfs_test.cpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -2692,6 +2916,13 @@
     {
       "authority": "active",
       "path": "tests/adapter/clang22/materialization_store_test.cpp",
+      "removal_issue": null,
+      "replacement": null,
+      "status": "active"
+    },
+    {
+      "authority": "active",
+      "path": "tests/adapter/clang22/materialization_task_spool_test.cpp",
       "removal_issue": null,
       "replacement": null,
       "status": "active"
@@ -3342,7 +3573,7 @@
     }
   ],
   "classifications": {
-    "active": 441,
+    "active": 474,
     "archived": 35,
     "generated": 1
   },

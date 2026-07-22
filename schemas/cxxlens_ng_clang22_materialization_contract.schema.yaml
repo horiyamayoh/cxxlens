@@ -36,15 +36,17 @@ properties:
   authority:
     type: object
     additionalProperties: false
-    required: [design, decision_adr, owner_issue, owner]
+    required: [design, decision_adr, sqlite_decision_adr, sqlite_decision_issue, owner_issue, owner]
     properties:
       design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
       decision_adr: {const: docs/design/adr/0096-clang22-installed-materialization-boundary.md}
+      sqlite_decision_adr: {const: docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md}
+      sqlite_decision_issue: {const: '#200'}
       owner_issue: {const: '#181'}
       owner: {const: steward.ng-clang22-provider}
   dependencies:
     type: array
-    minItems: 6
+    minItems: 7
     uniqueItems: true
     items: {$ref: '#/$defs/text'}
   dependency_policy:
@@ -57,7 +59,7 @@ properties:
     type: object
     minProperties: 1
     additionalProperties: true
-    required: [json_lexical_policy, json_lexical_errors, resource_limits]
+    required: [json_lexical_policy, json_lexical_errors, private_spool, resource_limits]
     properties:
       json_lexical_policy:
         const:
@@ -71,11 +73,66 @@ properties:
         const:
           request: materialization.request-invalid
           report: materialization.report-invalid
+      private_spool:
+        const:
+          platform: linux-only
+          creation_operation: memfd_create
+          creation_flags: [MFD_CLOEXEC, MFD_ALLOW_SEALING]
+          backing: private-memfd-only
+          pathname-or-mkstemp-fallback: forbidden
+          seal_addition_operation: F_ADD_SEALS
+          seal_required_bits: [F_SEAL_WRITE, F_SEAL_GROW, F_SEAL_SHRINK, F_SEAL_SEAL]
+          seal_verification_operation: F_GET_SEALS
+          actual_size_verification: fstat-equals-successful-append-census-after-kernel-seal
+          sealed_content_verification: sealed-byte-sha256-equals-successful-append-transcript-sha256
+          logical_sealed_publication: after-required-bits-actual-size-and-sealed-content-verified
+          capability_gate: first-raw-spool-create-add-get-and-required-bit-observation-before-effects
+          capability_unavailable: typed-failure-before-worker-store-or-file-effects
+          later-create-or-seal-failure: phase-authentic-typed-failure-without-mutable-downgrade
+          pre_seal_mutation: content-grow-or-shrink-drift-typed-failure-before-effects
+          post_seal_mutation: write-grow-shrink-and-further-seal-addition-forbidden
       resource_limits:
         type: object
-        required: [report_construction, allocation_failure]
+        required:
+          - maximum_task_sandbox_requirements
+          - maximum_json_members_per_object
+          - maximum_request_schema_capture_utf8_bytes
+          - maximum_request_version_capture_utf8_bytes
+          - semantic_replay
+          - admission_failure
+          - report_construction
+          - allocation_failure
         additionalProperties: true
         properties:
+          maximum_task_sandbox_requirements: {const: 4096}
+          maximum_json_members_per_object: {const: 4096}
+          maximum_request_schema_capture_utf8_bytes: {const: 43}
+          maximum_request_version_capture_utf8_bytes: {const: 6}
+          semantic_replay:
+            const:
+              token_replay: decoded-utf8-minimal-json-escape-canonical-integer-no-insignificant-whitespace
+              raw_spelling_bound: excluded
+              schema_walk: closed-required-local-ref-allof-intersection-oneof-maximum
+              global_substitution: tasks-empty-array
+              task_metadata_substitution: source-content-base64-empty-string
+              window_bytes: 67108864
+              global_selected_schema_maximum_bytes: 10420985
+              global_margin_bytes: 56687879
+              task_metadata_selected_schema_maximum_bytes: 8463179
+              task_metadata_margin_bytes: 58645685
+              request_schema_canonical_digest: sha256:241fc96ae3a249e5a8851baa95e585460ad29378cb20d11cfcda33a69eaa9270
+              derivation_digest: sha256:ff9baf9982f909d8a4f51c46f53637af6980a7d06728dfa65794ffc1eebf816d
+          admission_failure:
+            const:
+              phase_authentic_spool_failure:
+                lexical_raw_and_task_index: json-decode
+                selected_schema_global_task_source_and_uniqueness: request-schema
+                derived_identity_source_task_input_and_execution_uniqueness: request-binding
+              internal_no_response:
+                code_visibility: source-private-not-a-stable-report-error
+                causes: [phase-opaque-allocation-failure, proved-bound-invariant-breach, compact-response-unsafe]
+                process_outcome: exit-two-zero-stdout
+              forbidden_admission_codes: [materialization.io-failure, materialization.resource-limit, materialization.internal-failure]
           report_construction:
             type: object
             additionalProperties: false
@@ -237,6 +294,15 @@ properties:
         authority: decoded-source-bytes
         offsets: zero-and-byte-after-each-lf-including-eof
         identity: canonical-line-index-domain-identity-over-contract-content-size-and-offsets
+      base64:
+        encoding: rfc4648-standard-alphabet-with-required-padding
+        canonicality: zero-discarded-padding-bits
+        raw_json_token_escape_spelling: non-authoritative-after-strict-string-decode
+        decoded_string: exactly-one-canonical-spelling-per-decoded-byte-sequence
+        request_schema_rejection: before-derived-identity-and-binding
+        source_authority: decoded-bytes-count-content-digest-and-line-index
+        task_v3_projection: unique-canonical-base64-derived-from-sealed-source-bytes
+        validation: decode-reencode-and-exact-compare
       validation: recompute-before-source-file-and-task-adoption
   group_topology: {$ref: '#/$defs/nonempty_object'}
   project_and_tasks:
@@ -315,6 +381,12 @@ properties:
         payload_authority: installed-tool-derived-only
         task_input_digest: sha256-content-digest-of-exact-projection-bytes
         old_codec_or_caller_payload: reject
+        source_content_base64:
+          input: canonical-rfc4648-decoded-json-string
+          projection: unique-canonical-spelling-derived-from-sealed-source-bytes
+          raw_json_escape_affects_task_identity: false
+          nonzero_discarded_padding_bits: reject-before-task-input-digest
+          cross_binding: decoded-bytes-size-content-digest-line-index-and-request-string
         logical_transfer:
           authority: exact-canonical-task-v3-bytes-and-task-input-digest
           fragmentation_changes-logical-identity: false
@@ -332,7 +404,7 @@ properties:
         maximum_projection_proof:
           authority: checker-derived-from-every-projected-request-field-count-and-utf8-byte-bound
           request_schema: schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
-          derivation_digest: sha256:d74c62f50f3344e86ac4f32d9be9a8305902e28fee2876faac41d783e28a5f61
+          derivation_digest: sha256:009ccd68b46c1a2665af45034056f9ee29f56e209028e565d0f5eda1c21f5b54
           arithmetic: checked-uint64-add-and-multiply
           canonical_length_field_bytes: 8
           component_maximum_bytes:
@@ -369,8 +441,9 @@ properties:
   span_adoption: {$ref: '#/$defs/nonempty_object'}
   claim_adoption:
     type: object
-    required: [guarantee]
+    required: [guarantee, df_0200_resolution]
     properties:
+      df_0200_resolution: {$ref: '#/$defs/df_0200_resolution'}
       guarantee:
         const:
           profile:
@@ -390,8 +463,40 @@ properties:
   publication: {$ref: '#/$defs/nonempty_object'}
   report:
     type: object
-    required: [digest_chain]
+    required: [response_union, digest_chain]
     properties:
+      response_union:
+        type: object
+        additionalProperties: true
+        required: [compact_failure]
+        properties:
+          compact_failure:
+            type: object
+            additionalProperties: true
+            required: [store_draft_state_authority, head_observation_states, prepublication_store_failure_cause]
+            properties:
+              store_draft_state_authority:
+                const:
+                  authority: invocation-logical-unpublished-snapshot-draft-lifecycle-not-sdk-writer-existence
+                  not_created: no-successful-store-open-adoption
+                  discarded: successful-store-open-adoption-released-before-compact-authority
+                  writer_begin_receipt_inference: forbidden
+              head_observation_states:
+                const: [not-observed, absent, present, sdk-error]
+              prepublication_store_failure_cause:
+                type: object
+                additionalProperties: true
+                required: [access_path_by_operation, head_current_observation]
+                properties:
+                  access_path_by_operation:
+                    const:
+                      head_current: current-selector
+                      all_other_operations: null
+                  head_current_observation:
+                    const:
+                      store.current-not-found: absent
+                      every_other_sdk_error: sdk-error
+                      observed_head_publication: null
       digest_chain:
         const:
           leaf_authority: shared-validator-sealed-decoded-rows-chunks-provenance-and-typed-side-channels
@@ -538,3 +643,840 @@ $defs:
     type: object
     minProperties: 1
     additionalProperties: true
+  df_0200_resolution:
+    const:
+      status: accepted-authority-implementation-pending
+      resolution_id: cxxlens.df-0200.incremental-claim-store.v1
+      implementation_disposition: pending-implementation-and-qualification
+      d1_claim_batch_oracle:
+        public_reference: sdk-claim-batch-commit
+        public_reference_control_flow: independent-bounded-resident-reference-during-qualification
+        production_path: source-private-incremental-external-validator
+        shared_implementation_allowlist:
+        - canonical-codecs
+        - identity-functions
+        - field-validators
+        shared_commit_control_flow_or_verdict_logic: forbidden
+        literal_all_claims_vector_call: required-for-bounded-qualification-only
+        exact_equivalence:
+        - accepted-final-occurrence-multiset
+        - canonical-order
+        - exact-duplicate-deduplication
+        - metadata-distinct-same-content-preservation
+        - hard-and-soft-reference-verdicts
+        - functional-conflicts
+        - differential-disagreements
+        - unresolved-conflict-and-differential-censuses
+        - cxxlens-claim-batch-v2-canonical-encoding-and-content-digest
+        digest_only_equality_or_order: forbidden
+        qualification_corpus:
+          id: cxxlens.df-0200.claim-batch-differential-corpus.v1
+          freeze_point: pre-refactor-canonical-bytes-and-verdicts
+          artifact:
+            path: schemas/cxxlens_ng_df_0200_claim_batch_differential_corpus.tsv
+            schema: schemas/cxxlens_ng_df_0200_claim_batch_differential_corpus.schema.yaml
+            schema_id: https://cxxlens.dev/schema/ng/df-0200-claim-batch-differential-corpus.schema.yaml
+            format: cxxlens.df-0200.claim-batch-differential-corpus.tsv.v1
+            artifact_version: 1.0.0
+            raw_sha256: sha256:f05513d05b0b57788b6f94d9c1a477c88d589b64dd8232d88a5c6c6022a84836
+          current_public_reference:
+            driver: tests/adapter/clang22/df_0200_claim_batch_corpus_test.cpp
+            cmake_target: cxxlens-df0200-claim-batch-corpus
+            ctest: qualification.df0200-claim-batch-corpus
+            operation: cxxlens::sdk::claim_batch::commit
+            mode: execute-all-frozen-cases-and-compare-exact-artifact-bytes
+            generator:
+              visibility: source-private
+              option: --emit
+              artifact_update_gate: independent-review-and-new-frozen-digest
+          census:
+            case_count: 10
+            success_count: 9
+            error_count: 1
+            added_claim_count: 17
+            existing_claim_count: 16
+            projection_byte_count: 88607
+            projection_digest: semantic-v2:sha256:741e9c5d7682f11a574b5218de1b48b009907782441bc3c9ac1488f264d42ba3
+            projection_fields:
+            - case-id
+            - full-added-and-existing-input-encoding
+            - exact-success-or-error-tuple-encoding
+            - full-semantic-verdict-encoding
+          artifact_case_ids:
+          - hard-missing
+          - soft-unresolved-exact-duplicate
+          - metadata-distinct-occurrences
+          - one-shot-conflict-forward
+          - one-shot-conflict-reverse
+          - split-new-existing-conflict
+          - existing-existing-non-reclassification
+          - new-existing-same-payload
+          - new-existing-disjoint
+          - new-existing-cross-domain-differential
+          compare_against:
+          - frozen-pre-refactor-corpus
+          - current-public-sdk-claim-batch-commit
+          cases:
+          - added-versus-existing-claim-classification
+          - new-to-existing-hard-and-soft-references
+          - new-to-existing-functional-conflicts-and-differentials
+          - existing-to-existing-non-reclassification
+          - one-shot-versus-split-batch-parity
+          - canonical-input-permutations
+          - exact-duplicate-deduplication
+          - metadata-distinct-same-content-preservation
+          - hard-and-soft-reference-verdicts
+          - functional-conflict-and-differential-verdicts
+          expected_projection:
+          - full-added-and-existing-canonical-input-bytes
+          - full-canonical-claim-batch-v2-bytes
+          - exact-success-or-structured-error-tuple
+          - accepted-added-and-existing-occurrence-sets
+          - reference-conflict-and-differential-verdicts
+          - unresolved-conflict-and-differential-censuses
+          production_path_comparison: required-as-accepted-activation-step-before-production
+          corpus_regeneration: forbidden-without-independent-review-and-new-frozen-digest
+        bounded_differential_oracle: frozen-corpus-plus-independent-current-public-api-required-before-production
+        qualified_zero_side_channel_result: replay-receipt-instead-of-resident-full-claim-batch-result
+      d2_move_only_lifecycle:
+        operations:
+        - begin
+        - consume-task-rvalue
+        - finalize-rvalue
+        task_order: exact-canonical-next-task-only
+        live_sealed_results: at-most-one
+        consume_effect: validate-spool-and-destroy-before-return
+        aggregate_authority: sealed-source-private-replayable-spools
+        finalize_precondition: exact-task-census
+        final_source: move-only-replayable-bounded-typed-partition-events
+        event_codec: cxxlens.df-0200.partition-event-stream.v1
+        all_task_result_span_or_full_graph: forbidden
+      partition_event_codec:
+        id: cxxlens.df-0200.partition-event-stream.v1
+        scope: full-byte-private-partition-event-stream
+        byte_order: big-endian
+        canonical_scalar_codec: cxxlens-canonical-tuple-v1
+        canonical_tuple_profile:
+          kind_tags:
+            'null': 0
+            boolean: 1
+            signed-integer: 2
+            bytes: 3
+            utf8-string: 4
+            ordered-tuple: 5
+          length_encoding: u64be
+          signed_integer_encoding: sign-u8-then-minimal-magnitude-length-u64be-and-big-endian-magnitude
+          utf8: strict-no-repair
+          decode_rule: consume-one-complete-value-reencode-byte-identical-no-trailing-bytes
+        field_catalog:
+          utf8-string-exactly-one:
+          - task-id
+          - partition-id
+          - relation-descriptor-id
+          - scope
+          - condition
+          - interpretation
+          - producer-semantics
+          - input-basis-digest
+          - precision-profile
+          - assumption-set-id
+          - canonical-row-identity
+          - claim-content-digest
+          - coverage-identity
+          - unresolved-identity
+          - event-digest
+          - claim-digest
+          - row-digest
+          - coverage-digest
+          - unresolved-digest
+          - partition-content-digest
+          canonical-bytes-exactly-one:
+          - claim-canonical-order-key
+          - occurrence-canonical-order-key
+          - claim-content-canonical-bytes
+          - occurrence-metadata-canonical-bytes
+          - canonical-row-bytes
+          - annotation-order-key
+          - canonical-annotation-bytes
+          - canonical-coverage-bytes
+          - canonical-typed-unresolved-bytes
+          u64be-as-canonical-bytes-exactly-one:
+          - event-count
+          - claim-count
+          - row-count
+          - coverage-count
+          - unresolved-count
+          ordered-unique-canonical-bytes-tuple-exactly-one:
+          - hard-reference-targets
+          - soft-reference-targets
+          - functional-conflict-keys
+          - differential-keys
+          collection_item_order: ascending-full-canonical-item-bytes
+          collection_duplicate_policy: reject
+          scalar_cardinality: exactly-one-non-null
+          unknown_or_multiply_classified_field: reject
+        stream_header:
+          magic_ascii_8: CXLPEV01
+          codec_version_u16be: 1
+          header_length_u32be: 86
+          stream_sequence_id: sha256-32-raw
+          spool_index: u64be
+          first_event_ordinal: u128be
+          declared_frame_count: u64be
+          declared_body_bytes: u64be
+          authority: self-reported-cross-check-only
+        frame:
+          layout:
+          - event-kind-u8
+          - key-length-u64be
+          - payload-length-u64be
+          - key-bytes
+          - payload-bytes
+          - checksum-sha256-32-raw
+          framed_length: one-plus-eight-plus-eight-plus-key-length-plus-payload-length-plus-thirty-two
+          key_and_payload_encoding: cxxlens-canonical-tuple-v1
+          checksum_domain: cxxlens/df-0200-partition-event-frame/v1
+          checksum_input: domain-length-u64be-domain-utf8-projection-length-u64be-then-kind-lengths-key-and-payload-before-checksum
+        event_projections:
+          partition-begin:
+            kind_code: 1
+            key_fields:
+            - task-id
+            - partition-id
+            payload_fields:
+            - relation-descriptor-id
+            - scope
+            - condition
+            - interpretation
+            - producer-semantics
+            - input-basis-digest
+            - precision-profile
+            - assumption-set-id
+          claim-occurrence:
+            kind_code: 2
+            key_fields:
+            - task-id
+            - partition-id
+            - claim-canonical-order-key
+            - occurrence-canonical-order-key
+            payload_fields:
+            - claim-content-canonical-bytes
+            - occurrence-metadata-canonical-bytes
+            - hard-reference-targets
+            - soft-reference-targets
+            - functional-conflict-keys
+            - differential-keys
+          detached-row:
+            kind_code: 3
+            key_fields:
+            - task-id
+            - partition-id
+            - relation-descriptor-id
+            - canonical-row-identity
+            payload_fields:
+            - canonical-row-bytes
+          claim-annotation:
+            kind_code: 4
+            key_fields:
+            - task-id
+            - partition-id
+            - claim-content-digest
+            - annotation-order-key
+            payload_fields:
+            - canonical-annotation-bytes
+          coverage:
+            kind_code: 5
+            key_fields:
+            - task-id
+            - partition-id
+            - coverage-identity
+            payload_fields:
+            - canonical-coverage-bytes
+          unresolved:
+            kind_code: 6
+            key_fields:
+            - task-id
+            - partition-id
+            - unresolved-identity
+            payload_fields:
+            - canonical-typed-unresolved-bytes
+          partition-end:
+            kind_code: 7
+            key_fields:
+            - task-id
+            - partition-id
+            payload_fields:
+            - event-count
+            - claim-count
+            - row-count
+            - coverage-count
+            - unresolved-count
+            - event-digest
+            - claim-digest
+            - row-digest
+            - coverage-digest
+            - unresolved-digest
+            - partition-content-digest
+        event_container:
+          key: ordered-tuple-of-key-fields-in-listed-order
+          payload: ordered-tuple-of-payload-fields-in-listed-order
+          field_cardinality: every-listed-field-exactly-once-no-other-fields
+          full_event_projection:
+          - event-kind-u8-as-one-canonical-byte-string
+          - exact-key-canonical-bytes-as-canonical-byte-string
+          - exact-payload-canonical-bytes-as-canonical-byte-string
+          list_framing: ordered-tuple-of-full-event-projection-canonical-byte-strings
+          list_deduplication: reject-identical-full-event-projection
+        digest_framing:
+          raw_sha256: domain-length-u64be-domain-utf8-projection-length-u64be-projection-bytes
+          semantic_v2: canonical-tuple-cxxlens-semantic-digest-v2-domain-utf8-projection-bytes
+        digest_domains:
+          stream-sequence-id:
+            domain: cxxlens/df-0200-partition-event-stream-sequence/v1
+            output: sha256-32-raw
+            projection:
+            - materialization-request-id-utf8
+            - spool-index-u64be
+            - first-event-ordinal-u128be
+          frame-checksum:
+            domain: cxxlens/df-0200-partition-event-frame/v1
+            output: sha256-32-raw
+            projection:
+            - event-kind-u8
+            - key-length-u64be
+            - payload-length-u64be
+            - exact-key-bytes
+            - exact-payload-bytes
+          trailer-frames-digest:
+            domain: cxxlens/df-0200-partition-event-frames/v1
+            output: sha256-32-raw
+            projection:
+            - spool-index-u64be
+            - actual-frame-count-u64be
+            - ordered-u64be-length-prefixed-full-frame-bytes
+          trailer-stream-prefix-digest:
+            domain: cxxlens/df-0200-partition-event-stream-prefix/v1
+            output: sha256-32-raw
+            projection:
+            - exact-header-bytes
+            - actual-body-bytes-u64be
+            - ordered-u64be-length-prefixed-full-frame-bytes
+          task-event-digest:
+            domain: cxxlens.df-0200.task-event-full-projection.v1
+            output: semantic-v2-sha256-string
+            projection: [task-id, event-count-u64be-as-canonical-bytes, ordered-full-event-projection-bytes]
+          partition-event-digest:
+            domain: cxxlens.df-0200.partition-event-full-projection.v1
+            output: semantic-v2-sha256-string
+            projection: [partition-id, event-count-u64be-as-canonical-bytes, ordered-full-event-projection-bytes]
+          task-partition-set-digest:
+            domain: cxxlens.df-0200.task-partition-full-projection.v1
+            output: semantic-v2-sha256-string
+            projection: [task-id, partition-count-u64be-as-canonical-bytes, ordered-partition-id-and-full-projection-digest-tuples]
+          global-event-digest:
+            domain: cxxlens.df-0200.global-event-full-projection.v1
+            output: semantic-v2-sha256-string
+            projection: [materialization-request-id, event-count-u64be-as-canonical-bytes, ordered-full-event-projection-bytes]
+          claim-digest:
+            domain: cxxlens.df-0200.claim-occurrence-full-projection.v1
+            output: semantic-v2-sha256-string
+            projection: [partition-id, claim-count-u64be-as-canonical-bytes, ordered-full-claim-occurrence-projection-bytes]
+          task-claim-digest:
+            domain: cxxlens.df-0200.task-claim-occurrence-full-projection.v1
+            output: semantic-v2-sha256-string
+            projection: [task-id, claim-count-u64be-as-canonical-bytes, ordered-full-claim-occurrence-projection-bytes]
+          global-claim-digest:
+            domain: cxxlens.df-0200.global-claim-occurrence-full-projection.v1
+            output: semantic-v2-sha256-string
+            projection: [materialization-request-id, claim-count-u64be-as-canonical-bytes, ordered-full-claim-occurrence-projection-bytes]
+          row-digest:
+            domain: cxxlens.df-0200.detached-row-full-projection.v1
+            output: semantic-v2-sha256-string
+            projection: [partition-id, row-count-u64be-as-canonical-bytes, ordered-full-detached-row-projection-bytes]
+          task-row-digest:
+            domain: cxxlens.df-0200.task-detached-row-full-projection.v1
+            output: semantic-v2-sha256-string
+            projection: [task-id, row-count-u64be-as-canonical-bytes, ordered-full-detached-row-projection-bytes]
+          global-row-digest:
+            domain: cxxlens.df-0200.global-detached-row-full-projection.v1
+            output: semantic-v2-sha256-string
+            projection: [materialization-request-id, row-count-u64be-as-canonical-bytes, ordered-full-detached-row-projection-bytes]
+          coverage-digest:
+            domain: cxxlens.df-0200.coverage-full-projection.v1
+            output: semantic-v2-sha256-string
+            projection: [partition-id, coverage-count-u64be-as-canonical-bytes, ordered-full-coverage-projection-bytes]
+          task-coverage-digest:
+            domain: cxxlens.df-0200.task-coverage-full-projection.v1
+            output: semantic-v2-sha256-string
+            projection: [task-id, coverage-count-u64be-as-canonical-bytes, ordered-full-coverage-projection-bytes]
+          global-coverage-digest:
+            domain: cxxlens.df-0200.global-coverage-full-projection.v1
+            output: semantic-v2-sha256-string
+            projection: [materialization-request-id, coverage-count-u64be-as-canonical-bytes, ordered-full-coverage-projection-bytes]
+          unresolved-digest:
+            domain: cxxlens.df-0200.unresolved-full-projection.v1
+            output: semantic-v2-sha256-string
+            projection: [partition-id, unresolved-count-u64be-as-canonical-bytes, ordered-full-unresolved-projection-bytes]
+          task-unresolved-digest:
+            domain: cxxlens.df-0200.task-unresolved-full-projection.v1
+            output: semantic-v2-sha256-string
+            projection: [task-id, unresolved-count-u64be-as-canonical-bytes, ordered-full-unresolved-projection-bytes]
+          global-unresolved-digest:
+            domain: cxxlens.df-0200.global-unresolved-full-projection.v1
+            output: semantic-v2-sha256-string
+            projection: [materialization-request-id, unresolved-count-u64be-as-canonical-bytes, ordered-full-unresolved-projection-bytes]
+          global-task-set-digest:
+            domain: cxxlens.df-0200.global-task-receipt-full-projection.v1
+            output: semantic-v2-sha256-string
+            projection: [materialization-request-id, task-count-u64be-as-canonical-bytes, canonical-task-order-and-full-receipt-seal-digest-tuples]
+          global-partition-set-digest:
+            domain: cxxlens.df-0200.global-partition-full-projection.v1
+            output: semantic-v2-sha256-string
+            projection: [materialization-request-id, partition-count-u64be-as-canonical-bytes, ordered-task-id-partition-id-and-full-projection-digest-tuples]
+          partition-content-digest:
+            domain: partition-content
+            output: store-canonical-identity-v1-string
+            projection: [partition-id, claim-set-digest, coverage-digest]
+        canonical_order:
+        - validated-request-canonical-task-order
+        - full-partition-id-bytes
+        - partition-begin
+        - claim-occurrence-full-key-bytes
+        - detached-row-full-key-bytes
+        - claim-annotation-full-key-bytes
+        - coverage-full-key-bytes
+        - unresolved-full-key-bytes
+        - partition-end
+        stream_trailer:
+          magic_ascii_8: CXLPEEND
+          trailer_length_bytes: 112
+          layout:
+          - magic-ascii-8
+          - spool-index-u64be
+          - next-event-ordinal-u128be
+          - actual-frame-count-u64be
+          - actual-body-bytes-u64be
+          - frames-sha256-32-raw
+          - stream-prefix-sha256-32-raw
+          authority: self-reported-cross-check-only
+        rejection:
+        - unknown-event-kind
+        - missing-or-duplicate-header-or-trailer
+        - noncanonical-key-or-payload
+        - missing-duplicate-or-interleaved-partition-begin-or-end
+        - task-partition-or-event-reordered
+        - event-ordinal-gap-overlap-or-spool-index-drift
+        - declared-versus-actual-count-or-byte-mismatch
+        - frame-checksum-or-stream-digest-mismatch
+        - truncated-length-key-payload-checksum-or-trailer
+        - trailing-bytes-after-trailer
+        - whole-partition-drop-against-external-authority
+      d3_store_ingestion:
+        bridge: source-private-non-installed-header-without-catalog-entry
+        public_state_machine:
+        - created
+        - staged
+        - validating
+        - committed
+        - rejected
+        - rolled_back
+        source_events:
+        - partition-begin
+        - claim-occurrence
+        - detached-row
+        - claim-annotation
+        - coverage
+        - unresolved
+        - partition-end
+        event_codec: cxxlens.df-0200.partition-event-stream.v1
+        external_completeness_authority:
+          validated_request:
+            authority: selected-schema-validated-request-external-to-event-stream
+            producer: request-schema-and-derived-binding-validator
+            generation_timing: before-provider-dispatch-and-before-event-encoding
+            seal: immutable-selected-request-journal-entry
+            exact_projection:
+            - materialization-request-id
+            - canonical-task-id-order
+            - exact-task-count
+            - per-task-source-digest
+            - per-task-output-and-row-budgets
+            - ordered-selected-request-entry-binding-digests
+            selected_request_entry_binding:
+              domain: cxxlens.df-0200.selected-request-entry-binding.v1
+              cardinality: exactly-one-per-selected-task
+              projection:
+              - materialization-request-id
+              - task-id
+              - canonical-task-ordinal-u64be-as-canonical-bytes
+              - source-digest
+              - output-budget-u64be-as-canonical-bytes
+              - row-budget-u64be-as-canonical-bytes
+              output: semantic-v2-sha256-string
+              global_set:
+                domain: cxxlens.df-0200.selected-request-entry-binding-set.v1
+                projection: [materialization-request-id, exact-task-count, canonical-task-id-order, ordered-selected-request-entry-binding-digests]
+                output: semantic-v2-sha256-string
+              generation_timing: after-request-validation-before-provider-dispatch
+          sealed_execution_journal_and_task_receipts:
+            authority: sealed-execution-evidence-external-to-event-stream
+            producer: runtime-transport-receipt-plus-independent-pre-encoder-oracle
+            generation_timing: after-shared-task-seal-before-event-encoder
+            seal: immutable-before-store-ingress
+            exact_task_projection:
+            - materialization-request-id
+            - task-id
+            - canonical-task-ordinal
+            - successful-seal
+            - provider-stdout-byte-count
+            - provider-stdout-sha256
+            - decoded-provider-frame-count
+            - provider-frame-transcript-digest
+            - provider-sealed-transcript-digest
+            - task-partition-count-and-full-projection-digest
+            - task-event-count-and-digest
+            - task-claim-count-and-digest
+            - task-row-count-and-digest
+            - task-coverage-count-and-digest
+            - task-unresolved-count-and-digest
+            - pre-encoder-task-receipt-seal-digest
+            - selected-request-entry-binding-digest
+            exact_journal_projection:
+            - materialization-request-id
+            - exact-task-count
+            - canonical-task-id-order
+            - ordered-pre-encoder-task-receipt-seal-digests
+            - execution-journal-receipt-set-digest
+          pre_encoder_receipt_oracle:
+            owner: installed-tool-private-independent-receipt-builder
+            input: immutable-sealed-task-result-before-move-or-destruction
+            generation_timing: after-task-result-seal-before-first-event-encoder-call
+            enumeration: exact-event-identity-and-full-canonical-projection-multiset-for-every-partition
+            canonicalization: independent-claim-law-then-sort-by-full-event-key-and-full-projection
+            input_occurrence_law:
+              exact_duplicate_claim_occurrence: collapse-before-event-enumeration
+              metadata_distinct_same_content_occurrence: preserve-as-distinct-event
+              duplicate_final_full_event_projection: reject
+              qualification_binding: cxxlens.df-0200.claim-batch-differential-corpus.v1-raw-sha256-f05513d05b0b57788b6f94d9c1a477c88d589b64dd8232d88a5c6c6022a84836
+            shared_implementation_allowlist: [canonical-codecs, identity-functions, field-validators]
+            shared_event_enumeration_or_aggregation_control_flow: forbidden
+            selected_request_entry_cross_check: exactly-one-entry-whose-task-id-and-canonical-ordinal-equal-this-task-receipt
+            receipt_seal:
+              domain: cxxlens.df-0200.pre-encoder-task-receipt.v1
+              projection:
+              - materialization-request-id
+              - selected-request-entry-binding-digest
+              - task-id
+              - canonical-task-ordinal
+              - successful-seal
+              - provider-stdout-byte-count
+              - provider-stdout-sha256
+              - decoded-provider-frame-count
+              - provider-frame-transcript-digest
+              - provider-sealed-transcript-digest
+              - task-partition-count-and-full-projection-digest
+              - task-event-count-and-digest
+              - task-claim-count-and-digest
+              - task-row-count-and-digest
+              - task-coverage-count-and-digest
+              - task-unresolved-count-and-digest
+              output: semantic-v2-sha256-string
+            execution_journal_receipt_set:
+              domain: cxxlens.df-0200.execution-journal-receipt-set.v1
+              projection:
+              - materialization-request-id
+              - exact-task-count
+              - canonical-task-id-order
+              - ordered-pre-encoder-task-receipt-seal-digests
+              output: semantic-v2-sha256-string
+              seal_timing: after-all-task-receipts-before-store-ingress
+            receipt_field_catalog:
+              materialization-request-id: {type: strict-utf8-string, domain_id: not-applicable-scalar-bound-by-receipt-seal, exact_projection: selected-materialization-request-id}
+              task-id: {type: strict-utf8-string, domain_id: not-applicable-scalar-bound-by-receipt-seal, exact_projection: selected-provider-task-id}
+              canonical-task-ordinal: {type: canonical-bytes-containing-u64be, domain_id: not-applicable-scalar-bound-by-receipt-seal, exact_projection: zero-based-selected-request-canonical-task-order}
+              successful-seal: {type: canonical-boolean-true, domain_id: not-applicable-scalar-bound-by-receipt-seal, exact_projection: shared-validator-produced-immutable-successful-seal}
+              provider-stdout-byte-count: {type: canonical-bytes-containing-u64be, domain_id: not-applicable-scalar-bound-by-receipt-seal, exact_projection: runtime-observed-stdout-bytes-before-decode-or-move}
+              provider-stdout-sha256:
+                type: sha256-string
+                domain_id: sha256-content-digest
+                exact_projection: runtime-observed-exact-stdout-bytes-before-decode-or-move
+                authority_ref: 'schemas/cxxlens_ng_provider_runtime_contract.yaml#runtime_private_receipt.raw_stdout'
+              decoded-provider-frame-count: {type: canonical-bytes-containing-u64be, domain_id: not-applicable-scalar-bound-by-receipt-seal, exact_projection: exact-shared-validator-decoded-frame-census}
+              provider-frame-transcript-digest:
+                type: semantic-v2-sha256-string
+                domain_id: cxxlens.provider-frame-transcript.v2
+                exact_projection: explicit-frame-count-and-decoded-wire-order-full-eight-field-frame-projections
+                authority_ref: 'schemas/cxxlens_ng_provider_runtime_contract.yaml#runtime_private_receipt.frame_transcript'
+              provider-sealed-transcript-digest:
+                type: semantic-v2-sha256-string
+                domain_id: cxxlens.provider-sealed-transcript.v1
+                exact_projection: task-terminal-batches-full-coverage-unresolved-and-evidence-projections-in-provider-authority-order
+                authority_ref: 'schemas/cxxlens_ng_provider_runtime_contract.yaml#runtime_private_receipt.sealed_transcript'
+              task-partition-count-and-full-projection-digest:
+                type: canonical-tuple-u64be-count-and-semantic-v2-sha256-string
+                domain_id: cxxlens.df-0200.task-partition-full-projection.v1
+                exact_projection: task-id-partition-count-and-ordered-partition-id-plus-partition-event-full-projection-digest-tuples
+              task-event-count-and-digest:
+                type: canonical-tuple-u64be-count-and-semantic-v2-sha256-string
+                domain_id: cxxlens.df-0200.task-event-full-projection.v1
+                exact_projection: task-id-event-count-and-ordered-full-event-projection-bytes
+              task-claim-count-and-digest:
+                type: canonical-tuple-u64be-count-and-semantic-v2-sha256-string
+                domain_id: cxxlens.df-0200.task-claim-occurrence-full-projection.v1
+                exact_projection: task-id-claim-count-and-ordered-full-claim-occurrence-projection-bytes
+              task-row-count-and-digest:
+                type: canonical-tuple-u64be-count-and-semantic-v2-sha256-string
+                domain_id: cxxlens.df-0200.task-detached-row-full-projection.v1
+                exact_projection: task-id-row-count-and-ordered-full-detached-row-projection-bytes
+              task-coverage-count-and-digest:
+                type: canonical-tuple-u64be-count-and-semantic-v2-sha256-string
+                domain_id: cxxlens.df-0200.task-coverage-full-projection.v1
+                exact_projection: task-id-coverage-count-and-ordered-full-coverage-projection-bytes
+              task-unresolved-count-and-digest:
+                type: canonical-tuple-u64be-count-and-semantic-v2-sha256-string
+                domain_id: cxxlens.df-0200.task-unresolved-full-projection.v1
+                exact_projection: task-id-unresolved-count-and-ordered-full-unresolved-projection-bytes
+              pre-encoder-task-receipt-seal-digest: {type: semantic-v2-sha256-string, domain_id: cxxlens.df-0200.pre-encoder-task-receipt.v1, exact_projection: receipt-seal-projection-in-listed-order}
+              selected-request-entry-binding-digest:
+                type: semantic-v2-sha256-string
+                domain_id: cxxlens.df-0200.selected-request-entry-binding.v1
+                exact_projection: request-id-task-id-canonical-ordinal-source-digest-and-output-row-budgets-before-provider-dispatch
+              execution-journal-receipt-set-digest: {type: semantic-v2-sha256-string, domain_id: cxxlens.df-0200.execution-journal-receipt-set.v1, exact_projection: execution-journal-receipt-set-projection-in-listed-order}
+              exact-task-count: {type: canonical-bytes-containing-u64be, domain_id: not-applicable-scalar-bound-by-journal-seal, exact_projection: selected-request-exact-task-count}
+              canonical-task-id-order: {type: ordered-unique-strict-utf8-string-tuple, domain_id: not-applicable-scalar-bound-by-journal-seal, exact_projection: selected-request-canonical-task-id-order}
+              ordered-pre-encoder-task-receipt-seal-digests: {type: ordered-unique-semantic-v2-sha256-string-tuple, domain_id: cxxlens.df-0200.pre-encoder-task-receipt.v1, exact_projection: canonical-task-order-exact-task-receipt-seal-digests}
+            unknown_or_additional_receipt_field: reject
+            cycle_prohibition:
+              task_receipt_may_bind: selected-request-entry-binding-digest-only
+              task_receipt_must_not_bind: execution-journal-receipt-set-digest
+              execution_journal_may_bind: ordered-finalized-task-receipt-seal-digests
+              bidirectional-or-self-reference: reject-authority-before-implementation
+          task_result_lifetime: destroy-only-after-pre-encoder-receipt-seal-and-event-stream-seal
+          stream_header_and_trailer: non-authoritative-cross-check-only
+          required_global_censuses_and_digests:
+          - task
+          - partition
+          - event
+          - claim
+          - row
+          - coverage
+          - unresolved
+          required_manifests:
+          - segment-manifest
+          - run-manifest
+          - merge-manifest
+          required_receipts:
+          - byte-receipt
+          - record-receipt
+          - seal-receipt
+          store_comparison:
+            raw_provider_transport: exact-stdout-byte-count-sha256-decoded-frame-count-and-frame-transcript-digest-against-runtime-receipt
+            event_projection: exact-partition-and-event-count-plus-full-projection-digests-from-pre-encoder-receipt-against-independent-stream-replay
+            receipt_seal: recompute-task-receipt-seal-and-exact-match-immutable-execution-journal-receipt-set-digest
+            global: recompute-dedicated-task-partition-global-domains-and-exact-match-external-censuses
+          comparison: exact-equality-against-external-request-journal-and-task-receipts-before-store-candidate
+          whole_partition_drop: reject-even-if-stream-header-trailer-and-internal-digests-self-consistent
+          correlated_omission_rejection:
+            stream_and_stream_owned_end_or_trailer_edited_together: reject-against-fixed-pre-encoder-receipt-full-projection-digest
+            stream_and_receipt_edited_together: reject-fixed-selected-request-entry-binding-or-immutable-execution-journal-receipt-set-digest-mismatch
+        independent_validation:
+          materializer_receipt_is_authority: false
+          stream_header_or_trailer_is_completeness_authority: false
+          required_recomputation:
+          - relation-engine-and-schema
+          - canonical-claim-and-row-identity
+          - exact-eight-field-partition-grouping
+          - occurrence-content-coverage-and-unresolved-censuses-and-digests
+          - hard-and-soft-references-and-closure
+          - full-byte-event-codec-framing-order-checksum-and-seal
+          - external-request-journal-task-and-global-census-digest-closure
+          - segment-run-merge-manifests-and-byte-record-seal-receipts
+          - manifest-snapshot-and-publication-identity
+          - canonical-v5-encode-decode-byte-identity
+        private_ingress_collection_overflow:
+          trigger: any-canonical-v5-collection-count-greater-than-u64-max
+          operation: partition_stage
+          code: store.counter-overflow
+          field: materialization-v5-collection-count
+          detail: ''
+          mapping: store-stage-materialization.store-failure-draft-discarded
+        transaction: one-unpublished-candidate-one-publish-attempt-no-partial-publication
+        memory_backend: exactly-one-canonical-backend-owned-payload-transferred-without-full-copy
+        sqlite_prepublication: sealed-canonical-v5-payload-spool-and-independent-validation
+        sqlite_predecessor_v2_capacity: single-payload-blob-runtime-max-length-1000000000-insufficient-for-required-limit-adjacent-parity
+        sqlite_current_physical_format: cxxlens.sqlite-semantic-store.v3-3.0.0-bounded-8388608-byte-chunks
+        sqlite_publish_and_reopen_qualification: required-current-v3-plus-v2-read-migration-and-limit-exceeding-parity
+        sqlite_capacity_decision_status: accepted
+        payload_and_format: logical-canonical-v5-unchanged-except-authorized-physical-generation-current-sqlite-v3
+      d4_memory_accounting:
+        metrics:
+        - peak-transient-owned-bytes
+        - memory-backend-final-payload-bytes
+        - sealed-spool-logical-bytes
+        - sqlite-persisted-payload-bytes
+        - operating-system-peak-rss
+        transient_formula: shared-catalog-plus-fixed-buffers-plus-compact-task-index-window-plus-maximum-of-task-source-output-claim-consume-claim-finalize-store-reopen-or-report-window
+        final_payload_exclusion: exactly-one-immutable-memory-payload-transferred-unchanged-on-success-only
+        spool_and_persisted_storage: measured-separately-never-hidden-as-zero-residency
+        sort_arena_bytes: 8388608
+        record_compare_bytes: 65536
+        record_compare_cursors: exactly-two-cursors-thirty-two-kib-each
+        merge_fan_in: 16
+        maximum_merge_file_descriptors: 18
+        merge_file_descriptor_census: sixteen-inputs-plus-one-output-plus-one-metadata
+        arithmetic: checked-unsigned-128-before-u64-or-signed-offset-narrowing
+        framed_record:
+          layout:
+          - event-kind-u8
+          - key-length-u64be
+          - payload-length-u64be
+          - key-bytes
+          - payload-bytes
+          - checksum-sha256-32-raw
+          logical_bytes_include: kind-lengths-key-payload-and-checksum
+          cross_segment_or_spool: forbidden
+          preappend_check: u128-framed-length-segment-spool-and-aggregate-before-any-io
+        maximum_spool_logical_bytes: 18446744073709551615
+        maximum_spool_segment_bytes: 9223372036854775807
+        maximum_spool_segments_per_spool: 3
+        maximum_record_bytes: 9223372036854775807
+        maximum_record_count: 18446744073709551615
+        segment_offsets:
+          interval: half-open-zero-to-segment-length
+          data_position: lowest-exact-segment-index-and-offset-within-interval
+          nonfinal_end: next-segment-index-zero
+          final_eof: segment-index-equals-segment-count-and-offset-zero
+          empty_nonfinal_segment: forbidden
+        rollover: segment-first-then-next-spool-at-record-boundary-with-no-record-split
+        aggregate_census: checked-u128-across-all-spools-runs-and-merges
+        oversize_sort_record: framed-record-over-eight-mib-is-one-streamed-singleton-run
+        full_byte_comparison: two-cursors-total-sixty-four-kib-never-digest-order
+        u128_overflow_tests: checked-operand-overflow-without-constructing-u128-max-plus-one
+        semantic_version_component_maximum: 4294967295
+        canonical_v5_collection_count:
+          encoding: u64be
+          maximum: 18446744073709551615
+          aggregate_before_narrowing: checked-u128
+        legacy_decoder_collection_caps:
+          one_million:
+          - descriptor-and-string-vectors
+          - manifest-partitions-and-closures
+          - row-and-annotation-relation-groups
+          - unresolved-source-columns
+          ten_million:
+          - rows-claims-unresolved-annotations-and-coverage
+          - partition-envelope-claims-coverage-and-unresolved
+          authority: legacy-implementation-guards-not-normative-ceilings-remove-via-bounded-streaming
+        maximum_report_bytes: 1073741824
+        limit_priority: proved-record-spool-collection-or-report-limit-before-io-actual-private-spool-enospc-only-after-proved-in-range
+        canonical_order: exact-full-canonical-bytes-never-digest-order
+      d5_failure_taxonomy:
+        stable_spool_failure_cause: actual-private-prepublication-spool-port-io-or-hash-failure-only
+        proposed_prepublication_phase_codes:
+          materialization-validation: materialization.spool-failure
+          store-stage: materialization.spool-failure
+          report-construction: materialization.spool-failure
+        pre_review_phase_matrix_and_report_schema: unchanged
+        accepted_activation_step: atomically-add-three-private-spool-phase-codes-request-bound-reverse-closures-for-spool-and-partition-stage-counter-overflow-and-update-full-report-schema-canonical-json-digest
+        relation_or_claim_schema_ceiling_exceeded: materialization-validation-materialization-claim-invalid-before-store-open
+        v5_collection_count_overflow:
+          operation: partition_stage
+          code: store.counter-overflow
+          field: materialization-v5-collection-count
+          detail: ''
+          phase_and_code: store-stage-materialization.store-failure
+          effect: draft-discarded-publication-not-attempted
+        sqlite_writer_publish_enospc_or_sqlite_toobig:
+          operation: writer_publish
+          code: store.sqlite-failure
+          field: database
+          detail: opaque
+          outcome: publication_outcome_unknown
+        successful_receipt_contradiction: source-private-exit-two-zero-stdout
+        semantic_claim_failure: existing-materialization-claim-invalid-or-coverage-code
+        report_over_limit: report-construction-materialization-report-invalid-if-compact-completable
+        actual_private_spool_enospc: phase-authentic-materialization.spool-failure-only-before-publication
+        publish_returned_handle_then_verification_failure: committed_unverified-detailed-response-when-safely-constructible
+        response_unsafe_exit_two:
+        - spool-or-allocation-failure-preventing-safe-response
+        - report-construction-or-transport-failure-preventing-safe-response
+        - successful-receipt-contradiction
+        - checked-arithmetic-contradiction
+        post_publish_typed_outcome_reclassification: forbidden
+        new_materialization_resource_or_internal_stable_code: forbidden
+        sqlite_v2_migration_required:
+          store_tuple:
+            operation: writer_begin
+            code: store.migration-required
+            field: sqlite-physical-format
+            detail: cxxlens.sqlite-semantic-store.v2-to-v3
+          phase_and_code: store-stage-materialization.store-failure
+          effect: logical-draft-discarded-publication-not-attempted-committed-transaction-count-zero
+          materializer_implicit_migration: forbidden
+      sqlite_capacity_decision:
+        status: accepted
+        selected_alternative: A
+        decision_ref: docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
+        decision_issue: '#200'
+        confirmed_blocker: sqlite-v2-single-payload-blob-runtime-max-length-1000000000-cannot-satisfy-required-limit-adjacent-passed-memory-sqlite-parity
+        required_parity: limit-adjacent-passed-memory-and-reopened-sqlite
+        weakening_parity: forbidden
+        alternatives:
+          A:
+            decision: sqlite-physical-v3-segmented-or-chunk-table
+            disposition: selected
+            preserves: logical-canonical-v5-bytes-except-authorized-physical-generation-field
+            requires:
+            - physical-format-v3-authority
+            - deterministic-v2-to-v3-migration
+            - reopen-compaction-pin-and-backend-parity-qualification
+          B:
+            decision: successor-request-budget-and-cross-backend-canonical-payload-cap
+            disposition: rejected-not-selected
+            preserves: memory-sqlite-parity-inside-successor-cap
+            requires:
+            - successor-version
+            - fresh-request-and-budget-authority
+            - same-cap-for-memory-and-sqlite-qualification
+        implementation_and_acceptance: may-proceed-under-accepted-option-a-not-qualified-until-required-evidence
+      d6_compatibility:
+        contract_version: 2.1.0-accepted-df-0200-option-a-authority
+        report_schema_canonical_json_digest: sha256:f321e25f72bf8c6312dfe1e36fe6b6573239db697c2cfabd60e2c0546f9ee98b
+        public_headers_signatures_and_inventory: unchanged
+        public_catalog: additive-sqlite-v3-behavior-entry-with-store.migration-required-no-new-callable
+        request_and_report_shape: request-2.1.0-unchanged-report-private-spool-failure-occurrence-inventory-sandbox-bounds-activated
+        claim_store_identities_and_logical_canonical_schema_projection: unchanged-with-authorized-physical-generation-transition
+        sqlite_contract: schemas/cxxlens_ng_sqlite_store_contract.yaml
+        sqlite_physical_format: cxxlens.sqlite-semantic-store.v3-3.0.0
+        sqlite_chunk_profile: cxxlens.sqlite-payload-chunks.v1-8388608-byte-maximum-16777216-runtime-floor
+        sqlite_predecessor: exact-v2.6.0-read-only-direct-open
+        sqlite_migration: compact-v2.6.0-to-v3.0.0-single-transaction-cow
+        sqlite_capacity_decision_status: accepted
+        source_private_receipts_and_counters: excluded-from-public-report-and-api
+        external_qualified_v2_1_found: require-successor-version-and-migration-boundary
+        fresh_public_semantics_gate:
+        - request-accepted-set-or-budget
+        - retained-memory-guarantee-weakening
+        - public-claim-or-store-signature-success-semantics-or-cursor-lifetime
+        - public-header-callable-or-catalog-entry
+        - report-shape-or-version
+        - canonical-v5-or-snapshot-identity
+        - incompatible-sqlite-format-or-migration-beyond-adr-0097
+      falsification:
+      - frozen-pre-refactor-and-current-public-claim-batch-byte-verdict-corpus
+      - added-existing-and-new-existing-reference-conflict-nonreclassification
+      - one-shot-split-and-input-permutation-parity
+      - exact-duplicate-versus-metadata-distinct-occurrence-preservation
+      - cross-task-run-and-partition-hard-soft-reference-and-conflict-matrix
+      - event-codec-unknown-missing-reordered-truncated-and-checksum-matrix
+      - external-census-digest-and-whole-partition-drop-rejection
+      - segment-run-merge-manifest-and-byte-record-seal-receipt-matrix
+      - exact-eight-field-and-zero-row-partition-matrix
+      - four-thousand-ninety-six-task-one-live-seal-and-permutation-evidence
+      - every-private-spool-operation-phase-code-effect-fault-injection
+      - partition-stage-u64-collection-overflow-exact-sdk-tuple
+      - checked-u64-u128-framing-segment-offset-fan-in-and-report-boundaries
+      - sqlite-writer-publish-unknown-and-committed-unverified-preservation
+      - single-owner-memory-payload-and-forbidden-all-task-graph-measurement
+      - sqlite-option-a-v3-v2-read-migration-and-limit-exceeding-parity
+      - memory-sqlite-static-shared-semantic-and-public-api-parity

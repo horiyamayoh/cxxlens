@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime
 import hashlib
 import importlib
@@ -22,6 +23,7 @@ import jsonschema
 import yaml
 
 import check_ng_clang22_materialization as materialization
+import check_ng_sqlite_store_v3_qualification as sqlite_qualification
 import public_callable_inventory as callable_inventory
 
 
@@ -67,6 +69,10 @@ MATERIALIZATION_EXECUTION_RECEIPT_SCHEMA = pathlib.Path(
 MATERIALIZATION_OCCURRENCE_MANIFEST_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml"
 )
+SQLITE_STORE_CONTRACT = pathlib.Path("schemas/cxxlens_ng_sqlite_store_contract.yaml")
+SQLITE_STORE_V3_QUALIFICATION_REPORT_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_sqlite_store_v3_qualification_report.schema.yaml"
+)
 MATERIALIZATION_OCCURRENCE_MANIFEST_PATH = (
     "share/cxxlens/materialization/clang22/occurrence-v1.json"
 )
@@ -81,6 +87,8 @@ RELEASE_AUTHORITY_PATHS = (
     MATERIALIZATION_REPORT_SCHEMA,
     MATERIALIZATION_EXECUTION_RECEIPT_SCHEMA,
     MATERIALIZATION_OCCURRENCE_MANIFEST_SCHEMA,
+    SQLITE_STORE_CONTRACT,
+    SQLITE_STORE_V3_QUALIFICATION_REPORT_SCHEMA,
     RELEASE,
     ACCEPTANCE,
     SUPPORT,
@@ -109,6 +117,9 @@ MATERIALIZATION_ASSIGNMENT_FEEDBACK = (
     "DF-0195",
     "DF-0196",
     "DF-0197",
+    "DF-0198",
+    "DF-0199",
+    "DF-0200",
 )
 MATERIALIZATION_ASSIGNMENT_SURFACES = (
     ("distribution.consumer-configuration", "shared/real-project"),
@@ -144,6 +155,10 @@ MATERIALIZATION_TASK_EXECUTION_KEY_FIELDS = (
     "task_input_digest",
     "provider_execution_id",
 )
+SQLITE_STORE_V3_QUALIFICATION_REPORT_FILENAME = (
+    "cxxlens-ng-sqlite-store-v3-qualification-report.json"
+)
+SQLITE_STORE_V3_QUALIFICATION_REPORT_MAX_BYTES = 16_777_216
 
 
 class ReleaseQualificationError(ValueError):
@@ -446,11 +461,12 @@ def materialization_assignment_shape(qualification: str) -> dict[str, Any]:
                 "gap": {
                     "finding": "scope.tracked-gap.clang22-installed-adoption",
                     "remediation": (
-                        "Accept the DF-0195/DF-0196/DF-0197 sealed-evidence, "
-                        "measured-occurrence, and authenticated-streaming authority "
-                        "amendments, then complete installed actual-source worker output "
-                        "adoption with exact publication and query evidence; do not claim "
-                        "generic relation-row reference enforcement."
+                        "Implement the accepted DF-0195 through DF-0199 sealed-evidence, "
+                        "measured-occurrence, authenticated-streaming, head-observation, "
+                        "and canonical-Base64 authority; resolve DF-0200 bounded claim/Store "
+                        "staging; then complete installed actual-source worker output adoption "
+                        "with exact publication and query evidence; do not claim generic "
+                        "relation-row reference enforcement."
                     ),
                 },
                 "feedback": list(MATERIALIZATION_ASSIGNMENT_FEEDBACK),
@@ -510,7 +526,8 @@ def materialization_assignment_transition(root: pathlib.Path) -> dict[str, Any]:
         }
     fail(
         "Clang 22 materializer assignment is neither the exact "
-        "#181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/DF-0197 "
+        "#181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/DF-0197/"
+        "DF-0198/DF-0199/DF-0200 "
         "tracked gap nor the exact included+qualified assignment"
     )
 
@@ -566,7 +583,8 @@ def collect_materialization_evidence(
     if state == "tracked-gap":
         if report_paths or request_paths or receipt_paths:
             fail(
-                "the exact #181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/DF-0197 "
+                "the exact #181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/"
+                "DF-0197/DF-0198/DF-0199/DF-0200 "
                 "tracked gap requires zero materialization "
                 f"requests and reports, found {len(request_paths)} requests and "
                 f"{len(report_paths)} reports and {len(receipt_paths)} execution receipts"
@@ -623,7 +641,7 @@ def validate_documents(
             "run_url": "https://github.com/horiyamayoh/cxxlens/actions/runs/1",
             "git": {"revision": "1" * 40, "tree": "2" * 40, "branch": "main", "clean": True},
             "release": {"id": "distribution-1.0", "version": "1.0.0", "state": "qualified"},
-            "prerequisites": {"gates": [f"gate.g{i}" for i in range(6)] + ["gate.release"], "migrations": [f"R{i}" for i in range(5)], "foundation_report_digest": "sha256:" + "1" * 64, "readiness_report_digest": "sha256:" + "2" * 64, "public_callable_report_digest": "sha256:" + "3" * 64, "g5_report_digest": "sha256:" + "4" * 64, "materialization_contract_digest": "sha256:" + "5" * 64, "release_evaluation_report_digest": "sha256:" + "6" * 64, "same_revision": True},
+            "prerequisites": {"gates": [f"gate.g{i}" for i in range(6)] + ["gate.release"], "migrations": [f"R{i}" for i in range(5)], "foundation_report_digest": "sha256:" + "1" * 64, "readiness_report_digest": "sha256:" + "2" * 64, "public_callable_report_digest": "sha256:" + "3" * 64, "g5_report_digest": "sha256:" + "4" * 64, "materialization_contract_digest": "sha256:" + "5" * 64, "sqlite_store_v3_qualification": {"revision": "1" * 40, "source_tree": "2" * 40, "report_digest": "sha256:" + "7" * 64, "report_set_digest": "sha256:" + "8" * 64, "report_schema_digest": "sha256:" + "9" * 64, "sqlite_contract_digest": "sha256:" + "a" * 64}, "release_evaluation_report_digest": "sha256:" + "6" * 64, "same_revision": True},
             "packages": [
                 {"configuration": configuration, "prefix_digest": "sha256:" + digit * 64, "manifest_digest": "sha256:" + digit * 64, "toolchain_digest": "sha256:" + digit * 64, "materialization_report_set_digest": "sha256:" + digit * 64, "real_project": "passed", "storage_backends": ["memory", "sqlite"], "relocated": True, "license": "sha256:" + digit * 64, "notice": "sha256:" + digit * 64}
                 for configuration, digit in (("static", "1"), ("shared", "2"))
@@ -702,6 +720,14 @@ def validate_documents(
                 "g5_report_digest": "sha256:" + "7" * 64,
                 "security_report_digest": "sha256:" + "8" * 64,
                 "materialization_contract_digest": "sha256:" + "9" * 64,
+                "sqlite_store_v3_qualification": {
+                    "revision": "1" * 40,
+                    "source_tree": "2" * 40,
+                    "report_digest": "sha256:" + "a" * 64,
+                    "report_set_digest": "sha256:" + "b" * 64,
+                    "report_schema_digest": "sha256:" + "c" * 64,
+                    "sqlite_contract_digest": "sha256:" + "d" * 64,
+                },
                 "materialization_evidence": {
                     "state": "exact-matrix",
                     "request_count": 4,
@@ -776,6 +802,10 @@ def validate_documents(
         materialization.validate_documents(root)
     except materialization.MaterializationError as error:
         fail(f"Clang 22 materialization authority is invalid: {error}")
+    try:
+        sqlite_qualification.validate_documents(root)
+    except sqlite_qualification.SQLiteStoreV3QualificationError as error:
+        fail(f"SQLite Store v3 qualification authority is invalid: {error}")
     expected_materialization = {
         "tool": "cxxlens-clang22-materialize",
         "contract": MATERIALIZATION_CONTRACT.as_posix(),
@@ -841,6 +871,23 @@ def validate_documents(
     }
     if manifest.get("materialization") != expected_materialization:
         fail("release materialization matrix/set-digest contract differs")
+    expected_sqlite_qualification = {
+        "authority": "docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md",
+        "report_schema": SQLITE_STORE_V3_QUALIFICATION_REPORT_SCHEMA.as_posix(),
+        "checker": "tools/quality/check_ng_sqlite_store_v3_qualification.py",
+        "report_filename": SQLITE_STORE_V3_QUALIFICATION_REPORT_FILENAME,
+        "report_artifact": "cxxlens-ng-sqlite-store-v3-qualification-${revision}",
+        "maximum_bytes": SQLITE_STORE_V3_QUALIFICATION_REPORT_MAX_BYTES,
+        "status": "required",
+        "binding": (
+            "exact-revision-source-tree-schema-contract-artifact-and-"
+            "report-set-digests"
+        ),
+        "configurations": ["static", "shared"],
+        "required_cases": list(sqlite_qualification.CASE_IDS),
+    }
+    if manifest.get("sqlite_store_v3_qualification") != expected_sqlite_qualification:
+        fail("release SQLite Store v3 qualification contract differs")
     if manifest["provider"].get("observation_relation_descriptors") != materialization.DESCRIPTOR_IDS[3:]:
         fail("release observation descriptor order differs from materialization authority")
     if manifest["claim_policy"].get("tuple_evidence_projection") != [
@@ -850,6 +897,7 @@ def validate_documents(
         "materialization_request_artifacts",
         "materialization_report_set",
         "materialization_contract",
+        "sqlite_store_v3_qualification",
         "g5_report",
         "security_report",
         "public_callable_report",
@@ -886,6 +934,19 @@ def validate_documents(
             for configuration, backend in MATERIALIZATION_MATRIX
         ],
         "materialization_report_set_binding": "exact-configuration-two-report-set-digest",
+        "sqlite_store_v3_qualification": {
+            "authority": (
+                "docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md"
+            ),
+            "report_schema": SQLITE_STORE_V3_QUALIFICATION_REPORT_SCHEMA.as_posix(),
+            "checker": "tools/quality/check_ng_sqlite_store_v3_qualification.py",
+            "artifact": "cxxlens-ng-sqlite-store-v3-qualification-${revision}",
+            "maximum_bytes": SQLITE_STORE_V3_QUALIFICATION_REPORT_MAX_BYTES,
+            "binding": (
+                "exact-revision-source-tree-schema-contract-artifact-and-"
+                "report-set-digests"
+            ),
+        },
         "checker": "tools/quality/check_ng_release_qualification.py",
         "ci_job": "release-qualification",
         "status": "implemented",
@@ -896,6 +957,7 @@ def validate_documents(
             "same-sha-wave0-readiness-report",
             "same-sha-public-callable-report-and-review",
             "same-sha-g5-report",
+            "same-sha-sqlite-store-v3-qualification-report",
             "static-relocated-install-artifact",
             "shared-relocated-install-artifact",
             "static-shared-runtime-junit",
@@ -908,6 +970,29 @@ def validate_documents(
     }
     if release.get("release_qualification") != expected_release_binding:
         fail("release qualification binding differs")
+    expected_sqlite_release_evidence = {
+        "status": "required",
+        "current_authority": "independently-validated-exact-2x4-release-evidence",
+        "report_schema": SQLITE_STORE_V3_QUALIFICATION_REPORT_SCHEMA.as_posix(),
+        "checker": "tools/quality/check_ng_sqlite_store_v3_qualification.py",
+        "report_filename": SQLITE_STORE_V3_QUALIFICATION_REPORT_FILENAME,
+        "artifact": "cxxlens-ng-sqlite-store-v3-qualification-${revision}",
+        "maximum_bytes": SQLITE_STORE_V3_QUALIFICATION_REPORT_MAX_BYTES,
+        "revision_binding": (
+            "exact-revision-source-tree-schema-contract-artifact-and-"
+            "report-set-digests"
+        ),
+        "configurations": ["static", "shared"],
+        "required_cases": list(sqlite_qualification.CASE_IDS),
+    }
+    snapshot_binding = release.get("snapshot_format_binding", {})
+    if (
+        snapshot_binding.get("registered_migration", {}).get("authority_status")
+        != "accepted"
+        or snapshot_binding.get("qualification_evidence")
+        != expected_sqlite_release_evidence
+    ):
+        fail("release SQLite Store v3 evidence activation differs")
     scope_evaluation = release.get("production_scope_closure", {}).get("evaluation")
     if scope_evaluation != {
         "schema": EVALUATION_REPORT_SCHEMA.as_posix(),
@@ -954,7 +1039,7 @@ def validate_documents(
     if evaluation_job is None or strict_job is None:
         fail("release evaluation/qualification workflow jobs are missing")
     for marker in (
-        "needs: [g5-qualification]",
+        "needs: [g5-qualification, sqlite-store-v3-qualification]",
         "check_ng_release_qualification.py evaluate",
         '--github-output "${GITHUB_OUTPUT}"',
         "qualification: ${{ steps.evaluate.outputs.qualification }}",
@@ -999,6 +1084,257 @@ def find_one(root: pathlib.Path, name: str) -> pathlib.Path:
     if len(matches) != 1:
         fail(f"expected exactly one {name}, found {len(matches)}")
     return matches[0]
+
+
+def _artifact_identity(value: os.stat_result) -> tuple[int, int, int, int, int, int]:
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_mode,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+
+
+def _artifact_name_occurrences(
+    evidence: pathlib.Path, filename: str
+) -> list[pathlib.Path]:
+    """Census one filename without traversing a symlinked directory."""
+
+    matches: list[pathlib.Path] = []
+
+    def raise_walk_error(error: OSError) -> None:
+        raise error
+
+    try:
+        for current, directories, files in os.walk(
+            evidence, topdown=True, onerror=raise_walk_error, followlinks=False
+        ):
+            current_path = pathlib.Path(current)
+            if filename in files or filename in directories:
+                matches.append(current_path / filename)
+            directories[:] = sorted(
+                name
+                for name in directories
+                if not (current_path / name).is_symlink()
+            )
+    except OSError as error:
+        fail(f"cannot census SQLite Store v3 qualification artifacts: {error}")
+    return sorted(matches)
+
+
+@contextlib.contextmanager
+def held_sqlite_store_v3_report(
+    evidence: pathlib.Path,
+    artifact_name: str,
+    report_name: str,
+    maximum_bytes: int,
+):
+    """Hold and bounded-read the exact no-follow artifact path once."""
+
+    for label, component in (
+        ("artifact", artifact_name),
+        ("report", report_name),
+    ):
+        if component in {"", ".", ".."} or pathlib.PurePath(component).name != component:
+            fail(f"SQLite Store v3 qualification {label} is not one path component")
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
+        fail("SQLite Store v3 qualification requires no-follow directory opens")
+
+    expected_path = evidence / artifact_name / report_name
+    evidence_descriptor = -1
+    artifact_descriptor = -1
+    report_descriptor = -1
+    try:
+        try:
+            evidence_lstat = os.stat(evidence, follow_symlinks=False)
+        except OSError as error:
+            fail(f"cannot lstat SQLite Store v3 evidence root {evidence}: {error}")
+        if not stat.S_ISDIR(evidence_lstat.st_mode):
+            fail(f"SQLite Store v3 evidence root is not a no-follow directory: {evidence}")
+        flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+        try:
+            evidence_descriptor = os.open(evidence, flags | os.O_DIRECTORY)
+        except OSError as error:
+            fail(f"cannot open SQLite Store v3 evidence root {evidence}: {error}")
+        evidence_fstat = os.fstat(evidence_descriptor)
+        if _artifact_identity(evidence_fstat) != _artifact_identity(evidence_lstat):
+            fail("SQLite Store v3 evidence root changed before it was held")
+
+        try:
+            artifact_lstat = os.stat(
+                artifact_name,
+                dir_fd=evidence_descriptor,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            matches = _artifact_name_occurrences(evidence, report_name)
+            if len(matches) == 1:
+                fail(
+                    "SQLite Store v3 qualification report artifact root differs: "
+                    f"expected={expected_path.parent}, actual={matches[0].parent}"
+                )
+            fail(f"expected exactly one {report_name}, found {len(matches)}")
+        except OSError as error:
+            fail(f"cannot lstat SQLite Store v3 artifact directory: {error}")
+        if not stat.S_ISDIR(artifact_lstat.st_mode):
+            fail(
+                "SQLite Store v3 qualification artifact directory is not a "
+                f"no-follow directory: {expected_path.parent}"
+            )
+        try:
+            artifact_descriptor = os.open(
+                artifact_name,
+                flags | os.O_DIRECTORY,
+                dir_fd=evidence_descriptor,
+            )
+        except OSError as error:
+            fail(f"cannot open SQLite Store v3 artifact directory: {error}")
+        artifact_fstat = os.fstat(artifact_descriptor)
+        if _artifact_identity(artifact_fstat) != _artifact_identity(artifact_lstat):
+            fail("SQLite Store v3 qualification artifact directory changed before open")
+
+        matches = _artifact_name_occurrences(evidence, report_name)
+        if len(matches) != 1:
+            fail(f"expected exactly one {report_name}, found {len(matches)}")
+        if pathlib.Path(os.path.abspath(matches[0])) != pathlib.Path(
+            os.path.abspath(expected_path)
+        ):
+            fail(
+                "SQLite Store v3 qualification report artifact root differs: "
+                f"expected={expected_path.parent}, actual={matches[0].parent}"
+            )
+
+        try:
+            report_lstat = os.stat(
+                report_name,
+                dir_fd=artifact_descriptor,
+                follow_symlinks=False,
+            )
+        except OSError as error:
+            fail(f"cannot lstat SQLite Store v3 qualification report: {error}")
+        if not stat.S_ISREG(report_lstat.st_mode):
+            fail(
+                "SQLite Store v3 qualification report is not a no-follow regular file: "
+                f"{expected_path}"
+            )
+        if report_lstat.st_size > maximum_bytes:
+            fail(
+                "SQLite Store v3 qualification report exceeds the bounded byte limit: "
+                f"{report_lstat.st_size} > {maximum_bytes}"
+            )
+        try:
+            report_descriptor = os.open(
+                report_name,
+                flags,
+                dir_fd=artifact_descriptor,
+            )
+        except OSError as error:
+            fail(f"cannot open SQLite Store v3 qualification report: {error}")
+        report_fstat = os.fstat(report_descriptor)
+        if _artifact_identity(report_fstat) != _artifact_identity(report_lstat):
+            fail("SQLite Store v3 qualification report changed before open")
+
+        chunks: list[bytes] = []
+        remaining = maximum_bytes + 1
+        while remaining > 0:
+            chunk = os.read(report_descriptor, min(1_048_576, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        raw = b"".join(chunks)
+        if len(raw) > maximum_bytes:
+            fail("SQLite Store v3 qualification report grew beyond its bounded byte limit")
+        after_read = os.fstat(report_descriptor)
+        if (
+            len(raw) != report_fstat.st_size
+            or _artifact_identity(after_read) != _artifact_identity(report_fstat)
+        ):
+            fail("SQLite Store v3 qualification report changed while it was read")
+
+        yield expected_path, raw
+
+        current_evidence = os.stat(evidence, follow_symlinks=False)
+        current_artifact = os.stat(
+            artifact_name,
+            dir_fd=evidence_descriptor,
+            follow_symlinks=False,
+        )
+        current_report = os.stat(
+            report_name,
+            dir_fd=artifact_descriptor,
+            follow_symlinks=False,
+        )
+        if _artifact_identity(current_evidence) != _artifact_identity(evidence_fstat):
+            fail("SQLite Store v3 evidence root path changed while validating the report")
+        if _artifact_identity(current_artifact) != _artifact_identity(artifact_fstat):
+            fail("SQLite Store v3 qualification artifact directory path changed")
+        if _artifact_identity(current_report) != _artifact_identity(report_fstat):
+            fail("SQLite Store v3 qualification report path changed while validating")
+        matches = _artifact_name_occurrences(evidence, report_name)
+        if [pathlib.Path(os.path.abspath(path)) for path in matches] != [
+            pathlib.Path(os.path.abspath(expected_path))
+        ]:
+            fail("SQLite Store v3 qualification report census changed while validating")
+    except OSError as error:
+        fail(f"SQLite Store v3 qualification artifact changed while held: {error}")
+    finally:
+        for descriptor in (
+            report_descriptor,
+            artifact_descriptor,
+            evidence_descriptor,
+        ):
+            if descriptor >= 0:
+                os.close(descriptor)
+
+
+def verify_sqlite_store_v3_qualification(
+    root: pathlib.Path,
+    manifest: dict[str, Any],
+    evidence: pathlib.Path,
+    git: dict[str, Any],
+) -> dict[str, Any]:
+    """Independently validate and bind one exact-SHA SQLite v3 report artifact."""
+
+    contract = manifest["sqlite_store_v3_qualification"]
+    artifact_name = contract["report_artifact"].replace(
+        "${revision}", git["revision"]
+    )
+    with held_sqlite_store_v3_report(
+        evidence,
+        artifact_name,
+        contract["report_filename"],
+        contract["maximum_bytes"],
+    ) as (report_path, report_bytes):
+        try:
+            report = sqlite_qualification.load_report_bytes(
+                report_bytes,
+                "SQLite Store v3 qualification report",
+            )
+            sqlite_qualification.validate_report(
+                root,
+                report,
+                expected_revision=git["revision"],
+                expected_source_tree=git["tree"],
+            )
+        except sqlite_qualification.SQLiteStoreV3QualificationError as error:
+            fail(f"SQLite Store v3 qualification report is invalid: {error}")
+
+        binding = {
+            "revision": report["revision"],
+            "source_tree": report["source_tree"],
+            "report_digest": digest_bytes(report_bytes),
+            "report_set_digest": report["report_set_digest"],
+            "report_schema_digest": report["report_schema_digest"],
+            "sqlite_contract_digest": report["sqlite_contract_digest"],
+        }
+        if binding["revision"] != git["revision"]:
+            fail("SQLite Store v3 qualification revision differs from release evidence")
+        if binding["source_tree"] != git["tree"]:
+            fail("SQLite Store v3 qualification source tree differs from release evidence")
+    return {"path": report_path, "report": report, "binding": binding}
 
 
 def verify_public_callable_evidence(
@@ -1922,6 +2258,9 @@ def collect_release_evidence(
     """Validate exact-SHA inputs without constructing either release report."""
 
     git = require_exact_clean_main(root, expected_revision)
+    sqlite_store_v3_qualification = verify_sqlite_store_v3_qualification(
+        root, manifest, evidence, git
+    )
     foundation_path = find_one(evidence, "cxxlens-ng-foundation-completion-report.json")
     foundation = load(foundation_path)
     validate_schema(foundation, load(root / FOUNDATION_REPORT_SCHEMA), "foundation report")
@@ -2036,6 +2375,7 @@ def collect_release_evidence(
         "g5": g5,
         "security_path": security_path,
         "security": security,
+        "sqlite_store_v3_qualification": sqlite_store_v3_qualification,
     }
 
 
@@ -2072,6 +2412,9 @@ def production_support_tuples(
                     "materialization_report_sets"
                 ][configuration],
                 "materialization_contract": digest(root / MATERIALIZATION_CONTRACT),
+                "sqlite_store_v3_qualification": evidence[
+                    "sqlite_store_v3_qualification"
+                ]["binding"],
                 "g5_report": digest(evidence["g5_path"]),
                 "security_report": digest(evidence["security_path"]),
                 "public_callable_report": evidence["callable_evidence"]["report"]["digest"],
@@ -2084,6 +2427,12 @@ def production_support_tuples(
 
 
 def evaluation_evidence_binding(evidence: dict[str, Any]) -> dict[str, Any]:
+    sqlite_binding = evidence["sqlite_store_v3_qualification"]["binding"]
+    if (
+        sqlite_binding.get("revision") != evidence["git"]["revision"]
+        or sqlite_binding.get("source_tree") != evidence["git"]["tree"]
+    ):
+        fail("SQLite Store v3 qualification binding differs from release revision/tree")
     install_manifests = [
         {
             "configuration": configuration,
@@ -2156,6 +2505,7 @@ def evaluation_evidence_binding(evidence: dict[str, Any]) -> dict[str, Any]:
         "materialization_contract_digest": digest(
             evidence["root"] / MATERIALIZATION_CONTRACT
         ),
+        "sqlite_store_v3_qualification": sqlite_binding,
         "materialization_evidence": evidence["materialization_evidence"],
         "install_manifests": install_manifests,
         "materialization_reports": materialization_reports,
@@ -2205,6 +2555,14 @@ def verify_gr_evaluation_artifact_binding(
         fail("strict GR and release evaluation use different revision/tree bindings")
     if evaluation["qualification"] != "qualified" or not evaluation["qualified"]:
         fail("strict GR terminal binding requires a qualified release evaluation")
+    sqlite_binding = evaluation["evidence"]["sqlite_store_v3_qualification"]
+    if (
+        sqlite_binding["revision"] != evaluation["git"]["revision"]
+        or sqlite_binding["source_tree"] != evaluation["git"]["tree"]
+    ):
+        fail("release evaluation SQLite qualification revision/tree binding differs")
+    if gr["prerequisites"]["sqlite_store_v3_qualification"] != sqlite_binding:
+        fail("strict GR SQLite qualification report binding differs")
     expected_digest = digest(evaluation_path)
     actual_digest = gr["prerequisites"]["release_evaluation_report_digest"]
     if actual_digest != expected_digest:
@@ -2243,7 +2601,7 @@ def make_report(
         "run_url": run_url,
         "git": evidence["git"],
         "release": {"id": "distribution-1.0", "version": "1.0.0", "state": "qualified"},
-        "prerequisites": {"gates": manifest["prerequisites"]["gates"] + ["gate.release"], "migrations": manifest["prerequisites"]["migrations"], "foundation_report_digest": digest(evidence["foundation_path"]), "readiness_report_digest": digest(evidence["readiness_path"]), "public_callable_report_digest": evidence["callable_evidence"]["report"]["digest"], "g5_report_digest": digest(evidence["g5_path"]), "materialization_contract_digest": digest(root / MATERIALIZATION_CONTRACT), "release_evaluation_report_digest": digest(evaluation_path), "same_revision": True},
+        "prerequisites": {"gates": manifest["prerequisites"]["gates"] + ["gate.release"], "migrations": manifest["prerequisites"]["migrations"], "foundation_report_digest": digest(evidence["foundation_path"]), "readiness_report_digest": digest(evidence["readiness_path"]), "public_callable_report_digest": evidence["callable_evidence"]["report"]["digest"], "g5_report_digest": digest(evidence["g5_path"]), "materialization_contract_digest": digest(root / MATERIALIZATION_CONTRACT), "sqlite_store_v3_qualification": evidence["sqlite_store_v3_qualification"]["binding"], "release_evaluation_report_digest": digest(evaluation_path), "same_revision": True},
         "packages": evidence["packages"],
         "production_support": production_support,
         "security": {"status": evidence["security"]["status"], "contract_digest": evidence["security"]["contract_digest"], "vector_count": evidence["security"]["vector_count"]},

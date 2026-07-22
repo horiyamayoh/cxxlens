@@ -26,6 +26,8 @@ implementation_issues:
   - '#181'
 resolution_refs:
   - CMakeLists.txt
+  - cmake/GenerateClang22OccurrenceManifest.cmake.in
+  - cmake/VerifyClang22SourceProvenance.cmake
   - docs/design/cxxlens_next_generation_integrated_design_ja.md
   - docs/design/adr/0096-clang22-installed-materialization-boundary.md
   - docs/design/catalogs/README.md
@@ -39,7 +41,19 @@ resolution_refs:
   - schemas/cxxlens_ng_release_qualification_evaluation_report.schema.yaml
   - schemas/cxxlens_ng_production_scope_closure.yaml
   - schemas/cxxlens_ng_acceptance_manifest.yaml
+  - schemas/cxxlens_ng_public_callable_inventory.yaml
+  - include/cxxlens/sdk/store.hpp
+  - src/sdk/store.cpp
+  - src/sdk/store_backend_lifetime_internal.hpp
+  - src/llvm/clang22/materialization_occurrence.cpp
+  - src/llvm/clang22/materialization_occurrence.hpp
+  - src/llvm/clang22/materialization_rooted_vfs.cpp
+  - src/llvm/clang22/materialization_rooted_vfs.hpp
+  - src/llvm/clang22/materialization_sqlite_abi.hpp
   - tests/install/run_install_test.cmake.in
+  - tests/CMakeLists.txt
+  - tests/adapter/clang22/materialization_occurrence_test.cpp
+  - tests/adapter/clang22/materialization_rooted_vfs_test.cpp
   - tools/quality/check_ng_clang22_materialization.py
   - tests/quality/test_ng_clang22_materialization.py
   - tools/quality/check_ng_release_qualification.py
@@ -53,6 +67,7 @@ review:
   reviewer: codex-agent-final-df195-197-review
   refs:
     - https://github.com/horiyamayoh/cxxlens/issues/196#issuecomment-5020652167
+    - https://github.com/horiyamayoh/cxxlens/issues/196#issuecomment-5025519088
 created: '2026-07-20'
 ---
 
@@ -218,3 +233,76 @@ amendment plus independent post-change review. The final review required every
 and its actual digest to the exact retained successful path projection, including closure and
 cross-path evidence. The closed mapping, rooted SQLite rules, occurrence inventory, writer exit-two
 disposition, and adversarial negatives now pass. Issue #181 may proceed for this scope.
+
+2026-07-21 addendum: implementation exposed two security-relevant lifetime assumptions inside the
+same installed occurrence/effect-root scope. Retaining an authenticated but mutable installed file
+descriptor did not freeze role bytes after measurement, and destroying the rooted opener could leave
+a returned Store without ownership of its registered VFS. The resolution now creates exactly one
+private sealed memfd snapshot for every closed manifest role during measurement, verifies the copied
+stream and source stability, and returns independent `O_RDONLY` handles to that same device/inode
+without recopy. Manifest reads also compare stable stat before and after the bounded read.
+
+The rooted SQLite VFS is registered by name without replacing the ambient default. The Store retains
+a source-private backend lifetime token, destroys its SQLite connection before unregistering and
+releasing the captured root/library, and permits cross-thread final Store destruction without
+cross-thread mutex ownership. Active main-database paths are refcounted through close; named roles,
+anonymous temporary roles, `xAccess`, and `xDelete` are fail-closed to their exact authenticated
+sets, and `xShmMap` / `xShmUnmap` require an active authenticated main-database handle. A shared
+private SQLite ABI declaration removes callback type drift. The Clang 22 callable
+census remains at 536 and contains no new public callable; only source anchors moved. Exact machine
+contract fields, design/ADR and implementation-order guards, all-role/inode/read-only negatives,
+direct non-main SHM callback negatives, opener-before-Store and cross-thread
+destruction/re-registration tests, low-FD execution, ASan/UBSan, and TSan bind the resolution. This is
+a dated strengthening of DF-0196 rather than a new authority decision because it closes the already
+accepted occurrence/effect-root lifecycle and changes no public semantics.
+
+A subsequent adversarial pass on the same addendum found that SQLite filename parsing and inherited
+VFS callbacks formed capabilities outside the captured root even though ordinary database/WAL/SHM
+tests were green. In a `SQLITE_USE_URI` build, raw `:memory:` and `file:...?vfs=...` names can be
+interpreted before the selected VFS opens a file. Delegating `xDl*` or `xSet/Get/NextSystemCall` also
+exposes ambient dynamic loading and process-global syscall hooks. Named `DELETEONCLOSE` deferred an
+unauthenticated unlink until close, while main-database creation preceded a fallible registry
+allocation. Early `xOpen` failures left caller-provided `pMethods` untouched, path replacement was
+reported as not moved, and a last-main-close race could revoke path authority between a sidecar
+check and its filesystem effect. Finally, allocation exceptions in callback-local string/vector work
+could cross the SQLite C ABI, and receipt allocation after a successful open could return failure
+after leaving Store files behind.
+
+The strengthened resolution binds a synthetic rooted name before SQLite URI parsing and rejects
+reserved or unprefixed names before effect. It disables the dynamic-loader and system-call callback
+surfaces, rejects named `DELETEONCLOSE`, reserves main-database authority and all opener receipt state
+before creation, and commits the active count without allocation. Every `xOpen` failure publishes a
+null method table and zero output flags. Every C callback contains C++ exceptions without ownership
+leaks; callback-owned partial handle state remains available to close/unmap, and already-authenticated
+filesystem effects are not misrepresented as transactional. An authority lease serializes
+sidecar/access/delete effects with last-close revocation. Open journal/WAL handles reacquire active
+base authority for every effectful callback, while close always releases their resources. Named
+open/access require a nonblocking regular-file verdict; path-based delete observes a regular leaf
+immediately before unlink but intentionally makes no exact-object claim across a concurrent rebind.
+`SQLITE_FCNTL_HAS_MOVED` compares the opened FD to the current rooted path identity.
+
+A final namespace-race review made the capability boundary explicit. Each named path first acquires a
+parent-directory capability by duplicating the captured root itself or by opening a descendant with
+`openat2` beneath that root, then resolves its leaf relative to the retained authenticated parent. A
+concurrent ancestor rename or mount relocation
+after parent-capability acquisition does not revoke the derived capability, so effect-time
+reachability through the current captured-root pathname is not claimed. This qualification grants no
+authority to a parent outside the root at acquisition and no authority to a mismatched leaf; it
+records the Linux directory-capability and `unlinkat` limit instead of silently implying dynamic
+pathname containment.
+
+The SDK now owns a raw `sqlite3_open_v2` connection with stack RAII before constructing diagnostics
+or its heap owner, so allocation failure cannot outlive the Store's backend token. Direct callback,
+poisoned-output, writable anonymous-memfd, URI/special-name, FIFO, replacement, deterministic
+last-close/lease, sidecar-post-close, source-order mutation, and sanitizer negatives bind these
+conditions. These are fail-closed corrections to the already accepted captured effect-root model,
+not a new public semantic choice, so the addendum remains the appropriate record.
+
+The Store lifetime bridge exposes no callable signature in the installed public header. A
+source-private access class is the only bridge-specific friend type of `snapshot_store`; its only
+static method has explicit default visibility solely so the installed shared materializer can cross
+the kernel DSO boundary. Method-level visibility overrides are forbidden, and required static/shared
+build-tests link and execute the rooted VFS target in both configurations.
+That internal DSO-linkage symbol has no installed declaration and is neither cataloged public C++
+API nor supported external ABI. This preserves the unchanged public callable catalog while allowing
+the returned Store to retain the rooted VFS token in both static and shared configurations.

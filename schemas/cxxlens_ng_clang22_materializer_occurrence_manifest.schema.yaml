@@ -27,8 +27,8 @@ properties:
   package_configuration: {enum: [static, shared]}
   files:
     type: array
-    minItems: 12
-    maxItems: 18
+    minItems: 13
+    maxItems: 19
     uniqueItems: true
     items: {$ref: '#/$defs/file'}
   occurrence_payload_digest: {$ref: '#/$defs/digest'}
@@ -113,6 +113,13 @@ $defs:
           role: {const: snapshot-store-contract}
           path: {const: share/cxxlens/schemas/cxxlens_ng_snapshot_store_contract.yaml}
         required: [role, path]
+  sqlite_store_contract:
+    allOf:
+      - {$ref: '#/$defs/file'}
+      - properties:
+          role: {const: sqlite-store-contract}
+          path: {const: share/cxxlens/schemas/cxxlens_ng_sqlite_store_contract.yaml}
+        required: [role, path]
   materialization_contract:
     allOf:
       - {$ref: '#/$defs/file'}
@@ -185,8 +192,8 @@ $defs:
         required: [role, path]
   static_files:
     type: array
-    minItems: 12
-    maxItems: 12
+    minItems: 13
+    maxItems: 13
     uniqueItems: true
     prefixItems:
       - {$ref: '#/$defs/materializer'}
@@ -197,6 +204,7 @@ $defs:
       - {$ref: '#/$defs/provider_protocol'}
       - {$ref: '#/$defs/provider_runtime_contract'}
       - {$ref: '#/$defs/snapshot_store_contract'}
+      - {$ref: '#/$defs/sqlite_store_contract'}
       - {$ref: '#/$defs/materialization_contract'}
       - {$ref: '#/$defs/materialization_contract_schema'}
       - {$ref: '#/$defs/materialization_request_schema'}
@@ -204,8 +212,8 @@ $defs:
     items: false
   shared_files:
     type: array
-    minItems: 18
-    maxItems: 18
+    minItems: 19
+    maxItems: 19
     uniqueItems: true
     prefixItems:
       - {$ref: '#/$defs/materializer'}
@@ -216,6 +224,7 @@ $defs:
       - {$ref: '#/$defs/provider_protocol'}
       - {$ref: '#/$defs/provider_runtime_contract'}
       - {$ref: '#/$defs/snapshot_store_contract'}
+      - {$ref: '#/$defs/sqlite_store_contract'}
       - {$ref: '#/$defs/materialization_contract'}
       - {$ref: '#/$defs/materialization_contract_schema'}
       - {$ref: '#/$defs/materialization_request_schema'}

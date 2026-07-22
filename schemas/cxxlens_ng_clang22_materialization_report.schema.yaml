@@ -72,8 +72,8 @@ properties:
           configuration: {enum: [static, shared]}
           files:
             type: array
-            minItems: 12
-            maxItems: 18
+            minItems: 13
+            maxItems: 19
             uniqueItems: true
             items: {$ref: '#/$defs/measured_occurrence_inventory_file'}
           tool:
@@ -93,9 +93,9 @@ properties:
               properties: {configuration: {const: static}}
               required: [configuration]
             then:
-              properties: {files: {minItems: 12, maxItems: 12}}
+              properties: {files: {minItems: 13, maxItems: 13}}
             else:
-              properties: {files: {minItems: 18, maxItems: 18}}
+              properties: {files: {minItems: 19, maxItems: 19}}
   provider:
     type: object
     additionalProperties: false
@@ -676,6 +676,75 @@ oneOf:
 allOf:
   - if:
       properties:
+        error:
+          properties: {phase: {const: input-limit}}
+          required: [phase]
+      required: [error]
+    then:
+      properties:
+        error:
+          properties: {code: {const: materialization.request-invalid}}
+  - if:
+      properties:
+        error:
+          properties: {phase: {const: json-decode}}
+          required: [phase]
+      required: [error]
+    then:
+      properties:
+        error:
+          properties:
+            code: {enum: [materialization.request-invalid, materialization.spool-failure]}
+  - if:
+      properties:
+        error:
+          properties: {phase: {const: request-envelope}}
+          required: [phase]
+      required: [error]
+    then:
+      properties:
+        error:
+          properties: {code: {const: materialization.request-invalid}}
+  - if:
+      properties:
+        error:
+          properties: {phase: {const: request-version}}
+          required: [phase]
+      required: [error]
+    then:
+      properties:
+        error:
+          properties: {code: {const: materialization.version-unsupported}}
+  - if:
+      properties:
+        error:
+          properties: {phase: {const: request-schema}}
+          required: [phase]
+      required: [error]
+    then:
+      properties:
+        error:
+          properties:
+            code: {enum: [materialization.request-invalid, materialization.spool-failure]}
+  - if:
+      properties:
+        error:
+          properties: {phase: {const: request-binding}}
+          required: [phase]
+      required: [error]
+    then:
+      properties:
+        error:
+          properties:
+            code:
+              enum:
+                - materialization.identity-mismatch
+                - materialization.catalog-census-mismatch
+                - materialization.task-binding-mismatch
+                - materialization.descriptor-binding-mismatch
+                - materialization.spool-failure
+  - if:
+      properties:
         response_kind: {const: compact_failure}
         error:
           properties: {phase: {const: input-limit}}
@@ -725,6 +794,28 @@ allOf:
             head_observation: {const: not-observed}
   - if:
       properties:
+        error:
+          type: object
+          properties: {code: {const: materialization.spool-failure}}
+          required: [code]
+      required: [error]
+    then:
+      properties:
+        response_kind: {const: compact_failure}
+        result: {const: failed}
+        process_exit_status: {const: 1}
+        raw_input_observation:
+          properties: {complete: {const: true}}
+        binding:
+          properties: {state: {const: raw-input-only}, request: {type: 'null'}}
+          required: [state, request]
+        error:
+          properties:
+            phase: {enum: [json-decode, request-schema, request-binding]}
+          required: [phase]
+      required: [response_kind, binding, error]
+  - if:
+      properties:
         response_kind: {const: compact_failure}
         binding:
           properties: {state: {const: request-bound}}
@@ -753,12 +844,84 @@ allOf:
                 - {$ref: '#/$defs/store_failure_cause'}
                 - properties:
                     kind: {const: sdk_error}
-                    access_path: {type: 'null'}
-                  required: [kind, access_path]
+                  required: [kind]
+                - if:
+                    properties: {operation: {const: head_current}}
+                    required: [operation]
+                  then:
+                    properties: {access_path: {const: current-selector}}
+                  else:
+                    properties: {access_path: {type: 'null'}}
     else:
       properties:
         effects:
           properties: {store_failure_cause: {type: 'null'}}
+  - if:
+      properties:
+        response_kind: {const: compact_failure}
+        effects:
+          properties:
+            store_failure_cause:
+              type: object
+              properties:
+                kind: {const: sdk_error}
+                operation: {const: head_current}
+                code: {const: store.current-not-found}
+              required: [kind, operation, code]
+          required: [store_failure_cause]
+      required: [response_kind, effects]
+    then:
+      properties:
+        effects:
+          properties:
+            head_observation: {const: absent}
+            observed_head_publication: {type: 'null'}
+  - if:
+      properties:
+        response_kind: {const: compact_failure}
+        effects:
+          properties:
+            store_failure_cause:
+              type: object
+              properties:
+                kind: {const: sdk_error}
+                operation: {const: head_current}
+                code: {not: {const: store.current-not-found}}
+              required: [kind, operation, code]
+          required: [store_failure_cause]
+      required: [response_kind, effects]
+    then:
+      properties:
+        effects:
+          properties:
+            head_observation: {const: sdk-error}
+            observed_head_publication: {type: 'null'}
+  - if:
+      properties:
+        response_kind: {const: compact_failure}
+        effects:
+          properties: {head_observation: {const: sdk-error}}
+          required: [head_observation]
+      required: [response_kind, effects]
+    then:
+      properties:
+        error:
+          properties:
+            code: {const: materialization.store-failure}
+            phase: {const: store-stage}
+          required: [code, phase]
+        effects:
+          properties:
+            observed_head_publication: {type: 'null'}
+            store_failure_cause:
+              allOf:
+                - {$ref: '#/$defs/store_failure_cause'}
+                - properties:
+                    kind: {const: sdk_error}
+                    operation: {const: head_current}
+                    access_path: {const: current-selector}
+                    code: {not: {const: store.current-not-found}}
+                  required: [kind, operation, access_path, code]
   - if:
       properties: {response_kind: {const: detailed}}
       required: [response_kind]
@@ -1281,7 +1444,7 @@ $defs:
       worker_launch_attempt_count: {type: integer, minimum: 0}
       worker_launch_success_count: {type: integer, minimum: 0}
       store_draft_state: {enum: [not-created, discarded]}
-      head_observation: {enum: [not-observed, absent, present]}
+      head_observation: {enum: [not-observed, absent, present, sdk-error]}
       observed_head_publication: {$ref: '#/$defs/nullable_id'}
       publication_attempted: {const: false}
       committed_transaction_count: {const: 0}
@@ -1292,7 +1455,7 @@ $defs:
           - {$ref: '#/$defs/store_failure_cause'}
     allOf:
       - if:
-          properties: {head_observation: {enum: [not-observed, absent]}}
+          properties: {head_observation: {enum: [not-observed, absent, sdk-error]}}
           required: [head_observation]
         then:
           properties: {observed_head_publication: {type: 'null'}}
@@ -1599,6 +1762,7 @@ $defs:
       task_sandbox_requirements:
         type: array
         minItems: 1
+        maxItems: 4096
         uniqueItems: true
         items:
           type: object
@@ -2626,7 +2790,7 @@ $defs:
     required: [code, phase, subject, diagnostic]
     properties:
       code:
-        enum: [materialization.request-invalid, materialization.version-unsupported, materialization.identity-mismatch, materialization.catalog-census-mismatch, materialization.task-binding-mismatch, materialization.descriptor-binding-mismatch, materialization.transcript-invalid, materialization.group-incomplete, materialization.span-invalid, materialization.claim-invalid, materialization.coverage-incomplete, materialization.stale-parent, materialization.store-failure, materialization.worker-failure, materialization.report-invalid]
+        enum: [materialization.request-invalid, materialization.spool-failure, materialization.version-unsupported, materialization.identity-mismatch, materialization.catalog-census-mismatch, materialization.task-binding-mismatch, materialization.descriptor-binding-mismatch, materialization.transcript-invalid, materialization.group-incomplete, materialization.span-invalid, materialization.claim-invalid, materialization.coverage-incomplete, materialization.stale-parent, materialization.store-failure, materialization.worker-failure, materialization.report-invalid]
       phase: {enum: [input-limit, json-decode, request-envelope, request-version, request-schema, request-binding, installation-binding, worker-launch, transcript, materialization-validation, store-open, store-stage, publication, post-publication-verification, report-construction]}
       subject: {$ref: '#/$defs/strong_id'}
       diagnostic: {type: string, minLength: 1, maxLength: 4096}

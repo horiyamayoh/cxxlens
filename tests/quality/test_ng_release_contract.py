@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "tools" / "quality"))
 from check_ng_release_contract import (  # noqa: E402
     EXPECTED_PRODUCTION_SCOPE_NAMESPACES,
     ReleaseContractError,
+    canonical_document_digest,
     decide,
     load_document,
     schema_validate,
@@ -22,6 +23,7 @@ from check_ng_release_contract import (  # noqa: E402
     validate_bundle,
     validate_package_qualification,
     validate_release_mapping,
+    validate_version_contract,
 )
 
 
@@ -39,22 +41,39 @@ PROVIDER_AXES = [
     "condition-semantics",
 ]
 DIGEST_AXES = {
+    "snapshot-format",
     "relation-descriptor",
     "provider-implementation",
     "native-sdk",
     "model-assumption-pack",
 }
 DEFAULT_DIGEST = "sha256:" + "1" * 64
+SNAPSHOT_CONTRACT_DIGEST = canonical_document_digest(
+    load_document(ROOT / "schemas/cxxlens_ng_sqlite_store_contract.yaml")
+)
+SNAPSHOT_CURRENT_FEATURES = (
+    "memory-readable-2.6.0-direct",
+    "sqlite-readable-3.0.0-direct",
+    "sqlite-v2.6.0-read-only-migration-required",
+    "compact-v2.6.0-to-v3.0.0-explicit",
+)
+SNAPSHOT_V2_ARTIFACT_CONTEXT = "sqlite-store-artifact-v2.6.0-pre-migration"
 
 
 def axis(
     name: str,
-    version: str = "1.0.0",
+    version: str | None = None,
     *,
     required: tuple[str, ...] = (),
     optional: tuple[str, ...] = (),
     digest: str | None = None,
 ) -> dict:
+    if version is None:
+        version = "3.0.0" if name == "snapshot-format" else "1.0.0"
+    if name == "snapshot-format" and not required and not optional:
+        required = SNAPSHOT_CURRENT_FEATURES
+    if name == "snapshot-format" and digest is None:
+        digest = SNAPSHOT_CONTRACT_DIGEST
     return {
         "axis": name,
         "version": version,
@@ -107,22 +126,187 @@ class NgReleaseContractTest(unittest.TestCase):
         self.assertEqual(report["reason_codes"], ["compat.exact"])
         self.assertFalse(report["fallback_used"])
 
-    def test_newer_same_major_is_supported(self) -> None:
+    def test_unknown_newer_snapshot_physical_minor_is_rejected(self) -> None:
         document = request(SNAPSHOT_AXES, context="snapshot-open")
-        document["offered_axes"][0]["version"] = "1.2.0"
+        document["offered_axes"][0]["version"] = "3.1.0"
         report = decide(self.bundle, document, ROOT)
-        self.assertEqual(report["decision"], "supported")
-        self.assertIn("compat.same-major", report["reason_codes"])
+        self.assertEqual(report["decision"], "unsupported")
+        self.assertIn("compat.axis-version-mismatch", report["reason_codes"])
 
-    def test_explicit_same_major_migration_is_reported(self) -> None:
+    def test_truthful_current_binary_with_v2_sqlite_artifact_requires_migration(
+        self,
+    ) -> None:
         document = request(SNAPSHOT_AXES, context="snapshot-open")
-        document["required_axes"][0]["version"] = "1.1.0"
+        document["offered_axes"][0]["features"].append(
+            {"id": SNAPSHOT_V2_ARTIFACT_CONTEXT, "requirement": "required"}
+        )
         report = decide(self.bundle, document, ROOT)
         self.assertEqual(report["decision"], "migration-required")
+        snapshot = next(
+            row for row in report["axis_results"] if row["axis"] == "snapshot-format"
+        )
+        self.assertEqual(snapshot["required_version"], "3.0.0")
+        self.assertEqual(snapshot["offered_version"], "3.0.0")
+        self.assertEqual(snapshot["missing_required_features"], [])
+        self.assertEqual(
+            {row["id"] for row in document["offered_axes"][0]["features"]},
+            {*SNAPSHOT_CURRENT_FEATURES, SNAPSHOT_V2_ARTIFACT_CONTEXT},
+        )
         self.assertEqual(
             report["migration_steps"][0]["migration_id"],
-            "snapshot-format-1.0-to-1.1",
+            "compact-v2.6.0-to-v3.0.0",
         )
+        self.assertEqual(
+            report["migration_steps"][0]["handler"], "snapshot-store-compact"
+        )
+
+    def test_v2_artifact_context_without_current_binary_capabilities_is_rejected(
+        self,
+    ) -> None:
+        document = request(SNAPSHOT_AXES, context="snapshot-open")
+        document["offered_axes"][0]["features"] = [
+            {"id": SNAPSHOT_V2_ARTIFACT_CONTEXT, "requirement": "required"},
+            {
+                "id": "memory-readable-2.6.0-direct",
+                "requirement": "required",
+            },
+            {
+                "id": "compact-v2.6.0-to-v3.0.0-explicit",
+                "requirement": "required",
+            },
+        ]
+        report = decide(self.bundle, document, ROOT)
+        self.assertEqual(report["decision"], "unsupported")
+        self.assertIn("compat.required-feature-missing", report["reason_codes"])
+        self.assertEqual(report["migration_steps"], [])
+
+    def test_v2_artifact_context_without_explicit_compact_capability_is_rejected(
+        self,
+    ) -> None:
+        document = request(SNAPSHOT_AXES, context="snapshot-open")
+        document["offered_axes"][0]["features"] = [
+            {"id": feature, "requirement": "required"}
+            for feature in SNAPSHOT_CURRENT_FEATURES
+            if feature != "compact-v2.6.0-to-v3.0.0-explicit"
+        ]
+        document["offered_axes"][0]["features"].append(
+            {"id": SNAPSHOT_V2_ARTIFACT_CONTEXT, "requirement": "required"}
+        )
+        report = decide(self.bundle, document, ROOT)
+        self.assertEqual(report["decision"], "unsupported")
+        self.assertIn("compat.required-feature-missing", report["reason_codes"])
+        self.assertEqual(report["migration_steps"], [])
+
+    def test_physical_v2_version_cannot_substitute_for_release_axis_version(self) -> None:
+        document = request(SNAPSHOT_AXES, context="snapshot-open")
+        document["offered_axes"][0]["version"] = "2.6.0"
+        document["offered_axes"][0]["features"].append(
+            {"id": SNAPSHOT_V2_ARTIFACT_CONTEXT, "requirement": "required"}
+        )
+        report = decide(self.bundle, document, ROOT)
+        self.assertEqual(report["decision"], "unsupported")
+        self.assertIn("compat.axis-major-mismatch", report["reason_codes"])
+        self.assertEqual(report["migration_steps"], [])
+
+    def test_memory_readable_format_cannot_substitute_for_release_axis_version(
+        self,
+    ) -> None:
+        document = request(SNAPSHOT_AXES, context="snapshot-open")
+        document["offered_axes"][0]["version"] = "2.6.0"
+        document["offered_axes"][0]["features"] = [
+            {
+                "id": "memory-readable-2.6.0-direct",
+                "requirement": "required",
+            }
+        ]
+        report = decide(self.bundle, document, ROOT)
+        self.assertEqual(report["decision"], "unsupported")
+        self.assertIn("compat.axis-major-mismatch", report["reason_codes"])
+        self.assertEqual(report["migration_steps"], [])
+
+    def test_backend_format_cannot_substitute_for_required_release_axis(self) -> None:
+        document = request(SNAPSHOT_AXES, context="snapshot-open")
+        document["required_axes"][0]["version"] = "2.6.0"
+        document["offered_axes"][0]["version"] = "2.6.0"
+        report = decide(self.bundle, document, ROOT)
+        self.assertEqual(report["decision"], "unsupported")
+        self.assertIn("compat.axis-version-mismatch", report["reason_codes"])
+        self.assertEqual(report["migration_steps"], [])
+
+    def test_v2_artifact_context_requirement_must_be_required(self) -> None:
+        document = request(SNAPSHOT_AXES, context="snapshot-open")
+        document["offered_axes"][0]["features"].append(
+            {"id": SNAPSHOT_V2_ARTIFACT_CONTEXT, "requirement": "optional"}
+        )
+        report = decide(self.bundle, document, ROOT)
+        self.assertEqual(report["decision"], "unsupported")
+        self.assertIn("compat.request-invalid", report["reason_codes"])
+        self.assertEqual(report["migration_steps"], [])
+
+    def test_other_snapshot_axis_cross_major_tuples_are_rejected(self) -> None:
+        for version in ("1.9.9", "2.5.0", "4.0.0"):
+            with self.subTest(version=version):
+                document = request(SNAPSHOT_AXES, context="snapshot-open")
+                document["offered_axes"][0]["version"] = version
+                document["offered_axes"][0]["features"].append(
+                    {
+                        "id": SNAPSHOT_V2_ARTIFACT_CONTEXT,
+                        "requirement": "required",
+                    }
+                )
+                report = decide(self.bundle, document, ROOT)
+                self.assertEqual(report["decision"], "unsupported")
+                self.assertIn(
+                    "compat.axis-major-mismatch", report["reason_codes"]
+                )
+                self.assertEqual(report["migration_steps"], [])
+
+    def test_snapshot_migration_registry_rejects_implicit_execution(self) -> None:
+        bundle = copy.deepcopy(self.bundle)
+        bundle["migrations"][0]["implicit"] = True
+        with self.assertRaisesRegex(ReleaseContractError, "must be explicit"):
+            validate_version_contract(bundle, ROOT)
+
+    def test_snapshot_migration_registry_rejects_other_cross_major_path(self) -> None:
+        bundle = copy.deepcopy(self.bundle)
+        other = copy.deepcopy(bundle["migrations"][0])
+        other.update(
+            {
+                "id": "unregistered-snapshot-cross-major",
+                "from": "1.0.0",
+                "to": "2.0.0",
+            }
+        )
+        bundle["migrations"].append(other)
+        with self.assertRaisesRegex(
+            ReleaseContractError, "exact registered|must not cross"
+        ):
+            validate_version_contract(bundle, ROOT)
+
+    def test_snapshot_migration_registry_is_scoped_to_sqlite_readable_format(
+        self,
+    ) -> None:
+        bundle = copy.deepcopy(self.bundle)
+        bundle["migrations"][0]["coordinate"] = "snapshot-format-axis"
+        with self.assertRaisesRegex(
+            ReleaseContractError, "exact registered|must not cross"
+        ):
+            validate_version_contract(bundle, ROOT)
+
+    def test_snapshot_axis_requires_exact_sqlite_contract_digest(self) -> None:
+        document = request(SNAPSHOT_AXES, context="snapshot-open")
+        document["offered_axes"][0]["contract_digest"] = "sha256:" + "2" * 64
+        report = decide(self.bundle, document, ROOT)
+        self.assertEqual(report["decision"], "unsupported")
+        self.assertIn("compat.contract-digest-mismatch", report["reason_codes"])
+
+    def test_current_snapshot_axis_cannot_omit_physical_capability_features(self) -> None:
+        document = request(SNAPSHOT_AXES, context="snapshot-open")
+        document["required_axes"][0]["features"] = []
+        document["offered_axes"][0]["features"] = []
+        report = decide(self.bundle, document, ROOT)
+        self.assertEqual(report["decision"], "unsupported")
+        self.assertIn("compat.required-feature-missing", report["reason_codes"])
 
     def test_major_mismatch_is_unsupported_without_fallback(self) -> None:
         document = request(PROVIDER_AXES, context="provider-handshake")

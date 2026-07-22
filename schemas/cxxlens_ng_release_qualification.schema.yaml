@@ -2,10 +2,10 @@ $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://cxxlens.dev/schemas/cxxlens.ng-release-qualification.v1
 type: object
 additionalProperties: false
-required: [schema, document_version, maturity, authority, binding, prerequisites, package, materialization, provider, security, performance, documentation, claim_policy, required_artifacts]
+required: [schema, document_version, maturity, authority, binding, prerequisites, package, materialization, sqlite_store_v3_qualification, provider, security, performance, documentation, claim_policy, required_artifacts]
 properties:
   schema: {const: cxxlens.ng-release-qualification.v1}
-  document_version: {const: 1.6.0}
+  document_version: {const: 1.7.0}
   maturity: {const: implemented}
   authority:
     type: object
@@ -14,7 +14,7 @@ properties:
     properties:
       design: {const: docs/design/cxxlens_next_generation_integrated_design_ja.md}
       adr: {const: docs/design/adr/0091-distribution-1-production-qualification.md}
-      amendments: {const: [docs/design/adr/0096-clang22-installed-materialization-boundary.md]}
+      amendments: {const: [docs/design/adr/0096-clang22-installed-materialization-boundary.md, docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md]}
       owner_issue: {const: '#167'}
   binding:
     type: object
@@ -31,7 +31,7 @@ properties:
   prerequisites:
     type: object
     additionalProperties: false
-    required: [gates, migrations, r0_r3_evidence, readiness_evidence, public_callable_evidence, r4_evidence, release_evaluation_evidence, same_revision]
+    required: [gates, migrations, r0_r3_evidence, readiness_evidence, public_callable_evidence, r4_evidence, sqlite_store_v3_evidence, release_evaluation_evidence, same_revision]
     properties:
       gates: {const: [gate.g0, gate.g1, gate.g2, gate.g3, gate.g4, gate.g5]}
       migrations: {const: [R0, R1, R2, R3, R4]}
@@ -39,6 +39,7 @@ properties:
       readiness_evidence: {const: cxxlens.ng-api-development-readiness-report.v1}
       public_callable_evidence: {const: cxxlens.ng-public-callable-inventory-report.v1}
       r4_evidence: {const: cxxlens.ng-g5-qualification-report.v1}
+      sqlite_store_v3_evidence: {const: cxxlens.ng-sqlite-store-v3-qualification-report.v1}
       release_evaluation_evidence: {const: cxxlens.ng-release-qualification-evaluation-report.v1}
       same_revision: {const: required}
   package:
@@ -93,6 +94,18 @@ properties:
         projection: [configuration, reports]
         backend_order: [memory, sqlite]
         report_entry_fields: [backend, report_digest, execution_receipt_digest]
+  sqlite_store_v3_qualification:
+    const:
+      authority: docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
+      report_schema: schemas/cxxlens_ng_sqlite_store_v3_qualification_report.schema.yaml
+      checker: tools/quality/check_ng_sqlite_store_v3_qualification.py
+      report_filename: cxxlens-ng-sqlite-store-v3-qualification-report.json
+      report_artifact: cxxlens-ng-sqlite-store-v3-qualification-${revision}
+      maximum_bytes: 16777216
+      status: required
+      binding: exact-revision-source-tree-schema-contract-artifact-and-report-set-digests
+      configurations: [static, shared]
+      required_cases: [current-v3.0.0-cold-reopen, v2.6.0-read-only-zero-mutation, compact-v2.6.0-to-v3.0.0-same-semantic-digest, limit-length-exceeding-valid-canonical-v5-reopened-parity]
   provider:
     type: object
     additionalProperties: false
@@ -153,7 +166,7 @@ properties:
       required_claim_fields: {const: [capabilities, guarantee, security_profile_digest, evidence_digest]}
       pending_or_wildcard: {const: forbidden}
       unlisted_surface: {const: unsupported}
-      tuple_evidence_projection: {const: [install_manifest, installed_worker, materialization_tool, materialization_request_artifacts, materialization_report_set, materialization_contract, g5_report, security_report, public_callable_report, configuration]}
+      tuple_evidence_projection: {const: [install_manifest, installed_worker, materialization_tool, materialization_request_artifacts, materialization_report_set, materialization_contract, sqlite_store_v3_qualification, g5_report, security_report, public_callable_report, configuration]}
   required_artifacts:
     type: array
     minItems: 10
