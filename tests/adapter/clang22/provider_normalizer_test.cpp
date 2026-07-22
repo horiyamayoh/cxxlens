@@ -34,6 +34,218 @@ namespace
 		}
 	}
 
+	[[nodiscard]] clang22_task_source_receipt source_receipt(const std::span<const std::byte> bytes)
+	{
+		std::vector<sdk::canonical_value> offsets{sdk::canonical_value::from_integer(0)};
+		for (std::size_t index{}; index < bytes.size(); ++index)
+			if (bytes[index] == std::byte{'\n'})
+				offsets.push_back(
+					sdk::canonical_value::from_integer(static_cast<std::int64_t>(index + 1U)));
+		const auto digest = sdk::content_digest(bytes);
+		const std::array fields{
+			sdk::canonical_value::from_string("cxxlens.byte-line-index.v1"),
+			sdk::canonical_value::from_string(digest),
+			sdk::canonical_value::from_integer(static_cast<std::int64_t>(bytes.size())),
+			sdk::canonical_value::from_tuple(std::move(offsets)),
+		};
+		auto line_index = sdk::canonical_identity_digest("line-index", fields);
+		require(line_index.has_value(), "test source-spool line-index receipt failed");
+		return {bytes.size(), digest, std::move(*line_index)};
+	}
+
+	[[nodiscard]] std::string base64_encode(const std::span<const std::byte> bytes)
+	{
+		constexpr std::string_view alphabet{
+			"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"};
+		std::string output;
+		output.reserve(((bytes.size() + 2U) / 3U) * 4U);
+		for (std::size_t offset{}; offset < bytes.size(); offset += 3U)
+		{
+			const auto count = std::min<std::size_t>(3U, bytes.size() - offset);
+			std::uint32_t word =
+				static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[offset])) << 16U;
+			if (count > 1U)
+				word |=
+					static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[offset + 1U]))
+					<< 8U;
+			if (count > 2U)
+				word |= std::to_integer<std::uint8_t>(bytes[offset + 2U]);
+			output.push_back(alphabet[(word >> 18U) & 0x3fU]);
+			output.push_back(alphabet[(word >> 12U) & 0x3fU]);
+			output.push_back(count > 1U ? alphabet[(word >> 6U) & 0x3fU] : '=');
+			output.push_back(count > 2U ? alphabet[word & 0x3fU] : '=');
+		}
+		return output;
+	}
+
+	class fragmented_task_source final : public clang22_task_source_replay
+	{
+	  public:
+		explicit fragmented_task_source(
+			const std::string& value,
+			const std::size_t fragment,
+			const bool sealed = true,
+			std::optional<clang22_task_source_receipt> receipt = std::nullopt)
+			: bytes_{std::as_bytes(std::span{value})}, fragment_{fragment},
+			  receipt_{receipt ? std::move(*receipt) : source_receipt(bytes_)}, sealed_{sealed}
+		{
+		}
+
+		sdk::result<std::size_t> read_at(const std::uint64_t offset,
+										 std::span<std::byte> destination) override
+		{
+			if (offset > bytes_.size())
+				return sdk::unexpected(sdk::error{"test.task-source", "offset", {}});
+			const auto count = std::min(
+				{destination.size(), fragment_, bytes_.size() - static_cast<std::size_t>(offset)});
+			std::ranges::copy(std::span{bytes_}.subspan(static_cast<std::size_t>(offset), count),
+							  destination.begin());
+			return count;
+		}
+
+		[[nodiscard]] std::uint64_t size_bytes() const noexcept override
+		{
+			return bytes_.size();
+		}
+
+		[[nodiscard]] bool sealed() const noexcept override
+		{
+			return sealed_;
+		}
+
+		[[nodiscard]] const clang22_task_source_receipt& receipt() const noexcept override
+		{
+			return receipt_;
+		}
+
+	  private:
+		std::span<const std::byte> bytes_;
+		std::size_t fragment_{};
+		clang22_task_source_receipt receipt_;
+		bool sealed_{};
+	};
+
+	class fragmented_task_replay final : public clang22_task_input_replay
+	{
+	  public:
+		fragmented_task_replay(const std::span<const std::byte> bytes,
+							   const std::size_t fragment,
+							   const bool sealed = true,
+							   const std::optional<std::uint64_t> reported_size = std::nullopt)
+			: bytes_{bytes}, fragment_{fragment},
+			  reported_size_{reported_size.value_or(bytes.size())}, sealed_{sealed}
+		{
+		}
+
+		sdk::result<std::size_t> read_at(const std::uint64_t offset,
+										 std::span<std::byte> destination) override
+		{
+			if (offset > bytes_.size())
+				return sdk::unexpected(sdk::error{"test.task-replay", "offset", {}});
+			const auto count = std::min(
+				{destination.size(), fragment_, bytes_.size() - static_cast<std::size_t>(offset)});
+			std::ranges::copy(std::span{bytes_}.subspan(static_cast<std::size_t>(offset), count),
+							  destination.begin());
+			return count;
+		}
+
+		[[nodiscard]] std::uint64_t size_bytes() const noexcept override
+		{
+			return reported_size_;
+		}
+
+		[[nodiscard]] bool sealed() const noexcept override
+		{
+			return sealed_;
+		}
+
+	  private:
+		std::span<const std::byte> bytes_;
+		std::size_t fragment_{};
+		std::uint64_t reported_size_{};
+		bool sealed_{};
+	};
+
+	class vector_source_spool final : public clang22_task_source_spool
+	{
+	  public:
+		sdk::result<void> append(const std::span<const std::byte> bytes) override
+		{
+			if (sealed_)
+				return sdk::unexpected(sdk::error{"test.source-spool", "append", "sealed"});
+			bytes_.insert(bytes_.end(), bytes.begin(), bytes.end());
+			return {};
+		}
+
+		sdk::result<clang22_task_source_receipt> seal() override
+		{
+			if (sealed_)
+				return sdk::unexpected(sdk::error{"test.source-spool", "seal", "duplicate"});
+			receipt_ = source_receipt(bytes_);
+			sealed_ = true;
+			return receipt_;
+		}
+
+		sdk::result<std::size_t> read_at(const std::uint64_t offset,
+										 std::span<std::byte> destination) override
+		{
+			if (!sealed_ || offset > bytes_.size())
+				return sdk::unexpected(sdk::error{"test.source-spool", "read", {}});
+			const auto count =
+				std::min(destination.size(), bytes_.size() - static_cast<std::size_t>(offset));
+			std::ranges::copy(std::span{bytes_}.subspan(static_cast<std::size_t>(offset), count),
+							  destination.begin());
+			return count;
+		}
+
+		[[nodiscard]] std::uint64_t size_bytes() const noexcept override
+		{
+			return bytes_.size();
+		}
+
+		[[nodiscard]] bool sealed() const noexcept override
+		{
+			return sealed_;
+		}
+
+		[[nodiscard]] const clang22_task_source_receipt& receipt() const noexcept override
+		{
+			return receipt_;
+		}
+
+		[[nodiscard]] std::span<const std::byte> bytes() const noexcept
+		{
+			return bytes_;
+		}
+
+	  private:
+		std::vector<std::byte> bytes_;
+		clang22_task_source_receipt receipt_;
+		bool sealed_{};
+	};
+
+	class vector_task_sink final : public clang22_task_input_sink
+	{
+	  public:
+		sdk::result<void> append(const std::span<const std::byte> bytes) override
+		{
+			value.insert(value.end(), bytes.begin(), bytes.end());
+			return {};
+		}
+
+		std::vector<std::byte> value;
+	};
+
+	class failing_task_sink final : public clang22_task_input_sink
+	{
+	  public:
+		sdk::result<void> append(std::span<const std::byte>) override
+		{
+			return sdk::unexpected(
+				sdk::error{"materialization.spool-failure", "task.v3", "injected-write"});
+		}
+	};
+
 	[[nodiscard]] sdk::detached_cell
 	symbol_cell(const sdk::scalar_kind kind, std::string parameter, std::string value)
 	{
@@ -142,9 +354,9 @@ namespace
 		return value;
 	}
 
-	[[nodiscard]] clang22_task_input task_input()
+	[[nodiscard]] clang22_task_input
+	task_input(std::string source = "int target(); int main(){ return target(); }")
 	{
-		const std::string source{"int target(); int main(){ return target(); }"};
 		const std::vector<std::string> arguments{"clang++", "-std=c++23"};
 		auto invocation = sdk::canonical_binary(sdk::canonical_value::from_tuple({
 			sdk::canonical_value::from_string("cxxlens.clang22.effective-invocation.v1"),
@@ -202,8 +414,7 @@ namespace
 		output.interpretation = "cc.clang22-canonical-1";
 		output.logical_path = "project://input.cpp";
 		output.source_content_digest = source_digest;
-		output.source_content_base64 =
-			"aW50IHRhcmdldCgpOyBpbnQgbWFpbigpeyByZXR1cm4gdGFyZ2V0KCk7IH0=";
+		output.source_content_base64 = base64_encode(std::as_bytes(std::span{source}));
 		output.source_size_bytes = source.size();
 		output.source_encoding = "utf8";
 		output.source_read_only = true;
@@ -847,6 +1058,43 @@ int main()
 	auto task = task_input();
 	auto encoded = encode_task_input(task);
 	require(encoded.has_value(), "task input encoding failed");
+	auto streaming_task = task;
+	streaming_task.source.clear();
+	streaming_task.source_content_base64.clear();
+	for (const auto fragment : {1U, 2U, 3U, 7U, 64U})
+	{
+		fragmented_task_source source{task.source, fragment};
+		vector_task_sink sink;
+		auto receipt = encode_task_input_streaming(streaming_task, source, sink);
+		require(receipt && receipt->source_size_bytes == task.source.size() &&
+					receipt->canonical_base64_bytes == task.source_content_base64.size() &&
+					receipt->task_input_bytes == encoded->size() && sink.value == *encoded,
+				"streaming task.v3 replay differs across source fragmentation");
+	}
+	{
+		fragmented_task_source source{task.source, 7U};
+		failing_task_sink sink;
+		auto failure = encode_task_input_streaming(
+			streaming_task, streaming_task.project_catalog, source, sink);
+		require(!failure && failure.error().code == "materialization.spool-failure" &&
+					failure.error().detail == "injected-write",
+				"streaming task.v3 encoding erased a typed spool failure");
+	}
+	{
+		fragmented_task_source unsealed{task.source, 7U, false};
+		vector_task_sink sink;
+		require(!encode_task_input_streaming(streaming_task, unsealed, sink),
+				"streaming task.v3 encoder accepted an unsealed source replay");
+	}
+	{
+		auto stale = source_receipt(std::as_bytes(std::span{task.source}));
+		stale.content_digest =
+			"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+		fragmented_task_source drift{task.source, 7U, true, std::move(stale)};
+		vector_task_sink sink;
+		require(!encode_task_input_streaming(streaming_task, drift, sink),
+				"streaming task.v3 encoder accepted source bytes under a stale sealed receipt");
+	}
 	const auto task_input_digest = sdk::content_digest(*encoded);
 	require(task_input_digest ==
 				"sha256:1a54c7f79747653e0395330797ff72823892443faa74417085eaa16d23111395",
@@ -859,6 +1107,96 @@ int main()
 				decoded->selected_catalog_compile_unit == task.selected_catalog_compile_unit &&
 				decoded->compile_unit == task.compile_unit,
 			"task input did not round trip");
+	for (const auto fragment : {1U, 2U, 3U, 7U, 64U, 65535U, 1048576U})
+	{
+		fragmented_task_replay replay{*encoded, fragment};
+		vector_source_spool source_spool;
+		auto streamed = decode_task_input_streaming(replay, source_spool);
+		require(streamed && streamed->input.source.empty() &&
+					streamed->input.source_content_base64.empty() &&
+					streamed->input.source_snapshot == task.source_snapshot &&
+					streamed->source == source_receipt(std::as_bytes(std::span{task.source})) &&
+					streamed->canonical_base64_bytes == task.source_content_base64.size() &&
+					streamed->task_input_bytes == encoded->size() && source_spool.sealed() &&
+					std::ranges::equal(source_spool.bytes(), std::as_bytes(std::span{task.source})),
+				"streaming task.v3 decode retained source bytes or changed across short reads");
+	}
+	{
+		auto chunked_task = task_input(std::string((1024U * 1024U) + 3U, 'x'));
+		auto chunked_encoded = encode_task_input(chunked_task);
+		require(chunked_encoded && chunked_encoded->size() > 1024U * 1024U,
+				"task.v3 1 MiB chunk-boundary fixture did not cross the boundary");
+		fragmented_task_replay replay{*chunked_encoded, 1024U * 1024U};
+		vector_source_spool source_spool;
+		auto streamed = decode_task_input_streaming(replay, source_spool);
+		require(streamed && streamed->task_input_bytes == chunked_encoded->size() &&
+					streamed->source.size_bytes == chunked_task.source_size_bytes &&
+					std::ranges::equal(source_spool.bytes(),
+									   std::as_bytes(std::span{chunked_task.source})),
+				"streaming task.v3 decode changed bytes across a canonical 1 MiB chunk boundary");
+	}
+	{
+		fragmented_task_replay replay{*encoded, 7U, false};
+		vector_source_spool source_spool;
+		require(!decode_task_input_streaming(replay, source_spool),
+				"streaming task.v3 decoder accepted an unsealed replay");
+	}
+	{
+		fragmented_task_replay replay{*encoded, 7U, true, 64U * 1024U * 1024U};
+		vector_source_spool source_spool;
+		auto maximum = decode_task_input_streaming(replay, source_spool);
+		require(!maximum && maximum.error().detail != "maximum-bytes",
+				"streaming task.v3 decoder rejected the exact 64 MiB boundary as oversized");
+	}
+	{
+		fragmented_task_replay replay{*encoded, 7U, true, (64U * 1024U * 1024U) + 1U};
+		vector_source_spool source_spool;
+		auto oversized = decode_task_input_streaming(replay, source_spool);
+		require(!oversized && oversized.error().detail == "maximum-bytes",
+				"streaming task.v3 decoder did not fail closed above 64 MiB");
+	}
+	{
+		auto trailing_stream = *encoded;
+		trailing_stream.push_back(std::byte{0});
+		fragmented_task_replay replay{trailing_stream, 3U};
+		vector_source_spool source_spool;
+		require(!decode_task_input_streaming(replay, source_spool),
+				"streaming task.v3 decoder accepted trailing canonical bytes");
+	}
+	{
+		auto zero_item_length = *encoded;
+		require(zero_item_length.size() > 17U,
+				"task.v3 fixture is too small for canonical framing mutation");
+		std::ranges::fill(std::span{zero_item_length}.subspan(9U, 8U), std::byte{0});
+		fragmented_task_replay replay{zero_item_length, 1U};
+		vector_source_spool source_spool;
+		require(!decode_task_input_streaming(replay, source_spool),
+				"streaming task.v3 decoder accepted a zero-length canonical tuple item");
+	}
+	{
+		auto invalid_base64 = *encoded;
+		const auto spelling = std::as_bytes(std::span{task.source_content_base64});
+		auto found = std::search(
+			invalid_base64.begin(), invalid_base64.end(), spelling.begin(), spelling.end());
+		require(found != invalid_base64.end(), "task.v3 base64 fixture spelling was not found");
+		*found = std::byte{'!'};
+		fragmented_task_replay replay{invalid_base64, 2U};
+		vector_source_spool source_spool;
+		require(!decode_task_input_streaming(replay, source_spool),
+				"streaming task.v3 decoder accepted an invalid base64 alphabet");
+	}
+	{
+		auto source_mutation = *encoded;
+		const auto spelling = std::as_bytes(std::span{task.source_content_base64});
+		auto found = std::search(
+			source_mutation.begin(), source_mutation.end(), spelling.begin(), spelling.end());
+		require(found != source_mutation.end(), "task.v3 source mutation spelling was not found");
+		*found = std::byte{'b'};
+		fragmented_task_replay replay{source_mutation, 65535U};
+		vector_source_spool source_spool;
+		require(!decode_task_input_streaming(replay, source_spool),
+				"streaming task.v3 decoder accepted source bytes under a stale digest");
+	}
 	auto condition_ref = provider_condition_ref_id(task);
 	require(condition_ref &&
 				*condition_ref ==
@@ -879,6 +1217,34 @@ int main()
 				(portable_task ? portable_task->task_id
 							   : portable_task.error().code + "/" + portable_task.error().field +
 						 "/" + portable_task.error().detail));
+	{
+		fragmented_task_replay replay{*encoded, 3U};
+		vector_source_spool source_spool;
+		auto streamed = decode_task_input_streaming(replay, source_spool);
+		auto streamed_condition = streamed
+			? provider_condition_ref_id(streamed->input, streamed->source)
+			: sdk::result<std::string>{
+				  sdk::unexpected(sdk::error{"sdk.test-setup", "streamed-task", {}})};
+		require(streamed && streamed_condition && *streamed_condition == *condition_ref,
+				"spool-backed task.v3 authority lost its condition identity");
+		auto external_catalog = std::move(streamed->input.project_catalog);
+		const auto* catalog_entries = external_catalog.compile_units.data();
+		vector_task_sink reference_sink;
+		auto reference_encoding = encode_task_input_streaming(
+			streamed->input, external_catalog, source_spool, reference_sink);
+		auto reference_task_id = reconstruct_provider_task_id(
+			streamed->input,
+			external_catalog,
+			streamed->source,
+			exact_task_descriptors(),
+			"sha256:1111111111111111111111111111111111111111111111111111111111111111");
+		require(
+			reference_encoding && reference_sink.value == *encoded && reference_task_id &&
+				*reference_task_id == portable_task->task_id &&
+				streamed->input.project_catalog.compile_units.empty() &&
+				external_catalog.compile_units.data() == catalog_entries,
+			"catalog-reference task.v3 admission copied/mutated the catalog or changed identity");
+	}
 	auto condition_drift = task;
 	condition_drift.condition_universe = "condition-universe:drift";
 	auto drift_ref = provider_condition_ref_id(condition_drift);
@@ -946,17 +1312,41 @@ int main()
 	auto trailing = *encoded;
 	trailing.push_back(std::byte{0});
 	require(!decode_task_input(trailing), "task.v3 accepted trailing bytes");
-	auto base64_spelling = task;
-	base64_spelling.source_content_base64.back() = '=';
-	base64_spelling.source_content_base64[base64_spelling.source_content_base64.size() - 2U] = '1';
-	auto spelling_encoded = encode_task_input(base64_spelling);
-	auto spelling_decoded = spelling_encoded ? decode_task_input(*spelling_encoded)
-											 : sdk::result<clang22_task_input>{sdk::unexpected(
-												   sdk::error{"sdk.test-setup", "task.v3", {}})};
-	require(spelling_encoded && spelling_decoded && spelling_decoded->source == task.source &&
-				spelling_decoded->source_content_base64 == base64_spelling.source_content_base64 &&
-				sdk::content_digest(*spelling_encoded) != sdk::content_digest(*encoded),
-			"task.v3 did not preserve the exact schema-valid base64 request spelling");
+	for (const auto& [source, canonical, noncanonical] :
+		 std::array{std::array<std::string_view, 3U>{"a", "YQ==", "YR=="},
+					std::array<std::string_view, 3U>{"ab", "YWI=", "YWJ="}})
+	{
+		auto canonical_task = task_input(std::string{source});
+		require(canonical_task.source_content_base64 == canonical,
+				"task.v3 canonical Base64 fixture differs");
+		auto canonical_encoding = encode_task_input(canonical_task);
+		require(canonical_encoding.has_value(), "canonical Base64 task.v3 fixture was rejected");
+
+		auto noncanonical_task = canonical_task;
+		noncanonical_task.source_content_base64 = noncanonical;
+		require(!encode_task_input(noncanonical_task),
+				"task.v3 encoder accepted non-zero discarded Base64 padding bits");
+
+		auto mutated_encoding = *canonical_encoding;
+		const auto canonical_bytes = std::as_bytes(std::span{canonical});
+		auto found = std::search(mutated_encoding.begin(),
+								 mutated_encoding.end(),
+								 canonical_bytes.begin(),
+								 canonical_bytes.end());
+		require(found != mutated_encoding.end(), "task.v3 canonical Base64 spelling was not found");
+		std::ranges::copy(std::as_bytes(std::span{noncanonical}), found);
+		require(!decode_task_input(mutated_encoding),
+				"task.v3 decoder accepted non-zero discarded Base64 padding bits");
+
+		fragmented_task_replay replay{mutated_encoding, 1U};
+		vector_source_spool source_spool;
+		require(!decode_task_input_streaming(replay, source_spool),
+				"streaming task.v3 decoder accepted non-zero discarded Base64 padding bits");
+	}
+	auto trailing_lf_task = task;
+	trailing_lf_task.source_content_base64.push_back('\n');
+	require(!encode_task_input(trailing_lf_task),
+			"task.v3 encoder accepted trailing non-alphabet Base64 data");
 	auto missing_source_authority = task;
 	missing_source_authority.source_snapshot.clear();
 	require(!encode_task_input(missing_source_authority),

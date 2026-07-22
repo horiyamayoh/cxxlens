@@ -362,6 +362,9 @@ namespace cxxlens::detail::clang22::materialization
 				const int d = pad_three ? 0 : value(encoded[offset + 3U]);
 				if (a < 0 || b < 0 || c < 0 || d < 0)
 					return sdk::unexpected(invalid("source.content_base64", "alphabet"));
+				if ((pad_two && (b & 0x0f) != 0) || (pad_three && !pad_two && (c & 0x03) != 0))
+					return sdk::unexpected(
+						invalid("source.content_base64", "nonzero-padding-bits"));
 				const auto append = [&](const unsigned integer) -> sdk::result<void>
 				{
 					if (output.size() >= maximum_output)
@@ -904,7 +907,9 @@ namespace cxxlens::detail::clang22::materialization
 			task.source_size_bytes = *source_size;
 			task.source_read_only = *source_read_only;
 			auto decoded = decode_base64(task.source_content_base64, 16U * 1024U * 1024U);
-			if (!decoded || decoded->size() != task.source_size_bytes ||
+			if (!decoded)
+				return sdk::unexpected(std::move(decoded.error()));
+			if (decoded->size() != task.source_size_bytes ||
 				sdk::content_digest(*decoded) != task.source_content_digest)
 				return sdk::unexpected(mismatch("task.source", "bytes-size-digest"));
 			if (decoded->empty())
@@ -1128,7 +1133,7 @@ namespace cxxlens::detail::clang22::materialization
 				auto unit_environment =
 					member_text(entry, "environment_digest", "environment_digest");
 				if (!id || !invocation || !source || !unit_environment)
-					return sdk::unexpected(!id				 ? std::move(id.error())
+					return sdk::unexpected(!id ? std::move(id.error())
 											   : !invocation ? std::move(invocation.error())
 											   : !source	 ? std::move(source.error())
 															 : std::move(unit_environment.error()));

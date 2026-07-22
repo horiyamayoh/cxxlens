@@ -20,6 +20,8 @@
 #include <cxxlens/relations/cc_call_site.hpp>
 #include <cxxlens/relations/cc_entity.hpp>
 
+#include "llvm/clang22/materialization_pipeline.hpp"
+
 namespace
 {
 	using namespace cxxlens;
@@ -564,16 +566,16 @@ namespace
 				"claim construction failed: " + (claims ? std::string{} : failure(claims.error())));
 		require(claims->materializer_semantics_digest() ==
 						"semantic-v2:sha256:"
-						"990c39ac20d23c4fd967ee864c8c6c16bb4ecfe8dcfb0ea0dbfe8ac0f320b701" &&
+						"380c729df49f7fb0002bf27cbd35874bbdd6a87f922f0ec0ee27b9148483ae20" &&
 					claims->direct_basis_digest() ==
 						"semantic-v2:sha256:"
-						"505d3625e78a1f9e6780935249a92d47d13ec0a1e648d2fc08b8d603d64e4f12" &&
+						"d3c107e8ac0fafd8c337745f6e5b44d600049faa08f7944c9d07e270cb31a361" &&
 					claims->canonical_adoption_transform_digest() ==
 						"semantic-v2:sha256:"
-						"560547b5fee9053fa08313aa34b8356d7088aec4b7e0df5f2bb134af4bd22d16" &&
+						"a9d3402e5a28e166d275d5d388d2d97b7f033bbe321b58507c68bb7db5ffb53c" &&
 					claims->base_ingestion_transform_digest() ==
 						"semantic-v2:sha256:"
-						"bb8935855244da792f871c1db0480ba389abf590adf24fc76a9c6095a45d37be" &&
+						"b550962fd63ee81d69efc6aaa88872588b1ed9d448faf498535bf123703a86a7" &&
 					claims->assumption_set_id() ==
 						"assumption-set:semantic-v2:sha256:"
 						"054f2400cc7d6084286f98ff7c22f4fbcf531178fa605b2211346f528862a098",
@@ -592,6 +594,16 @@ namespace
 					!claims->origin_associations().empty() && !claims->partitions().empty(),
 				"claim construction omitted a required private projection");
 		verify_graph_and_partitions(request, *claims);
+		auto store_transaction = make_materialization_store_transaction(request, *claims);
+		require(store_transaction.has_value() &&
+					store_transaction->draft.series == request.publication.selector &&
+					store_transaction->draft.catalog_semantic_digest ==
+						request.tasks.front().worker_input.project_catalog.catalog_digest &&
+					store_transaction->draft.expected_parent_publication ==
+						request.publication.expected_parent_publication &&
+					store_transaction->partitions.size() == claims->partitions().size() &&
+					store_transaction->closures.empty(),
+				"sealed claims did not produce the exact one-transaction Store plan");
 		for (std::size_t index = 1U; index < claims->partitions().size(); ++index)
 			require(claims->partitions()[index - 1U].manifest.partition_id <
 						claims->partitions()[index].manifest.partition_id,

@@ -13,6 +13,7 @@
 #include <cxxlens/sdk/provider.hpp>
 
 #include "json_internal.hpp"
+#include "provider_validation_internal.hpp"
 
 namespace cxxlens::sdk::provider
 {
@@ -1391,98 +1392,68 @@ namespace cxxlens::sdk::provider
 
 	result<std::vector<std::byte>> encode_host_transcript(const host_transcript_request& request)
 	{
-		const auto& expected = request.expectation;
-		if (expected.provider_manifest.empty() || expected.task.task_id.empty() ||
-			expected.task.task_id.contains('\0') ||
-			!canonical_digest(expected.task.task_input_digest) ||
-			!canonical_digest(expected.task.normalized_invocation_digest) ||
-			!canonical_digest(expected.task.toolchain_digest) ||
-			!canonical_digest(expected.task.environment_digest) ||
-			content_digest(request.payload) != expected.task.task_input_digest ||
-			request.credit.bytes == 0U || request.credit.frames == 0U)
-			return cxxlens::sdk::unexpected(provider_error(
-				"provider.host-transcript-invalid", expected.task.task_id, "request-binding"));
-		auto hello = encode_control_text(expected.provider_manifest);
-		auto schema = encode_schema_negotiate_metadata(
-			{"cxxlens.provider-protocol.v1", expected.limits.maximum_minor});
-		auto open = encode_open_task_metadata(expected.task);
-		auto credit = encode_credit_metadata({request.credit.bytes, request.credit.frames});
-		auto close = encode_close_metadata({expected.task.task_id});
-		if (!hello || !schema || !open || !credit || !close)
-			return cxxlens::sdk::unexpected(provider_error(
-				"provider.host-transcript-invalid", expected.task.task_id, "control-encoding"));
-		std::array frames{
-			frame{message_type::hello_ack, 1U, 0U, std::move(*hello), {}},
-			frame{message_type::schema_negotiate, 1U, 1U, std::move(*schema), {}},
-			frame{message_type::open_task, 1U, 2U, std::move(*open), request.payload},
-			frame{message_type::credit, 1U, 3U, std::move(*credit), {}},
-			frame{message_type::close, 1U, 4U, std::move(*close), {}},
-		};
-		for (auto& value : frames)
+		class vector_input final : public detail::replayable_host_input
 		{
-			value.protocol_major = expected.limits.protocol_major;
-			value.protocol_minor = expected.limits.maximum_minor;
-		}
-		if (auto valid = validate_host_transcript(frames, expected); !valid)
-			return cxxlens::sdk::unexpected(std::move(valid.error()));
-		std::vector<std::byte> output;
-		for (const auto& value : frames)
+		  public:
+			explicit vector_input(const std::span<const std::byte> bytes) : bytes_{bytes} {}
+			result<std::uint64_t> size() const override
+			{
+				return bytes_.size();
+			}
+			result<std::size_t> read_at(const std::uint64_t offset,
+										const std::span<std::byte> output) const override
+			{
+				if (offset > bytes_.size())
+					return cxxlens::sdk::unexpected(provider_error(
+						"provider.host-transcript-invalid", "payload", "read-offset"));
+				const auto count = std::min<std::size_t>(output.size(), bytes_.size() - offset);
+				std::ranges::copy(bytes_.subspan(static_cast<std::size_t>(offset), count),
+								  output.begin());
+				return count;
+			}
+
+		  private:
+			std::span<const std::byte> bytes_;
+		} input{request.payload};
+		class vector_frame_sink final : public frame_sink
 		{
-			auto encoded = encode_frame(value, expected.limits);
-			if (!encoded)
-				return cxxlens::sdk::unexpected(std::move(encoded.error()));
-			output.insert(output.end(), encoded->begin(), encoded->end());
-		}
-		return output;
+		  public:
+			result<void> write(const std::span<const std::byte> bytes) override
+			{
+				bytes_.insert(bytes_.end(), bytes.begin(), bytes.end());
+				return {};
+			}
+			std::vector<std::byte> bytes_;
+		} output;
+		auto sealed = detail::encode_host_transcript_incremental(
+			{request.expectation, request.expectation.limits.maximum_minor == 1U},
+			request.credit,
+			input,
+			output);
+		if (!sealed)
+			return cxxlens::sdk::unexpected(std::move(sealed.error()));
+		return std::move(output.bytes_);
 	}
 
 	result<validated_host_transcript>
 	validate_host_transcript(const std::span<const frame> frames,
 							 const host_transcript_expectation& expectation)
 	{
-		const auto fail = [&](const std::string_view detail)
+		class vector_chunk_sink final : public detail::host_input_chunk_sink
 		{
-			return cxxlens::sdk::unexpected(provider_error(
-				"provider.host-transcript-invalid", expectation.task.task_id, std::string{detail}));
-		};
-		if (frames.size() != 5U || expectation.provider_manifest.empty() ||
-			expectation.task.task_id.empty() || expectation.task.task_id.contains('\0') ||
-			!canonical_digest(expectation.task.task_input_digest) ||
-			!canonical_digest(expectation.task.normalized_invocation_digest) ||
-			!canonical_digest(expectation.task.toolchain_digest) ||
-			!canonical_digest(expectation.task.environment_digest))
-			return fail("expectation-or-count");
-		constexpr std::array types{message_type::hello_ack,
-								   message_type::schema_negotiate,
-								   message_type::open_task,
-								   message_type::credit,
-								   message_type::close};
-		for (std::size_t index = 0U; index < frames.size(); ++index)
-		{
-			const auto& value = frames[index];
-			if (value.type != types[index] || value.stream_id != 1U || value.sequence != index ||
-				value.flags != 0U || value.protocol_major != expectation.limits.protocol_major ||
-				value.protocol_minor != expectation.limits.maximum_minor || value.control.empty() ||
-				value.control.size() > expectation.limits.max_control_bytes ||
-				value.payload.size() > expectation.limits.max_payload_bytes ||
-				(index != 2U && !value.payload.empty()))
-				return fail("frame-state");
-		}
-		auto hello = decode_control_text(frames[0U].control);
-		auto schema = decode_schema_negotiate_metadata(frames[1U].control);
-		auto task = decode_open_task_metadata(frames[2U].control);
-		auto credit = decode_credit_metadata(frames[3U].control);
-		auto close = decode_close_metadata(frames[4U].control);
-		if (!hello || !schema || !task || !credit || !close ||
-			*hello != expectation.provider_manifest ||
-			schema->protocol_schema != "cxxlens.provider-protocol.v1" ||
-			schema->protocol_minor != expectation.limits.maximum_minor ||
-			*task != expectation.task ||
-			content_digest(frames[2U].payload) != task->task_input_digest || credit->bytes == 0U ||
-			credit->frames == 0U || close->task_id != task->task_id)
-			return fail("control-or-binding");
-		return validated_host_transcript{
-			std::move(*task), {credit->bytes, credit->frames}, frames[2U].payload};
+		  public:
+			result<void> append(const std::span<const std::byte> bytes) override
+			{
+				bytes_.insert(bytes_.end(), bytes.begin(), bytes.end());
+				return {};
+			}
+			std::vector<std::byte> bytes_;
+		} input;
+		auto sealed = detail::validate_host_transcript_incremental(
+			frames, {expectation, expectation.limits.maximum_minor == 1U}, input);
+		if (!sealed)
+			return cxxlens::sdk::unexpected(std::move(sealed.error()));
+		return validated_host_transcript{sealed->task(), sealed->credit(), std::move(input.bytes_)};
 	}
 
 	result<encoded_column_chunk> encode_column_chunk(const column_chunk_record& value,

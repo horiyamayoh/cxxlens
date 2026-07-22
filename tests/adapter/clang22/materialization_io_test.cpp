@@ -1,6 +1,8 @@
 #include "llvm/clang22/materialization_io.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cerrno>
 #include <cstddef>
 #include <cstdlib>
 #include <iostream>
@@ -14,6 +16,11 @@
 #include <vector>
 
 #include <cxxlens/sdk/common.hpp>
+#include <dirent.h>
+#include <fcntl.h>
+#include <sys/resource.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 namespace
 {
@@ -40,6 +47,43 @@ namespace
 		const auto view = std::span{input}.first(size);
 		return {view.begin(), view.end()};
 	}
+
+#if defined(__linux__) && defined(F_ADD_SEALS) && defined(F_GET_SEALS) && defined(F_SEAL_WRITE) && \
+	defined(F_SEAL_GROW) && defined(F_SEAL_SHRINK) && defined(F_SEAL_SEAL)
+	[[nodiscard]] int locate_materialization_memfd()
+	{
+		auto* directory = ::opendir("/proc/self/fd");
+		require(directory != nullptr, "cannot enumerate /proc/self/fd for the private memfd");
+		const auto directory_descriptor = ::dirfd(directory);
+		int found = -1;
+		while (const auto* entry = ::readdir(directory))
+		{
+			char* end{};
+			const auto parsed = std::strtol(entry->d_name, &end, 10);
+			if (end == entry->d_name || *end != '\0' || parsed < 0 ||
+				parsed == directory_descriptor)
+				continue;
+			const auto path = std::string{"/proc/self/fd/"} + entry->d_name;
+			std::array<char, 256U> target{};
+			const auto count = ::readlink(path.c_str(), target.data(), target.size() - 1U);
+			if (count <= 0)
+				continue;
+			const std::string_view observed{target.data(), static_cast<std::size_t>(count)};
+			if (observed.find("memfd:cxxlens-materialization") == std::string_view::npos)
+				continue;
+			require(found < 0, "more than one materialization memfd was unexpectedly retained");
+			found = static_cast<int>(parsed);
+		}
+		require(::closedir(directory) == 0, "cannot close the /proc/self/fd enumeration");
+		require(found >= 0, "the private spool is not backed by the required Linux memfd");
+		return found;
+	}
+
+	[[nodiscard]] std::string proc_fd_path(const int descriptor)
+	{
+		return "/proc/self/fd/" + std::to_string(descriptor);
+	}
+#endif
 
 	class fragmented_reader final : public materialization_byte_reader
 	{
@@ -127,8 +171,8 @@ namespace
 	  public:
 		materialization_io_result<void> update(const std::span<const std::byte> input) override
 		{
-			if (fail_update_)
-				return materialization_io_failure{materialization_io_failure_kind::hash,
+			if (update_failure_)
+				return materialization_io_failure{*update_failure_,
 												  materialization_io_operation::digest_update};
 			data_.insert(data_.end(), input.begin(), input.end());
 			return {};
@@ -136,16 +180,99 @@ namespace
 
 		materialization_io_result<std::string> finish() override
 		{
-			if (fail_finish_)
-				return materialization_io_failure{materialization_io_failure_kind::hash,
+			if (finish_failure_)
+				return materialization_io_failure{*finish_failure_,
 												  materialization_io_operation::digest_finalize};
+			if (malformed_finish_)
+				return std::string{"SHA256:not-canonical"};
 			return cxxlens::sdk::content_digest(data_);
 		}
 
 		std::vector<std::byte> data_;
-		bool fail_update_{};
-		bool fail_finish_{};
+		std::optional<materialization_io_failure_kind> update_failure_;
+		std::optional<materialization_io_failure_kind> finish_failure_;
+		bool malformed_finish_{};
 	};
+
+	class contradictory_replay_spool final : public materialization_replayable_spool
+	{
+	  public:
+		explicit contradictory_replay_spool(const bool overreport) : overreport_{overreport} {}
+
+		materialization_io_result<void> append(std::span<const std::byte>) override
+		{
+			return materialization_io_failure{
+				materialization_io_failure_kind::invalid_configuration,
+				materialization_io_operation::spool_write};
+		}
+
+		materialization_io_result<void> seal() override
+		{
+			return {};
+		}
+
+		materialization_io_result<std::size_t> read(std::span<std::byte> destination) override
+		{
+			return read_at(0U, destination);
+		}
+
+		materialization_io_result<std::size_t> read_at(std::uint64_t,
+													   std::span<std::byte> destination) override
+		{
+			return overreport_ ? destination.size() + 1U : 0U;
+		}
+
+		materialization_io_result<void> rewind() override
+		{
+			return {};
+		}
+
+		[[nodiscard]] std::uint64_t size_bytes() const noexcept override
+		{
+			return 1U;
+		}
+
+		[[nodiscard]] bool sealed() const noexcept override
+		{
+			return true;
+		}
+
+	  private:
+		bool overreport_{};
+	};
+
+	void phase_authentic_failure_matrix()
+	{
+		constexpr std::array authentic{
+			materialization_io_failure{materialization_io_failure_kind::read,
+									   materialization_io_operation::input_read},
+			materialization_io_failure{materialization_io_failure_kind::write,
+									   materialization_io_operation::spool_write},
+			materialization_io_failure{materialization_io_failure_kind::spool,
+									   materialization_io_operation::spool_seal},
+			materialization_io_failure{materialization_io_failure_kind::hash,
+									   materialization_io_operation::digest_finalize},
+		};
+		for (const auto& failure : authentic)
+			require(is_materialization_actual_io_or_hash_failure(failure),
+					"actual port I/O/hash failure was removed from stable taxonomy");
+
+		constexpr std::array private_failures{
+			materialization_io_failure{materialization_io_failure_kind::allocation,
+									   materialization_io_operation::buffer_allocation},
+			materialization_io_failure{materialization_io_failure_kind::invalid_configuration,
+									   materialization_io_operation::configuration},
+			materialization_io_failure{materialization_io_failure_kind::read,
+									   materialization_io_operation::digest_finalize},
+			materialization_io_failure{materialization_io_failure_kind::hash,
+									   materialization_io_operation::spool_read},
+			materialization_io_failure{materialization_io_failure_kind::spool,
+									   materialization_io_operation::configuration},
+		};
+		for (const auto& failure : private_failures)
+			require(!is_materialization_actual_io_or_hash_failure(failure),
+					"configuration/allocation/operation-drift entered stable taxonomy");
+	}
 
 	void expect_capture(std::vector<std::byte> input,
 						const std::uint64_t limit,
@@ -265,7 +392,8 @@ namespace
 		spool = memory_spool{};
 		reader.overreport_ = true;
 		failed = capture_bounded_input(reader, spool, {4U, 2U});
-		require(!failed && failed.error().kind == materialization_io_failure_kind::read &&
+		require(!failed &&
+					failed.error().kind == materialization_io_failure_kind::invalid_configuration &&
 					spool.data_.empty(),
 				"reader count beyond requested span was accepted");
 
@@ -313,7 +441,7 @@ namespace
 		reader = fragmented_reader{bytes("abc"), {2U}};
 		spool = memory_spool{};
 		injectable_digest digest;
-		digest.fail_update_ = true;
+		digest.update_failure_ = materialization_io_failure_kind::hash;
 		failed = capture_bounded_input(reader, spool, digest, {4U, 2U});
 		require(!failed &&
 					failed.error() ==
@@ -324,21 +452,236 @@ namespace
 		reader = fragmented_reader{bytes("abc"), {2U}};
 		spool = memory_spool{};
 		digest = injectable_digest{};
-		digest.fail_finish_ = true;
+		digest.finish_failure_ = materialization_io_failure_kind::hash;
 		failed = capture_bounded_input(reader, spool, digest, {4U, 2U});
 		require(!failed && spool.sealed_ &&
 					failed.error() ==
 						materialization_io_failure{materialization_io_failure_kind::hash,
 												   materialization_io_operation::digest_finalize},
 				"incremental hash finalization failure escaped its private port");
+
+		reader = fragmented_reader{bytes("abc"), {2U}};
+		spool = memory_spool{};
+		digest = injectable_digest{};
+		digest.malformed_finish_ = true;
+		failed = capture_bounded_input(reader, spool, digest, {4U, 2U});
+		require(!failed && spool.sealed_ &&
+					failed.error().kind == materialization_io_failure_kind::invalid_configuration &&
+					failed.error().operation == materialization_io_operation::digest_finalize,
+				"malformed successful capture digest escaped private configuration taxonomy");
+
+		for (const auto overreport : {false, true})
+		{
+			contradictory_replay_spool replay{overreport};
+			auto replay_digest = digest_materialization_spool(replay, 1U);
+			require(!replay_digest &&
+						replay_digest.error().kind ==
+							materialization_io_failure_kind::invalid_configuration &&
+						replay_digest.error().operation == materialization_io_operation::spool_read,
+					"successful replay count contradiction entered I/O failure taxonomy");
+		}
+	}
+
+	void anonymous_replay_spool()
+	{
+		auto spool = make_materialization_private_spool();
+		require(spool.has_value(), "anonymous private spool creation failed");
+		const auto first = bytes("abc");
+		const auto second = bytes("defgh");
+		require((*spool)->append(first) && (*spool)->append(second) &&
+					(*spool)->size_bytes() == 8U && !(*spool)->sealed(),
+				"anonymous spool did not retain the exact unsealed byte census");
+
+		std::array<std::byte, 3U> middle{};
+		auto read = (*spool)->read_at(2U, middle);
+		require(read && *read == middle.size() &&
+					std::vector<std::byte>{middle.begin(), middle.end()} == bytes("cde"),
+				"cursor-independent private-spool read differs");
+		require((*spool)->seal() && (*spool)->sealed(), "anonymous spool did not become immutable");
+		auto sealed_append = (*spool)->append(bytes("x"));
+		require(!sealed_append &&
+					sealed_append.error().kind ==
+						materialization_io_failure_kind::invalid_configuration &&
+					(*spool)->size_bytes() == 8U,
+				"sealed anonymous spool accepted an append");
+
+		std::array<std::byte, 8U> replay{};
+		auto replayed = (*spool)->read(replay);
+		require(replayed && *replayed == replay.size() &&
+					std::vector<std::byte>{replay.begin(), replay.end()} == bytes("abcdefgh"),
+				"sealed anonymous spool did not replay from byte zero");
+		require(static_cast<bool>((*spool)->rewind()), "anonymous spool rewind failed");
+		std::array<std::byte, 2U> prefix{};
+		replayed = (*spool)->read(prefix);
+		require(replayed && *replayed == prefix.size() &&
+					std::vector<std::byte>{prefix.begin(), prefix.end()} == bytes("ab"),
+				"anonymous spool rewind changed replay bytes");
+
+		auto digest = digest_materialization_spool(**spool, 3U);
+		require(digest && *digest == cxxlens::sdk::content_digest(bytes("abcdefgh")),
+				"streaming anonymous-spool digest differs from the exact bytes");
+	}
+
+	void kernel_seal_is_adversarially_immutable()
+	{
+#if defined(__linux__) && defined(F_ADD_SEALS) && defined(F_GET_SEALS) && defined(F_SEAL_WRITE) && \
+	defined(F_SEAL_GROW) && defined(F_SEAL_SHRINK) && defined(F_SEAL_SEAL)
+		auto spool = make_materialization_private_spool();
+		require(spool.has_value(), "private memfd creation failed for kernel-seal test");
+		const auto original = bytes("authority");
+		require((*spool)->append(original) && (*spool)->seal() && (*spool)->sealed(),
+				"private memfd did not reach its verified sealed state");
+
+		const auto descriptor = locate_materialization_memfd();
+		const auto path = proc_fd_path(descriptor);
+		const auto reopened = ::open(path.c_str(), O_RDWR | O_CLOEXEC);
+		require(reopened >= 0, "cannot reopen the private memfd through /proc/self/fd");
+		constexpr auto required_seals = F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL;
+		const auto observed_seals = ::fcntl(reopened, F_GET_SEALS);
+		require(observed_seals >= 0 && (observed_seals & required_seals) == required_seals,
+				"reopened private memfd lacks an exact required kernel seal bit");
+
+		const auto replacement = std::byte{'X'};
+		errno = 0;
+		require(::pwrite(reopened, &replacement, 1U, 0) < 0 && errno == EPERM,
+				"reopened sealed memfd accepted pwrite mutation");
+		errno = 0;
+		require(::ftruncate(reopened, static_cast<off_t>(original.size() + 1U)) < 0 &&
+					errno == EPERM,
+				"reopened sealed memfd accepted growth");
+		errno = 0;
+		require(::ftruncate(reopened, static_cast<off_t>(original.size() - 1U)) < 0 &&
+					errno == EPERM,
+				"reopened sealed memfd accepted shrinkage");
+		errno = 0;
+		require(::fcntl(reopened, F_ADD_SEALS, F_SEAL_WRITE) < 0 && errno == EPERM,
+				"reopened sealed memfd accepted further seal mutation");
+		require(::close(reopened) == 0, "cannot close the adversarially reopened memfd");
+
+		std::array<std::byte, 9U> replay{};
+		auto replayed = (*spool)->read_at(0U, replay);
+		require(replayed && *replayed == replay.size() &&
+					std::vector<std::byte>{replay.begin(), replay.end()} == original,
+				"adversarial mutation attempts changed sealed spool bytes");
+#else
+		auto spool = make_materialization_private_spool();
+		require(!spool &&
+					spool.error() ==
+						materialization_io_failure{
+							materialization_io_failure_kind::invalid_configuration,
+							materialization_io_operation::spool_create},
+				"unsupported platform did not fail closed before private-spool creation");
+#endif
+	}
+
+	void preseal_mutation_fails_closed()
+	{
+#if defined(__linux__) && defined(F_ADD_SEALS) && defined(F_GET_SEALS) && defined(F_SEAL_WRITE) && \
+	defined(F_SEAL_GROW) && defined(F_SEAL_SHRINK) && defined(F_SEAL_SEAL)
+		{
+			auto spool = make_materialization_private_spool();
+			require(spool.has_value() && (*spool)->append(bytes("authority")),
+					"cannot create private memfd for pre-seal content mutation probe");
+			const auto reopened =
+				::open(proc_fd_path(locate_materialization_memfd()).c_str(), O_RDWR | O_CLOEXEC);
+			require(reopened >= 0, "cannot reopen private memfd before content seal");
+			const auto replacement = std::byte{'X'};
+			require(::pwrite(reopened, &replacement, 1U, 0) == 1,
+					"cannot inject the pre-seal content mutation");
+			require(::close(reopened) == 0, "cannot close pre-seal content mutation fd");
+			auto sealed = (*spool)->seal();
+			require(!sealed &&
+						sealed.error() ==
+							materialization_io_failure{
+								materialization_io_failure_kind::invalid_configuration,
+								materialization_io_operation::spool_seal} &&
+						!(*spool)->sealed(),
+					"pre-seal content mutation escaped the sealed-byte binding");
+			require(!(*spool)->seal() && !(*spool)->append(bytes("x")),
+					"content-binding failure did not leave the spool terminally poisoned");
+		}
+
+		{
+			auto spool = make_materialization_private_spool();
+			require(spool.has_value() && (*spool)->append(bytes("authority")),
+					"cannot create private memfd for pre-seal size mutation probe");
+			const auto reopened =
+				::open(proc_fd_path(locate_materialization_memfd()).c_str(), O_RDWR | O_CLOEXEC);
+			require(reopened >= 0, "cannot reopen private memfd before size seal");
+			require(::ftruncate(reopened, 10) == 0, "cannot inject the pre-seal size mutation");
+			require(::close(reopened) == 0, "cannot close pre-seal size mutation fd");
+			auto sealed = (*spool)->seal();
+			require(!sealed &&
+						sealed.error() ==
+							materialization_io_failure{
+								materialization_io_failure_kind::invalid_configuration,
+								materialization_io_operation::spool_seal} &&
+						!(*spool)->sealed(),
+					"pre-seal size mutation escaped the actual-size binding");
+			require(!(*spool)->seal() && !(*spool)->append(bytes("x")),
+					"size-binding failure did not leave the spool terminally poisoned");
+		}
+#endif
+	}
+
+	void factory_and_seal_fail_closed()
+	{
+#if defined(__linux__) && defined(F_ADD_SEALS) && defined(F_GET_SEALS) && defined(F_SEAL_WRITE) && \
+	defined(F_SEAL_GROW) && defined(F_SEAL_SHRINK) && defined(F_SEAL_SEAL)
+		const auto child = ::fork();
+		require(child >= 0, "cannot fork the memfd factory failure probe");
+		if (child == 0)
+		{
+			struct rlimit descriptors{};
+			if (::getrlimit(RLIMIT_NOFILE, &descriptors) != 0)
+				::_exit(2);
+			descriptors.rlim_cur = 0;
+			if (::setrlimit(RLIMIT_NOFILE, &descriptors) != 0)
+				::_exit(3);
+			auto spool = make_materialization_private_spool();
+			const auto failed_closed = !spool &&
+				spool.error() ==
+					materialization_io_failure{materialization_io_failure_kind::spool,
+											   materialization_io_operation::spool_create};
+			::_exit(failed_closed ? 0 : 4);
+		}
+		int status{};
+		while (::waitpid(child, &status, 0) < 0)
+			require(errno == EINTR, "cannot wait for the memfd factory failure probe");
+		require(WIFEXITED(status) && WEXITSTATUS(status) == 0,
+				"memfd creation failure did not fail closed with a typed factory error");
+
+		auto spool = make_materialization_private_spool();
+		require(spool.has_value() && (*spool)->append(bytes("mutable")),
+				"cannot create private memfd for seal-failure probe");
+		const auto descriptor = locate_materialization_memfd();
+		const auto path = proc_fd_path(descriptor);
+		const auto reopened = ::open(path.c_str(), O_RDWR | O_CLOEXEC);
+		require(reopened >= 0, "cannot reopen private memfd for seal-failure probe");
+		require(::fcntl(reopened, F_ADD_SEALS, F_SEAL_SEAL) == 0,
+				"cannot inject an irreversible partial-seal failure");
+		require(::close(reopened) == 0, "cannot close partial-seal failure probe fd");
+		auto sealed = (*spool)->seal();
+		require(!sealed &&
+					sealed.error() ==
+						materialization_io_failure{materialization_io_failure_kind::spool,
+												   materialization_io_operation::spool_seal} &&
+					!(*spool)->sealed(),
+				"failed kernel sealing was reported as a logically sealed spool");
+#endif
 	}
 } // namespace
 
 int main()
 {
+	phase_authentic_failure_matrix();
 	boundary_state_machine();
 	fragmented_digest_oracle();
 	default_limit_stays_chunk_bounded();
 	typed_failures();
+	anonymous_replay_spool();
+	kernel_seal_is_adversarially_immutable();
+	preseal_mutation_fails_closed();
+	factory_and_seal_fail_closed();
 	return 0;
 }

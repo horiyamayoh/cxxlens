@@ -39,11 +39,27 @@ def run(driver: pathlib.Path, payload: bytes) -> subprocess.CompletedProcess[byt
     )
 
 
-def expect_pass(driver: pathlib.Path, value: dict[str, Any]) -> None:
-    result = run(driver, encoded(value))
+def run_option(
+    driver: pathlib.Path, option: str, payload: bytes = b""
+) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        [str(driver), option],
+        input=payload,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+
+def expect_pass_payload(driver: pathlib.Path, payload: bytes) -> None:
+    result = run(driver, payload)
     assert result.returncode == 0, (result.stdout, result.stderr)
     assert result.stdout == b"ok\n"
     assert result.stderr == b""
+
+
+def expect_pass(driver: pathlib.Path, value: dict[str, Any]) -> None:
+    expect_pass_payload(driver, encoded(value))
 
 
 def expect_failure(
@@ -60,10 +76,30 @@ def expect_failure(
     assert result.stderr == b""
 
 
+def expect_no_response(driver: pathlib.Path, option: str) -> None:
+    result = run_option(driver, option)
+    assert result.returncode == 2, (result.stdout, result.stderr)
+    assert result.stdout == b""
+    assert result.stderr == b""
+
+
 def main() -> int:
     args = parse_args()
     sys.path.insert(0, str(args.root / "tools" / "quality"))
     import check_ng_clang22_materialization as oracle  # pylint: disable=import-error
+
+    expect_no_response(args.driver, "--test-no-response")
+    unexpected = run_option(args.driver, "--unexpected")
+    assert unexpected.returncode == 2
+    assert unexpected.stdout == b""
+    assert unexpected.stderr == b""
+    over_limit = run_option(args.driver, "--test-input-limit", b"x" * 17)
+    assert over_limit.returncode == 1
+    assert (
+        over_limit.stdout
+        == b"materialization.request-invalid|input-limit|maximum-bytes\n"
+    )
+    assert over_limit.stderr == b""
 
     memory = oracle.sample_request(args.root, configuration="static", backend="memory")
     sqlite = oracle.sample_request(
@@ -82,7 +118,7 @@ def main() -> int:
         args.driver,
         encoded(unknown_version_with_shape_error),
         b"materialization.version-unsupported",
-        b"request.request_version",
+        b"request-version",
     )
 
     unknown_schema_with_shape_error = copy.deepcopy(memory)
@@ -93,8 +129,8 @@ def main() -> int:
     expect_failure(
         args.driver,
         encoded(unknown_schema_with_shape_error),
-        b"materialization.version-unsupported",
-        b"request.schema",
+        b"materialization.request-invalid",
+        b"request-envelope",
     )
 
     supported_version_with_shape_error = copy.deepcopy(memory)
@@ -112,28 +148,55 @@ def main() -> int:
     base64_alias["tasks"][0]["source"]["content_base64"] = (
         canonical_base64[:-3] + "h=="
     )
-    stale_spelling_binding = copy.deepcopy(base64_alias)
-    oracle.bind_request_identity(stale_spelling_binding)
+    try:
+        oracle.validate_request(args.root, base64_alias)
+    except oracle.MaterializationError as error:
+        assert error.code == "materialization.request-invalid", error
+    else:
+        raise AssertionError("Python oracle accepted noncanonical two-pad Base64")
     expect_failure(
         args.driver,
-        encoded(stale_spelling_binding),
-        b"materialization.identity-mismatch",
-        b"task.task_input_digest",
+        encoded(base64_alias),
+        b"materialization.request-invalid",
+        b"request-schema",
     )
-    oracle.bind_provider_task_identities(base64_alias)
-    oracle.bind_task_execution_identities(base64_alias)
-    oracle.bind_request_identity(base64_alias)
-    oracle.validate_request(args.root, base64_alias)
-    expect_pass(args.driver, base64_alias)
 
-    one_pad_base64_alias = copy.deepcopy(memory)
-    one_pad_base64_alias["project"]["catalog_compile_units"][0][
+    escaped_base64 = encoded(memory).replace(
+        json.dumps(canonical_base64).encode("ascii"),
+        ("\"" + canonical_base64.replace("=", "\\u003d") + "\"").encode("ascii"),
+        1,
+    )
+    assert escaped_base64 != encoded(memory)
+    decoded_escape = oracle.load_strict_json_bytes(escaped_base64, "request")
+    assert decoded_escape == memory
+    assert oracle.expected_task_input_digest(
+        decoded_escape, decoded_escape["tasks"][0]
+    ) == oracle.expected_task_input_digest(memory, memory["tasks"][0])
+    expect_pass_payload(args.driver, escaped_base64)
+
+    one_pad_base64 = copy.deepcopy(memory)
+    one_pad_base64["project"]["catalog_compile_units"][0][
         "source_digest"
     ] = oracle.content_digest(b"ab")
+    one_pad_base64["tasks"][0]["source"]["content_base64"] = "YWI="
+    oracle.rebind_request_base_identities(args.root, one_pad_base64)
+    oracle.validate_request(args.root, one_pad_base64)
+    expect_pass(args.driver, one_pad_base64)
+
+    one_pad_base64_alias = copy.deepcopy(one_pad_base64)
     one_pad_base64_alias["tasks"][0]["source"]["content_base64"] = "YWJ="
-    oracle.rebind_request_base_identities(args.root, one_pad_base64_alias)
-    oracle.validate_request(args.root, one_pad_base64_alias)
-    expect_pass(args.driver, one_pad_base64_alias)
+    try:
+        oracle.validate_request(args.root, one_pad_base64_alias)
+    except oracle.MaterializationError as error:
+        assert error.code == "materialization.request-invalid", error
+    else:
+        raise AssertionError("Python oracle accepted noncanonical one-pad Base64")
+    expect_failure(
+        args.driver,
+        encoded(one_pad_base64_alias),
+        b"materialization.request-invalid",
+        b"request-schema",
+    )
 
     empty_source = copy.deepcopy(memory)
     empty_source["project"]["catalog_compile_units"][0]["source_digest"] = (
@@ -150,7 +213,7 @@ def main() -> int:
         args.driver,
         encoded(identity_drift),
         b"materialization.identity-mismatch",
-        b"request.identity",
+        b"request.request_digest",
     )
 
     task_drift = copy.deepcopy(memory)
@@ -189,14 +252,19 @@ def main() -> int:
         b'{"engine":null,"engine":',
         1,
     )
-    expect_failure(args.driver, duplicate, b"materialization.json-invalid", b"input")
+    expect_failure(args.driver, duplicate, b"materialization.request-invalid", b"json-decode")
     expect_failure(
         args.driver,
         b"\xef\xbb\xbf" + valid,
-        b"materialization.json-invalid",
-        b"input",
+        b"materialization.request-invalid",
+        b"json-decode",
     )
-    expect_failure(args.driver, valid + b"{}", b"materialization.json-invalid", b"input")
+    expect_failure(
+        args.driver,
+        valid + b"{}",
+        b"materialization.request-invalid",
+        b"json-decode",
+    )
     return 0
 
 

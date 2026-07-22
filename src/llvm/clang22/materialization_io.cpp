@@ -3,16 +3,302 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cerrno>
 #include <limits>
+#include <memory>
 #include <new>
 #include <stdexcept>
 #include <string_view>
+#include <system_error>
 #include <vector>
+
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#if defined(__linux__)
+#include <linux/memfd.h>
+#include <sys/syscall.h>
+#endif
 
 namespace cxxlens::detail::clang22::materialization
 {
 	namespace
 	{
+#if defined(__linux__) && defined(SYS_memfd_create) && defined(MFD_CLOEXEC) && \
+	defined(MFD_ALLOW_SEALING) && defined(F_ADD_SEALS) && defined(F_GET_SEALS) && \
+	defined(F_SEAL_WRITE) && defined(F_SEAL_GROW) && defined(F_SEAL_SHRINK) && \
+	defined(F_SEAL_SEAL)
+		inline constexpr int required_memfd_seals =
+			F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL;
+#endif
+
+		[[nodiscard]] bool exact_sha256(const std::string_view value) noexcept
+		{
+			return value.size() == 71U && value.starts_with("sha256:") &&
+				std::ranges::all_of(value.substr(7U),
+									[](const char byte)
+									{
+										return (byte >= '0' && byte <= '9') ||
+											(byte >= 'a' && byte <= 'f');
+									});
+		}
+
+		class anonymous_file_spool final : public materialization_replayable_spool
+		{
+		  public:
+			anonymous_file_spool(
+				const int descriptor,
+				std::unique_ptr<materialization_digest_accumulator> expected_digest) noexcept
+				: descriptor_{descriptor}, expected_digest_{std::move(expected_digest)}
+			{
+			}
+			~anonymous_file_spool() override
+			{
+				if (descriptor_ >= 0)
+					(void)::close(descriptor_);
+			}
+
+			materialization_io_result<void> append(const std::span<const std::byte> bytes) override
+			{
+				if (sealed_ || poisoned_ || !expected_digest_)
+					return materialization_io_failure{
+						materialization_io_failure_kind::invalid_configuration,
+						materialization_io_operation::spool_write};
+				std::size_t offset{};
+				while (offset < bytes.size())
+				{
+					const auto count =
+						::write(descriptor_, bytes.data() + offset, bytes.size() - offset);
+					if (count < 0 && errno == EINTR)
+						continue;
+					if (count < 0)
+					{
+						poisoned_ = true;
+						return materialization_io_failure{
+							materialization_io_failure_kind::write,
+							materialization_io_operation::spool_write};
+					}
+					if (count == 0 || static_cast<std::size_t>(count) > bytes.size() - offset)
+					{
+						poisoned_ = true;
+						return materialization_io_failure{
+							materialization_io_failure_kind::invalid_configuration,
+							materialization_io_operation::spool_write};
+					}
+					offset += static_cast<std::size_t>(count);
+				}
+				if (auto updated = expected_digest_->update(bytes); !updated)
+				{
+					poisoned_ = true;
+					return updated.error();
+				}
+				size_ += static_cast<std::uint64_t>(bytes.size());
+				return {};
+			}
+
+			materialization_io_result<void> seal() override
+			{
+				if (poisoned_ || !expected_digest_)
+					return materialization_io_failure{
+						materialization_io_failure_kind::invalid_configuration,
+						materialization_io_operation::spool_seal};
+				if (sealed_)
+					return {};
+#if defined(__linux__) && defined(SYS_memfd_create) && defined(MFD_CLOEXEC) && \
+	defined(MFD_ALLOW_SEALING) && defined(F_ADD_SEALS) && defined(F_GET_SEALS) && \
+	defined(F_SEAL_WRITE) && defined(F_SEAL_GROW) && defined(F_SEAL_SHRINK) && \
+	defined(F_SEAL_SEAL)
+				if (::lseek(descriptor_, 0, SEEK_SET) < 0)
+					return materialization_io_failure{materialization_io_failure_kind::spool,
+													  materialization_io_operation::spool_seal};
+				if (::fcntl(descriptor_, F_ADD_SEALS, required_memfd_seals) != 0)
+					return materialization_io_failure{materialization_io_failure_kind::spool,
+													  materialization_io_operation::spool_seal};
+				const auto observed_seals = ::fcntl(descriptor_, F_GET_SEALS);
+				if (observed_seals < 0)
+					return materialization_io_failure{materialization_io_failure_kind::spool,
+													  materialization_io_operation::spool_seal};
+				if ((observed_seals & required_memfd_seals) != required_memfd_seals)
+				{
+					poisoned_ = true;
+					return materialization_io_failure{
+						materialization_io_failure_kind::invalid_configuration,
+						materialization_io_operation::spool_seal};
+				}
+				struct stat status{};
+				if (::fstat(descriptor_, &status) != 0)
+				{
+					poisoned_ = true;
+					return materialization_io_failure{materialization_io_failure_kind::spool,
+													  materialization_io_operation::spool_seal};
+				}
+				if (status.st_size < 0 || static_cast<std::uint64_t>(status.st_size) != size_)
+				{
+					poisoned_ = true;
+					return materialization_io_failure{
+						materialization_io_failure_kind::invalid_configuration,
+						materialization_io_operation::spool_seal};
+				}
+				auto verified = verify_sealed_bytes();
+				if (!verified)
+				{
+					poisoned_ = true;
+					return verified.error();
+				}
+				expected_digest_.reset();
+				sealed_ = true;
+				return {};
+#else
+				return materialization_io_failure{
+					materialization_io_failure_kind::invalid_configuration,
+					materialization_io_operation::spool_seal};
+#endif
+			}
+
+			materialization_io_result<std::size_t> read(std::span<std::byte> destination) override
+			{
+				if (!sealed())
+					return materialization_io_failure{
+						materialization_io_failure_kind::invalid_configuration,
+						materialization_io_operation::spool_read};
+				for (;;)
+				{
+					const auto count = ::read(descriptor_, destination.data(), destination.size());
+					if (count < 0 && errno == EINTR)
+						continue;
+					if (count < 0)
+						return materialization_io_failure{materialization_io_failure_kind::read,
+														  materialization_io_operation::spool_read};
+					if (static_cast<std::size_t>(count) > destination.size())
+						return materialization_io_failure{
+							materialization_io_failure_kind::invalid_configuration,
+							materialization_io_operation::spool_read};
+					return static_cast<std::size_t>(count);
+				}
+			}
+
+			materialization_io_result<std::size_t>
+			read_at(const std::uint64_t offset, std::span<std::byte> destination) override
+			{
+				if (poisoned_ || offset > size_)
+					return materialization_io_failure{
+						materialization_io_failure_kind::invalid_configuration,
+						materialization_io_operation::spool_read};
+				if (offset == size_ || destination.empty())
+					return std::size_t{};
+				const auto available = static_cast<std::size_t>(
+					std::min<std::uint64_t>(size_ - offset, destination.size()));
+				for (;;)
+				{
+					const auto count = ::pread(
+						descriptor_, destination.data(), available, static_cast<off_t>(offset));
+					if (count < 0 && errno == EINTR)
+						continue;
+					if (count < 0)
+						return materialization_io_failure{materialization_io_failure_kind::read,
+														  materialization_io_operation::spool_read};
+					if (count == 0 || static_cast<std::size_t>(count) > available)
+						return materialization_io_failure{
+							materialization_io_failure_kind::invalid_configuration,
+							materialization_io_operation::spool_read};
+					return static_cast<std::size_t>(count);
+				}
+			}
+
+			materialization_io_result<void> rewind() override
+			{
+				if (poisoned_)
+					return materialization_io_failure{
+						materialization_io_failure_kind::invalid_configuration,
+						materialization_io_operation::spool_rewind};
+				if (::lseek(descriptor_, 0, SEEK_SET) < 0)
+					return materialization_io_failure{materialization_io_failure_kind::spool,
+													  materialization_io_operation::spool_rewind};
+				return {};
+			}
+
+			[[nodiscard]] std::uint64_t size_bytes() const noexcept override
+			{
+				return size_;
+			}
+
+			[[nodiscard]] bool sealed() const noexcept override
+			{
+				return sealed_ && !poisoned_;
+			}
+
+		  private:
+			[[nodiscard]] materialization_io_result<void> verify_sealed_bytes()
+			{
+				try
+				{
+					auto expected = expected_digest_->finish();
+					if (!expected)
+						return expected.error();
+					if (!exact_sha256(*expected))
+						return materialization_io_failure{
+							materialization_io_failure_kind::invalid_configuration,
+							materialization_io_operation::digest_finalize};
+					auto observed_digest = make_materialization_sha256_accumulator();
+					if (!observed_digest)
+						return materialization_io_failure{
+							materialization_io_failure_kind::allocation,
+							materialization_io_operation::buffer_allocation};
+					std::array<std::byte, default_stream_chunk_bytes> buffer{};
+					std::uint64_t offset{};
+					while (offset < size_)
+					{
+						const auto requested = static_cast<std::size_t>(
+							std::min<std::uint64_t>(size_ - offset, buffer.size()));
+						ssize_t count{};
+						do
+						{
+							count = ::pread(
+								descriptor_, buffer.data(), requested, static_cast<off_t>(offset));
+						} while (count < 0 && errno == EINTR);
+						if (count < 0)
+							return materialization_io_failure{
+								materialization_io_failure_kind::read,
+								materialization_io_operation::spool_read};
+						if (count == 0 || static_cast<std::size_t>(count) > requested)
+							return materialization_io_failure{
+								materialization_io_failure_kind::invalid_configuration,
+								materialization_io_operation::spool_read};
+						if (auto updated = observed_digest->update(
+								std::span{buffer}.first(static_cast<std::size_t>(count)));
+							!updated)
+							return updated.error();
+						offset += static_cast<std::uint64_t>(count);
+					}
+					auto observed = observed_digest->finish();
+					if (!observed)
+						return observed.error();
+					if (!exact_sha256(*observed))
+						return materialization_io_failure{
+							materialization_io_failure_kind::invalid_configuration,
+							materialization_io_operation::digest_finalize};
+					if (*observed != *expected)
+						return materialization_io_failure{
+							materialization_io_failure_kind::invalid_configuration,
+							materialization_io_operation::spool_seal};
+					return {};
+				}
+				catch (const std::bad_alloc&)
+				{
+					return materialization_io_failure{
+						materialization_io_failure_kind::allocation,
+						materialization_io_operation::buffer_allocation};
+				}
+			}
+
+			int descriptor_{-1};
+			std::unique_ptr<materialization_digest_accumulator> expected_digest_;
+			std::uint64_t size_{};
+			bool sealed_{};
+			bool poisoned_{};
+		};
+
 		class incremental_sha256 final : public materialization_digest_accumulator
 		{
 		  public:
@@ -157,6 +443,90 @@ namespace cxxlens::detail::clang22::materialization
 		}
 	} // namespace
 
+	materialization_io_result<std::unique_ptr<materialization_replayable_spool>>
+	make_materialization_private_spool()
+	{
+#if defined(__linux__) && defined(SYS_memfd_create) && defined(MFD_CLOEXEC) && \
+	defined(MFD_ALLOW_SEALING) && defined(F_ADD_SEALS) && defined(F_GET_SEALS) && \
+	defined(F_SEAL_WRITE) && defined(F_SEAL_GROW) && defined(F_SEAL_SHRINK) && \
+	defined(F_SEAL_SEAL)
+		const auto descriptor = static_cast<int>(::syscall(
+			SYS_memfd_create, "cxxlens-materialization", MFD_CLOEXEC | MFD_ALLOW_SEALING));
+		if (descriptor < 0)
+			return materialization_io_failure{materialization_io_failure_kind::spool,
+											  materialization_io_operation::spool_create};
+		try
+		{
+			auto expected_digest = make_materialization_sha256_accumulator();
+			if (!expected_digest)
+			{
+				(void)::close(descriptor);
+				return materialization_io_failure{materialization_io_failure_kind::allocation,
+												  materialization_io_operation::spool_create};
+			}
+			auto output =
+				std::make_unique<anonymous_file_spool>(descriptor, std::move(expected_digest));
+			return std::unique_ptr<materialization_replayable_spool>{std::move(output)};
+		}
+		catch (const std::bad_alloc&)
+		{
+			(void)::close(descriptor);
+			return materialization_io_failure{materialization_io_failure_kind::allocation,
+											  materialization_io_operation::spool_create};
+		}
+#else
+		return materialization_io_failure{materialization_io_failure_kind::invalid_configuration,
+										  materialization_io_operation::spool_create};
+#endif
+	}
+
+	std::unique_ptr<materialization_digest_accumulator> make_materialization_sha256_accumulator()
+	{
+		return std::make_unique<incremental_sha256>();
+	}
+
+	materialization_io_result<std::string>
+	digest_materialization_spool(materialization_replayable_spool& spool,
+								 const std::size_t chunk_bytes)
+	{
+		if (!spool.sealed() || chunk_bytes == 0U || chunk_bytes > maximum_stream_chunk_bytes)
+			return failure(materialization_io_failure_kind::invalid_configuration,
+						   materialization_io_operation::configuration);
+		try
+		{
+			std::vector<std::byte> buffer(chunk_bytes);
+			incremental_sha256 digest;
+			std::uint64_t offset{};
+			while (offset < spool.size_bytes())
+			{
+				const auto remaining = spool.size_bytes() - offset;
+				auto destination = std::span{buffer}.first(
+					static_cast<std::size_t>(std::min<std::uint64_t>(remaining, buffer.size())));
+				auto received = spool.read_at(offset, destination);
+				if (!received)
+					return received.error();
+				if (*received == 0U || *received > destination.size())
+					return failure(materialization_io_failure_kind::invalid_configuration,
+								   materialization_io_operation::spool_read);
+				if (auto updated = digest.update(std::span{buffer}.first(*received)); !updated)
+					return updated.error();
+				offset += static_cast<std::uint64_t>(*received);
+			}
+			auto finished = digest.finish();
+			if (!finished)
+				return finished.error();
+			if (!exact_sha256(*finished))
+				return failure(materialization_io_failure_kind::invalid_configuration,
+							   materialization_io_operation::digest_finalize);
+			return std::move(*finished);
+		}
+		catch (const std::bad_alloc&)
+		{
+			return failure(materialization_io_failure_kind::allocation,
+						   materialization_io_operation::buffer_allocation);
+		}
+	}
+
 	materialization_io_result<raw_input_observation>
 	capture_bounded_input(materialization_byte_reader& input,
 						  materialization_private_spool& spool,
@@ -188,7 +558,7 @@ namespace cxxlens::detail::clang22::materialization
 				if (!received)
 					return received.error();
 				if (*received > requested)
-					return failure(materialization_io_failure_kind::read,
+					return failure(materialization_io_failure_kind::invalid_configuration,
 								   materialization_io_operation::input_read);
 				if (*received == 0U)
 				{
@@ -216,6 +586,9 @@ namespace cxxlens::detail::clang22::materialization
 			auto finished = digest.finish();
 			if (!finished)
 				return finished.error();
+			if (!exact_sha256(*finished))
+				return failure(materialization_io_failure_kind::invalid_configuration,
+							   materialization_io_operation::digest_finalize);
 			return raw_input_observation{
 				options.byte_limit, observed, std::move(*finished), complete};
 		}

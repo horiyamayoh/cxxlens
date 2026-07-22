@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <string>
 #include <utility>
@@ -32,6 +33,9 @@ namespace cxxlens::detail::clang22::materialization
 		input_read,
 		spool_write,
 		spool_seal,
+		spool_create,
+		spool_read,
+		spool_rewind,
 		digest_update,
 		digest_finalize,
 	};
@@ -43,6 +47,34 @@ namespace cxxlens::detail::clang22::materialization
 
 		[[nodiscard]] bool operator==(const materialization_io_failure&) const = default;
 	};
+
+	/** True only for an operation-authentic port I/O/hash failure admitted to stable taxonomy. */
+	[[nodiscard]] constexpr bool
+	is_materialization_actual_io_or_hash_failure(const materialization_io_failure& failure) noexcept
+	{
+		switch (failure.operation)
+		{
+			case materialization_io_operation::input_read:
+				return failure.kind == materialization_io_failure_kind::read;
+			case materialization_io_operation::spool_write:
+				return failure.kind == materialization_io_failure_kind::write ||
+					failure.kind == materialization_io_failure_kind::spool;
+			case materialization_io_operation::spool_seal:
+			case materialization_io_operation::spool_create:
+			case materialization_io_operation::spool_rewind:
+				return failure.kind == materialization_io_failure_kind::spool;
+			case materialization_io_operation::spool_read:
+				return failure.kind == materialization_io_failure_kind::read ||
+					failure.kind == materialization_io_failure_kind::spool;
+			case materialization_io_operation::digest_update:
+			case materialization_io_operation::digest_finalize:
+				return failure.kind == materialization_io_failure_kind::hash;
+			case materialization_io_operation::configuration:
+			case materialization_io_operation::buffer_allocation:
+				return false;
+		}
+		return false;
+	}
 
 	template <class Value>
 	class materialization_io_result
@@ -162,6 +194,35 @@ namespace cxxlens::detail::clang22::materialization
 		[[nodiscard]] virtual materialization_io_result<void> seal() = 0;
 	};
 
+	/**
+	 * Anonymous file-backed spool used by the production two-pass request path.
+	 *
+	 * The object is move-only behind this port, never exposes a pathname, and rejects every append
+	 * after `seal()`. `read_at` is cursor-independent so nested replay and exact duplicate-member
+	 * ledgers do not depend on ambient file offsets.
+	 */
+	class materialization_replayable_spool : public materialization_private_spool,
+											 public materialization_byte_reader
+	{
+	  public:
+		~materialization_replayable_spool() override = default;
+
+		[[nodiscard]] virtual materialization_io_result<std::size_t>
+		read_at(std::uint64_t offset, std::span<std::byte> destination) = 0;
+		[[nodiscard]] virtual materialization_io_result<void> rewind() = 0;
+		[[nodiscard]] virtual std::uint64_t size_bytes() const noexcept = 0;
+		[[nodiscard]] virtual bool sealed() const noexcept = 0;
+	};
+
+	/**
+	 * Create one Linux memfd-only spool with close-on-exec and sealing enabled.
+	 *
+	 * Creation fails closed when `memfd_create` or irreversible kernel sealing is unavailable; no
+	 * pathname-backed or mutable anonymous-file fallback is permitted.
+	 */
+	[[nodiscard]] materialization_io_result<std::unique_ptr<materialization_replayable_spool>>
+	make_materialization_private_spool();
+
 	/** Private incremental digest port; hash implementation and failure injection stay outside I/O.
 	 */
 	class materialization_digest_accumulator
@@ -172,6 +233,15 @@ namespace cxxlens::detail::clang22::materialization
 		update(std::span<const std::byte> bytes) = 0;
 		[[nodiscard]] virtual materialization_io_result<std::string> finish() = 0;
 	};
+
+	/** Create a fresh incremental SHA-256 accumulator returning `sha256:<lower-hex>`. */
+	[[nodiscard]] std::unique_ptr<materialization_digest_accumulator>
+	make_materialization_sha256_accumulator();
+
+	/** Hash one complete sealed spool without retaining its contents in memory. */
+	[[nodiscard]] materialization_io_result<std::string>
+	digest_materialization_spool(materialization_replayable_spool& spool,
+								 std::size_t chunk_bytes = default_stream_chunk_bytes);
 
 	/** Exact bounded raw-input observation; no suffix size or digest is representable. */
 	struct raw_input_observation

@@ -25,6 +25,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "sdk/provider_runtime_internal.hpp"
 #include "sdk/provider_validation_internal.hpp"
 
 namespace
@@ -1005,6 +1006,131 @@ namespace
 					maximum->credit.frames == std::numeric_limits<std::uint64_t>::max() &&
 					rejects(std::move(decimal_overflow)) && rejects(std::move(extreme_decimal)),
 				"host credit boundary did not reject decimal overflow or preserve uint64 max");
+
+		auto chunk_manifest = description;
+		chunk_manifest.protocol.maximum_minor = 1U;
+		chunk_manifest.protocol.required_features = {"credit-backpressure", "task-input-chunks-v1"};
+		constexpr std::size_t chunk_bytes = 1024U * 1024U;
+		std::vector<std::byte> streaming_bytes;
+		host_transcript_expectation streaming_expectation;
+		for (const auto size :
+			 std::array<std::size_t, 5U>{0U, 1U, chunk_bytes - 1U, chunk_bytes, chunk_bytes + 1U})
+		{
+			std::vector<std::byte> payload(size);
+			for (std::size_t index{}; index < payload.size(); ++index)
+				payload[index] = static_cast<std::byte>(index % 251U);
+			auto expectation = host.expectation;
+			expectation.provider_manifest = chunk_manifest.canonical_json();
+			expectation.limits.minimum_minor = 1U;
+			expectation.limits.maximum_minor = 1U;
+			expectation.task.task_input_digest = content_digest(payload);
+			auto wire = encode_host_transcript({expectation, host.credit, payload});
+			auto decoded = wire ? decode_frame_stream(*wire, expectation.limits)
+								: result<std::vector<frame>>{unexpected(wire.error())};
+			auto checked = decoded ? validate_host_transcript(*decoded, expectation)
+								   : result<validated_host_transcript>{unexpected(decoded.error())};
+			const auto expected_chunks = size == 0U ? 0U : 1U + ((size - 1U) / chunk_bytes);
+			require(checked && checked->payload == payload &&
+						decoded->size() == 6U + expected_chunks &&
+						decoded->at(2U).type == message_type::open_task &&
+						decoded->at(2U).payload.empty() &&
+						decoded->at(3U).type == message_type::input_descriptor &&
+						decoded->at(4U + expected_chunks).type == message_type::credit &&
+						decoded->at(5U + expected_chunks).type == message_type::close,
+					"minor-1 host input boundary failed exact descriptor/chunk shape");
+			if (size == chunk_bytes + 1U)
+			{
+				streaming_bytes = std::move(*wire);
+				streaming_expectation = std::move(expectation);
+				auto missing = *decoded;
+				missing.erase(missing.begin() + 4);
+				auto duplicate = *decoded;
+				duplicate.insert(duplicate.begin() + 5, duplicate.at(4U));
+				auto reordered = *decoded;
+				std::swap(reordered.at(4U), reordered.at(5U));
+				auto digest_mismatch = *decoded;
+				digest_mismatch.at(4U).payload.front() ^= std::byte{1U};
+				auto descriptor_mismatch = *decoded;
+				descriptor_mismatch.at(3U).control.clear();
+				auto extra = *decoded;
+				auto extra_frame = extra.back();
+				extra_frame.sequence += 1U;
+				extra.push_back(std::move(extra_frame));
+				require(!validate_host_transcript(missing, streaming_expectation) &&
+							!validate_host_transcript(duplicate, streaming_expectation) &&
+							!validate_host_transcript(reordered, streaming_expectation) &&
+							!validate_host_transcript(digest_mismatch, streaming_expectation) &&
+							!validate_host_transcript(descriptor_mismatch, streaming_expectation) &&
+							!validate_host_transcript(extra, streaming_expectation),
+						"minor-1 host input accepted "
+						"missing/duplicate/reordered/digest/descriptor/extra");
+			}
+		}
+
+		class short_read_source final : public detail::host_input_byte_source
+		{
+		  public:
+			explicit short_read_source(const std::span<const std::byte> bytes) : bytes_{bytes} {}
+			result<std::size_t> read(const std::span<std::byte> output) override
+			{
+				const auto count = std::min<std::size_t>(
+					{output.size(), bytes_.size() - offset_, std::size_t{4093U}});
+				std::ranges::copy(bytes_.subspan(offset_, count), output.begin());
+				offset_ += count;
+				return count;
+			}
+
+		  private:
+			std::span<const std::byte> bytes_;
+			std::size_t offset_{};
+		} short_reads{streaming_bytes};
+		class collecting_input_sink final : public detail::host_input_chunk_sink
+		{
+		  public:
+			result<void> append(const std::span<const std::byte> bytes) override
+			{
+				bytes_.insert(bytes_.end(), bytes.begin(), bytes.end());
+				return {};
+			}
+			std::vector<std::byte> bytes_;
+		} streamed_input;
+		auto streamed_seal = detail::validate_host_transcript_stream(
+			short_reads, {streaming_expectation, true}, streamed_input);
+		require(
+			streamed_seal && streamed_seal->protocol_minor() == 1U &&
+				streamed_seal->total_bytes() == chunk_bytes + 1U &&
+				streamed_seal->chunk_bytes() == chunk_bytes && streamed_seal->chunk_count() == 2U &&
+				streamed_seal->ordered_chunk_digests().size() == 2U &&
+				streamed_input.bytes_.size() == chunk_bytes + 1U &&
+				streamed_seal->ordered_chunk_digest_set_digest().starts_with("semantic-v2:sha256:"),
+			"arbitrary-short-read host stream did not produce the exact immutable input seal");
+
+		class oversized_input final : public detail::replayable_host_input
+		{
+		  public:
+			result<std::uint64_t> size() const override
+			{
+				return 64U * 1024U * 1024U + 1U;
+			}
+			result<std::size_t> read_at(std::uint64_t, std::span<std::byte>) const override
+			{
+				return cxxlens::sdk::unexpected(error{"sdk.test-unexpected-read", "input", {}});
+			}
+		} oversized;
+		class discard_frames final : public frame_sink
+		{
+		  public:
+			result<void> write(std::span<const std::byte>) override
+			{
+				return {};
+			}
+		} discarded;
+		auto oversized_result = detail::encode_host_transcript_incremental(
+			{streaming_expectation, true}, host.credit, oversized, discarded);
+		require(!oversized_result &&
+					oversized_result.error().code == "provider.host-transcript-invalid" &&
+					oversized_result.error().detail == "input-limit",
+				"minor-1 logical input limit did not fail before reading or allocation");
 	}
 
 	void check_sealed_provider_validation()
@@ -1214,7 +1340,7 @@ namespace
 				"cross-column row count mismatch reached an adoption seal");
 	}
 
-	void check_process_faults(const std::string& executable)
+	void check_process_faults(const std::string& executable, const bool receipt_only = false)
 	{
 		auto processes = make_system_provider_process_port();
 		require(processes != nullptr, "system provider process port unavailable");
@@ -1224,59 +1350,182 @@ namespace
 				"default/forged selection token reached process launch");
 
 		std::array<int, 2U> inherited_descriptors{-1, -1};
-		require(::socketpair(AF_UNIX, SOCK_STREAM, 0, inherited_descriptors.data()) == 0,
-				"parent non-CLOEXEC socket fixture failed");
-		for (const auto mode : {"success", "network-check", "fd-clean"})
+		if (!receipt_only)
 		{
-			auto request = task(select(executable, mode));
-			if (std::string_view{mode} == "success")
-				request.task_id = "task|delimiter-雪";
-			auto report = runtime.execute(request);
-			cxxlens::sdk::provider::task reference_task;
-			reference_task.task_id = request.task_id;
-			reference_task.outputs = request.output_descriptors;
-			auto reference = report
-				? cxxlens::sdk::testing::validate_process_transcript(reference_task,
-																	 report->provider,
-																	 report->frames,
-																	 request.output_credit,
-																	 request.limits)
-				: cxxlens::sdk::result<cxxlens::sdk::testing::conformance_report>{
-					  cxxlens::sdk::unexpected(
-						  cxxlens::sdk::error{"sdk.test-setup", "process-report", {}})};
-			auto applied_policy = report
-				? resolve_sandbox_policy(report->sandbox.policy_digest)
-				: result<sandbox_policy>{unexpected(error{"sdk.test-setup", "sandbox", {}})};
-			auto evidence = report && applied_policy
-				? sandbox_evidence_digest(*applied_policy,
-										  request.budget,
-										  report->sandbox.achieved,
-										  report->sandbox.mechanisms,
-										  report->provider.provider_binary_digest)
-				: result<std::string>{unexpected(error{"sdk.test-setup", "evidence", {}})};
-			require(
-				report && report->succeeded() &&
-					report->measured_executable_digest == report->provider.provider_binary_digest &&
-					report->frames.front().type == message_type::hello &&
-					report->frames.size() == 15U &&
-					report->frames.at(1U).type == message_type::schema_negotiate &&
-					report->frames.at(2U).type == message_type::task_accepted &&
-					report->frames.at(3U).type == message_type::batch_begin &&
-					report->frames.at(10U).type == message_type::batch_end &&
-					report->frames.at(11U).type == message_type::coverage_chunk &&
-					report->frames.back().type == message_type::task_complete &&
-					report->sandbox.achieved == sandbox_assurance::enforced &&
-					report->sandbox.policy_digest ==
-						request.selection.authority_request().sandbox.policy_digest &&
-					applied_policy && report->sandbox.mechanisms == applied_policy->mechanisms &&
-					evidence && report->sandbox.evidence_digest == *evidence &&
-					report->canonical_form().contains("cxxlens.provider-execution-report.v1") &&
-					reference && reference->accepted,
-				std::string{"successful process provider failed: "} + mode +
-					" terminal=" + (report ? report->terminal : report.error().code));
+			require(::socketpair(AF_UNIX, SOCK_STREAM, 0, inherited_descriptors.data()) == 0,
+					"parent non-CLOEXEC socket fixture failed");
+			for (const auto mode : {"success", "network-check", "fd-clean"})
+			{
+				auto request = task(select(executable, mode));
+				if (std::string_view{mode} == "success")
+					request.task_id = "task|delimiter-雪";
+				auto report = runtime.execute(request);
+				cxxlens::sdk::provider::task reference_task;
+				reference_task.task_id = request.task_id;
+				reference_task.outputs = request.output_descriptors;
+				auto reference = report
+					? cxxlens::sdk::testing::validate_process_transcript(reference_task,
+																		 report->provider,
+																		 report->frames,
+																		 request.output_credit,
+																		 request.limits)
+					: cxxlens::sdk::result<cxxlens::sdk::testing::conformance_report>{
+						  cxxlens::sdk::unexpected(
+							  cxxlens::sdk::error{"sdk.test-setup", "process-report", {}})};
+				auto applied_policy = report
+					? resolve_sandbox_policy(report->sandbox.policy_digest)
+					: result<sandbox_policy>{unexpected(error{"sdk.test-setup", "sandbox", {}})};
+				auto evidence = report && applied_policy
+					? sandbox_evidence_digest(*applied_policy,
+											  request.budget,
+											  report->sandbox.achieved,
+											  report->sandbox.mechanisms,
+											  report->provider.provider_binary_digest)
+					: result<std::string>{unexpected(error{"sdk.test-setup", "evidence", {}})};
+				require(
+					report && report->succeeded() &&
+						report->measured_executable_digest ==
+							report->provider.provider_binary_digest &&
+						report->frames.front().type == message_type::hello &&
+						report->frames.size() == 15U &&
+						report->frames.at(1U).type == message_type::schema_negotiate &&
+						report->frames.at(2U).type == message_type::task_accepted &&
+						report->frames.at(3U).type == message_type::batch_begin &&
+						report->frames.at(10U).type == message_type::batch_end &&
+						report->frames.at(11U).type == message_type::coverage_chunk &&
+						report->frames.back().type == message_type::task_complete &&
+						report->sandbox.achieved == sandbox_assurance::enforced &&
+						report->sandbox.policy_digest ==
+							request.selection.authority_request().sandbox.policy_digest &&
+						applied_policy &&
+						report->sandbox.mechanisms == applied_policy->mechanisms && evidence &&
+						report->sandbox.evidence_digest == *evidence &&
+						report->canonical_form().contains("cxxlens.provider-execution-report.v1") &&
+						reference && reference->accepted,
+					std::string{"successful process provider failed: "} + mode +
+						" terminal=" + (report ? report->terminal : report.error().code));
+			}
 		}
+
+		auto receipt_candidate = candidate(executable, "success");
+		receipt_candidate.description.protocol.maximum_minor = 1U;
+		receipt_candidate.description.protocol.required_features = {"credit-backpressure",
+																	"task-input-chunks-v1"};
+		auto receipt_selection =
+			select_provider(selection_request(executable), std::span{&receipt_candidate, 1U});
+		require(receipt_selection.has_value(), "runtime receipt provider selection failed");
+		auto receipt_request = task(std::move(*receipt_selection));
+		receipt_request.limits.minimum_minor = 1U;
+		receipt_request.limits.maximum_minor = 1U;
+		auto sealed_execution = detail::execute_provider_process(*processes, receipt_request);
+		require(
+			sealed_execution && sealed_execution->succeeded() && sealed_execution->input_seal &&
+				sealed_execution->sealed && sealed_execution->provider_identity &&
+				sealed_execution->runtime_receipt,
+			"successful process did not retain input/output seals, identity, and runtime receipt");
+		const auto& input_seal = *sealed_execution->input_seal;
+		const auto& sealed_identity = *sealed_execution->provider_identity;
+		const auto& receipt = *sealed_execution->runtime_receipt;
+		require(input_seal.protocol_major() == 1U && input_seal.protocol_minor() == 1U &&
+					input_seal.total_bytes() == receipt_request.payload.size() &&
+					input_seal.chunk_bytes() == 1024U * 1024U && input_seal.chunk_count() == 1U &&
+					input_seal.task().task_input_digest == receipt_request.task_input_digest &&
+					sealed_identity.provider_id == receipt_candidate.description.provider_id &&
+					sealed_identity.provider_binary_digest ==
+						receipt_candidate.description.provider_binary_digest &&
+					sealed_identity.protocol_minor == 1U &&
+					std::ranges::binary_search(sealed_identity.required_features,
+											   "task-input-chunks-v1") &&
+					sealed_identity.offered_relations ==
+						receipt_candidate.description.offered_relations,
+				"sealed input or independent provider identity lost an exact authority binding");
+		std::vector<std::byte> raw_stdout;
+		for (const auto& value : sealed_execution->frames)
+		{
+			auto encoded_frame = encode_frame(value, receipt_request.limits);
+			require(encoded_frame.has_value(), "receipt frame did not canonically re-encode");
+			raw_stdout.insert(raw_stdout.end(), encoded_frame->begin(), encoded_frame->end());
+		}
+		require(receipt.raw_stdout_byte_count() == raw_stdout.size() &&
+					receipt.raw_stdout_sha256() == content_digest(raw_stdout) &&
+					receipt.decoded_frame_count() == sealed_execution->frames.size() &&
+					receipt.frame_transcript_digest().starts_with("semantic-v2:sha256:") &&
+					receipt.sealed_transcript_digest().starts_with("semantic-v2:sha256:") &&
+					receipt.frame_transcript_digest() != receipt.sealed_transcript_digest(),
+				"runtime receipt did not bind exact raw bytes, decoded count, and distinct typed "
+				"seals");
+		auto corrupt_stdout = raw_stdout;
+		corrupt_stdout.back() ^= std::byte{1U};
+		auto corrupt_decode = decode_frame_stream(corrupt_stdout, receipt_request.limits);
+		require(!corrupt_decode && corrupt_decode.error().code == "provider.checksum-mismatch",
+				"one-byte raw stdout mutation survived frame checksum validation");
+		auto wrong_identity = sealed_identity;
+		wrong_identity.provider_binary_digest =
+			"sha256:9999999999999999999999999999999999999999999999999999999999999999";
+		const detail::transcript_validation_request wrong_identity_validation{
+			receipt_request.task_id,
+			receipt_candidate.description.provider_id,
+			receipt_candidate.description.provider_version,
+			&receipt_candidate.description,
+			receipt_request.output_descriptors,
+			receipt_request.output_credit,
+			&receipt_request.budget,
+			true,
+			&wrong_identity,
+		};
+		auto identity_rejected = detail::validate_provider_transcript(
+			wrong_identity_validation, sealed_execution->frames, receipt_request.limits);
+		require(!identity_rejected &&
+					identity_rejected.error().code == "provider.binary-identity-mismatch",
+				"provider stdout self-consistency overrode the independent selected identity");
+		auto public_receipt_report = runtime.execute(receipt_request);
+		require(public_receipt_report && public_receipt_report->succeeded() &&
+					public_receipt_report->semantic_digest() != receipt.frame_transcript_digest() &&
+					public_receipt_report->semantic_digest() != receipt.sealed_transcript_digest(),
+				"public process report semantic digest aliased runtime-private receipt authority");
+
+		class replay_source final : public detail::replayable_host_input
+		{
+		  public:
+			explicit replay_source(const std::span<const std::byte> bytes) : bytes_{bytes} {}
+			result<std::uint64_t> size() const override
+			{
+				return bytes_.size();
+			}
+			result<std::size_t> read_at(const std::uint64_t offset,
+										const std::span<std::byte> output) const override
+			{
+				if (offset > bytes_.size())
+					return cxxlens::sdk::unexpected(error{"sdk.test-read", "offset", {}});
+				const auto count =
+					std::min<std::size_t>({output.size(), bytes_.size() - offset, std::size_t{2U}});
+				std::ranges::copy(bytes_.subspan(static_cast<std::size_t>(offset), count),
+								  output.begin());
+				return count;
+			}
+
+		  private:
+			std::span<const std::byte> bytes_;
+		};
+		const auto replay_payload = receipt_request.payload;
+		replay_source replay_input{replay_payload};
+		auto replay_request = receipt_request;
+		replay_request.payload.clear();
+		auto replay_port = detail::make_system_replayable_provider_process_port();
+		require(replay_port != nullptr, "system replayable provider process port unavailable");
+		auto replayed =
+			detail::execute_provider_process_replayable(*replay_port, replay_request, replay_input);
+		require(
+			replayed && replayed->succeeded() && replayed->input_seal &&
+				replayed->input_seal->task().task_input_digest ==
+					receipt_request.task_input_digest &&
+				replayed->input_seal->total_bytes() == replay_payload.size() &&
+				replayed->runtime_receipt && replayed->provider_identity,
+			"replayable process execution fell back to request.payload or lost sealed receipts");
 		(void)::close(inherited_descriptors[0]);
 		(void)::close(inherited_descriptors[1]);
+		if (receipt_only)
+			return;
 
 		auto policies = builtin_sandbox_policies();
 		const auto& strict_policy = policies.back();
@@ -1337,6 +1586,8 @@ namespace
 
 		auto minor_candidate = candidate(executable, "success");
 		minor_candidate.description.protocol.maximum_minor = 1U;
+		minor_candidate.description.protocol.required_features = {"credit-backpressure",
+																  "task-input-chunks-v1"};
 		auto minor_selection =
 			select_provider(selection_request(executable), std::span{&minor_candidate, 1U});
 		require(minor_selection.has_value(), "minor-capable provider selection failed");
@@ -1355,6 +1606,19 @@ namespace
 				(negotiated_minor && !negotiated_minor->diagnostics.empty()
 					 ? ":" + negotiated_minor->diagnostics.back().detail
 					 : std::string{}));
+
+		auto missing_chunk_feature = candidate(executable, "success");
+		missing_chunk_feature.description.protocol.minimum_minor = 1U;
+		missing_chunk_feature.description.protocol.maximum_minor = 1U;
+		auto missing_chunk_selection =
+			select_provider(selection_request(executable), std::span{&missing_chunk_feature, 1U});
+		require(missing_chunk_selection.has_value(), "minor-1 missing-feature selection failed");
+		auto missing_chunk_request = task(std::move(*missing_chunk_selection));
+		missing_chunk_request.limits.minimum_minor = 1U;
+		missing_chunk_request.limits.maximum_minor = 1U;
+		auto missing_chunk = runtime.execute(missing_chunk_request);
+		require(!missing_chunk && missing_chunk.error().code == "provider.required-feature-missing",
+				"protocol minor 1 was activated without task-input-chunks-v1");
 
 		auto plain_transcript = runtime.execute(task(select(executable, "success")));
 		auto eos_transcript = runtime.execute(task(select(executable, "success-eos")));
@@ -1744,10 +2008,21 @@ namespace
 		require(current && current->manifest().id == prior,
 				"failed worker destroyed or replaced the prior snapshot");
 	}
+
 } // namespace
 
 int main(const int argument_count, const char* const* arguments)
 {
+	if (argument_count == 3 && std::string_view{arguments[1]} == "--host-only")
+	{
+		check_host_transcript_validator(arguments[2]);
+		return 0;
+	}
+	if (argument_count == 3 && std::string_view{arguments[1]} == "--receipt-only")
+	{
+		check_process_faults(arguments[2], true);
+		return 0;
+	}
 	if (argument_count == 2 && std::string_view{arguments[1]} == "--sealed-only")
 	{
 		check_sealed_provider_validation();

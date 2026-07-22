@@ -29,6 +29,59 @@ option(CXXLENS_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(CXXLENS_BUILD_DOCS "Enable Doxygen documentation targets" OFF)
 option(CXXLENS_BUILD_QUALITY_TOOLS "Enable local quality targets" ON)
 
+set(CXXLENS_SOURCE_REVISION
+    ""
+    CACHE STRING
+          "Exact 40-hex source commit embedded in installed occurrence evidence"
+)
+set(CXXLENS_SOURCE_TREE
+    ""
+    CACHE STRING
+          "Exact 40-hex source tree embedded in installed occurrence evidence")
+if(CXXLENS_SOURCE_REVISION STREQUAL "" OR CXXLENS_SOURCE_TREE STREQUAL "")
+  find_package(Git QUIET)
+  if(Git_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+    execute_process(
+      COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+      WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+      OUTPUT_VARIABLE _cxxlens_git_revision
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      RESULT_VARIABLE _cxxlens_git_revision_status)
+    execute_process(
+      COMMAND "${GIT_EXECUTABLE}" rev-parse "HEAD^{tree}"
+      WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+      OUTPUT_VARIABLE _cxxlens_git_tree
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      RESULT_VARIABLE _cxxlens_git_tree_status)
+    if(CXXLENS_SOURCE_REVISION STREQUAL "" AND _cxxlens_git_revision_status
+                                               EQUAL 0)
+      set(CXXLENS_SOURCE_REVISION "${_cxxlens_git_revision}")
+    endif()
+    if(CXXLENS_SOURCE_TREE STREQUAL "" AND _cxxlens_git_tree_status EQUAL 0)
+      set(CXXLENS_SOURCE_TREE "${_cxxlens_git_tree}")
+    endif()
+  endif()
+endif()
+string(LENGTH "${CXXLENS_SOURCE_REVISION}" _cxxlens_source_revision_length)
+string(LENGTH "${CXXLENS_SOURCE_TREE}" _cxxlens_source_tree_length)
+if(NOT CXXLENS_SOURCE_REVISION MATCHES "^[0-9a-f]+$"
+   OR NOT CXXLENS_SOURCE_TREE MATCHES "^[0-9a-f]+$"
+   OR NOT _cxxlens_source_revision_length EQUAL 40
+   OR NOT _cxxlens_source_tree_length EQUAL 40)
+  message(
+    FATAL_ERROR
+      "CXXLENS_SOURCE_REVISION and CXXLENS_SOURCE_TREE must be exact 40-hex identities"
+  )
+endif()
+if(CXXLENS_BUILD_SHARED)
+  set(CXXLENS_OCCURRENCE_CONFIGURATION shared)
+else()
+  set(CXXLENS_OCCURRENCE_CONFIGURATION static)
+endif()
+configure_file(
+  cmake/GenerateClang22OccurrenceManifest.cmake.in
+  "${CMAKE_CURRENT_BINARY_DIR}/GenerateClang22OccurrenceManifest.cmake" @ONLY)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CxxlensWarnings)
 include(CxxlensSanitizers)
@@ -128,8 +181,10 @@ set_target_properties(cxxlens PROPERTIES EXPORT_NAME cxxlens)
 # where a shared build cannot resolve hidden SDK implementation symbols across
 # DSO boundaries. The public runtime is deliberately omitted from this object,
 # and the target is neither installed nor exported.
-add_library(cxxlens_provider_runtime_internal OBJECT
-            EXCLUDE_FROM_ALL src/sdk/provider_runtime.cpp)
+add_library(
+  cxxlens_provider_runtime_internal OBJECT
+  EXCLUDE_FROM_ALL src/sdk/provider_runtime.cpp
+  src/runtime/provider_process_adapter.cpp)
 target_compile_definitions(cxxlens_provider_runtime_internal
                            PRIVATE CXXLENS_PROVIDER_RUNTIME_INTERNAL_ONLY=1)
 target_link_libraries(cxxlens_provider_runtime_internal
@@ -260,8 +315,17 @@ add_library(
   src/llvm/clang22/materialization_io.cpp
   src/llvm/clang22/materialization_claims.cpp
   src/llvm/clang22/materialization_request.cpp
+  src/llvm/clang22/materialization_request_identity.cpp
+  src/llvm/clang22/materialization_request_stream.cpp
+  src/llvm/clang22/materialization_request_v2_1.cpp
+  src/llvm/clang22/materialization_task_spool.cpp
   src/llvm/clang22/materialization_seal.cpp
-  src/llvm/clang22/materialization_store.cpp)
+  src/llvm/clang22/materialization_store.cpp
+  src/llvm/clang22/materialization_rooted_vfs.cpp
+  src/llvm/clang22/materialization_occurrence.cpp
+  src/llvm/clang22/materialization_execution_journal.cpp
+  src/llvm/clang22/materialization_report.cpp
+  src/llvm/clang22/materialization_pipeline.cpp)
 target_link_libraries(
   cxxlens_clang22_materializer_core
   PUBLIC cxxlens::base
