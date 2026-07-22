@@ -1,0 +1,292 @@
+---
+id: DF-0197
+title: Close materialization task transport and streaming bounds
+status: accepted
+kind: contract-contradiction
+impact: invariant
+confidence: high
+implementation_disposition: may-proceed
+scope:
+  - provider.clang22-materialization-request-streaming
+  - provider.clang22-task-v3-input-transfer
+  - provider.host-transcript-payload-limits
+  - release.materialization-scale-evidence
+  - provider.clang22-materialization-private-spool-sealing
+authority_refs:
+  - docs/design/cxxlens_next_generation_integrated_design_ja.md
+  - docs/design/adr/0010-provider-wire-streaming-atomicity.md
+  - docs/design/adr/0044-shared-provider-transcript-validation.md
+  - docs/design/adr/0064-portable-provider-task-session-binding.md
+  - docs/design/adr/0096-clang22-installed-materialization-boundary.md
+  - schemas/cxxlens_ng_provider_protocol.yaml
+  - schemas/cxxlens_ng_provider_runtime_contract.yaml
+  - schemas/cxxlens_ng_clang22_materialization_contract.yaml
+  - schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
+tracking_issue: '#197'
+implementation_issues:
+  - '#181'
+resolution_refs:
+  - docs/design/cxxlens_next_generation_integrated_design_ja.md
+  - docs/design/adr/0010-provider-wire-streaming-atomicity.md
+  - docs/design/adr/0044-shared-provider-transcript-validation.md
+  - docs/design/adr/0064-portable-provider-task-session-binding.md
+  - docs/design/adr/0071-host-to-provider-transcript-validation.md
+  - docs/design/adr/0096-clang22-installed-materialization-boundary.md
+  - schemas/cxxlens_ng_provider_protocol.yaml
+  - schemas/cxxlens_ng_provider_protocol.schema.yaml
+  - schemas/cxxlens_ng_provider_fuzz_corpus.yaml
+  - schemas/cxxlens_ng_provider_fuzz_corpus.schema.yaml
+  - schemas/cxxlens_ng_provider_runtime_contract.yaml
+  - schemas/cxxlens_ng_provider_runtime_contract.schema.yaml
+  - schemas/cxxlens_ng_clang22_materialization_contract.yaml
+  - schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
+  - schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
+  - schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
+  - tools/quality/check_ng_provider_protocol.py
+  - tests/quality/test_ng_provider_protocol.py
+  - tools/quality/check_ng_provider_runtime.py
+  - tests/quality/test_ng_provider_runtime.py
+  - tools/quality/check_ng_clang22_materialization.py
+  - tests/quality/test_ng_clang22_materialization.py
+  - src/llvm/clang22/materialization_io.hpp
+  - src/llvm/clang22/materialization_io.cpp
+  - tests/adapter/clang22/materialization_io_test.cpp
+  - tools/quality/check_ng_sdk_contract.py
+  - tests/quality/test_ng_sdk_contract.py
+review:
+  mode: independent
+  status: complete
+  author: codex-agent-streaming-request-architecture
+  reviewer: codex-agent-final-df195-197-review
+  refs:
+    - https://github.com/horiyamayoh/cxxlens/issues/197#issuecomment-5020653069
+    - https://github.com/horiyamayoh/cxxlens/issues/197#issuecomment-5026098897
+created: '2026-07-20'
+---
+
+# Close materialization task transport and streaming bounds
+
+## Observation
+
+The installed materialization request accepts a decoded source of up to 16,777,216 bytes per task
+and a corresponding `content_base64` string of up to 22,369,624 characters. The exact
+`cxxlens.clang22.task.v3` projection embeds that base64 string, the complete global project catalog,
+effective argv, and all other task authority. Provider Protocol v1 permits payload only on the one
+`open_task` frame in its exact five-frame host transcript and fixes that frame's payload limit at
+16,777,216 bytes. A schema-valid maximum source therefore exceeds the transport limit before
+canonical tuple framing or any catalog and task metadata is added.
+
+The current request implementation also contradicts ADR 0096's bounded streaming requirement. The
+test driver reads stdin into one string, `json_document` retains both the raw occurrence and a
+recursive DOM, and every validated task owns a copy of the global catalog, base64 spelling, decoded
+source, and encoded worker payload. The default JSON limits are only 16 MiB input and 8 MiB per
+string, so even a single schema-valid maximum source cannot pass the current parser. Retaining all
+task catalogs and task payloads additionally creates an `O(task_count * catalog_count)` expansion.
+
+At the 512 MiB aggregate decoded-source ceiling, let `D` be decoded source bytes and `E` their
+base64 character count. The retained source-bearing lower bound is `raw request + DOM base64 + task
+base64 + decoded source + task-payload base64 >= R + 3E + D`, where `E` is approximately `4D/3`
+and `R >= E`. This is already approximately 3.17 GiB before DOM/container overhead, transient
+canonical trees, repeated catalog bytes, argv, descriptors, and provider-runtime copies.
+
+## Working mental model
+
+Raw request occurrence authority, decoded task semantics, and worker transport are separate
+lifetimes. The raw occurrence should be captured once into an immutable private spool with its exact
+bounded prefix digest. A duplicate-aware lexical pass can authenticate the JSON document and
+envelope without a DOM; a selected-version pass can validate exact v2 shape, stream each base64
+value into a bounded source spool, and retain only replay slices and bounded task metadata. The
+global catalog should have one immutable owner, and tasks should be validated and executed in
+canonical order without retaining all source or encoded worker payloads in memory.
+
+Fragmentation cannot weaken task identity. If task input crosses multiple frames or an equivalent
+content-addressed transfer, one shared host encoder/worker decoder/transcript validator must bind
+the exact ordered bytes, total length, and final task-input digest before `task_accepted`. Raw frames
+remain diagnostic occurrences; only the shared validator's immutable sealed value can authorize
+claim construction or Store adoption.
+
+## Mismatch or opportunity
+
+No implementation can simultaneously accept the current maximum request, encode exact task.v3,
+and obey the accepted Provider Protocol v1 payload limit and state machine. Raising a runtime
+`protocol_limits` value locally would silently contradict the machine authority; lowering the source
+limit would silently shrink the accepted request schema. A private filesystem side channel would
+introduce unauthenticated input authority.
+
+The streaming request refactor is therefore blocked at its host-to-worker boundary until normative
+authority selects an input-transfer contract. Work on generic bounded spool and parser mechanics may
+continue, but it cannot be described as a production-complete installed request path.
+
+## Evidence
+
+- `schemas/cxxlens_ng_clang22_materialization_request.schema.yaml` permits
+  `source.size_bytes <= 16777216` and `content_base64.maxLength == 22369624`.
+- `schemas/cxxlens_ng_clang22_materialization_contract.yaml` repeats the per-task and aggregate
+  source limits and requires streaming base64 to private spool.
+- `schemas/cxxlens_ng_provider_protocol.yaml` fixes `wire.limits.payload_bytes` at 16,777,216 and
+  permits a host payload only on the single `open_task` frame.
+- `src/llvm/clang22/provider_task_v3.cpp::task_payload_projection()` embeds the exact base64 string,
+  full catalog, argv, and task authority in task.v3.
+- `tests/adapter/clang22/materialization_request_driver.cpp` reads all stdin bytes into a string.
+- `src/llvm/clang22/materialization_json.hpp::json_document` owns both raw bytes and a recursive
+  value tree; default input/string limits are below the request schema limits.
+- `src/llvm/clang22/materialization_request.cpp::parse_task()` copies the project catalog, retains
+  base64 and decoded source, encodes and retains a complete worker payload, and checks the aggregate
+  source limit only after that work.
+- `src/llvm/clang22/materialization_io.hpp` has bounded capture, append, and seal ports but no
+  immutable replay/slice/reservation operations required by a streaming parser and task builder.
+- Issue #181 requires the installed actual-source path, 4,096-task/512-MiB bounds, shared transcript
+  validation, raw-frame non-authority, and static/shared memory/SQLite qualification.
+
+## Alternatives and trade-offs
+
+1. Add a bounded authenticated task-input chunk sequence, or an equivalent content-addressed input
+   transfer, to the Provider Protocol. Preserve exact task.v3 logical bytes and digest across chunks,
+   and validate the same state machine in the host, worker, and shared runtime. This preserves the
+   accepted source limit and avoids a single large frame, but changes protocol/session authority and
+   requires versioned conformance evidence.
+2. Increase the one-frame payload limit to a proved finite maximum for full task.v3. This is smaller
+   mechanically, but the current schema does not give every variable task string a finite maximum,
+   it retains a large contiguous payload requirement, and it changes protocol resource/security
+   qualification.
+3. Reduce request source and field limits so every task.v3 fits 16 MiB. This preserves Protocol v1
+   but weakens the accepted materialization contract; the safe source maximum varies with catalog,
+   argv, and other task fields.
+4. Transfer source by an ambient path or descriptor outside the authenticated transcript. This is
+   rejected unless a new exact content-addressed and sandboxed input-transfer contract binds the
+   occurrence; otherwise the worker gains hidden input authority.
+
+## Recommendation
+
+Prefer alternative 1 as the working hypothesis. Define a bounded ordered input-transfer sequence
+whose terminal authority is the exact task.v3 byte length and content digest. Decide explicitly
+whether logical task.v3 remains the codec across physical fragmentation or an exact successor codec
+is required. The shared host encoder, worker decoder, transcript validator, budget accounting, and
+fault-injection corpus must use one state machine; missing, duplicate, reordered, extra, truncated,
+or digest-mismatched chunks fail before task acceptance.
+
+After that authority is accepted, replace the request path with two strict spool-backed JSON passes:
+lexical/envelope dispatch first, then selected-v2 schema and bottom-up binding. Retain a single
+immutable catalog, raw-spool slices for exact decoded base64 spelling, bounded per-task decoded
+source spools, and a compact task index. Validate the complete request before effects, then build,
+launch, seal, and destroy each task payload/source occurrence sequentially. The raw request spool
+remains until response write completion, while provider frames are destroyed as soon as the shared
+immutable seal and diagnostic digest receipt are established.
+
+Independent review should require limit-adjacent and maximum source/task/catalog tests, 1 GiB raw
+input and 512 MiB aggregate source tests, arbitrary short reads, duplicate JSON members at arbitrary
+depth, all task-input chunk perturbations, spool failures, deterministic task-order evidence, and
+measured peak retained memory independent of task/source aggregate size.
+
+## Disposition
+
+2026-07-20: Accepted after Provider Protocol 1.1 authenticated input chunks, the shared incremental
+runtime contract, exact task.v3 bound derivation, and spool-backed request authority were amended and
+independently reviewed. The recursive required/property census, checked bound
+`41,530,256 <= 67,108,864`, independently decoded saturated witness, minor-0 compatibility, and
+negative transfer/schema cases pass. Issue #181 may proceed for this scope.
+
+2026-07-21 security addendum: an adversarial audit reproduced a hidden assumption in the private
+spool implementation. When `memfd_create` failed, the factory silently fell back to an unlinked
+`mkstemp` inode and `seal()` reported a logical sealed state without a kernel write seal. A same-UID
+process could reopen that inode through `/proc/<pid>/fd/<fd>`, use `pwrite` to replace bytes after an
+earlier validation pass, and make a later replay observe different authority. The same mechanism
+could separate a decoded-source receipt from task.v3 bytes reread from the mutable source spool.
+
+The correction makes Linux `memfd_create` with `MFD_CLOEXEC | MFD_ALLOW_SEALING` the only admitted
+private-spool backing. It removes pathname and unlinked-tempfile fallback, requires one
+`F_ADD_SEALS` operation containing `F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL`, and
+requires `F_GET_SEALS` to observe every required bit before logical sealed publication. Missing
+compile-time support or failure of the first raw-spool create/add/get/required-bit observation is a
+typed fail-before-effects capability-gate outcome. A later individual create/seal failure remains a
+phase-authentic typed failure and never enables a mutable downgrade. Runtime tests reopen the
+resulting memfd through
+`/proc/self/fd`, prove `pwrite`, grow, shrink, and further seal mutation fail after seal, and prove
+factory and partial-seal failures never report a usable sealed spool. The materialization checker
+source-binds the memfd-only/no-fallback/add-and-observe sequence and rejects negative mutations that
+restore `mkstemp` or remove `F_GET_SEALS`.
+
+The same audit then reproduced a second pre-seal window: after an admitted `append` but before
+`F_ADD_SEALS`, a same-UID process could reopen the memfd, overwrite an existing byte, and leave the
+incremental observation digest describing the producer's original bytes while the final sealed
+spool contained the replacement. Kernel seals closed later mutation but did not by themselves bind
+the bytes that were sealed. Every production private memfd spool now owns an incremental SHA-256 of
+its successful append transcript. After adding and observing all required kernel seals, `seal()`
+compares `fstat` size with the append census and re-digests the immutable sealed bytes; it publishes
+logical sealed state only when both size and content match. Any pre-seal content, growth, or shrink
+drift poisons the spool and returns a typed failure before worker, Store, or file effects. Runtime
+tests inject both `pwrite` and `ftruncate` through `/proc/self/fd` before sealing, and the checker
+fail-closes if actual-size binding, sealed-byte re-digestion, transcript comparison, or their ordering
+is removed.
+
+2026-07-21 admission-index addendum: independent review found that the first v2.1 implementation
+spooled every task's canonical metadata and decoded source a second time for `tasks.uniqueItems`,
+then performed an all-header quadratic comparison. It also applied a generic 4096 array ceiling in
+pass one and global DOM replay instead of completing lexical/version scan before the selected
+schema applied the exact 4096 ceilings for both `tasks` and
+`trust_policy.task_sandbox_requirements`; request/report/runtime/checker bindings were not kept in
+sync, and valid-request auxiliary spool failures were mapped to unregistered or request-invalid
+codes.
+
+The correction stores one fixed 64-byte task record containing raw SHA-256, logical length, task
+ordinal, and raw task offset/length. The sealed index is read once and sorted; only a matching
+digest/length group enters exact raw-request replay. Exact replay spools the left canonical metadata
+only for that collision, destroys its DOM before opening the right metadata window, and compares the
+JSON-unescaped Base64 strings incrementally. Execution uniqueness uses the same compact index and an
+exact three-string replay. A forced equal-length digest collision proves unequal values remain
+distinct, while an actual duplicate still fails `uniqueItems`.
+
+Generic array and non-envelope string scan ceilings derive from the 1 GiB raw-request bound. The
+resident object-name ledger retains its explicit 4096 lexical ceiling. Top-level tasks and
+`trust_policy.task_sandbox_requirements` both have selected-schema `maxItems: 4096`; a 4097th item
+does not truncate lexical validation or version dispatch and is then rejected as
+`materialization.request-invalid` / `request-schema`. Trust requirement and large catalog
+uniqueness sort bounded exact fixed-member views and compare adjacent tuples in O(N log N), rather
+than invoking attacker-controlled pairwise JSON equality or creating canonical JSON copies.
+
+Envelope capture retains only expected decoded literal length+1 bytes for `schema` and
+`request_version`, while continuing the complete lexical scan. Actual I/O/hash faults returned by
+the port for sealed raw/global/task replay, task-index, source/task.v3 spool, identity digest, and
+uniqueness storage use stable
+`materialization.spool-failure`: lexical raw/task-index is `json-decode`, selected-schema replay and
+source validation is `request-schema`, and post-schema source/task.v3/identity/index replay is
+`request-binding`. Base64 grammar, shape, and schema-owned limits remain request invalidity. A
+stable spool failure requires an actual I/O/hash failure returned by the port. An allocation kind or
+a successful read/seal/digest result whose count, sealed state, record census/ordinal/raw span,
+receipt, or digest grammar contradicts already-proved authority is instead internal corruption. A
+proved-impossible bound breach, phase-opaque allocation failure, internal corruption/invariant
+breach, or inability to construct a safe compact response uses a source-private no-response signal
+and exits 2 with zero stdout; it is not a stable report error. Raw-capture failure still lacks a
+complete observation and follows the same no-response process outcome.
+
+The exact operation-authentic kind×operation matrix admits only `input_read×read`,
+`spool_write×(write|spool)`, `spool_seal|spool_create|spool_rewind×spool`,
+`spool_read×(read|spool)`, and `digest_update|digest_finalize×hash`; configuration,
+buffer-allocation, and every mismatched pair are no-response. During `request-schema`, missing or
+extra selected root members and missing/non-string task/source/`content_base64` shape are request
+invalidity; the same contradiction during `request-binding` is no-response. Collision metadata
+must reverse-read the sealed left canonical bytes with exact size/content before replaying the
+right side. An actual reverse-read failure is stable, while successful write-drop, size/count
+drift, zero/over-report, and corruption are no-response.
+
+2026-07-21 semantic-replay closure: the fixed `67,108,864`-byte replay window is an internal
+semantic JSON token window, not a raw token-spelling ceiling. Replay discards insignificant
+whitespace, decodes JSON strings and emits only minimal JSON escaping, and canonicalizes integer
+spellings. The global form substitutes `tasks=[]`; the per-task metadata form substitutes
+`source.content_base64=""`. A fail-closed closed/required/local-ref/`allOf`-intersection/`oneOf`-
+maximum schema walk derives an exact global selected-schema canonical maximum of `10,420,985`
+bytes and a task-metadata maximum of `8,463,179` bytes. Their margins below the window are
+`56,687,879` and `58,645,685` bytes. The derivation projection is bound by
+the full parsed request-schema canonical JSON fingerprint
+`sha256:241fc96ae3a249e5a8851baa95e585460ad29378cb20d11cfcda33a69eaa9270`
+and has digest `sha256:ff9baf9982f909d8a4f51c46f53637af6980a7d06728dfa65794ffc1eebf816d`.
+
+Raw-spelling inflation such as whitespace, equivalent Unicode escapes, or a long zero exponent is
+therefore excluded from the semantic replay bound and does not narrow the 1 GiB raw-request
+transport contract. Missing/open schema bounds, substitution or normalization drift, proved bound
+breach, parse-result contradiction, and allocation failure remain private no-response outcomes;
+only actual port I/O/hash failures retain the phase-authentic stable
+`materialization.spool-failure` taxonomy. Focused tests use an injected smaller semantic window to
+exercise raw-spelling independence without making the normal suite allocate a 64 MiB resident
+string; the exact schema derivation independently proves every selected-schema-valid semantic form
+fits the production window.

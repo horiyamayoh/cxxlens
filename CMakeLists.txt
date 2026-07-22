@@ -29,6 +29,77 @@ option(CXXLENS_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(CXXLENS_BUILD_DOCS "Enable Doxygen documentation targets" OFF)
 option(CXXLENS_BUILD_QUALITY_TOOLS "Enable local quality targets" ON)
 
+set(CXXLENS_SOURCE_REVISION
+    ""
+    CACHE STRING
+          "Exact 40-hex source commit embedded in installed occurrence evidence"
+)
+set(CXXLENS_SOURCE_TREE
+    ""
+    CACHE STRING
+          "Exact 40-hex source tree embedded in installed occurrence evidence")
+if((CXXLENS_SOURCE_REVISION STREQUAL "" AND NOT CXXLENS_SOURCE_TREE STREQUAL "")
+   OR (NOT CXXLENS_SOURCE_REVISION STREQUAL "" AND CXXLENS_SOURCE_TREE STREQUAL
+                                                   ""))
+  message(
+    FATAL_ERROR
+      "CXXLENS_SOURCE_REVISION and CXXLENS_SOURCE_TREE must be supplied together"
+  )
+endif()
+set(CXXLENS_SOURCE_PROVENANCE_MODE explicit)
+set(CXXLENS_SOURCE_PROVENANCE_GIT "")
+if(CXXLENS_SOURCE_REVISION STREQUAL "" AND CXXLENS_SOURCE_TREE STREQUAL "")
+  find_package(Git QUIET)
+  if(NOT Git_FOUND OR NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+    message(
+      FATAL_ERROR
+        "Source provenance requires either an available git checkout or an explicit revision/tree pair"
+    )
+  endif()
+  execute_process(
+    COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    OUTPUT_VARIABLE _cxxlens_git_revision
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE _cxxlens_git_revision_status)
+  execute_process(
+    COMMAND "${GIT_EXECUTABLE}" rev-parse "HEAD^{tree}"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    OUTPUT_VARIABLE _cxxlens_git_tree
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE _cxxlens_git_tree_status)
+  if(NOT _cxxlens_git_revision_status EQUAL 0 OR NOT _cxxlens_git_tree_status
+                                                 EQUAL 0)
+    message(FATAL_ERROR "Cannot derive exact source provenance from git")
+  endif()
+  set(CXXLENS_SOURCE_REVISION "${_cxxlens_git_revision}")
+  set(CXXLENS_SOURCE_TREE "${_cxxlens_git_tree}")
+  set(CXXLENS_SOURCE_PROVENANCE_MODE git-clean)
+  set(CXXLENS_SOURCE_PROVENANCE_GIT "${GIT_EXECUTABLE}")
+endif()
+string(LENGTH "${CXXLENS_SOURCE_REVISION}" _cxxlens_source_revision_length)
+string(LENGTH "${CXXLENS_SOURCE_TREE}" _cxxlens_source_tree_length)
+if(NOT CXXLENS_SOURCE_REVISION MATCHES "^[0-9a-f]+$"
+   OR NOT CXXLENS_SOURCE_TREE MATCHES "^[0-9a-f]+$"
+   OR NOT _cxxlens_source_revision_length EQUAL 40
+   OR NOT _cxxlens_source_tree_length EQUAL 40)
+  message(
+    FATAL_ERROR
+      "CXXLENS_SOURCE_REVISION and CXXLENS_SOURCE_TREE must be exact 40-hex identities"
+  )
+endif()
+if(CXXLENS_BUILD_SHARED)
+  set(CXXLENS_OCCURRENCE_CONFIGURATION shared)
+else()
+  set(CXXLENS_OCCURRENCE_CONFIGURATION static)
+endif()
+configure_file(
+  cmake/VerifyClang22SourceProvenance.cmake
+  "${CMAKE_CURRENT_BINARY_DIR}/VerifyClang22SourceProvenance.cmake" COPYONLY)
+configure_file(
+  cmake/GenerateClang22OccurrenceManifest.cmake.in
+  "${CMAKE_CURRENT_BINARY_DIR}/GenerateClang22OccurrenceManifest.cmake" @ONLY)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CxxlensWarnings)
 include(CxxlensSanitizers)
@@ -84,8 +155,25 @@ add_library(cxxlens_base ${CXXLENS_LIBRARY_TYPE} src/sdk/common.cpp)
 add_library(cxxlens::base ALIAS cxxlens_base)
 cxxlens_configure_component(cxxlens_base base)
 
-add_library(cxxlens_kernel ${CXXLENS_LIBRARY_TYPE} src/sdk/relation.cpp
-                           src/sdk/claim.cpp src/sdk/store.cpp)
+add_library(
+  cxxlens_kernel
+  ${CXXLENS_LIBRARY_TYPE}
+  src/sdk/relation.cpp
+  src/sdk/claim.cpp
+  src/sdk/store.cpp
+  src/sdk/sqlite_connection_lifecycle_internal.cpp
+  src/sdk/sqlite_limit_length_control_internal.cpp
+  src/sdk/sqlite_payload_streaming_internal.cpp
+  src/sdk/sqlite_wal_receipt_internal.cpp
+  src/sdk/sqlite_wal_source_capture_internal.cpp
+  src/sdk/sqlite_wal_recovery_workspace_internal.cpp
+  src/sdk/sqlite_private_snapshot_internal.cpp
+  src/sdk/sqlite_default_observation.cpp
+  src/sdk/sqlite_source_shm_readonly_preflight_internal.cpp
+  src/sdk/sqlite_default_forwarding_vfs.cpp
+  src/sdk/sqlite_store_fault_injection_internal.cpp
+  src/sdk/sqlite_store_terminal_internal.cpp
+  src/sdk/sqlite_terminal_reclassifier_internal.cpp)
 add_library(cxxlens::kernel ALIAS cxxlens_kernel)
 cxxlens_configure_component(cxxlens_kernel kernel)
 target_link_libraries(
@@ -124,6 +212,29 @@ target_link_libraries(cxxlens INTERFACE cxxlens::base cxxlens::kernel
                                         cxxlens::query cxxlens::cpp)
 set_target_properties(cxxlens PROPERTIES EXPORT_NAME cxxlens)
 
+# A source-private copy of the provider launch/validation core is embedded only
+# where a shared build cannot resolve hidden SDK implementation symbols across
+# DSO boundaries. The public runtime is deliberately omitted from this object,
+# and the target is neither installed nor exported.
+add_library(
+  cxxlens_provider_runtime_internal OBJECT
+  EXCLUDE_FROM_ALL src/sdk/provider_runtime.cpp
+  src/runtime/provider_process_adapter.cpp)
+target_compile_definitions(cxxlens_provider_runtime_internal
+                           PRIVATE CXXLENS_PROVIDER_RUNTIME_INTERNAL_ONLY=1)
+target_link_libraries(cxxlens_provider_runtime_internal
+                      PRIVATE cxxlens::cxxlens cxxlens::recipes)
+target_include_directories(cxxlens_provider_runtime_internal
+                           PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_provider_runtime_internal PRIVATE cxx_std_23)
+set_target_properties(
+  cxxlens_provider_runtime_internal
+  PROPERTIES POSITION_INDEPENDENT_CODE ON
+             CXX_VISIBILITY_PRESET hidden
+             VISIBILITY_INLINES_HIDDEN YES)
+cxxlens_set_project_warnings(cxxlens_provider_runtime_internal)
+cxxlens_enable_sanitizers(cxxlens_provider_runtime_internal)
+
 add_library(
   cxxlens_provider_sdk
   ${CXXLENS_LIBRARY_TYPE} src/sdk/provider.cpp src/sdk/incremental.cpp
@@ -134,16 +245,136 @@ cxxlens_configure_component(cxxlens_provider_sdk provider_sdk)
 target_link_libraries(cxxlens_provider_sdk PUBLIC cxxlens::cxxlens
                                                   cxxlens::recipes)
 
-add_library(
-  cxxlens_clang22_provider_sdk
-  ${CXXLENS_LIBRARY_TYPE} src/llvm/clang22/provider_sdk.cpp
-  src/llvm/clang22/provider_worker.cpp)
+add_library(cxxlens_clang22_provider_sdk ${CXXLENS_LIBRARY_TYPE}
+                                         src/llvm/clang22/provider_sdk.cpp)
 add_library(cxxlens::clang22_provider_sdk ALIAS cxxlens_clang22_provider_sdk)
 cxxlens_configure_component(cxxlens_clang22_provider_sdk clang22_provider_sdk)
 target_link_libraries(cxxlens_clang22_provider_sdk PUBLIC cxxlens::provider_sdk)
 target_include_directories(cxxlens_clang22_provider_sdk
                            PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 cxxlens_configure_clang22(cxxlens_clang22_provider_sdk)
+
+# NFC validation is part of the installed materializer's self-contained-prefix
+# contract. Never let CMake silently select an ICU shared object or import
+# library for this private implementation.
+find_path(CXXLENS_ICU_STATIC_INCLUDE_DIR NAMES unicode/unorm2.h REQUIRED)
+if(WIN32)
+  find_library(CXXLENS_ICUUC_STATIC_ARCHIVE NAMES sicuuc REQUIRED)
+  find_library(CXXLENS_ICUDATA_STATIC_ARCHIVE NAMES sicudt REQUIRED)
+  if(NOT CXXLENS_ICUUC_STATIC_ARCHIVE MATCHES "[/\\\\]sicuuc[^/\\\\]*\\.lib$"
+     OR NOT CXXLENS_ICUDATA_STATIC_ARCHIVE MATCHES
+        "[/\\\\]sicudt[^/\\\\]*\\.lib$")
+    message(
+      FATAL_ERROR
+        "Static ICU proof failed: expected the ICU sicuuc/sicudt .lib naming contract"
+    )
+  endif()
+elseif(UNIX)
+  set(_cxxlens_saved_library_suffixes "${CMAKE_FIND_LIBRARY_SUFFIXES}")
+  set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+  find_library(CXXLENS_ICUUC_STATIC_ARCHIVE NAMES icuuc REQUIRED)
+  find_library(CXXLENS_ICUDATA_STATIC_ARCHIVE NAMES icudata REQUIRED)
+  set(CMAKE_FIND_LIBRARY_SUFFIXES "${_cxxlens_saved_library_suffixes}")
+  unset(_cxxlens_saved_library_suffixes)
+  if(NOT CXXLENS_ICUUC_STATIC_ARCHIVE MATCHES "\\.a$"
+     OR NOT CXXLENS_ICUDATA_STATIC_ARCHIVE MATCHES "\\.a$")
+    message(
+      FATAL_ERROR
+        "Static ICU proof failed: icuuc and icudata must resolve to .a archives"
+    )
+  endif()
+else()
+  message(
+    FATAL_ERROR
+      "Static ICU proof is not implemented for this platform; refusing a shared fallback"
+  )
+endif()
+
+find_package(Threads REQUIRED)
+add_library(cxxlens_icu_static INTERFACE)
+target_include_directories(cxxlens_icu_static SYSTEM
+                           INTERFACE "${CXXLENS_ICU_STATIC_INCLUDE_DIR}")
+target_compile_definitions(cxxlens_icu_static
+                           INTERFACE U_STATIC_IMPLEMENTATION=1)
+target_link_libraries(
+  cxxlens_icu_static
+  INTERFACE "${CXXLENS_ICUUC_STATIC_ARCHIVE}"
+            "${CXXLENS_ICUDATA_STATIC_ARCHIVE}" Threads::Threads)
+if(CMAKE_DL_LIBS)
+  target_link_libraries(cxxlens_icu_static INTERFACE "${CMAKE_DL_LIBS}")
+endif()
+if(UNIX AND NOT APPLE)
+  find_library(CXXLENS_MATH_LIBRARY NAMES m REQUIRED)
+  target_link_libraries(cxxlens_icu_static INTERFACE "${CXXLENS_MATH_LIBRARY}")
+endif()
+
+# Canonical task/observation codecs stay private to provider-owned execution and
+# materialization, without importing the Clang parser implementation.
+add_library(
+  cxxlens_clang22_materialization_codecs STATIC
+  src/llvm/clang22/provider_task_v3.cpp src/llvm/clang22/observation_v2.cpp
+  src/llvm/clang22/unicode_nfc.cpp)
+target_link_libraries(
+  cxxlens_clang22_materialization_codecs
+  PUBLIC cxxlens::provider_sdk
+  PRIVATE cxxlens_icu_static)
+target_include_directories(cxxlens_clang22_materialization_codecs
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_clang22_materialization_codecs
+                        PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens_clang22_materialization_codecs)
+cxxlens_enable_sanitizers(cxxlens_clang22_materialization_codecs)
+
+# Worker/parser implementation stays out of the installed Clang 22 SDK DSO. It
+# is linked only by provider-owned executables and source-private tests.
+add_library(cxxlens_clang22_worker_core STATIC
+            src/llvm/clang22/provider_worker.cpp)
+target_link_libraries(
+  cxxlens_clang22_worker_core
+  PUBLIC cxxlens::clang22_provider_sdk
+  PRIVATE cxxlens_clang22_materialization_codecs)
+target_include_directories(cxxlens_clang22_worker_core
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_clang22_worker_core PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens_clang22_worker_core)
+cxxlens_enable_sanitizers(cxxlens_clang22_worker_core)
+cxxlens_configure_clang22(cxxlens_clang22_worker_core)
+
+# Provider-owned implementation for the installed Clang 22 machine surface. This
+# target is deliberately private: no headers, symbols, or CMake target are
+# exported to SDK consumers.
+add_library(
+  cxxlens_clang22_materializer_core STATIC
+  src/llvm/clang22/materialization_json.cpp
+  src/llvm/clang22/materialization_identity.cpp
+  src/llvm/clang22/materialization_io.cpp
+  src/llvm/clang22/materialization_claims.cpp
+  src/llvm/clang22/materialization_request.cpp
+  src/llvm/clang22/materialization_request_identity.cpp
+  src/llvm/clang22/materialization_request_stream.cpp
+  src/llvm/clang22/materialization_request_v2_1.cpp
+  src/llvm/clang22/materialization_task_spool.cpp
+  src/llvm/clang22/materialization_seal.cpp
+  src/llvm/clang22/materialization_store.cpp
+  src/llvm/clang22/materialization_rooted_vfs.cpp
+  src/llvm/clang22/materialization_occurrence.cpp
+  src/llvm/clang22/materialization_execution_journal.cpp
+  src/llvm/clang22/materialization_report.cpp
+  src/llvm/clang22/materialization_pipeline.cpp)
+target_link_libraries(
+  cxxlens_clang22_materializer_core
+  PUBLIC cxxlens::base
+  PRIVATE cxxlens::kernel cxxlens::provider_sdk
+          cxxlens_clang22_materialization_codecs)
+if(CXXLENS_BUILD_SHARED)
+  target_sources(cxxlens_clang22_materializer_core
+                 PRIVATE $<TARGET_OBJECTS:cxxlens_provider_runtime_internal>)
+endif()
+target_include_directories(cxxlens_clang22_materializer_core
+                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(cxxlens_clang22_materializer_core PRIVATE cxx_std_23)
+cxxlens_set_project_warnings(cxxlens_clang22_materializer_core)
+cxxlens_enable_sanitizers(cxxlens_clang22_materializer_core)
 
 add_executable(cxxlens-provider-scaffold tools/sdk/provider_scaffold_main.cpp)
 target_link_libraries(cxxlens-provider-scaffold PRIVATE cxxlens::provider_sdk)
@@ -162,7 +393,7 @@ cxxlens_configure_installed_tool(cxxlens-sdk-doctor)
 add_executable(cxxlens-clang-worker-22
                src/llvm/clang22/provider_worker_main.cpp)
 target_link_libraries(cxxlens-clang-worker-22
-                      PRIVATE cxxlens::clang22_provider_sdk)
+                      PRIVATE cxxlens_clang22_worker_core)
 target_include_directories(cxxlens-clang-worker-22
                            PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(cxxlens-clang-worker-22 PRIVATE cxx_std_23)
@@ -171,8 +402,15 @@ cxxlens_enable_sanitizers(cxxlens-clang-worker-22)
 cxxlens_configure_installed_tool(cxxlens-clang-worker-22)
 
 set(CXXLENS_COMPILED_TARGETS
-    cxxlens_base cxxlens_kernel cxxlens_query cxxlens_recipes
-    cxxlens_provider_sdk cxxlens_clang22_provider_sdk)
+    cxxlens_base
+    cxxlens_kernel
+    cxxlens_query
+    cxxlens_recipes
+    cxxlens_provider_sdk
+    cxxlens_clang22_provider_sdk
+    cxxlens_clang22_materialization_codecs
+    cxxlens_clang22_worker_core
+    cxxlens_clang22_materializer_core)
 
 if(CXXLENS_ENABLE_CLANG_TIDY)
   find_program(CXXLENS_CLANG_TIDY NAMES clang-tidy-22 clang-tidy REQUIRED)
@@ -249,6 +487,8 @@ install(
         schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml
         schemas/cxxlens_ng_clang22_materialization_request.schema.yaml
         schemas/cxxlens_ng_clang22_materialization_report.schema.yaml
+        schemas/cxxlens_ng_clang22_materialization_execution_receipt.schema.yaml
+        schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml
   DESTINATION "${CMAKE_INSTALL_DATADIR}/cxxlens/schemas")
 install(FILES README.md SECURITY.md LICENSE NOTICE
         DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cxxlens")

@@ -206,6 +206,9 @@ def validate_project_catalog_contract(
     relation_source = (root / "src/sdk/relation.cpp").read_text(encoding="utf-8")
     provider_source = (root / "src/sdk/provider.cpp").read_text(encoding="utf-8")
     worker_source = (root / "src/llvm/clang22/provider_worker.cpp").read_text(encoding="utf-8")
+    task_decoder_source = (root / "src/llvm/clang22/provider_task_v3.cpp").read_text(
+        encoding="utf-8"
+    )
     for marker in (
         "catalog_compile_unit",
         "not a build.compile_unit row ID",
@@ -218,8 +221,16 @@ def validate_project_catalog_contract(
     acceptance = provider_source.find("message_type::task_accepted", validation)
     if validation < 0 or acceptance < 0 or validation > acceptance:
         fail("provider task catalog is not validated before task_accepted")
-    if "sdk::project_catalog::make(" not in worker_source:
-        fail("native provider worker bypasses the shared project catalog loader")
+    validate_project_catalog_worker_decomposition(worker_source, task_decoder_source)
+
+
+def validate_project_catalog_worker_decomposition(
+    worker_source: str, task_decoder_source: str
+) -> None:
+    if "decode_task_input(" not in worker_source:
+        fail("native provider worker bypasses the task.v3 decoder")
+    if "sdk::project_catalog::make(" not in task_decoder_source:
+        fail("task.v3 decoder bypasses the shared project catalog loader")
 
 
 def validate_provider_task_contract(
@@ -777,6 +788,9 @@ def validate_cpp_provider_manifest(root: pathlib.Path, executable: str) -> None:
 def validate_store_implementation(root: pathlib.Path) -> None:
     header = (root / "include/cxxlens/sdk/store.hpp").read_text(encoding="utf-8")
     source = (root / "src/sdk/store.cpp").read_text(encoding="utf-8")
+    identity_source = (root / "src/sdk/store_identity_internal.hpp").read_text(
+        encoding="utf-8"
+    )
     claim = (root / "src/sdk/claim.cpp").read_text(encoding="utf-8")
     cmake = (root / "CMakeLists.txt").read_text(encoding="utf-8")
     for marker in (
@@ -790,8 +804,8 @@ def validate_store_implementation(root: pathlib.Path) -> None:
     ):
         if marker not in header:
             fail(f"snapshot/store public marker is missing: {marker}")
+    validate_store_identity_decomposition(source, identity_source)
     for marker in (
-        'canonical_identity_digest("snapshot"',
         'canonical_identity_digest("snapshot-series"',
         'canonical_identity_digest("partition-content"',
         'canonical_identity_digest("closure-certificate"',
@@ -825,6 +839,61 @@ def validate_store_implementation(root: pathlib.Path) -> None:
     ):
         if marker not in test:
             fail(f"snapshot/store acceptance marker is missing: {marker}")
+
+
+def _function_body(source: str, signature: str, label: str) -> str:
+    signature_offset = source.find(signature)
+    if signature_offset < 0:
+        fail(f"{label} function is missing")
+    opening = source.find("{", signature_offset + len(signature))
+    if opening < 0:
+        fail(f"{label} function body is missing")
+    depth = 0
+    for offset in range(opening, len(source)):
+        if source[offset] == "{":
+            depth += 1
+        elif source[offset] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[opening + 1 : offset]
+    fail(f"{label} function body is unterminated")
+
+
+def validate_store_identity_decomposition(
+    store_source: str, identity_source: str
+) -> None:
+    if '#include "store_identity_internal.hpp"' not in store_source:
+        fail("Store does not bind the source-private identity helper")
+
+    snapshot_call = _function_body(
+        store_source, "std::string snapshot_identity(", "Store snapshot identity wrapper"
+    )
+    if "detail::snapshot_manifest_identity(value)" not in snapshot_call:
+        fail("Store snapshot identity wrapper bypasses the source-private helper")
+    publication_call = _function_body(
+        store_source,
+        "std::string publication_identity(",
+        "Store publication identity wrapper",
+    )
+    if "detail::publication_record_identity(" not in publication_call:
+        fail("Store publication identity wrapper bypasses the source-private helper")
+
+    snapshot_helper = _function_body(
+        identity_source,
+        "snapshot_manifest_identity(",
+        "source-private snapshot identity helper",
+    )
+    if 'canonical_identity_digest("snapshot", fields)' not in snapshot_helper:
+        fail("source-private snapshot identity helper omits the canonical snapshot tuple")
+    publication_helper = _function_body(
+        identity_source,
+        "publication_record_identity(",
+        "source-private publication identity helper",
+    )
+    if 'canonical_identity_digest("publication", fields)' not in publication_helper:
+        fail(
+            "source-private publication identity helper omits the canonical publication tuple"
+        )
 
 
 def validate_query_runtime_implementation(root: pathlib.Path) -> None:

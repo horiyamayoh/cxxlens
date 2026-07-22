@@ -39,6 +39,7 @@ foreach(
         query_contract
         semantic_guarantee
         snapshot_store_contract
+        sqlite_store_contract
         provider_protocol
         security_contract
         provider_runtime)
@@ -93,6 +94,14 @@ add_custom_target(
     "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_api_development_readiness.py"
     check --root "${CMAKE_CURRENT_SOURCE_DIR}"
+  VERBATIM)
+
+add_custom_target(
+  cxxlens-ng-sqlite-store-v3-qualification-check
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/quality/check_ng_sqlite_store_v3_qualification.py"
+    contract --root "${CMAKE_CURRENT_SOURCE_DIR}"
   VERBATIM)
 
 add_custom_target(
@@ -196,6 +205,8 @@ add_dependencies(
   cxxlens-ng-security-contract-check
   cxxlens-ng-semantic-guarantee-check
   cxxlens-ng-snapshot-store-contract-check
+  cxxlens-ng-sqlite-store-contract-check
+  cxxlens-ng-sqlite-store-v3-qualification-check
   cxxlens-public-boundary-check
   cxxlens-quality-ownership-check
   cxxlens-runtime-port-check

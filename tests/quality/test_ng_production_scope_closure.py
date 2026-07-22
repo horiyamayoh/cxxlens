@@ -82,6 +82,14 @@ class ProductionScopeClosureTest(unittest.TestCase):
                 "g5_report_digest": digest,
                 "security_report_digest": digest,
                 "materialization_contract_digest": digest,
+                "sqlite_store_v3_qualification": {
+                    "revision": REVISION,
+                    "source_tree": TREE,
+                    "report_digest": digest,
+                    "report_set_digest": digest,
+                    "report_schema_digest": digest,
+                    "sqlite_contract_digest": digest,
+                },
                 "materialization_evidence": {
                     "state": "exact-matrix",
                     "request_count": 4,
@@ -98,7 +106,19 @@ class ProductionScopeClosureTest(unittest.TestCase):
                     {
                         "configuration": configuration,
                         "backend": backend,
+                        "request_digest": "sha256:" + "1" * 64,
+                        "request_byte_count": 128,
                         "report_digest": digest,
+                        "report_byte_count": 512,
+                        "execution_receipt_digest": "sha256:" + "c" * 64,
+                        "actual_exit_status": 0,
+                        "exact_stdout_byte_count": 512,
+                        "stdout_digest": digest,
+                        "parsed_response_count": 1,
+                        "stderr_digest": (
+                            "sha256:e3b0c44298fc1c149afbf4c8996fb924"
+                            "27ae41e4649b934ca495991b7852b855"
+                        ),
                     }
                     for configuration in ("shared", "static")
                     for backend in ("memory", "sqlite")
@@ -135,6 +155,14 @@ class ProductionScopeClosureTest(unittest.TestCase):
                 "public_callable_report_digest": digest,
                 "g5_report_digest": digest,
                 "materialization_contract_digest": digest,
+                "sqlite_store_v3_qualification": {
+                    "revision": REVISION,
+                    "source_tree": TREE,
+                    "report_digest": digest,
+                    "report_set_digest": digest,
+                    "report_schema_digest": digest,
+                    "sqlite_contract_digest": digest,
+                },
                 "release_evaluation_report_digest": "sha256:" + "e" * 64,
                 "same_revision": True,
             },
@@ -189,8 +217,8 @@ class ProductionScopeClosureTest(unittest.TestCase):
     def test_repository_check_closes_exact_30_domains(self) -> None:
         self.assertEqual(tuple(sorted({key.domain for key in self.model.nodes})), tuple(sorted(closure.DOMAINS)))
         self.assertEqual(self.model.summary["domain_count"], 30)
-        self.assertEqual(self.model.summary["assignable_count"], 231)
-        self.assertEqual(self.model.summary["expanded_count"], 781)
+        self.assertEqual(self.model.summary["assignable_count"], 233)
+        self.assertEqual(self.model.summary["expanded_count"], 783)
         self.assertEqual(self.model.summary["aggregate_count"], 14)
         self.assertEqual(self.model.closure_status, "classified-with-gaps")
 
@@ -211,7 +239,7 @@ class ProductionScopeClosureTest(unittest.TestCase):
 
     def test_known_gap_and_blocker_census_is_truthful(self) -> None:
         assignments = {assignment["id"]: assignment for assignment in self.model.manifest["assignments"]}
-        self.assertEqual(len(assignments["scope.clang22-installed-adoption-gap"]["surfaces"]), 13)
+        self.assertEqual(len(assignments["scope.clang22-installed-adoption-gap"]["surfaces"]), 14)
         self.assertEqual(len(assignments["scope.ng1-provider-hardening-gap"]["surfaces"]), 6)
         self.assertEqual(len(assignments["scope.incremental-coordinator-gap"]["surfaces"]), 6)
         self.assertEqual(len(assignments["scope.nightly-qualification-gap"]["surfaces"]), 4)

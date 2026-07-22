@@ -76,9 +76,9 @@ int main(const int argument_count, const char* const* arguments)
 		"cc.call_direct_target@1",
 		"cc.call_site@1",
 		"cc.entity@1",
-		"frontend.clang22.call_observation@1",
-		"frontend.clang22.entity_observation@1",
-		"frontend.clang22.type_observation@1",
+		"frontend.clang22.call_observation@2",
+		"frontend.clang22.entity_observation@2",
+		"frontend.clang22.type_observation@2",
 	};
 	description.interpretation_domains = {"cc.clang22-canonical-1"};
 	description.invalidation_contract =
@@ -124,9 +124,9 @@ int main(const int argument_count, const char* const* arguments)
 	process_task_request request;
 	request.selection = std::move(*selection);
 	request.output_descriptors = {
-		cxxlens::cc::relations::entity::descriptor(),
-		cxxlens::cc::relations::call_site::descriptor(),
 		cxxlens::cc::relations::call_direct_target::descriptor(),
+		cxxlens::cc::relations::call_site::descriptor(),
+		cxxlens::cc::relations::entity::descriptor(),
 	};
 	request.task_id = "clang22-malformed-input-" + std::string(300U, 'x');
 	request.payload = {std::byte{0x01}, std::byte{0x02}};
@@ -152,6 +152,16 @@ int main(const int argument_count, const char* const* arguments)
 	auto failure = report && !report->frames.empty()
 		? decode_task_failed_metadata(report->frames.back().control)
 		: result<task_failed_metadata>{unexpected(error{"sdk.test-setup", "terminal", {}})};
+	if (!report || report->terminal != "provider.frontend-request-invalid" ||
+		report->frames.empty() || !failure)
+	{
+		std::cerr << "terminal=" << (report ? report->terminal : report.error().code)
+				  << " frames=" << (report ? report->frames.size() : 0U);
+		if (!failure)
+			std::cerr << " failure=" << failure.error().code << ':' << failure.error().field << ':'
+					  << failure.error().detail;
+		std::cerr << '\n';
+	}
 	require(report && report->terminal == "provider.frontend-request-invalid" &&
 				report->frames.front().type == message_type::hello &&
 				report->frames.back().type == message_type::task_failed && failure &&

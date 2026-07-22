@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import pathlib
 import sys
 import tempfile
@@ -19,6 +20,61 @@ import check_ng_production_scope_closure as scope  # noqa: E402
 
 
 class NgReleaseQualificationTests(unittest.TestCase):
+    def test_clang22_production_source_decomposition_is_exact(self) -> None:
+        worker = "\n".join(
+            (
+                "cc::relations::entity::descriptor()",
+                "cc::relations::call_site::descriptor()",
+                "cc::relations::call_direct_target::descriptor()",
+                "auto task = decode_task_input(payload);",
+            )
+        )
+        decoder = "\n".join(
+            (
+                'auto interpretation = "cc.clang22-canonical-1";',
+                "auto catalog = sdk::project_catalog::make(root, digest, units);",
+            )
+        )
+        release.validate_clang22_production_source_decomposition(worker, decoder)
+
+        with self.assertRaisesRegex(
+            release.ReleaseQualificationError, "decode_task_input"
+        ):
+            release.validate_clang22_production_source_decomposition(
+                worker.replace("decode_task_input", "legacy_decode"), decoder
+            )
+        with self.assertRaisesRegex(
+            release.ReleaseQualificationError, "task.v3 production surface"
+        ):
+            release.validate_clang22_production_source_decomposition(worker, "")
+
+    def write_materialization_report(
+        self,
+        path: pathlib.Path,
+        report: dict,
+        manifest: dict,
+        *,
+        actual_exit_status: int = 0,
+        parsed_response_count: int = 1,
+    ) -> pathlib.Path:
+        raw = release.materialization.canonical_json(report)
+        path.write_bytes(raw)
+        receipt = {
+            "schema": "cxxlens.clang22-materialization-execution-receipt.v1",
+            "actual_exit_status": actual_exit_status,
+            "exact_stdout_byte_count": len(raw),
+            "stdout_sha256": release.digest_bytes(raw),
+            "parsed_response_count": parsed_response_count,
+            "stderr_sha256": release.digest_bytes(b""),
+        }
+        receipt_path = path.with_name(
+            manifest["materialization"]["execution_receipt_filename"]
+        )
+        receipt_path.write_text(
+            json.dumps(receipt, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        return receipt_path
+
     def scope_inventory(self, closure_status: str) -> dict:
         gaps = closure_status != "qualified"
         return {
@@ -44,11 +100,30 @@ class NgReleaseQualificationTests(unittest.TestCase):
     def evaluation_evidence(
         self, directory: pathlib.Path, closure_status: str
     ) -> dict:
+        revision = "1" * 40
+        source_tree = "2" * 40
         paths = {}
         for name in ("foundation", "readiness", "g5", "security"):
             path = directory / f"{name}.json"
             path.write_text(f"{name}\n", encoding="utf-8")
             paths[name] = path
+        sqlite_artifact_root = directory / (
+            f"cxxlens-ng-sqlite-store-v3-qualification-{revision}"
+        )
+        sqlite_artifact_root.mkdir(exist_ok=True)
+        sqlite_report_path = (
+            sqlite_artifact_root
+            / release.SQLITE_STORE_V3_QUALIFICATION_REPORT_FILENAME
+        )
+        sqlite_report_path.write_text("sqlite qualification\n", encoding="utf-8")
+        sqlite_binding = {
+            "revision": revision,
+            "source_tree": source_tree,
+            "report_digest": release.digest(sqlite_report_path),
+            "report_set_digest": "sha256:" + "d" * 64,
+            "report_schema_digest": "sha256:" + "e" * 64,
+            "sqlite_contract_digest": "sha256:" + "f" * 64,
+        }
         install_values = {}
         materialization_reports = {}
         for configuration, digit in (("static", "a"), ("shared", "b")):
@@ -75,7 +150,22 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 )
                 materialization_reports[(configuration, backend)] = {
                     "path": report_path,
+                    "request_digest": release.digest_bytes(
+                        f"{configuration} {backend} request".encode()
+                    ),
+                    "request_byte_count": len(
+                        f"{configuration} {backend} request".encode()
+                    ),
                     "digest": release.digest(report_path),
+                    "byte_count": report_path.stat().st_size,
+                    "execution_receipt": {
+                        "actual_exit_status": 0,
+                        "exact_stdout_byte_count": report_path.stat().st_size,
+                        "stdout_sha256": release.digest(report_path),
+                        "parsed_response_count": 1,
+                        "stderr_sha256": release.digest_bytes(b""),
+                    },
+                    "execution_receipt_digest": "sha256:" + digit * 64,
                 }
         materialization_report_sets = {
             configuration: release.materialization_report_set_digest(
@@ -86,8 +176,8 @@ class NgReleaseQualificationTests(unittest.TestCase):
         return {
             "root": ROOT,
             "git": {
-                "revision": "1" * 40,
-                "tree": "2" * 40,
+                "revision": revision,
+                "tree": source_tree,
                 "branch": "main",
                 "clean": True,
             },
@@ -113,6 +203,11 @@ class NgReleaseQualificationTests(unittest.TestCase):
             "g5": {},
             "security_path": paths["security"],
             "security": {},
+            "sqlite_store_v3_qualification": {
+                "path": sqlite_report_path,
+                "report": {},
+                "binding": sqlite_binding,
+            },
         }
 
     def make_callable_evidence(
@@ -186,6 +281,227 @@ class NgReleaseQualificationTests(unittest.TestCase):
         }
         return manifest, readiness, git, report_path, review_path
 
+    def test_sqlite_store_v3_qualification_report_is_required_exactly_once(
+        self,
+    ) -> None:
+        manifest = release.load(ROOT / release.MANIFEST)
+        git = {
+            "revision": "1" * 40,
+            "tree": "2" * 40,
+            "branch": "main",
+            "clean": True,
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = pathlib.Path(temporary)
+            with self.assertRaisesRegex(
+                release.ReleaseQualificationError,
+                "expected exactly one cxxlens-ng-sqlite-store-v3-qualification-report.json",
+            ):
+                release.verify_sqlite_store_v3_qualification(
+                    ROOT, manifest, evidence, git
+                )
+
+    def test_sqlite_store_v3_qualification_rejects_revision_and_tree_mismatch(
+        self,
+    ) -> None:
+        manifest = release.load(ROOT / release.MANIFEST)
+        git = {
+            "revision": "1" * 40,
+            "tree": "2" * 40,
+            "branch": "main",
+            "clean": True,
+        }
+        base_report = {
+            "revision": git["revision"],
+            "source_tree": git["tree"],
+            "report_set_digest": "sha256:" + "3" * 64,
+            "report_schema_digest": "sha256:" + "4" * 64,
+            "sqlite_contract_digest": "sha256:" + "5" * 64,
+        }
+        mutations = (
+            ("revision", "revision", "6" * 40),
+            ("source tree", "source_tree", "7" * 40),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = pathlib.Path(temporary)
+            artifact_root = evidence / manifest["sqlite_store_v3_qualification"][
+                "report_artifact"
+            ].replace("${revision}", git["revision"])
+            artifact_root.mkdir()
+            report_path = (
+                artifact_root
+                / release.SQLITE_STORE_V3_QUALIFICATION_REPORT_FILENAME
+            )
+            for label, field, replacement in mutations:
+                with self.subTest(label=label):
+                    report = copy.deepcopy(base_report)
+                    report[field] = replacement
+                    report_path.write_text(
+                        json.dumps(report, sort_keys=True) + "\n", encoding="utf-8"
+                    )
+                    with mock.patch.object(
+                        release.sqlite_qualification, "validate_report"
+                    ), self.assertRaisesRegex(
+                        release.ReleaseQualificationError,
+                        f"SQLite Store v3 qualification {label} differs",
+                    ):
+                        release.verify_sqlite_store_v3_qualification(
+                            ROOT, manifest, evidence, git
+                        )
+
+    def test_sqlite_store_v3_qualification_rejects_wrong_artifact_root(self) -> None:
+        manifest = release.load(ROOT / release.MANIFEST)
+        git = {
+            "revision": "1" * 40,
+            "tree": "2" * 40,
+            "branch": "main",
+            "clean": True,
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = pathlib.Path(temporary)
+            report_path = (
+                evidence / release.SQLITE_STORE_V3_QUALIFICATION_REPORT_FILENAME
+            )
+            report_path.write_text("{}\n", encoding="utf-8")
+            with self.assertRaisesRegex(
+                release.ReleaseQualificationError,
+                "qualification report artifact root differs",
+            ):
+                release.verify_sqlite_store_v3_qualification(
+                    ROOT, manifest, evidence, git
+                )
+
+    def test_sqlite_store_v3_qualification_holds_one_bounded_nofollow_report(
+        self,
+    ) -> None:
+        manifest = release.load(ROOT / release.MANIFEST)
+        git = {
+            "revision": "1" * 40,
+            "tree": "2" * 40,
+            "branch": "main",
+            "clean": True,
+        }
+        report = {
+            "revision": git["revision"],
+            "source_tree": git["tree"],
+            "report_set_digest": "sha256:" + "3" * 64,
+            "report_schema_digest": "sha256:" + "4" * 64,
+            "sqlite_contract_digest": "sha256:" + "5" * 64,
+        }
+        artifact_name = manifest["sqlite_store_v3_qualification"][
+            "report_artifact"
+        ].replace("${revision}", git["revision"])
+        report_name = release.SQLITE_STORE_V3_QUALIFICATION_REPORT_FILENAME
+
+        with self.subTest(case="symlink-artifact-directory-outside-evidence"):
+            with tempfile.TemporaryDirectory() as temporary:
+                temporary_root = pathlib.Path(temporary)
+                evidence = temporary_root / "evidence"
+                outside = temporary_root / "outside"
+                evidence.mkdir()
+                outside.mkdir()
+                (outside / report_name).write_text("{}\n", encoding="utf-8")
+                (evidence / artifact_name).symlink_to(
+                    outside, target_is_directory=True
+                )
+                with self.assertRaisesRegex(
+                    release.ReleaseQualificationError,
+                    "artifact directory is not a no-follow directory",
+                ):
+                    release.verify_sqlite_store_v3_qualification(
+                        ROOT, manifest, evidence, git
+                    )
+
+        with self.subTest(case="symlink-report-outside-evidence"):
+            with tempfile.TemporaryDirectory() as temporary:
+                temporary_root = pathlib.Path(temporary)
+                evidence = temporary_root / "evidence"
+                artifact_root = evidence / artifact_name
+                outside = temporary_root / "outside.json"
+                artifact_root.mkdir(parents=True)
+                outside.write_text("{}\n", encoding="utf-8")
+                (artifact_root / report_name).symlink_to(outside)
+                with self.assertRaisesRegex(
+                    release.ReleaseQualificationError,
+                    "report is not a no-follow regular file",
+                ):
+                    release.verify_sqlite_store_v3_qualification(
+                        ROOT, manifest, evidence, git
+                    )
+
+        with self.subTest(case="nonregular-report"):
+            with tempfile.TemporaryDirectory() as temporary:
+                evidence = pathlib.Path(temporary)
+                report_path = evidence / artifact_name / report_name
+                report_path.mkdir(parents=True)
+                with self.assertRaisesRegex(
+                    release.ReleaseQualificationError,
+                    "report is not a no-follow regular file",
+                ):
+                    release.verify_sqlite_store_v3_qualification(
+                        ROOT, manifest, evidence, git
+                    )
+
+        with self.subTest(case="duplicate-report"):
+            with tempfile.TemporaryDirectory() as temporary:
+                evidence = pathlib.Path(temporary)
+                report_path = evidence / artifact_name / report_name
+                report_path.parent.mkdir()
+                report_path.write_text("{}\n", encoding="utf-8")
+                duplicate = evidence / "duplicate" / report_name
+                duplicate.parent.mkdir()
+                duplicate.write_text("{}\n", encoding="utf-8")
+                with self.assertRaisesRegex(
+                    release.ReleaseQualificationError,
+                    f"expected exactly one {report_name}, found 2",
+                ):
+                    release.verify_sqlite_store_v3_qualification(
+                        ROOT, manifest, evidence, git
+                    )
+
+        with self.subTest(case="bounded-read"):
+            with tempfile.TemporaryDirectory() as temporary:
+                evidence = pathlib.Path(temporary)
+                report_path = evidence / artifact_name / report_name
+                report_path.parent.mkdir()
+                with report_path.open("wb") as stream:
+                    stream.truncate(
+                        release.SQLITE_STORE_V3_QUALIFICATION_REPORT_MAX_BYTES + 1
+                    )
+                with self.assertRaisesRegex(
+                    release.ReleaseQualificationError,
+                    "exceeds the bounded byte limit",
+                ):
+                    release.verify_sqlite_store_v3_qualification(
+                        ROOT, manifest, evidence, git
+                    )
+
+        with self.subTest(case="replace-between-parse-and-digest"):
+            with tempfile.TemporaryDirectory() as temporary:
+                evidence = pathlib.Path(temporary)
+                report_path = evidence / artifact_name / report_name
+                report_path.parent.mkdir()
+                report_path.write_text(
+                    json.dumps(report, sort_keys=True) + "\n", encoding="utf-8"
+                )
+
+                def replace_report(*_args, **_kwargs) -> None:
+                    replacement = report_path.with_name("replacement.json")
+                    replacement.write_text("{}\n", encoding="utf-8")
+                    os.replace(replacement, report_path)
+
+                with mock.patch.object(
+                    release.sqlite_qualification,
+                    "validate_report",
+                    side_effect=replace_report,
+                ), self.assertRaisesRegex(
+                    release.ReleaseQualificationError,
+                    "path changed",
+                ):
+                    release.verify_sqlite_store_v3_qualification(
+                        ROOT, manifest, evidence, git
+                    )
+
     def make_materialization_matrix(
         self, evidence: pathlib.Path
     ) -> tuple[dict, dict, dict, dict]:
@@ -203,6 +519,14 @@ class NgReleaseQualificationTests(unittest.TestCase):
             prefix_digest = "sha256:" + ("c" if configuration == "static" else "d") * 64
             tool_digest = "sha256:" + ("e" if configuration == "static" else "f") * 64
             worker_digest = "sha256:" + ("1" if configuration == "static" else "2") * 64
+            occurrence = release.materialization.fixture_occurrence_measurement(
+                ROOT,
+                source_revision=git["revision"],
+                source_tree=git["tree"],
+                configuration=configuration,
+                tool_digest=tool_digest,
+                worker_digest=worker_digest,
+            )
             install_values[configuration] = {
                 "manifest_digest": manifest_digest,
                 "prefix_digest": prefix_digest,
@@ -214,6 +538,10 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     {
                         "path": "bin/cxxlens-clang-worker-22",
                         "digest": worker_digest,
+                    },
+                    {
+                        "path": release.MATERIALIZATION_OCCURRENCE_MANIFEST_PATH,
+                        "digest": occurrence["manifest_file_digest"],
                     },
                 ],
             }
@@ -229,30 +557,27 @@ class NgReleaseQualificationTests(unittest.TestCase):
                         "source_revision": git["revision"],
                         "source_tree": git["tree"],
                         "installed_executable_digest": tool_digest,
-                        "prefix_manifest_digest": manifest_digest,
-                        "relocated_prefix_digest": prefix_digest,
+                        "occurrence_manifest_digest": occurrence[
+                            "manifest_file_digest"
+                        ],
                     }
                 )
                 request["worker"]["installed_binary_digest"] = worker_digest
                 release.materialization.bind_request_identity(request)
-                report = release.materialization.sample_report(ROOT, request)
-                report["installation"]["platform"] = (
-                    f"linux-{release.platform.machine().lower()}-{configuration}"
+                request_bytes = (
+                    json.dumps(request, ensure_ascii=False, sort_keys=True) + "\n"
+                ).encode("utf-8")
+                report = release.materialization.sample_report(
+                    ROOT, request, request_bytes=request_bytes
                 )
                 directory = evidence / configuration / backend
                 directory.mkdir(parents=True)
                 request_path = directory / manifest["materialization"][
                     "request_filename"
                 ]
-                request_path.write_text(
-                    json.dumps(request, ensure_ascii=False, sort_keys=True) + "\n",
-                    encoding="utf-8",
-                )
+                request_path.write_bytes(request_bytes)
                 path = directory / manifest["materialization"]["report_filename"]
-                path.write_text(
-                    json.dumps(report, ensure_ascii=False, sort_keys=True) + "\n",
-                    encoding="utf-8",
-                )
+                self.write_materialization_report(path, report, manifest)
                 written[(configuration, backend)] = path
         return manifest, install_values, git, written
 
@@ -265,6 +590,185 @@ class NgReleaseQualificationTests(unittest.TestCase):
             "cxxlens.ng-public-callable-inventory-report.v1",
         )
         self.assertTrue((ROOT / release.EVALUATION_REPORT_SCHEMA).is_file())
+        receipt_schema = release.MATERIALIZATION_EXECUTION_RECEIPT_SCHEMA.as_posix()
+        self.assertIn(receipt_schema, manifest["required_artifacts"])
+        self.assertIn(
+            "share/cxxlens/schemas/"
+            + release.MATERIALIZATION_EXECUTION_RECEIPT_SCHEMA.name,
+            manifest["package"]["required_files"],
+        )
+        self.assertIn(
+            release.MATERIALIZATION_EXECUTION_RECEIPT_SCHEMA,
+            release.RELEASE_AUTHORITY_PATHS,
+        )
+        self.assertIn(
+            release.MATERIALIZATION_EXECUTION_RECEIPT_SCHEMA.name,
+            (ROOT / "CMakeLists.txt").read_text(encoding="utf-8"),
+        )
+        occurrence_schema = release.MATERIALIZATION_OCCURRENCE_MANIFEST_SCHEMA
+        self.assertIn(occurrence_schema.as_posix(), manifest["required_artifacts"])
+        self.assertIn(
+            "share/cxxlens/schemas/" + occurrence_schema.name,
+            manifest["package"]["required_files"],
+        )
+        self.assertIn(
+            release.MATERIALIZATION_OCCURRENCE_MANIFEST_PATH,
+            manifest["package"]["required_files"],
+        )
+        self.assertEqual(
+            manifest["materialization"]["occurrence_manifest_schema"],
+            occurrence_schema.as_posix(),
+        )
+        self.assertEqual(
+            manifest["materialization"]["occurrence_manifest_path"],
+            release.MATERIALIZATION_OCCURRENCE_MANIFEST_PATH,
+        )
+        self.assertIn(occurrence_schema, release.RELEASE_AUTHORITY_PATHS)
+        self.assertIn(
+            occurrence_schema.name,
+            (ROOT / "CMakeLists.txt").read_text(encoding="utf-8"),
+        )
+        acceptance = release.load(ROOT / release.ACCEPTANCE)
+        release_gate = next(
+            entry for entry in acceptance["entries"] if entry["id"] == "gate.release"
+        )
+        self.assertIn(occurrence_schema.as_posix(), release_gate["evidence"])
+
+    def test_materialization_request_machine_rejects_stale_versions_and_prefixes(
+        self,
+    ) -> None:
+        def remove_occurrence(request: dict) -> None:
+            del request["tool"]["occurrence_manifest_digest"]
+
+        cases = (
+            (
+                "request-version",
+                lambda request: request.update({"request_version": "2.0.0"}),
+                "machine 2.1",
+            ),
+            (
+                "tool-interface",
+                lambda request: request["tool"].update(
+                    {"interface_version": "2.0.0"}
+                ),
+                "machine 2.1",
+            ),
+            (
+                "occurrence-digest",
+                remove_occurrence,
+                "machine 2.1",
+            ),
+            (
+                "worker-minor",
+                lambda request: request["worker"].update({"protocol_minor": 0}),
+                "machine 2.1",
+            ),
+            (
+                "worker-features",
+                lambda request: request["worker"].update({"required_features": []}),
+                "machine 2.1",
+            ),
+            (
+                "trust-minor",
+                lambda request: request["trust_policy"].update(
+                    {"protocol_minor": 0}
+                ),
+                "machine 2.1",
+            ),
+            (
+                "trust-features",
+                lambda request: request["trust_policy"].update(
+                    {"required_features": []}
+                ),
+                "machine 2.1",
+            ),
+            (
+                "prefix-manifest",
+                lambda request: request["tool"].update(
+                    {"prefix_manifest_digest": "sha256:" + "0" * 64}
+                ),
+                "legacy prefix",
+            ),
+            (
+                "relocated-prefix",
+                lambda request: request["tool"].update(
+                    {"relocated_prefix_digest": "sha256:" + "0" * 64}
+                ),
+                "legacy prefix",
+            ),
+        )
+        for label, mutate, message in cases:
+            with self.subTest(label=label):
+                request = release.materialization.sample_request(ROOT)
+                mutate(request)
+                with self.assertRaisesRegex(
+                    release.ReleaseQualificationError, message
+                ):
+                    release.validate_release_materialization_request_machine(request)
+
+    def test_materialization_occurrence_binding_is_fixed_and_prefix_free(self) -> None:
+        request = release.materialization.sample_request(ROOT)
+        occurrence = release.materialization.fixture_occurrence_measurement(
+            ROOT,
+            source_revision=request["tool"]["source_revision"],
+            source_tree=request["tool"]["source_tree"],
+            configuration=request["tool"]["package_configuration"],
+            tool_digest=request["tool"]["installed_executable_digest"],
+            worker_digest=request["worker"]["installed_binary_digest"],
+        )
+        report = {
+            "installation": {
+                "requested": {
+                    "occurrence_manifest_digest": occurrence[
+                        "manifest_file_digest"
+                    ]
+                },
+                "measured": occurrence,
+            }
+        }
+        install = {
+            "files": [
+                {
+                    "path": release.MATERIALIZATION_OCCURRENCE_MANIFEST_PATH,
+                    "digest": occurrence["manifest_file_digest"],
+                },
+                {
+                    "path": "bin/cxxlens-clang22-materialize",
+                    "digest": request["tool"]["installed_executable_digest"],
+                },
+                {
+                    "path": "bin/cxxlens-clang-worker-22",
+                    "digest": request["worker"]["installed_binary_digest"],
+                },
+            ]
+        }
+        git = {
+            "revision": request["tool"]["source_revision"],
+            "tree": request["tool"]["source_tree"],
+        }
+        release.validate_release_occurrence_binding(
+            request, report, install, git, "static/memory"
+        )
+
+        stale_report = copy.deepcopy(report)
+        stale_report["installation"]["prefix_manifest_digest"] = (
+            "sha256:" + "0" * 64
+        )
+        with self.assertRaisesRegex(
+            release.ReleaseQualificationError, "legacy prefix"
+        ):
+            release.validate_release_occurrence_binding(
+                request, stale_report, install, git, "static/memory"
+            )
+
+        relocated_install = copy.deepcopy(install)
+        relocated_install["files"][0]["path"] = "relocated/occurrence-v1.json"
+        with self.assertRaisesRegex(
+            release.ReleaseQualificationError, "occurrence manifest census"
+        ):
+            release.validate_release_occurrence_binding(
+                request, report, relocated_install, git, "static/memory"
+            )
 
     def test_release_schemas_require_static_and_shared_exactly_once(self) -> None:
         evaluation_schema = release.load(ROOT / release.EVALUATION_REPORT_SCHEMA)
@@ -304,7 +808,16 @@ class NgReleaseQualificationTests(unittest.TestCase):
             {
                 "configuration": configuration,
                 "backend": backend,
+                "request_digest": "sha256:" + digit * 64,
+                "request_byte_count": 1,
                 "report_digest": "sha256:" + digit * 64,
+                "report_byte_count": 1,
+                "execution_receipt_digest": "sha256:" + digit * 64,
+                "actual_exit_status": 0,
+                "exact_stdout_byte_count": 1,
+                "stdout_digest": "sha256:" + digit * 64,
+                "parsed_response_count": 1,
+                "stderr_digest": "sha256:" + "0" * 64,
             }
             for configuration, digit in (("static", "5"), ("shared", "6"))
             for backend in ("memory", "sqlite")
@@ -395,9 +908,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
             reordered_path = written[("static", "sqlite")]
             reordered = release.load(reordered_path)
             reordered["task_results"].reverse()
-            reordered_path.write_text(
-                json.dumps(reordered, sort_keys=True) + "\n", encoding="utf-8"
-            )
+            self.write_materialization_report(reordered_path, reordered, manifest)
             reports, report_sets = release.verify_materialization_reports(
                 ROOT, manifest, evidence, install_values, git
             )
@@ -478,9 +989,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 path = written[("static", "memory")]
                 report = release.load(path)
                 mutate(report)
-                path.write_text(
-                    json.dumps(report, sort_keys=True) + "\n", encoding="utf-8"
-                )
+                self.write_materialization_report(path, report, manifest)
                 with self.assertRaisesRegex(
                     release.ReleaseQualificationError, message
                 ):
@@ -522,9 +1031,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 path = written[("shared", "sqlite")]
                 report = release.load(path)
                 mutate(report)
-                path.write_text(
-                    json.dumps(report, sort_keys=True) + "\n", encoding="utf-8"
-                )
+                self.write_materialization_report(path, report, manifest)
                 with self.assertRaisesRegex(
                     release.ReleaseQualificationError,
                     "composite task/input/execution result census differs",
@@ -565,7 +1072,18 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 "report_count": 0,
                 "report_set_count": 0,
                 "owner_issue": "#181",
-                "feedback": ["DF-0182", "DF-0187"],
+                "feedback": [
+                    "DF-0182",
+                    "DF-0187",
+                    "DF-0191",
+                    "DF-0192",
+                    "DF-0195",
+                    "DF-0196",
+                    "DF-0197",
+                    "DF-0198",
+                    "DF-0199",
+                    "DF-0200",
+                ],
             },
         )
 
@@ -596,7 +1114,10 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     scope, "validate_repository", return_value=model
                 ), self.assertRaisesRegex(
                     release.ReleaseQualificationError,
-                    "neither the exact #181/DF-0182/DF-0187 tracked gap",
+                    "neither the exact "
+                    "#181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/"
+                    "DF-0197/DF-0198/DF-0199/DF-0200 "
+                    "tracked gap",
                 ):
                     release.materialization_assignment_transition(ROOT)
 
@@ -612,7 +1133,18 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 "report_count": 0,
                 "report_set_count": 0,
                 "owner_issue": "#181",
-                "feedback": ["DF-0182", "DF-0187"],
+                "feedback": [
+                    "DF-0182",
+                    "DF-0187",
+                    "DF-0191",
+                    "DF-0192",
+                    "DF-0195",
+                    "DF-0196",
+                    "DF-0197",
+                    "DF-0198",
+                    "DF-0199",
+                    "DF-0200",
+                ],
             },
         }
         required = release.materialization_required_install_files(
@@ -663,6 +1195,20 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 release.collect_materialization_evidence(
                     ROOT, manifest, evidence, {}, git, transition
                 )
+
+        for artifact_key in ("report_filename", "execution_receipt_filename"):
+            with self.subTest(artifact=artifact_key), tempfile.TemporaryDirectory() as temporary:
+                evidence = pathlib.Path(temporary)
+                (evidence / manifest["materialization"][artifact_key]).write_text(
+                    "{}\n", encoding="utf-8"
+                )
+                with self.assertRaisesRegex(
+                    release.ReleaseQualificationError,
+                    "requires zero materialization requests and reports",
+                ):
+                    release.collect_materialization_evidence(
+                        ROOT, manifest, evidence, {}, git, transition
+                    )
 
     def test_qualified_materializer_with_unrelated_gaps_requires_exact_matrix(
         self,
@@ -761,11 +1307,34 @@ class NgReleaseQualificationTests(unittest.TestCase):
             manifest, install_values, git, written = self.make_materialization_matrix(
                 evidence
             )
+            report_path = written[("static", "sqlite")]
+            self.write_materialization_report(
+                report_path,
+                {
+                    "schema": "cxxlens.clang22-materialization-report.v1",
+                    "report_version": "1.0.0",
+                    "result": "passed",
+                },
+                manifest,
+            )
+            with self.assertRaisesRegex(
+                release.ReleaseQualificationError, "schema validation failed"
+            ):
+                release.verify_materialization_reports(
+                    ROOT, manifest, evidence, install_values, git
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = pathlib.Path(temporary)
+            manifest, install_values, git, written = self.make_materialization_matrix(
+                evidence
+            )
             path = written[("static", "sqlite")]
             report = release.load(path)
             report["publication"]["backend"] = "memory"
-            report["publication"]["sqlite_reopened"] = False
-            path.write_text(json.dumps(report, sort_keys=True) + "\n", encoding="utf-8")
+            report["publication"]["sqlite_effect_root_receipt"] = None
+            report["publication"]["sqlite_reopen_status"] = "not_applicable"
+            self.write_materialization_report(path, report, manifest)
             with self.assertRaisesRegex(
                 release.ReleaseQualificationError, "duplicate materialization matrix"
             ):
@@ -790,25 +1359,25 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 "authority digest",
             ),
             (
-                "manifest",
-                lambda report: report["installation"].update(
-                    {"prefix_manifest_digest": "sha256:" + "0" * 64}
+                "occurrence",
+                lambda report: report["installation"]["requested"].update(
+                    {"occurrence_manifest_digest": "sha256:" + "0" * 64}
                 ),
-                "install/prefix/tool/worker",
+                "installed occurrence binding",
             ),
             (
                 "tool",
-                lambda report: report["installation"].update(
-                    {"tool_digest": "sha256:" + "0" * 64}
+                lambda report: report["installation"]["measured"]["tool"].update(
+                    {"digest": "sha256:" + "0" * 64}
                 ),
-                "install/prefix/tool/worker",
+                "installed occurrence binding",
             ),
             (
                 "worker",
-                lambda report: report["installation"].update(
-                    {"worker_digest": "sha256:" + "0" * 64}
+                lambda report: report["installation"]["measured"]["worker"].update(
+                    {"digest": "sha256:" + "0" * 64}
                 ),
-                "install/prefix/tool/worker",
+                "installed occurrence binding",
             ),
         )
         for label, mutate, message in mutations:
@@ -820,9 +1389,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 path = written[("static", "memory")]
                 report = release.load(path)
                 mutate(report)
-                path.write_text(
-                    json.dumps(report, sort_keys=True) + "\n", encoding="utf-8"
-                )
+                self.write_materialization_report(path, report, manifest)
                 with self.assertRaisesRegex(
                     release.ReleaseQualificationError, message
                 ):
@@ -849,8 +1416,8 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 "report-nonfinite",
                 "report",
                 lambda raw: raw.replace(
-                    b'"committed_transaction_count": 1',
-                    b'"committed_transaction_count": NaN',
+                    b'"committed_transaction_count":1',
+                    b'"committed_transaction_count":NaN',
                     1,
                 ),
             ),
@@ -884,6 +1451,182 @@ class NgReleaseQualificationTests(unittest.TestCase):
                         ROOT, manifest, evidence, install_values, git
                     )
 
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = pathlib.Path(temporary)
+            manifest, install_values, git, written = self.make_materialization_matrix(
+                evidence
+            )
+            path = written[("static", "memory")]
+            report = release.load(path)
+            noncanonical = (
+                json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+            ).encode("utf-8")
+            self.assertNotEqual(noncanonical, release.materialization.canonical_json(report))
+            path.write_bytes(noncanonical)
+            receipt_path = path.with_name(
+                manifest["materialization"]["execution_receipt_filename"]
+            )
+            receipt = release.load(receipt_path)
+            receipt["exact_stdout_byte_count"] = len(noncanonical)
+            receipt["stdout_sha256"] = release.digest_bytes(noncanonical)
+            receipt_path.write_text(
+                json.dumps(receipt, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            with self.assertRaisesRegex(
+                release.ReleaseQualificationError,
+                "report artifact is not canonical JSON",
+            ):
+                release.verify_materialization_reports(
+                    ROOT, manifest, evidence, install_values, git
+                )
+
+    def test_materialization_execution_receipt_schema_is_a_closed_union(
+        self,
+    ) -> None:
+        schema = release.load(ROOT / release.MATERIALIZATION_EXECUTION_RECEIPT_SCHEMA)
+        for exit_status, response_count, stdout_count in (
+            (0, 1, 1),
+            (1, 1, 1),
+            (2, 0, 0),
+            (2, 0, 17),
+        ):
+            release.validate_schema(
+                {
+                    "schema": "cxxlens.clang22-materialization-execution-receipt.v1",
+                    "actual_exit_status": exit_status,
+                    "exact_stdout_byte_count": stdout_count,
+                    "stdout_sha256": "sha256:" + "1" * 64,
+                    "parsed_response_count": response_count,
+                    "stderr_sha256": "sha256:" + "2" * 64,
+                },
+                schema,
+                "execution receipt union",
+            )
+        for exit_status, response_count, stdout_count in (
+            (0, 0, 1),
+            (0, 1, 0),
+            (1, 0, 1),
+            (1, 1, 0),
+            (2, 1, 0),
+            (3, 0, 0),
+        ):
+            with self.assertRaisesRegex(
+                release.ReleaseQualificationError, "schema validation failed"
+            ):
+                release.validate_schema(
+                    {
+                        "schema": "cxxlens.clang22-materialization-execution-receipt.v1",
+                        "actual_exit_status": exit_status,
+                        "exact_stdout_byte_count": stdout_count,
+                        "stdout_sha256": "sha256:" + "1" * 64,
+                        "parsed_response_count": response_count,
+                        "stderr_sha256": "sha256:" + "2" * 64,
+                    },
+                    schema,
+                    "execution receipt union",
+                )
+
+    def test_materialization_execution_receipt_is_exact_and_release_only(
+        self,
+    ) -> None:
+        mutations = (
+            (
+                "stdout-digest",
+                lambda receipt: receipt.update(
+                    {"stdout_sha256": "sha256:" + "0" * 64}
+                ),
+                "does not bind exact successful stdout/report bytes",
+            ),
+            (
+                "stdout-count",
+                lambda receipt: receipt.update(
+                    {"exact_stdout_byte_count": receipt["exact_stdout_byte_count"] + 1}
+                ),
+                "does not bind exact successful stdout/report bytes",
+            ),
+            (
+                "failed-exit",
+                lambda receipt: receipt.update(
+                    {"actual_exit_status": 1, "parsed_response_count": 1}
+                ),
+                "does not bind exact successful stdout/report bytes",
+            ),
+            (
+                "no-response",
+                lambda receipt: receipt.update(
+                    {"actual_exit_status": 2, "parsed_response_count": 0}
+                ),
+                "does not bind exact successful stdout/report bytes",
+            ),
+        )
+        for label, mutate, message in mutations:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temporary:
+                evidence = pathlib.Path(temporary)
+                manifest, install_values, git, written = (
+                    self.make_materialization_matrix(evidence)
+                )
+                receipt_path = written[("static", "memory")].with_name(
+                    manifest["materialization"]["execution_receipt_filename"]
+                )
+                receipt = release.load(receipt_path)
+                mutate(receipt)
+                release.validate_schema(
+                    receipt,
+                    release.load(
+                        ROOT / release.MATERIALIZATION_EXECUTION_RECEIPT_SCHEMA
+                    ),
+                    "schema-valid adversarial execution receipt",
+                )
+                receipt_path.write_text(
+                    json.dumps(receipt, sort_keys=True) + "\n", encoding="utf-8"
+                )
+                with self.assertRaisesRegex(
+                    release.ReleaseQualificationError, message
+                ):
+                    release.verify_materialization_reports(
+                        ROOT, manifest, evidence, install_values, git
+                    )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = pathlib.Path(temporary)
+            manifest, install_values, git, written = self.make_materialization_matrix(
+                evidence
+            )
+            written[("shared", "sqlite")].with_name(
+                manifest["materialization"]["execution_receipt_filename"]
+            ).unlink()
+            with self.assertRaisesRegex(
+                release.ReleaseQualificationError, "exactly four.*execution receipts"
+            ):
+                release.verify_materialization_reports(
+                    ROOT, manifest, evidence, install_values, git
+                )
+
+    def test_materialization_artifact_size_is_rejected_before_read(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = pathlib.Path(temporary) / "artifact.json"
+            path.write_bytes(b"{}")
+            with self.assertRaisesRegex(
+                release.ReleaseQualificationError,
+                "exceeds the 1-byte qualification limit",
+            ):
+                release.read_bounded_artifact(path, "fixture artifact", 1)
+
+    def test_materialization_artifact_reader_rejects_in_read_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = pathlib.Path(temporary) / "artifact.json"
+            path.write_bytes(b"{}")
+            before = path.stat()
+            after = mock.Mock(wraps=before)
+            after.st_mtime_ns = before.st_mtime_ns + 1
+            with mock.patch.object(
+                release.os, "fstat", side_effect=(before, after)
+            ), self.assertRaisesRegex(
+                release.ReleaseQualificationError,
+                "changed while qualification was reading it",
+            ):
+                release.read_bounded_artifact(path, "fixture artifact", 16)
+
     def test_strict_release_closes_span_observation_and_unresolved_censuses(
         self,
     ) -> None:
@@ -895,9 +1638,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
             path = written[("static", "memory")]
             report = release.load(path)
             report["span_validation"]["observed_bundle_count"] = 0
-            path.write_text(
-                json.dumps(report, sort_keys=True) + "\n", encoding="utf-8"
-            )
+            self.write_materialization_report(path, report, manifest)
             with self.assertRaisesRegex(
                 release.ReleaseQualificationError, "observed plus absent"
             ):
@@ -930,7 +1671,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 stage
                 for stage in report["claim_stages"]
                 if stage["descriptor_id"] == call_descriptor
-            )["claim_count"] += 1
+            )["sdk_claim_occurrence_count"] += 1
             report["side_channels"]["coverage"]["state_counts"].update(
                 {"covered": 2, "unresolved": 1}
             )
@@ -941,12 +1682,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     "category_counts": {"missing_input": 1},
                 }
             )
-            report["side_channels"]["guarantee"]["approximation"] = (
-                "under_approximation"
-            )
-            path.write_text(
-                json.dumps(report, sort_keys=True) + "\n", encoding="utf-8"
-            )
+            self.write_materialization_report(path, report, manifest)
             with self.assertRaisesRegex(
                 release.ReleaseQualificationError,
                 "lack exact typed unresolved category accounting",
@@ -974,9 +1710,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
             project["claim_count"] += 1
             report["base_claims"]["total_row_count"] += 1
             report["base_claims"]["total_claim_count"] += 1
-            path.write_text(
-                json.dumps(report, sort_keys=True) + "\n", encoding="utf-8"
-            )
+            self.write_materialization_report(path, report, manifest)
             with self.assertRaisesRegex(
                 release.ReleaseQualificationError,
                 "base-claim descriptor census differs",
@@ -1008,9 +1742,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 path = written[("shared", "sqlite")]
                 report = release.load(path)
                 mutate(report["base_claims"])
-                path.write_text(
-                    json.dumps(report, sort_keys=True) + "\n", encoding="utf-8"
-                )
+                self.write_materialization_report(path, report, manifest)
                 with mock.patch.object(
                     release.materialization, "validate_report"
                 ), self.assertRaisesRegex(
@@ -1107,11 +1839,17 @@ class NgReleaseQualificationTests(unittest.TestCase):
             )
         release.materialization.bind_provider_task_identities(request)
         release.materialization.bind_task_execution_identities(request)
+        release.materialization.bind_engine_policy_and_selector_identities(request)
         release.materialization.bind_request_identity(request)
 
         report = release.materialization.sample_report(ROOT, request)
         release.materialization.validate_request(ROOT, request)
-        release.materialization.validate_report(ROOT, request, report)
+        release.materialization.validate_report(
+            ROOT,
+            request,
+            report,
+            request_bytes=release.materialization.canonical_json(request),
+        )
         release.validate_release_base_claims(request, report)
         compile_units = next(
             row
@@ -1133,17 +1871,17 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 "sqlite-reopen",
                 ("static", "sqlite"),
                 lambda report: report["publication"].update(
-                    {"sqlite_reopened": False}
+                    {"sqlite_reopen_status": "not_applicable"}
                 ),
                 "schema validation failed",
             ),
             (
                 "semantic-output",
                 ("shared", "sqlite"),
-                lambda report: report["semantic_verification"].update(
-                    {"query_digest": "sha256:" + "0" * 64}
-                ),
-                "semantic parity differs",
+                lambda report: report["semantic_verification"]["reopened_store"][
+                    "cursor_projection"
+                ].update({"digest": "sha256:" + "0" * 64}),
+                "request/report binding is invalid",
             ),
         )
         for label, key, mutate, message in mutations:
@@ -1155,9 +1893,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 path = written[key]
                 report = release.load(path)
                 mutate(report)
-                path.write_text(
-                    json.dumps(report, sort_keys=True) + "\n", encoding="utf-8"
-                )
+                self.write_materialization_report(path, report, manifest)
                 with self.assertRaisesRegex(
                     release.ReleaseQualificationError, message
                 ):
@@ -1178,16 +1914,12 @@ class NgReleaseQualificationTests(unittest.TestCase):
             request["tasks"][0]["budget"]["rows"] += 1
             release.materialization.bind_task_execution_identities(request)
             release.materialization.bind_request_identity(request)
-            request_path.write_text(
-                json.dumps(request, sort_keys=True) + "\n", encoding="utf-8"
+            request_bytes = (json.dumps(request, sort_keys=True) + "\n").encode()
+            request_path.write_bytes(request_bytes)
+            report = release.materialization.sample_report(
+                ROOT, request, request_bytes=request_bytes
             )
-            report = release.materialization.sample_report(ROOT, request)
-            report["installation"]["platform"] = (
-                f"linux-{release.platform.machine().lower()}-static"
-            )
-            report_path.write_text(
-                json.dumps(report, sort_keys=True) + "\n", encoding="utf-8"
-            )
+            self.write_materialization_report(report_path, report, manifest)
             with self.assertRaisesRegex(
                 release.ReleaseQualificationError,
                 "base-claim count/set-digest parity differs",
@@ -1268,6 +2000,34 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 updated_by_platform[
                     f"linux-{release.platform.machine().lower()}-shared"
                 ],
+            )
+            request_changed = copy.deepcopy(evidence)
+            request_changed["materialization_reports"][("static", "memory")][
+                "request_digest"
+            ] = "sha256:" + "e" * 64
+            request_updated = release.production_support_tuples(
+                ROOT, manifest, request_changed
+            )
+            request_updated_by_platform = {
+                row["platform"]: row["evidence_digest"] for row in request_updated
+            }
+            self.assertNotEqual(
+                baseline_by_platform[
+                    f"linux-{release.platform.machine().lower()}-static"
+                ],
+                request_updated_by_platform[
+                    f"linux-{release.platform.machine().lower()}-static"
+                ],
+            )
+            receipt_changed = copy.deepcopy(evidence["materialization_reports"])
+            receipt_changed[("static", "memory")][
+                "execution_receipt_digest"
+            ] = "sha256:" + "f" * 64
+            self.assertNotEqual(
+                evidence["materialization_report_sets"]["static"],
+                release.materialization_report_set_digest(
+                    receipt_changed, "static"
+                ),
             )
 
     def test_wave0_scope_inventory_binding_is_exact(self) -> None:
@@ -1358,7 +2118,18 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 "report_count": 0,
                 "report_set_count": 0,
                 "owner_issue": "#181",
-                "feedback": ["DF-0182", "DF-0187"],
+                "feedback": [
+                    "DF-0182",
+                    "DF-0187",
+                    "DF-0191",
+                    "DF-0192",
+                    "DF-0195",
+                    "DF-0196",
+                    "DF-0197",
+                    "DF-0198",
+                    "DF-0199",
+                    "DF-0200",
+                ],
             }
             with mock.patch.object(
                 release, "collect_release_evidence", return_value=evidence
@@ -1457,6 +2228,72 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 ),
                 evaluation,
             )
+            schema_valid_mutations = (
+                (
+                    "request-digest",
+                    lambda value: value["evidence"]["materialization_reports"][0].update(
+                        {"request_digest": "sha256:" + "d" * 64}
+                    ),
+                ),
+                (
+                    "stdout-count",
+                    lambda value: value["evidence"]["materialization_reports"][0].update(
+                        {
+                            "exact_stdout_byte_count": value["evidence"]
+                            ["materialization_reports"][0]["exact_stdout_byte_count"]
+                            + 1
+                        }
+                    ),
+                ),
+                (
+                    "stdout-digest",
+                    lambda value: value["evidence"]["materialization_reports"][0].update(
+                        {"stdout_digest": "sha256:" + "e" * 64}
+                    ),
+                ),
+                (
+                    "receipt-digest",
+                    lambda value: value["evidence"]["materialization_reports"][0].update(
+                        {"execution_receipt_digest": "sha256:" + "f" * 64}
+                    ),
+                ),
+                (
+                    "report-set-digest",
+                    lambda value: value["evidence"]["materialization_report_sets"][0].update(
+                        {"report_set_digest": "sha256:" + "a" * 64}
+                    ),
+                ),
+                (
+                    "sqlite-qualification-report-digest",
+                    lambda value: value["evidence"][
+                        "sqlite_store_v3_qualification"
+                    ].update({"report_digest": "sha256:" + "b" * 64}),
+                ),
+            )
+            evaluation_schema = release.load(ROOT / release.EVALUATION_REPORT_SCHEMA)
+            for label, mutate in schema_valid_mutations:
+                with self.subTest(label=label):
+                    mutated = copy.deepcopy(evaluation)
+                    mutate(mutated)
+                    release.validate_schema(
+                        mutated,
+                        evaluation_schema,
+                        "schema-valid adversarial evaluation",
+                    )
+                    evaluation_path.write_text(
+                        json.dumps(mutated, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    with self.assertRaisesRegex(
+                        release.ReleaseQualificationError,
+                        "evidence binding differs from exact GR inputs",
+                    ):
+                        release.verify_qualified_evaluation(
+                            ROOT, evaluation_path, evidence
+                        )
+            evaluation_path.write_text(
+                json.dumps(evaluation, sort_keys=True) + "\n", encoding="utf-8"
+            )
             changed = copy.deepcopy(evidence)
             changed["scope_inventory"] = self.scope_inventory(
                 "classified-with-gaps"
@@ -1485,13 +2322,24 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 "git": git,
                 "qualification": "qualified",
                 "qualified": True,
+                "evidence": {
+                    "sqlite_store_v3_qualification": {
+                        "revision": git["revision"],
+                        "source_tree": git["tree"],
+                        "report_digest": "sha256:" + "3" * 64,
+                        "report_set_digest": "sha256:" + "4" * 64,
+                        "report_schema_digest": "sha256:" + "5" * 64,
+                        "sqlite_contract_digest": "sha256:" + "6" * 64,
+                    }
+                },
             }
             gr = {
                 "git": git,
                 "prerequisites": {
-                    "release_evaluation_report_digest": release.digest(
-                        evaluation_path
-                    )
+                    "release_evaluation_report_digest": release.digest(evaluation_path),
+                    "sqlite_store_v3_qualification": evaluation["evidence"][
+                        "sqlite_store_v3_qualification"
+                    ],
                 },
             }
 
@@ -1517,6 +2365,21 @@ class NgReleaseQualificationTests(unittest.TestCase):
                 with self.assertRaisesRegex(
                     release.ReleaseQualificationError,
                     "artifact digest differs",
+                ):
+                    release.verify_gr_evaluation_artifact_binding(
+                        ROOT, evaluation_path, gr_path
+                    )
+
+                gr["prerequisites"]["release_evaluation_report_digest"] = (
+                    release.digest(evaluation_path)
+                )
+                gr["prerequisites"]["sqlite_store_v3_qualification"] = {
+                    **evaluation["evidence"]["sqlite_store_v3_qualification"],
+                    "report_digest": "sha256:" + "0" * 64,
+                }
+                with self.assertRaisesRegex(
+                    release.ReleaseQualificationError,
+                    "SQLite qualification report binding differs",
                 ):
                     release.verify_gr_evaluation_artifact_binding(
                         ROOT, evaluation_path, gr_path
@@ -1568,6 +2431,10 @@ class NgReleaseQualificationTests(unittest.TestCase):
             self.assertEqual(
                 report["prerequisites"]["release_evaluation_report_digest"],
                 release.digest(evaluation_path),
+            )
+            self.assertEqual(
+                report["prerequisites"]["sqlite_store_v3_qualification"],
+                evidence["sqlite_store_v3_qualification"]["binding"],
             )
 
     def test_strict_report_rejects_scope_gaps_before_tuple_derivation(self) -> None:
@@ -1790,7 +2657,16 @@ class NgReleaseQualificationTests(unittest.TestCase):
             "under_approximation"
         )
         release.materialization.rebind_report_digest_chain(ROOT, request, report)
-        release.materialization.validate_report(ROOT, request, report)
+        with self.assertRaisesRegex(
+            release.materialization.MaterializationError,
+            "'exact' was expected",
+        ):
+            release.materialization.validate_report(
+                ROOT,
+                request,
+                report,
+                request_bytes=release.materialization.canonical_json(request),
+            )
         with self.assertRaisesRegex(
             release.ReleaseQualificationError,
             "contains a non-exact observation",

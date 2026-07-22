@@ -490,6 +490,23 @@ class NgApiDevelopmentReadinessTest(unittest.TestCase):
             ):
                 validate_documents(root)
 
+    def test_release_evaluation_requires_sqlite_qualification(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.copied_root(temporary)
+            workflow = root / ".github/workflows/quality.yml"
+            workflow.write_text(
+                workflow.read_text(encoding="utf-8").replace(
+                    "needs: [g5-qualification, sqlite-store-v3-qualification]",
+                    "needs: [g5-qualification]",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                ReadinessError, "production-scope job needs differ: release-evaluation"
+            ):
+                validate_documents(root)
+
     def test_production_scope_dependency_matrix_is_required(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)

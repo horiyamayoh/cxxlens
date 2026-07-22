@@ -33,6 +33,8 @@
 
 #include <cxxlens/sdk/provider.hpp>
 
+#include "../sdk/provider_runtime_internal.hpp"
+
 namespace cxxlens::sdk::provider
 {
 	namespace
@@ -130,9 +132,7 @@ namespace cxxlens::sdk::provider
 				return cxxlens::sdk::unexpected(process_error(
 					"provider.process-launch-failed", "executable-open", std::to_string(errno)));
 			descriptor source{source_value};
-			struct stat metadata
-			{
-			};
+			struct stat metadata{};
 			if (::fstat(source.get(), &metadata) != 0 || !S_ISREG(metadata.st_mode) ||
 				(metadata.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) == 0)
 				return cxxlens::sdk::unexpected(process_error(
@@ -233,6 +233,66 @@ namespace cxxlens::sdk::provider
 				return cxxlens::sdk::unexpected(process_error(
 					"provider.process-launch-failed", "input-write", std::to_string(errno)));
 			}
+			if (::lseek(value, 0, SEEK_SET) < 0)
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-launch-failed", "input-seek", std::to_string(errno)));
+			if (::fcntl(value,
+						F_ADD_SEALS,
+						F_SEAL_WRITE | F_SEAL_GROW | F_SEAL_SHRINK | F_SEAL_SEAL) != 0)
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-launch-failed", "input-seal", std::to_string(errno)));
+			return output;
+		}
+
+		class replayable_input_sink final : public frame_sink
+		{
+		  public:
+			explicit replayable_input_sink(const int output) : output_{output} {}
+
+			result<void> write(const std::span<const std::byte> bytes) override
+			{
+				// One exact 64 MiB logical input plus the maximum bounded frame/control envelope.
+				// This is a transport safety bound only; the shared encoder owns semantic limits.
+				constexpr std::uint64_t maximum_wire_input_bytes = 72U * 1024U * 1024U;
+				if (bytes.size() > maximum_wire_input_bytes - written_)
+					return cxxlens::sdk::unexpected(
+						process_error("provider.process-request-invalid", "input-limit"));
+				std::size_t offset{};
+				while (offset < bytes.size())
+				{
+					const auto count =
+						::write(output_, bytes.data() + offset, bytes.size() - offset);
+					if (count > 0)
+					{
+						offset += static_cast<std::size_t>(count);
+						continue;
+					}
+					if (count < 0 && errno == EINTR)
+						continue;
+					return cxxlens::sdk::unexpected(process_error(
+						"provider.process-launch-failed", "input-write", std::to_string(errno)));
+				}
+				written_ += bytes.size();
+				return {};
+			}
+
+		  private:
+			int output_{};
+			std::uint64_t written_{};
+		};
+
+		[[nodiscard]] result<descriptor> make_replayable_input(
+			const detail::replayable_provider_process_port::input_writer& write_input)
+		{
+			const int value =
+				::memfd_create("cxxlens-provider-input", MFD_CLOEXEC | MFD_ALLOW_SEALING);
+			if (value < 0)
+				return cxxlens::sdk::unexpected(process_error(
+					"provider.process-launch-failed", "input", std::to_string(errno)));
+			descriptor output{value};
+			replayable_input_sink sink{value};
+			if (auto written = write_input(sink); !written)
+				return cxxlens::sdk::unexpected(std::move(written.error()));
 			if (::lseek(value, 0, SEEK_SET) < 0)
 				return cxxlens::sdk::unexpected(process_error(
 					"provider.process-launch-failed", "input-seek", std::to_string(errno)));
@@ -386,12 +446,46 @@ namespace cxxlens::sdk::provider
 			}
 		}
 
-		class linux_process_port final : public provider_process_port
+		class linux_process_port final : public provider_process_port,
+										 public detail::replayable_provider_process_port
 		{
 		  public:
 			[[nodiscard]] result<process_output>
 			run(const process_invocation& invocation,
 				const std::stop_token cancellation) const override
+			{
+				return run_with_input(
+					invocation,
+					[&invocation]
+					{
+						return make_input(invocation.standard_input);
+					},
+					cancellation);
+			}
+
+			[[nodiscard]] result<process_output> run_replayable(
+				const process_invocation& invocation,
+				const detail::replayable_provider_process_port::input_writer& write_input,
+				const std::stop_token cancellation) const override
+			{
+				if (!invocation.standard_input.empty())
+					return cxxlens::sdk::unexpected(
+						process_error("provider.process-request-invalid", "standard-input-mixed"));
+				return run_with_input(
+					invocation,
+					[&write_input]
+					{
+						return make_replayable_input(write_input);
+					},
+					cancellation);
+			}
+
+		  private:
+			template <typename InputFactory>
+			[[nodiscard]] result<process_output>
+			run_with_input(const process_invocation& invocation,
+						   InputFactory&& input_factory,
+						   const std::stop_token cancellation) const
 			{
 				if (auto valid = invocation.budget.validate(); !valid)
 					return cxxlens::sdk::unexpected(
@@ -439,7 +533,7 @@ namespace cxxlens::sdk::provider
 										  {},
 										  verified->digest};
 
-				auto input = make_input(invocation.standard_input);
+				auto input = std::forward<InputFactory>(input_factory)();
 				auto output_pipe = make_pipe();
 				auto error_pipe = make_pipe();
 				if (!input)
@@ -617,7 +711,8 @@ namespace cxxlens::sdk::provider
 			}
 		};
 #else
-		class unavailable_process_port final : public provider_process_port
+		class unavailable_process_port final : public provider_process_port,
+											   public detail::replayable_provider_process_port
 		{
 		  public:
 			result<process_output> run(const process_invocation& invocation,
@@ -640,11 +735,31 @@ namespace cxxlens::sdk::provider
 									  "provider.runtime-unavailable",
 									  {}};
 			}
+
+			result<process_output>
+			run_replayable(const process_invocation& invocation,
+						   const detail::replayable_provider_process_port::input_writer&,
+						   std::stop_token cancellation) const override
+			{
+				return run(invocation, cancellation);
+			}
 		};
 #endif
 	} // namespace
 
+#if !defined(CXXLENS_PROVIDER_RUNTIME_INTERNAL_ONLY)
 	std::unique_ptr<provider_process_port> make_system_provider_process_port()
+	{
+#if defined(__linux__) && defined(__GLIBC__)
+		return std::make_unique<linux_process_port>();
+#else
+		return std::make_unique<unavailable_process_port>();
+#endif
+	}
+#endif
+
+	std::unique_ptr<detail::replayable_provider_process_port>
+	detail::make_system_replayable_provider_process_port()
 	{
 #if defined(__linux__) && defined(__GLIBC__)
 		return std::make_unique<linux_process_port>();

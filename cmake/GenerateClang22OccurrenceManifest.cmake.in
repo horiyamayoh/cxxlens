@@ -1,0 +1,116 @@
+# Generate the source-private occurrence authority only after every inventoried
+# install artifact exists at its final prefix-relative path.
+
+set(CXXLENS_PROVENANCE_MODE "@CXXLENS_SOURCE_PROVENANCE_MODE@")
+set(CXXLENS_PROVENANCE_SOURCE_DIR "@CMAKE_CURRENT_SOURCE_DIR@")
+set(CXXLENS_PROVENANCE_GIT_EXECUTABLE "@CXXLENS_SOURCE_PROVENANCE_GIT@")
+set(CXXLENS_PROVENANCE_EXPECTED_REVISION "@CXXLENS_SOURCE_REVISION@")
+set(CXXLENS_PROVENANCE_EXPECTED_TREE "@CXXLENS_SOURCE_TREE@")
+include("@CMAKE_CURRENT_BINARY_DIR@/VerifyClang22SourceProvenance.cmake")
+
+set(_cxxlens_occurrence_prefix "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}")
+set(_cxxlens_occurrence_files "")
+set(_cxxlens_occurrence_separator "")
+
+function(_cxxlens_occurrence_append role relative_path)
+  set(_absolute "${_cxxlens_occurrence_prefix}/${relative_path}")
+  if(NOT EXISTS "${_absolute}")
+    message(
+      FATAL_ERROR
+        "Clang 22 occurrence inventory entry is missing: ${relative_path}")
+  endif()
+  file(SHA256 "${_absolute}" _digest)
+  set(_entry
+      "${_cxxlens_occurrence_separator}{\"digest\":\"sha256:${_digest}\",\"path\":\"${relative_path}\",\"role\":\"${role}\"}"
+  )
+  set(_cxxlens_occurrence_files
+      "${_cxxlens_occurrence_files}${_entry}"
+      PARENT_SCOPE)
+  set(_cxxlens_occurrence_separator
+      ","
+      PARENT_SCOPE)
+endfunction()
+
+_cxxlens_occurrence_append(materializer-executable
+                           "@CMAKE_INSTALL_BINDIR@/cxxlens-clang22-materialize")
+_cxxlens_occurrence_append(worker-executable
+                           "@CMAKE_INSTALL_BINDIR@/cxxlens-clang-worker-22")
+_cxxlens_occurrence_append(
+  relation-registry
+  "@CMAKE_INSTALL_DATADIR@/cxxlens/schemas/cxxlens_ng_relation_registry.yaml")
+_cxxlens_occurrence_append(
+  project-catalog-contract
+  "@CMAKE_INSTALL_DATADIR@/cxxlens/schemas/cxxlens_ng_project_catalog_contract.yaml"
+)
+_cxxlens_occurrence_append(
+  portable-provider-task-contract
+  "@CMAKE_INSTALL_DATADIR@/cxxlens/schemas/cxxlens_ng_portable_provider_task_contract.yaml"
+)
+_cxxlens_occurrence_append(
+  provider-protocol
+  "@CMAKE_INSTALL_DATADIR@/cxxlens/schemas/cxxlens_ng_provider_protocol.yaml")
+_cxxlens_occurrence_append(
+  provider-runtime-contract
+  "@CMAKE_INSTALL_DATADIR@/cxxlens/schemas/cxxlens_ng_provider_runtime_contract.yaml"
+)
+_cxxlens_occurrence_append(
+  snapshot-store-contract
+  "@CMAKE_INSTALL_DATADIR@/cxxlens/schemas/cxxlens_ng_snapshot_store_contract.yaml"
+)
+_cxxlens_occurrence_append(
+  sqlite-store-contract
+  "@CMAKE_INSTALL_DATADIR@/cxxlens/schemas/cxxlens_ng_sqlite_store_contract.yaml"
+)
+_cxxlens_occurrence_append(
+  materialization-contract
+  "@CMAKE_INSTALL_DATADIR@/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.yaml"
+)
+_cxxlens_occurrence_append(
+  materialization-contract-schema
+  "@CMAKE_INSTALL_DATADIR@/cxxlens/schemas/cxxlens_ng_clang22_materialization_contract.schema.yaml"
+)
+_cxxlens_occurrence_append(
+  materialization-request-schema
+  "@CMAKE_INSTALL_DATADIR@/cxxlens/schemas/cxxlens_ng_clang22_materialization_request.schema.yaml"
+)
+_cxxlens_occurrence_append(
+  materialization-report-schema
+  "@CMAKE_INSTALL_DATADIR@/cxxlens/schemas/cxxlens_ng_clang22_materialization_report.schema.yaml"
+)
+
+if("@CXXLENS_OCCURRENCE_CONFIGURATION@" STREQUAL "shared")
+  if(NOT "@CMAKE_INSTALL_LIBDIR@" MATCHES "^(lib|lib64)$")
+    message(
+      FATAL_ERROR "Shared Clang 22 occurrence authority requires lib or lib64")
+  endif()
+  _cxxlens_occurrence_append(
+    base "@CMAKE_INSTALL_LIBDIR@/libcxxlens_base.so.@PROJECT_VERSION_MAJOR@")
+  _cxxlens_occurrence_append(
+    kernel
+    "@CMAKE_INSTALL_LIBDIR@/libcxxlens_kernel.so.@PROJECT_VERSION_MAJOR@")
+  _cxxlens_occurrence_append(
+    query "@CMAKE_INSTALL_LIBDIR@/libcxxlens_query.so.@PROJECT_VERSION_MAJOR@")
+  _cxxlens_occurrence_append(
+    recipes
+    "@CMAKE_INSTALL_LIBDIR@/libcxxlens_recipes.so.@PROJECT_VERSION_MAJOR@")
+  _cxxlens_occurrence_append(
+    provider-sdk
+    "@CMAKE_INSTALL_LIBDIR@/libcxxlens_provider_sdk.so.@PROJECT_VERSION_MAJOR@")
+  _cxxlens_occurrence_append(
+    clang22-provider-sdk
+    "@CMAKE_INSTALL_LIBDIR@/libcxxlens_clang22_provider_sdk.so.@PROJECT_VERSION_MAJOR@"
+  )
+endif()
+
+set(_payload
+    "{\"files\":[${_cxxlens_occurrence_files}],\"manifest_version\":\"1.0.0\",\"package_configuration\":\"@CXXLENS_OCCURRENCE_CONFIGURATION@\",\"schema\":\"cxxlens.clang22-materializer-occurrence-manifest.v1\",\"source_revision\":\"@CXXLENS_SOURCE_REVISION@\",\"source_tree\":\"@CXXLENS_SOURCE_TREE@\"}"
+)
+string(SHA256 _payload_digest "${_payload}")
+set(_manifest
+    "{\"files\":[${_cxxlens_occurrence_files}],\"manifest_version\":\"1.0.0\",\"occurrence_payload_digest\":\"sha256:${_payload_digest}\",\"package_configuration\":\"@CXXLENS_OCCURRENCE_CONFIGURATION@\",\"schema\":\"cxxlens.clang22-materializer-occurrence-manifest.v1\",\"source_revision\":\"@CXXLENS_SOURCE_REVISION@\",\"source_tree\":\"@CXXLENS_SOURCE_TREE@\"}\n"
+)
+set(_destination
+    "${_cxxlens_occurrence_prefix}/@CMAKE_INSTALL_DATADIR@/cxxlens/materialization/clang22"
+)
+file(MAKE_DIRECTORY "${_destination}")
+file(WRITE "${_destination}/occurrence-v1.json" "${_manifest}")

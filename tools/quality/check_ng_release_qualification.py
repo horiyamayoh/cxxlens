@@ -4,13 +4,16 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime
 import hashlib
 import importlib
 import json
+import os
 import pathlib
 import platform
 import re
+import stat
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -20,6 +23,7 @@ import jsonschema
 import yaml
 
 import check_ng_clang22_materialization as materialization
+import check_ng_sqlite_store_v3_qualification as sqlite_qualification
 import public_callable_inventory as callable_inventory
 
 
@@ -59,6 +63,43 @@ MATERIALIZATION_REQUEST_SCHEMA = pathlib.Path(
 MATERIALIZATION_REPORT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_clang22_materialization_report.schema.yaml"
 )
+MATERIALIZATION_EXECUTION_RECEIPT_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_clang22_materialization_execution_receipt.schema.yaml"
+)
+MATERIALIZATION_OCCURRENCE_MANIFEST_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_clang22_materializer_occurrence_manifest.schema.yaml"
+)
+SQLITE_STORE_CONTRACT = pathlib.Path("schemas/cxxlens_ng_sqlite_store_contract.yaml")
+SQLITE_STORE_V3_QUALIFICATION_REPORT_SCHEMA = pathlib.Path(
+    "schemas/cxxlens_ng_sqlite_store_v3_qualification_report.schema.yaml"
+)
+MATERIALIZATION_OCCURRENCE_MANIFEST_PATH = (
+    "share/cxxlens/materialization/clang22/occurrence-v1.json"
+)
+MATERIALIZATION_REQUEST_VERSION = "2.1.0"
+MATERIALIZATION_PROTOCOL_MINOR = 1
+MATERIALIZATION_REQUIRED_FEATURES = ["task-input-chunks-v1"]
+RELEASE_AUTHORITY_PATHS = (
+    MANIFEST,
+    MATERIALIZATION_CONTRACT,
+    MATERIALIZATION_CONTRACT_SCHEMA,
+    MATERIALIZATION_REQUEST_SCHEMA,
+    MATERIALIZATION_REPORT_SCHEMA,
+    MATERIALIZATION_EXECUTION_RECEIPT_SCHEMA,
+    MATERIALIZATION_OCCURRENCE_MANIFEST_SCHEMA,
+    SQLITE_STORE_CONTRACT,
+    SQLITE_STORE_V3_QUALIFICATION_REPORT_SCHEMA,
+    RELEASE,
+    ACCEPTANCE,
+    SUPPORT,
+    SECURITY,
+    REGISTRY,
+    CALLABLE_INVENTORY,
+    CALLABLE_INVENTORY_SCHEMA,
+    CALLABLE_REPORT_SCHEMA,
+)
+MATERIALIZATION_ARTIFACT_MAX_BYTES = 1073741824
+MATERIALIZATION_RECEIPT_MAX_BYTES = 65536
 MATERIALIZATION_MATRIX = (
     ("static", "memory"),
     ("static", "sqlite"),
@@ -68,7 +109,18 @@ MATERIALIZATION_MATRIX = (
 MATERIALIZATION_TOOL_FILE = "bin/cxxlens-clang22-materialize"
 MATERIALIZATION_ASSIGNMENT_ID = "scope.clang22-installed-adoption-gap"
 MATERIALIZATION_ASSIGNMENT_OWNER = "#181"
-MATERIALIZATION_ASSIGNMENT_FEEDBACK = ("DF-0182", "DF-0187")
+MATERIALIZATION_ASSIGNMENT_FEEDBACK = (
+    "DF-0182",
+    "DF-0187",
+    "DF-0191",
+    "DF-0192",
+    "DF-0195",
+    "DF-0196",
+    "DF-0197",
+    "DF-0198",
+    "DF-0199",
+    "DF-0200",
+)
 MATERIALIZATION_ASSIGNMENT_SURFACES = (
     ("distribution.consumer-configuration", "shared/real-project"),
     ("distribution.consumer-configuration", "static/real-project"),
@@ -80,6 +132,7 @@ MATERIALIZATION_ASSIGNMENT_SURFACES = (
     ("provider.production-tuple-template", "static/cc.call_direct_target@1"),
     ("provider.production-tuple-template", "static/cc.call_site@1"),
     ("provider.production-tuple-template", "static/cc.entity@1"),
+    ("provider.profile-feature", "NG0/task-input-chunks-v1"),
     ("relation.descriptor", "frontend.clang22.call_observation.v2"),
     ("relation.descriptor", "frontend.clang22.entity_observation.v2"),
     ("relation.descriptor", "frontend.clang22.type_observation.v2"),
@@ -102,6 +155,10 @@ MATERIALIZATION_TASK_EXECUTION_KEY_FIELDS = (
     "task_input_digest",
     "provider_execution_id",
 )
+SQLITE_STORE_V3_QUALIFICATION_REPORT_FILENAME = (
+    "cxxlens-ng-sqlite-store-v3-qualification-report.json"
+)
+SQLITE_STORE_V3_QUALIFICATION_REPORT_MAX_BYTES = 16_777_216
 
 
 class ReleaseQualificationError(ValueError):
@@ -122,17 +179,107 @@ def load(path: pathlib.Path) -> dict[str, Any]:
     return value
 
 
-def load_materialization_json(path: pathlib.Path, label: str) -> dict[str, Any]:
-    """Load one request/report with the specialization's strict byte policy."""
+def read_bounded_artifact(
+    path: pathlib.Path, label: str, maximum_bytes: int
+) -> bytes:
+    """Open once, fstat before reading, and retain only one bounded byte occurrence."""
 
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(
+        os, "O_NOFOLLOW", 0
+    )
+    descriptor = -1
     try:
-        raw = path.read_bytes()
+        descriptor = os.open(path, flags)
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            fail(f"{label} is not a regular artifact: {path}")
+        expected_size = before.st_size
+        if expected_size > maximum_bytes:
+            fail(
+                f"{label} exceeds the {maximum_bytes}-byte qualification limit: "
+                f"{path}: {expected_size}"
+            )
+        with os.fdopen(descriptor, "rb", closefd=True) as stream:
+            descriptor = -1
+            raw = stream.read(maximum_bytes + 1)
+            after = os.fstat(stream.fileno())
     except OSError as error:
         fail(f"cannot read {label} {path}: {error}")
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    if len(raw) > maximum_bytes:
+        fail(f"{label} grew beyond the {maximum_bytes}-byte qualification limit: {path}")
+    if len(raw) != expected_size:
+        fail(
+            f"{label} changed while qualification was reading it: "
+            f"{path}: stat={expected_size}, read={len(raw)}"
+        )
+    before_identity = (
+        before.st_dev,
+        before.st_ino,
+        before.st_size,
+        before.st_mtime_ns,
+        before.st_ctime_ns,
+    )
+    after_identity = (
+        after.st_dev,
+        after.st_ino,
+        after.st_size,
+        after.st_mtime_ns,
+        after.st_ctime_ns,
+    )
+    if after_identity != before_identity:
+        fail(f"{label} changed while qualification was reading it: {path}")
     try:
-        return materialization.load_strict_json_bytes(raw, f"{label} {path}")
+        current = os.stat(path, follow_symlinks=False)
+    except OSError as error:
+        fail(f"cannot restat {label} {path}: {error}")
+    if not stat.S_ISREG(current.st_mode) or (
+        current.st_dev,
+        current.st_ino,
+        current.st_size,
+        current.st_mtime_ns,
+        current.st_ctime_ns,
+    ) != before_identity:
+        fail(f"{label} path changed while qualification was reading it: {path}")
+    return raw
+
+
+def load_materialization_json(
+    path: pathlib.Path, label: str
+) -> tuple[dict[str, Any], bytes]:
+    """Load one request/report with the specialization's strict byte policy."""
+
+    raw = read_bounded_artifact(path, label, MATERIALIZATION_ARTIFACT_MAX_BYTES)
+    try:
+        value = materialization.load_strict_json_bytes(raw, f"{label} {path}")
     except materialization.MaterializationError as error:
         fail(f"{label} is not strict materialization JSON: {error}")
+    return value, raw
+
+
+def load_execution_receipt(
+    path: pathlib.Path,
+    schema: dict[str, Any],
+) -> tuple[dict[str, Any], bytes]:
+    """Load and validate one external materializer process receipt."""
+
+    raw = read_bounded_artifact(
+        path, "materialization execution receipt", MATERIALIZATION_RECEIPT_MAX_BYTES
+    )
+    try:
+        value = materialization.load_strict_json_bytes(
+            raw, f"materialization execution receipt {path}"
+        )
+    except materialization.MaterializationError as error:
+        fail(f"materialization execution receipt is not strict JSON: {error}")
+    validate_schema(
+        value,
+        schema,
+        f"materialization execution receipt {path}",
+    )
+    return value, raw
 
 
 def validate_schema(value: Any, schema: dict[str, Any], label: str) -> None:
@@ -143,6 +290,76 @@ def validate_schema(value: Any, schema: dict[str, Any], label: str) -> None:
         ).validate(value)
     except (jsonschema.SchemaError, jsonschema.ValidationError) as error:
         fail(f"{label} schema validation failed: {error.message}")
+
+
+def validate_release_materialization_request_machine(request: dict[str, Any]) -> None:
+    tool = request.get("tool")
+    worker = request.get("worker")
+    trust = request.get("trust_policy")
+    if not all(isinstance(value, dict) for value in (tool, worker, trust)):
+        fail("release materialization request machine projection is malformed")
+    legacy_fields = {"prefix_manifest_digest", "relocated_prefix_digest"}
+    if legacy_fields.intersection(tool):
+        fail("release materialization request retains legacy prefix digest authority")
+    if (
+        request.get("schema") != "cxxlens.clang22-materialization-request.v2"
+        or request.get("request_version") != MATERIALIZATION_REQUEST_VERSION
+        or tool.get("interface_version") != MATERIALIZATION_REQUEST_VERSION
+        or "occurrence_manifest_digest" not in tool
+        or worker.get("protocol_major") != 1
+        or worker.get("protocol_minor") != MATERIALIZATION_PROTOCOL_MINOR
+        or worker.get("required_features") != MATERIALIZATION_REQUIRED_FEATURES
+        or trust.get("protocol_major") != 1
+        or trust.get("protocol_minor") != MATERIALIZATION_PROTOCOL_MINOR
+        or trust.get("required_features") != MATERIALIZATION_REQUIRED_FEATURES
+    ):
+        fail("release materialization request machine 2.1 projection differs")
+
+
+def validate_release_occurrence_binding(
+    request: dict[str, Any],
+    report: dict[str, Any],
+    install: dict[str, Any],
+    git: dict[str, Any],
+    label: str,
+) -> None:
+    installation = report["installation"]
+    if {"prefix_manifest_digest", "relocated_prefix_digest"}.intersection(
+        installation
+    ):
+        fail("materialization report retains legacy prefix digest authority")
+    file_rows = [
+        row
+        for row in install["files"]
+        if row["path"] == MATERIALIZATION_OCCURRENCE_MANIFEST_PATH
+    ]
+    if len(file_rows) != 1:
+        fail(f"installed occurrence manifest census differs: {label}")
+    occurrence_manifest_digest = file_rows[0]["digest"]
+    files = {row["path"]: row["digest"] for row in install["files"]}
+    tool_digest = files.get("bin/cxxlens-clang22-materialize")
+    worker_digest = files.get("bin/cxxlens-clang-worker-22")
+    requested = installation["requested"]
+    measured = installation["measured"]
+    configuration = request["tool"]["package_configuration"]
+    if (
+        request["tool"]["occurrence_manifest_digest"]
+        != occurrence_manifest_digest
+        or request["tool"]["installed_executable_digest"] != tool_digest
+        or request["worker"]["installed_binary_digest"] != worker_digest
+        or requested
+        != {"occurrence_manifest_digest": occurrence_manifest_digest}
+        or measured["manifest_path"] != MATERIALIZATION_OCCURRENCE_MANIFEST_PATH
+        or measured["manifest_file_digest"] != occurrence_manifest_digest
+        or measured["source_revision"] != git["revision"]
+        or measured["source_tree"] != git["tree"]
+        or measured["configuration"] != configuration
+        or measured["tool"]
+        != {"path": "bin/cxxlens-clang22-materialize", "digest": tool_digest}
+        or measured["worker"]
+        != {"path": "bin/cxxlens-clang-worker-22", "digest": worker_digest}
+    ):
+        fail(f"materialization installed occurrence binding differs: {label}")
 
 
 def digest_bytes(value: bytes) -> str:
@@ -244,9 +461,11 @@ def materialization_assignment_shape(qualification: str) -> dict[str, Any]:
                 "gap": {
                     "finding": "scope.tracked-gap.clang22-installed-adoption",
                     "remediation": (
-                        "Complete installed actual-source worker output adoption with "
-                        "tool-private independent all-or-none span-bundle validation, "
-                        "publication, and query evidence; do not claim generic "
+                        "Implement the accepted DF-0195 through DF-0199 sealed-evidence, "
+                        "measured-occurrence, authenticated-streaming, head-observation, "
+                        "and canonical-Base64 authority; resolve DF-0200 bounded claim/Store "
+                        "staging; then complete installed actual-source worker output adoption "
+                        "with exact publication and query evidence; do not claim generic "
                         "relation-row reference enforcement."
                     ),
                 },
@@ -307,7 +526,9 @@ def materialization_assignment_transition(root: pathlib.Path) -> dict[str, Any]:
         }
     fail(
         "Clang 22 materializer assignment is neither the exact "
-        "#181/DF-0182/DF-0187 tracked gap nor the exact included+qualified assignment"
+        "#181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/DF-0197/"
+        "DF-0198/DF-0199/DF-0200 "
+        "tracked gap nor the exact included+qualified assignment"
     )
 
 
@@ -351,13 +572,22 @@ def collect_materialization_evidence(
         for path in evidence.rglob(manifest["materialization"]["request_filename"])
         if path.is_file()
     ]
+    receipt_paths = [
+        path
+        for path in evidence.rglob(
+            manifest["materialization"]["execution_receipt_filename"]
+        )
+        if path.is_file()
+    ]
     state = transition.get("assignment_state")
     if state == "tracked-gap":
-        if report_paths or request_paths:
+        if report_paths or request_paths or receipt_paths:
             fail(
-                "the exact #181/DF-0182/DF-0187 tracked gap requires zero materialization "
+                "the exact #181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/"
+                "DF-0197/DF-0198/DF-0199/DF-0200 "
+                "tracked gap requires zero materialization "
                 f"requests and reports, found {len(request_paths)} requests and "
-                f"{len(report_paths)} reports"
+                f"{len(report_paths)} reports and {len(receipt_paths)} execution receipts"
             )
         return {}, {}, transition["materialization_evidence"]
     if state != "qualified":
@@ -393,13 +623,25 @@ def validate_documents(
     validate_schema(manifest, load(root / MANIFEST_SCHEMA), "release qualification")
     validate_schema(
         {
+            "schema": "cxxlens.clang22-materialization-execution-receipt.v1",
+            "actual_exit_status": 0,
+            "exact_stdout_byte_count": 1,
+            "stdout_sha256": "sha256:" + "0" * 64,
+            "parsed_response_count": 1,
+            "stderr_sha256": "sha256:" + "0" * 64,
+        },
+        load(root / MATERIALIZATION_EXECUTION_RECEIPT_SCHEMA),
+        "materialization execution receipt",
+    )
+    validate_schema(
+        {
             "schema": "cxxlens.ng-release-qualification-report.v1",
             "result": "passed",
             "generated_at": "2026-07-18T00:00:00Z",
             "run_url": "https://github.com/horiyamayoh/cxxlens/actions/runs/1",
             "git": {"revision": "1" * 40, "tree": "2" * 40, "branch": "main", "clean": True},
             "release": {"id": "distribution-1.0", "version": "1.0.0", "state": "qualified"},
-            "prerequisites": {"gates": [f"gate.g{i}" for i in range(6)] + ["gate.release"], "migrations": [f"R{i}" for i in range(5)], "foundation_report_digest": "sha256:" + "1" * 64, "readiness_report_digest": "sha256:" + "2" * 64, "public_callable_report_digest": "sha256:" + "3" * 64, "g5_report_digest": "sha256:" + "4" * 64, "materialization_contract_digest": "sha256:" + "5" * 64, "release_evaluation_report_digest": "sha256:" + "6" * 64, "same_revision": True},
+            "prerequisites": {"gates": [f"gate.g{i}" for i in range(6)] + ["gate.release"], "migrations": [f"R{i}" for i in range(5)], "foundation_report_digest": "sha256:" + "1" * 64, "readiness_report_digest": "sha256:" + "2" * 64, "public_callable_report_digest": "sha256:" + "3" * 64, "g5_report_digest": "sha256:" + "4" * 64, "materialization_contract_digest": "sha256:" + "5" * 64, "sqlite_store_v3_qualification": {"revision": "1" * 40, "source_tree": "2" * 40, "report_digest": "sha256:" + "7" * 64, "report_set_digest": "sha256:" + "8" * 64, "report_schema_digest": "sha256:" + "9" * 64, "sqlite_contract_digest": "sha256:" + "a" * 64}, "release_evaluation_report_digest": "sha256:" + "6" * 64, "same_revision": True},
             "packages": [
                 {"configuration": configuration, "prefix_digest": "sha256:" + digit * 64, "manifest_digest": "sha256:" + digit * 64, "toolchain_digest": "sha256:" + digit * 64, "materialization_report_set_digest": "sha256:" + digit * 64, "real_project": "passed", "storage_backends": ["memory", "sqlite"], "relocated": True, "license": "sha256:" + digit * 64, "notice": "sha256:" + digit * 64}
                 for configuration, digit in (("static", "1"), ("shared", "2"))
@@ -478,6 +720,14 @@ def validate_documents(
                 "g5_report_digest": "sha256:" + "7" * 64,
                 "security_report_digest": "sha256:" + "8" * 64,
                 "materialization_contract_digest": "sha256:" + "9" * 64,
+                "sqlite_store_v3_qualification": {
+                    "revision": "1" * 40,
+                    "source_tree": "2" * 40,
+                    "report_digest": "sha256:" + "a" * 64,
+                    "report_set_digest": "sha256:" + "b" * 64,
+                    "report_schema_digest": "sha256:" + "c" * 64,
+                    "sqlite_contract_digest": "sha256:" + "d" * 64,
+                },
                 "materialization_evidence": {
                     "state": "exact-matrix",
                     "request_count": 4,
@@ -498,7 +748,16 @@ def validate_documents(
                     {
                         "configuration": configuration,
                         "backend": backend,
+                        "request_digest": "sha256:" + digit * 64,
+                        "request_byte_count": 1,
                         "report_digest": "sha256:" + digit * 64,
+                        "report_byte_count": 1,
+                        "execution_receipt_digest": "sha256:" + digit * 64,
+                        "actual_exit_status": 0,
+                        "exact_stdout_byte_count": 1,
+                        "stdout_digest": "sha256:" + digit * 64,
+                        "parsed_response_count": 1,
+                        "stderr_digest": "sha256:" + "0" * 64,
                     }
                     for configuration, digit in (("static", "b"), ("shared", "c"))
                     for backend in ("memory", "sqlite")
@@ -530,19 +789,65 @@ def validate_documents(
     cmake = (root / "CMakeLists.txt").read_text(encoding="utf-8")
     if "VERSION 1.0.0" not in cmake or "LICENSE NOTICE" not in cmake:
         fail("distribution package is not version 1.0.0 with license/notice")
+    if MATERIALIZATION_EXECUTION_RECEIPT_SCHEMA.name not in cmake:
+        fail("CMake install omits the materialization execution receipt schema")
+    if MATERIALIZATION_OCCURRENCE_MANIFEST_SCHEMA.name not in cmake:
+        fail("CMake install omits the materializer occurrence manifest schema")
+    if MATERIALIZATION_OCCURRENCE_MANIFEST_PATH not in manifest["package"][
+        "required_files"
+    ]:
+        fail("release package omits the fixed materializer occurrence manifest")
 
     try:
         materialization.validate_documents(root)
     except materialization.MaterializationError as error:
         fail(f"Clang 22 materialization authority is invalid: {error}")
+    try:
+        sqlite_qualification.validate_documents(root)
+    except sqlite_qualification.SQLiteStoreV3QualificationError as error:
+        fail(f"SQLite Store v3 qualification authority is invalid: {error}")
     expected_materialization = {
         "tool": "cxxlens-clang22-materialize",
         "contract": MATERIALIZATION_CONTRACT.as_posix(),
         "contract_schema": MATERIALIZATION_CONTRACT_SCHEMA.as_posix(),
         "request_schema": MATERIALIZATION_REQUEST_SCHEMA.as_posix(),
         "report_schema": MATERIALIZATION_REPORT_SCHEMA.as_posix(),
+        "occurrence_manifest_schema": (
+            MATERIALIZATION_OCCURRENCE_MANIFEST_SCHEMA.as_posix()
+        ),
+        "occurrence_manifest_path": MATERIALIZATION_OCCURRENCE_MANIFEST_PATH,
         "request_filename": "cxxlens-clang22-materialization-request.json",
         "report_filename": "cxxlens-clang22-materialization-report.json",
+        "execution_receipt_filename": (
+            "cxxlens-clang22-materialization-execution-receipt.json"
+        ),
+        "execution_receipt_schema": (
+            MATERIALIZATION_EXECUTION_RECEIPT_SCHEMA.as_posix()
+        ),
+        "execution_receipt": {
+            "schema": "cxxlens.clang22-materialization-execution-receipt.v1",
+            "encoding": "strict-json-single-object",
+            "maximum_bytes": MATERIALIZATION_RECEIPT_MAX_BYTES,
+            "fields": [
+                "actual_exit_status",
+                "exact_stdout_byte_count",
+                "stdout_sha256",
+                "parsed_response_count",
+                "stderr_sha256",
+            ],
+            "report_cross_binding": "exact-stdout-bytes-equal-report-artifact",
+            "qualified": {"actual_exit_status": 0, "parsed_response_count": 1},
+            "schema_valid_failure": {
+                "actual_exit_status": 1,
+                "parsed_response_count": 1,
+                "release_eligible": False,
+            },
+            "no_response_failure": {
+                "actual_exit_status": 2,
+                "parsed_response_count": 0,
+                "release_eligible": False,
+            },
+        },
         "configurations": ["static", "shared"],
         "cardinality": "exactly-one-per-configuration-and-backend",
         "relocated_installed_execution": "required",
@@ -557,22 +862,48 @@ def validate_documents(
             "encoding": "canonical-json-sorted-keys-no-whitespace",
             "projection": ["configuration", "reports"],
             "backend_order": ["memory", "sqlite"],
-            "report_entry_fields": ["backend", "report_digest"],
+            "report_entry_fields": [
+                "backend",
+                "report_digest",
+                "execution_receipt_digest",
+            ],
         },
     }
     if manifest.get("materialization") != expected_materialization:
         fail("release materialization matrix/set-digest contract differs")
+    expected_sqlite_qualification = {
+        "authority": "docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md",
+        "report_schema": SQLITE_STORE_V3_QUALIFICATION_REPORT_SCHEMA.as_posix(),
+        "checker": "tools/quality/check_ng_sqlite_store_v3_qualification.py",
+        "report_filename": SQLITE_STORE_V3_QUALIFICATION_REPORT_FILENAME,
+        "report_artifact": "cxxlens-ng-sqlite-store-v3-qualification-${revision}",
+        "maximum_bytes": SQLITE_STORE_V3_QUALIFICATION_REPORT_MAX_BYTES,
+        "status": "required",
+        "binding": (
+            "exact-revision-source-tree-schema-contract-artifact-and-"
+            "report-set-digests"
+        ),
+        "configurations": ["static", "shared"],
+        "required_cases": list(sqlite_qualification.CASE_IDS),
+    }
+    if manifest.get("sqlite_store_v3_qualification") != expected_sqlite_qualification:
+        fail("release SQLite Store v3 qualification contract differs")
     if manifest["provider"].get("observation_relation_descriptors") != materialization.DESCRIPTOR_IDS[3:]:
         fail("release observation descriptor order differs from materialization authority")
     if manifest["claim_policy"].get("tuple_evidence_projection") != [
         "install_manifest",
+        "installed_worker",
+        "materialization_tool",
+        "materialization_request_artifacts",
         "materialization_report_set",
+        "materialization_contract",
+        "sqlite_store_v3_qualification",
         "g5_report",
         "security_report",
         "public_callable_report",
         "configuration",
     ]:
-        fail("production tuple evidence omits the materialization report set")
+        fail("production tuple evidence omits exact materialization artifacts")
 
     acceptance = load(root / ACCEPTANCE)
     gates = {row["id"]: row for row in acceptance["entries"]}
@@ -603,6 +934,19 @@ def validate_documents(
             for configuration, backend in MATERIALIZATION_MATRIX
         ],
         "materialization_report_set_binding": "exact-configuration-two-report-set-digest",
+        "sqlite_store_v3_qualification": {
+            "authority": (
+                "docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md"
+            ),
+            "report_schema": SQLITE_STORE_V3_QUALIFICATION_REPORT_SCHEMA.as_posix(),
+            "checker": "tools/quality/check_ng_sqlite_store_v3_qualification.py",
+            "artifact": "cxxlens-ng-sqlite-store-v3-qualification-${revision}",
+            "maximum_bytes": SQLITE_STORE_V3_QUALIFICATION_REPORT_MAX_BYTES,
+            "binding": (
+                "exact-revision-source-tree-schema-contract-artifact-and-"
+                "report-set-digests"
+            ),
+        },
         "checker": "tools/quality/check_ng_release_qualification.py",
         "ci_job": "release-qualification",
         "status": "implemented",
@@ -613,10 +957,11 @@ def validate_documents(
             "same-sha-wave0-readiness-report",
             "same-sha-public-callable-report-and-review",
             "same-sha-g5-report",
+            "same-sha-sqlite-store-v3-qualification-report",
             "static-relocated-install-artifact",
             "shared-relocated-install-artifact",
             "static-shared-runtime-junit",
-            "static-shared-clang22-materialization-reports",
+            "static-shared-clang22-materialization-reports-and-execution-receipts",
             "real-project-memory-sqlite-and-major-rejection",
             "security-conformance-and-negative-paths",
             "doxygen-contract-and-support-matrix",
@@ -625,6 +970,29 @@ def validate_documents(
     }
     if release.get("release_qualification") != expected_release_binding:
         fail("release qualification binding differs")
+    expected_sqlite_release_evidence = {
+        "status": "required",
+        "current_authority": "independently-validated-exact-2x4-release-evidence",
+        "report_schema": SQLITE_STORE_V3_QUALIFICATION_REPORT_SCHEMA.as_posix(),
+        "checker": "tools/quality/check_ng_sqlite_store_v3_qualification.py",
+        "report_filename": SQLITE_STORE_V3_QUALIFICATION_REPORT_FILENAME,
+        "artifact": "cxxlens-ng-sqlite-store-v3-qualification-${revision}",
+        "maximum_bytes": SQLITE_STORE_V3_QUALIFICATION_REPORT_MAX_BYTES,
+        "revision_binding": (
+            "exact-revision-source-tree-schema-contract-artifact-and-"
+            "report-set-digests"
+        ),
+        "configurations": ["static", "shared"],
+        "required_cases": list(sqlite_qualification.CASE_IDS),
+    }
+    snapshot_binding = release.get("snapshot_format_binding", {})
+    if (
+        snapshot_binding.get("registered_migration", {}).get("authority_status")
+        != "accepted"
+        or snapshot_binding.get("qualification_evidence")
+        != expected_sqlite_release_evidence
+    ):
+        fail("release SQLite Store v3 evidence activation differs")
     scope_evaluation = release.get("production_scope_closure", {}).get("evaluation")
     if scope_evaluation != {
         "schema": EVALUATION_REPORT_SCHEMA.as_posix(),
@@ -652,15 +1020,14 @@ def validate_documents(
     if not set(manifest["provider"]["relation_descriptors"]).issubset(descriptors):
         fail("release provider relation is absent from registry")
     worker_source = (root / "src/llvm/clang22/provider_worker.cpp").read_text(encoding="utf-8")
-    for marker in (
-        "cc::relations::entity::descriptor()",
-        "cc::relations::call_site::descriptor()",
-        "cc::relations::call_direct_target::descriptor()",
-        '"cc.clang22-canonical-1"',
-    ):
-        if marker not in worker_source:
-            fail(f"Clang 22 worker production surface marker is missing: {marker}")
+    task_decoder_source = (root / "src/llvm/clang22/provider_task_v3.cpp").read_text(
+        encoding="utf-8"
+    )
+    validate_clang22_production_source_decomposition(
+        worker_source, task_decoder_source
+    )
     workflow = (root / ".github/workflows/quality.yml").read_text(encoding="utf-8")
+
     def workflow_job(name: str) -> re.Match[str] | None:
         return re.search(
             rf"(?ms)^  {re.escape(name)}:\n(?P<body>.*?)(?=^  [a-zA-Z0-9_-]+:|\Z)",
@@ -672,7 +1039,7 @@ def validate_documents(
     if evaluation_job is None or strict_job is None:
         fail("release evaluation/qualification workflow jobs are missing")
     for marker in (
-        "needs: [g5-qualification]",
+        "needs: [g5-qualification, sqlite-store-v3-qualification]",
         "check_ng_release_qualification.py evaluate",
         '--github-output "${GITHUB_OUTPUT}"',
         "qualification: ${{ steps.evaluate.outputs.qualification }}",
@@ -696,11 +1063,278 @@ def validate_documents(
     return manifest
 
 
+def validate_clang22_production_source_decomposition(
+    worker_source: str, task_decoder_source: str
+) -> None:
+    for marker in (
+        "cc::relations::entity::descriptor()",
+        "cc::relations::call_site::descriptor()",
+        "cc::relations::call_direct_target::descriptor()",
+        "decode_task_input(",
+    ):
+        if marker not in worker_source:
+            fail(f"Clang 22 worker production surface marker is missing: {marker}")
+    for marker in ('"cc.clang22-canonical-1"', "sdk::project_catalog::make("):
+        if marker not in task_decoder_source:
+            fail(f"Clang 22 task.v3 production surface marker is missing: {marker}")
+
+
 def find_one(root: pathlib.Path, name: str) -> pathlib.Path:
     matches = sorted(path for path in root.rglob(name) if path.is_file())
     if len(matches) != 1:
         fail(f"expected exactly one {name}, found {len(matches)}")
     return matches[0]
+
+
+def _artifact_identity(value: os.stat_result) -> tuple[int, int, int, int, int, int]:
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_mode,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+
+
+def _artifact_name_occurrences(
+    evidence: pathlib.Path, filename: str
+) -> list[pathlib.Path]:
+    """Census one filename without traversing a symlinked directory."""
+
+    matches: list[pathlib.Path] = []
+
+    def raise_walk_error(error: OSError) -> None:
+        raise error
+
+    try:
+        for current, directories, files in os.walk(
+            evidence, topdown=True, onerror=raise_walk_error, followlinks=False
+        ):
+            current_path = pathlib.Path(current)
+            if filename in files or filename in directories:
+                matches.append(current_path / filename)
+            directories[:] = sorted(
+                name
+                for name in directories
+                if not (current_path / name).is_symlink()
+            )
+    except OSError as error:
+        fail(f"cannot census SQLite Store v3 qualification artifacts: {error}")
+    return sorted(matches)
+
+
+@contextlib.contextmanager
+def held_sqlite_store_v3_report(
+    evidence: pathlib.Path,
+    artifact_name: str,
+    report_name: str,
+    maximum_bytes: int,
+):
+    """Hold and bounded-read the exact no-follow artifact path once."""
+
+    for label, component in (
+        ("artifact", artifact_name),
+        ("report", report_name),
+    ):
+        if component in {"", ".", ".."} or pathlib.PurePath(component).name != component:
+            fail(f"SQLite Store v3 qualification {label} is not one path component")
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
+        fail("SQLite Store v3 qualification requires no-follow directory opens")
+
+    expected_path = evidence / artifact_name / report_name
+    evidence_descriptor = -1
+    artifact_descriptor = -1
+    report_descriptor = -1
+    try:
+        try:
+            evidence_lstat = os.stat(evidence, follow_symlinks=False)
+        except OSError as error:
+            fail(f"cannot lstat SQLite Store v3 evidence root {evidence}: {error}")
+        if not stat.S_ISDIR(evidence_lstat.st_mode):
+            fail(f"SQLite Store v3 evidence root is not a no-follow directory: {evidence}")
+        flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+        try:
+            evidence_descriptor = os.open(evidence, flags | os.O_DIRECTORY)
+        except OSError as error:
+            fail(f"cannot open SQLite Store v3 evidence root {evidence}: {error}")
+        evidence_fstat = os.fstat(evidence_descriptor)
+        if _artifact_identity(evidence_fstat) != _artifact_identity(evidence_lstat):
+            fail("SQLite Store v3 evidence root changed before it was held")
+
+        try:
+            artifact_lstat = os.stat(
+                artifact_name,
+                dir_fd=evidence_descriptor,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            matches = _artifact_name_occurrences(evidence, report_name)
+            if len(matches) == 1:
+                fail(
+                    "SQLite Store v3 qualification report artifact root differs: "
+                    f"expected={expected_path.parent}, actual={matches[0].parent}"
+                )
+            fail(f"expected exactly one {report_name}, found {len(matches)}")
+        except OSError as error:
+            fail(f"cannot lstat SQLite Store v3 artifact directory: {error}")
+        if not stat.S_ISDIR(artifact_lstat.st_mode):
+            fail(
+                "SQLite Store v3 qualification artifact directory is not a "
+                f"no-follow directory: {expected_path.parent}"
+            )
+        try:
+            artifact_descriptor = os.open(
+                artifact_name,
+                flags | os.O_DIRECTORY,
+                dir_fd=evidence_descriptor,
+            )
+        except OSError as error:
+            fail(f"cannot open SQLite Store v3 artifact directory: {error}")
+        artifact_fstat = os.fstat(artifact_descriptor)
+        if _artifact_identity(artifact_fstat) != _artifact_identity(artifact_lstat):
+            fail("SQLite Store v3 qualification artifact directory changed before open")
+
+        matches = _artifact_name_occurrences(evidence, report_name)
+        if len(matches) != 1:
+            fail(f"expected exactly one {report_name}, found {len(matches)}")
+        if pathlib.Path(os.path.abspath(matches[0])) != pathlib.Path(
+            os.path.abspath(expected_path)
+        ):
+            fail(
+                "SQLite Store v3 qualification report artifact root differs: "
+                f"expected={expected_path.parent}, actual={matches[0].parent}"
+            )
+
+        try:
+            report_lstat = os.stat(
+                report_name,
+                dir_fd=artifact_descriptor,
+                follow_symlinks=False,
+            )
+        except OSError as error:
+            fail(f"cannot lstat SQLite Store v3 qualification report: {error}")
+        if not stat.S_ISREG(report_lstat.st_mode):
+            fail(
+                "SQLite Store v3 qualification report is not a no-follow regular file: "
+                f"{expected_path}"
+            )
+        if report_lstat.st_size > maximum_bytes:
+            fail(
+                "SQLite Store v3 qualification report exceeds the bounded byte limit: "
+                f"{report_lstat.st_size} > {maximum_bytes}"
+            )
+        try:
+            report_descriptor = os.open(
+                report_name,
+                flags,
+                dir_fd=artifact_descriptor,
+            )
+        except OSError as error:
+            fail(f"cannot open SQLite Store v3 qualification report: {error}")
+        report_fstat = os.fstat(report_descriptor)
+        if _artifact_identity(report_fstat) != _artifact_identity(report_lstat):
+            fail("SQLite Store v3 qualification report changed before open")
+
+        chunks: list[bytes] = []
+        remaining = maximum_bytes + 1
+        while remaining > 0:
+            chunk = os.read(report_descriptor, min(1_048_576, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        raw = b"".join(chunks)
+        if len(raw) > maximum_bytes:
+            fail("SQLite Store v3 qualification report grew beyond its bounded byte limit")
+        after_read = os.fstat(report_descriptor)
+        if (
+            len(raw) != report_fstat.st_size
+            or _artifact_identity(after_read) != _artifact_identity(report_fstat)
+        ):
+            fail("SQLite Store v3 qualification report changed while it was read")
+
+        yield expected_path, raw
+
+        current_evidence = os.stat(evidence, follow_symlinks=False)
+        current_artifact = os.stat(
+            artifact_name,
+            dir_fd=evidence_descriptor,
+            follow_symlinks=False,
+        )
+        current_report = os.stat(
+            report_name,
+            dir_fd=artifact_descriptor,
+            follow_symlinks=False,
+        )
+        if _artifact_identity(current_evidence) != _artifact_identity(evidence_fstat):
+            fail("SQLite Store v3 evidence root path changed while validating the report")
+        if _artifact_identity(current_artifact) != _artifact_identity(artifact_fstat):
+            fail("SQLite Store v3 qualification artifact directory path changed")
+        if _artifact_identity(current_report) != _artifact_identity(report_fstat):
+            fail("SQLite Store v3 qualification report path changed while validating")
+        matches = _artifact_name_occurrences(evidence, report_name)
+        if [pathlib.Path(os.path.abspath(path)) for path in matches] != [
+            pathlib.Path(os.path.abspath(expected_path))
+        ]:
+            fail("SQLite Store v3 qualification report census changed while validating")
+    except OSError as error:
+        fail(f"SQLite Store v3 qualification artifact changed while held: {error}")
+    finally:
+        for descriptor in (
+            report_descriptor,
+            artifact_descriptor,
+            evidence_descriptor,
+        ):
+            if descriptor >= 0:
+                os.close(descriptor)
+
+
+def verify_sqlite_store_v3_qualification(
+    root: pathlib.Path,
+    manifest: dict[str, Any],
+    evidence: pathlib.Path,
+    git: dict[str, Any],
+) -> dict[str, Any]:
+    """Independently validate and bind one exact-SHA SQLite v3 report artifact."""
+
+    contract = manifest["sqlite_store_v3_qualification"]
+    artifact_name = contract["report_artifact"].replace(
+        "${revision}", git["revision"]
+    )
+    with held_sqlite_store_v3_report(
+        evidence,
+        artifact_name,
+        contract["report_filename"],
+        contract["maximum_bytes"],
+    ) as (report_path, report_bytes):
+        try:
+            report = sqlite_qualification.load_report_bytes(
+                report_bytes,
+                "SQLite Store v3 qualification report",
+            )
+            sqlite_qualification.validate_report(
+                root,
+                report,
+                expected_revision=git["revision"],
+                expected_source_tree=git["tree"],
+            )
+        except sqlite_qualification.SQLiteStoreV3QualificationError as error:
+            fail(f"SQLite Store v3 qualification report is invalid: {error}")
+
+        binding = {
+            "revision": report["revision"],
+            "source_tree": report["source_tree"],
+            "report_digest": digest_bytes(report_bytes),
+            "report_set_digest": report["report_set_digest"],
+            "report_schema_digest": report["report_schema_digest"],
+            "sqlite_contract_digest": report["sqlite_contract_digest"],
+        }
+        if binding["revision"] != git["revision"]:
+            fail("SQLite Store v3 qualification revision differs from release evidence")
+        if binding["source_tree"] != git["tree"]:
+            fail("SQLite Store v3 qualification source tree differs from release evidence")
+    return {"path": report_path, "report": report, "binding": binding}
 
 
 def verify_public_callable_evidence(
@@ -825,8 +1459,19 @@ def verify_install_manifest(root: pathlib.Path, path: pathlib.Path, revision: st
         fail(f"relocated prefix is missing beside {path}")
     for relative in required_files:
         candidate = prefix / relative
-        if not candidate.is_file() or digest(candidate) != files[relative]["digest"]:
+        if not candidate.is_file():
             fail(f"installed file digest mismatch: {configuration}:{relative}")
+        candidate_digest = digest(candidate)
+        if candidate_digest != files[relative]["digest"]:
+            fail(f"installed file digest mismatch: {configuration}:{relative}")
+        schema_prefix = "share/cxxlens/schemas/"
+        if relative.startswith(schema_prefix):
+            source_schema = root / "schemas" / relative.removeprefix(schema_prefix)
+            if not source_schema.is_file() or candidate_digest != digest(source_schema):
+                fail(
+                    "installed schema differs from the exact source authority: "
+                    f"{configuration}:{relative}"
+                )
     return configuration, value
 
 
@@ -842,6 +1487,9 @@ def materialization_report_set_digest(
                 {
                     "backend": backend,
                     "report_digest": reports[(configuration, backend)]["digest"],
+                    "execution_receipt_digest": reports[(configuration, backend)][
+                        "execution_receipt_digest"
+                    ],
                 }
                 for backend in ("memory", "sqlite")
             ],
@@ -883,7 +1531,7 @@ def validate_release_span_census(report: dict[str, Any]) -> None:
 
     for descriptor_id, row_count in observation_rows.items():
         stage = stages.get(descriptor_id)
-        if stage is None or stage["claim_count"] != row_count:
+        if stage is None or stage["sdk_claim_occurrence_count"] != row_count:
             fail(
                 "materialization span observation claim/row census differs: "
                 f"{descriptor_id}"
@@ -1186,6 +1834,7 @@ def verify_materialization_reports(
 
     report_name = manifest["materialization"]["report_filename"]
     request_name = manifest["materialization"]["request_filename"]
+    receipt_name = manifest["materialization"]["execution_receipt_filename"]
     paths = sorted(path for path in evidence.rglob(report_name) if path.is_file())
     if len(paths) != len(MATERIALIZATION_MATRIX):
         fail(
@@ -1200,16 +1849,32 @@ def verify_materialization_reports(
             "GR requires exactly four co-located Clang 22 materialization "
             f"requests, found {len(request_paths)}"
         )
-    if {path.parent for path in request_paths} != {path.parent for path in paths}:
-        fail("materialization request/report artifact pairs are not co-located exactly")
+    receipt_paths = sorted(
+        path for path in evidence.rglob(receipt_name) if path.is_file()
+    )
+    if len(receipt_paths) != len(MATERIALIZATION_MATRIX):
+        fail(
+            "GR requires exactly four co-located Clang 22 materialization "
+            f"execution receipts, found {len(receipt_paths)}"
+        )
+    artifact_parents = {path.parent for path in paths}
+    if (
+        {path.parent for path in request_paths} != artifact_parents
+        or {path.parent for path in receipt_paths} != artifact_parents
+    ):
+        fail(
+            "materialization request/report/execution-receipt artifacts are not "
+            "co-located exactly"
+        )
 
     report_schema = load(root / MATERIALIZATION_REPORT_SCHEMA)
+    receipt_schema = load(root / MATERIALIZATION_EXECUTION_RECEIPT_SCHEMA)
     expected_authorities = materialization.authority_bindings(root)
     expected_registry_digest, expected_descriptors = materialization.descriptor_bindings(
         root
     )
     expected_registry = {
-        "registry_digest": expected_registry_digest,
+        "authority_registry_digest": expected_registry_digest,
         "base_descriptors": materialization.base_descriptor_bindings(root),
         "descriptors": expected_descriptors,
     }
@@ -1217,15 +1882,39 @@ def verify_materialization_reports(
 
     for path in paths:
         request_path = path.with_name(request_name)
-        request = load_materialization_json(request_path, "materialization request")
+        request, request_bytes = load_materialization_json(
+            request_path, "materialization request"
+        )
+        validate_release_materialization_request_machine(request)
         try:
             materialization.validate_request(root, request)
         except materialization.MaterializationError as error:
             fail(f"materialization request binding is invalid: {request_path}: {error}")
-        report = load_materialization_json(path, "materialization report")
+        report, report_bytes = load_materialization_json(
+            path, "materialization report"
+        )
+        receipt_path = path.with_name(receipt_name)
+        receipt, receipt_bytes = load_execution_receipt(receipt_path, receipt_schema)
         validate_schema(report, report_schema, f"Clang 22 materialization report {path}")
-        if report["result"] != "passed":
+        if report_bytes != materialization.canonical_json(report):
+            fail(f"materialization report artifact is not canonical JSON: {path}")
+        if (
+            report.get("response_kind") != "detailed"
+            or report["result"] != "passed"
+            or report["process_exit_status"] != 0
+        ):
             fail(f"materialization qualification contains a failed report: {path}")
+        report_digest = digest_bytes(report_bytes)
+        if (
+            receipt["actual_exit_status"] != 0
+            or receipt["parsed_response_count"] != 1
+            or receipt["exact_stdout_byte_count"] != len(report_bytes)
+            or receipt["stdout_sha256"] != report_digest
+        ):
+            fail(
+                "materialization execution receipt does not bind exact successful "
+                f"stdout/report bytes: {path}"
+            )
         if report["source"] != {
             "revision": git["revision"],
             "tree": git["tree"],
@@ -1236,9 +1925,8 @@ def verify_materialization_reports(
         if report["registry"] != expected_registry:
             fail(f"materialization registry/descriptor binding differs: {path}")
 
-        installation = report["installation"]
         publication = report["publication"]
-        configuration = installation["configuration"]
+        configuration = request["tool"]["package_configuration"]
         backend = publication["backend"]
         key = (configuration, backend)
         if key not in MATERIALIZATION_MATRIX:
@@ -1249,39 +1937,26 @@ def verify_materialization_reports(
             fail(f"materialization report has no install manifest: {configuration}")
 
         install = install_values[configuration]
-        files = {row["path"]: row["digest"] for row in install["files"]}
-        expected_installation = {
-            "prefix_manifest_digest": install["manifest_digest"],
-            "relocated_prefix_digest": install["prefix_digest"],
-            "tool_digest": files["bin/cxxlens-clang22-materialize"],
-            "worker_digest": files["bin/cxxlens-clang-worker-22"],
-        }
-        if any(
-            installation[field] != expected
-            for field, expected in expected_installation.items()
-        ):
-            fail(
-                "materialization install/prefix/tool/worker digest binding differs: "
-                f"{configuration}/{backend}"
-            )
+        validate_release_occurrence_binding(
+            request,
+            report,
+            install,
+            git,
+            f"{configuration}/{backend}",
+        )
         validate_release_task_execution_census(request, report)
         validate_release_span_census(report)
         validate_release_observation_equivalence(report)
         validate_release_base_claims(request, report)
         try:
-            materialization.validate_report(root, request, report)
+            materialization.validate_report(
+                root, request, report, request_bytes=request_bytes
+            )
         except materialization.MaterializationError as error:
             fail(
                 "materialization request/report binding is invalid: "
                 f"{configuration}/{backend}: {error}"
             )
-        expected_platform = f"linux-{platform.machine().lower()}-{configuration}"
-        if installation["platform"] != expected_platform:
-            fail(
-                "materialization platform/configuration binding differs: "
-                f"expected={expected_platform}, actual={installation['platform']}"
-            )
-
         task_results = report["task_results"]
         descriptor_bindings = {
             row["descriptor_id"]: row for row in expected_descriptors
@@ -1387,7 +2062,7 @@ def verify_materialization_reports(
                     f"{descriptor_id}"
                 )
         canonical_count = sum(
-            stages[descriptor_id]["claim_count"]
+            stages[descriptor_id]["sdk_claim_occurrence_count"]
             for descriptor_id in materialization.DESCRIPTOR_IDS[:3]
         )
         provenance = report["provenance"]
@@ -1402,23 +2077,37 @@ def verify_materialization_reports(
         if (
             publication["observed_parent_publication"]
             != publication["expected_parent_publication"]
-            or publication["cas_verdict"] != "matched"
+            or publication["outcome"] != "committed_verified"
+            or publication["candidate_identity_state"] != "constructed"
+            or publication["invocation_commit_state"] != "committed"
             or publication["committed_transaction_count"] != 1
-            or not publication["committed"]
+            or publication["invocation_committed_record"] is None
+            or publication["terminal_head"]["status"] != "present"
+            or publication["candidate_visibility"] != "present_by_invocation"
+            or publication["head_effect"] != "advanced_to_candidate"
+            or publication["store_failure"] is not None
         ):
             fail(
                 "production materialization report lacks one exact committed transaction: "
                 f"{configuration}/{backend}"
             )
-        if backend == "sqlite" and not publication["sqlite_reopened"]:
+        if backend == "sqlite" and publication["sqlite_reopen_status"] != "opened":
             fail("SQLite materialization report was not close/reopen verified")
-        if backend == "memory" and publication["sqlite_reopened"]:
+        if backend == "memory" and publication["sqlite_reopen_status"] != "not_applicable":
             fail("memory materialization report falsely claims SQLite reopen")
         semantic = report["semantic_verification"]
+        reopened = semantic["reopened_store"]
         if (
             semantic["status"] != "passed"
-            or not semantic["snapshot_identity_recomputed"]
-            or not semantic["reopened_store_verified"]
+            or reopened is None
+            or semantic["reopen_attempt"] is not None
+            or semantic["failure"] is not None
+            or reopened["backend"] != backend
+            or len(reopened["handle_receipts"]) != 3
+            or any(
+                receipt["status"] != "present"
+                for receipt in reopened["handle_receipts"]
+            )
         ):
             fail(
                 "materialization semantic reopen/identity verification is incomplete: "
@@ -1427,8 +2116,15 @@ def verify_materialization_reports(
         reports[key] = {
             "request_path": request_path,
             "request": request,
+            "request_bytes": request_bytes,
+            "request_digest": digest_bytes(request_bytes),
+            "request_byte_count": len(request_bytes),
             "path": path,
-            "digest": digest(path),
+            "digest": report_digest,
+            "byte_count": len(report_bytes),
+            "execution_receipt_path": receipt_path,
+            "execution_receipt": receipt,
+            "execution_receipt_digest": digest_bytes(receipt_bytes),
             "value": report,
         }
 
@@ -1439,7 +2135,11 @@ def verify_materialization_reports(
         materialization.validate_qualification_matrix(
             root,
             [
-                (reports[key]["request"], reports[key]["value"])
+                (
+                    reports[key]["request"],
+                    reports[key]["value"],
+                    reports[key]["request_bytes"],
+                )
                 for key in MATERIALIZATION_MATRIX
             ],
         )
@@ -1455,6 +2155,14 @@ def verify_materialization_reports(
             fail("materialization matrix project semantics differ")
         if report["registry"] != first["registry"]:
             fail("materialization matrix registry semantics differ")
+        if report["engine"] != first["engine"]:
+            fail("materialization matrix engine admission semantics differ")
+        if report["interpretation_policy"] != first["interpretation_policy"]:
+            fail("materialization matrix interpretation policy semantics differ")
+        if report["trust_policy"] != first["trust_policy"]:
+            fail("materialization matrix trust policy semantics differ")
+        if report["store"]["selector"] != first["store"]["selector"]:
+            fail("materialization matrix Store selector semantics differ")
 
     for configuration in ("static", "shared"):
         if (
@@ -1470,18 +2178,67 @@ def verify_materialization_reports(
             )
 
     snapshots = {
-        reports[key]["value"]["publication"]["snapshot_id"]
+        reports[key]["value"]["store"]["snapshot_manifest"]["snapshot_id"]
         for key in MATERIALIZATION_MATRIX
     }
     exports = {
-        reports[key]["value"]["semantic_verification"]["canonical_export_digest"]
+        reports[key]["value"]["semantic_verification"]["reopened_store"][
+            "canonical_export_digest"
+        ]
         for key in MATERIALIZATION_MATRIX
     }
-    queries = {
-        reports[key]["value"]["semantic_verification"]["query_digest"]
+    cursors = {
+        reports[key]["value"]["semantic_verification"]["reopened_store"][
+            "cursor_projection"
+        ]["digest"]
         for key in MATERIALIZATION_MATRIX
     }
-    if len(snapshots) != 1 or len(exports) != 1 or len(queries) != 1:
+    publication_semantics = {
+        tuple(
+            reports[key]["value"]["publication"]["invocation_committed_record"][
+                field
+            ]
+            for field in (
+                "publication_id",
+                "series_id",
+                "snapshot_id",
+                "sequence",
+                "parent_publication",
+                "state",
+                "corrupt",
+            )
+        )
+        for key in MATERIALIZATION_MATRIX
+    }
+    partition_bindings = {
+        canonical_digest(
+            reports[key]["value"]["semantic_verification"]["reopened_store"][
+                "partition_bindings"
+            ]
+        )
+        for key in MATERIALIZATION_MATRIX
+    }
+    reopen_semantics = {
+        backend: {
+            receipt["projection"]["semantic_projection_digest"]
+            for configuration in ("static", "shared")
+            for receipt in reports[(configuration, backend)]["value"][
+                "semantic_verification"
+            ]["reopened_store"]["handle_receipts"]
+        }
+        for backend in ("memory", "sqlite")
+    }
+    if any(
+        len(values) != 1
+        for values in (
+            snapshots,
+            exports,
+            cursors,
+            publication_semantics,
+            partition_bindings,
+            *reopen_semantics.values(),
+        )
+    ):
         fail("materialization memory/SQLite/static/shared semantic parity differs")
 
     report_sets = {
@@ -1501,6 +2258,9 @@ def collect_release_evidence(
     """Validate exact-SHA inputs without constructing either release report."""
 
     git = require_exact_clean_main(root, expected_revision)
+    sqlite_store_v3_qualification = verify_sqlite_store_v3_qualification(
+        root, manifest, evidence, git
+    )
     foundation_path = find_one(evidence, "cxxlens-ng-foundation-completion-report.json")
     foundation = load(foundation_path)
     validate_schema(foundation, load(root / FOUNDATION_REPORT_SCHEMA), "foundation report")
@@ -1615,6 +2375,7 @@ def collect_release_evidence(
         "g5": g5,
         "security_path": security_path,
         "security": security,
+        "sqlite_store_v3_qualification": sqlite_store_v3_qualification,
     }
 
 
@@ -1634,9 +2395,26 @@ def production_support_tuples(
         evidence_digest = canonical_digest(
             {
                 "install_manifest": value["manifest_digest"],
+                "installed_worker": worker,
+                "materialization_tool": files[
+                    "bin/cxxlens-clang22-materialize"
+                ],
+                "materialization_request_artifacts": [
+                    {
+                        "backend": backend,
+                        "request_digest": evidence["materialization_reports"][
+                            (configuration, backend)
+                        ]["request_digest"],
+                    }
+                    for backend in ("memory", "sqlite")
+                ],
                 "materialization_report_set": evidence[
                     "materialization_report_sets"
                 ][configuration],
+                "materialization_contract": digest(root / MATERIALIZATION_CONTRACT),
+                "sqlite_store_v3_qualification": evidence[
+                    "sqlite_store_v3_qualification"
+                ]["binding"],
                 "g5_report": digest(evidence["g5_path"]),
                 "security_report": digest(evidence["security_path"]),
                 "public_callable_report": evidence["callable_evidence"]["report"]["digest"],
@@ -1649,6 +2427,12 @@ def production_support_tuples(
 
 
 def evaluation_evidence_binding(evidence: dict[str, Any]) -> dict[str, Any]:
+    sqlite_binding = evidence["sqlite_store_v3_qualification"]["binding"]
+    if (
+        sqlite_binding.get("revision") != evidence["git"]["revision"]
+        or sqlite_binding.get("source_tree") != evidence["git"]["tree"]
+    ):
+        fail("SQLite Store v3 qualification binding differs from release revision/tree")
     install_manifests = [
         {
             "configuration": configuration,
@@ -1664,9 +2448,36 @@ def evaluation_evidence_binding(evidence: dict[str, Any]) -> dict[str, Any]:
             {
                 "configuration": configuration,
                 "backend": backend,
+                "request_digest": evidence["materialization_reports"][
+                    (configuration, backend)
+                ]["request_digest"],
+                "request_byte_count": evidence["materialization_reports"][
+                    (configuration, backend)
+                ]["request_byte_count"],
                 "report_digest": evidence["materialization_reports"][
                     (configuration, backend)
                 ]["digest"],
+                "report_byte_count": evidence["materialization_reports"][
+                    (configuration, backend)
+                ]["byte_count"],
+                "execution_receipt_digest": evidence["materialization_reports"][
+                    (configuration, backend)
+                ]["execution_receipt_digest"],
+                "actual_exit_status": evidence["materialization_reports"][
+                    (configuration, backend)
+                ]["execution_receipt"]["actual_exit_status"],
+                "exact_stdout_byte_count": evidence["materialization_reports"][
+                    (configuration, backend)
+                ]["execution_receipt"]["exact_stdout_byte_count"],
+                "stdout_digest": evidence["materialization_reports"][
+                    (configuration, backend)
+                ]["execution_receipt"]["stdout_sha256"],
+                "parsed_response_count": evidence["materialization_reports"][
+                    (configuration, backend)
+                ]["execution_receipt"]["parsed_response_count"],
+                "stderr_digest": evidence["materialization_reports"][
+                    (configuration, backend)
+                ]["execution_receipt"]["stderr_sha256"],
             }
             for configuration in ("static", "shared")
             for backend in ("memory", "sqlite")
@@ -1694,6 +2505,7 @@ def evaluation_evidence_binding(evidence: dict[str, Any]) -> dict[str, Any]:
         "materialization_contract_digest": digest(
             evidence["root"] / MATERIALIZATION_CONTRACT
         ),
+        "sqlite_store_v3_qualification": sqlite_binding,
         "materialization_evidence": evidence["materialization_evidence"],
         "install_manifests": install_manifests,
         "materialization_reports": materialization_reports,
@@ -1743,6 +2555,14 @@ def verify_gr_evaluation_artifact_binding(
         fail("strict GR and release evaluation use different revision/tree bindings")
     if evaluation["qualification"] != "qualified" or not evaluation["qualified"]:
         fail("strict GR terminal binding requires a qualified release evaluation")
+    sqlite_binding = evaluation["evidence"]["sqlite_store_v3_qualification"]
+    if (
+        sqlite_binding["revision"] != evaluation["git"]["revision"]
+        or sqlite_binding["source_tree"] != evaluation["git"]["tree"]
+    ):
+        fail("release evaluation SQLite qualification revision/tree binding differs")
+    if gr["prerequisites"]["sqlite_store_v3_qualification"] != sqlite_binding:
+        fail("strict GR SQLite qualification report binding differs")
     expected_digest = digest(evaluation_path)
     actual_digest = gr["prerequisites"]["release_evaluation_report_digest"]
     if actual_digest != expected_digest:
@@ -1774,21 +2594,6 @@ def make_report(
     production_support = production_support_tuples(root, manifest, evidence)
 
     metrics = evidence["g5"]["performance"]["metrics_us"]
-    authority_paths = [
-        MANIFEST,
-        MATERIALIZATION_CONTRACT,
-        MATERIALIZATION_CONTRACT_SCHEMA,
-        MATERIALIZATION_REQUEST_SCHEMA,
-        MATERIALIZATION_REPORT_SCHEMA,
-        RELEASE,
-        ACCEPTANCE,
-        SUPPORT,
-        SECURITY,
-        REGISTRY,
-        CALLABLE_INVENTORY,
-        CALLABLE_INVENTORY_SCHEMA,
-        CALLABLE_REPORT_SCHEMA,
-    ]
     report = {
         "schema": "cxxlens.ng-release-qualification-report.v1",
         "result": "passed",
@@ -1796,7 +2601,7 @@ def make_report(
         "run_url": run_url,
         "git": evidence["git"],
         "release": {"id": "distribution-1.0", "version": "1.0.0", "state": "qualified"},
-        "prerequisites": {"gates": manifest["prerequisites"]["gates"] + ["gate.release"], "migrations": manifest["prerequisites"]["migrations"], "foundation_report_digest": digest(evidence["foundation_path"]), "readiness_report_digest": digest(evidence["readiness_path"]), "public_callable_report_digest": evidence["callable_evidence"]["report"]["digest"], "g5_report_digest": digest(evidence["g5_path"]), "materialization_contract_digest": digest(root / MATERIALIZATION_CONTRACT), "release_evaluation_report_digest": digest(evaluation_path), "same_revision": True},
+        "prerequisites": {"gates": manifest["prerequisites"]["gates"] + ["gate.release"], "migrations": manifest["prerequisites"]["migrations"], "foundation_report_digest": digest(evidence["foundation_path"]), "readiness_report_digest": digest(evidence["readiness_path"]), "public_callable_report_digest": evidence["callable_evidence"]["report"]["digest"], "g5_report_digest": digest(evidence["g5_path"]), "materialization_contract_digest": digest(root / MATERIALIZATION_CONTRACT), "sqlite_store_v3_qualification": evidence["sqlite_store_v3_qualification"]["binding"], "release_evaluation_report_digest": digest(evaluation_path), "same_revision": True},
         "packages": evidence["packages"],
         "production_support": production_support,
         "security": {"status": evidence["security"]["status"], "contract_digest": evidence["security"]["contract_digest"], "vector_count": evidence["security"]["vector_count"]},
@@ -1811,7 +2616,7 @@ def make_report(
             "support_matrix": "exact-report-only",
         },
         "negative_evidence": manifest["security"]["required_negative_evidence"],
-        "authority_digests": [{"path": path.as_posix(), "digest": digest(root / path)} for path in authority_paths],
+        "authority_digests": [{"path": path.as_posix(), "digest": digest(root / path)} for path in RELEASE_AUTHORITY_PATHS],
     }
     validate_schema(report, load(root / REPORT_SCHEMA), "release report")
     return report

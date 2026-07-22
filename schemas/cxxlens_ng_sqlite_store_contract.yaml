@@ -1,20 +1,172 @@
 schema: cxxlens.ng-sqlite-store-contract.v1
-document_version: 1.4.0
-maturity: implemented
+document_version: 2.0.0
+maturity: accepted
 authority:
   semantic_contract: schemas/cxxlens_ng_snapshot_store_contract.yaml
-  decision_adr: docs/design/adr/0079-checked-publication-counters.md
-  owner_issue: '#148'
+  decision_adr: docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
+  legacy_layout_adr: docs/design/adr/0013-ng-sqlite-physical-store.md
+  materialization_adr: docs/design/adr/0096-clang22-installed-materialization-boundary.md
+  decision_issue: '#200'
+  implementation_issue: '#181'
 physical_format:
-  id: cxxlens.sqlite-semantic-store.v2
-  current: 2.6.0
+  id: cxxlens.sqlite-semantic-store.v3
+  current: 3.0.0
+  layout: bounded-publication-chunk-table
   semantic_snapshot_id_excludes_format: true
+  logical_payload_schema_unchanged: true
+  predecessor:
+    id: cxxlens.sqlite-semantic-store.v2
+    persisted_marker: physical-format-id-only-no-minor-row
+    reported_readable_format: 2.6.0
+    acceptance: exact-v2.6-schema-codec-and-typed-diagnostic-classification
+    persisted_minor_inference: forbidden
+    direct_open: read-only-no-persistent-side-effects
+    migration_id: compact-v2.6.0-to-v3.0.0
+  metadata_rows:
+    physical_format: cxxlens.sqlite-semantic-store.v3
+    physical_format_version: 3.0.0
+    payload_chunk_profile: cxxlens.sqlite-payload-chunks.v1
+    payload_chunk_maximum_bytes: '8388608'
+  unknown_or_additional_format_profile_metadata: reject-before-mutation
 runtime:
   discovery: explicit-runtime-library
   candidates:
     linux: [libsqlite3.so.0, libsqlite3.so]
     macos: [libsqlite3.dylib, /usr/lib/libsqlite3.dylib]
-  missing_runtime: store.backend-unavailable
+  missing_runtime:
+    public_semantics: unchanged
+    cases:
+      dynamic_library_missing: {code: store.backend-unavailable, field: sqlite, detail: library}
+      required_symbol_missing: {code: store.backend-unavailable, field: sqlite, detail: symbols}
+      unsupported_platform: {code: store.backend-unavailable, field: sqlite, detail: platform}
+    v3_additional_symbols: use-the-existing-required-symbol-missing-tuple
+    source_shm_readonly_symbols: use-the-existing-required-symbol-missing-tuple-only-after-active-wal-census
+  required_symbols:
+    v2_base: [sqlite3_open_v2, sqlite3_close_v2, sqlite3_errmsg, sqlite3_exec, sqlite3_free, sqlite3_vfs_find, sqlite3_vfs_register, sqlite3_vfs_unregister, sqlite3_prepare_v2, sqlite3_step, sqlite3_finalize, sqlite3_column_type, sqlite3_column_text, sqlite3_column_blob, sqlite3_column_bytes, sqlite3_column_int64]
+    v3_additional: [sqlite3_libversion_number, sqlite3_limit, sqlite3_prepare_v3, sqlite3_reset, sqlite3_bind_text, sqlite3_bind_int64, sqlite3_bind_blob64]
+    source_shm_readonly: [sqlite3_sourceid, sqlite3_uri_parameter, sqlite3_uri_key]
+    resolution: exact-symbol-from-the-one-pinned-runtime-library-handle
+  capability_preflight:
+    common_prefix:
+      - classify-locator-and-reject-empty-or-invalid-filesystem-locator-before-runtime-load
+      - load-and-pin-one-runtime-library-and-resolve-v2-base-symbols
+    filesystem_existing_order:
+      - bind-and-pin-source-vfs-and-required-observation-capability-before-main-or-sidecar-access
+      - canonicalize-through-the-bound-vfs-and-observe-parent-main-and-sidecar-namespace
+      - reject-topology-object-kind-readability-or-observation-failure-before-sqlite-open
+      - run-the-closed-base-symbol-format-discriminator-on-one-stable-read-only-source-snapshot
+      - return-exact-v2-only-after-the-complete-v2-profile-and-eager-row-decode-without-any-v3-gate
+      - return-unknown-or-mixed-terminal-result-without-any-v3-gate
+      - for-declared-current-v3-only-require-v3-symbols-and-library-version
+      - completely-validate-current-v3-on-the-read-only-snapshot
+      - reopen-the-existing-main-with-readwrite-privatecache-fullmutex-and-create-uri-omitted
+      - query-limit-on-that-actual-current-v3-writer-before-any-write
+    active_wal_source_shm_readonly_order:
+      steps:
+        - bind-nonmutating-census-and-classify-readable-wal-plus-shm-with-v2-wal-header-before-the-branch-specific-symbol-gate
+        - resolve-sqlite3-sourceid-sqlite3-uri-parameter-and-sqlite3-uri-key-from-the-same-pinned-runtime-handle
+        - qualify-the-exact-runtime-vfs-and-filesystem-profile-on-target-independent-scratch-before-underlying-source-xOpen
+        - validate-the-exact-internal-uri-receipt-in-the-owned-main-xOpen-callback-before-delegation
+        - open-and-eagerly-decode-on-the-same-connection-and-held-read-lock
+      quiescent_exact_v2: no-source-shm-readonly-symbol-version-or-behavioral-qualification-gate
+    existing_format_discriminator:
+      input: one-stable-read-only-main-sidecar-snapshot-observed-with-v2-base-symbols
+      precedence: [exact-logical-empty, recognized-v2-v3-mixed, declared-v2, declared-current-v3, unknown-nonempty]
+      recognized_generation_signals:
+        v2: [exact-v2-physical-format-marker, exact-v2-exclusive-publication-checksum-and-single-payload-blob-layout]
+        v3: [exact-v3-physical-format-marker, physical-format-version-payload-chunk-profile-or-maximum-metadata, payload-chunk-table-or-v3-publication-locator-columns]
+      classes:
+        exact_logical_empty:
+          predicate: exact-empty-predicate-with-no-recognized-format-or-layout-signal
+          route: fresh-or-empty
+        mixed_v2_v3:
+          predicate: at-least-one-recognized-v2-signal-and-at-least-one-recognized-v3-signal
+          result: {code: store.corrupt, field: sqlite-format-classification, detail: mixed-v2-v3}
+          v3_gate: forbidden
+        declared_v2:
+          predicate: exactly-one-v2-format-marker-and-no-v3-signal
+          validation: complete-exact-v2.6-schema-codec-storage-class-and-eager-row-profile
+          incompatible_result: {code: store.format-incompatible, field: sqlite-physical-format, detail: v2-profile-mismatch}
+          v3_gate: forbidden
+        declared_current_v3:
+          predicate: exactly-one-current-v3-format-marker-and-no-v2-signal
+          next: v3-symbol-version-gate-before-full-current-v3-profile-validation
+          damaged_profile_result_after_gate: {code: store.corrupt, field: sqlite-current-v3, detail: schema-or-authority-damage}
+        unknown_nonempty:
+          predicate: every-other-nonempty-state-including-missing-or-unknown-format-marker
+          result: {code: store.format-incompatible, field: sqlite-physical-format, detail: unknown-format-or-layout}
+          v3_gate: forbidden
+      inference_from-table-shape-without-an-exact-marker: forbidden
+      current_v3_fallback_to_v2_or_unknown: forbidden
+    preauthority_wal_only_current_v3_gate:
+      factory: query-version-symbols-and-limit-on-the-pinned-runtime-private-recovery-connection-before-accepting-the-eager-v3-state
+      source_before_first_mutation: query-limit-on-the-source-read-write-no-create-recovery-connection-before-recovery-journal-or-authority-effect-then-recheck-on-the-normal-writer-before-store-write
+    filesystem_fresh_order:
+      - bind-and-pin-source-vfs-and-required-observation-capability-before-main-or-sidecar-access
+      - establish-nonexistent-or-exact-empty-main-and-sidecar-census-without-sqlite-target-open
+      - observe-v3-symbols-and-library-version
+      - query-limit-on-a-separate-side-effect-free-scratch-memory-connection
+      - recheck-fresh-census-before-raw-vfs-bootstrap-if-nonexistent-and-target-sqlite-read-write-no-create-open
+    filesystem_fresh_scratch_connection: exact-memory-name-opened-through-the-already-registered-source-alias-as-explicit-fourth-argument-vfs-capability-only-discarded-before-target-open-and-never-a-second-null-default-resolution
+    ephemeral_memory_order:
+      - observe-v3-symbols-and-library-version
+      - resolve-and-pin-the-runtime-default-vfs-and-register-one-owned-forwarding-alias
+      - open-the-sole-target-memory-connection-with-that-explicit-alias
+      - query-limit-on-that-same-target-connection-before-journal-ddl-metadata-or-marker
+      - reuse-that-connection-for-initialization-and-the-store-lifetime
+    target_persistent_or_authority_effect_before_fresh_v3_gate: forbidden
+    permitted_ephemeral_pre_gate_effect: construct-the-sole-target-memory-connection-and-query-its-limit-without-journal-ddl-metadata-or-marker-write
+    fresh_or_ephemeral_v3_gate: require-v3-symbols-version-and-branch-specific-limit-before-target-filesystem-open-or-memory-authority-ddl
+    existing_below_v3_floor:
+      exact_v2_profile: allow-diagnostic-read-with-base-symbols-and-existing-payload-specific-behavior
+      declared_current_v3: return-v3-runtime-version-or-symbol-error-before-full-current-v3-profile-validation
+      unknown_or_mixed: return-the-base-discriminator-terminal-result-without-v3-symbol-version-or-limit-observation
+    error_precedence:
+      common_locator: [empty-or-invalid-locator, existing-library-base-symbol-or-platform-tuple]
+      filesystem_common: [source-vfs-lifetime-and-observation-capability, vfs-canonicalization, namespace-observation-io, sidecar-topology, regular-file-or-backend-equivalent-object-kind, source-open-and-base-format-discriminator]
+      exact_v2_existing: [common-locator-and-filesystem-prefix, exact-v2-schema-codec-storage-class-and-eager-row-classification]
+      unknown_or_mixed_existing: [common-locator-and-filesystem-prefix, base-discriminator-terminal-result]
+      declared_current_v3_existing: [common-locator-and-filesystem-prefix, v3-required-symbols, sqlite-runtime-version, current-v3-read-only-full-validation, existing-main-read-write-open-with-create-and-uri-omitted, bound-vfs-read-write-mode-proof, actual-connection-sqlite-limit-length]
+      filesystem_fresh: [common-locator-and-filesystem-prefix, v3-required-symbols, sqlite-runtime-version, explicit-alias-scratch-memory-open-and-limit, exclusive-bootstrap-create-file-and-parent-durability, fresh-main-read-write-open-with-create-and-uri-omitted, bound-vfs-read-write-mode-proof, xLock-journal-transition]
+      migration_or_recovery: [common-locator-and-filesystem-prefix, clean-source-profile, v3-required-symbols, sqlite-runtime-version, source-main-read-write-no-create-open, bound-vfs-read-write-mode-proof, actual-connection-sqlite-limit-length, begin-immediate]
+      ephemeral_memory: [common-locator, v3-required-symbols, sqlite-runtime-version, loader-origin-default-vfs-alias-binding, sole-memory-read-write-create-open, actual-target-sqlite-limit-length]
+    actual_connection_recheck: filesystem-read-write-mode-proof-then-v3-symbols-library-version-and-limit-length-before-first-schema-metadata-payload-or-journal-write
+    actual_connection_vfs_arming: source-read-write-no-create-main-connection-is-opened-through-the-bound-forwarding-vfs-with-write-delete-truncate-sidecar-create-shm-map-extension-and-effectful-file-control-denied-until-version-symbol-limit-locator-identity-and-receipt-gates-pass-then-branch-specific-coordination-and-write-stages-arm
+    pre_arm_synchronous:
+      ordinary-current-v3-fresh-and-memory: set-and-query-connection-local-full-before-first-store-write-with-no-new-persistent-authority-effect
+      wal-only-recovery-stage: after-all-runtime-locator-identity-and-receipt-gates-permit-only-wal-index-shm-coordination-create-map-lock-and-bytes-while-main-wal-rollback-journal-write-delete-truncate-and-authority-effects-remain-denied-then-set-and-query-full
+      final_arm: only-after-full-verification-enable-the-named-recovery-checkpoint-journal-transition-or-store-writes
+    pre_arm_synchronous_failure: {code: store.sqlite-failure, field: database, detail: preserve-sqlite-runtime-diagnostic}
+    pre_arm_synchronous_failure_effects:
+      ordinary_current_v3_open_before-store-install: finalize-and-attempt-exactly-one-close-v2-close-ok-returns-the-preserved-sqlite-runtime-diagnostic-with-no-store-and-no-reclassifier-close-non-ok-quarantines-the-connection-and-runtime-vfs-pins
+      fresh_before-journal-receipt: finalize-and-attempt-exactly-one-close-v2-close-ok-returns-the-preserved-sqlite-runtime-diagnostic-with-no-store-and-no-reclassifier-close-non-ok-quarantines-the-connection-and-runtime-vfs-pins
+      ephemeral_memory_before-authority: finalize-and-attempt-exactly-one-close-v2-close-ok-discards-the-sole-database-and-returns-the-preserved-sqlite-runtime-diagnostic-with-no-store-and-no-receipt-or-reclassifier-close-non-ok-quarantines-the-connection-and-runtime-vfs-pins
+      wal-only-or-first-mutation-recovery-with-sealed-source-receipt: finalize-and-attempt-exactly-one-close-v2-close-ok-then-run-the-receipt-aware-phase-classifier-close-non-ok-quarantines-and-poisons-without-reopen
+      coordination_effect_limit: new-shm-is-coordination-only-never-authority-and-no-main-wal-journal-or-store-authority-write-is-permitted-before-final-arm
+    recheck_failure_effects:
+      filesystem_before_sealed_operation_or_recovery_receipt: finalize-no-live-statement-and-attempt-exactly-one-sqlite3-close-v2-close-ok-returns-the-selected-pre-effect-gate-error-with-no-store-install-reclassifier-or-retry-close-non-ok-quarantines-the-connection-and-runtime-vfs-pins-the-fresh-nonexistent-branch-may-retain-only-its-already-durable-raw-bootstrap-zero-byte-main
+      filesystem_after_sealed_receipt_or_coordination_effect: finalize-all-statements-attempt-one-rollback-if-a-transaction-may-remain-then-attempt-exactly-one-sqlite3-close-v2-close-ok-delegates-to-the-receipt-aware-operation-phase-classifier-close-non-ok-quarantines-and-poisons-without-reopen-or-retry
+      ephemeral_memory_before_authority: finalize-all-statements-and-attempt-exactly-one-sqlite3-close-v2-close-ok-discards-the-sole-database-and-returns-the-selected-pre-effect-gate-error-close-non-ok-quarantines-the-connection-and-runtime-vfs-pins-no-filesystem-receipt-reopen-reclassifier-or-retry
+      after_begin_immediate_epoch_check: delegate-to-transaction.connection_lifecycle.mutation_epoch_recheck.drift_effects
+  library_version:
+    query: sqlite3-libversion-number
+    minimum: 3037000
+    applicability: fresh-v3-current-v3-and-v2-compact-before-mutation
+    predecessor_v2_diagnostic_read: existing-runtime-and-symbol-capability-without-new-version-floor
+    below_minimum:
+      code: store.backend-unavailable
+      field: sqlite-runtime-version
+      detail: '3037000'
+  limit_length:
+    query: sqlite3_limit-SQLITE_LIMIT_LENGTH-negative-one
+    minimum: 16777216
+    applicability: fresh-v3-current-v3-and-v2-compact-before-mutation
+    predecessor_v2_diagnostic_read: payload-specific-existing-runtime-behavior
+    below_minimum:
+      code: store.backend-unavailable
+      field: sqlite-limit-length
+      detail: '16777216'
+    public_request_or_payload_cap: false
 tables:
   - name: cxxlens_ng_metadata
     primary_key: [key]
@@ -29,6 +181,17 @@ tables:
       - generation
       - parent
       - state
+      - payload_checksum
+      - payload_byte_count
+      - payload_chunk_count
+  - name: cxxlens_ng_payload_chunk
+    primary_key: [publication_id, generation, chunk_ordinal]
+    columns:
+      - publication_id
+      - generation
+      - chunk_ordinal
+      - byte_offset
+      - byte_count
       - checksum
       - payload
   - name: cxxlens_ng_series_head
@@ -37,13 +200,206 @@ tables:
 indexes:
   - name: cxxlens_ng_publication_series
     columns: [series_id, sequence]
+  - name: cxxlens_ng_payload_chunk_locator
+    columns: [publication_id, generation, chunk_ordinal]
+schema_profiles:
+  current_v3:
+    strict: true
+    without_rowid: true
+    canonical_ddl:
+      projection: ordered-statements-canonical-json-utf8
+      validation_projection: sqlite-schema-explicit-sql-plus-table-xinfo-index-list-and-index-xinfo
+      digest: sha256:b1d4e497441749001a67b07adb97d4f58e30a6f5a1a78c7f9a294ed405a6abd8
+      statements:
+        - 'CREATE TABLE cxxlens_ng_metadata(key TEXT NOT NULL PRIMARY KEY,value TEXT NOT NULL) STRICT, WITHOUT ROWID'
+        - 'CREATE TABLE cxxlens_ng_publication(publication_id TEXT NOT NULL PRIMARY KEY,series_id TEXT NOT NULL,snapshot_id TEXT NOT NULL,sequence INTEGER NOT NULL,generation INTEGER NOT NULL,parent TEXT,state INTEGER NOT NULL CHECK(state BETWEEN 0 AND 5),payload_checksum TEXT NOT NULL,payload_byte_count INTEGER NOT NULL,payload_chunk_count INTEGER NOT NULL CHECK(payload_chunk_count BETWEEN 0 AND 2199023255552)) STRICT, WITHOUT ROWID'
+        - 'CREATE TABLE cxxlens_ng_payload_chunk(publication_id TEXT NOT NULL,generation INTEGER NOT NULL,chunk_ordinal INTEGER NOT NULL,byte_offset INTEGER NOT NULL,byte_count INTEGER NOT NULL,checksum TEXT NOT NULL,payload BLOB NOT NULL,PRIMARY KEY(publication_id,generation,chunk_ordinal),CHECK(chunk_ordinal BETWEEN 0 AND 2199023255551),CHECK(byte_count BETWEEN 1 AND 8388608),CHECK(length(payload)=byte_count)) STRICT, WITHOUT ROWID'
+        - 'CREATE TABLE cxxlens_ng_series_head(series_id TEXT NOT NULL PRIMARY KEY,current_publication TEXT NOT NULL,sequence INTEGER NOT NULL) STRICT, WITHOUT ROWID'
+        - 'CREATE INDEX cxxlens_ng_publication_series ON cxxlens_ng_publication(series_id,sequence)'
+        - 'CREATE INDEX cxxlens_ng_payload_chunk_locator ON cxxlens_ng_payload_chunk(publication_id,generation,chunk_ordinal)'
+    exact_user_objects:
+      tables: [cxxlens_ng_metadata, cxxlens_ng_publication, cxxlens_ng_payload_chunk, cxxlens_ng_series_head]
+      indexes: [cxxlens_ng_publication_series, cxxlens_ng_payload_chunk_locator]
+      views: []
+      triggers: []
+    column_shape_defaults:
+      default_expression: none-for-every-column
+      hidden_columns: forbidden
+      text_collation: BINARY
+    index_profiles:
+      cxxlens_ng_publication_series:
+        unique: false
+        origin: explicit-c
+        partial: false
+        key_columns: [series_id-asc-binary, sequence-asc-binary]
+        auxiliary_columns: [publication_id-primary-key]
+      cxxlens_ng_payload_chunk_locator:
+        unique: false
+        origin: explicit-c
+        partial: false
+        key_columns: [publication_id-asc-binary, generation-asc-binary, chunk_ordinal-asc-binary]
+        auxiliary_columns: []
+    automatic_primary_key_index_profiles:
+      sqlite_autoindex_cxxlens_ng_metadata_1:
+        unique: true
+        origin: primary-key
+        partial: false
+        key_columns: [key-asc-binary]
+        auxiliary_columns: [value]
+      sqlite_autoindex_cxxlens_ng_publication_1:
+        unique: true
+        origin: primary-key
+        partial: false
+        key_columns: [publication_id-asc-binary]
+        auxiliary_columns: [series_id, snapshot_id, sequence, generation, parent, state, payload_checksum, payload_byte_count, payload_chunk_count]
+      sqlite_autoindex_cxxlens_ng_payload_chunk_1:
+        unique: true
+        origin: primary-key
+        partial: false
+        key_columns: [publication_id-asc-binary, generation-asc-binary, chunk_ordinal-asc-binary]
+        auxiliary_columns: [byte_offset, byte_count, checksum, payload]
+      sqlite_autoindex_cxxlens_ng_series_head_1:
+        unique: true
+        origin: primary-key
+        partial: false
+        key_columns: [series_id-asc-binary]
+        auxiliary_columns: [current_publication, sequence]
+    metadata:
+      exact_row_count: 4
+      exact_keys: [payload_chunk_maximum_bytes, payload_chunk_profile, physical_format, physical_format_version]
+    tables:
+      cxxlens_ng_metadata:
+        columns:
+          - {name: key, declared_type: TEXT, nullable: false, primary_key_ordinal: 1}
+          - {name: value, declared_type: TEXT, nullable: false, primary_key_ordinal: 0}
+        checks: []
+      cxxlens_ng_publication:
+        columns:
+          - {name: publication_id, declared_type: TEXT, nullable: false, primary_key_ordinal: 1}
+          - {name: series_id, declared_type: TEXT, nullable: false, primary_key_ordinal: 0}
+          - {name: snapshot_id, declared_type: TEXT, nullable: false, primary_key_ordinal: 0}
+          - {name: sequence, declared_type: INTEGER, nullable: false, primary_key_ordinal: 0}
+          - {name: generation, declared_type: INTEGER, nullable: false, primary_key_ordinal: 0}
+          - {name: parent, declared_type: TEXT, nullable: true, primary_key_ordinal: 0}
+          - {name: state, declared_type: INTEGER, nullable: false, primary_key_ordinal: 0}
+          - {name: payload_checksum, declared_type: TEXT, nullable: false, primary_key_ordinal: 0}
+          - {name: payload_byte_count, declared_type: INTEGER, nullable: false, primary_key_ordinal: 0}
+          - {name: payload_chunk_count, declared_type: INTEGER, nullable: false, primary_key_ordinal: 0}
+        checks: [state-between-0-and-5, payload-chunk-count-between-0-and-2199023255552]
+      cxxlens_ng_payload_chunk:
+        columns:
+          - {name: publication_id, declared_type: TEXT, nullable: false, primary_key_ordinal: 1}
+          - {name: generation, declared_type: INTEGER, nullable: false, primary_key_ordinal: 2}
+          - {name: chunk_ordinal, declared_type: INTEGER, nullable: false, primary_key_ordinal: 3}
+          - {name: byte_offset, declared_type: INTEGER, nullable: false, primary_key_ordinal: 0}
+          - {name: byte_count, declared_type: INTEGER, nullable: false, primary_key_ordinal: 0}
+          - {name: checksum, declared_type: TEXT, nullable: false, primary_key_ordinal: 0}
+          - {name: payload, declared_type: BLOB, nullable: false, primary_key_ordinal: 0}
+        checks: [chunk-ordinal-between-0-and-2199023255551, byte-count-between-1-and-8388608, blob-length-equals-byte-count]
+      cxxlens_ng_series_head:
+        columns:
+          - {name: series_id, declared_type: TEXT, nullable: false, primary_key_ordinal: 1}
+          - {name: current_publication, declared_type: TEXT, nullable: false, primary_key_ordinal: 0}
+          - {name: sequence, declared_type: INTEGER, nullable: false, primary_key_ordinal: 0}
+        checks: []
+  predecessor_v2:
+    strict: false
+    without_rowid: false
+    canonical_ddl:
+      projection: ordered-statements-canonical-json-utf8
+      validation_projection: sqlite-schema-explicit-sql-plus-table-xinfo-index-list-and-index-xinfo
+      digest: sha256:94ca215379e56ce13c7c2c2205bbb34074229f453d076959611715d56ca8b607
+      statements:
+        - 'CREATE TABLE cxxlens_ng_metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL)'
+        - 'CREATE TABLE cxxlens_ng_publication(publication_id TEXT PRIMARY KEY,series_id TEXT NOT NULL,snapshot_id TEXT NOT NULL,sequence INTEGER NOT NULL,generation INTEGER NOT NULL,parent TEXT,state INTEGER NOT NULL,checksum TEXT NOT NULL,payload BLOB NOT NULL)'
+        - 'CREATE TABLE cxxlens_ng_series_head(series_id TEXT PRIMARY KEY,current_publication TEXT NOT NULL,sequence INTEGER NOT NULL)'
+        - 'CREATE INDEX cxxlens_ng_publication_series ON cxxlens_ng_publication(series_id,sequence)'
+    exact_user_objects:
+      tables: [cxxlens_ng_metadata, cxxlens_ng_publication, cxxlens_ng_series_head]
+      indexes: [cxxlens_ng_publication_series]
+      views: []
+      triggers: []
+    column_shape_defaults:
+      default_expression: none-for-every-column
+      hidden_columns: forbidden
+      text_collation: BINARY
+    index_profiles:
+      cxxlens_ng_publication_series:
+        unique: false
+        origin: explicit-c
+        partial: false
+        key_columns: [series_id-asc-binary, sequence-asc-binary]
+        auxiliary_columns: [rowid]
+    automatic_primary_key_index_profiles:
+      sqlite_autoindex_cxxlens_ng_metadata_1:
+        unique: true
+        origin: primary-key
+        partial: false
+        key_columns: [key-asc-binary]
+        auxiliary_columns: [rowid]
+      sqlite_autoindex_cxxlens_ng_publication_1:
+        unique: true
+        origin: primary-key
+        partial: false
+        key_columns: [publication_id-asc-binary]
+        auxiliary_columns: [rowid]
+      sqlite_autoindex_cxxlens_ng_series_head_1:
+        unique: true
+        origin: primary-key
+        partial: false
+        key_columns: [series_id-asc-binary]
+        auxiliary_columns: [rowid]
+    metadata:
+      exact_row_count: 1
+      exact_rows: {physical_format: cxxlens.sqlite-semantic-store.v2}
+    tables:
+      cxxlens_ng_metadata:
+        columns:
+          - {name: key, declared_type: TEXT, nullable: primary-key-legacy-rowid-rule, primary_key_ordinal: 1}
+          - {name: value, declared_type: TEXT, nullable: false, primary_key_ordinal: 0}
+        checks: []
+      cxxlens_ng_publication:
+        columns:
+          - {name: publication_id, declared_type: TEXT, nullable: primary-key-legacy-rowid-rule, primary_key_ordinal: 1}
+          - {name: series_id, declared_type: TEXT, nullable: false, primary_key_ordinal: 0}
+          - {name: snapshot_id, declared_type: TEXT, nullable: false, primary_key_ordinal: 0}
+          - {name: sequence, declared_type: INTEGER, nullable: false, primary_key_ordinal: 0}
+          - {name: generation, declared_type: INTEGER, nullable: false, primary_key_ordinal: 0}
+          - {name: parent, declared_type: TEXT, nullable: true, primary_key_ordinal: 0}
+          - {name: state, declared_type: INTEGER, nullable: false, primary_key_ordinal: 0}
+          - {name: checksum, declared_type: TEXT, nullable: false, primary_key_ordinal: 0}
+          - {name: payload, declared_type: BLOB, nullable: false, primary_key_ordinal: 0}
+        checks: []
+      cxxlens_ng_series_head:
+        columns:
+          - {name: series_id, declared_type: TEXT, nullable: primary-key-legacy-rowid-rule, primary_key_ordinal: 1}
+          - {name: current_publication, declared_type: TEXT, nullable: false, primary_key_ordinal: 0}
+          - {name: sequence, declared_type: INTEGER, nullable: false, primary_key_ordinal: 0}
+        checks: []
+    row_validation:
+      storage_class_gate_before_diagnostic_classification:
+        metadata: key-and-value-are-text
+        publication: publication-series-snapshot-and-checksum-are-text-parent-is-null-or-text-sequence-generation-and-state-are-integer-and-payload-is-blob
+        series_head: series-and-current-publication-are-text-and-sequence-is-integer
+        checksum_spelling: exact-content-digest-sha256-colon-64-lowercase-hex-even-when-payload-content-is-corrupt
+        failure: marker-v2-format-incompatible-not-a-migratable-diagnostic-row
+      primary_keys: non-null-and-unique-despite-legacy-rowid-ddl
+      state: exact-integer-enum-0-through-5-with-publication-local-diagnostic-state
+      counters: exact-checked-u64-decoding
+      payload:
+        validation: attempt-full-checksum-canonical-decode-and-semantic-object-graph-validation-for-every-row
+        authority: fully-validated-committed-state-3-rows-only
+        failure: retain-and-classify-publication-local-corrupt-never-authorize-head-counter-or-generation
+        corrupt_noncommitted: typed-diagnostic-raw-row-remains-migration-preservable-without-checksum-or-decode-success
 counter_storage:
   logical_domain: unsigned-64-bit
+  fields: [sequence, generation, payload_byte_count, payload_chunk_count, chunk_ordinal, byte_offset, byte_count]
   sqlite_integer_encoding:
     zero_through_int64_max: nonnegative-int64
     int64_max_plus_one_through_uint64_max: negative-twos-complement-int64
   decode: exact-u64
   ordering_authority: decoded-logical-value
+  arithmetic: checked-u64-with-checked-u128-aggregate
 payload:
   write_schema: cxxlens.ng-snapshot-payload.v5
   readable_schemas:
@@ -53,21 +409,57 @@ payload:
     - cxxlens.ng-snapshot-payload.v4
     - cxxlens.ng-snapshot-payload.v5
   encoding: versioned-length-prefixed-binary
-  checksum: sha256-full-256
-  canonical_semantics_revalidated_on_open: true
+  full_checksum: canonical-content-digest-text-sha256-colon-64-lowercase-hex-over-the-exact-full-payload-bytes
+  physical_generation_field:
+    present_in_payload: true
+    compaction_transition: canonical-field-only-replacement
+    all_other_payload_bytes: byte-exact-preserved-during-v2-v3-migration
+  chunk_profile:
+    id: cxxlens.sqlite-payload-chunks.v1
+    maximum_bytes: 8388608
+    maximum_chunk_count: 2199023255552
+    maximum_chunk_ordinal: 2199023255551
+    ordinal: contiguous-canonical-u64-zero-through-count-minus-one
+    ordinal_sqlite_encoding: nonnegative-int64-only-negative-rejected
+    byte_offset: exact-ordinal-times-8388608-checked-u64
+    non_final_size: 8388608
+    final_size: one-through-8388608
+    committed_chunk_count: one-through-2199023255552
+    diagnostic_noncommitted_empty_payload: exact-zero-byte-count-zero-chunk-count-and-no-chunk-rows
+    noncommitted_nonempty_chunk_count: one-through-2199023255552
+    zero_length_chunk: forbidden
+    checksum: canonical-content-digest-text-sha256-colon-64-lowercase-hex-over-each-exact-chunk-blob
+    ownership: exact-publication-id-and-current-generation
+    read_order: numeric-order-by-chunk-ordinal-asc
+    row-page-insertion-order: non-authoritative
+  write_api:
+    dynamic_values: prepared-statements-only
+    payload_binding: sqlite3-bind-blob64
+    payload_read: sqlite3-column-blob-and-column-bytes-for-one-validated-at-most-8388608-byte-chunk
+    sql_hex_literal: forbidden
+    hex_payload_query: forbidden
+    group_concat: forbidden
+  streaming:
+    canonical_encoder: bounded-replayable-sink
+    canonical_decoder: bounded-replayable-source
+    checksum: incremental-sha256
+    all-payload-vector: forbidden-in-sqlite-v3-production-path
+    all-chunk-collection: forbidden
+    collection_counts: checked-u64
+    aggregate_accounting: checked-u128
+  validation_order:
+    - publication-current-generation-binding
+    - contiguous-chunk-ordinal-and-offset
+    - chunk-count-and-row-length
+    - per-chunk-checksum
+    - aggregate-logical-byte-count
+    - full-payload-checksum
+    - canonical-decode-reencode
+    - semantic-object-graph-and-manifest
+    - snapshot-and-publication-identity
+  canonical_semantics_revalidated_on_open: publication-local-diagnostic-validation-and-mutation-gate-clean-committed-authority-plus-exactly-classified-bound-noncommitted-rows
   query_annotations:
     introduced: cxxlens.ng-snapshot-payload.v2
-    fields:
-      - condition
-      - interpretation
-      - semantic_key
-      - assertion
-      - claim_content
-      - producer_id
-      - producer_semantic_contract
-      - provenance_root
-      - guarantee
-      - relation_coverage
     annotationless_payload_query: reject-with-sdk.query-annotations-unavailable
     occurrence_cardinality:
       exact_duplicate: deduplicate
@@ -75,17 +467,728 @@ payload:
       order: full-annotation-canonical-total-order
   closure_proof_projection:
     introduced: cxxlens.ng-snapshot-payload.v4
-    fields: [partition_identity_binding, validated_closure_certificate_subject]
     legacy_id_only_payload_closed_world: forbidden
   semantic_object_graph:
     introduced: cxxlens.ng-snapshot-payload.v5
     source: canonical-partition-claim-envelope-coverage-unresolved
-    reconstruct_on: [open, compaction]
+    reconstruct_on: [open, compaction, migration]
     compare: [manifest, detached-rows, annotations, claim-contents, coverage, unresolved]
     mismatch: corrupt
+compatibility:
+  current_v3:
+    readable_format: 3.0.0
+    direct_open: true
+    migration_required: false
+    mutation: allowed-after-full-validation
+  predecessor_v2:
+    readable_format: 2.6.0
+    direct_open: true
+    migration_required: true
+    mutation: forbidden-except-explicit-compact-migration
+    open_side_effects: forbidden
+    connection_mode: source-never-opened-read-write-except-explicit-compact
+    read_path_strategy:
+      classification_order:
+        - reject-any-present-journal
+        - require-wal-and-shm-presence-to-match
+        - require-present-wal-and-shm-to-both-be-readable
+        - active-wal-or-quiescent
+      active_wal:
+        precondition: wal-and-shm-both-exist-and-are-readable-journal-is-absent-and-held-main-header-read-and-write-version-bytes-are-both-2
+        non_wal_result: {code: store.sqlite-failure, field: sqlite-journal-mode, detail: expected-wal}
+        non_wal_effects: none
+        open: sqlite-open-v2-application-generated-strict-source-uri-readonly-uri-privatecache-fullmutex-no-create-explicit-owned-vfs
+        source_shm_readonly_capability:
+          id: sqlite-source-shm-readonly-unix-uri-v1
+          availability_gate: establish-after-bound-nonmutating-census-identifies-readable-wal-and-shm-and-before-first-underlying-sqlite-source-xOpen-shm-map-or-authority-read-otherwise-fail-closed-with-no-post-close-or-private-copy-fallback
+          uri:
+            exact_template: file:<uppercase-percent-encoded-canonical-absolute-path>?mode=ro&cache=private&readonly_shm=1
+            path_encoding: canonical-absolute-path-with-every-uri-delimiter-and-non-unreserved-byte-percent-encoded-using-uppercase-hex
+            parameters_in_order: [mode-ro, cache-private, readonly_shm-1]
+            forbidden: [vfs-parameter, immutable-parameter, user-uri-or-query, unknown-parameter]
+          open_flags: [SQLITE_OPEN_READONLY, SQLITE_OPEN_URI, SQLITE_OPEN_PRIVATECACHE, SQLITE_OPEN_FULLMUTEX]
+          omitted_open_flags: [SQLITE_OPEN_CREATE]
+          required_runtime_symbols: [sqlite3_sourceid, sqlite3_uri_parameter, sqlite3_uri_key]
+          vfs_admissibility: loader-origin-proven-sqlite-unix-default-vfs-or-typed-exact-equivalent-with-the-same-qualified-nonmutating-shm-contract
+          pre_source_behavioral_qualification:
+            scope: exact-runtime-plus-vfs-implementation-plus-filesystem-profile
+            fixture: source-private-scratch-wal-and-shm-with-no-access-to-the-target-source
+            scratch_namespace_binding: retained-descriptor-relative-producer-cold-and-active-locators-with-candidate-only-exact-full-path-preservation-no-host-path-reresolution
+            target_filesystem_binding: held-main-wal-and-shm-object-filesystem-profiles-must-all-exactly-equal-the-retained-parent-and-scratch-profile
+            proves: [first-map-no-shm-initialize-truncate-extend-create-delete-or-resize, later-map-no-shm-initialize-truncate-extend-create-delete-or-resize, cantinit-null-heap-wal-index-route, readonly-nonnull-mapped-wal-index-retry-route]
+            timing: complete-after-bound-nonmutating-sidecar-census-and-before-first-underlying-sqlite-source-xOpen
+            name-or-uri-spelling-alone: insufficient
+          qualification_unavailable_or_failed:
+            result: {code: store.backend-unavailable, field: sqlite, detail: source-shm-readonly-qualification}
+            effects: no-underlying-source-xOpen-shm-map-authority-read-or-fallback
+          source_open_callback_receipt:
+            timing: validate-in-owned-main-xOpen-callback-before-delegating-underlying-source-xOpen-or-performing-source-authority-read-or-shm-map
+            fields: [canonical-absolute-main-path, retained-parent-fd-anchored-delegated-main-locator, target-namespace-epoch-token, exact-mode-ro, exact-cache-private, exact-readonly_shm-1, absent-vfs, absent-immutable, absent-user-or-unknown-query, pinned-owned-vfs-alias-and-underlying-identity]
+            mismatch: fail-without-delegating-underlying-source-xOpen-and-with-no-authority-read-shm-map-or-fallback
+          target_namespace_epoch:
+            start: after-qualification-before-target-xFullPathname-or-xOpen
+            native_resolution: main-wal-and-shm-resolve-only-through-one-retained-parent-fd-anchored-locator-while-logical-canonical-uri-remains-the-callback-authority
+            entry_kind: main-wal-and-shm-must-be-direct-regular-parent-directory-entries-with-no-symlink-or-other-indirection
+            entry_kind_gate: seal-and-validate-in-bound-source-census-before-main-header-or-any-other-target-source-read-and-before-native-callback
+            logical_host_reresolution: forbidden-after-epoch-start-native-resolution-and-census-use-only-retained-parent-fd-and-held-object-receipts
+            watch: namespace-only-create-delete-move-self-ignored-and-queue-overflow-no-content-modify-or-attrib
+            validation: before-and-after-native-map-and-before-eager-read-transaction-end-with-fd-relative-exact-census
+            loss_or_event: release-any-native-mapping-with-nonremoving-unmap-and-fail-closed
+          shm_map_state_machine:
+            pre_delegate_source_identity: current-shm-object-and-directory-entry-must-exactly-match-the-sealed-source-census-otherwise-zero-native-map-calls
+            post_delegate_source_identity: exact-recheck-required-drift-releases-any-native-mapping-with-nonremoving-unmap-and-fails-closed
+            first_and_later_extend_zero: delegate-every-call-to-the-qualified-native-vfs
+            caller_extend_one: delegate-to-the-qualified-native-vfs-as-extend-zero-on-first-and-later-calls-never-pass-the-extension-request
+            cantinit_null: preserve-SQLITE_READONLY_CANTINIT-and-null
+            readonly_nonnull: preserve-exact-SQLITE_READONLY-and-the-native-nonnull-mapping
+            expected_writer_attach_transition: SQLITE_READONLY_CANTINIT-null-to-exact-SQLITE_READONLY-nonnull
+            any_native_ok: backend-protocol-violation-fail-closed-never-translate-to-readonly
+            readonly_null: normalize-to-SQLITE_READONLY_CANTINIT-and-null
+            permanent_delegation_suppression: forbidden
+            reset: successful-delegated-xShmUnmap-only
+            generic_nonprofile_extend_zero_ok: remains-legal-outside-this-qualified-readonly-shm-profile
+          heap_wal_index_recovery:
+            trigger: authentic-SQLITE_READONLY_CANTINIT-with-null-page-zero
+            connection: same-sqlite-connection-no-close-or-reopen
+            lock: same-connection-WAL_READ_LOCK-0-held-through-complete-eager-decode
+            receipt: held-main-wal-shm-identities-directory-bindings-wal-header-and-salt-read-lock-zero-and-complete-decoded-logical-projection
+          forbidden_fallbacks: [post-close-endpoint-or-digest-only-private-copy, different-connection-reopen, arbitrary-sqlite-error-fallback, unleased-main-wal-copy]
+          source_effects: no-main-wal-journal-byte-change-and-no-shm-initialize-truncate-extend-create-delete-or-resize
+        decode_transaction: one-explicit-read-transaction-spans-format-schema-metadata-publication-payload-head-census-and-complete-decode
+        post_decode: end-read-transaction-close-probe-and-retain-only-eager-validated-process-state
+        shm_coordination_bytes: non-durable-authority
+        stable_source_receipt: actual-vfs-open-main-wal-and-shm-file-identities-directory-entry-bindings-held-main-wal-header-oracle-vfs-observed-shm-read-lock-slot-and-completely-decoded-logical-projection
+        snapshot_authority: the-one-explicit-sqlite-read-transaction-and-its-held-shm-lock-not-an-unexposed-mxFrame-or-post-hoc-file-digest
+        lock_zero: main-database-snapshot-route-bind-exact-main-size-and-sha256-before-and-after-decode-wal-reset-rewrite-or-append-and-shm-coordination-changes-allowed-while-the-lock-is-held
+        lock_n: after-vfs-observes-the-final-held-shared-wal-read-lock-n-greater-than-zero-synchronously-read-and-validate-the-header-from-the-already-open-wal-handle-and-bind-its-salt-epoch-before-authority-decode-without-claiming-numeric-mxFrame-main-checkpoint-post-snapshot-append-and-monotonic-shm-extension-allowed-held-lock-prevents-reset-or-prefix-reuse
+        replacement_or_drift: lock-zero-main-size-or-sha256-before-after-mismatch-main-wal-or-shm-open-handle-or-directory-identity-replacement-or-lost-shm-snapshot-lock-returns-store.sqlite-failure-sqlite-open-snapshot-concurrent-source-change
+        observation_io_failure: {code: store.sqlite-failure, field: sqlite-open-snapshot, detail: active-wal-observation-io-failure}
+        observation_io_failure_scope: [main-wal-shm-identity-or-directory-observation, held-main-size-or-sha256, held-wal-header-or-salt-read, shm-read-lock-observation]
+        observation_io_failure_effects: close-probe-no-store-and-no-source-write
+      quiescent:
+        precondition: wal-shm-and-journal-all-absent
+        source_object: held-readonly-file-descriptor-plus-parent-directory-entry-identity
+        private_snapshot: bounded-copy-from-held-descriptor-with-exact-digest
+        open: application-generated-strict-file-uri-to-private-snapshot-readonly-private-cache-immutable-explicit-vfs
+        allowed_uri_parameters: [mode-ro, cache-private, immutable-1]
+        user_uri_or_query_passthrough: forbidden
+        decode_transaction: one-explicit-read-transaction-spans-format-schema-metadata-publication-payload-head-census-and-complete-decode
+        post_decode: end-read-transaction-close-private-snapshot-connection-and-retain-only-eager-validated-process-state
+        persisted_journal_oracle: held-source-sqlite-header-read-and-write-version-bytes-at-offsets-18-and-19-not-private-immutable-pragma
+        non_wal_result: {code: store.sqlite-failure, field: sqlite-journal-mode, detail: expected-wal}
+        non_wal_effects: none
+        verification: exact-held-source-digest-directory-entry-identity-and-wal-shm-journal-absence-before-and-after-complete-decode
+        observation_io_failure: {code: store.sqlite-failure, field: sqlite-open-snapshot, detail: quiescent-observation-io-failure}
+        observation_io_failure_scope: [held-main-or-parent-entry-observation, bounded-copy-read, size-or-sha256, before-or-after-sidecar-census]
+        observation_io_failure_effects: close-held-and-private-resources-no-store-and-no-source-write
+      incomplete_sidecar_pair:
+        code: store.sqlite-failure
+        field: sqlite-sidecar-state
+        detail: incomplete-wal-shm-pair
+      unreadable_sidecar_pair:
+        code: store.sqlite-failure
+        field: sqlite-sidecar-state
+        detail: unreadable-wal-shm-pair
+      journal_present:
+        code: store.sqlite-failure
+        field: sqlite-sidecar-state
+        detail: journal-present
+      totality: every-wal-shm-journal-presence-and-readability-combination-is-classified-before-sqlite-open
+      concurrent_change:
+        code: store.sqlite-failure
+        field: sqlite-open-snapshot
+        detail: concurrent-source-change
+    zero_mutation_oracle:
+      operations: [open, current, open-publication, canonical-export, query, begin]
+      excluded_operation: explicit-compact
+      main_database: exact-presence-size-and-bytes
+      wal_and_journal: exact-presence-size-and-bytes
+      shm: exact-presence-and-size-coordination-bytes-non-authoritative
+      sidecar_create-delete-or-resize: forbidden
+      directory_entry_set: exact
+      inability_to_read_without_sidecar_creation: fail-before-creation
+      qualification_precondition: fixture-exclusive-no-external-writer
+    begin_failure:
+      code: store.migration-required
+      field: sqlite-physical-format
+      detail: cxxlens.sqlite-semantic-store.v2-to-v3
+    begin_error_precedence:
+      first: existing-draft-series-and-authority-validation-with-zero-store-effects
+      invalid_draft: preserve-existing-public-error
+      second_after_valid_draft: migration-required-before-draft-allocation-or-store-effect
+    diagnostic_open:
+      factory_result: success-after-exact-format-schema-and-bounded-row-census
+      corrupt_publication: retained-and-marked-corrupt
+      current_error: store.current-corrupt
+      snapshot_error: store.snapshot-corrupt
+      publication_error: store.publication-corrupt
+      explicit_intact_prior_open: allowed
+      mutation_census: every-fully-validated-committed-authority-row-and-head-is-globally-clean-and-every-noncommitted-row-is-exactly-classified-and-bound-corrupt-diagnostics-are-allowed-preserved-and-excluded-from-authority
+  other_v2_minor_or_layout:
+    code: store.format-incompatible
+    mutation: forbidden
+    classification: exact-v2-marker-with-no-v3-signal-that-fails-the-exact-v2.6-schema-codec-storage-class-or-row-profile
+  unknown_major_or_marker:
+    code: store.format-incompatible
+    mutation: forbidden
+    classification: missing-or-unknown-nonempty-format-marker-with-no-recognized-v2-v3-mixed-signal
+  current_v3_profile_damage:
+    code: store.corrupt
+    gate: exact-current-v3-marker-no-v2-signal-and-v3-symbol-version-capability-before-full-profile-validation
+    classification: schema-object-metadata-row-head-or-chunk-authority-damage
+  mixed_v2_v3:
+    code: store.corrupt
+    field: sqlite-format-classification
+    detail: mixed-v2-v3
+    v3_gate: forbidden
+  classification_authority: runtime.capability_preflight.existing_format_discriminator
+  implicit_migration: forbidden
+  public_migration_callable_or_cli: forbidden
 transaction:
-  journal_mode: WAL
-  synchronous: FULL
+  connection_lifecycle:
+    existing_probe: exact-active-wal-or-verified-quiescent-read-path-before-format-classification
+    locator_modes:
+      empty:
+        public_input: ''
+        result: {code: store.sqlite-path-empty, field: database_path, detail: ''}
+        database_vfs_or_sidecar_open: forbidden
+        effects: none
+      ephemeral_memory:
+        public_input: ':memory:'
+        classification: exact-special-locator-before-filesystem-canonicalization
+        format: fresh-v3-only
+        open: sqlite-open-v2-readwrite-create-private-cache-fullmutex-no-uri
+        vfs: owned-forwarding-alias-over-the-loader-origin-pinned-default-selected-by-explicit-fourth-argument
+        filesystem_database_or_sidecars: none
+        predecessor_v2_or_migration: not-applicable
+        reopen_persistence: none
+      filesystem:
+        public_input: every-other-nonempty-string-is-a-filesystem-path-not-a-user-uri
+        injectivity_gate: reject-embedded-nul-or-platform-unrepresentable-encoding-before-canonicalization-runtime-or-filesystem-access
+        invalid_result: {code: store.sqlite-failure, field: sqlite-locator, detail: invalid-filesystem-path}
+        invalid_effects: none
+        canonicalization_order: raw-length-and-byte-validation-then-runtime-load-and-vfs-bind-then-pinned-vfs-xFullPathname-before-main-or-sidecar-access
+        full_path_authority: exact-xFullPathname-output-within-mxPathname-absolute-and-nul-terminated-no-host-std-filesystem-canonical-or-realpath
+        symlink_resolution: the-bound-vfs-open-policy-and-resulting-file-identity-not-host-path-canonicalization
+        canonicalization_failure: {code: store.sqlite-failure, field: sqlite-locator, detail: canonicalization-failed}
+        binding: pinned-vfs-full-path-plus-file-identity-with-internal-private-copy-uri-percent-encoding-only
+        user_uri_or_query_passthrough: forbidden
+    existing_v2: close-probe-after-complete-snapshot-decode-and-retain-eager-process-state
+    existing_v3:
+      reopen: read-write-no-create-same-canonical-locator-vfs-and-file-identity-after-complete-read-only-validation
+      identity_mismatch: {code: store.sqlite-failure, field: sqlite-open-epoch, detail: file-identity-changed}
+      read_write_reopen_failure: {code: store.sqlite-failure, field: open, detail: preserve-sqlite-runtime-diagnostic}
+      persistent_pragma_before_anchor_validation: forbidden
+      journal_mode_probe: require-held-main-header-read-and-write-version-bytes-2-and-original-read-write-connection-pragma-wal-without-setting-or-fallback
+      immutable_private_probe_pragma_journal_mode: non-authoritative
+      non_wal_result: {code: store.sqlite-failure, field: sqlite-journal-mode, detail: expected-wal}
+      synchronous: set-connection-local-full-before-write
+      synchronous_failure: {code: store.sqlite-failure, field: database, detail: preserve-sqlite-runtime-diagnostic}
+      first_write_lock: begin-immediate-then-revalidate-exact-or-valid-descendant-of-eager-all-row-head-anchor
+      valid_non_descendant: {code: store.sqlite-failure, field: sqlite-open-epoch, detail: concurrent-authority-change}
+      failure_effects: apply-sqlite_open_profiles.common_non_ok_return_cleanup-for-an-open-non-ok-otherwise-apply-runtime.capability_preflight.recheck_failure_effects-for-the-reached-pre-effect-phase
+    fresh_or_empty:
+      filesystem_nonexistent: raw-bound-vfs-exclusive-create-zero-byte-main-then-sqlite-read-write-no-create
+      filesystem_existing_empty: sqlite-read-write-no-create-same-census-identity
+      ephemeral_memory: sqlite-read-write-create-sole-connection
+      filesystem_sqlite_create_or_replacement_fallback: forbidden
+      open_failure_effects: apply-sqlite_open_profiles.common_non_ok_return_cleanup
+    sqlite_open_profiles:
+      active_existing_probe:
+        main_flags: [SQLITE_OPEN_READONLY, SQLITE_OPEN_URI, SQLITE_OPEN_PRIVATECACHE, SQLITE_OPEN_FULLMUTEX]
+        omitted: [SQLITE_OPEN_CREATE]
+        uri: application-generated-exact-file-uppercase-percent-encoded-canonical-absolute-path-mode-ro-cache-private-readonly_shm-1
+        uri_forbidden: [vfs-parameter, immutable-parameter, user-uri-or-query, unknown-parameter]
+        vfs: explicit-owned-forwarding-alias-argument-never-uri-parameter
+        sidecar_create: forbidden
+      quiescent_private_snapshot:
+        main_flags: [SQLITE_OPEN_READONLY, SQLITE_OPEN_URI, SQLITE_OPEN_PRIVATECACHE, SQLITE_OPEN_FULLMUTEX]
+        omitted: [SQLITE_OPEN_CREATE]
+        uri: application-generated-strict-private-copy-uri-only
+        sidecar_create: forbidden
+      existing_current_v3_writer:
+        main_flags: [SQLITE_OPEN_READWRITE, SQLITE_OPEN_PRIVATECACHE, SQLITE_OPEN_FULLMUTEX]
+        omitted: [SQLITE_OPEN_CREATE, SQLITE_OPEN_URI]
+        main_precondition: same-existing-canonical-locator-vfs-and-file-identity
+        sidecar_create: only-sqlite-required-wal-shm-coordination-after-the-named-arming-gate
+      fresh_filesystem_after_raw_bootstrap:
+        main_flags: [SQLITE_OPEN_READWRITE, SQLITE_OPEN_PRIVATECACHE, SQLITE_OPEN_FULLMUTEX]
+        omitted: [SQLITE_OPEN_CREATE, SQLITE_OPEN_URI]
+        main_precondition: exact-durable-zero-byte-main-created-or-observed-by-the-bootstrap-gate
+        sidecar_create: only-after-underlying-exclusive-lock-and-exact-receipt-recheck
+      wal_only_private_recovery:
+        main_flags: [SQLITE_OPEN_READWRITE, SQLITE_OPEN_PRIVATECACHE, SQLITE_OPEN_FULLMUTEX]
+        omitted: [SQLITE_OPEN_CREATE, SQLITE_OPEN_URI]
+        main_precondition: private-held-copy-already-exists
+        sidecar_create: private-shm-journal-or-wal-only-inside-the-private-directory
+      wal_only_source_recovery_or_v2_compact:
+        main_flags: [SQLITE_OPEN_READWRITE, SQLITE_OPEN_PRIVATECACHE, SQLITE_OPEN_FULLMUTEX]
+        omitted: [SQLITE_OPEN_CREATE, SQLITE_OPEN_URI]
+        main_precondition: source-main-already-exists-and-exact-receipt-was-rechecked
+        sidecar_create: branch-specific-coordination-or-recovery-only-after-arming
+      scratch_or_ephemeral_memory:
+        main_flags: [SQLITE_OPEN_READWRITE, SQLITE_OPEN_CREATE, SQLITE_OPEN_PRIVATECACHE, SQLITE_OPEN_FULLMUTEX]
+        omitted: [SQLITE_OPEN_URI]
+        vfs: explicit-owned-forwarding-alias
+        filesystem_main_or_sidecar: none
+      common_non_ok_return_cleanup:
+        applicability: every-sqlite3-open-v2-call-in-every-profile-including-probes-private-copies-writers-fresh-recovery-scratch-and-ephemeral-memory
+        null_handle: return-the-selected-profile-open-error-with-no-close-retry-reclassifier-or-authority-effect
+        nonnull_handle: prepare-or-step-is-forbidden-after-the-non-ok-return-finalize-no-statements-and-attempt-exactly-one-sqlite3-close-v2-before-return
+        close_ok: discard-the-handle-and-return-the-selected-profile-open-error-with-no-retry-reclassifier-or-new-authority-effect
+        close_non_ok_or_unknown: quarantine-the-handle-and-associated-runtime-vfs-pins-do-not-unregister-reopen-or-retry-and-return-the-selected-profile-open-error-with-no-store
+        fresh_nonexistent_exception: the-already-durable-raw-bootstrap-zero-byte-main-may-remain-but-is-never-format-or-store-authority
+    read_write_fallback_to_read_only:
+      proof: owned-forwarding-vfs-zero-initializes-local-out-flags-passes-its-nonnull-address-to-underlying-xOpen-records-input-main-db-and-readwrite-request-and-only-after-success-records-the-returned-flags-and-requires-them-not-to-contain-SQLITE_OPEN_READONLY
+      local_out_flags_before_call: exact-integer-zero
+      do_not_require_output_echo: SQLITE_OPEN_MAIN_DB-and-SQLITE_OPEN_READWRITE-are-input-role-and-request-only
+      supplied_vfs: the-owned-alias-records-the-same-underlying-xOpen-input-and-output-proof
+      ephemeral_memory: exempt-no-filesystem-main-and-the-sole-read-write-create-branch-is-separately-owned
+      failure: {code: store.sqlite-failure, field: open, detail: read-write-required}
+      failure_effects: finalize-and-attempt-exactly-one-close-v2-on-the-unarmed-connection-no-sqlite-journal-recovery-schema-metadata-or-store-effect-no-fallback-or-retry-the-fresh-nonexistent-branch-may-retain-only-its-already-durable-raw-bootstrap-zero-byte-main-close-non-ok-quarantines-the-connection-and-runtime-vfs-pins
+      timing: after-successful-filesystem-main-open-and-before-limit-synchronous-arming-lock-journal-recovery-schema-or-data-effect
+    mutation_epoch_recheck:
+      existing_v3_publish_or_compaction:
+        lock: begin-immediate-before-any-schema-metadata-payload-or-head-write
+        first_check: held-main-header-read-and-write-version-bytes-2-and-connection-pragma-journal-mode-exact-wal
+        then: exact-format-schema-all-row-head-and-counter-anchor
+      fresh_filesystem_initialization:
+        before_transaction: open-the-bootstrapped-main-read-write-no-create-with-effects-denied-seal-exact-empty-identity-size-and-digest-then-on-the-underlying-vfs-xLock-exclusive-success-recheck-that-receipt-and-only-then-arm-journal-header-and-sidecar-effects-for-set-and-verify-wal-outside-any-transaction
+        transaction: begin-immediate-then-recheck-wal-header-empty-identity-and-authority-anchor-before-ddl-or-metadata
+      ephemeral_memory_initialization:
+        transaction: begin-immediate-on-the-sole-connection-then-recheck-memory-journal-and-empty-authority-before-ddl-or-metadata
+      migration_or_preauthority_recovery: use-the-named-exclusive-lease-journal-transition-and-post-lock-revalidation-before-any-schema-or-data-write
+      drift_result: {code: store.sqlite-failure, field: sqlite-journal-mode, detail: drift-before-write}
+      drift_effects:
+        common: perform-zero-schema-metadata-payload-head-counter-or-process-state-write-finalize-the-current-statement-attempt-one-rollback-if-the-transaction-may-remain-and-never-retry
+        filesystem_current_v3_publish: delegate-to-transaction.publish.precommit_failure-using-the-sealed-post_format_prewrite-receipt-healthy-confirmed-rollback-may-return-the-drift-error-uncertain-cleanup-requires-confirmed-close-before-reclassification-close-non-ok-quarantines-and-poisons
+        filesystem_current_v3_compaction: delegate-to-compaction.failure-using-the-sealed-post_format_prewrite-receipt-healthy-confirmed-rollback-may-return-the-drift-error-uncertain-cleanup-requires-confirmed-close-before-reclassification-close-non-ok-quarantines-and-poisons
+        fresh_filesystem_initialization: delegate-to-transaction.initialization.precommit_failure-using-the-already-sealed-fresh_initialization-receipt-and-its-exactly-one-close-gate-before-any-reclassification
+        migration_or_preauthority_recovery: delegate-to-migration.source_connection.precommit_failure-or-the-matching-recovery-phase-rule-using-its-sealed-receipt-and-confirmed-close-gate
+        ephemeral_memory_initialization_or_mutation: delegate-to-the-matching-memory-precommit-rule-with-no-filesystem-receipt-or-reclassifier-uncertainty-finalizes-and-attempts-exactly-one-close-v2-close-ok-discards-close-non-ok-quarantines
+    vfs_binding:
+      filesystem_source:
+        timing: once-after-runtime-base-symbol-resolution-and-before-first-source-main-or-sidecar-access
+        supplied_vfs: exact-registered-name-implementation-identity-owned-backend-lifetime-token-and-source-private-typed-observation-capability
+        default_vfs: resolve-loaded-library-default-once-and-register-an-owned-nondefault-forwarding-alias-that-delegates-through-a-pinned-underlying-pointer
+        default_underlying_admissibility: nonnull-name-supported-method-table-version-executable-method-loader-origin-proof-and-vfs-plus-nonnull-pAppData-storage-owned-by-the-pinned-runtime-image
+        supplied_underlying_admissibility: executable-method-origin-proof-plus-explicit-owned-vfs-pointer-and-pAppData-backend-lifetime-token-plus-rooted-vfs-v1-observation-profile-or-independently-qualified-exact-equivalent
+        delegation: invoke-every-method-with-the-pinned-original-vfs-pointer-so-original-pAppData-is-preserved-alias-pAppData-owns-only-wrapper-state
+        inadmissible_underlying: {code: store.backend-unavailable, field: sqlite, detail: vfs-lifetime}
+        alias_lifecycle: process-global-registry-lease-register-nondefault-verify-find-pointer-close-all-db-and-vfs-files-unregister-then-destroy
+        alias_name: collision-free-process-local-backend-lifetime-token-id-not-semantic-or-persisted
+        alias_collision_or_registration_drift: {code: store.backend-unavailable, field: sqlite, detail: vfs-lifetime}
+        identity_projection: [registered-alias-name, pinned-original-vfs-pointer-identity, original-pAppData-identity, underlying-name, iVersion, szOsFile, mxPathname, function-pointer-tuple, backend-lifetime-token-identity, observation-profile-id, observation-capability-token-identity]
+        readwrite_open_observation: zero-initialize-local-out-flags-record-underlying-xOpen-input-main-db-and-readwrite-request-and-record-returned-pOutFlags-only-after-success-for-every-filesystem-writer-profile
+        reuse: every-source-probe-read-write-reopen-recovery-migration-compaction-and-sidecar-operation
+        reresolve-null-default-or-name-only: forbidden
+        failure: {code: store.backend-unavailable, field: sqlite, detail: vfs-lifetime}
+        failure_effects: no-database-or-sidecar-open-or-effect
+        required_observation_capability:
+          timing: bind-and-validate-before-first-main-or-sidecar-access
+          object_binding: observations-name-the-exact-objects-opened-by-the-bound-vfs-never-a-host-path-reopen
+          required_operations: [retain-authenticated-parent-namespace-capability, observe-leaf-presence-kind-and-stable-identity-without-blocking, hold-and-read-exact-object-bytes-size-and-sha256, observe-exact-main-wal-shm-journal-entry-census, detect-open-handle-versus-current-entry-replacement, exclusive-create-zero-byte-main, full-sync-created-main-object, sync-created-main-parent-namespace, zero-initialize-local-out-flags-record-underlying-xOpen-input-role-request-and-on-success-returned-pOutFlags]
+          default_vfs_admission: loader-origin-pinned-built-in-vfs-plus-an-owned-qualified-platform-observation-companion-bound-to-the-same-opened-objects
+          supplied_vfs_admission: exact-source-private-typed-observation-capability-bound-to-the-same-vfs-name-implementation-and-backend-lifetime-token
+          supplied_rooted_profile: rooted-vfs-v1-or-an-independently-qualified-exact-equivalent
+          generic-registered-name-method-table-and-untyped-lifetime-only: forbidden
+          unavailable_result: {code: store.backend-unavailable, field: sqlite, detail: vfs-observation}
+          unavailable_effects: no-main-or-sidecar-open-or-effect
+      named_object_admission:
+        scope: [main, wal, shm, journal]
+        timing:
+          existing: after-name-presence-census-and-before-content-read-copy-hash-or-sqlite-open
+          newly_created_main: immediately-after-exclusive-create-and-before-sync-or-sqlite-handoff
+        default_filesystem: held-nonblocking-regular-file
+        supplied_backend_equivalent: finite-seekable-byte-object-with-stable-held-identity-no-directory-pipe-socket-device-or-blocking-special-object-semantics-and-durable-content-plus-parent-namespace-sync
+        rejected_result: {code: store.sqlite-failure, field: sqlite-object-kind, detail: not-regular-or-equivalent}
+        rejected_effects: none
+        namespace_observation_io_failure: {code: store.sqlite-failure, field: sqlite-sidecar-state, detail: observation-io-failure}
+        namespace_observation_io_failure_effects: none
+      private_snapshot:
+        capability: separately-owned-source-private-copy-vfs-and-lifetime-not-user-uri-or-source-locator-authority
+        source_locator_effects: none
+      fresh_filesystem_scratch_memory:
+        vfs: explicit-already-registered-source-alias-never-null-default
+        lifetime: one-limit-query-then-close-before-target-open
+      ephemeral_memory:
+        vfs: one-owned-forwarding-alias-over-the-loader-origin-pinned-default-used-by-explicit-fourth-argument
+        alias_lifecycle: same-registration-identity-lifetime-and-unregister-after-connection-close-rules-as-filesystem-with-no-filesystem-open
+        reopen_or_recovery_use: none
+  recovery_model:
+    main_object_identity:
+      receipt: canonical-locator-bound-vfs-main-open-object-identity-and-parent-directory-entry-binding
+      reopened_requirement: exact-same-main-open-object-identity-and-directory-entry-binding
+      path_replacement_even_with-byte-or-semantic-equality: valid-non-descendant-concurrent-authority-change
+      supplied_vfs_equivalent: same-namespace-stable-object-and-entry-identity-from-the-required-cxxlens-observation-capability
+    authority_state_projection:
+      id: cxxlens.sqlite-authority-state.v1
+      encoding: cxxlens-canonical-tuple-v1-length-framed
+      digest: sha256-domain-cxxlens.sqlite-authority-state.v1
+      sqlite_value_projection:
+        'null': storage-class-null
+        integer: storage-class-integer-plus-exact-checked-logical-u64
+        text: storage-class-text-plus-u64-byte-count-plus-exact-column-text-bytes
+        blob: storage-class-blob-plus-u64-byte-count-plus-exact-column-blob-bytes
+        float: forbidden
+      v2_publication_row_fields: [publication_id, series_id, snapshot_id, sequence, generation, parent-null-or-text, state, checksum, payload]
+      v3_publication_row_fields: [publication_id, series_id, snapshot_id, sequence, generation, parent-null-or-text, state, payload_checksum, payload_byte_count, payload_chunk_count]
+      v3_chunk_row_fields: [publication_id, generation, chunk_ordinal, byte_offset, byte_count, checksum, payload]
+      state_projection_order: [format-and-canonical-ddl-digest, exact-metadata-row-projection, publication-rows-by-publication-id-binary, each-v3-row-chunks-by-logical-ordinal, heads-by-series-id-binary, fully-validated-committed-generation-maximum]
+      committed_generation_maximum:
+        empty_committed_set: canonical-tagged-none-iff-the-fully-validated-committed-row-count-is-zero
+        nonempty_committed_set: canonical-tagged-some-with-the-exact-maximum-logical-u64-generation
+        equation_only_origin: tagged-none-maps-to-u128-zero-only-inside-checked-allocation-and-reachability-equations-never-for-canonical-state-equality
+        zero_distinction: tagged-some-u64-zero-for-a-nonempty-legacy-state-is-byte-distinct-from-tagged-none
+        malformed: tagged-none-with-any-committed-row-or-tagged-some-with-zero-committed-rows-is-an-invalid-census
+      diagnostic_noncommitted_projection:
+        states: [0, 1, 2, 4, 5]
+        v2: exact-full-v2-publication-row-projection-plus-storage-class-gate-and-full-validation-verdict-vector
+        v3: exact-full-v3-publication-row-and-all-owned-chunk-projections-plus-storage-class-gate-and-full-validation-verdict-vector
+        verdict_vector: [publication-identity, stored-full-checksum, canonical-decode-reencode, semantic-graph-and-manifest]
+        verdict_values: [pass, fail, not-evaluated]
+        authority: excluded-from-head-and-generation
+      mutation_state: exact-schema-and-metadata-plus-no-corrupt-committed-row-plus-every-noncommitted-row-exactly-classified
+    diagnostic_v2_to_v3_projection:
+      copied_publication_columns: [publication_id, series_id, snapshot_id, sequence, generation, parent, state]
+      payload_checksum: exact-source-checksum-text-bytes
+      payload_byte_count: exact-source-blob-byte-count
+      payload_chunk_count: zero-iff-empty-else-checked-ceil-byte-count-div-8388608
+      chunks: exact-source-payload-slices-in-ordinal-order-with-source-publication-id-and-generation-canonical-offset-and-length-and-new-canonical-per-chunk-checksum
+      empty: zero-byte-count-zero-chunk-count-no-chunk-rows
+      required_verdict: exact-normalized-source-and-reconstructed-target-verdict-vector-equality
+      forbidden: [payload-generation-rewrite, checksum-repair, reclassification, semantic-promotion]
+    authorized_descendant_algebra:
+      id: cxxlens.sqlite-authorized-descendant.v1
+      scope_guard: exact-canonical-locator-pinned-vfs-and-same-main-file-instance-plus-directory-entry-binding
+      relation: reflexive-transitive-closure-of-exact-transition-operators-decided-by-the-canonical-compressed-normal-form-below
+      source_and_target: independently-validated-mutation-state-projections
+      state_equality: exact-length-framed-canonical-projection-byte-count-and-byte-for-byte-comparison-the-sha256-digest-is-only-an-acceleration-key-and-never-equality-authority
+      operators:
+        legacy-v2-publish: recognition-only-one-valid-committed-row-head-cas-and-max-plus-one-generation
+        legacy-v2-compact: recognition-only-nonempty-whole-committed-set-cow-to-max-plus-one-through-max-plus-count-in-replacement-order-diagnostic-rows-exact
+        migrate-v2-v3: exactly-the-registered-migration-operator
+        v3-publish: one-valid-committed-row-and-complete-chunks-plus-head-cas-and-max-plus-one-generation
+        v3-compact: nonempty-whole-committed-set-cow-to-max-plus-one-through-max-plus-count-in-replacement-order-diagnostic-rows-exact
+      no_zero_row_compaction_edge: true
+      transition_proof:
+        form: canonical-run-length-compressed-closed-form-witness-derived-independently-from-the-sealed-prestate-and-reopened-target
+        validation: validate-logical-extension-format-split-and-final-physical-projection-then-solve-compact-run-counts-with-checked-arithmetic-without-replaying-each-edge
+        candidate_acceptance: accept-the-target-iff-at-least-one-row-count-bounded-candidate-passes-all-arithmetic-rank-format-topology-and-byte-exact-projection-checks
+        canonical_witness_selection: from-all-accepted-candidates-select-for-deterministic-reporting-only-the-typed-lexicographically-first-tuple-of-migration-population-tagged-none-before-zero-through-row-count-last-reset-kind-none-before-migration-before-current-format-compaction-last-reset-population-tagged-none-before-zero-through-row-count-canonical-publication-id-order-and-format-tagged-ascending-population-run-count-vector-never-use-this-choice-as-operation-result-authority
+        operation_edge_predicates: compute-each-legacy-v2-compact-migration-and-v3-compact-presence-bit-as-existence-in-any-valid-representation-of-any-accepted-structural-candidate-never-from-only-its-canonical-residual-counts-or-the-canonical-reporting-witness-and-keep-the-exact-expected-candidate-direct-proof-separate
+        added_rows: target-minus-source-committed-rows-only
+        diagnostic-row-add-delete-or-rewrite: forbidden
+        generation_bound: no-intermediate-authority-generation-may-exceed-target-maximum
+        canonical_publish_order: for-each-final-compaction-or-migration-candidate-derive-pre-edge-cross-series-equal-sequence-order-from-the-target-contiguous-replacement-generation-order-and-verify-series-topology-and-known-source-generations-post-final-edge-rows-use-strictly-increasing-target-generation-publication-id-is-only-the-tertiary-tie-break-if-prior-generations-are-equal
+        replacement_rank_invariant: every-whole-reset-is-a-stable-sort-by-publication-sequence-then-unique-prior-generation-so-equal-sequence-order-is-publish-chronology-and-must-match-known-source-order-plus-the-order-derived-from-target-reset-ranks
+        final_compaction_candidates: enumerate-the-no-current-format-compaction-case-and-each-possible-designated-last-current-format-compaction-population-k-in-row-count-order-for-a-designated-k-subtract-exactly-one-k-edge-solve-only-the-single-pre-final-residual-and-append-k-once-then-require-the-contiguous-replacement-range-plus-strict-target-generation-publish-suffix-to-byte-match-target
+        migration_candidates: for-a-v2-source-enumerate-one-migration-population-m-from-source-row-count-through-target-row-count-require-exactly-one-migration-for-a-v3-target-and-none-for-a-v2-target-migration-is-the-designated-last-reset-only-when-no-later-v3-compaction-exists-and-every-candidate-must-byte-match-its-contiguous-reset-range-plus-target-generation-publish-suffix
+        candidate_cases:
+          same_format_no_reset: require-the-total-compaction-residual-to-be-zero-and-validate-only-the-strict-generation-ordered-publish-extension
+          same_format_final_compaction_k: subtract-the-designated-k-edge-and-solve-the-single-pre-final-residual-on-max-one-source-row-count-through-k
+          v2_to_v3_migration_last_m: subtract-the-single-migration-population-m-and-solve-all-compaction-residual-on-max-one-source-row-count-through-m-with-m-zero-admitting-only-zero-residual
+          v2_to_v3_final_v3_compaction_m_k: subtract-the-single-migration-population-m-and-designated-final-k-edge-then-solve-the-single-pre-final-residual-on-max-one-source-row-count-through-k-with-the-m-boundary-rule
+          v3_to_v2: forbidden
+        no_reset_target_shape: preserve-every-source-physical-generation-and-require-every-added-publication-to-use-the-next-strict-consecutive-generation-above-the-source-arithmetic-maximum-in-the-validated-canonical-topological-order
+        reset_target_shape: every-positive-designated-last-reset-candidate-requires-all-target-committed-generations-to-be-one-contiguous-range-ending-at-the-target-maximum-the-first-k-target-rows-to-be-in-stable-sequence-then-prior-chronology-rank-and-contain-every-source-publication-id-and-the-remaining-rows-to-be-the-strict-consecutive-generation-and-series-topology-valid-publish-suffix
+        zero_population_migration: format-only-edge-with-no-generation-allocation-and-no-compaction-denomination
+        normalization_completeness: every-executable-path-maps-to-its-row-count-bounded-migration-population-and-last-reset-population-and-the-closed-form-counts-construct-an-observationally-equivalent-executable-path-because-same-population-resets-are-fixed-points-and-the-v2-v3-population-intervals-meet-at-the-commuting-migration-boundary
+        format_boundary_commutation_validation: validate-byte-exactly-for-each-committed-row-that-moving-a-population-m-whole-reset-across-the-registered-migration-preserves-the-final-v3-logical-and-physical-projection-after-the-designated-last-reset
+        canonical_byte_work: precompute-each-row-format-parse-logical-projection-and-reset-rank-once-so-candidate-and-edge-feature-enumeration-does-not-repeat-canonical-byte-work
+        compact_run_equation:
+          population_interval: every-positive-integer-population-a-through-b-reachable-while-the-canonical-publish-prefix-grows-zero-population-is-never-a-compaction-denomination
+          total_residual: checked-target-arithmetic-maximum-minus-source-arithmetic-maximum-minus-added-publish-count-minus-migration-population-where-tagged-none-is-equation-only-zero-and-a-designated-final-compaction-is-not-yet-subtracted
+          migration_last_boundary: when-migration-at-population-m-is-the-last-reset-solve-the-entire-compaction-residual-on-max-one-source-row-count-through-m-and-assign-every-run-to-v2-the-post-migration-compaction-residual-is-exactly-zero
+          final_current_format_boundary: for-a-designated-final-compaction-at-population-k-subtract-one-k-then-solve-the-single-pre-final-residual-on-max-one-source-row-count-through-k-for-v2-to-v3-candidates-assign-populations-less-than-m-to-v2-greater-than-m-to-v3-and-equal-to-m-to-v2-as-the-exact-commuting-boundary-rule-for-same-format-candidates-assign-every-run-to-that-format
+          boundary_completeness: the-v2-interval-ending-at-m-and-v3-interval-starting-at-m-have-the-contiguous-union-max-one-source-row-count-through-k-and-compactions-at-population-m-commute-with-the-single-migration-reset-under-the-stable-rank-and-generation-offset-invariants
+          feasibility: residual-D-zero-allows-zero-runs-otherwise-q-is-ceil-D-div-b-and-the-interval-is-reachable-iff-q-is-at-most-floor-D-div-a
+          canonical_counts: for-positive-D-let-q-equal-ceil-D-div-b-d-equal-D-div-q-and-r-equal-D-mod-q-emit-count-q-minus-r-at-population-d-and-count-r-at-population-d-plus-one-omitting-zero-counts-so-the-residual-has-at-most-two-populations-and-a-separately-tagged-final-edge-makes-at-most-three-never-iterate-q-times
+          edge_feature_query: for-each-requested-compact-format-enumerate-one-forced-legal-population-p-in-that-format-segment-including-m-in-both-v2-and-v3-segments-subtract-p-and-run-the-same-constant-time-full-union-interval-feasibility-solver-on-the-remainder-or-the-bit-across-p-and-structural-candidates-a-designated-final-edge-sets-its-format-bit-directly
+          designated_final_edge: keep-the-designated-last-edge-separate-even-when-a-residual-run-has-the-same-population-and-never-coalesce-it
+          final_candidate_binding: the-no-current-format-compaction-candidate-requires-zero-post-last-reset-compaction-residual-a-designated-final-population-k-requires-residual-at-least-k-and-appends-that-k-edge-exactly-once-after-the-closed-form-pre-final-schedule
+          verification: checked-u128-sum-of-population-times-run-count-must-equal-the-selected-residual-D-and-each-count-schedule-is-applied-symbolically-in-ascending-population-order
+          symbolic_rank_update: for-each-nonzero-population-count-apply-one-full-sequence-prior-generation-publication-id-rank-transform-then-add-count-minus-one-times-population-to-the-maximum-without-repeating-the-rank-transform-because-no-publish-interleaves-inside-the-run-and-the-order-is-a-fixed-point
+        compact_edge_presence: per-format-existential-over-all-valid-representations-of-all-accepted-structural-candidates-using-the-forced-population-query-or-a-designated-final-edge-never-only-the-canonical-count-vector
+        work_bound: at-most-row-count-plus-one-cubed-checked-structural-candidate-forced-edge-and-arithmetic-steps-plus-one-precomputed-streaming-pass-over-canonical-authority-bytes
+        storage_bound: linear-in-row-count-plus-the-already-required-eager-canonical-authority-state
+        generation-distance-loop-or-uncompressed-edge-replay: forbidden
+        termination: row-count-bounded-migration-and-final-reset-candidate-enumeration-plus-one-closed-form-residual-per-candidate-the-single-zero-row-migration-format-edge-may-occur-once-and-no-generation-distance-segment-split-is-enumerated
+      migration_operator:
+        committed_parse: schema-specific-canonical-decoder-records-the-exact-physical-generation-field-byte-range-never-byte-value-search
+        committed_rewrite: replace-only-that-canonical-eight-byte-big-endian-u64-field-and-require-prefix-suffix-schema-version-and-all-other-bytes-exact
+        committed_target: exact-decode-reencode-logical-identity-and-derived-full-plus-chunk-checksums
+        diagnostic: exact-diagnostic_v2_to_v3_projection
+      classifications: [exact, valid-descendant-with-transition-proof, fully-valid-non-descendant, invalid-census, mixed-format]
+    terminal_reclassification:
+      id: cxxlens.sqlite-terminal-reclassifier.v1
+      scope: [initialization-recovery, publish, migration, compaction]
+      backend_scope: filesystem-only-ephemeral-memory-uncertainty-finalizes-and-attempts-exactly-one-close-v2-close-ok-discards-close-non-ok-quarantines-without-a-filesystem-receipt-reopen-or-reclassifier
+      source_mutation: forbidden
+      runtime_and_vfs_pins: retained-through-terminal-classification-or-poison-quarantine
+      sealed_receipt_profiles:
+        post_format_prewrite: [canonical-locator, exact-pinned-vfs-identity, writer-main-open-file-instance-identity, writer-main-directory-entry-binding, exact-length-framed-prestate-authority-state-projection-bytes-and-digest, operation-kind, operation-phase, no-candidate-yet]
+        post_format_candidate: [exact-post-format-prewrite-receipt, candidate-id, exact-candidate-projection]
+        fresh_initialization: [canonical-locator, exact-pinned-vfs-identity, preinit-absent-or-exact-empty-anchor, actual-target-main-open-file-instance-identity-and-directory-entry-binding, pre-arm-raw-main-size-and-digest-and-sidecar-census, deterministic-expected-empty-v3-projection, initialization-id]
+        fresh_empty_anchor_is_not_post_format_authority_state: true
+      main_identity:
+        capture:
+          transactional_writer: from-the-actual-writer-main-handle-under-begin-immediate-plus-synchronous-directory-entry-cross-check-before-first-write
+          fresh_journal_transition: from-the-actual-target-main-handle-after-underlying-xLock-exclusive-and-the-same-entry-exact-empty-recheck-before-arming-journal-effects
+        recheck: reopened-main-handle-and-directory-entry-must-denote-the-same-file-instance
+        path-or-byte-equality-without-identity: insufficient
+        missing-or-replaced: concurrent-authority-change
+      cleanup:
+        precommit: commit-is-never-called-attempt-exactly-one-rollback-then-finalize-all-statements
+        commit-unknown: do-not-infer-from-rollback-result-attempt-cleanup-rollback-if-transaction-may-remain-then-finalize
+        rollback-or-finalize-result: never-durable-outcome-authority
+        close: exactly-one-sqlite3-close-v2-after-finalization
+        close-ok: required-before-post-close-classification
+        close-non-ok: no-reopen-no-vfs-unregister-quarantine-connection-poison-store
+      post_close_sidecar_decision_order: [absent-unreadable-or-replaced-main, namespace-observation-io-or-any-nonregular-or-nonequivalent-main-wal-shm-journal-object, unstable-main-or-directory-or-sidecar-presence-census, any-present-journal, stable-present-but-unreadable-wal-or-required-shm, readable-wal-plus-readable-shm, readable-wal-without-shm, shm-without-wal, no-sidecars]
+      routes:
+        absent-unreadable-main: reclassification-unavailable
+        replaced-main-or-directory-binding: main-identity-changed
+        namespace-observation-io-or-object-kind-failure: reclassification-unavailable
+        unstable-census: reclassification-unavailable
+        any-journal: unsupported-terminal-sidecar-state
+        stable-unreadable-wal-or-required-shm: reclassification-unavailable
+        wal-and-shm: ordinary-active-wal-one-explicit-read-transaction-and-held-lock-route
+        wal-only: stable-held-main-plus-wal-private-copy-and-private-read-write-no-create-recovery-route
+        shm-only: unsupported-terminal-sidecar-state
+        no-sidecars: ordinary-held-main-quiescent-private-copy-route
+      totality: every-main-wal-shm-journal-namespace-observation-object-kind-presence-readability-and-drift-combination-including-stable-unreadable-sidecars-maps-once-in-the-listed-order
+      accepted_routes_require:
+        common: [same-main-identity, complete-profile-specific-validation, exact-byte-authority-or-authorized-descendant-classification]
+        profile_classes: [exact-logical-empty-preauthority, exact-v2, current-v3]
+        operation_admission:
+          initialization-recovery: [exact-logical-empty-preauthority, current-v3]
+          publish: [current-v3]
+          migration: [exact-v2, current-v3]
+          compaction: [current-v3]
+        exact_logical_empty: classification-only-never-install-a-store-state-return-the-selected-initialization-phase-no-store-result
+      source_recovery_checkpoint_or_sidecar_cleanup: forbidden
+      retry_or_second-snapshot: forbidden
+      state_install: only-an-independently-validated-exact-v2-or-current-v3-valid-descendant-eager-state-under-the-selected-operation-admission
+      unsafe_post_state: post-format-existing-store-poisons-result-operations-reopen-required-and-preserves-last-validated-nonresult-observers-initialization-returns-no-store-and-quarantines-any-unclosed-resources
+    terminal_result_precedence:
+      result_authority: select-the-exact-operation-and-phase-block-before-mapping-the-terminal-classification-to-a-public-result
+      generic_terminal_class_is_not_a_public_result: true
+      close-not-confirmed-or-reclassifier-unavailable: apply-the-selected-operation-phase-opaque-result-and-unsafe-state-effect
+      main-identity-changed-or-fully-valid-non-descendant: apply-the-selected-operation-phase-non-descendant-result-and-unsafe-state-effect
+      acquired-invalid-census: apply-the-selected-operation-phase-invalid-census-result-and-unsafe-state-effect
+      acquired-mixed-format: apply-the-selected-operation-phase-mixed-or-ambiguous-result-and-unsafe-state-effect
+      unsupported-terminal-sidecar-state: apply-the-selected-operation-phase-opaque-result-and-unsafe-state-effect
+      acquired-authorized-state: apply-the-selected-operation-phase-authorized-state-rule
+      initialization:
+        journal-transition-or-precommit-uncertain: apply-fresh_v3_initialization-journal-transition-or-precommit-phase-exactly
+        commit-outcome-unknown: apply-fresh_v3_initialization.commit_outcome_unknown-exactly
+        successful-handoff: require-confirmed-close-before-reopen-or-apply-the-initialization-recovery-opaque-quarantine-rule
+      publish:
+        precommit-failure: apply-publish.precommit_failure-exactly-original-trigger-only-for-authorized-installed-state-otherwise-database-opaque-and-poison
+        commit-outcome-unknown: apply-publish.commit_outcome_unknown-exactly-always-store.sqlite-failure-database-opaque-with-authorized-state-install-or-unsafe-state-poison
+      migration:
+        locked-before-first-write-observed-reachable-v3: rollback-close-reclassify-install-v3-and-return-success
+        precommit-failure-v2-reachable-with-no-migration-edge: return-exact-original-triggering-result-after-authorized-reclassification
+        precommit-failure-v3-reachable-with-exactly-one-migration-edge: recovered-success-and-install-v3-as-idempotent-compact-postcondition
+        commit-outcome-unknown-v2-reachable-with-no-migration-edge: store.sqlite-failure-database-opaque-and-install-v2
+        commit-outcome-unknown-v3-reachable-with-exactly-one-migration-edge: recovered-success-and-install-v3
+      compaction:
+        zero-pre-anchor-filesystem: validate-under-begin-immediate-perform-no-write-and-no-commit-rollback-finalize-confirm-close-and-return-success-after-authorized-reclassification
+        zero-pre-anchor-ephemeral-memory: validate-under-begin-immediate-perform-no-write-and-no-commit-successfully-rollback-finalize-retain-the-healthy-sole-connection-without-close-or-reclassification-and-return-success
+        nonzero-precommit-failure-proof-containing-v3-compact-edge: recovered-success-as-idempotent-compact-postcondition
+        nonzero-precommit-failure-proof-with-no-v3-compact-edge: exact-original-triggering-result-after-authorized-reclassification
+        commit-outcome-unknown-proof-containing-v3-compact-edge: recovered-success
+        commit-outcome-unknown-proof-with-no-v3-compact-edge: store.sqlite-failure-database-opaque
+  fresh_v3_initialization:
+    exact_empty_predicate: zero-application-id-user-objects-metadata-and-semantic-or-diagnostic-authority
+    guards:
+      filesystem:
+        nonexistent_creation_bootstrap:
+          order: reserve-and-recheck-the-canonical-parent-directory-entry-exclusive-create-an-empty-regular-main-through-the-bound-vfs-capture-its-file-identity-then-handoff-to-sqlite-read-write-no-create-with-the-xLock-exclusive-recheck-gate
+          sole_prelease_persistent_effect: exclusive-create-full-sync-of-the-new-zero-byte-regular-main-and-sync-of-its-authenticated-parent-namespace
+          durability_order:
+            - exclusive-create-zero-byte-main-through-the-bound-vfs
+            - verify-new-object-is-regular-or-qualified-equivalent-and-capture-held-identity
+            - full-sync-the-held-zero-byte-main-object
+            - sync-the-authenticated-parent-namespace-containing-that-exact-entry
+            - reobserve-parent-entry-held-object-identity-zero-size-and-empty-digest
+            - only-then-handoff-to-sqlite-main-open-with-create-omitted
+          durability_success: both-main-object-and-parent-namespace-sync-succeeded-and-the-post-sync-identity-recheck-is-exact
+          durability_failure: {code: store.sqlite-failure, field: sqlite-initialization-bootstrap, detail: durability-opaque}
+          durability_failure_effects: [close-the-created-handle, do-not-delete-retry-or-open-the-target-through-sqlite, no-header-sidecar-schema-metadata-or-authority-write, the-new-empty-main-may-be-present-or-absent-after-a-crash-and-is-not-authority]
+          next_invocation: restart-from-a-complete-bound-vfs-census
+          forbidden_before_lease: [sidecar-create, database-header-write, journal-mode-change, schema, metadata, semantic-or-diagnostic-authority]
+          failure_remnant: a-new-zero-byte-main-may-remain-but-its-presence-is-never-success-or-format-authority
+          collision_parent_identity_nonregular_or_postcreate_replacement: {code: store.sqlite-failure, field: sqlite-initialization, detail: concurrent-authority-change}
+          environmental_create_or_open_failure: {code: store.sqlite-failure, field: open, detail: preserve-sqlite-runtime-diagnostic}
+          environmental_create_or_open_failure_effects: raw-create-failure-retains-no-open-handle-target-sqlite-open-non-ok-applies-transaction.connection_lifecycle.sqlite_open_profiles.common_non_ok_return_cleanup
+          retry_or_second_create: forbidden
+        precreate_census:
+          precedence: before-existing-database-sidecar-classification-and-before-raw-nonexistent-bootstrap-or-target-read-write-no-create-handoff
+          clean: nonexistent-or-exact-empty-main-with-zero-application-id-and-wal-shm-and-journal-all-absent
+          orphan_sidecar_without_main: {code: store.sqlite-failure, field: sqlite-initialization-sidecar, detail: orphan-without-main}
+          sidecar_presence_precedence:
+            - no-main-plus-any-sidecar-is-orphan-and-rejected
+            - any-journal-with-main-is-journal-present-and-rejected-even-with-wal-or-shm
+            - wal-and-shm-with-main-first-uses-the-ordinary-active-wal-existing-database-route-and-exact-logical-empty-with-no-format-authority-uses-the-active-wal-empty-preauthority-route
+            - shm-without-wal-is-incomplete-and-rejected
+            - wal-without-shm-and-with-main-but-unreadable-wal-is-a-terminal-unreadable-wal-only-result
+            - readable-wal-without-shm-and-with-main-is-the-only-preauthority-crash-candidate
+            - no-sidecar-with-main-is-the-ordinary-quiescent-or-clean-route
+          unreadable_wal_only: {code: store.sqlite-failure, field: sqlite-initialization-sidecar, detail: unreadable-wal-only}
+          unreadable_wal_only_effects: no-copy-private-recovery-sqlite-open-or-source-effect
+          preauthority_sidecar_candidate:
+            precondition: existing-main-plus-readable-wal-plus-absent-shm-and-journal-regardless-of-main-only-marker-visibility
+            stable_source_receipt: held-main-and-wal-before-and-after-identity-size-and-sha256-plus-directory-entry-census
+            wal_participation_gate:
+              zero_byte: carries-no-wal-authority-stable-main-alone-may-prove-exact-empty-v2-or-current-v3-and-unrecognized-main-rejects
+              nonzero: require-valid-wal-header-page-size-and-salt-then-scan-ordered-frames-and-checksums-until-the-first-invalid-or-truncated-frame-with-only-the-exact-last-valid-commit-prefix-authoritative
+              post_authoritative_suffix: after-the-last-valid-commit-or-from-frame-zero-when-there-is-no-commit-all-valid-uncommitted-frames-and-the-terminal-invalid-or-truncated-remainder-are-nonauthoritative-never-resume-scan-after-the-first-invalid-frame
+              format_provenance_limit: sqlite-wal-has-no-durable-main-identity-or-historical-binding-salt-and-checksum-prove-only-wal-internal-validity
+              main_alone_logical_anchor:
+                valid-header-with-no-valid-commit: including-zero-frames-first-frame-stop-or-valid-uncommitted-frames-authoritative-prefix-is-empty-all-frame-bytes-and-terminal-remainder-contribute-no-authority-and-private-recovery-must-equal-the-stable-exact-empty-v2-or-current-v3-main-alone-anchor
+                cold-factory-with-valid-committed-prefix: fully-validated-recovered-exact-v2-or-current-v3-is-the-current-filesystem-state-authority-even-when-main-alone-is-a-partial-checkpoint-this-is-not-historical-provenance
+                cold-factory-recovered-empty: accept-only-exact-empty-or-empty-authority-current-v3
+                live_sealed_operation_receipt: recovered-state-must-match-the-exact-expected-projection-or-its-authorized-descendant
+                invalid-or-torn-wal-header-recovery-disagreement-or-no-fully-validated-result: reject
+              rejected_wal: {code: store.sqlite-failure, field: sqlite-initialization-sidecar, detail: unrecognized-preauthority-state}
+              recovered_state_source: nonzero-wal-uses-its-last-valid-commit-prefix-or-an-empty-prefix-for-valid-uncommitted-frames-zero-wal-uses-only-the-stable-exact-main-authority
+            classification:
+              copy_and_recovery: bounded-copy-held-main-and-wal-only-never-shm-or-journal-to-private-directory-then-read-write-no-create-sqlite-recovery-with-v2-base-capability
+              base_profile_split: apply-runtime.capability_preflight.existing_format_discriminator-to-the-fully-recovered-private-state
+              exact_v2: complete-decode-with-v2-base-capability-and-return-without-v3-gate
+              declared_current_v3: require-v3-symbols-version-and-private-connection-limit-gate-before-current-v3-full-schema-chunk-and-semantic-decode
+              declared_current_v3_below_gate: declared-v3-runtime-version-symbol-or-limit-error-not-corruption
+              unknown_or_v2_v3_mixed: return-the-base-discriminator-format-incompatible-or-corrupt-terminal-without-v3-gate
+            private_shm: created-and-owned-only-inside-the-private-directory-and-never-copied-from-source
+            accepted_v2_or_current_v3_wal_oracle: held-or-recovered-main-header-read-and-write-version-bytes-at-offsets-18-and-19-are-both-2
+            accepted_v2_or_current_v3_non_wal_result: {code: store.sqlite-failure, field: sqlite-journal-mode, detail: expected-wal}
+            accepted_v2_or_current_v3_non_wal_effects: none
+            accepted_empty: exact-logical-empty-database-with-zero-application-id-user-objects-metadata-and-authority-after-private-recovery
+            accepted_v2: return-eager-validated-read-only-v2-process-state-bound-to-the-stable-source-receipt-with-source-mutation-deferred-to-explicit-compact-only
+            accepted_current_v3: return-eager-validated-current-v3-process-state-bound-to-the-stable-source-receipt-with-source-normalization-deferred-to-the-first-v3-mutation
+            other: {code: store.sqlite-failure, field: sqlite-initialization-sidecar, detail: unrecognized-preauthority-state}
+            original_effect_before-accepted-empty-or-first-authorized-mutation: forbidden
+            source_drift_result: {code: store.sqlite-failure, field: sqlite-initialization-sidecar, detail: concurrent-source-change}
+            accepted_empty_original_recovery: acquire-exclusive-lease-recheck-every-receipt-field-open-original-read-write-no-create-through-the-initially-write-denying-vfs-query-and-pass-the-actual-connection-v3-gate-arm-writes-let-sqlite-recover-and-checkpoint-then-prove-exact-empty-and-normalized-sidecars-before-journal-setup
+            accepted_v2_compact_recovery: explicit-compact-acquires-exclusive-lease-rechecks-every-receipt-field-opens-original-read-write-no-create-through-the-initially-write-denying-vfs-queries-and-passes-the-actual-connection-v3-gate-arms-writes-lets-sqlite-recover-and-proves-the-exact-anchored-v2-state-before-migration-write-concurrent-byte-drift-is-the-source-drift-result
+            accepted_current_v3_first_mutation_recovery: acquire-exclusive-lease-recheck-every-receipt-field-query-source-limit-let-sqlite-recover-and-prove-the-exact-anchored-current-v3-state-and-wal-close-the-exclusive-recovery-connection-release-its-lock-normal-read-write-no-create-reopen-then-begin-immediate-and-recheck-exact-or-valid-descendant-wal-and-limit-before-write
+            special_recovery_concurrency: exact-receipt-only-is-a-conservative-exception-to-ordinary-valid-descendant-admission-until-normal-locking-handoff-concurrent-byte-drift-is-no-write-concurrent-source-change
+            recovery_failure_totality:
+              receipt_drift_before_effect: return-the-source-drift-result-retain-the-eager-read-state-and-do-not-poison
+              after_arming_action: after-confirmed-close-run-transaction.recovery_model.terminal_reclassification-across-active-wal-wal-only-and-quiescent-terminals-before-using-any-stale-process-state-close-non-ok-quarantines-and-poisons-without-reopen
+              close_non_ok_or_unknown: retain-runtime-vfs-and-connection-quarantine-do-not-reopen-or-unregister-vfs-return-the-handoff-opaque-result-and-poison-result-operations-reopen-required
+              accepted_state_gate: exact-same-main-object-identity-and-operation-receipt-exact-or-authorized-descendant-under-the-matching-v2-or-current-v3-algebra
+              accepted_empty_reclassification: return-store.sqlite-failure-sqlite-initialization-recovery-opaque-and-no-store-instance
+              accepted_v2_reclassification: install-the-independently-validated-reopened-v2-state-and-return-store.sqlite-failure-sqlite-recovery-opaque
+              accepted_current_v3_reclassification: install-the-independently-validated-reopened-current-v3-state-and-return-store.sqlite-failure-sqlite-recovery-opaque
+              reclassification_or_normal_handoff_failure_operation_result: {code: store.sqlite-failure, field: sqlite-recovery-handoff, detail: opaque}
+              poisoned_store_instance_state: poisoned-no-result-operation-reads-or-writes-stale-state
+              subsequent_result_operation: {code: store.backend-unavailable, field: sqlite-connection, detail: reopen-required}
+              compatibility: last-independently-validated-source-tuple-with-direct-open-false
+              retained_generation_count: exact-live-preexisting-process-pin-count
+              preexisting_handles_and_cursors: remain-valid-under-original-process-generation-pins
+            terminal_routing: accepted-v2-and-current-v3-never-reenter-the-ordinary-incomplete-sidecar-rejection-before-their-authorized-recovery-gate
+            cold_restart_without_process_receipt: reconstruct-the-stable-source-receipt-from-held-main-and-wal-and-apply-the-same-private-recovery-classification-with-no-success-inference-from-an-absent-candidate-id
+          active_wal_empty_preauthority_candidate:
+            precondition: existing-main-plus-readable-wal-and-shm-plus-absent-journal-whose-one-explicit-read-transaction-proves-exact-logical-empty-with-zero-application-id-user-objects-metadata-and-authority
+            receipt: actual-vfs-open-main-wal-and-shm-identities-plus-main-and-wal-size-sha256-directory-bindings-and-shm-presence-size-before-and-after-read
+            source_effect_before_gate: forbidden-except-existing-shm-coordination-bytes
+            recovery: acquire-exclusive-identity-checked-lease-recheck-main-and-wal-receipt-and-shm-presence-size-open-source-through-initially-write-denying-vfs-pass-actual-connection-v3-gate-arm-writes-let-sqlite-recover-and-checkpoint-prove-normalized-exact-empty-then-enter-fresh-initialization
+            drift_result: {code: store.sqlite-failure, field: sqlite-initialization-sidecar, detail: concurrent-source-change}
+            nonempty_or_unrecognized: route-to-exact-v2-or-current-v3-ordinary-active-open-or-reject-unrecognized-preauthority-state
+          target_effect_before-clean-or-accepted-empty: forbidden
+        lease: after-the-nonexistent-bootstrap-exception-sqlite-exclusive-lock-plus-main-file-identity-check-before-every-persistent-effect
+        locked_recheck: exact-main-identity-or-created-file-identity-empty-authority-and-normalized-sidecar-absence-before-journal-setup
+        journal: set-wal-while-database-is-locked-and-still-exact-empty-before-any-authority-object
+        journal_transition_atomicity:
+          prelock_effect_gate: deny-header-journal-sidecar-write-truncate-create-shm-extension-and-effectful-file-control
+          arming_point: after-underlying-xLock-exclusive-success-and-synchronous-same-file-identity-size-digest-directory-and-exact-empty-recheck
+          pre_journal_receipt:
+            capture: at-the-arming-point-before-enabling-the-first-header-journal-wal-shm-or-file-control-effect
+            fields: [canonical-locator-and-bound-vfs, preinit-absent-or-exact-empty-anchor, actual-target-main-open-file-instance-and-directory-entry-binding, exact-empty-logical-projection, pre-arm-raw-main-size-and-sha256, exact-pre-arm-main-wal-shm-journal-census, initialization-id, deterministic-expected-empty-v3-projection]
+            authority: transaction.recovery_model.terminal_reclassification.sealed_receipt_profiles.fresh_initialization
+          observed_identity_digest_directory_or_empty_mismatch: {code: store.sqlite-failure, field: sqlite-initialization, detail: concurrent-authority-change}
+          observation_or_hash_io_failure: {code: store.sqlite-failure, field: open, detail: preserve-sqlite-runtime-diagnostic}
+          failure_effects: before-arming-zero-persistent-effect-after-arming-no-schema-metadata-marker-semantic-or-diagnostic-authority-write-is-attempted-but-main-wal-header-and-wal-shm-or-journal-residue-may-exist
+          failure_after_arming:
+            cleanup: finalize-all-statements-attempt-one-rollback-only-if-a-transaction-may-remain-then-attempt-exactly-one-sqlite3-close-v2
+            close_ok: required-before-running-the-total-reclassifier-from-the-pre-journal-receipt
+            close_non_ok_or_unknown: quarantine-the-connection-and-runtime-vfs-pins-do-not-reopen-or-unregister-return-store.sqlite-failure-sqlite-initialization-recovery-opaque-and-return-no-store-instance
+            exact_same-identity-logical-empty: return-store.sqlite-failure-sqlite-initialization-recovery-opaque-with-no-store-instance
+            exact_expected-or-authorized-current-v3: install-the-independently-validated-current-v3-state-and-return-recovered-initialization-success
+            valid_non_descendant: return-store.sqlite-failure-sqlite-initialization-recovery-concurrent-authority-change-with-no-store-instance
+            invalid_or_mixed: return-store.corrupt-sqlite-initialization-recovery-partial-or-mixed-authority-with-no-store-instance
+            observation_or-reclassifier-unavailable: return-store.sqlite-failure-sqlite-initialization-recovery-opaque-with-no-store-instance
+            source_recovery_checkpoint_sidecar_cleanup_retry-or-second-snapshot: forbidden
+          sqlite_open_mode_after_bootstrap: read-write-no-create
+        transaction: one-begin-immediate-for-all-ddl-metadata-and-marker-while-exclusive-initialization-lease-is-held
+        locked_precondition: nonexistent-newly-created-or-exact-empty-database-with-zero-user-objects-and-zero-application-id-authority
+      ephemeral_memory:
+        connection: sole-read-write-create-private-cache-fullmutex-connection
+        filesystem_identity_sidecar_or_lease: none
+        journal: retain-sqlite-memory-journal
+        transaction: one-begin-immediate-for-all-ddl-metadata-and-marker-on-the-sole-connection
+        locked_precondition: exact-logical-empty-memory-database-with-zero-user-objects-and-authority
+    steps:
+      - create-exact-six-current-v3-canonical-ddl-objects
+      - insert-three-non-marker-profile-metadata-rows
+      - insert-physical-format-marker-last
+      - revalidate-exact-ddl-four-metadata-rows-and-empty-authority-census
+      - commit
+    concurrent_current_v3:
+      precondition: same-anchored-main-file-identity-and-exact-expected-empty-v3-or-authorized-v3-descendant-proved-by-transaction.recovery_model.authorized_descendant_algebra-from-the-deterministic-empty-v3-projection-observed-under-the-initialization-lease
+      transition: rollback-without-write-and-use-the-successful-filesystem-handoff-path
+      replacement_or_non_descendant: {code: store.sqlite-failure, field: sqlite-initialization, detail: concurrent-authority-change}
+      handoff_failure: {code: store.sqlite-failure, field: sqlite-initialization-recovery, detail: opaque}
+    concurrent_nonempty_noncurrent: {code: store.sqlite-failure, field: sqlite-initialization, detail: concurrent-authority-change}
+    precommit_failure:
+      rollback_confirmed-finalization-complete-and-connection-healthy:
+        filesystem: attempt-exactly-one-sqlite3-close-v2-close-ok-returns-the-original-triggering-error-with-no-store-instance-and-no-process-state-new-empty-file-may-remain
+        ephemeral_memory: attempt-exactly-one-sqlite3-close-v2-close-ok-discards-the-sole-database-and-returns-the-original-triggering-error-with-no-store-instance
+        close_non_ok_or_unknown: quarantine-the-connection-and-runtime-vfs-pins-return-store.sqlite-failure-sqlite-initialization-recovery-opaque-and-return-no-store-instance
+      filesystem_cleanup_or_rollback_uncertain:
+        receipt: the-sealed-fresh-initialization-receipt-and-deterministic-expected-empty-v3-projection
+        cleanup: finalize-all-statements-attempt-one-rollback-if-the-transaction-may-remain-then-attempt-exactly-one-sqlite3-close-v2
+        close_ok: required-before-the-total-reclassifier
+        close_non_ok_or_unknown: quarantine-the-connection-and-runtime-vfs-pins-do-not-reopen-or-unregister-return-store.sqlite-failure-sqlite-initialization-recovery-opaque-and-return-no-store-instance
+        same-identity-exact-logical-empty: return-the-original-triggering-error-with-no-store-instance
+        exact-expected-or-authorized-current-v3: install-the-independently-validated-current-v3-state-and-return-recovered-initialization-success
+        valid_non_descendant: return-store.sqlite-failure-sqlite-initialization-recovery-concurrent-authority-change-with-no-store-instance
+        invalid_or_mixed: return-store.corrupt-sqlite-initialization-recovery-partial-or-mixed-authority-with-no-store-instance
+        observation_or-reclassifier-unavailable: return-store.sqlite-failure-sqlite-initialization-recovery-opaque-with-no-store-instance
+      ephemeral_memory_cleanup_or_rollback_uncertain: finalize-and-attempt-exactly-one-close-v2-close-ok-discards-the-sole-database-close-non-ok-quarantines-the-connection-and-runtime-vfs-pins-return-store.sqlite-failure-sqlite-initialization-recovery-opaque-with-no-store-instance-and-no-filesystem-receipt-reopen-or-reclassifier
+    commit_outcome_unknown:
+      recovery_receipt:
+        profile: transaction.recovery_model.terminal_reclassification.sealed_receipt_profiles.fresh_initialization
+        fields: [canonical-locator-and-vfs, preinit-absent-or-exact-empty-anchor, actual-target-main-open-file-instance-identity-and-directory-entry-binding, pre-arm-raw-main-size-and-sha256, exact-pre-arm-main-wal-shm-journal-census, deterministic-expected-empty-v3-ddl-metadata-and-census-projection, candidate-initialization-id]
+        lifetime: sealed-before-commit-until-recovery-classification
+      filesystem_action: finalize-all-statements-attempt-one-cleanup-rollback-if-the-transaction-may-remain-attempt-exactly-one-sqlite3-close-v2-and-only-after-close-ok-route-through-the-receipt-aware-total-sidecar-classifier
+      close_non_ok_or_unknown: quarantine-the-connection-and-runtime-vfs-pins-do-not-reopen-or-unregister-return-store.sqlite-failure-sqlite-initialization-recovery-opaque-and-return-no-store-instance
+      receipt_aware_classifier:
+        expected_v3: same-main-open-file-instance-and-directory-entry-binding-and-exact-expected-ddl-metadata-empty-census-or-an-authorized-v3-descendant-proved-by-the-compressed-normal-form-from-that-deterministic-empty-v3-state-is-recovered-success
+        empty: same-main-open-file-instance-and-directory-entry-binding-and-exact-preinit-logical-empty-is-database-opaque
+        changed_valid_non_descendant: main-file-or-directory-entry-replacement-or-authority-nondescendant-is-concurrent-authority-change
+        partial_or_mixed: corrupt-partial-or-mixed-authority
+        cold_restart_without_candidate_id: exact-current-v3-is-openable-success-exact-empty-is-fresh-initialization-candidate-and-any-ambiguous-mixed-state-is-corrupt
+      exact_preinit_absent_or_empty: {code: store.sqlite-failure, field: database, detail: opaque}
+      exact_or_valid_v3_descendant: same-main-open-file-instance-and-directory-entry-binding-plus-exact-expected-projection-or-transaction.recovery_model.authorized_descendant_algebra-proof-from-the-deterministic-empty-v3-projection
+      valid_non_descendant: {code: store.sqlite-failure, field: sqlite-initialization-recovery, detail: concurrent-authority-change}
+      invalid_partial_or_mixed: {code: store.corrupt, field: sqlite-initialization-recovery, detail: partial-or-mixed-authority}
+      filesystem_reopen_failure: {code: store.sqlite-failure, field: sqlite-initialization-recovery, detail: opaque}
+      ephemeral_memory: finalize-and-attempt-exactly-one-close-v2-close-ok-discards-the-sole-database-close-non-ok-quarantines-the-connection-and-runtime-vfs-pins-return-store.sqlite-failure-database-opaque-with-no-store-instance-and-no-filesystem-receipt-reopen-or-reclassifier
+    partial-or-mixed-authority_after_failure: forbidden
+    process_state: install-only-after-successful-commit-and-validation
+    successful_filesystem_handoff: use-the-pre-journal-already-sealed-initialization-receipt-finalize-all-statements-attempt-exactly-one-sqlite3-close-v2-and-only-after-close-ok-release-the-exclusive-connection-then-use-the-receipt-aware-normal-read-write-no-create-reopen-and-validate-same-identity-exact-or-compressed-normal-form-authorized-v3-descendant-before-process-state-install
+    successful_filesystem_handoff_close_non_ok: quarantine-the-connection-and-runtime-vfs-pins-do-not-reopen-or-unregister-return-store.sqlite-failure-sqlite-initialization-recovery-opaque-and-return-no-store-instance
+    successful_filesystem_handoff_failure: {code: store.sqlite-failure, field: sqlite-initialization-recovery, detail: opaque}
+    lease_release: confirmed-close-on-normal-paths-close-non-ok-or-unknown-quarantines-the-connection-and-runtime-vfs-pins-and-never-claims-release
+    ephemeral_memory_handoff: retain-the-successfully-initialized-memory-journal-connection-without-exclusive-filesystem-lease
+  journal_mode:
+    filesystem: fresh-empty-sets-wal-under-exclusive-identity-checked-lease-existing-current-v3-must-already-be-wal-and-is-never-mutated-on-open
+    ephemeral_memory: sqlite-memory-journal-no-wal-or-sidecars
+  synchronous: FULL-on-every-v3-writer-connection-before-first-write
   publish:
     boundary: begin-immediate-to-commit
     head_authority: cxxlens_ng_series_head
@@ -93,20 +1196,337 @@ transaction:
     expected_parent_mismatch: store.publication-conflict
     publication_row: immutable-insert
     publication_insert_or_replace: forbidden
-    atomic_steps: [recheck-head, insert-publication, update-head]
+    atomic_steps: [full-authority-census, recheck-head, allocate-generation, insert-publication, insert-and-validate-chunks, update-head]
     memory_update: after-database-commit
-    failure: rollback-without-visible-candidate
-  maintenance_write: begin-immediate-update-existing-physical-payload-commit
-  publication_visibility: committed-record-only
+    precommit_failure:
+      rollback_confirmed_and_connection_healthy: return-the-original-precommit-error-without-visible-candidate-or-process-state-change
+      rollback_or_close_uncertain:
+        filesystem_rollback_uncertain_close_confirmed: discard-writer-and-candidate-process-state-and-run-transaction.recovery_model.terminal_reclassification
+        ephemeral_memory_rollback-finalize-or-connection-health-uncertain: finalize-and-attempt-exactly-one-close-v2-close-ok-discards-the-sole-connection-close-non-ok-quarantines-it-and-runtime-vfs-pins-with-no-filesystem-receipt-reopen-or-terminal-reclassifier-return-store.sqlite-failure-database-opaque-and-poison-the-store
+        close_non_ok_or_unknown: quarantine-connection-do-not-reopen-or-unregister-vfs-and-poison-with-store.sqlite-failure-database-opaque
+        recovery_receipt: transaction.recovery_model.terminal_reclassification.sealed_receipt_profiles.post_format_prewrite-extended-to-post_format_candidate-only-if-the-candidate-id-and-projection-are-already-complete
+        exact_pre_or_authorized_descendant_including-a-complete-concurrent-candidate: install-independently-validated-current-v3-state-and-return-the-original-precommit-error-because-this-branch-never-invoked-commit
+        main-replaced-partial-candidate-valid-non-descendant-invalid-or-mixed: return-store.sqlite-failure-database-opaque-and-poison-result-operations-reopen-required-while-preserving-last-validated-compatibility-live-pin-count-and-old-handles
+        observation_or_reopen_failure: return-store.sqlite-failure-database-opaque-and-poison-result-operations-reopen-required
+        implicit_retry_write: forbidden
+    commit_outcome_unknown:
+      trigger: commit-or-postcommit-sqlite-error-before-a-commit-handle-is-safely-returnable
+      public_result: {code: store.sqlite-failure, field: database, detail: opaque}
+      materializer_outcome: publication_outcome_unknown
+      recovery_receipt:
+        profile: transaction.recovery_model.terminal_reclassification.sealed_receipt_profiles.post_format_candidate
+        fields: [canonical-locator-and-vfs, anchored-main-open-object-identity-and-directory-entry-binding, exact-length-framed-pre-v3-authority-state-projection-bytes-and-digest, exact-candidate-immutable-logical-projection, attempted-candidate-physical-generation-row-chunk-head-and-counter-projection, candidate-publication-id]
+        lifetime: sealed-before-commit-until-recovery-classification
+      filesystem_action: discard-writer-connection-and-candidate-process-state-confirm-close-then-run-transaction.recovery_model.terminal_reclassification-close-non-ok-quarantines-and-poisons-without-reopen
+      close_non_ok_or_unknown: return-the-same-database-opaque-result-quarantine-connection-retain-runtime-and-vfs-pins-and-poison-result-operations-reopen-required
+      descendant_authority: transaction.recovery_model.authorized_descendant_algebra-with-exact-same-main-object-identity
+      classifier:
+        attempted_physical_candidate_present: exact-fully-validated-attempted-candidate-row-chunks-and-head-transition-followed-by-zero-or-more-authorized-current-v3-publish-or-whole-compaction-transitions
+        same_logical_candidate_with_different_authorized_physical_projection: one-complete-valid-row-with-the-same-publication-id-and-byte-exact-immutable-logical-series-snapshot-sequence-parent-state-payload-projection-whose-different-generation-row-chunks-and-head-position-are-proved-by-the-authorized-descendant-normal-form-including-concurrent-publish-or-later-compaction
+        candidate_logical_identity_absent: exact-pre-state-followed-by-zero-or-more-authorized-current-v3-publish-or-whole-compaction-transitions-without-any-row-of-the-candidate-publication-id
+        candidate_id_with_different_immutable_logical_projection_or_partial_owned_chunks: invalid-or-partial
+        valid_non_descendant: fully-valid-state-that-violates-main-object-identity-or-the-executable-current-v3-descendant-algebra
+        invalid_or_partial: corrupt-mixed-or-partial-candidate-or-authority-census
+      result_precedence: always-return-the-original-database-opaque-because-the-durable-publication-outcome-remains-unknown-even-if-reopen-observes-the-candidate
+      admitted_post_state: install-the-independently-validated-reopened-current-v3-state-for-attempted-physical-candidate-same-logical-candidate-with-authorized-different-physical-projection-or-candidate-identity-absent-authorized-descendants-while-retaining-old-handles-by-process-pins
+      non_descendant_invalid_or_reopen_failure_post_state: poison-result-operations-to-store.backend-unavailable-sqlite-connection-reopen-required-compatibility-last-validated-direct-open-false-and-retained-generation-count-live-preexisting-pins
+      ephemeral_memory: finalize-and-attempt-exactly-one-close-v2-close-ok-discards-the-sole-connection-close-non-ok-quarantines-it-and-runtime-vfs-pins-poison-store-and-return-the-same-database-opaque-result-with-no-filesystem-receipt-reopen-or-terminal-reclassifier
+      implicit_retry_write: forbidden
+  publication_visibility: committed-record-with-complete-validated-current-generation-only
   stale_parent: reject-inside-database-transaction
+migration:
+  id: compact-v2.6.0-to-v3.0.0
+  public_trigger: snapshot-store-compact-only
+  source: marker-v2-with-exact-v2.6-compatible-layout-and-authority
+  target: exact-cxxlens.sqlite-semantic-store.v3-3.0.0
+  transaction: one-begin-immediate-for-entire-database
+  preflight_precedence:
+    - validate-compact-call-state-and-the-already-eager-v2-row-census
+    - if-any-corrupt-committed-publication-return-store.compact-validation-failed-for-the-first-replacement-order-offender-without-v3-symbol-version-limit-or-source-write
+    - only-a-clean-migratable-v2-source-requires-v3-symbols-version-and-branch-specific-actual-connection-limit
+  source_connection:
+    established_state: eagerly-decoded-validated-v2-process-state-without-live-source-connection
+    established_anchor: every-persisted-semantic-and-diagnostic-row-head-file-locator-vfs-main-open-object-identity-and-directory-entry-binding
+    compact_connection: distinct-read-write-no-create
+    locator_binding: exact-same-canonical-path-and-vfs
+    first_transaction: begin-immediate
+    post_lock_revalidation: exact-v2-format-schema-and-exact-or-valid-descendant-of-established-anchor-before-first-schema-or-data-write
+    preauthority_v2_recovery_receipt: when-present-recheck-under-exclusive-lease-and-let-sqlite-recover-the-original-before-the-same-post-lock-revalidation
+    valid_non_descendant: {code: store.sqlite-failure, field: migration-source, detail: concurrent-authority-change}
+    read_write_fallback_to_read_only: apply-transaction.connection_lifecycle.read_write_fallback_to_read_only-and-return-store.sqlite-failure-open-read-write-required-before-limit-lock-or-source-effect
+    precommit_failure:
+      rollback_or_cleanup_result: never-durable-outcome-authority
+      close_confirmed: discard-compact-connection-and-run-transaction.recovery_model.terminal_reclassification
+      close_non_ok_or_unknown: quarantine-connection-do-not-reopen-or-unregister-vfs-and-return-store.sqlite-failure-migration-recovery-opaque-with-poisoned-result-operations
+      validated_v2_exact_or_authorized_descendant: install-independently-validated-reopened-v2-read-only-state-and-return-the-original-precommit-error
+      validated_v3_expected_or_authorized_descendant: only-after-confirmed-close-exact-main-identity-and-an-authorized-descendant-proof-containing-exactly-one-v2-to-v3-edge-install-independently-validated-reopened-current-v3-state-and-return-recovered-success-as-idempotent-compact-postcondition
+      valid_non_descendant: return-store.sqlite-failure-migration-recovery-concurrent-authority-change-and-poison-result-operations-reopen-required
+      invalid_or_mixed: return-store.corrupt-migration-recovery-unexpected-census-or-mixed-or-ambiguous-and-poison-result-operations-reopen-required
+      observation_or_reopen_failure_after-confirmed-close: return-store.sqlite-failure-migration-recovery-opaque-and-poison-result-operations-reopen-required
+      preserved_observers: last-validated-compatibility-live-pin-count-and-old-handles
+    observed_already_v3:
+      precondition: under-begin-immediate-before-any-write-require-exact-expected-migration-or-authorized-v3-descendant-of-established-anchor
+      action: rollback-finalize-confirm-close-then-run-transaction.recovery_model.terminal_reclassification-with-exact-main-object-identity-close-non-ok-quarantines-and-poisons-without-reopen
+      validated_reopen_result: after-confirmed-close-exact-main-identity-and-an-authorized-descendant-proof-containing-exactly-one-v2-to-v3-edge-return-recovered-success-and-install-independently-validated-current-v3-state
+      valid_non_descendant: store.sqlite-failure-migration-recovery-concurrent-authority-change-and-poison-result-operations-reopen-required
+      invalid_or_reopen_failure: store.sqlite-failure-migration-recovery-opaque-and-poison-result-operations-reopen-required
+  authority_census:
+    - physical-checksum
+    - accepted-payload-v1-through-v5
+    - semantic-snapshot-digest
+    - publication-identity-binding
+    - parent-topology
+    - series-head
+    - counter-authority
+    - manifest-closure-binding
+    - persisted-semantic-object-graph
+  source_row_gate:
+    state: exact-integer-enum-0-through-5
+    preservation: every-persisted-publication-row
+    semantic-head-and-generation-authority: committed-integer-3-only
+    noncommitted_rows: preserve-exactly-and-exclude-from-head-and-generation-allocation
+  row_class_migration:
+    committed:
+      generation: allocate-new-checked-contiguous-range
+      payload: canonical-physical-generation-field-replacement-and-full-semantic-revalidation
+      authority: participates-in-head-counter-and-semantic-census
+    noncommitted:
+      generation: preserve-original
+      payload: preserve-raw-bytes-and-full-checksum-then-chunk-with-new-per-chunk-checksums
+      validation: preserve-source-typed-diagnostic-classification
+      authority: excluded-from-head-counter-generation-and-semantic-census
+    corrupt_noncommitted: preserve-as-typed-diagnostic-without-promotion-or-repair
+  replacement_order: prior-publication-sequence-then-prior-physical-generation-then-publication-id
+  generation_allocation:
+    authority: snapshot-shared-fully-validated-committed-generation-allocator
+    committed_nonempty: checked-range-from-prior-fully-validated-committed-maximum-plus-one-through-that-maximum-plus-committed-row-count-in-replacement-order
+    committed_empty: allocate-no-range
+    excluded: noncommitted-diagnostic-and-corrupt-rows
+  construction:
+    shadow_objects: distinct-main-schema-v3-metadata-publication-chunk-and-head-tables
+    legacy_replacement: drop-legacy-objects-only-after-complete-shadow-validation-inside-the-same-transaction
+    final_objects: create-with-the-exact-six-current-v3-canonical-ddl-statements-never-rename-shadow-objects
+    bounded_copy: validated-shadow-publication-chunk-head-and-three-non-marker-metadata-rows-to-final-objects
+    shadow_cleanup: drop-every-shadow-object-before-format-marker
+  replay_validation:
+    committed: independent-bounded-full-checksum-canonical-semantic-identity-and-authority-validation
+    noncommitted: exact-raw-length-chunk-recomposition-stored-full-checksum-bytes-and-source-typed-diagnostic-verdict-equality
+    noncommitted_checksum_or_decode_validity: not-required-when-the-source-typed-diagnostic-is-corrupt
+  finalization_order:
+    - validate-complete-shadow-projection
+    - drop-legacy-objects
+    - create-exact-final-canonical-ddl-objects
+    - bounded-copy-shadow-data-without-physical-format-marker
+    - validate-final-schema-data-and-row-class-projections
+    - drop-all-shadow-objects
+    - insert-exact-v3-physical-format-marker-last
+    - revalidate-exact-six-statement-ddl-four-metadata-rows-and-full-final-census
+    - commit
+  cold_reopen_ddl_digest: exact-current-v3-canonical-ddl-digest
+  process_state_and_pins: update-only-after-database-commit
+  payload_preservation:
+    schema-version: unchanged-per-publication-v1-through-v5
+    physical-generation: authorized-canonical-replacement-for-committed-only-noncommitted-unchanged
+    all-other-bytes: exact
+    semantic-snapshot-publication-claim-identities: exact
+    canonical-export-and-query: exact
+  failure: precommit-error-attempts-rollback-then-uses-source_connection.precommit_failure-total-classification-logical-v2-schema-rows-payloads-metadata-and-heads-change-only-through-an-authorized-concurrent-descendant
+  commit_outcome_unknown:
+    action: discard-connection-and-candidate-process-state-confirm-close-then-run-transaction.recovery_model.terminal_reclassification-close-non-ok-quarantines-and-poisons-without-reopen
+    close_non_ok_or_unknown: return-store.sqlite-failure-migration-recovery-opaque-quarantine-connection-retain-runtime-and-vfs-pins-and-poison-result-operations-reopen-required
+    recovery_receipt:
+      profile: transaction.recovery_model.terminal_reclassification.sealed_receipt_profiles.post_format_candidate
+      fields: [canonical-locator-and-vfs, anchored-main-open-object-identity-and-directory-entry-binding, exact-length-framed-pre-v2-authority-state-projection-bytes-and-digest, exact-length-framed-deterministic-expected-v3-migration-projection-bytes-and-digest, candidate-migration-id]
+      lifetime: process-local-until-recovery-classification
+    valid_descendant_rule:
+      main_object_identity: exact-same-anchored-open-object-and-directory-entry-binding
+      validated_v2: authorized-descendant-algebra-proof-with-only-legacy-v2-publish-or-nonempty-legacy-v2-compact-operators-and-no-migration-edge
+      validated_v3: authorized-descendant-algebra-proof-with-exactly-one-migrate-v2-v3-edge-followed-only-by-v3-publish-or-nonempty-v3-compact-operators
+      base_committed_publications: canonical-schema-version-and-payload-bytes-are-exact-except-the-authorized-physical-generation-replacement-and-its-derived-checksum-length-count-and-chunks
+      base_diagnostic_rows: exact-every-source-v2-row-column-publication-id-series-id-snapshot-id-sequence-generation-parent-state-checksum-and-raw-payload-plus-the-deterministically-derived-v3-row-length-count-and-owned-chunk-projection-without-repair
+      deletion-nongeneration-rewrite-nonancestor-head-or-main-replacement: not-a-descendant
+    validated_v2_descendant_result:
+      precondition: exact-pre-v2-state-or-authorized-v2-concurrent-publish-or-whole-compaction-descendant
+      code: store.sqlite-failure
+      field: database
+      detail: opaque
+    validated_v3_descendant_result:
+      precondition: exact-expected-v3-state-or-authorized-v3-concurrent-publication-or-whole-compaction-descendant-at-the-same-main-object-identity-locator-and-vfs
+      outcome: recovered-success
+    valid_non_descendant_source_or_target:
+      code: store.sqlite-failure
+      field: migration-recovery
+      detail: concurrent-authority-change
+    invalid_source_or_target_census:
+      code: store.corrupt
+      field: migration-recovery
+      detail: unexpected-census
+    mixed_unknown_or_ambiguous:
+      code: store.corrupt
+      field: migration-recovery
+      detail: mixed-or-ambiguous
+    post_classification_state:
+      validated_v2_exact_or_descendant: install-independently-validated-reopened-v2-read-only-state-before-returning-database-opaque
+      validated_v3_expected_or_descendant: install-independently-validated-reopened-current-v3-state-before-returning-recovered-success
+      valid_non_descendant: poison-result-operations-reopen-required-and-preserve-last-validated-compatibility-live-pin-count-and-old-handles
+      invalid_or_mixed: poison-result-operations-reopen-required-and-preserve-last-validated-compatibility-live-pin-count-and-old-handles
+    implicit-retry-write: forbidden
+  reopen_failure:
+    compact_result: {code: store.sqlite-failure, field: migration-recovery, detail: opaque}
+    store_instance_state: poisoned-no-result-operation-reads-or-writes-candidate-or-stale-process-state
+    subsequent_result_operation: {code: store.backend-unavailable, field: sqlite-connection, detail: reopen-required}
+    compatibility: last-independently-validated-source-tuple-with-direct-open-false
+    retained_generation_count: exact-live-preexisting-process-pin-count
+    preexisting_handles_and_cursors: remain-valid-under-original-process-generation-pins
+    recovery: caller-opens-a-new-snapshot-store-instance
+  concurrent_migrator:
+    format_recheck: inside-begin-immediate
+    already_v3: use-source_connection.observed_already_v3-and-return-recovered-success-only-after-exact-main-identity-sidecar-aware-reopen-and-full-validation
+    reopen_failure: poison-result-operations-reopen-required-and-return-store.sqlite-failure-migration-recovery-opaque
+    stale_v2_writer: fence-before-publication-or-schema-write
 compaction:
   algorithm: copy-on-write-physical-generation
   reader_pin: shared-generation-token
+  established_anchor: eager-current-v3-all-semantic-and-diagnostic-rows-heads-locator-vfs-and-file-identity
+  locked_precondition: exact-or-valid-descendant-of-established-anchor-before-first-compaction-write
+  valid_non_descendant_before_write: {code: store.sqlite-failure, field: compaction-source, detail: concurrent-authority-change}
+  authority_census: all-committed-publications-durable-heads-and-diagnostic-noncommitted-rows-inside-begin-immediate
+  replacement_order: prior-publication-sequence-then-prior-physical-generation-then-publication-id
+  generation_allocation:
+    authority: snapshot-shared-fully-validated-committed-generation-allocator
+    committed_nonempty: checked-range-from-prior-fully-validated-committed-maximum-plus-one-through-that-maximum-plus-committed-row-count-in-replacement-order
+    committed_empty: allocate-no-range
+    excluded: noncommitted-diagnostic-and-corrupt-rows
+  zero_committed_authority_operation:
+    precondition: begin-immediate-full-mutation-census-proves-zero-fully-validated-committed-publications
+    common_action: perform-no-schema-metadata-row-chunk-head-or-counter-write-and-do-not-call-commit
+    filesystem_success: rollback-finalize-confirm-close-run-total-terminal-reclassification-and-only-an-exact-or-authorized-v3-descendant-installs-the-independent-state-and-returns-compact-success
+    ephemeral_memory_success: successful-rollback-and-finalization-plus-a-healthy-sole-connection-retain-that-connection-without-close-or-terminal-reclassification-and-return-compact-success
+    filesystem_close_non_ok_or_reclassification_failure: quarantine-or-poison-and-return-store.sqlite-failure-compaction-recovery-opaque
+    ephemeral_memory_rollback-finalize-or-health-failure: finalize-and-attempt-exactly-one-close-v2-close-ok-discards-the-sole-database-close-non-ok-quarantines-the-connection-and-runtime-vfs-pins-poison-store-and-return-store.sqlite-failure-compaction-recovery-opaque-with-no-receipt-reopen-or-reclassifier
+    ordinary_commit_outcome_unknown_branch: unreachable
+  chunk_construction: committed-new-generation-before-current-locator-swap
+  noncommitted_rows_and_chunks: preserve-byte-exact-with-original-generation-and-source-typed-diagnostic-classification
+  durable_old_chunk_reclamation: inside-same-transaction-after-validated-locator-swap
   semantic_digest_revalidation: required
   semantic_object_graph_revalidation: required
+  process_memory_update: only-after-database-commit
+  decoded_process_generation_reclamation: after-last-process-pin
+  durable_retired_generation_after_commit: forbidden
+  failure:
+    rollback_confirmed_and_connection_healthy: preserve-complete-prior-generation-set-and-return-the-original-precommit-error
+    rollback_or_close_uncertain:
+      filesystem_rollback_uncertain_close_confirmed: discard-candidate-state-and-run-transaction.recovery_model.terminal_reclassification
+      ephemeral_memory_rollback-finalize-or-connection-health-uncertain: finalize-and-attempt-exactly-one-close-v2-close-ok-discards-the-sole-connection-close-non-ok-quarantines-it-and-runtime-vfs-pins-with-no-filesystem-receipt-reopen-or-terminal-reclassifier-return-store.sqlite-failure-compaction-recovery-opaque-and-poison-the-store
+      close_non_ok_or_unknown: quarantine-connection-do-not-reopen-or-unregister-vfs-and-poison-with-store.sqlite-failure-compaction-recovery-opaque
+      authorized_descendant_with-at-least-one-v3-compact-edge: install-independently-validated-current-v3-state-and-return-compact-success
+      exact_pre_or_authorized_descendant-with-no-v3-compact-edge: install-independently-validated-current-v3-state-and-return-the-original-precommit-error
+      valid_non_descendant_invalid_observation_or_reopen_failure: return-store.sqlite-failure-compaction-recovery-opaque-and-poison-result-operations-reopen-required-while-preserving-last-validated-compatibility-live-pin-count-and-old-handles
+      implicit_retry_write: forbidden
+  commit_outcome_unknown:
+    recovery_receipt:
+      profile: transaction.recovery_model.terminal_reclassification.sealed_receipt_profiles.post_format_candidate
+      fields: [canonical-locator-and-vfs, anchored-main-open-object-identity-and-directory-entry-binding, exact-length-framed-pre-v3-authority-state-projection-bytes-and-digest, exact-length-framed-locked-census-and-deterministic-expected-v3-compaction-projection-bytes-and-digest, candidate-compaction-id]
+      lifetime: process-local-until-recovery-classification
+    filesystem_action: discard-connection-and-candidate-process-state-confirm-close-then-run-transaction.recovery_model.terminal_reclassification-close-non-ok-quarantines-and-poisons-without-reopen
+    close_non_ok_or_unknown: return-store.sqlite-failure-compaction-recovery-opaque-quarantine-connection-retain-runtime-and-vfs-pins-and-poison-result-operations-reopen-required
+    exact_descendant_classifier:
+      authority: transaction.recovery_model.authorized_descendant_algebra-with-exact-same-main-object-identity-and-v3-only-operator-witness
+      base_committed_publications: exact-every-persisted-identity-parent-sequence-state-and-canonical-payload-schema-and-bytes-except-authorized-physical-generation-replacement-and-derived-generation-checksum-length-count-and-owned-chunks
+      base_diagnostic_rows: byte-and-value-exact-every-persisted-row-column-publication-id-series-id-snapshot-id-sequence-generation-parent-state-payload-checksum-payload-byte-count-payload-chunk-count-and-exact-owned-chunk-primary-key-offset-count-checksum-payload-bytes
+      base_heads: each-pre-compaction-head-is-equal-to-or-a-valid-parent-chain-ancestor-of-the-reopened-head
+      additions: complete-valid-committed-authority-publications-only-diagnostic-row-add-delete-or-rewrite-forbidden
+      authorized_publish_transition: append-only-valid-publication-plus-head-cas-with-no-existing-row-rewrite
+      authorized_compaction_transition: all-then-committed-publications-rewritten-in-canonical-replacement-order-to-one-checked-distinct-contiguous-generation-range-above-the-prior-committed-maximum-with-identical-logical-projections
+      expected_or_later_compacted: exact-receipt-expected-candidate-projection-is-sufficient-even-when-the-open-time-pre-anchor-was-empty-otherwise-the-authorized-normal-form-from-the-pre-anchor-must-contain-a-nonempty-whole-authority-compaction-edge-and-causal-authorship-is-not-required
+      pre_or_valid_uncompacted: exact-pre-state-followed-by-zero-or-more-authorized-publish-transitions-and-no-whole-authority-compaction-transition
+      observable_compaction: exact-expected-candidate-projection-or-at-least-one-positive-population-v3-compact-run-count-over-the-receipt-locked-census-the-witness-need-not-contain-an-open-time-pre-anchor-row
+      forbidden: [committed-or-diagnostic-row-deletion, semantic-or-diagnostic-rewrite, nonancestor-head, partial-generation-replacement, noncontiguous-generation-transition, retired-or-unowned-chunk]
+    expected_or_later_compacted_valid_descendant: recovered-success
+    exact_pre_or_valid_uncompacted_descendant: {code: store.sqlite-failure, field: database, detail: opaque}
+    valid_non_descendant: {code: store.sqlite-failure, field: compaction-recovery, detail: concurrent-authority-change}
+    invalid_census: {code: store.corrupt, field: compaction-recovery, detail: unexpected-census}
+    mixed_or_ambiguous: {code: store.corrupt, field: compaction-recovery, detail: mixed-or-ambiguous}
+    post_classification_state:
+      expected_or_later_compacted: install-independently-validated-reopened-current-v3-state-before-recovered-success
+      exact_pre_or_valid_uncompacted: install-independently-validated-reopened-current-v3-state-before-database-opaque
+      valid_non_descendant_or_invalid_or_mixed: poison-result-operations-reopen-required-and-preserve-last-validated-compatibility-live-pin-count-and-old-handles
+    ephemeral_memory: for-a-nonzero-write-attempt-or-any-commit-rollback-finalize-or-connection-health-uncertainty-discard-connection-poison-store-and-return-store.sqlite-failure-compaction-recovery-opaque-the-zero-authority-healthy-rollback-path-is-the-explicit-no-close-exception
+    implicit_retry_write: forbidden
+  reopen_failure:
+    compact_result: {code: store.sqlite-failure, field: compaction-recovery, detail: opaque}
+    store_instance_state: poisoned-no-result-operation-reads-or-writes-candidate-or-stale-process-state
+    subsequent_result_operation: {code: store.backend-unavailable, field: sqlite-connection, detail: reopen-required}
+    compatibility: last-independently-validated-source-tuple-with-direct-open-false
+    retained_generation_count: exact-live-preexisting-process-pin-count
+    preexisting_handles_and_cursors: remain-valid-under-original-process-generation-pins
+    recovery: caller-opens-a-new-snapshot-store-instance
 corruption:
+  chunk_rejection:
+    - missing
+    - extra
+    - duplicate
+    - orphan
+    - wrong-generation
+    - ordinal-gap-or-reorder
+    - offset-drift
+    - zero-or-oversize
+    - row-length-drift
+    - chunk-checksum-drift
+    - logical-length-drift
+    - full-checksum-drift
+    - semantic-tamper-with-recomputed-checksums
   checksum_mismatch: mark-publication-corrupt
   semantic_digest_mismatch: mark-publication-corrupt
   semantic_object_graph_mismatch: mark-publication-corrupt
+  classification_order:
+    - exact-schema-and-user-object-census
+    - structural-publication-and-chunk-owner-or-orphan-census
+    - publication-local-current-generation-chunk-full-checksum-and-semantic-verdict
+    - fully-validated-committed-authority-only-global-generation-uniqueness-and-retired-census
+  publication_local_chunk_defects: [missing, extra-current-generation, duplicate, ordinal-gap-or-reorder, offset-drift, zero-or-oversize, row-length-drift, chunk-checksum-drift, logical-length-drift, full-checksum-drift, semantic-tamper-with-recomputed-checksums]
+  publication_local_result:
+    retention: retain-and-mark-publication-corrupt
+    current: store.current-corrupt
+    snapshot: store.snapshot-corrupt
+    publication: store.publication-corrupt
+    explicit_intact_prior_open: allowed
+  global_chunk_authority_defects: [chunk-without-exact-publication-id-and-row-generation-owner, fully-validated-committed-noncurrent-or-retired-generation, duplicate-generation-among-fully-validated-committed-authority-publications]
+  corrupt_committed_row_generation_collision: retained-publication-local-corrupt-and-excluded-from-global-generation-authority
+  diagnostic_generation_collision: allowed-across-noncommitted-and-committed-publications-when-each-chunk-is-publication-local-and-the-diagnostic-row-is-otherwise-exactly-preserved
+  global_chunk_authority_result: {code: store.corrupt, field: sqlite-chunk-authority, detail: global-orphan-retired-or-duplicate-committed-generation}
+  compact_corrupt_committed_result:
+    applies_to: [v2-migration, v3-ordinary-compaction]
+    first_offender_order: prior-publication-sequence-then-prior-physical-generation-then-publication-id
+    result: {code: store.compact-validation-failed, field: offending-publication-id, detail: ''}
+  mixed-v2-v3-layout-or-marker: store.corrupt
   current_fallback: forbidden
   explicit_intact_prior_open: allowed
+public_error_set:
+  additive:
+    - code: store.migration-required
+      field: sqlite-physical-format
+      detail: cxxlens.sqlite-semantic-store.v2-to-v3
+  unchanged_signature_and_success_semantics: true
+materializer_binding:
+  implicit_migration: forbidden
+  v2_failure_phase: store-stage-after-read-only-open-and-head-observation
+  authenticated_operation: writer_begin
+  public_mapping: materialization.store-failure
+  effects: [logical-draft-discarded, publication-not-attempted, committed-transaction-count-zero]
+release_binding:
+  snapshot_format_axis: release-capability-bundle-version-3.0.0-with-backend-qualified-features-not-a-direct-store-readable-format-tuple
+  direct_store_compatibility: remains-backend-qualified-memory-2.6.0-or-sqlite-v3-v2-predecessor-and-is-not-substituted-for-axis-version
+  required_sqlite_evidence:
+    - current-v3.0.0-cold-reopen
+    - v2.6.0-read-only-zero-mutation
+    - compact-v2.6.0-to-v3.0.0-same-semantic-digest
+    - limit-length-exceeding-valid-canonical-v5-reopened-parity
+  qualification_report:
+    authority_state: planned-schema-shape-only-not-release-qualification-until-implementation
+    schema: schemas/cxxlens_ng_sqlite_store_v3_qualification_report.schema.yaml
+    artifact: cxxlens-ng-sqlite-store-v3-qualification-${revision}
+    revision_binding: exact-revision-source-tree-and-sqlite-contract-digest
+    activation_requires: producer-independent-relational-validator-negative-tests-exact-schema-checker-and-report-set-digests-measurements-and-atomic-gr-release-binding
+  matrix: exact-static-shared-by-memory-sqlite
+  v2_migration_evidence_implies_v2_write_support: false

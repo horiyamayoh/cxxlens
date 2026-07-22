@@ -28,10 +28,10 @@ version_contracts:
   condition_semantics: finite-canonical-alternative-set-ng0
   logical_query_ir: 1.1.0
   query_runtime: 1.0.0
-  provider_protocol: 1.0.0
+  provider_protocol: 1.1.0
   snapshot_identity: 1.0.0
   snapshot_payload: cxxlens.ng-snapshot-payload.v5
-  sqlite_physical_format: 2.6.0
+  sqlite_physical_format: 3.0.0
   recipe_semantics: cxxlens.recipes.calls_to_function-1.2.0
 authority_documents:
   - docs/design/cxxlens_next_generation_integrated_design_ja.md

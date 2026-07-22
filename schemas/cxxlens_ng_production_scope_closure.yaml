@@ -1,5 +1,5 @@
 schema: cxxlens.ng-production-scope-closure.v1
-document_version: 1.2.0
+document_version: 1.2.1
 maturity: accepted-contract
 authority:
   design: docs/design/cxxlens_next_generation_integrated_design_ja.md
@@ -21,7 +21,7 @@ source_contracts:
   - schemas/cxxlens_ng_release_bundle.yaml
   - schemas/cxxlens_ng_release_qualification.yaml
   - schemas/cxxlens_ng_security_profile.yaml
-authority_census_digest: sha256:a8c304024b6921efee1d9b3a22ce603cd3769346a2f1128d0f996151d5a2cdb8
+authority_census_digest: sha256:eea20387b23ddae1554fbc5ad4f41fa2ac00c305aa2b3db87e15a59f9d16d167
 assignments:
   - id: scope.qualified-baseline
     owner_issue: '#179'
@@ -228,8 +228,8 @@ assignments:
     qualification: tracked-gap
     gap:
       finding: scope.tracked-gap.clang22-installed-adoption
-      remediation: Complete installed actual-source worker output adoption with tool-private independent all-or-none span-bundle validation, publication, and query evidence; do not claim generic relation-row reference enforcement.
-    feedback: [DF-0182, DF-0187]
+      remediation: Implement the accepted DF-0195 through DF-0199 sealed-evidence, measured-occurrence, authenticated-streaming, head-observation, and canonical-Base64 authority; resolve DF-0200 bounded claim/Store staging; then complete installed actual-source worker output adoption with exact publication and query evidence; do not claim generic relation-row reference enforcement.
+    feedback: [DF-0182, DF-0187, DF-0191, DF-0192, DF-0195, DF-0196, DF-0197, DF-0198, DF-0199, DF-0200]
     surfaces:
       - {domain: distribution.consumer-configuration, id: shared/real-project}
       - {domain: distribution.consumer-configuration, id: static/real-project}
@@ -241,9 +241,19 @@ assignments:
       - {domain: provider.production-tuple-template, id: static/cc.call_direct_target@1}
       - {domain: provider.production-tuple-template, id: static/cc.call_site@1}
       - {domain: provider.production-tuple-template, id: static/cc.entity@1}
+      - {domain: provider.profile-feature, id: NG0/task-input-chunks-v1}
       - {domain: relation.descriptor, id: frontend.clang22.call_observation.v2}
       - {domain: relation.descriptor, id: frontend.clang22.entity_observation.v2}
       - {domain: relation.descriptor, id: frontend.clang22.type_observation.v2}
+  - id: scope.sqlite-store-v3-gap
+    owner_issue: '#181'
+    scope: included
+    qualification: tracked-gap
+    gap:
+      finding: scope.tracked-gap.sqlite-store-v3
+      remediation: Complete the SQLite v3 implementation and independent qualification, bind its exact report into release evaluation and GR, and promote the catalog entry from contract-pending only with exact evidence.
+    surfaces:
+      - {domain: public.catalog-entry, id: public.snapshot-store-sqlite-v3}
   - id: scope.ng1-provider-hardening-gap
     owner_issue: '#183'
     scope: included

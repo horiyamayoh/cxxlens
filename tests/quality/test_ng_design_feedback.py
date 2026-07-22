@@ -79,7 +79,7 @@ class NgDesignFeedbackTest(unittest.TestCase):
         return root
 
     @staticmethod
-    def metadata(number: int = 200) -> dict:
+    def metadata(number: int = 300) -> dict:
         return {
             "id": f"DF-{number:04d}",
             "title": "Synthetic design observation",
@@ -183,20 +183,20 @@ class NgDesignFeedbackTest(unittest.TestCase):
                 identifiers = {
                     record.metadata["id"] for record in validate_documents(root)
                 }
-                self.assertIn("DF-0200", identifiers)
+                self.assertIn("DF-0300", identifiers)
 
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
-            successor = self.metadata(201)
+            successor = self.metadata(301)
             self.write_record(root, successor, slug="successor")
-            original = self.metadata(200)
-            original.update({"status": "superseded", "superseded_by": "DF-0201"})
+            original = self.metadata(300)
+            original.update({"status": "superseded", "superseded_by": "DF-0301"})
             self.write_record(root, original)
             self.refresh_index(root)
             identifiers = {
                 record.metadata["id"] for record in validate_documents(root)
             }
-            self.assertTrue({"DF-0200", "DF-0201"}.issubset(identifiers))
+            self.assertTrue({"DF-0300", "DF-0301"}.issubset(identifiers))
 
     def test_duplicate_id_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -220,11 +220,11 @@ class NgDesignFeedbackTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
             metadata = self.metadata()
-            metadata["id"] = "DF-000200"
+            metadata["id"] = "DF-000300"
             path = self.write_record(root, metadata)
-            canonical_name = path.with_name("df-000200-synthetic.md")
+            canonical_name = path.with_name("df-000300-synthetic.md")
             path.rename(canonical_name)
-            with self.assertRaisesRegex(DesignFeedbackError, "expected DF-0200"):
+            with self.assertRaisesRegex(DesignFeedbackError, "expected DF-0300"):
                 load_records(root)
 
     def test_missing_section_is_rejected(self) -> None:
@@ -335,7 +335,7 @@ class NgDesignFeedbackTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
             metadata = self.metadata()
-            metadata.update({"status": "superseded", "superseded_by": "DF-0201"})
+            metadata.update({"status": "superseded", "superseded_by": "DF-0301"})
             self.write_record(root, metadata)
             with self.assertRaisesRegex(DesignFeedbackError, "no distinct successor"):
                 load_records(root)
@@ -389,18 +389,18 @@ class NgDesignFeedbackTest(unittest.TestCase):
                 load_records(root)
 
             metadata["review"]["refs"] = [
-                "https://github.com/example/cxxlens/issues/200#issuecomment-1"
+                "https://github.com/example/cxxlens/issues/300#issuecomment-1"
             ]
             self.write_record(root, metadata)
             with self.assertRaisesRegex(DesignFeedbackError, "review refs are invalid"):
                 load_records(root)
 
             metadata["review"]["refs"] = [
-                "https://github.com/horiyamayoh/cxxlens/issues/200#issuecomment-1"
+                "https://github.com/horiyamayoh/cxxlens/issues/300#issuecomment-1"
             ]
             self.write_record(root, metadata)
             identifiers = {record.metadata["id"] for record in load_records(root)}
-            self.assertIn("DF-0200", identifiers)
+            self.assertIn("DF-0300", identifiers)
 
     def test_issue_ready_rejects_unresolved_blocker(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -415,13 +415,13 @@ class NgDesignFeedbackTest(unittest.TestCase):
             metadata["status"] = "rejected"
             metadata["implementation_disposition"] = "may-proceed"
             self.write_record(root, metadata)
-            self.assertEqual(validate_issue_ready(load_records(root), "#300"), ["DF-0200"])
+            self.assertEqual(validate_issue_ready(load_records(root), "#300"), ["DF-0300"])
 
     def test_issue_ready_accepts_nonblocking_open_record(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = self.copied_root(temporary)
             self.write_record(root, self.metadata())
-            self.assertEqual(validate_issue_ready(load_records(root), "#300"), ["DF-0200"])
+            self.assertEqual(validate_issue_ready(load_records(root), "#300"), ["DF-0300"])
 
     def test_stale_index_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
