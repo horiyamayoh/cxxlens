@@ -1526,7 +1526,7 @@ allocator:
   - fully_qualified_name: cxxlens::source::relations::span::span_column::ref
     callable_kind: static
     next_overload_slot: 1
-inventory_digest: sha256:afa2825147c57f65a3e6a044505d82088a95ba79c51099a8c444a3f1dce07556
+inventory_digest: sha256:25bf406959228b6f6f373f15795c0a7f016c395ad682732ed815befb160b3c78
 callables:
 - id: cpp.callable.00100ca7a0bda4b73503b24a4e6f6d33be47b954c7553cab8f70e85f9e77f492
   identity:
@@ -1884,7 +1884,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -2087,7 +2087,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -2848,7 +2848,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -3056,7 +3056,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -3306,7 +3306,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -6415,7 +6415,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -6468,7 +6468,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -6573,7 +6573,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -6723,7 +6723,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -6931,7 +6931,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -7241,7 +7241,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -7452,7 +7452,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -7756,7 +7756,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -8017,7 +8017,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -8169,7 +8169,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -8423,7 +8423,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -8776,7 +8776,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -8934,7 +8934,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -9296,7 +9296,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -11118,7 +11118,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -11282,7 +11282,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -11391,7 +11391,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -11444,7 +11444,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -11654,7 +11654,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -11862,7 +11862,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -12016,7 +12016,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -12065,7 +12065,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -13300,7 +13300,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -13832,7 +13832,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -14040,7 +14040,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -14090,7 +14090,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -15110,7 +15110,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -15333,7 +15333,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -17146,7 +17146,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -17410,7 +17410,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -17615,7 +17615,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -18633,7 +18633,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -18938,7 +18938,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -18987,7 +18987,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -19799,7 +19799,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -19952,7 +19952,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -20104,7 +20104,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -20203,7 +20203,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -20252,7 +20252,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -21172,7 +21172,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -21221,7 +21221,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -22056,7 +22056,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -22213,7 +22213,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -22468,7 +22468,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -22571,7 +22571,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -22888,7 +22888,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -22990,7 +22990,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -23198,7 +23198,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -23980,7 +23980,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -24185,7 +24185,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -24237,7 +24237,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -24851,7 +24851,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -25450,7 +25450,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -25920,7 +25920,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -26226,7 +26226,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -26990,7 +26990,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -27091,7 +27091,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -27196,7 +27196,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -27406,7 +27406,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -27927,7 +27927,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -28092,7 +28092,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -28575,7 +28575,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
@@ -28728,7 +28728,7 @@ callables:
   qualification: NG0
   owner: '#148'
   evidence:
-    catalog_digest: sha256:8f66365629e5b106b79d80bda430ec5e63691db4f562f1ab76e1fffe555e47b8
+    catalog_digest: sha256:c54a569f98028a8b9e4fa84ebc14657703946c5787848a9db7b2445dc6bcf0da
     implementation: src/sdk/store.cpp
     test: tests/unit/sdk/store_test.cpp
     example: examples/sdk/snapshot_store.cpp
