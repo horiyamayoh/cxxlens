@@ -330,6 +330,14 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
+                "source-shm-target-direct-entry-gate",
+                lambda value: value["compatibility"]["predecessor_v2"]
+                ["read_path_strategy"]["active_wal"]
+                ["source_shm_readonly_capability"]["target_namespace_epoch"].pop(
+                    "entry_kind_gate"
+                ),
+            ),
+            (
                 "source-shm-target-no-logical-reresolution",
                 lambda value: value["compatibility"]["predecessor_v2"]
                 ["read_path_strategy"]["active_wal"]

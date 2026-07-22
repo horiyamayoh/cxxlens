@@ -659,6 +659,7 @@ $defs:
                 start: after-qualification-before-target-xFullPathname-or-xOpen
                 native_resolution: main-wal-and-shm-resolve-only-through-one-retained-parent-fd-anchored-locator-while-logical-canonical-uri-remains-the-callback-authority
                 entry_kind: main-wal-and-shm-must-be-direct-regular-parent-directory-entries-with-no-symlink-or-other-indirection
+                entry_kind_gate: seal-and-validate-in-bound-source-census-before-main-header-or-any-other-target-source-read-and-before-native-callback
                 logical_host_reresolution: forbidden-after-epoch-start-native-resolution-and-census-use-only-retained-parent-fd-and-held-object-receipts
                 watch: namespace-only-create-delete-move-self-ignored-and-queue-overflow-no-content-modify-or-attrib
                 validation: before-and-after-native-map-and-before-eager-read-transaction-end-with-fd-relative-exact-census

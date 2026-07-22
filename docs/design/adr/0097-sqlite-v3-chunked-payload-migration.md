@@ -169,7 +169,8 @@ locator だけへ内部投影する。target `xFullPathname` 前から eager dec
 create/delete/move/self/watch-loss/queue-overflow を監視し、外部 writer の content modify/attrib は監視対象から除外する。native map
 前後に fd-relative exact census と watch を検査し、event、loss、identity drift は native mapping を non-removing unmapして fail closed
 とする。target main/WAL/SHM は retained parent directory の direct regular entry に限定し、symlink その他の間接参照は native
-callback 前に拒否する。leaf/ancestor の A-to-B-to-A は endpoint identity が復元しても受理しない。
+callback 前に拒否する。この direct-entry proof は bound source census に seal し、main header oracle その他の target source read より前に
+検証する。leaf/ancestor の A-to-B-to-A は endpoint identity が復元しても受理しない。
 epoch 開始後は logical host path を census や identity receipt のためにも再解決せず、retained parent-fd と held object receipt だけを使う。
 
 forwarding `xShmMap` は native VFS の最初と後続すべての `extend=0` call を delegateする。caller の `extend=1` も最初と後続の

@@ -157,7 +157,8 @@ exposing an internal stage.
 
 Keep the logical target URI canonical, but project native main/WAL/SHM resolution through one
 receipt-bound retained parent descriptor. Require each target main/WAL/SHM leaf to be a direct
-regular directory entry; reject symlinks and other indirection before any native callback. Hold a namespace-only watch from before target
+regular directory entry. Seal that proof in the bound source census and validate it before the
+main-header oracle or any other target read; reject symlinks and other indirection again before any native callback. Hold a namespace-only watch from before target
 `xFullPathname`/`xOpen` through the end of eager decode, excluding content modification and
 attribute events that a legitimate writer may produce. Check the watch and an fd-relative exact
 census before and after native map delegation and before accepting the decoded state. A watch
@@ -248,6 +249,8 @@ the implementation and this exact strengthening remains required before release 
 not constrain a leaf symlink's target ancestry. Option A therefore accepts only direct regular
 main/WAL/SHM entries. A stable symlink or symlink-target A-to-B-to-A must fail before native access;
 this is a fail-closed narrowing of the same capability, not a new fallback or public surface.
+The direct-entry proof is required before the pre-qualification header oracle so a rejected
+indirection cannot be read first and rejected only when the target epoch is created.
 
 2026-07-22: The same review found logical-path identity rechecks in the forwarding VFS and Store
 after the retained epoch began. Those checks could touch a transient replacement namespace even

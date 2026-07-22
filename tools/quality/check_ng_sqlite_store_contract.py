@@ -27,14 +27,14 @@ SNAPSHOT_CONTRACT = pathlib.Path(
 # independent of the schema so a coordinated contract/schema weakening remains
 # fail closed while formatting-only YAML changes remain non-semantic.
 EXPECTED_CONTRACT_DIGEST = (
-    "sha256:49af966fa5a7500ad0899ac6f4b1bb3c396fbf68b72facaede602a3163bf457a"
+    "sha256:4c5d624133aedc693d19a5846efc77805017b5fd8d7f684ebd0582d867419292"
 )
 EXPECTED_SCHEMA_DIGEST = (
-    "sha256:a363b2b1c6468e815b84de167dc8f52e46e951d5476f9dc1577e0cdaeaf1dc40"
+    "sha256:5361a6ccfd87fe1dc1591f75d4ec8c75b5d2b8eab1a70a38db8890215c886192"
 )
 
 EXPECTED_SNAPSHOT_BINDING = (
-    "sha256:8c5926ee791c049411ffb1a1823d8a62d2de3e0035a866e39e6f7342d537fc46"
+    "sha256:4aa9eb36968e5d53f443a761660d1343d3c2388553d8e147b729c85630f6db2b"
 )
 
 SOURCE_SHM_READONLY_CAPABILITY: dict[str, Any] = {
@@ -141,6 +141,10 @@ SOURCE_SHM_READONLY_CAPABILITY: dict[str, Any] = {
         "entry_kind": (
             "main-wal-and-shm-must-be-direct-regular-parent-directory-entries-with-"
             "no-symlink-or-other-indirection"
+        ),
+        "entry_kind_gate": (
+            "seal-and-validate-in-bound-source-census-before-main-header-or-any-other-"
+            "target-source-read-and-before-native-callback"
         ),
         "logical_host_reresolution": (
             "forbidden-after-epoch-start-native-resolution-and-census-use-only-"
