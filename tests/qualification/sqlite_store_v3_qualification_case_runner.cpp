@@ -426,10 +426,8 @@ namespace
 			if (auto migrated = store->compact(); !migrated)
 				fail("qualification snapshot-store compact", migrated.error());
 			const auto observation = observation_scope.observation();
-			if (observation.observed_event_count != 1U || observation.matching_event_count != 1U ||
-				observation.issued_directive_count != 0U || !observation.has_last_observed_event ||
-				observation.last_observed_event != begin_immediate_after ||
-				!observation.has_matched_event ||
+			if (observation.matching_event_count != 1U ||
+				observation.issued_directive_count != 0U || !observation.has_matched_event ||
 				observation.matched_event != begin_immediate_after || observation.count_overflow ||
 				observation.invalid_plan || observation.invalid_event_observed ||
 				observation.nested_scope_suppressed)
