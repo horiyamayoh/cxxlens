@@ -10,6 +10,8 @@ namespace cxxlens::sdk
 	enum class sqlite_store_fault_boundary : std::uint8_t
 	{
 		transaction_begin,
+		wal_coordination,
+		journal_transition,
 		ddl_object,
 		metadata_row,
 		payload_chunk,
@@ -116,6 +118,8 @@ namespace cxxlens::sdk
 			switch (value)
 			{
 				case sqlite_store_fault_boundary::transaction_begin:
+				case sqlite_store_fault_boundary::wal_coordination:
+				case sqlite_store_fault_boundary::journal_transition:
 				case sqlite_store_fault_boundary::ddl_object:
 				case sqlite_store_fault_boundary::metadata_row:
 				case sqlite_store_fault_boundary::payload_chunk:

@@ -91,6 +91,56 @@ namespace
 		constexpr auto no_store = sqlite_terminal_state_effect::return_no_store;
 		constexpr auto install = sqlite_terminal_state_effect::install_authorized_state;
 		require_resolution({sqlite_store_operation::fresh_initialization,
+							sqlite_terminal_phase::journal_transition,
+							sqlite_terminal_cause::triggering_failure,
+							sqlite_terminal_class::exact_logical_empty},
+						   sqlite_terminal_public_result::initialization_recovery_opaque,
+						   no_store,
+						   "fresh journal-transition exact-empty state was not opaque");
+		require_resolution({sqlite_store_operation::fresh_initialization,
+							sqlite_terminal_phase::journal_transition,
+							sqlite_terminal_cause::triggering_failure,
+							sqlite_terminal_class::authorized_post_state_with_operation_edge},
+						   sqlite_terminal_public_result::recovered_success,
+						   install,
+						   "fresh journal-transition expected-v3 state did not recover success");
+		require_resolution({sqlite_store_operation::fresh_initialization,
+							sqlite_terminal_phase::journal_transition,
+							sqlite_terminal_cause::triggering_failure,
+							sqlite_terminal_class::authorized_post_state_without_operation_edge},
+						   sqlite_terminal_public_result::initialization_recovery_opaque,
+						   no_store,
+						   "fresh journal-transition inferred success without its operation edge");
+		require_resolution(
+			{sqlite_store_operation::fresh_initialization,
+			 sqlite_terminal_phase::journal_transition,
+			 sqlite_terminal_cause::triggering_failure,
+			 sqlite_terminal_class::valid_non_descendant},
+			sqlite_terminal_public_result::initialization_concurrent_authority_change,
+			no_store,
+			"fresh journal-transition non-descendant lost its typed result");
+		require_resolution({sqlite_store_operation::fresh_initialization,
+							sqlite_terminal_phase::journal_transition,
+							sqlite_terminal_cause::triggering_failure,
+							sqlite_terminal_class::invalid_census},
+						   sqlite_terminal_public_result::initialization_partial_or_mixed,
+						   no_store,
+						   "fresh journal-transition invalid census lost its typed result");
+		require_resolution({sqlite_store_operation::fresh_initialization,
+							sqlite_terminal_phase::journal_transition,
+							sqlite_terminal_cause::terminal_observation_failure,
+							sqlite_terminal_class::authorized_post_state_with_operation_edge},
+						   sqlite_terminal_public_result::initialization_recovery_opaque,
+						   no_store,
+						   "fresh journal-transition trusted an unavailable reclassifier");
+		require_resolution({sqlite_store_operation::fresh_initialization,
+							sqlite_terminal_phase::journal_transition,
+							sqlite_terminal_cause::close_non_ok_or_unknown,
+							sqlite_terminal_class::authorized_post_state_with_operation_edge},
+						   sqlite_terminal_public_result::initialization_recovery_opaque,
+						   no_store,
+						   "fresh journal-transition trusted a non-OK close");
+		require_resolution({sqlite_store_operation::fresh_initialization,
 							sqlite_terminal_phase::precommit,
 							sqlite_terminal_cause::rollback_uncertain,
 							sqlite_terminal_class::exact_logical_empty},
@@ -193,6 +243,7 @@ namespace
 		constexpr auto install = sqlite_terminal_state_effect::install_authorized_state;
 		constexpr auto poison = sqlite_terminal_state_effect::poison_result_operations;
 		constexpr std::array non_success_phases{sqlite_terminal_phase::pre_effect,
+												sqlite_terminal_phase::journal_transition,
 												sqlite_terminal_phase::precommit,
 												sqlite_terminal_phase::commit_outcome_unknown};
 		constexpr std::array authorized_classes{

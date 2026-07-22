@@ -22,6 +22,7 @@ namespace cxxlens::sdk
 	enum class sqlite_terminal_phase : std::uint8_t
 	{
 		pre_effect,
+		journal_transition,
 		precommit,
 		commit_outcome_unknown,
 		successful_handoff,

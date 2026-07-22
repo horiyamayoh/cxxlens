@@ -25,6 +25,7 @@ namespace cxxlens::sdk
 			switch (value)
 			{
 				case sqlite_terminal_phase::pre_effect:
+				case sqlite_terminal_phase::journal_transition:
 				case sqlite_terminal_phase::precommit:
 				case sqlite_terminal_phase::commit_outcome_unknown:
 				case sqlite_terminal_phase::successful_handoff:
@@ -189,6 +190,9 @@ namespace cxxlens::sdk
 				case sqlite_store_operation::fresh_initialization:
 					if (operation_edge)
 						return {sqlite_terminal_public_result::recovered_success, install};
+					if (phase == sqlite_terminal_phase::journal_transition)
+						return {sqlite_terminal_public_result::initialization_recovery_opaque,
+								sqlite_terminal_state_effect::return_no_store};
 					if (phase == sqlite_terminal_phase::precommit)
 						return {sqlite_terminal_public_result::original_trigger,
 								sqlite_terminal_state_effect::return_no_store};
@@ -311,6 +315,9 @@ namespace cxxlens::sdk
 		if (context.operation == sqlite_store_operation::fresh_initialization &&
 			terminal_class == sqlite_terminal_class::exact_logical_empty)
 		{
+			if (context.phase == sqlite_terminal_phase::journal_transition)
+				return {sqlite_terminal_public_result::initialization_recovery_opaque,
+						sqlite_terminal_state_effect::return_no_store};
 			if (context.phase == sqlite_terminal_phase::precommit)
 				return {sqlite_terminal_public_result::original_trigger,
 						sqlite_terminal_state_effect::return_no_store};

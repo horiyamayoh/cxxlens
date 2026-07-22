@@ -1,3 +1,4 @@
+#include <array>
 #include <cstdlib>
 #include <iostream>
 #include <string_view>
@@ -105,6 +106,43 @@ namespace
 					observed.issued_directive_count == 0U && observed.has_matched_event &&
 					observed.matched_event == begin_after && !observed.count_overflow,
 				"passive migration BEGIN observation did not retain its exact count");
+	}
+
+	void check_coordination_and_journal_boundaries_are_closed_and_exact()
+	{
+		constexpr std::array boundaries{sqlite_store_fault_boundary::wal_coordination,
+										sqlite_store_fault_boundary::journal_transition};
+		for (const auto boundary : boundaries)
+		{
+			const sqlite_store_fault_event before{sqlite_store_operation::fresh_initialization,
+												  boundary,
+												  sqlite_store_fault_timing::before,
+												  1U,
+												  1U};
+			const auto after = sqlite_store_fault_event{
+				before.operation, boundary, sqlite_store_fault_timing::after, 1U, 1U};
+			require(valid_sqlite_store_fault_event(before) &&
+						valid_sqlite_store_fault_plan(
+							{before, sqlite_store_fault_action::report_failure}) &&
+						valid_sqlite_store_fault_plan(
+							{after, sqlite_store_fault_action::report_failure_after_delegate}),
+					"typed coordination or journal transition boundary was not admissible");
+			{
+				sqlite_store_fault_scope scope{{before, sqlite_store_fault_action::report_failure}};
+				require(dispatch_sqlite_store_fault(before).issued &&
+							!dispatch_sqlite_store_fault(after).issued &&
+							scope.observation().matching_event_count == 1U,
+						"before transition boundary matched a delegated after event");
+			}
+			{
+				sqlite_store_fault_scope scope{
+					{after, sqlite_store_fault_action::report_failure_after_delegate}};
+				require(!dispatch_sqlite_store_fault(before).issued &&
+							dispatch_sqlite_store_fault(after).issued &&
+							scope.observation().matching_event_count == 1U,
+						"after transition boundary matched a pre-delegate event");
+			}
+		}
 	}
 
 	void check_crash_and_close_are_directives_only()
@@ -254,6 +292,7 @@ int main()
 	check_production_no_scope_is_noop();
 	check_exact_typed_match_and_exactly_once_directive();
 	check_passive_observation_never_changes_execution();
+	check_coordination_and_journal_boundaries_are_closed_and_exact();
 	check_crash_and_close_are_directives_only();
 	check_invalid_plans_and_events_fail_closed();
 	check_nested_scope_and_thread_local_isolation();
