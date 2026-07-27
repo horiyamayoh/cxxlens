@@ -120,6 +120,7 @@ MATERIALIZATION_ASSIGNMENT_FEEDBACK = (
     "DF-0198",
     "DF-0199",
     "DF-0200",
+    "DF-0205",
 )
 MATERIALIZATION_ASSIGNMENT_SURFACES = (
     ("distribution.consumer-configuration", "shared/real-project"),
@@ -464,9 +465,10 @@ def materialization_assignment_shape(qualification: str) -> dict[str, Any]:
                         "Implement the accepted DF-0195 through DF-0199 sealed-evidence, "
                         "measured-occurrence, authenticated-streaming, head-observation, "
                         "and canonical-Base64 authority; resolve DF-0200 bounded claim/Store "
-                        "staging; then complete installed actual-source worker output adoption "
-                        "with exact publication and query evidence; do not claim generic "
-                        "relation-row reference enforcement."
+                        "staging and DF-0205 same-process Store race authority; then complete "
+                        "installed actual-source worker output adoption with exact publication "
+                        "and query evidence; do not claim generic relation-row reference "
+                        "enforcement."
                     ),
                 },
                 "feedback": list(MATERIALIZATION_ASSIGNMENT_FEEDBACK),
@@ -527,7 +529,7 @@ def materialization_assignment_transition(root: pathlib.Path) -> dict[str, Any]:
     fail(
         "Clang 22 materializer assignment is neither the exact "
         "#181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/DF-0197/"
-        "DF-0198/DF-0199/DF-0200 "
+        "DF-0198/DF-0199/DF-0200/DF-0205 "
         "tracked gap nor the exact included+qualified assignment"
     )
 
@@ -584,7 +586,7 @@ def collect_materialization_evidence(
         if report_paths or request_paths or receipt_paths:
             fail(
                 "the exact #181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/"
-                "DF-0197/DF-0198/DF-0199/DF-0200 "
+                "DF-0197/DF-0198/DF-0199/DF-0200/DF-0205 "
                 "tracked gap requires zero materialization "
                 f"requests and reports, found {len(request_paths)} requests and "
                 f"{len(report_paths)} reports and {len(receipt_paths)} execution receipts"
