@@ -107,8 +107,9 @@ qualification artifacts, or a production implementation.
 1. Define a nonforgeable process-local writer-mapping lease. Mint it before the reader delegation
    only from an owned writer mapping, bind exact runtime/VFS/image/callback and main/WAL/SHM
    object-entry identities, page/size/pointer and retained lifetime, and accept native
-   `SQLITE_OK`/non-null only when the returned mapping and pre/post no-resize epoch match that
-   lease. This preserves multi-instance semantics, but pointer reuse, stale lease, unmap, fork,
+   `SQLITE_OK`/non-null only when the returned mapping and route-specific authenticated
+   pre/post size/effect epoch match that lease. This preserves multi-instance semantics, but
+   pointer reuse, stale lease, unmap, fork,
    VFS unregister, replacement, and ABA counterexamples must fail closed.
 2. Share one Store implementation or SQLite connection between same-process opens. This can make
    the current unit test pass by serialization, but it does not satisfy the explicit
@@ -136,14 +137,19 @@ as implementation permission. The proposal now defines:
   promotion only after all current-v3 Store writer gates; no registry pending exists before
   delegation, and simultaneous first writers install or join one exact generation;
 - a separate writer-map stat-only epoch whose namespace watch is armed before pre-stat:
-  pre-existing SHM permits zero events and exact pre/post identity/size equality, absent SHM
-  permits exactly one expected `IN_CREATE` and one direct regular post object; unavailable,
-  non-Linux, overflow, loss, extra-event, and A-B-A cases cannot mint;
+  pre-existing SHM permits zero events, with `{0,0}` requiring exact pre/post identity and size
+  equality and authenticated `{1,1}` requiring exact identity plus either preallocated-range
+  zero-size-effect or the exact monotonic size extension; absent SHM permits only authenticated
+  `{1,1}` with exactly one expected `IN_CREATE` and the exact direct regular post-create
+  object/size. Unavailable, non-Linux, overflow, loss, extra-event, and A-B-A cases cannot mint;
 - exact caller/delegated writer `extend` pairs. `{1,1}` requires authenticated RW MAIN_DB plus
-  WAL write-lock/effect evidence and exact direct create/growth observation; `{0,0}` requires a
-  pre-existing direct SHM and a zero-effect transcript; `{1,0}`, `{0,1}`, and other values never
-  mint, pend, or join. Same-generation new-page/growth atomically advances the page set and
-  sealed SHM-size receipt before reader admission;
+  WAL write-lock/effect evidence and exact preallocated zero-effect, direct-create, or
+  monotonic-extension observation;
+  `{0,0}` requires a pre-existing direct SHM, exact size equality, and a zero-effect transcript;
+  `{1,0}`, `{0,1}`, and other values never mint, pend, or join. Pair/effect receipts belong to
+  each attempt/resulting holder rather than the generation key, so valid `{1,1}` and `{0,0}`
+  holders may cross-join without pair equality. Same-generation new-page/growth atomically
+  advances the page set and sealed SHM-size receipt before reader admission;
 - retained parent-directory authority plus the existing main/WAL native-file-node/xOpen and SHM
   native-attachment receipts, with no duplicate target FD open/close while SQLite locks may be
   live. Native main/WAL close revokes the lease; a memory pin never makes a closed OS handle
@@ -152,8 +158,9 @@ as implementation permission. The proposal now defines:
   bounded ordered cross-thread retirement, nonblocking same-thread reentrant retirement to exact
   outer `SQLITE_IOERR` plus opaque-handle/lease quarantine, and no fabricated unmap success or
   retry;
-- conservative successor-generation exclusion while any prior reader handoff remains, including
-  W1/G1 handoff versus W2 same-pointer rejection, and the exact existing
+- exact-file-family successor-generation exclusion while any page handoff from the prior mapping
+  generation remains, including W1/G1 handoff versus W2 same-pointer and controlled-VFS
+  different-page rejection, and the exact existing
   `store.sqlite-failure / database / preserve-sqlite-runtime-diagnostic`, retryable-false
   projection;
 - a production-only qualified route that may translate one leased native `SQLITE_OK`/nonnull to
@@ -181,3 +188,13 @@ and fresh-review boundary. This DF remains `observed`, `implementation_dispositi
 `resolution_refs: []`, and independent review `pending`. Until that separate review accepts the
 proposal, every native `SQLITE_OK` in the qualified readonly-SHM profile remains a terminal
 protocol violation and no production or implementation exception is authorized.
+
+2026-07-28: Independent semantic counterexample review of exact proposal commit
+`e54d73e2767f06c85ef98de67f003944a962d7de` returned three P1 blockers: its unconditional
+pre-existing-SHM size equality contradicted authenticated growth, holder-to-holder extend-pair
+equality rejected valid `{1,1}` / `{0,0}` joins, and successor exclusion covered one page rather
+than the complete native mapping generation. The revised four-mirror proposal digest
+`sha256:fc0990d3343b4e99b76b521d8db534bc05a30c03fd2e32e0d11adad668c34b89`
+closes those three contradictions and adds an old-rule negative for each affected field. The
+blocking review is recorded on Issue #205; fresh independent review of the revised exact commit
+is still required. This record therefore remains `observed`, blocked, and non-authorizing.

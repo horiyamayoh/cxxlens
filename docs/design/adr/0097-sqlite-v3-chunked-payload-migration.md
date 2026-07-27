@@ -209,11 +209,15 @@ lease は二段階で構築する。owned current-v3 writer の native `xShmMap`
 callback-localなnon-authoritative attempt/pre-map receipt、generationまたはfirst-writer cohortの
 writer in-flight pin、別個のwriter-map stat-only interfaceとretained-parent/ancestry namespace
 epoch/watchだけであり、registryへcandidateをinstallしない。registry mutexはnative callback越しに
-保持しない。watchはpre-statより先にarmする。pre-existing SHMならnative writer map中のnamespace
-event zeroとpre/postのexact same direct entry/object/mount/sizeを要求する。SHM absentならexpected
-SHM leafのexact one `IN_CREATE`とpost-map direct regular object/entry/mount/sizeだけを許し、他の
-create/delete/move、indirection、A-to-B-to-A、watch loss/overflowはfail closedにする。Linux以外、
-またはこのstat-only observationをtrustedに提供できないprofileはleaseをmintできない。
+保持しない。watchはpre-statより先にarmする。pre-existing SHMはnative writer map中のnamespace
+event zeroを共通に要求し、`{0,0}` attemptはpre/post exact same direct entry/object/mount/size、
+authenticated `{1,1}` attemptはpre/post exact same direct entry/object/mountに加え、requested
+mapping rangeがpreallocatedならexact size equalityとzero effect、それ以外はrangeに対応するexact
+monotonic size extensionだけを許す。SHM absentはauthenticated `{1,1}`
+attemptによるexpected SHM leafのexact one `IN_CREATE`とexact post-create direct regular
+object/entry/mount/sizeだけを許し、`{0,0}` attemptでは許さない。他のcreate/delete/move、
+indirection、A-to-B-to-A、watch loss/overflowはfail closedにする。Linux以外、またはこのstat-only
+observationをtrustedに提供できないprofileはleaseをmintできない。
 underlying authenticated writer mapがexact `SQLITE_OK`+non-nullを返し、post-map object/entry/size/effect
 receiptとretained parent、既存main/WAL `native_file_node`/`xOpen` receipt、SHM native attachmentの
 stat-only object/direct-entry receiptのsealが成立した後にだけ
@@ -227,18 +231,21 @@ writer-mapping epoch/watchはpending、live writer holder、in-flight、handoff�
 last writer holderとlast reader handoffの両方が解放されるまで保持する。endpoint identityやpointer
 だけでその連続性を代替しない。
 
-writer map receiptはcaller `extend`とunderlyingへdelegatedした`extend`のexact pairを保持し、各値は
+writer map receiptはcaller `extend`とunderlyingへdelegatedした`extend`のexact pairおよびeffect
+transcriptを各callback attempt/resulting holderに保持し、mapping generation keyには含めず、各値は
 0または1だけを許す。`{1,1}`はauthenticated RW `MAIN_DB`とexact WAL write-lock/effect gateの下で、
-new generation、same generation join、new pageを許す。preallocated rangeならsize effectはzero、
-create/growthならexpected direct createまたはsize extensionをwrapper call/result、namespace event、
-pre/post stat object/entry/mount/size、exact WAL-lock history、pinned source ID/callback transcriptで証明
-する。unobservableなunderlying syscall provenanceは要求せず、caller intentだけをeffect proofに
-しない。`{0,0}`はpre-existing direct SHMとcreate/initialize/truncate/extend/delete/resize zero
-transcriptだけをpendingにでき、full current-v3 gate後に初めてpromote/joinできる。`{1,0}`は
-effect-denied downgradeであり、`{0,1}`または他値と同様にmint/pending/join authorityを持たない。
-same pageへのwriter joinはpair、pointer、page/range、size、zero size driftがexact一致するときだけ
-許す。同じgenerationへのnew page/growthはmapping-page setとsealed SHM sizeをatomically更新し、
-以後の全reader admission/handoffを最新generation-size receiptへbindする。
+new generation、same generation join、new pageを許し、pre-existing SHMではpreallocated requested
+rangeのzero-size-effectまたはrangeに対応するexact monotonic size extension、absent SHMではexpected
+direct createをwrapper call/result、namespace event、pre/post stat object/entry/mount/size、exact
+WAL-lock history、pinned source ID/callback transcriptで証明する。unobservableなunderlying syscall
+provenanceは要求せず、caller intentだけをeffect proofにしない。`{0,0}`はpre-existing direct SHM、pre/post exact size
+equality、create/initialize/truncate/extend/delete/resize zero transcriptだけをpendingにでき、full
+current-v3 gate後に初めてpromote/joinできる。`{1,0}`はeffect-denied downgradeであり、`{0,1}`または
+他値と同様にmint/pending/join authorityを持たない。same pageへのwriter joinは各holder固有のvalid
+pair/effect receipt、pointer、page/range、current sealed sizeがexact-compatibleなら許し、holder間で
+pair equalityを要求しない。したがってvalid `{1,1}` holderとvalid `{0,0}` holderは両方向に
+cross-holder joinできる。同じgenerationへのnew page/growthはmapping-page setとsealed SHM sizeを
+atomically更新し、以後の全reader admission/handoffを最新generation-size receiptへbindする。
 
 mapとStore gateの両順序を閉じる。mapがgateより先なら上記pendingをgate completionがpromoteする。
 gateが失敗した場合はpendingをremoveし、trusted non-removing `xShmUnmap(0)`とcloseをexact outcome
@@ -267,9 +274,10 @@ lifetime pinを保持する。この値のequalityをcohort keyにせず、share
 ID/load generation/callback tuple、original underlying VFS pointer/`pAppData`/registration epoch、
 file-family、mapping generationへexact cross-bindした場合だけcross-alias lookupを許す。simultaneous
 first writersはcohort in-flightとして競合し、最初にcomplete authenticated post-map receiptを得た
-callbackがgenerationをinstallする。後続はsame pointer/page/size/range/receiptなら同じgenerationへ
-joinし、不一致ならcleanupしてfail closedとする。W2 writer map callback中はW1 last-holder retirementを
-W2のjoin/fail確定前に進めない。
+callbackがgenerationをinstallする。後続はsame pointer/page/size/rangeと各holder固有のvalid
+pair/effect receiptがcompatibleなら同じgenerationへjoinし、holder間のreceiptまたはpair equalityは
+要求しない。不一致ならcleanupしてfail closedとする。W2 writer map callback中はW1 last-holder
+retirementをW2のjoin/fail確定前に進めない。
 
 lease identity は少なくとも次を一つのimmutable receiptへbindする。
 
@@ -292,10 +300,11 @@ lease identity は少なくとも次を一つのimmutable receiptへbindする�
   symlink/indirection、watch loss/overflow/event、object/entry/mount replacement、A-to-B-to-Aはendpointが
   戻ってもinvalidateする。mainのdevice/inodeが同じでも別hardlink/path/retained parent、または
   WAL/SHM sidecar leaf/entry familyが一致しないaliasはcross-bindしない。
-- exact caller/delegated extend pair、SHM mapping page number、page size、byte offset/range、native
-  non-null pointer、post-writer-map SHM size、mapping-page set、mapping generation、writer holder
-  generation、上記wrapper-observable effect census。pointer、inode、final size equalityのいずれか単独をmapping
-  identityまたはno-effect authorityにしない。
+- SHM mapping page number、page size、byte offset/range、native non-null pointer、
+  post-writer-map SHM size、mapping-page set、mapping generationをgeneration identityにbindする。
+  exact caller/delegated extend pair、writer holder generation、上記wrapper-observable effect censusは
+  各attempt/resulting holder固有のreceiptとして同じgenerationへ関連付けるがgeneration keyにはしない。
+  pointer、inode、final size equalityのいずれか単独をmapping identityまたはno-effect authorityにしない。
 
 reader はnative delegation前にregistryからexactly one live leaseをlookupし、leaseがまだnew
 admission可能であることを検証してnoncopyable/nonserializableなin-flight pinを取得する。registry
@@ -331,15 +340,16 @@ promotionのraceはいずれもadmissionを拒否する。reader pin取得から
 handoff、eager decode、delegated reader unmapまでのone-shot state machineでskipped、duplicate、
 reordered callbackをfail closedにする。
 
-exact family/pageのretiredまたはretiring generationにreader handoffが一件でも残る間は、successor
-writer attempt/pending/promotionとnew generationをadmitしない。writer predelegationでこの状態を
-観測できればunderlying mapを呼ばずexact `SQLITE_IOERR`へfail closedにする。concurrent raceによりnative writer map後に
-判明した場合は、そのmappingをnon-removing unmapし、unmap outcomeを含むlifecycleをquarantineして
-outer resultを`SQLITE_IOERR`にしてinternal retryしない。public factory resultは既存
+exact file familyのretiredまたはretiring prior mapping generationにreader handoffが一件でも残る
+間は、そのhandoffと同じpageか異なるpageかを問わず、family全体のsuccessor writer
+attempt/pending/promotionとnew generationをadmitしない。writer predelegationでこの状態を観測
+できればunderlying mapを呼ばずexact `SQLITE_IOERR`へfail closedにする。concurrent raceによりnative
+writer map後に判明した場合は、そのmappingをnon-removing unmapし、unmap outcomeを含むlifecycleを
+quarantineしてouter resultを`SQLITE_IOERR`にしてinternal retryしない。public factory resultは既存
 `store.sqlite-failure / database / preserve-sqlite-runtime-diagnostic`、retryable falseに固定する。
-全prior handoffがdrainした後だけfresh generationを開始できる。W1/G1の
-handoff中にW2が同じobject/page/pointerを得てもcontinuityとはみなさず、handoffはsuccessor writerや
-reader authorityをmintしない。
+prior mapping generationの全page handoffがdrainした後だけfamilyにfresh generationを開始できる。
+W1/G1のhandoff中にW2が同じobject/page/pointer、またはcontrolled VFSで異なるpage pointerを得ても
+continuityとはみなさず、handoffはsuccessor writerやreader authorityをmintしない。
 
 reader delegation直前にはprocess/runtime/VFS/callback/registration、parent/file-family/entry/mount/
 watch、lease generation/holder/pin、latest atomic mapping-page set/sealed SHM size、requested
@@ -360,13 +370,13 @@ pin/handoff、callback gatesとfocused testsを実装できる。public API、sn
 error tuple、generic VFS semanticsは変更しない。production activationには二つのlive Storeによる
 durable CAS winner/loser、materialization competitor、cross-process CAS、CANTINIT/READONLY
 regressionと、pending-only、fork/PID reuse、holder/pin/unmap race、ABA、runtime/VFS/app-data/
-callback drift、file-family/mount replacement、namespace watch loss、page/pointer/size/no-resize、
+callback drift、file-family/mount replacement、namespace watch loss、page/pointer/route-specific size/effect、
 writer extend pairの全4分類、simultaneous first-writer join/mismatch、W2 predelegate対W1 retire、
 new-page atomic size update、duplicate target FDによるlock-loss、native close後memory pin、
 unknown outcome、same-thread reentrant retirement、different-thread wait timeoutの全counterexample
-matrixに加え、W1/G1 reader handoff中のW2 same-pointer successor rejectionをexact
-implementation commitへbindした別のindependent reviewが必要である。それまではproduction
-same-process exceptionをactivateしない。
+matrixに加え、W1/G1 reader handoff中のW2 same-pointer successor rejectionとcontrolled VFSによる
+different-page successor rejectionをexact implementation commitへbindした別のindependent reviewが
+必要である。それまではproduction same-process exceptionをactivateしない。
 
 SQLite API が公開しない `mxFrame` や post-hoc whole-file digest を推測しない。read-lock 0 は main snapshot route として
 SQLite snapshot が保たれる限り WAL reset/rewrite/append と SHM coordination の変化を許すが、decode 前後の exact main

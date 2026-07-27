@@ -511,6 +511,18 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
+                "writer-mapping-lease-preexisting-shm-size-equality-regression",
+                lambda value: writer_mapping_lease(value)[
+                    "two_stage_writer_authority"
+                ].__setitem__(
+                    "preexisting_shm_transition",
+                    (
+                        "require-zero-namespace-events-and-the-exact-same-direct-"
+                        "entry-object-mount-and-size-from-pre-stat-through-post-map"
+                    ),
+                ),
+            ),
+            (
                 "writer-mapping-lease-extend-downgrade-mints",
                 lambda value: writer_mapping_lease(value)[
                     "two_stage_writer_authority"
@@ -534,6 +546,33 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
+                "writer-mapping-lease-holder-extend-tuple-equality-regression",
+                lambda value: writer_mapping_lease(value)[
+                    "two_stage_writer_authority"
+                ].__setitem__(
+                    "existing_mapping_holder",
+                    (
+                        "same-page-join-only-to-one-exact-live-generation-with-"
+                        "identical-runtime-vfs-file-family-caller-delegated-extend-"
+                        "tuple-page-size-pointer-and-zero-size-drift-effect-receipt"
+                    ),
+                ),
+            ),
+            (
+                "writer-mapping-lease-first-writer-receipt-equality-regression",
+                lambda value: writer_mapping_lease(value)[
+                    "two_stage_writer_authority"
+                ].__setitem__(
+                    "simultaneous_first_writers",
+                    (
+                        "first-complete-authenticated-post-map-installs-the-generation-"
+                        "and-each-later-first-writer-cohort-callback-joins-only-that-"
+                        "same-generation-after-exact-pointer-page-size-range-and-"
+                        "receipt-equality-otherwise-it-cleans-up-and-fails"
+                    ),
+                ),
+            ),
+            (
                 "writer-mapping-lease-cross-alias-lifetime-equality",
                 lambda value: writer_mapping_lease(value)[
                     "process_global_registry"
@@ -552,6 +591,17 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
+                "writer-mapping-lease-generation-extend-pair-regression",
+                lambda value: writer_mapping_lease(value)["identity_receipt"].__setitem__(
+                    "mapping",
+                    (
+                        "exact-caller-and-delegated-extend-pair-page-number-page-size-"
+                        "byte-offset-range-native-nonnull-pointer-post-writer-map-shm-"
+                        "size-generation-mapping-page-set-and-writer-holder-generation"
+                    ),
+                ),
+            ),
+            (
                 "writer-mapping-lease-same-thread-wait",
                 lambda value: writer_mapping_lease(value)[
                     "reader_lifetime"
@@ -567,6 +617,19 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ].__setitem__(
                     "successor_while_handoff_live",
                     "allow-new-generation-when-pointer-matches",
+                ),
+            ),
+            (
+                "writer-mapping-lease-successor-same-page-only-regression",
+                lambda value: writer_mapping_lease(value)[
+                    "generation_and_races"
+                ].__setitem__(
+                    "successor_while_handoff_live",
+                    (
+                        "forbid-writer-attempt-pending-promotion-and-new-generation-"
+                        "for-the-exact-family-page-until-all-retired-or-retiring-"
+                        "generation-reader-handoffs-drain"
+                    ),
                 ),
             ),
             (

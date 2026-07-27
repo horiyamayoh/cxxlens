@@ -51,6 +51,12 @@ narrow admission は、ADR 0097 の DF-0205 pending amendment が定義する
 equality を CAS または SHM nonmutation authority にしない。
 proposal はwriter `xShmMap`のcaller/delegated extend pair、writer cohort in-flight、stat-only namespace
 epoch、current-v3 Store gate、shared runtime/VFS cohortとaliasごとのdistinct lifetime pinをreceiptにする。
+pre-existing SHMは`{0,0}`のexact size不変と、authenticated `{1,1}`のpreallocated-range
+zero-size-effectまたはexact monotonic extensionを分け、absent SHMのexact createはauthenticated
+`{1,1}`だけに許す。extend pair/effect receiptはmapping
+generation keyではなく各attempt/resulting holder固有とし、valid `{1,1}`と`{0,0}`のcross-holder
+joinはpair equalityなしで許す。prior mapping generationのreader handoffが一pageでも残る間はexact
+file family全体で全pageのsuccessor generationを排他する。
 SQLite lockがliveになり得る間にmain/WAL/SHM targetのduplicate FDをopen/closeせず、retained parent
 directory FD、既存main/WAL native-file-node/`xOpen` receipt、SHM native attachment receiptだけを使う。
 native close、same-thread reentrant retirement、unknown callback outcomeはleaseをfail closedにretire/
@@ -86,5 +92,6 @@ implementationを検証する場合は、fork/PID reuse、writer unmap/last rele
 runtime/VFS unregister/unload、main/WAL/SHM object/entry/mount/namespace replacement、page/size/pointer drift、native callback
 outcome unknown、extend pair全分類、simultaneous first writers、writer in-flight対last-holder retire、
 new-page/size receipt、duplicate-target-FD lock loss、same-thread reentrant retirementとbounded wait timeoutを
-fail-closed matrixに含める。物理契約は
+fail-closed matrixに含め、controlled VFSでprior-generation handoffと異なるpageへのsuccessor mapも
+file-family-wideに拒否する。物理契約は
 `schemas/cxxlens_ng_sqlite_store_contract.yaml` と schema に固定する。

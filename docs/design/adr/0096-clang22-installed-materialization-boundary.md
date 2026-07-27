@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-07-19
 - Issue: #182; machine-v2.1 amendment #181
-- Design feedback: DF-0182 / #182; DF-0187 / #187; DF-0191 / #191; DF-0192 / #192; DF-0194 / #194; DF-0195 / #195; DF-0196 / #196; DF-0197 / #197; DF-0198 / #198; DF-0199 / #199; DF-0200 / #200
+- Design feedback: DF-0182 / #182; DF-0187 / #187; DF-0191 / #191; DF-0192 / #192; DF-0194 / #194; DF-0195 / #195; DF-0196 / #196; DF-0197 / #197; DF-0198 / #198; DF-0199 / #199; DF-0200 / #200; DF-0205 / #205
 - Amends: ADR 0015, ADR 0038, ADR 0064, ADR 0091, ADR 0095
 - Depends on: ADR 0010, ADR 0043, ADR 0044, ADR 0083, ADR 0084
 
@@ -822,7 +822,7 @@ task/index/source/output window の式に従うことを測定する。aggregate
 evidence として拒否する。
 
 authority-only rollout 中は、production-scope の materializer assignment 自身が exact
-`scope.clang22-installed-adoption-gap` / `#181` / `[DF-0182, DF-0187, DF-0191, DF-0192, DF-0195, DF-0196, DF-0197]` の `tracked-gap` である場合に限り、normal release evaluation が request/report/set の
+`scope.clang22-installed-adoption-gap` / `#181` / `[DF-0182, DF-0187, DF-0191, DF-0192, DF-0195, DF-0196, DF-0197, DF-0198, DF-0199, DF-0200, DF-0205]` の `tracked-gap` である場合に限り、normal release evaluation が request/report/set の
 exact zero state を typed `tracked-gap-empty` として受理する。この状態では materializer executable 一件だけを installed-file census から除外し、
 schema、worker、他の required file は除外しない。zero state に一件でも request/report が混じる、または exact four-pair evidence が先行する場合も
 assignment と evidence が一致しないため拒否する。
@@ -833,8 +833,10 @@ digests を必須とし、それらがない evaluation は `not-qualified` と�
 一致しない中間状態は fail closed に拒否する。
 
 元の installed boundary と observation v2 authority は Issue #182 の authority-only unit である。Issue #181 の preflight で見つかった
-DF-0191/DF-0192 に対する machine v2、SDK registry conformance、Store projection と、DF-0195/DF-0196/DF-0197 に対する sealed report leaf、
-installed occurrence/effect、Protocol 1.1 chunked task transfer の release/checker amendment は Issue #181 の独立した authority-first checkpoint とする。
+DF-0191/DF-0192 に対する machine v2、SDK registry conformance、Store projection、DF-0195〜DF-0199 に対する sealed report leaf、
+installed occurrence/effect、Protocol 1.1 chunked task transfer、failed-head observation、canonical Base64、DF-0200 の bounded
+claim/Store staging、DF-0205 の same-process Store race authority に対する release/checker amendment は Issue #181 の独立した
+authority-first checkpoint とする。
 独立反証 review が exact binding を受理して該当 DF を accepted / may-proceed にするまでは blocked scope の runtime/tool implementation を再開しない。受理後、runtime と
 四件の installed detailed report evidence を同じ Issue #181 が完成させる。それまでは production scope の tracked gap と Clang 22
 production-support prohibition を維持する。
