@@ -27,14 +27,14 @@ SNAPSHOT_CONTRACT = pathlib.Path(
 # independent of the schema so a coordinated contract/schema weakening remains
 # fail closed while formatting-only YAML changes remain non-semantic.
 EXPECTED_CONTRACT_DIGEST = (
-    "sha256:4c5d624133aedc693d19a5846efc77805017b5fd8d7f684ebd0582d867419292"
+    "sha256:517a10188df1f8e2bdeda0e2ad3311a4b7e86f86a816123695985bfc263a126c"
 )
 EXPECTED_SCHEMA_DIGEST = (
-    "sha256:5361a6ccfd87fe1dc1591f75d4ec8c75b5d2b8eab1a70a38db8890215c886192"
+    "sha256:ae6a434909210a199bf7b0c58596a9c87c0eee343060a18bf6630974993350b0"
 )
 
 EXPECTED_SNAPSHOT_BINDING = (
-    "sha256:4aa9eb36968e5d53f443a761660d1343d3c2388553d8e147b729c85630f6db2b"
+    "sha256:97ff10adea7365082c883ab7a48a0bee1c6b13b6457e7a84fa19605d2f07da8e"
 )
 
 SOURCE_SHM_READONLY_CAPABILITY: dict[str, Any] = {
@@ -240,6 +240,890 @@ ACTIVE_EXISTING_PROBE_PROFILE: dict[str, Any] = {
     "sidecar_create": "forbidden",
 }
 
+ACCEPTED_EMPTY_NORMALIZATION_SOURCE_ANCHOR_RECEIPT = [
+    "canonical-locator",
+    "exact-pinned-vfs-identity",
+    "pinned-sqlite-runtime-identity-and-version",
+    "exact-normalization-effect-grammar-profile-receipt",
+    "accepted-empty-private-recovery-stable-source-receipt",
+    "preinit-exact-empty-wal-header-anchor",
+    "pre-coordination-zero-wal-branch-absent-create-or-preexisting-bound-size-zero-open",
+    "actual-normalizer-main-open-file-instance-identity-and-directory-entry-binding",
+    "retained-authenticated-parent-directory-capability-and-continuous-namespace-epoch",
+    "pre-coordination-main-size-and-sha256-and-sidecar-census",
+    (
+        "pre-coordination-decoded-main-page-size-and-file-offset-zero-database-page-"
+        "one-sha256-and-exact-header-byte-range-zero-through-one-hundred-exclusive"
+    ),
+    "immutable-held-pre-main-exact-byte-snapshot-with-length-and-streaming-byte-receipt",
+    "exact-empty-logical-projection",
+    "normalization-id",
+    (
+        "deterministic-expected-post-whole-main-exact-byte-projection-plus-size-and-"
+        "sha256-derived-before-effect-from-the-immutable-pre-main-byte-snapshot-by-"
+        "streaming-copy-with-only-the-authorized-page-one-field-patch-plus-the-"
+        "complete-expected-rollback-empty-logical-projection-and-sidecar-census"
+    ),
+]
+
+ACCEPTED_EMPTY_NORMALIZATION_RECEIPT = [
+    "exact-accepted-empty-normalization-source-anchor-receipt",
+    "exact-normalization-effect-grammar-profile-receipt",
+    (
+        "exact-accepted-empty-normalization-coordination-sequence-two-receipt-with-"
+        "denied-sequence-one-prerequisite-and-armed-after-exclusive-true"
+    ),
+    "later-repeated-exclusive-xLock-source-anchor-and-same-main-entry-recheck",
+    (
+        "coordination-zero-wal-open-flags-file-instance-identity-directory-entry-"
+        "size-and-sha256"
+    ),
+    "planned-normalization-candidate-id",
+]
+
+ACCEPTED_EMPTY_NORMALIZATION_COMPLETED_EDGE_RECEIPT = [
+    "exact-accepted-empty-normalization-pre-effect-full-receipt",
+    "exact-normalization-effect-grammar-profile-receipt",
+    (
+        "exact-accepted-empty-normalization-full-sequence-three-receipt-with-"
+        "coordination-sequence-two-prerequisite-and-armed-after-exclusive-true"
+    ),
+    "exact-normalization-bounded-effect-transcript-receipt",
+    "exact-coordination-wal-delete-retained-authenticated-parent-fsync-receipt",
+    "exact-journal-creation-retained-authenticated-parent-fsync-receipt",
+    "confirmed-single-delete-normalization-transition-result",
+    "exact-terminal-journal-delete-retained-authenticated-parent-fsync-receipt",
+    "exactly-one-confirmed-connection-close",
+    (
+        "same-main-and-entry-plus-streaming-exact-post-main-byte-equality-to-the-"
+        "sealed-deterministic-expected-projection-with-size-and-sha256-only-"
+        "acceleration-plus-complete-post-structural-logical-validation-and-sidecar-"
+        "census"
+    ),
+    "sealed-normalization-edge-id",
+]
+
+ACCEPTED_EMPTY_NORMALIZATION_OPEN_PROFILE: dict[str, Any] = {
+    "main_flags": [
+        "SQLITE_OPEN_READWRITE",
+        "SQLITE_OPEN_PRIVATECACHE",
+        "SQLITE_OPEN_FULLMUTEX",
+    ],
+    "omitted": ["SQLITE_OPEN_CREATE", "SQLITE_OPEN_URI"],
+    "main_precondition": (
+        "same-anchored-existing-main-and-directory-entry-bound-to-the-confirmed-"
+        "accepted-empty-private-recovery-source-receipt-with-exact-empty-header-"
+        "two-two-and-either-no-sidecars-or-one-preexisting-exact-bound-size-zero-wal"
+    ),
+    "sidecar_create": (
+        "only-the-named-zero-wal-accepted-empty-normalization-coordination-effect-"
+        "after-the-first-exclusive-callback-seals-the-source-anchor-and-publishes-"
+        "coordination-sequence-two-WAL-absent-means-create-and-seal-new-object-"
+        "identity-preexisting-size-zero-WAL-means-open-and-seal-the-same-rechecked-"
+        "object-identity"
+    ),
+}
+
+ACCEPTED_EMPTY_NORMALIZATION: dict[str, Any] = {
+    "operation": "accepted-empty-normalization",
+    "precondition": (
+        "prior-accepted-empty-private-recovery-and-confirmed-close-proof-bound-to-"
+        "the-stable-source-receipt-same-main-identity-exact-logical-empty-wal-"
+        "header-and-either-no-sidecars-or-one-exact-bound-size-zero-wal"
+    ),
+    "checkpoint": (
+        "not-applicable-in-this-normalization-phase-no-explicit-checkpoint-or-busy-"
+        "tuple"
+    ),
+    "page_size_decode": (
+        "big-endian-header-bytes-sixteen-through-seventeen-value-one-means-65536-"
+        "otherwise-value-must-be-a-power-of-two-from-512-through-32768"
+    ),
+    "whole_main_bound": (
+        "pre-main-byte-count-is-a-positive-integral-multiple-of-the-decoded-page-"
+        "size-and-matches-the-complete-valid-sqlite-structure-header-page-count-and-"
+        "exact-logical-empty-proof"
+    ),
+    "connection": (
+        "bound-vfs-read-write-no-create-private-cache-fullmutex-initially-write-"
+        "denying"
+    ),
+    "locking_mode": (
+        "set-and-confirm-connection-local-exclusive-before-the-first-wal-touch"
+    ),
+    "gate_stage_order": [
+        (
+            "initial-write-denying-through-actual-read-write-open-version-limit-"
+            "main-identity-and-exact-empty-recheck"
+        ),
+        "install-pending-accepted-empty-normalization-coordination-arm",
+        (
+            "first-underlying-exclusive-xLock-callback-rechecks-under-the-held-lock-"
+            "seals-the-source-anchor-and-publishes-accepted-empty-normalization-"
+            "coordination-sequence-two"
+        ),
+        (
+            "exact-zero-byte-wal-open-while-that-exclusive-lock-remains-continuously-"
+            "held"
+        ),
+        "install-post-coordination-full-arm-request",
+        (
+            "later-repeated-underlying-pending-full-arm-exclusive-xLock-success-"
+            "rechecks-and-seals-the-pre-effect-full-receipt-with-a-planned-"
+            "normalization-candidate-id-before-publishing-full-sequence-three"
+        ),
+    ],
+    "coordination_effect": (
+        "exact-SQLITE_OPEN_READWRITE-CREATE-WAL-create-or-open-of-one-same-"
+        "directory-zero-byte-wal-under-the-continuously-held-exclusive-lock-with-"
+        "captured-file-identity-entry-size-and-sha256-no-shm-journal-main-or-wal-"
+        "byte-write-truncate-sync-or-authority-effect"
+    ),
+    "coordination_observation": (
+        "immutable-pre-coordination-source-anchor-plus-exact-accepted-empty-"
+        "normalization-coordination-stage-receipt-and-zero-wal-open-flags-file-"
+        "instance-identity-directory-entry-zero-size-and-sha256-sufficient-for-post-"
+        "close-classification-before-the-normalization-receipt-is-sealed"
+    ),
+    "sealed_receipt": (
+        "transaction.recovery_model.terminal_reclassification."
+        "sealed_receipt_profiles.accepted_empty_normalization"
+    ),
+    "completed_edge_receipt": (
+        "transaction.recovery_model.terminal_reclassification."
+        "sealed_receipt_profiles.accepted_empty_normalization_completed_edge"
+    ),
+    "normalization_transition": (
+        "execute-exactly-one-transaction-free-pragma-journal-mode-delete-after-"
+        "full-arm-require-the-single-result-delete-and-never-control-on-diagnostic-"
+        "prose"
+    ),
+    "allowed_effects": [
+        (
+            "exact-coordination-zero-byte-wal-create-open-followed-after-full-arm-"
+            "by-close-and-unlink"
+        ),
+        (
+            "one-same-directory-rollback-journal-lifecycle-create-write-the-derived-"
+            "large-sector-record-set-of-exact-original-bound-page-images-sync-"
+            "invalidate-with-the-observed-zero-header-write-sync-close-and-unlink"
+        ),
+        (
+            "one-full-bound-page-write-for-each-derived-large-sector-record-page-in-"
+            "ascending-page-number-order-with-page-one-equal-to-the-sealed-post-"
+            "projection-and-every-other-page-byte-exact-to-its-preimage-plus-one-main-"
+            "xSync-flags-two-normal-after-SQLITE_FCNTL_SYNC-under-the-confirmed-"
+            "connection-local-synchronous-FULL-setting-for-the-sqlite-internal-wal-"
+            "to-rollback-header-transition"
+        ),
+        (
+            "necessary-nonauthority-lock-and-file-control-effects-bound-to-the-"
+            "receipt-plus-the-exact-retained-authenticated-parent-directory-journal-"
+            "creation-coordination-wal-delete-and-terminal-journal-delete-durability-"
+            "receipts-with-platform-path-trace-only-nonauthoritative-evidence"
+        ),
+    ],
+    "forbidden_effects": [
+        "main-replacement",
+        "main-size-change",
+        "any-main-page-outside-the-derived-large-sector-record-set-write",
+        "any-non-page-one-main-byte-change",
+        "any-wal-byte-write-truncate-or-sync",
+        "shm-create-or-effect",
+        "any-second-or-nonrollback-journal",
+        "any-main-or-journal-truncate",
+        "schema",
+        "metadata",
+        "format-marker",
+        "semantic-or-diagnostic-authority",
+        "payload-publication-head-or-publication-counter-authority",
+        "arbitrary-sql-fallback-or-retry",
+        "raw-header-edit-outside-sqlite",
+    ],
+    "wal_effect_trace": (
+        "xOpen-flags-524294-readwrite-create-wal-then-after-full-arm-xFileControl-"
+        "PERSIST_WAL-10-xClose-immediate-retained-parent-relative-current-wal-leaf-"
+        "regular-identity-byte-check-wrapper-known-name-xDelete-syncDir-zero-with-"
+        "zero-xWrite-xTruncate-or-xSync-then-full-fsync-the-retained-authenticated-"
+        "parent-before-returning-the-delete-callback-or-journal-create"
+    ),
+    "journal_sector_profile": {
+        "maximum_sector_size": 65_536,
+        "runtime_binding": (
+            "maximum-sector-size-65536-is-an-exact-pinned-sqlite-pager-"
+            "implementation-bound-not-a-stable-public-file-format-guarantee"
+        ),
+        "writer_effective_S": (
+            "temporary-or-powersafe-overwrite-pager-forces-S-512-otherwise-raw-"
+            "xSectorSize-less-than-32-maps-to-512-raw-greater-than-65536-maps-to-"
+            "65536-and-every-other-raw-value-is-unchanged"
+        ),
+        "writer_admission": (
+            "effective-S-is-a-power-of-two-from-32-through-65536-before-installing-"
+            "the-pending-coordination-request"
+        ),
+        "writer_receipt": (
+            "raw-xSectorSize-effective-S-temporary-status-exact-"
+            "xDeviceCharacteristics-profile-and-exact-vfs-backend-token-sealed-"
+            "before-the-pending-coordination-request"
+        ),
+        "effect_grammar_admission": (
+            "require-the-exact-separately-qualified-xDeviceCharacteristics-and-SQLite-"
+            "build-profile-before-installing-the-pending-coordination-request-SQLITE_"
+            "IOCAP_SAFE_APPEND-SEQUENTIAL-atomic-family-BATCH_ATOMIC-or-UNDELETABLE_"
+            "WHEN_OPEN-and-any-other-trace-altering-bit-or-build-option-require-a-"
+            "separate-header-sync-journal-bypass-finalization-and-crash-family-grammar-"
+            "and-never-inherit-the-default-matrix"
+        ),
+        "no_contract_default": (
+            "fixed-S-is-forbidden-and-the-observed-pinned-S-512-is-qualification-"
+            "evidence-only"
+        ),
+        "cold_parser_source": (
+            "big-endian-u32-sector-size-field-at-journal-header-bytes-20-through-23"
+        ),
+        "cold_parser_admission": (
+            "first-header-parsed-S-is-a-power-of-two-from-32-through-65536-before-"
+            "any-layout-arithmetic"
+        ),
+        "all_header_format_requirement": (
+            "every-header-segment-has-the-same-S-and-decoded-page-size"
+        ),
+        "exact_match": (
+            "actual-header-bytes-20-through-23-decode-to-the-same-S-used-for-header-"
+            "padding-record-offsets-and-length-validation"
+        ),
+        "header_layout": (
+            "exact-28-byte-big-endian-header-fields-followed-by-an-opaque-"
+            "uninterpreted-region-through-byte-S-exclusive-with-the-entire-header-"
+            "region-exactly-S-bytes"
+        ),
+        "writer_header_chunks": (
+            "exact-S-byte-header-region-written-in-minimum-of-decoded-page-size-and-"
+            "S-byte-chunks-after-writer-admission"
+        ),
+        "page_record_layout": (
+            "for-header-offset-H-and-zero-based-record-r-record-start-is-H-plus-S-"
+            "plus-r-times-open-decoded-page-size-plus-8-close-page-number-is-at-"
+            "record-start-page-image-is-at-record-start-plus-4-checksum-is-at-"
+            "record-start-plus-4-plus-decoded-page-size-and-record-end-is-record-"
+            "start-plus-8-plus-decoded-page-size"
+        ),
+        "large_sector_record_set": (
+            "let-P-be-decoded-page-size-Q-be-S-divided-by-P-when-S-is-greater-than-P-"
+            "otherwise-one-L-be-the-SQLite-pending-byte-locking-page-and-E-be-the-"
+            "ascending-pages-one-through-minimum-of-database-page-count-and-Q-"
+            "excluding-L-then-R-is-cardinality-E-the-journal-nRec-is-R-record-r-"
+            "contains-page-E-r-and-the-complete-one-header-journal-length-is-S-plus-R-"
+            "times-open-P-plus-8-close"
+        ),
+        "large_sector_main_projection": (
+            "SQLite-may-write-every-page-in-E-page-one-is-the-deterministic-post-page-"
+            "one-and-every-other-page-is-byte-exact-to-its-sealed-preimage-so-the-"
+            "whole-main-projection-still-differs-only-in-the-authorized-page-one-fields"
+        ),
+        "next_header_layout": (
+            "next-header-H-is-the-smallest-S-multiple-at-or-after-the-prior-record-"
+            "end-and-its-first-record-starts-at-H-plus-S"
+        ),
+        "checksum_authority": (
+            "high-probability-incomplete-write-guard-only-never-a-substitute-for-"
+            "exact-original-page-one-bytes"
+        ),
+        "cold_parser_scope": (
+            "format-classifier-input-only-never-recovery-or-success-authority-"
+            "without-a-separately-accepted-receiptless-crash-profile"
+        ),
+        "invalid-or-mismatched-S": (
+            "reject-candidate-before-offset-arithmetic-private-recovery-or-source-"
+            "effect"
+        ),
+    },
+    "effect_grammar_profile_receipt": (
+        "bind-an-exact-layer-discriminator-plus-loaded-SQLite-DSO-source-id-hash-"
+        "build-options-VFS-backend-token-raw-xSectorSize-effective-S-temporary-status-"
+        "xDeviceCharacteristics-device-filesystem-profile-decoded-P-database-page-"
+        "count-N-and-derived-Q-E-R-the-disposable-qualification-layer-additionally-"
+        "binds-the-nonforgeable-fixture-capability-private-root-identity-lifetime-"
+        "harness-build-toolchain-run-plan-exact-proposal-review-receipt-and-fresh-"
+        "qualification-run-and-candidate-report-IDs-without-requiring-its-not-yet-"
+        "produced-report-and-never-authorizes-production-the-production-layer-cannot-"
+        "accept-that-capability-and-binds-an-already-accepted-canonical-qualification-"
+        "report-digest-and-distinct-production-profile-review-receipt-seal-before-the-"
+        "pending-coordination-request-and-inherit-the-receipt-through-the-full-receipt-"
+        "bounded-effect-transcript-completed-edge-and-handoff"
+    ),
+    # The nested draft is still non-authorizing, but every byte of its parsed
+    # projection remains fail-closed through this independent canonical digest.
+    "receiptless_crash_profile_draft": {
+        "__canonical_sha256__": (
+            "sha256:e0988e9ed9e654533df8991517b78805dc08abccb2a77a0fce0adb27bb14f782"
+        )
+    },
+    "rollback_journal_effect_trace": (
+        "xOpen-flags-2054-readwrite-create-main_journal-write-the-exact-S-byte-"
+        "incomplete-header-in-minimum-of-P-and-S-byte-chunks-then-for-each-derived-"
+        "large-sector-record-page-in-ascending-order-xWrite-4-page-number-xWrite-P-"
+        "exact-preimage-xWrite-4-checksum-xSync-flags-2-normal-xWrite-12-at-zero-"
+        "valid-magic-and-nRec-R-xSync-flags-2-normal-then-for-each-derived-record-"
+        "page-xWrite-P-at-page-offset-with-page-one-postimage-and-every-other-page-"
+        "byte-exact-xFileControl-SYNC-21-return-SQLITE_NOTFOUND-12-xSync-flags-2-"
+        "normal-xWrite-28-at-zero-zero-header-invalidation-xSync-flags-18-normal-"
+        "dataonly-xFileControl-COMMIT_PHASETWO-22-return-SQLITE_NOTFOUND-12-xSync-"
+        "flags-2-normal-xClose-then-immediate-retained-parent-relative-current-"
+        "journal-leaf-regular-identity-byte-check-wrapper-known-name-xDelete-syncDir-"
+        "zero-with-no-xTruncate-and-after-wrapper-delete-success-before-returning-"
+        "the-callback-full-fsync-the-retained-authenticated-parent"
+    ),
+    "parent_directory_effect_trace": (
+        "separate-linux-unix-vfs-platform-syscall-evidence-after-the-first-journal-"
+        "fdatasync-and-before-the-valid-journal-header-write-opens-the-same-path-"
+        "parent-directory-performs-fdatasync-and-closes-it-but-unix-VFS-ignores-"
+        "directory-fsync-failure-and-this-observation-is-never-the-per-operation-"
+        "durability-receipt"
+    ),
+    "normalizer_parent_durability_receipt": (
+        "after-the-underlying-first-journal-xSync-succeeds-and-before-returning-that-"
+        "wrapper-callback-or-arming-the-valid-header-or-any-main-write-full-fsync-the-"
+        "preopened-retained-authenticated-parent-directory-fd-require-observed-success-"
+        "and-seal-the-same-parent-entry-journal-object-and-namespace-epoch-receipt-"
+        "failure-enters-post-journal-pre-main-effect-totality-with-no-valid-header-or-"
+        "main-write"
+    ),
+    "normalizer_delete_identity_limit": (
+        "for-each-coordination-wal-or-terminal-journal-xDelete-callback-immediately-"
+        "reobserve-through-the-retained-authenticated-parent-fd-that-the-current-"
+        "authenticated-known-leaf-is-direct-regular-and-matches-the-sealed-identity-"
+        "and-bytes-then-the-wrapper-performs-the-actual-unlink-through-that-same-"
+        "retained-parent-capability-relative-known-leaf-with-no-host-path-delete-"
+        "delegation-this-never-claims-conditional-or-exact-object-deletion-any-rebind-"
+        "or-unexpected-namespace-event-from-final-check-through-xDelete-or-uncertain-"
+        "delete-outcome-is-post-effect-durability-and-authority-opaque-with-no-bounded-"
+        "poststate-retry-second-snapshot-handoff-edge-seal-or-success-and-a-VFS-or-"
+        "platform-unable-to-provide-this-effect-fails-before-arm"
+    ),
+    "normalizer_coordination_wal_delete_durability_receipt": (
+        "after-the-wrapper-retained-parent-relative-coordination-wal-xDelete-syncDir-"
+        "zero-succeeds-and-before-returning-that-callback-or-creating-the-journal-full-"
+        "fsync-the-same-preopened-retained-authenticated-parent-directory-fd-require-"
+        "observed-success-and-bind-the-known-wal-name-delete-event-operation-token-and-"
+        "continuous-namespace-epoch-failure-or-unknown-after-delete-is-durability-and-"
+        "authority-opaque-with-no-handoff"
+    ),
+    "normalizer_final_delete_durability_receipt": (
+        "after-the-wrapper-retained-parent-relative-terminal-journal-xDelete-syncDir-"
+        "zero-succeeds-and-before-returning-that-callback-closing-the-normalizer-or-"
+        "sealing-the-completed-edge-full-fsync-the-same-preopened-retained-"
+        "authenticated-parent-directory-fd-require-observed-success-and-bind-the-"
+        "known-journal-name-delete-event-current-main-operation-token-and-continuous-"
+        "namespace-epoch-failure-or-unknown-after-delete-is-durability-opaque-with-no-"
+        "handoff"
+    ),
+    "vfs_parent_sync_admission": {
+        "pinned_default_linux_unix": (
+            "require-the-exact-parent-directory-effect-trace-plus-the-separate-"
+            "normalizer-parent-durability-receipt-normalizer-coordination-wal-delete-"
+            "durability-receipt-and-normalizer-final-delete-durability-receipt"
+        ),
+        "supplied_or_exact_equivalent": (
+            "require-independently-qualified-typed-durable-journal-creation-"
+            "coordination-wal-delete-and-final-journal-delete-parent-namespace-sync-"
+            "equivalents-bound-to-the-exact-vfs-backend-token-retained-authenticated-"
+            "parent-fd-current-operation-receipt-and-delete-identity-limit"
+        ),
+        "qualification_unavailable_or_failed": (
+            "fail-before-installing-the-pending-coordination-request-or-any-"
+            "normalization-effect"
+        ),
+        "generic-supplied-vfs-inherits-linux-strace-claim": "forbidden",
+    },
+    "main_effect_trace": (
+        "for-each-derived-large-sector-record-page-in-ascending-order-exactly-one-"
+        "xWrite-decoded-page-size-at-file-offset-open-page-number-minus-one-close-"
+        "times-P-with-page-one-the-sealed-expected-post-image-and-every-other-page-"
+        "the-sealed-byte-exact-preimage-then-xFileControl-SYNC-21-exact-SQLITE_"
+        "NOTFOUND-12-and-xSync-flags-2-normal-no-size-change-or-write-outside-the-"
+        "derived-set"
+    ),
+    "normalization_file_control_trace": (
+        "each-arming-HAS_MOVED-20-call-uses-a-local-moved-integer-initialized-to-"
+        "exact-zero-and-requires-SQLITE_OK-output-zero-the-pending-full-arm-xLock-"
+        "exclusive-success-second-call-seals-the-pre-effect-full-receipt-and-"
+        "publishes-full-sequence-three-later-PERSIST_WAL-10-MMAP_SIZE-18-HAS_MOVED-"
+        "20-and-after-main-sync-COMMIT_PHASETWO-22-PRAGMA-14-HAS_MOVED-20"
+    ),
+    "normalization_bounded_effect_transcript_receipt": (
+        "bind-the-normalization-operation-token-exact-effect-grammar-profile-receipt-"
+        "and-record-every-permitted-wal-journal-main-lock-file-control-sync-delete-"
+        "parent-sync-close-callback-in-exact-order-with-input-role-flags-offset-bytes-"
+        "and-result-output-plus-the-three-parent-durability-receipts-and-require-no-"
+        "missing-duplicate-extra-or-out-of-grammar-effect-before-completed-edge-seal"
+    ),
+    "post_main_raw_projection": (
+        "pre-normalization-main-bytes-exact-except-sqlite-defined-page-one-fields-"
+        "read-and-write-version-bytes-18-through-19-equal-one-change-counter-bytes-"
+        "24-through-27-equal-the-big-endian-u32-modulo-two-to-the-thirty-two-"
+        "successor-of-the-pre-change-counter-version-valid-for-bytes-92-through-95-"
+        "equal-that-post-change-counter-and-write-library-version-bytes-96-through-"
+        "99-equal-the-big-endian-u32-sqlite3_libversion_number-from-the-exact-"
+        "pinned-runtime-all-other-bytes-byte-exact"
+    ),
+    "observed_pinned_runtime_diff": (
+        "only-ranges-18-through-20-27-through-28-and-95-through-96-with-two-to-one-"
+        "one-to-two-and-one-to-two-respectively"
+    ),
+    "post_main_validation": (
+        "unchanged-size-valid-positive-integer-page-count-complete-valid-rollback-"
+        "mode-sqlite-structure-exact-logical-empty-zero-application-id-user-objects-"
+        "metadata-and-semantic-or-diagnostic-authority-plus-streaming-exact-byte-"
+        "equality-of-the-entire-post-main-to-the-sealed-deterministic-expected-"
+        "projection-with-size-and-sha256-only-acceleration-plus-sidecar-census-"
+        "captured-for-the-fresh-anchor"
+    ),
+    "success_postcondition": (
+        "only-after-the-exact-normalization-bounded-effect-transcript-and-"
+        "coordination-wal-delete-journal-creation-and-terminal-journal-delete-"
+        "retained-authenticated-parent-fsync-receipts-finalize-and-exactly-one-"
+        "confirmed-close-post-close-total-reclassification-seals-the-completed-"
+        "normalization-edge-receipt-binding-the-planned-candidate-and-full-sequence-"
+        "three-to-the-same-main-and-entry-unchanged-main-size-valid-positive-integer-"
+        "page-count-valid-complete-rollback-mode-sqlite-structure-header-read-and-"
+        "write-version-one-zero-application-id-zero-user-objects-metadata-and-"
+        "semantic-or-diagnostic-authority-wal-shm-journal-absence-and-streaming-"
+        "exact-whole-main-byte-equality-to-the-sealed-expected-post-projection-with-"
+        "size-and-sha256-only-acceleration"
+    ),
+    "handoff": (
+        "one-planned-nonretry-handoff-to-ordinary-fresh-initialization-requires-"
+        "the-original-preinit-anchor-plus-the-exact-normalization-bounded-effect-"
+        "transcript-and-coordination-wal-delete-journal-creation-and-terminal-"
+        "journal-delete-retained-authenticated-parent-fsync-receipts-plus-"
+        "the-separately-sealed-post-close-completed-physical-normalization-edge-"
+        "receipt-plus-the-streaming-exact-post-main-byte-projection-and-sidecar-"
+        "census-with-size-and-sha256-only-acceleration-before-the-fresh-receipt-is-"
+        "sealed-the-pre-effect-full-receipt-or-planned-candidate-alone-never-"
+        "authorizes-handoff"
+    ),
+    "cold_restart_or_interrupted_handoff": (
+        "only-for-a-quiescent-accepted-completed-callback-boundary-trace-with-no-"
+        "rebind-or-uncertain-delete-and-with-an-accepted-qualified-receiptless-"
+        "profile-a-crash-before-or-after-the-final-delete-parent-fsync-cold-"
+        "classifies-as-FI-or-FO-and-enters-only-precreate_census.rollback_header_"
+        "exact_empty_candidate-with-no-process-receipt-success-or-operation-history-"
+        "inference-rebind-or-uncertain-outcome-uses-the-unbounded-remnant-failure-"
+        "rule-and-without-that-profile-fail-closed"
+    ),
+    "failure_totality": {
+        "receipt_drift_before_effect": (
+            "return-the-source_drift_result-with-no-store-and-no-arm"
+        ),
+        "sqlite_open_non_ok": (
+            "apply-transaction.connection_lifecycle.sqlite_open_profiles."
+            "common_non_ok_return_cleanup"
+        ),
+        "pre_effect_no_receipt_or_persistent_effect_after_successful_open": (
+            "when-no-persistent-effect-occurred-whether-or-not-a-pending-request-"
+            "source-anchor-or-coordination-sequence-two-receipt-exists-return-the-"
+            "exact-original-triggering-result-and-no-store-after-exactly-one-"
+            "confirmed-close-close-non-ok-applies-the-opaque-quarantine-rule"
+        ),
+        "after_coordination_effect_before_normalization_receipt_seal": (
+            "finalize-all-statements-no-transaction-rollback-inference-attempt-"
+            "exactly-one-close-v2-and-only-after-close-ok-classify-from-the-immutable-"
+            "pre-coordination-source-anchor-plus-exact-gate-and-zero-wal-observation-"
+            "and-latest-stage-receipt-never-assume-a-sealed-normalization-edge"
+        ),
+        "after_normalization_receipt_seal_or_transition_attempt": (
+            "finalize-all-statements-no-transaction-rollback-inference-attempt-"
+            "exactly-one-close-v2-and-only-after-close-ok-run-the-total-reclassifier-"
+            "from-the-pre-effect-full-receipt-and-full-sequence-three-receipt-never-"
+            "infer-a-physical-edge-or-success-from-the-planned-candidate"
+        ),
+        (
+            "coordination_wal_or_terminal_journal_final_check_rebind_delete_unknown_"
+            "or_parent_fsync_failure"
+        ): (
+            "return-store.sqlite-failure-sqlite-initialization-recovery-durability-"
+            "opaque-treat-authority-as-opaque-with-no-store-bounded-namespace-"
+            "poststate-retry-second-snapshot-handoff-edge-seal-or-further-classifier-"
+            "effect-and-require-a-later-cold-invocation-to-classify-any-observed-"
+            "remnant-fail-closed"
+        ),
+        "close_non_ok_or_unknown": (
+            "quarantine-connection-and-runtime-vfs-pins-no-reopen-or-unregister-"
+            "return-store.sqlite-failure-sqlite-initialization-recovery-opaque-and-"
+            "no-store"
+        ),
+        "same_identity_normalized_empty_with_operation_edge": (
+            "internal-normalization-completed-continue-fresh-initialization-with-no-"
+            "store-yet"
+        ),
+        "same_identity_prestate_or_normalized_empty_without_operation_edge": (
+            "return-store.sqlite-failure-sqlite-initialization-recovery-opaque-and-"
+            "no-store"
+        ),
+        "valid_non_descendant_or_replaced_main": (
+            "return-store.sqlite-failure-sqlite-initialization-recovery-concurrent-"
+            "authority-change-and-no-store"
+        ),
+        "invalid_or_mixed": (
+            "return-store.corrupt-sqlite-initialization-recovery-partial-or-mixed-"
+            "authority-and-no-store"
+        ),
+        "observation_or_reclassifier_unavailable": (
+            "return-store.sqlite-failure-sqlite-initialization-recovery-opaque-and-"
+            "no-store"
+        ),
+        "terminal_reclassifier_source_effect": (
+            "forbidden-no-repair-cleanup-or-second-normalization"
+        ),
+        "post_normalization_fresh_pre_effect_failure": (
+            "when-normalization-close-postcondition-are-confirmed-and-fresh-has-"
+            "made-no-persistent-effect-return-the-exact-fresh-trigger-and-no-store-"
+            "without-claiming-zero-whole-invocation-effect-fresh-close-non-ok-and-"
+            "post-arm-paths-retain-existing-fresh-totality"
+        ),
+    },
+    "implicit_retry_or_second_snapshot": "forbidden",
+    "qualification": {
+        "matrix": (
+            "exact-static-and-shared-Cxxlens-qualification-runners-bound-to-the-same-"
+            "loaded-SQLite-DSO-identity-source-id-hash-VFS-build-and-device-profile-"
+            "not-an-inferred-static-SQLite-runtime"
+        ),
+        "observed_fixture_page_size": 4096,
+        "page_size_vectors": [
+            "512-header-512-file-512",
+            "1024-header-1024-file-1024",
+            "2048-header-2048-file-2048",
+            "4096-header-4096-file-4096",
+            "8192-header-8192-file-8192",
+            "16384-header-16384-file-16384",
+            "32768-header-32768-file-32768",
+            "65536-header-1-file-65536",
+        ],
+        "page_size_boundary_qualification_required": [
+            "512-header-512-file-512",
+            "65536-header-1-file-65536",
+        ],
+        "sector_page_count_matrix_required": (
+            "for-every-supported-P-and-every-qualified-effective-S-let-Q-be-S-div-P-"
+            "when-S-is-greater-than-P-otherwise-one-and-cover-the-deduplicated-"
+            "positive-database-page-count-set-one-Q-minus-one-Q-and-Q-plus-one-then-"
+            "mechanically-prove-L-equals-floor-0x40000000-div-P-plus-one-is-greater-"
+            "than-Q-throughout-the-admitted-domain-and-reject-a-synthetic-record-"
+            "containing-L"
+        ),
+        "journal_sector_pinned_default_vector": (
+            "qualification-only-raw-xSectorSize-512-effective-S-512-incomplete-"
+            "header-single-512-byte-write-at-zero-page-number-one-at-512-page-one-"
+            "at-516-and-checksum-at-516-plus-decoded-page-size-never-a-contract-"
+            "default"
+        ),
+        "journal_sector_parameterized_vectors_required": [
+            "raw-16-effective-512",
+            "raw-32-effective-32",
+            "raw-4096-effective-4096",
+            "raw-65536-effective-65536",
+            "raw-131072-effective-65536",
+            "raw-4096-powersafe-overwrite-effective-512",
+            "S-65536-page-size-4096-header-written-as-sixteen-4096-byte-chunks",
+            (
+                "S-65536-page-size-4096-page-count-at-least-16-nRec-16-record-pages-"
+                "one-through-16-and-main-writes-page-one-postimage-plus-pages-two-"
+                "through-16-exact-preimages"
+            ),
+        ],
+        "journal_sector_negative_vectors_required": [
+            "effective-non-power-of-two",
+            "parsed-S-below-32",
+            "parsed-S-above-65536",
+            "header-field-S-mismatch",
+            "header-region-length-not-equal-to-S",
+            "record-offset-derived-from-512-instead-of-S",
+            "record-length-or-page-size-mismatch",
+            "padding-bytes-treated-as-authority",
+            "fixed-nRec-one-when-S-exceeds-page-size",
+            "omitted-large-sector-preimage",
+            "injected-locking-page-L-record",
+            "main-write-outside-derived-record-set",
+            "non-page-one-main-byte-change",
+        ],
+        "observed_fixture_pre_main_sha256": (
+            "e3ba06536f7dbba337dee3c1c5f01b43660ce276abb54c5cee2d5defc5b970aa"
+        ),
+        "observed_fixture_post_main_sha256": (
+            "bd70f69256dee6875161b88a66f56baaf057e8f064a01108d11428b2d7a7b071"
+        ),
+        "counter_vectors": [
+            (
+                "pre-change-counter-5-pre-version-valid-for-9-post-change-counter-6-"
+                "post-version-valid-for-6"
+            ),
+            (
+                "pre-change-counter-4294967295-pre-version-valid-for-305419896-post-"
+                "change-counter-0-post-version-valid-for-0"
+            ),
+        ],
+        "write_library_version_vector": (
+            "pre-write-library-version-1-pre-change-counter-7-pre-version-valid-for-"
+            "3-post-write-library-version-3045001-post-change-counter-8-post-version-"
+            "valid-for-8"
+        ),
+        "multi_page_freelist_vector": {
+            "page_count": 492,
+            "page_size": 4096,
+            "byte_count": 2_015_232,
+            "freelist_pages": 491,
+            "pre_main_sha256": (
+                "bc708af76e44d33510e7f13224227e34a7a2730baf5e55a5b27c2cdf43c849c8"
+            ),
+            "post_main_sha256": (
+                "11add905bcdca94b67c443e7b74276f2c771f4924ee8a30170db1551af7f00a2"
+            ),
+            "projection": (
+                "unchanged-size-and-page-one-only-authorized-fields-patched-with-"
+                "pages-two-through-492-byte-exact"
+            ),
+        },
+        "required": [
+            "pre-and-post-exact-file-family-effect-trace",
+            (
+                "faults-before-and-after-first-coordination-callback-post-"
+                "coordination-pre-full-zero-wal-gap-and-before-and-after-second-"
+                "full-arm-callback"
+            ),
+            "skipped-duplicate-reordered-and-wrong-prerequisite-arm-fail-closed",
+            (
+                "faults-at-every-parameterized-header-chunk-record-field-journal-sync-"
+                "valid-header-main-page-write-main-sync-invalidation-close-"
+                "coordination-wal-delete-parent-sync-terminal-journal-delete-parent-"
+                "sync-and-creation-parent-sync-boundary-including-FI-to-FO"
+            ),
+            (
+                "receiptless-nonhot-hot-invalidated-absent-and-zero-wal-cold-reopen-"
+                "and-recrash-idempotence"
+            ),
+            (
+                "rebind-at-every-known-name-unlink-and-wrapper-xDelete-final-check-"
+                "boundary"
+            ),
+            (
+                "same-process-shared-and-reserved-separate-process-lock-holder-and-"
+                "unrelated-same-inode-fd-close-hazard"
+            ),
+            "post-normalization-fresh-journal-transition-fault",
+            "cold-reopen-exact-outcome",
+            (
+                "no-effect-replacement-nonempty-mixed-unrecognized-journal-and-"
+                "receipt-drift-cases"
+            ),
+        ],
+    },
+}
+
+ACCEPTED_EMPTY_EFFECT_GATE_STAGES: dict[str, Any] = {
+    "wal_shm_coordination_only": {
+        "accepted_empty_normalization_coordination": "forbidden",
+        "semantics_expansion_for_accepted_empty_normalization": "forbidden",
+    },
+    "accepted_empty_normalization_coordination": {
+        "operation": "accepted-empty-normalization",
+        "entry": (
+            "after-the-sealed-accepted-empty-source-anchor-and-before-the-first-wal-"
+            "touch"
+        ),
+        "has_moved_output_totality": (
+            "before-each-arming-callback-SQLITE_FCNTL_HAS_MOVED-20-call-initialize-"
+            "a-local-moved-integer-to-exact-zero-then-require-exact-SQLITE_OK-and-"
+            "output-zero"
+        ),
+        "coordination_arming_callback": (
+            "first-underlying-xLock-exclusive-success-then-local-moved-integer-"
+            "initialized-to-exact-zero-before-SQLITE_FCNTL_HAS_MOVED-20-require-"
+            "exact-SQLITE_OK-and-output-zero-then-synchronous-same-main-entry-size-"
+            "sha256-sidecar-census-and-exact-empty-recheck-under-the-continuously-"
+            "held-exclusive-lock-seal-the-immutable-source-anchor-and-only-then-"
+            "publish-accepted-empty-normalization-coordination-sequence-two"
+        ),
+        "sole_persistent_allowance": {
+            "exclusive_lock": (
+                "verified-held-continuously-from-the-coordination-arming-callback"
+            ),
+            "flags_integer": 524294,
+            "flags": [
+                "SQLITE_OPEN_READWRITE",
+                "SQLITE_OPEN_CREATE",
+                "SQLITE_OPEN_WAL",
+            ],
+            "object": "exact-one-same-bound-directory-zero-byte-wal-create-or-open",
+            "receipt": (
+                "captured-wal-file-instance-identity-directory-entry-size-zero-and-"
+                "sha256"
+            ),
+        },
+        "otherwise_permitted": [
+            "nonpersistent-identity-observation",
+            "nonpersistent-lock-observation",
+            "nonpersistent-file-control-observation",
+        ],
+        "forbidden": [
+            "main-or-wal-byte-write",
+            "main-or-wal-truncate",
+            "main-or-wal-sync",
+            "main-or-wal-delete",
+            "shm-or-rollback-journal-create",
+            (
+                "schema-metadata-format-marker-semantic-diagnostic-payload-head-"
+                "counter-or-process-state-authority-effect"
+            ),
+        ],
+        "full_arming_callback": (
+            "later-repeated-underlying-pending-full-arm-xLock-exclusive-success-"
+            "while-the-same-exclusive-lock-is-continuously-held-then-local-moved-"
+            "integer-initialized-to-exact-zero-before-SQLITE_FCNTL_HAS_MOVED-20-"
+            "require-exact-SQLITE_OK-and-output-zero-then-synchronous-same-main-"
+            "entry-source-anchor-coordination-sequence-two-zero-wal-receipt-and-"
+            "exact-empty-recheck-seal-the-pre-effect-full-receipt-with-only-a-"
+            "planned-normalization-candidate-id-and-only-then-publish-the-pending-"
+            "full-arm"
+        ),
+        "full_arming_failure": (
+            "any-xLock-HAS_MOVED-or-recheck-failure-leaves-full-unarmed-and-enters-"
+            "accepted-empty-normalization-failure-totality-after-close"
+        ),
+        "receipt_sequence": {
+            "denied": (
+                "sequence-one-prior-to-pending-request-install-armed-after-"
+                "exclusive-false"
+            ),
+            "coordination": (
+                "sequence-two-prerequisite-denied-sequence-one-armed-after-"
+                "exclusive-true-only-after-first-HAS_MOVED-source-recheck-and-"
+                "source-anchor-seal"
+            ),
+            "full": (
+                "sequence-three-prerequisite-coordination-sequence-two-armed-after-"
+                "exclusive-true-only-after-zero-wal-plus-source-recheck-and-pre-"
+                "effect-full-receipt-seal"
+            ),
+            "skipped-duplicate-reordered-or-wrong-prerequisite": "fail-closed",
+        },
+        "lock_trace": (
+            "shared-then-first-exclusive-then-zero-wal-open-then-second-exclusive-"
+            "then-zero-wal-close-delete-then-unlock-shared-none-with-no-unlock-"
+            "between-the-two-exclusive-callbacks"
+        ),
+        "next_stage": (
+            "only-existing-fully-armed-from-the-underlying-exclusive-xLock-callback-"
+            "after-exact-recheck-and-normalization-receipt-seal"
+        ),
+    },
+    "fully_armed": {
+        "accepted_empty_normalization_entry": (
+            "only-from-accepted-empty-normalization-coordination-after-the-"
+            "underlying-exclusive-xLock-callback-rechecks-and-seals-the-receipt"
+        )
+    },
+}
+
+ACCEPTED_EMPTY_TYPED_CONTROL: dict[str, Any] = {
+    "operation": "accepted-empty-normalization",
+    "transition_fault_boundary": "journal-normalization",
+    "terminal_phase": "normalization-transition",
+    "normalization_close_fault_event": (
+        "accepted-empty-normalization-plus-connection-close"
+    ),
+    "subsequent_fresh_close_fault_event": "fresh-initialization-plus-connection-close",
+    "ordinal_or_total_as_phase_identity": "forbidden",
+    "operation_or_phase_aliasing": "forbidden",
+}
+
+ACCEPTED_EMPTY_NORMALIZATION_PHYSICAL_EDGE: dict[str, Any] = {
+    "id": "cxxlens.sqlite-accepted-empty-normalization-edge.v1",
+    "applicability": "accepted-empty-normalization-only",
+    "source_class": "exact-logical-empty-preauthority",
+    "pre_physical_state": (
+        "same-main-header-two-two-exact-empty-and-either-no-sidecars-before-"
+        "coordination-or-one-bound-size-zero-wal-used-as-the-coordination-object"
+    ),
+    "post_physical_state": (
+        "same-main-complete-valid-rollback-mode-exact-empty-and-no-sidecars"
+    ),
+    "seal_timing": (
+        "only-after-coordination-wal-delete-journal-creation-and-terminal-journal-"
+        "delete-retained-authenticated-parent-fsync-finalize-exactly-one-confirmed-"
+        "close-and-post-close-total-reclassification"
+    ),
+    "candidate_receipt_presence_alone": "never-edge-or-success-authority",
+    "proof": (
+        "exact-completed-edge-receipt-binding-the-planned-candidate-plus-source-"
+        "coordination-full-arm-and-exact-normalization-bounded-effect-transcript-"
+        "receipts-to-the-same-main-and-entry-plus-all-three-parent-durability-"
+        "receipts-plus-streaming-exact-byte-compare-against-the-sealed-expected-post_"
+        "main_raw_projection-with-size-and-sha256-only-acceleration-plus-complete-"
+        "post-structural-logical-validation-and-sidecar-census"
+    ),
+    "with_edge_terminal_class": "authorized-post-state-with-operation-edge",
+    "prestate_terminal_class": "authorized-pre-state",
+    "normalized_without_edge_terminal_class": (
+        "authorized-post-state-without-operation-edge"
+    ),
+    "exact_empty_early_return_before_physical_edge_test": "forbidden",
+    "store_authority_descendant_algebra_membership": "forbidden",
+    "state_install_or_public_store_success": "forbidden",
+}
+
+NORMALIZED_EMPTY_INTERRUPTED_HANDOFF: dict[str, Any] = {
+    "raw_candidate": (
+        "existing-nonzero-main-header-read-and-write-version-one-and-wal-shm-"
+        "journal-absent"
+    ),
+    "private_classification": (
+        "bounded-held-main-only-copy-opened-with-transaction.connection_lifecycle."
+        "sqlite_open_profiles.quiescent_private_snapshot-for-complete-valid-sqlite-"
+        "structure-and-exact-logical-empty-proof"
+    ),
+    "private_close": (
+        "exactly-one-confirmed-close-before-source-recheck-or-fresh-route"
+    ),
+    "private_open_or_close_failure": {
+        "open_non_ok": (
+            "apply-transaction.connection_lifecycle.sqlite_open_profiles."
+            "common_non_ok_return_cleanup-and-return-the-selected-open-error-with-no-"
+            "source-effect-or-fresh-receipt"
+        ),
+        "close_non_ok_or_unknown": (
+            "quarantine-the-private-connection-and-runtime-vfs-pins-return-store."
+            "sqlite-failure-sqlite-initialization-recovery-opaque-with-no-source-"
+            "effect-or-fresh-receipt"
+        ),
+    },
+    "source_recheck": (
+        "same-main-entry-size-sha256-and-sidecar-census-exact-to-the-pre-copy-receipt"
+    ),
+    "drift_result": {
+        "code": "store.sqlite-failure",
+        "field": "sqlite-initialization-sidecar",
+        "detail": "concurrent-source-change",
+    },
+    "source_effects": "none",
+    "precedence": (
+        "before-the-nonzero-main-unconditional-header-two-two-gate-and-before-"
+        "expected-wal"
+    ),
+    "accepted_empty": (
+        "zero-application-id-user-objects-metadata-and-semantic-or-diagnostic-"
+        "authority-enters-ordinary-fresh-initialization-as-an-exact-empty-anchor-"
+        "with-a-new-fresh-receipt-no-process-receipt-success-inference"
+    ),
+    "nonempty_v2_current_or_unknown": (
+        "never-relax-the-v2-or-current-v3-header-two-two-wal-oracle-route-to-the-"
+        "existing-exact-format-incompatible-corrupt-or-sqlite-journal-mode-expected-"
+        "wal-result"
+    ),
+}
+
 
 # These requirements intentionally duplicate the safety-critical Option A
 # projection instead of deriving it from the schema.  The full-document
@@ -330,6 +1214,15 @@ OPTION_A_REQUIREMENTS: tuple[tuple[tuple[str, ...], Any], ...] = (
         ACTIVE_EXISTING_PROBE_PROFILE,
     ),
     (
+        (
+            "transaction",
+            "connection_lifecycle",
+            "sqlite_open_profiles",
+            "accepted_empty_normalization",
+        ),
+        ACCEPTED_EMPTY_NORMALIZATION_OPEN_PROFILE,
+    ),
+    (
         ("runtime", "capability_preflight", "error_precedence"),
         {
             "common_locator": [
@@ -401,7 +1294,8 @@ OPTION_A_REQUIREMENTS: tuple[tuple[tuple[str, ...], Any], ...] = (
         {
             "applicability": (
                 "every-sqlite3-open-v2-call-in-every-profile-including-probes-"
-                "private-copies-writers-fresh-recovery-scratch-and-ephemeral-memory"
+                "private-copies-writers-accepted-empty-normalization-fresh-recovery-"
+                "scratch-and-ephemeral-memory"
             ),
             "null_handle": (
                 "return-the-selected-profile-open-error-with-no-close-retry-"
@@ -684,6 +1578,22 @@ OPTION_A_REQUIREMENTS: tuple[tuple[tuple[str, ...], Any], ...] = (
         ),
         [
             "no-main-plus-any-sidecar-is-orphan-and-rejected",
+            (
+                "only-after-receiptless-crash-profile-acceptance-and-matching-"
+                "qualification-main-plus-one-readable-size-zero-wal-with-no-shm-or-"
+                "journal-first-dispatches-exactly-through-receiptless_zero_wal_"
+                "dispatch-as-FZ-pre-or-FZ-post"
+            ),
+            (
+                "readable-size-zero-wal-with-main-and-no-shm-or-journal-that-does-"
+                "not-pass-the-accepted-FZ-gate-is-rejected-before-private-SQLite-"
+                "recovery-normalization-or-source-effect"
+            ),
+            (
+                "only-after-receiptless-crash-profile-acceptance-and-matching-"
+                "qualification-main-plus-journal-with-no-wal-or-shm-first-raw-"
+                "classifies-exact-nonhot-prefix-hot-or-invalidated-family"
+            ),
             "any-journal-with-main-is-journal-present-and-rejected-even-with-wal-or-shm",
             (
                 "wal-and-shm-with-main-first-uses-the-ordinary-active-wal-existing-"
@@ -696,11 +1606,137 @@ OPTION_A_REQUIREMENTS: tuple[tuple[tuple[str, ...], Any], ...] = (
                 "unreadable-wal-only-result"
             ),
             (
-                "readable-wal-without-shm-and-with-main-is-the-only-preauthority-"
-                "crash-candidate"
+                "readable-nonzero-wal-without-shm-and-with-main-is-the-only-generic-"
+                "preauthority-crash-candidate"
             ),
             "no-sidecar-with-main-is-the-ordinary-quiescent-or-clean-route",
         ],
+    ),
+    (
+        (
+            "transaction",
+            "fresh_v3_initialization",
+            "guards",
+            "filesystem",
+            "precreate_census",
+            "receiptless_zero_wal_dispatch",
+        ),
+        {
+            "raw_candidate": (
+                "existing-nonzero-main-plus-one-readable-stable-size-zero-wal-with-"
+                "wal-shm-journal-super-journal-and-other-sidecars-otherwise-absent"
+            ),
+            "activation": (
+                "only-after-the-receiptless-crash-profile-is-accepted-and-the-exact-"
+                "runtime-vfs-device-filesystem-S-P-page-count-and-recrash-vector-is-"
+                "qualified"
+            ),
+            "exact_pre_route": (
+                "complete-valid-wal-header-two-two-exact-empty-main-is-FZ-pre-and-"
+                "may-only-seal-a-new-live-normalizer-source-anchor-with-the-existing-"
+                "bound-zero-wal-as-coordination-object"
+            ),
+            "exact_post_route": (
+                "complete-valid-rollback-header-one-one-exact-empty-current-main-is-"
+                "FZ-post-and-may-only-run-the-typed-known-name-zero-wal-cleanup-then-"
+                "enter-rollback_header_exact_empty_candidate-with-the-byte-exact-"
+                "current-main-receipt"
+            ),
+            "rejected": (
+                "every-other-main-zero-wal-topology-profile-or-qualification-state-"
+                "is-unrecognized-preauthority-state-with-no-private-SQLite-recovery-"
+                "normalizer-cleanup-or-source-effect"
+            ),
+            "cold_operation_history": (
+                "never-infer-or-seal-the-prior-normalization-operation-edge"
+            ),
+            "precedence": (
+                "before-preauthority_sidecar_candidate-and-before-any-zero-wal-main-"
+                "alone-classification"
+            ),
+        },
+    ),
+    (
+        (
+            "transaction",
+            "fresh_v3_initialization",
+            "guards",
+            "filesystem",
+            "precreate_census",
+            "preauthority_sidecar_candidate",
+            "wal_participation_gate",
+            "zero_byte",
+        ),
+        (
+            "forbidden-on-this-generic-route-must-have-been-exhaustively-dispatched-"
+            "by-precreate_census.receiptless_zero_wal_dispatch"
+        ),
+    ),
+    (
+        (
+            "transaction",
+            "fresh_v3_initialization",
+            "guards",
+            "filesystem",
+            "precreate_census",
+            "wal_header_sidecar_absent_exact_empty_candidate",
+            "accepted_empty",
+        ),
+        (
+            "seal-the-accepted-empty-normalization-source-anchor-and-enter-exactly-"
+            "one-clean-normalizer-with-no-public-success-inference"
+        ),
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "accepted_empty_normalization_receiptless_crash_profile_draft",
+            "family_partition",
+        ),
+        [
+            "F0-exact-pre-no-sidecar",
+            (
+                "FZ-exact-pre-or-complete-valid-rollback-exact-empty-current-main-"
+                "plus-size-zero-wal"
+            ),
+            "FP-exact-pre-nonhot-journal-prefix",
+            "FH-valid-hot-journal-with-exact-preimages-and-pre-or-post-main",
+            (
+                "FI-journal-preimages-derive-exact-pre-and-deterministic-post-plus-"
+                "first-28-zero-invalidated-journal"
+            ),
+            "FO-complete-valid-rollback-exact-empty-current-main-no-sidecar",
+        ],
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "accepted_empty_normalization_receiptless_crash_profile_draft",
+            "cold_operation_history_inference",
+        ),
+        (
+            "forbidden-FZ-post-FI-and-FO-prove-only-an-independent-current-rollback-"
+            "header-exact-empty-anchor-while-F0-FZ-pre-FP-and-FH-may-only-start-a-"
+            "new-live-receipted-normalizer"
+        ),
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "accepted_empty_normalization_receiptless_crash_profile_draft",
+            "disposable_fixture_capability",
+        ),
+        (
+            "harness-minted-nonforgeable-private-root-capability-run-ID-and-internal-"
+            "test-only-entrypoint-with-user-and-canonical-locators-rejected-and-no-"
+            "production-API-route"
+        ),
     ),
     (
         (
@@ -1136,6 +2172,25 @@ OPTION_A_REQUIREMENTS: tuple[tuple[tuple[str, ...], Any], ...] = (
                     "recovery-opaque-quarantine-rule"
                 ),
             },
+            "accepted-empty-normalization": {
+                "pre-persistent-effect-failure": (
+                    "after-exactly-one-confirmed-close-return-the-exact-trigger-and-"
+                    "no-store-whether-pending-source-anchor-or-coordination-sequence-"
+                    "two-receipts-exist-close-non-ok-applies-the-opaque-quarantine-"
+                    "rule"
+                ),
+                "normalization-transition-or-close-uncertain": (
+                    "apply-accepted_empty_original_normalization.failure_totality-"
+                    "from-the-latest-effect-and-receipt-stage-and-return-no-store"
+                ),
+                "authorized-post-state-with-operation-edge": (
+                    "internal-continue-fresh-initialization-with-no-store-yet"
+                ),
+                "authorized-pre-state-or-authorized-post-state-without-operation-edge": (
+                    "return-store.sqlite-failure-sqlite-initialization-recovery-"
+                    "opaque-and-no-store"
+                ),
+            },
             "publish": {
                 "precommit-failure": (
                     "apply-publish.precommit_failure-exactly-original-trigger-only-"
@@ -1460,6 +2515,361 @@ OPTION_A_REQUIREMENTS: tuple[tuple[tuple[str, ...], Any], ...] = (
             "rollback-path-is-the-explicit-no-close-exception"
         ),
     ),
+    (
+        ("runtime", "capability_preflight", "pre_arm_synchronous", "accepted_empty_normalization_stage"),
+        (
+            "after-version-limit-locator-main-identity-source-anchor-and-exact-"
+            "empty-gates-install-the-pending-coordination-arm-while-effects-remain-"
+            "denied-then-set-and-query-connection-local-full-the-first-underlying-"
+            "exclusive-xLock-callback-rechecks-and-arms-coordination-before-the-"
+            "exact-zero-byte-wal-open-and-no-other-persistent-effect-is-permitted-"
+            "before-the-later-full-arm"
+        ),
+    ),
+    (
+        (
+            "runtime",
+            "capability_preflight",
+            "pre_arm_synchronous_failure_effects",
+            "accepted_empty_normalization_with_or_without_coordination_effect",
+        ),
+        (
+            "close-and-use-accepted_empty_original_normalization.failure_totality-"
+            "selecting-pre-effect-or-after-coordination-from-the-latest-stage-evidence"
+        ),
+    ),
+    (
+        (
+            "runtime",
+            "capability_preflight",
+            "pre_arm_synchronous_failure_effects",
+            "coordination_effect_limit",
+        ),
+        (
+            "wal-only-recovery-stage-new-shm-is-coordination-only-never-authority-"
+            "and-no-main-wal-journal-or-store-authority-write-is-permitted-before-"
+            "final-arm"
+        ),
+    ),
+    (
+        (
+            "runtime",
+            "capability_preflight",
+            "pre_arm_synchronous_failure_effects",
+            "accepted_empty_normalization_coordination_effect_limit",
+        ),
+        (
+            "exact-zero-byte-wal-create-or-open-only-under-accepted-empty-"
+            "normalization-coordination-with-all-other-persistent-effects-denied-"
+            "before-full-arm"
+        ),
+    ),
+    (
+        ("transaction", "connection_lifecycle", "effect_gate_stages"),
+        ACCEPTED_EMPTY_EFFECT_GATE_STAGES,
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "scope",
+        ),
+        [
+            "initialization-recovery",
+            "accepted-empty-normalization",
+            "publish",
+            "migration",
+            "compaction",
+        ],
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "sealed_receipt_profiles",
+            "accepted_empty_normalization_source_anchor",
+        ),
+        ACCEPTED_EMPTY_NORMALIZATION_SOURCE_ANCHOR_RECEIPT,
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "sealed_receipt_profiles",
+            "accepted_empty_normalization",
+        ),
+        ACCEPTED_EMPTY_NORMALIZATION_RECEIPT,
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "sealed_receipt_profiles",
+            "accepted_empty_normalization_completed_edge",
+        ),
+        ACCEPTED_EMPTY_NORMALIZATION_COMPLETED_EDGE_RECEIPT,
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "accepted_empty_normalization_source_anchor",
+        ),
+        (
+            "candidate-fields-computed-while-effects-are-denied-before-installing-"
+            "the-pending-coordination-request-and-immutable-receipt-sealed-inside-"
+            "the-first-exclusive-callback-before-coordination-publication-or-any-"
+            "persistent-effect"
+        ),
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "accepted_empty_normalization_source_anchor_profile",
+        ),
+        (
+            "terminal_reclassification.sealed_receipt_profiles."
+            "accepted_empty_normalization_source_anchor"
+        ),
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "accepted_empty_normalization_source_anchor_seal",
+        ),
+        (
+            "pending-coordination-request-may-be-installed-while-effects-remain-"
+            "denied-then-after-first-successful-underlying-exclusive-xLock-and-"
+            "local-zero-initialized-HAS_MOVED-exact-SQLITE_OK-output-zero-source-"
+            "recheck-seal-the-immutable-source-anchor-immediately-before-"
+            "publishing-coordination-sequence-two-and-before-zero-wal-or-other-"
+            "persistent-effect"
+        ),
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "accepted_empty_normalization_receipt_seal",
+        ),
+        (
+            "in-the-later-repeated-second-pending-full-arm-exclusive-xLock-callback-"
+            "after-prior-exact-coordination-sequence-two-receipt-and-exact-zero-wal-"
+            "observation-and-before-full-arm-or-header-effect"
+        ),
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "accepted_empty_normalization_receipt_extension",
+        ),
+        (
+            "exact-source-anchor-receipt-plus-exact-coordination-sequence-two-"
+            "receipt-plus-the-later-repeated-exclusive-lock-recheck-plus-"
+            "coordination-zero-wal-observation-plus-planned-normalization-candidate-"
+            "id"
+        ),
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "accepted_empty_normalization_candidate_identity",
+        ),
+        (
+            "planned-normalization-candidate-id-in-the-pre-effect-full-receipt-"
+            "never-proves-transition-close-poststate-physical-edge-or-success"
+        ),
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "accepted_empty_normalization_completed_edge_profile",
+        ),
+        (
+            "terminal_reclassification.sealed_receipt_profiles."
+            "accepted_empty_normalization_completed_edge"
+        ),
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "accepted_empty_normalization_completed_edge_seal",
+        ),
+        (
+            "only-after-the-exact-normalization-bounded-effect-transcript-and-"
+            "coordination-wal-delete-journal-creation-and-terminal-journal-delete-"
+            "retained-authenticated-parent-fsync-receipts-the-single-delete-"
+            "normalization-transition-finalize-exactly-one-confirmed-close-and-post-"
+            "close-total-reclassification-bind-the-planned-candidate-source-"
+            "coordination-and-full-arm-receipts-to-the-exact-same-identity-poststate"
+        ),
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "accepted_empty_normalization_operation_identity",
+        ),
+        (
+            "accepted-empty-normalization-operation-plus-journal-normalization-"
+            "boundary-plus-normalization-transition-phase-and-generic-connection-"
+            "close-distinct-from-fresh-initialization"
+        ),
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "accepted_empty_normalization_success",
+        ),
+        (
+            "intermediate-only-no-store-and-only-a-sealed-same-identity-normalized-"
+            "empty-operation-edge-continues-into-ordinary-fresh-initialization"
+        ),
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "accepted_empty_normalization_public_success",
+        ),
+        "forbidden-until-ordinary-fresh-initialization-independently-completes",
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "accepted_empty_normalization_physical_edge",
+        ),
+        ACCEPTED_EMPTY_NORMALIZATION_PHYSICAL_EDGE,
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "typed_control_surface",
+            "accepted_empty_normalization",
+        ),
+        ACCEPTED_EMPTY_TYPED_CONTROL,
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "main_identity",
+            "capture",
+            "accepted_empty_normalization",
+        ),
+        {
+            "source_anchor": (
+                "capture-from-the-actual-normalizer-xOpen-main-handle-and-same-"
+                "directory-entry-then-verify-and-seal-inside-the-first-underlying-"
+                "exclusive-xLock-callback-before-coordination-publication"
+            ),
+            "pre_effect_full": (
+                "recheck-that-exact-main-file-instance-and-directory-entry-inside-"
+                "the-later-repeated-second-exclusive-xLock-callback-before-sealing-"
+                "the-pre-effect-full-receipt-and-publishing-full-arm"
+            ),
+        },
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_reclassification",
+            "accepted_routes_require",
+            "operation_admission",
+            "accepted-empty-normalization",
+        ),
+        ["exact-logical-empty-preauthority"],
+    ),
+    (
+        (
+            "transaction",
+            "recovery_model",
+            "terminal_result_precedence",
+            "accepted-empty-normalization",
+        ),
+        {
+            "pre-persistent-effect-failure": (
+                "after-exactly-one-confirmed-close-return-the-exact-trigger-and-no-"
+                "store-whether-pending-source-anchor-or-coordination-sequence-two-"
+                "receipts-exist-close-non-ok-applies-the-opaque-quarantine-rule"
+            ),
+            "normalization-transition-or-close-uncertain": (
+                "apply-accepted_empty_original_normalization.failure_totality-from-"
+                "the-latest-effect-and-receipt-stage-and-return-no-store"
+            ),
+            "authorized-post-state-with-operation-edge": (
+                "internal-continue-fresh-initialization-with-no-store-yet"
+            ),
+            "authorized-pre-state-or-authorized-post-state-without-operation-edge": (
+                "return-store.sqlite-failure-sqlite-initialization-recovery-opaque-"
+                "and-no-store"
+            ),
+        },
+    ),
+    (
+        (
+            "transaction",
+            "fresh_v3_initialization",
+            "guards",
+            "filesystem",
+            "precreate_census",
+            "rollback_header_exact_empty_candidate",
+        ),
+        NORMALIZED_EMPTY_INTERRUPTED_HANDOFF,
+    ),
+    (
+        (
+            "transaction",
+            "fresh_v3_initialization",
+            "guards",
+            "filesystem",
+            "precreate_census",
+            "preauthority_sidecar_candidate",
+            "accepted_empty_original_normalization",
+        ),
+        ACCEPTED_EMPTY_NORMALIZATION,
+    ),
+    (
+        (
+            "transaction",
+            "fresh_v3_initialization",
+            "guards",
+            "filesystem",
+            "lease",
+        ),
+        (
+            "after-the-nonexistent-bootstrap-exception-sqlite-exclusive-lock-plus-"
+            "main-file-identity-check-before-every-persistent-effect"
+        ),
+    ),
 )
 
 
@@ -1496,13 +2906,43 @@ def option_a_projection(contract: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _matches_exact_requirement(actual: Any, expected: Any) -> bool:
+    """Match exact structures, with an explicit canonical-digest leaf escape."""
+
+    if (
+        isinstance(expected, dict)
+        and set(expected) == {"__canonical_sha256__"}
+        and isinstance(expected["__canonical_sha256__"], str)
+    ):
+        return document_digest(actual) == expected["__canonical_sha256__"]
+    if isinstance(expected, dict):
+        return (
+            isinstance(actual, dict)
+            and set(actual) == set(expected)
+            and all(
+                _matches_exact_requirement(actual[key], value)
+                for key, value in expected.items()
+            )
+        )
+    if isinstance(expected, list):
+        return (
+            isinstance(actual, list)
+            and len(actual) == len(expected)
+            and all(
+                _matches_exact_requirement(actual_item, expected_item)
+                for actual_item, expected_item in zip(actual, expected, strict=True)
+            )
+        )
+    return actual == expected
+
+
 def validate_option_a_contract(contract: dict[str, Any]) -> None:
     """Validate recovery/open semantics independently of the static digest."""
 
     actual = option_a_projection(contract)
     for path, expected in OPTION_A_REQUIREMENTS:
         label = ".".join(path)
-        if actual[label] != expected:
+        if not _matches_exact_requirement(actual[label], expected):
             fail(
                 "sqlite.option-a-contract-invalid",
                 f"critical Option A projection differs: {label}",
@@ -1545,6 +2985,7 @@ SQLITE_OPEN_PROFILE_NAMES = (
     "active_existing_probe",
     "quiescent_private_snapshot",
     "existing_current_v3_writer",
+    "accepted_empty_normalization",
     "fresh_filesystem_after_raw_bootstrap",
     "wal_only_private_recovery",
     "wal_only_source_recovery_or_v2_compact",
@@ -2194,6 +3635,349 @@ def compaction_recovery_verdict(
     return "store.sqlite-failure/database/opaque"
 
 
+def decode_normalization_page_size(encoded: int) -> int:
+    """Decode SQLite header bytes 16..17 for the normalization oracle."""
+
+    if isinstance(encoded, bool) or not isinstance(encoded, int):
+        fail("sqlite.normalization-vector-invalid", "page size is not an integer")
+    if encoded == 1:
+        return 65_536
+    if encoded < 512 or encoded > 32_768 or encoded & (encoded - 1):
+        fail("sqlite.normalization-vector-invalid", "invalid encoded page size")
+    return encoded
+
+
+def normalization_expected_post_main(
+    pre_main: bytes,
+    *,
+    pinned_libversion_number: int,
+) -> bytes:
+    """Build the deterministic SQLite-owned page-one normalization projection."""
+
+    if not isinstance(pre_main, bytes) or len(pre_main) < 100:
+        fail("sqlite.normalization-vector-invalid", "main image is too short")
+    page_size = decode_normalization_page_size(
+        int.from_bytes(pre_main[16:18], "big")
+    )
+    if len(pre_main) == 0 or len(pre_main) % page_size:
+        fail(
+            "sqlite.normalization-vector-invalid",
+            "main size is not a positive integral page multiple",
+        )
+    header_page_count = int.from_bytes(pre_main[28:32], "big")
+    if header_page_count != len(pre_main) // page_size:
+        fail(
+            "sqlite.normalization-vector-invalid",
+            "header page count does not match the whole main image",
+        )
+    runtime_version = _checked_nonnegative_integer(
+        pinned_libversion_number,
+        "pinned sqlite3_libversion_number",
+        (1 << 32) - 1,
+    )
+    post_counter = (int.from_bytes(pre_main[24:28], "big") + 1) & 0xFFFF_FFFF
+    post = bytearray(pre_main)
+    post[18:20] = b"\x01\x01"
+    post[24:28] = post_counter.to_bytes(4, "big")
+    post[92:96] = post_counter.to_bytes(4, "big")
+    post[96:100] = runtime_version.to_bytes(4, "big")
+    return bytes(post)
+
+
+def effective_sqlite_sector_size(
+    raw_xsector_size: int,
+    *,
+    temporary_file: bool = False,
+    powersafe_overwrite: bool = False,
+) -> int:
+    """Model the exact pinned pager's current sector-size selection."""
+
+    if isinstance(raw_xsector_size, bool) or not isinstance(raw_xsector_size, int):
+        fail("sqlite.normalization-vector-invalid", "xSectorSize is not an integer")
+    if not isinstance(temporary_file, bool) or not isinstance(
+        powersafe_overwrite, bool
+    ):
+        fail(
+            "sqlite.normalization-vector-invalid",
+            "sector-size device profile is not boolean",
+        )
+    if temporary_file or powersafe_overwrite:
+        return 512
+    if raw_xsector_size < 32:
+        return 512
+    if raw_xsector_size > 65_536:
+        return 65_536
+    return raw_xsector_size
+
+
+def normalization_journal_layout(
+    *,
+    raw_xsector_size: int,
+    decoded_page_size: int,
+    header_offset: int = 0,
+    record_index: int = 0,
+    temporary_file: bool = False,
+    powersafe_overwrite: bool = False,
+) -> dict[str, int]:
+    """Derive the live normalization journal layout from effective sector size S."""
+
+    sector_size = effective_sqlite_sector_size(
+        raw_xsector_size,
+        temporary_file=temporary_file,
+        powersafe_overwrite=powersafe_overwrite,
+    )
+    if sector_size & (sector_size - 1):
+        fail(
+            "sqlite.normalization-vector-invalid",
+            "effective journal sector size is not a power of two",
+        )
+    if (
+        isinstance(decoded_page_size, bool)
+        or not isinstance(decoded_page_size, int)
+        or decoded_page_size < 512
+        or decoded_page_size > 65_536
+        or decoded_page_size & (decoded_page_size - 1)
+    ):
+        fail("sqlite.normalization-vector-invalid", "invalid journal page size")
+    if (
+        isinstance(header_offset, bool)
+        or not isinstance(header_offset, int)
+        or header_offset < 0
+        or header_offset % sector_size != 0
+    ):
+        fail("sqlite.normalization-vector-invalid", "invalid journal header offset")
+    if (
+        isinstance(record_index, bool)
+        or not isinstance(record_index, int)
+        or record_index < 0
+    ):
+        fail("sqlite.normalization-vector-invalid", "invalid journal record index")
+    record_size = decoded_page_size + 8
+    record_start = header_offset + sector_size + record_index * record_size
+    record_end = record_start + record_size
+    header_chunk_size = min(decoded_page_size, sector_size)
+    return {
+        "sector_size": sector_size,
+        "header_offset": header_offset,
+        "header_field_end": header_offset + 28,
+        "header_padding_begin": header_offset + 28,
+        "header_padding_end": header_offset + sector_size,
+        "header_write_length": sector_size,
+        "header_chunk_size": header_chunk_size,
+        "header_chunk_count": sector_size // header_chunk_size,
+        "record_index": record_index,
+        "record_size": record_size,
+        "page_number_offset": record_start,
+        "page_image_offset": record_start + 4,
+        "checksum_offset": record_start + 4 + decoded_page_size,
+        "record_end": record_end,
+        "next_header_offset": ((record_end + sector_size - 1) // sector_size)
+        * sector_size,
+    }
+
+
+def normalization_large_sector_record_set(
+    *,
+    raw_xsector_size: int,
+    decoded_page_size: int,
+    database_page_count: int,
+    temporary_file: bool = False,
+    powersafe_overwrite: bool = False,
+) -> dict[str, Any]:
+    """Derive pagerWriteLargeSector's exact page set and one-header length."""
+
+    layout = normalization_journal_layout(
+        raw_xsector_size=raw_xsector_size,
+        decoded_page_size=decoded_page_size,
+        temporary_file=temporary_file,
+        powersafe_overwrite=powersafe_overwrite,
+    )
+    if (
+        isinstance(database_page_count, bool)
+        or not isinstance(database_page_count, int)
+        or database_page_count <= 0
+    ):
+        fail("sqlite.normalization-vector-invalid", "invalid database page count")
+    locking_page = (0x4000_0000 // decoded_page_size) + 1
+    sector_size = layout["sector_size"]
+    pages_per_sector = (
+        sector_size // decoded_page_size
+        if sector_size > decoded_page_size
+        else 1
+    )
+    upper = min(database_page_count, pages_per_sector)
+    record_pages = tuple(
+        page for page in range(1, upper + 1) if page != locking_page
+    )
+    if not record_pages:
+        fail("sqlite.normalization-vector-invalid", "empty journal record set")
+    record_size = decoded_page_size + 8
+    return {
+        "sector_size": sector_size,
+        "page_size": decoded_page_size,
+        "database_page_count": database_page_count,
+        "locking_page": locking_page,
+        "pages_per_sector": pages_per_sector,
+        "record_pages": record_pages,
+        "record_count": len(record_pages),
+        "journal_size": sector_size + len(record_pages) * record_size,
+        "main_write_offsets": tuple(
+            (page - 1) * decoded_page_size for page in record_pages
+        ),
+    }
+
+
+def normalization_record_pages_match(
+    *,
+    raw_xsector_size: int,
+    decoded_page_size: int,
+    database_page_count: int,
+    observed_pages: tuple[int, ...],
+) -> bool:
+    """Match a parsed record sequence to E, including locking-page exclusion."""
+
+    if not isinstance(observed_pages, tuple) or any(
+        isinstance(page, bool) or not isinstance(page, int) or page <= 0
+        for page in observed_pages
+    ):
+        fail("sqlite.normalization-vector-invalid", "invalid observed record pages")
+    expected = normalization_large_sector_record_set(
+        raw_xsector_size=raw_xsector_size,
+        decoded_page_size=decoded_page_size,
+        database_page_count=database_page_count,
+    )
+    return observed_pages == expected["record_pages"]
+
+
+def normalization_reconstruct_pager_nonce(
+    stored_checksum: bytes,
+    page_image: bytes,
+) -> int:
+    """Invert the pinned pager_cksum sparse sum for one journal record."""
+
+    if not isinstance(stored_checksum, bytes) or len(stored_checksum) != 4:
+        fail("sqlite.normalization-vector-invalid", "checksum is not big-endian u32")
+    if (
+        not isinstance(page_image, bytes)
+        or len(page_image) < 512
+        or len(page_image) > 65_536
+        or len(page_image) & (len(page_image) - 1)
+    ):
+        fail("sqlite.normalization-vector-invalid", "invalid checksum page image")
+    sparse_sum = 0
+    index = len(page_image) - 200
+    while index > 0:
+        sparse_sum = (sparse_sum + page_image[index]) & 0xFFFF_FFFF
+        index -= 200
+    return (int.from_bytes(stored_checksum, "big") - sparse_sum) & 0xFFFF_FFFF
+
+
+def parse_normalization_journal_header_sector(
+    header_sector: bytes,
+    *,
+    expected_sector_size: int,
+    expected_page_size: int,
+) -> dict[str, int]:
+    """Fail closed on cold journal S/header-boundary mismatches."""
+
+    if not isinstance(header_sector, bytes) or len(header_sector) < 28:
+        fail("sqlite.normalization-vector-invalid", "journal header is too short")
+    if (
+        isinstance(expected_sector_size, bool)
+        or not isinstance(expected_sector_size, int)
+        or expected_sector_size < 32
+        or expected_sector_size > 65_536
+        or expected_sector_size & (expected_sector_size - 1)
+    ):
+        fail("sqlite.normalization-vector-invalid", "invalid expected sector size")
+    parsed_sector_size = int.from_bytes(header_sector[20:24], "big")
+    if (
+        parsed_sector_size < 32
+        or parsed_sector_size > 65_536
+        or parsed_sector_size & (parsed_sector_size - 1)
+        or parsed_sector_size != expected_sector_size
+        or len(header_sector) != parsed_sector_size
+    ):
+        fail("sqlite.normalization-vector-invalid", "journal sector size mismatch")
+    parsed_page_size = int.from_bytes(header_sector[24:28], "big")
+    if parsed_page_size != expected_page_size:
+        fail("sqlite.normalization-vector-invalid", "journal page size mismatch")
+    return normalization_journal_layout(
+        raw_xsector_size=parsed_sector_size,
+        decoded_page_size=parsed_page_size,
+    )
+
+
+def normalization_arm_sequence(events: tuple[str, ...]) -> dict[str, Any]:
+    """Model the exact denied -> coordination -> full arming order."""
+
+    expected = (
+        "install-pending-coordination-request",
+        "first-exclusive-has-moved-zero-source-anchor-seal",
+        "zero-wal-open",
+        "install-pending-full-request",
+        "second-exclusive-has-moved-zero-pre-effect-receipt-seal",
+    )
+    if not isinstance(events, tuple) or events != expected:
+        fail(
+            "sqlite.normalization-vector-invalid",
+            "normalization arm sequence is skipped, duplicated, or reordered",
+        )
+    return {
+        "denied": {
+            "sequence": 1,
+            "prerequisite": None,
+            "armed_after_exclusive": False,
+        },
+        "coordination": {
+            "sequence": 2,
+            "prerequisite": 1,
+            "armed_after_exclusive": True,
+            "source_anchor_sealed": True,
+        },
+        "full": {
+            "sequence": 3,
+            "prerequisite": 2,
+            "armed_after_exclusive": True,
+            "pre_effect_receipt_sealed": True,
+        },
+    }
+
+
+def normalization_terminal_edge(
+    *,
+    planned_candidate: bool,
+    full_sequence_receipt: bool,
+    effect_grammar_profile_receipt: bool,
+    bounded_effect_transcript_receipt: bool,
+    coordination_wal_delete_parent_sync_receipt: bool,
+    journal_creation_parent_sync_receipt: bool,
+    transition_result_delete: bool,
+    terminal_journal_delete_parent_sync_receipt: bool,
+    confirmed_close: bool,
+    exact_expected_post: bool,
+) -> str:
+    """Keep a pre-effect candidate distinct from a post-close physical edge."""
+
+    fields = (
+        planned_candidate,
+        full_sequence_receipt,
+        effect_grammar_profile_receipt,
+        bounded_effect_transcript_receipt,
+        coordination_wal_delete_parent_sync_receipt,
+        journal_creation_parent_sync_receipt,
+        transition_result_delete,
+        terminal_journal_delete_parent_sync_receipt,
+        confirmed_close,
+        exact_expected_post,
+    )
+    if any(not isinstance(value, bool) for value in fields):
+        fail("sqlite.normalization-vector-invalid", "edge input is not boolean")
+    if all(fields):
+        return "sealed-post-close-physical-edge"
+    return "no-edge-no-handoff"
+
+
 def validate_option_a_vectors() -> None:
     """Run bounded executable witnesses for the compressed recovery model."""
 
@@ -2219,6 +4003,368 @@ def validate_option_a_vectors() -> None:
             fail(
                 "sqlite.option-a-vector-mismatch",
                 f"sqlite3_open_v2 cleanup differs for {profile}",
+            )
+
+    for encoded, decoded in (
+        (1, 65_536),
+        (512, 512),
+        (4096, 4096),
+        (8192, 8192),
+        (32_768, 32_768),
+    ):
+        if decode_normalization_page_size(encoded) != decoded:
+            fail("sqlite.option-a-vector-mismatch", "page-size decode differs")
+    for invalid in (0, 2, 511, 513, 32_767, 65_535):
+        try:
+            decode_normalization_page_size(invalid)
+        except SQLiteStoreContractError:
+            pass
+        else:
+            fail("sqlite.option-a-vector-mismatch", "invalid page size was accepted")
+
+    for encoded, byte_count in ((512, 512), (32_768, 32_768), (1, 65_536)):
+        pre = bytearray(byte_count)
+        pre[16:18] = encoded.to_bytes(2, "big")
+        pre[18:20] = b"\x02\x02"
+        pre[24:28] = (5).to_bytes(4, "big")
+        pre[28:32] = (1).to_bytes(4, "big")
+        pre[92:96] = (9).to_bytes(4, "big")
+        pre[96:100] = (1).to_bytes(4, "big")
+        post = normalization_expected_post_main(
+            bytes(pre), pinned_libversion_number=3_045_001
+        )
+        if (
+            post[18:20] != b"\x01\x01"
+            or int.from_bytes(post[24:28], "big") != 6
+            or int.from_bytes(post[92:96], "big") != 6
+            or int.from_bytes(post[96:100], "big") != 3_045_001
+            or post[100:] != bytes(pre[100:])
+        ):
+            fail("sqlite.option-a-vector-mismatch", "post-main projection differs")
+    wrapping = bytearray(4096)
+    wrapping[16:18] = (4096).to_bytes(2, "big")
+    wrapping[24:28] = (0xFFFF_FFFF).to_bytes(4, "big")
+    wrapping[28:32] = (1).to_bytes(4, "big")
+    wrapping[92:96] = (0x1234_5678).to_bytes(4, "big")
+    wrapped = normalization_expected_post_main(
+        bytes(wrapping), pinned_libversion_number=3_045_001
+    )
+    if wrapped[24:28] != b"\0\0\0\0" or wrapped[92:96] != b"\0\0\0\0":
+        fail("sqlite.option-a-vector-mismatch", "counter wrap projection differs")
+
+    for raw_sector, expected_sector in (
+        (16, 512),
+        (32, 32),
+        (512, 512),
+        (4096, 4096),
+        (65_536, 65_536),
+        (131_072, 65_536),
+    ):
+        layout = normalization_journal_layout(
+            raw_xsector_size=raw_sector,
+            decoded_page_size=4096,
+        )
+        if layout != {
+            "sector_size": expected_sector,
+            "header_offset": 0,
+            "header_field_end": 28,
+            "header_padding_begin": 28,
+            "header_padding_end": expected_sector,
+            "header_write_length": expected_sector,
+            "header_chunk_size": min(4096, expected_sector),
+            "header_chunk_count": expected_sector // min(4096, expected_sector),
+            "record_index": 0,
+            "record_size": 4104,
+            "page_number_offset": expected_sector,
+            "page_image_offset": expected_sector + 4,
+            "checksum_offset": expected_sector + 4 + 4096,
+            "record_end": expected_sector + 8 + 4096,
+            "next_header_offset": (
+                (expected_sector + 8 + 4096 + expected_sector - 1)
+                // expected_sector
+            )
+            * expected_sector,
+        }:
+            fail("sqlite.option-a-vector-mismatch", "journal S layout differs")
+    psow_layout = normalization_journal_layout(
+        raw_xsector_size=4096,
+        decoded_page_size=4096,
+        powersafe_overwrite=True,
+    )
+    if psow_layout["sector_size"] != 512:
+        fail("sqlite.option-a-vector-mismatch", "PSOW sector selection differs")
+    page_sizes = (512, 1024, 2048, 4096, 8192, 16_384, 32_768, 65_536)
+    effective_sectors = tuple(1 << exponent for exponent in range(5, 17))
+    for page_size in page_sizes:
+        page_layout = normalization_journal_layout(
+            raw_xsector_size=512,
+            decoded_page_size=page_size,
+        )
+        if (
+            page_layout["record_size"] != page_size + 8
+            or page_layout["header_chunk_size"] != min(512, page_size)
+        ):
+            fail("sqlite.option-a-vector-mismatch", "legal page size vector differs")
+        for effective_sector in effective_sectors:
+            pages_per_sector = (
+                effective_sector // page_size if effective_sector > page_size else 1
+            )
+            locking_page = (0x4000_0000 // page_size) + 1
+            if locking_page <= pages_per_sector:
+                fail(
+                    "sqlite.option-a-vector-mismatch",
+                    "locking-page exclusion proof differs",
+                )
+            counts = {
+                count
+                for count in (
+                    1,
+                    pages_per_sector - 1,
+                    pages_per_sector,
+                    pages_per_sector + 1,
+                )
+                if count > 0
+            }
+            for database_pages in counts:
+                boundary = normalization_large_sector_record_set(
+                    raw_xsector_size=effective_sector,
+                    decoded_page_size=page_size,
+                    database_page_count=database_pages,
+                )
+                expected_pages = tuple(
+                    range(1, min(database_pages, pages_per_sector) + 1)
+                )
+                if boundary["record_pages"] != expected_pages:
+                    fail(
+                        "sqlite.option-a-vector-mismatch",
+                        "parameterized S/P/N record set differs",
+                    )
+    wide_layout = normalization_journal_layout(
+        raw_xsector_size=65_536,
+        decoded_page_size=4096,
+    )
+    if (
+        wide_layout["header_chunk_size"] != 4096
+        or wide_layout["header_chunk_count"] != 16
+    ):
+        fail("sqlite.option-a-vector-mismatch", "wide journal header chunks differ")
+    large_sector = normalization_large_sector_record_set(
+        raw_xsector_size=65_536,
+        decoded_page_size=4096,
+        database_page_count=66,
+    )
+    if (
+        large_sector["record_pages"] != tuple(range(1, 17))
+        or large_sector["record_count"] != 16
+        or large_sector["journal_size"] != 131_200
+        or large_sector["main_write_offsets"] != tuple(range(0, 65_536, 4096))
+    ):
+        fail("sqlite.option-a-vector-mismatch", "large-sector record set differs")
+    for database_pages, expected_count in ((1, 1), (15, 15), (16, 16), (17, 16)):
+        boundary = normalization_large_sector_record_set(
+            raw_xsector_size=65_536,
+            decoded_page_size=4096,
+            database_page_count=database_pages,
+        )
+        if boundary["record_count"] != expected_count:
+            fail("sqlite.option-a-vector-mismatch", "large-sector count boundary differs")
+    actual_locking_page = large_sector["locking_page"]
+    if actual_locking_page <= large_sector["pages_per_sector"]:
+        fail("sqlite.option-a-vector-mismatch", "locking page proof differs")
+    if normalization_record_pages_match(
+        raw_xsector_size=65_536,
+        decoded_page_size=4096,
+        database_page_count=16,
+        observed_pages=large_sector["record_pages"] + (actual_locking_page,),
+    ):
+        fail("sqlite.option-a-vector-mismatch", "injected locking page was accepted")
+    page_image = bytes((index * 37 + 11) & 0xFF for index in range(4096))
+    expected_nonce = 0x1234_5678
+    sparse_sum = sum(page_image[index] for index in range(4096 - 200, 0, -200))
+    stored_checksum = ((expected_nonce + sparse_sum) & 0xFFFF_FFFF).to_bytes(4, "big")
+    if (
+        normalization_reconstruct_pager_nonce(stored_checksum, page_image)
+        != expected_nonce
+    ):
+        fail("sqlite.option-a-vector-mismatch", "pager checksum nonce differs")
+    ordinary_sector = normalization_large_sector_record_set(
+        raw_xsector_size=512,
+        decoded_page_size=4096,
+        database_page_count=492,
+    )
+    if ordinary_sector["record_pages"] != (1,):
+        fail("sqlite.option-a-vector-mismatch", "ordinary sector record set differs")
+    for invalid_count in (0, -1, True):
+        try:
+            normalization_large_sector_record_set(
+                raw_xsector_size=65_536,
+                decoded_page_size=4096,
+                database_page_count=invalid_count,
+            )
+        except SQLiteStoreContractError:
+            pass
+        else:
+            fail(
+                "sqlite.option-a-vector-mismatch",
+                "invalid large-sector database page count was accepted",
+            )
+    for raw_sector in (33, 48, 1000, 65_535):
+        try:
+            normalization_journal_layout(
+                raw_xsector_size=raw_sector,
+                decoded_page_size=4096,
+            )
+        except SQLiteStoreContractError:
+            pass
+        else:
+            fail(
+                "sqlite.option-a-vector-mismatch",
+                "non-power-of-two effective sector size was accepted",
+            )
+
+    for sector_size in (32, 512, 4096, 65_536):
+        header = bytearray(sector_size)
+        header[20:24] = sector_size.to_bytes(4, "big")
+        header[24:28] = (4096).to_bytes(4, "big")
+        parsed = parse_normalization_journal_header_sector(
+            bytes(header),
+            expected_sector_size=sector_size,
+            expected_page_size=4096,
+        )
+        if parsed["page_number_offset"] != sector_size:
+            fail("sqlite.option-a-vector-mismatch", "cold journal offset differs")
+
+    valid_header = bytearray(4096)
+    valid_header[20:24] = (4096).to_bytes(4, "big")
+    valid_header[24:28] = (4096).to_bytes(4, "big")
+    opaque_padding = bytearray(valid_header)
+    opaque_padding[28] = 1
+    opaque_padding[-1] = 0xA5
+    opaque_parsed = parse_normalization_journal_header_sector(
+        bytes(opaque_padding),
+        expected_sector_size=4096,
+        expected_page_size=4096,
+    )
+    if (
+        opaque_parsed["header_padding_begin"] != 28
+        or opaque_parsed["header_padding_end"] != 4096
+    ):
+        fail("sqlite.option-a-vector-mismatch", "opaque header boundary differs")
+    invalid_headers = []
+    mismatched_field = bytearray(valid_header)
+    mismatched_field[20:24] = (512).to_bytes(4, "big")
+    invalid_headers.append((bytes(mismatched_field), 4096, 4096))
+    non_power_field = bytearray(valid_header)
+    non_power_field[20:24] = (48).to_bytes(4, "big")
+    invalid_headers.append((bytes(non_power_field[:48]), 48, 4096))
+    below_minimum_field = bytearray(32)
+    below_minimum_field[20:24] = (16).to_bytes(4, "big")
+    below_minimum_field[24:28] = (4096).to_bytes(4, "big")
+    invalid_headers.append((bytes(below_minimum_field), 32, 4096))
+    above_maximum_field = bytearray(65_536)
+    above_maximum_field[20:24] = (65_537).to_bytes(4, "big")
+    above_maximum_field[24:28] = (4096).to_bytes(4, "big")
+    invalid_headers.append((bytes(above_maximum_field), 65_536, 4096))
+    invalid_headers.append((bytes(valid_header[:-1]), 4096, 4096))
+    invalid_headers.append((bytes(valid_header) + b"\0", 4096, 4096))
+    wrong_page_size = bytearray(valid_header)
+    wrong_page_size[24:28] = (8192).to_bytes(4, "big")
+    invalid_headers.append((bytes(wrong_page_size), 4096, 4096))
+    for header, expected_sector, expected_page in invalid_headers:
+        try:
+            parse_normalization_journal_header_sector(
+                header,
+                expected_sector_size=expected_sector,
+                expected_page_size=expected_page,
+            )
+        except SQLiteStoreContractError:
+            pass
+        else:
+            fail("sqlite.option-a-vector-mismatch", "invalid journal S was accepted")
+
+    exact_events = (
+        "install-pending-coordination-request",
+        "first-exclusive-has-moved-zero-source-anchor-seal",
+        "zero-wal-open",
+        "install-pending-full-request",
+        "second-exclusive-has-moved-zero-pre-effect-receipt-seal",
+    )
+    receipts = normalization_arm_sequence(exact_events)
+    if (
+        receipts["denied"]["armed_after_exclusive"]
+        or receipts["coordination"]["prerequisite"] != 1
+        or receipts["full"]["prerequisite"] != 2
+    ):
+        fail("sqlite.option-a-vector-mismatch", "arm receipts differ")
+    invalid_sequences = (
+        exact_events[:-1],
+        exact_events + (exact_events[-1],),
+        (exact_events[1], exact_events[0], *exact_events[2:]),
+    )
+    for invalid_sequence in invalid_sequences:
+        try:
+            normalization_arm_sequence(invalid_sequence)
+        except SQLiteStoreContractError:
+            pass
+        else:
+            fail("sqlite.option-a-vector-mismatch", "invalid arm order was accepted")
+
+    if normalization_terminal_edge(
+        planned_candidate=True,
+        full_sequence_receipt=True,
+        effect_grammar_profile_receipt=True,
+        bounded_effect_transcript_receipt=False,
+        coordination_wal_delete_parent_sync_receipt=False,
+        journal_creation_parent_sync_receipt=False,
+        transition_result_delete=False,
+        terminal_journal_delete_parent_sync_receipt=False,
+        confirmed_close=False,
+        exact_expected_post=False,
+    ) != "no-edge-no-handoff":
+        fail("sqlite.option-a-vector-mismatch", "candidate implied completed edge")
+    if normalization_terminal_edge(
+        planned_candidate=True,
+        full_sequence_receipt=True,
+        effect_grammar_profile_receipt=True,
+        bounded_effect_transcript_receipt=True,
+        coordination_wal_delete_parent_sync_receipt=True,
+        journal_creation_parent_sync_receipt=True,
+        transition_result_delete=True,
+        terminal_journal_delete_parent_sync_receipt=True,
+        confirmed_close=True,
+        exact_expected_post=True,
+    ) != "sealed-post-close-physical-edge":
+        fail("sqlite.option-a-vector-mismatch", "completed edge was not sealed")
+    complete_edge_inputs = {
+        "planned_candidate": True,
+        "full_sequence_receipt": True,
+        "effect_grammar_profile_receipt": True,
+        "bounded_effect_transcript_receipt": True,
+        "coordination_wal_delete_parent_sync_receipt": True,
+        "journal_creation_parent_sync_receipt": True,
+        "transition_result_delete": True,
+        "terminal_journal_delete_parent_sync_receipt": True,
+        "confirmed_close": True,
+        "exact_expected_post": True,
+    }
+    for required_field in (
+        "planned_candidate",
+        "full_sequence_receipt",
+        "effect_grammar_profile_receipt",
+        "bounded_effect_transcript_receipt",
+        "coordination_wal_delete_parent_sync_receipt",
+        "journal_creation_parent_sync_receipt",
+        "transition_result_delete",
+        "terminal_journal_delete_parent_sync_receipt",
+        "confirmed_close",
+        "exact_expected_post",
+    ):
+        incomplete_edge = dict(complete_edge_inputs)
+        incomplete_edge[required_field] = False
+        if normalization_terminal_edge(**incomplete_edge) != "no-edge-no-handoff":
+            fail(
+                "sqlite.option-a-vector-mismatch",
+                f"missing {required_field} sealed completed edge",
             )
 
     writer_input = frozenset(
@@ -2504,6 +4650,8 @@ def snapshot_binding_projection(snapshot: dict[str, Any]) -> dict[str, Any]:
         ingress = snapshot["df_0200_materialization_ingress"]
         compaction = snapshot["compaction"]
         format_compatibility = snapshot["format_compatibility"]
+        terminal = snapshot["publication_transaction"]["sqlite_terminal_recovery"]
+        terminal_receipts = terminal["sealed_receipt_profiles"]
         return {
             "authority": {
                 "sqlite_decision_adr": snapshot["authority"][
@@ -2529,6 +4677,57 @@ def snapshot_binding_projection(snapshot: dict[str, Any]) -> dict[str, Any]:
                 "sqlite_v3_compaction_commit_outcome_unknown"
             ],
             "format_compatibility": format_compatibility,
+            "sqlite_terminal_recovery_normalization": {
+                "sealed_receipt_profiles": {
+                    "accepted_empty_normalization_source_anchor": terminal_receipts[
+                        "accepted_empty_normalization_source_anchor"
+                    ],
+                    "accepted_empty_normalization": terminal_receipts[
+                        "accepted_empty_normalization"
+                    ],
+                    "accepted_empty_normalization_completed_edge": terminal_receipts[
+                        "accepted_empty_normalization_completed_edge"
+                    ],
+                },
+                "accepted_empty_normalization_source_anchor": terminal[
+                    "accepted_empty_normalization_source_anchor"
+                ],
+                "accepted_empty_normalization_source_anchor_profile": terminal[
+                    "accepted_empty_normalization_source_anchor_profile"
+                ],
+                "accepted_empty_normalization_source_anchor_seal": terminal[
+                    "accepted_empty_normalization_source_anchor_seal"
+                ],
+                "accepted_empty_normalization_receipt_seal": terminal[
+                    "accepted_empty_normalization_receipt_seal"
+                ],
+                "accepted_empty_normalization_receipt_extension": terminal[
+                    "accepted_empty_normalization_receipt_extension"
+                ],
+                "accepted_empty_normalization_candidate_identity": terminal[
+                    "accepted_empty_normalization_candidate_identity"
+                ],
+                "accepted_empty_normalization_completed_edge_profile": terminal[
+                    "accepted_empty_normalization_completed_edge_profile"
+                ],
+                "accepted_empty_normalization_completed_edge_seal": terminal[
+                    "accepted_empty_normalization_completed_edge_seal"
+                ],
+                "accepted_empty_normalization_operation_identity": terminal[
+                    "accepted_empty_normalization_operation_identity"
+                ],
+                "accepted_empty_normalization_success": terminal[
+                    "accepted_empty_normalization_success"
+                ],
+                "accepted_empty_normalization_public_success": terminal[
+                    "accepted_empty_normalization_public_success"
+                ],
+                "accepted_empty_normalization_receiptless_crash_profile_draft": (
+                    terminal[
+                        "accepted_empty_normalization_receiptless_crash_profile_draft"
+                    ]
+                ),
+            },
         }
     except (KeyError, TypeError) as error:
         fail("sqlite.snapshot-binding-drift", f"binding field is missing: {error}")
@@ -2549,6 +4748,9 @@ def validate_snapshot_binding(
         ]["active_wal"]["source_shm_readonly_capability"]
         chunk_profile = contract["payload"]["chunk_profile"]
         migration = contract["migration"]
+        terminal_reclassification = contract["transaction"]["recovery_model"][
+            "terminal_reclassification"
+        ]
     except (KeyError, TypeError) as error:
         fail(
             "sqlite.snapshot-binding-drift",
@@ -2581,6 +4783,33 @@ def validate_snapshot_binding(
     expected_ingress_tag = (
         f"{current_tag}-bounded-{chunk_profile['maximum_bytes']}-byte-chunks"
     )
+    expected_terminal_normalization = {
+        "sealed_receipt_profiles": {
+            key: terminal_reclassification["sealed_receipt_profiles"][key]
+            for key in (
+                "accepted_empty_normalization_source_anchor",
+                "accepted_empty_normalization",
+                "accepted_empty_normalization_completed_edge",
+            )
+        },
+        **{
+            key: terminal_reclassification[key]
+            for key in (
+                "accepted_empty_normalization_source_anchor",
+                "accepted_empty_normalization_source_anchor_profile",
+                "accepted_empty_normalization_source_anchor_seal",
+                "accepted_empty_normalization_receipt_seal",
+                "accepted_empty_normalization_receipt_extension",
+                "accepted_empty_normalization_candidate_identity",
+                "accepted_empty_normalization_completed_edge_profile",
+                "accepted_empty_normalization_completed_edge_seal",
+                "accepted_empty_normalization_operation_identity",
+                "accepted_empty_normalization_success",
+                "accepted_empty_normalization_public_success",
+                "accepted_empty_normalization_receiptless_crash_profile_draft",
+            )
+        },
+    }
     if (
         actual["authority"]
         != {
@@ -2602,6 +4831,8 @@ def validate_snapshot_binding(
         or actual["sqlite_v2_to_v3_migration"]["authority"] != decision_adr
         or actual["sqlite_v2_to_v3_migration"]["trigger"]
         != migration["public_trigger"]
+        or actual["sqlite_terminal_recovery_normalization"]
+        != expected_terminal_normalization
     ):
         fail(
             "sqlite.snapshot-binding-drift",

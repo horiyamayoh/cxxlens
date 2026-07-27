@@ -2121,6 +2121,97 @@ effect後ならfinalize/必要時一回rollback/一回close後のphase classifie
 close non-OKはquarantineし、`BEGIN IMMEDIATE`後のdriftはzero authority writeのまま該当publish/compaction/migration/fresh-init
 precommit規則へ委譲する。
 
+Issue #202 / DF-0202 の receiptless normalization interruption profile は、次の authority
+proposal として扱い、profile acceptance と qualification が完了するまで canonical source または production
+path を activate しない。対象 crash model は、underlying VFS callback が成功して呼出側へ戻った境界での process
+termination だけである。power loss、torn/partial sector write、kernel/device cache、callback 内 termination、
+unqualified filesystem reorder は含まず、これらを callback-boundary evidence から推測しない。cold raw classifier は
+SQLite open、recovery、checkpoint、SHM create、delete、cleanup を行わず、namespace epoch 開始後の
+retained authenticated parent fd 相対 `getdents`、`fstatat(AT_SYMLINK_NOFOLLOW)`、
+`openat(O_NOFOLLOW)` または同じ typed semantics、続く held regular file の `fstat`、streaming
+bytes と identity/entry だけから次の有限 family の candidate または unresolved を返す。host path
+の再解決を classifier authority にしない。
+
+| Family | exact cold topology |
+|---|---|
+| `F0` | byte-exact current pre-form main（WAL header 2/2）+ sidecar absent |
+| `FZ` | byte-exact current pre-form または post-form main + size-zero WAL、SHM/journal absent |
+| `FP` | pre-form main + derived normalization journal の exact non-hot callback-boundary prefix、WAL/SHM absent |
+| `FH` | pre-form またはpost-form main + exact preimage record を持つ valid hot journal、WAL/SHM absent |
+| `FI` | post-form main + first 28 bytes zero の exact invalidated journal body、WAL/SHM absent |
+| `FO` | byte-exact current post-form main（rollback header 1/1）+ sidecar absent |
+
+pre-formはcomplete-valid WAL-header 2/2 exact-empty current main、post-formはcomplete-valid
+rollback-header 1/1 exact-empty current mainである。receiptless post-form単独から未知のpre bytes、
+normalizer由来、operation historyを復元せず、preからのdeterministic post relationはlive receipt
+またはexact journal preimagesがあるbranchだけで検証する。
+
+precedence は main 不在+sidecar を orphan として最初に拒否し、main+journal+WAL/SHM absent
+だけを generic `journal-present` より先に `FP/FH/FI` raw classifier へ送る。journal と
+WAL/SHM の混在は family 外として拒否する。main+WAL+SHM は ordinary active-WAL、SHM-only は
+incomplete、nonzero WAL-only は ordinary WAL-only route を維持する。size-zero WAL-only は `FZ`
+を main の exact bytes により `FZ-pre` と `FZ-post` へ先に分け、`FZ-pre` は bound zero-WAL を
+coordination object とする新しい live-receipted normalizer、`FZ-post` は typed zero-WAL cleanup
+後の rollback-empty fresh anchor へ送る。sidecar absent は pre-form を `F0`、post-form を
+`FO` とし、それ以外を既存 format/journal-mode result へ閉じる。extra sidecar、ambiguous/truncated
+prefix、identity/byte drift、unavailable observation は candidate を受理せず、fallback や cleanup を
+行わない。
+
+`FP` は journal cleanup 後、`FH` は専用 recovery connection が exact preimage replay、journal
+delete、durable parent sync、one-shot predelegation WAL-open barrier、confirmed close を終えた後、それぞれ
+`F0` を独立再検証して新しい live receipt の normalizer を開始する。`FZ-pre` も同様に現在の
+zero-WAL identity を source receipt に bind して開始する。`FI` と `FZ-post` は sidecar cleanup 後、
+`FO` はそのまま、complete rollback-mode exact-empty を独立検証して ordinary fresh anchor を新しく
+sealする。cold `F0/FZ/FP/FH/FI/FO` から過去の operation history、candidate、receipt、completed
+normalization edge を復元してはならない。特に `FO/FI/FZ-post` は fresh anchor にはなれても、
+normalization success の証明ではない。live invocation で pre-effect/full receipts、permitted effect、
+confirmed close、exact poststate を連結できた場合だけ、その invocation の internal completed edge を
+sealでき、どの family route も Store/public success を直接返さない。
+
+source cleanup は private validation、continuous parent namespace epoch、main の
+`SHARED`→`EXCLUSIVE` lock と under-lock byte recheck の後だけ行う。retained authenticated parent
+directory capability と known sidecar leaf を使い、unlink 直前の current leaf が regular file で
+expected identity と一致することを観測して fd-relative path unlink を一回だけ行う。これは
+§17.6 の authenticated-known-path authority であり、final check と unlink の間の concurrent leaf
+rebind に対する exact-object deletion guarantee ではない。rebind-at-unlink では path effect が既に
+起きた可能性があるため、post-effect durability/authority opaque、no Store、no retry、no handoff、
+no second snapshot とする。全 sidecar deletion は同じ retained parent fd の別個の full `fsync`
+成功と post-census を handoff より前に必須とし、`xDelete(syncDir=1)` の success を durability
+receipt にしない。この規則は `FP/FI/FZ-post` cleanup、`FH` recovery delete、normalizer の
+coordination WAL delete と terminal journal delete のすべてに適用する。coordination WAL deleteは
+journal createより前に独立したparent-sync receiptをsealする。normalizer は最初の rollback-journal sync 後かつ valid
+header/main write 前にも authenticated parent namespace sync を要求し、その失敗を post-journal/
+pre-main opaque totality に閉じる。
+
+journal parser の SQLite pager checksum と large-sector grammar は family candidate の supporting
+integrity evidenceに限る。decoded page size `P`、qualified effective sector size `S`、database page
+count、pending-byte locking page から `Q=(S>P ? S/P : 1)` と record set を導出し、先頭
+`Q` pages（locking pageを除く）の exact preimageを扱う。nonce+sparse checksum は incomplete-write
+guardであってprovenance、main binding、page bytes、success authorityを代替しない。固定 `S`、一 record
+仮定、parent filesystemからの device profile推測を禁止し、SQLite build、`xSectorSize`、
+`xDeviceCharacteristics`、VFS/backend/filesystem profile と全 parameterized `S/P/page-count/record-set`
+matrix をbindする。admitted `S<=65536`、`512<=P<=65536`では`Q<=128`に対してpending-byte locking page
+`L=floor(0x40000000/P)+1>=16385`なので、`L>Q`を全pairで機械的に証明し、存在しないcrossingを
+実行vectorにしない。代わりにsynthetic record-set negativeで`L`を注入したcandidateを拒否する。
+
+authorization は二層である。proposal acceptance 前は authority edit、read-only audit、temporary
+investigation probeだけを許す。exact proposal の independent acceptance 後は raw classifier、
+typed filesystem/VFS ports、effect gates、one-shot barrier、fault harness、およびfixture-scoped
+cleanup/recovery/normalizerを実装し、そのsource effectを明示作成したisolated disposable
+qualification fixture にだけ発行してよい。fixture authorityはharness
+だけがisolated disposable rootの作成後にmintするnonforgeable capabilityとし、retained root
+identity/lifetime、exact fixture locator、qualification run id、selected runtime/VFS/device/build
+profile、許可family/effect/fault scheduleへbindする。path、environment、public flag、report field、
+self-asserted booleanから導出できず、serializeせず、internal qualification-only entrypointだけが
+受理してrun終了時にrevokeする。public locatorまたはproduction APIからmint・注入・到達できない。
+canonical/user source と
+production activation は、repository-tracked harness/build/toolchain、static/shared Cxxlens runners が
+実際に load する同一 SQLite DSO identity/source-id/hash、VFS/build/device/filesystem profile、全
+callback boundary・parameterized large-sector・parent-sync・rebind-at-unlink・recrash/idempotence matrix、
+canonical report digest、independent counterexample review が揃い、draft profile が accepted profile
+へ置換されるまで fail closed とする。Cxxlens の static/shared runner labels から static SQLite
+runtime を推測せず、genuinely static SQLite image は別 profile/matrix を要求する。
+
 exact public locator `:memory:` は filesystem canonicalization 前に ephemeral fresh-v3 branch とし、sidecar、v2/migration、
 close 後 persistence を持たない。embedded NUL またはplatform pathへlosslessに表現不能なnonempty inputはruntime/filesystem
 access前にzero-effectの`store.sqlite-failure / sqlite-locator / invalid-filesystem-path`で拒否する。それ以外のvalid inputは

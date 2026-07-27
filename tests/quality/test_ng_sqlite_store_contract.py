@@ -29,10 +29,16 @@ from check_ng_sqlite_store_contract import (  # noqa: E402
     compaction_recovery_verdict,
     compressed_compaction_schedule,
     document_digest,
+    effective_sqlite_sector_size,
     forced_population_reachable,
     format_reset_projection,
     load_yaml,
+    normalization_large_sector_record_set,
+    normalization_journal_layout,
+    normalization_reconstruct_pager_nonce,
+    normalization_record_pages_match,
     option_a_projection,
+    parse_normalization_journal_header_sector,
     readwrite_open_observation,
     scalar_authorized_descendant_summary,
     schema_validate,
@@ -92,6 +98,26 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         )
 
     def test_option_a_structural_semantic_drift_is_rejected(self) -> None:
+        def normalization(value: dict[str, Any]) -> dict[str, Any]:
+            return value["transaction"]["fresh_v3_initialization"]["guards"][
+                "filesystem"
+            ]["precreate_census"]["preauthority_sidecar_candidate"][
+                "accepted_empty_original_normalization"
+            ]
+
+        def receiptless(value: dict[str, Any]) -> dict[str, Any]:
+            return normalization(value)["receiptless_crash_profile_draft"]
+
+        def precreate_census(value: dict[str, Any]) -> dict[str, Any]:
+            return value["transaction"]["fresh_v3_initialization"]["guards"][
+                "filesystem"
+            ]["precreate_census"]
+
+        def terminal_receiptless(value: dict[str, Any]) -> dict[str, Any]:
+            return value["transaction"]["recovery_model"][
+                "terminal_reclassification"
+            ]["accepted_empty_normalization_receiptless_crash_profile_draft"]
+
         mutations: list[tuple[str, Mutation]] = [
             (
                 "source-shm-runtime-symbol",
@@ -504,6 +530,12 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ].pop("wal_only_private_recovery"),
             ),
             (
+                "accepted-empty-normalization-open-profile",
+                lambda value: value["transaction"]["connection_lifecycle"]
+                ["sqlite_open_profiles"]["accepted_empty_normalization"]
+                ["main_flags"].append("SQLITE_OPEN_CREATE"),
+            ),
+            (
                 "null-open-handle-cleanup",
                 lambda value: value["transaction"]["connection_lifecycle"][
                     "sqlite_open_profiles"
@@ -886,6 +918,925 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
+                "normalization-operation",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"].__setitem__(
+                    "operation", "fresh-initialization"
+                ),
+            ),
+            (
+                "normalization-fault-boundary",
+                lambda value: value["transaction"]["recovery_model"]
+                ["terminal_reclassification"]["typed_control_surface"]
+                ["accepted_empty_normalization"].__setitem__(
+                    "transition_fault_boundary", "journal-transition"
+                ),
+            ),
+            (
+                "normalization-terminal-phase",
+                lambda value: value["transaction"]["recovery_model"]
+                ["terminal_reclassification"]["typed_control_surface"]
+                ["accepted_empty_normalization"].__setitem__(
+                    "terminal_phase", "journal-transition"
+                ),
+            ),
+            (
+                "normalization-distinct-terminal-operation-selector",
+                lambda value: value["transaction"]["recovery_model"]
+                ["terminal_result_precedence"].__setitem__(
+                    "accepted-empty-normalization",
+                    value["transaction"]["recovery_model"]
+                    ["terminal_result_precedence"]["initialization"],
+                ),
+            ),
+            (
+                "normalization-gate-stage",
+                lambda value: value["transaction"]["connection_lifecycle"]
+                ["effect_gate_stages"].pop(
+                    "accepted_empty_normalization_coordination"
+                ),
+            ),
+            (
+                "normalization-old-coordination-expansion",
+                lambda value: value["transaction"]["connection_lifecycle"]
+                ["effect_gate_stages"]["wal_shm_coordination_only"].__setitem__(
+                    "accepted_empty_normalization_coordination", "allowed"
+                ),
+            ),
+            (
+                "normalization-receipt-profile",
+                lambda value: value["transaction"]["recovery_model"]
+                ["terminal_reclassification"]["sealed_receipt_profiles"]
+                ["accepted_empty_normalization_source_anchor"].remove(
+                    "normalization-id"
+                ),
+            ),
+            (
+                "normalization-source-byte-snapshot-receipt",
+                lambda value: value["transaction"]["recovery_model"]
+                ["terminal_reclassification"]["sealed_receipt_profiles"]
+                ["accepted_empty_normalization_source_anchor"].remove(
+                    "immutable-held-pre-main-exact-byte-snapshot-with-length-and-"
+                    "streaming-byte-receipt"
+                ),
+            ),
+            (
+                "normalization-prefect-coordination-sequence-receipt",
+                lambda value: value["transaction"]["recovery_model"]
+                ["terminal_reclassification"]["sealed_receipt_profiles"]
+                ["accepted_empty_normalization"].pop(1),
+            ),
+            (
+                "normalization-completed-edge-full-sequence-receipt",
+                lambda value: value["transaction"]["recovery_model"]
+                ["terminal_reclassification"]["sealed_receipt_profiles"]
+                ["accepted_empty_normalization_completed_edge"].pop(1),
+            ),
+            (
+                "normalization-source-anchor-before-coordination",
+                lambda value: value["transaction"]["recovery_model"]
+                ["terminal_reclassification"].__setitem__(
+                    "accepted_empty_normalization_source_anchor",
+                    "after-coordination-effect",
+                ),
+            ),
+            (
+                "normalization-source-anchor-seal-after-pending-request",
+                lambda value: value["transaction"]["recovery_model"]
+                ["terminal_reclassification"].__setitem__(
+                    "accepted_empty_normalization_source_anchor_seal",
+                    "immutable-before-installing-the-pending-coordination-request",
+                ),
+            ),
+            (
+                "normalization-full-arm-has-moved",
+                lambda value: value["transaction"]["connection_lifecycle"]
+                ["effect_gate_stages"]["accepted_empty_normalization_coordination"]
+                .__setitem__("full_arming_callback", "xLock-then-full-arm"),
+            ),
+            (
+                "normalization-has-moved-local-zero",
+                lambda value: value["transaction"]["connection_lifecycle"]
+                ["effect_gate_stages"]["accepted_empty_normalization_coordination"]
+                .__setitem__(
+                    "has_moved_output_totality", "assume-underlying-vfs-writes-output"
+                ),
+            ),
+            (
+                "normalization-effect-bounds",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["forbidden_effects"]
+                .remove(
+                    "any-main-page-outside-the-derived-large-sector-record-set-write"
+                ),
+            ),
+            (
+                "normalization-journal-effect-lifecycle",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["allowed_effects"].pop(1),
+            ),
+            (
+                "normalization-journal-sector-profile",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"].pop(
+                    "journal_sector_profile"
+                ),
+            ),
+            (
+                "normalization-journal-sector-writer-clamp",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["journal_sector_profile"]
+                .__setitem__("writer_effective_S", "always-512"),
+            ),
+            (
+                "normalization-journal-sector-runtime-binding",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["journal_sector_profile"]
+                .pop("runtime_binding"),
+            ),
+            (
+                "normalization-journal-sector-power-of-two",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["journal_sector_profile"]
+                .__setitem__("writer_admission", "any-effective-integer"),
+            ),
+            (
+                "normalization-journal-sector-no-default",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["journal_sector_profile"]
+                .__setitem__("no_contract_default", "S-is-always-512"),
+            ),
+            (
+                "normalization-cold-journal-sector-domain",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["journal_sector_profile"]
+                .__setitem__("cold_parser_admission", "any-header-sector-size"),
+            ),
+            (
+                "normalization-cold-journal-all-header-consistency",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["journal_sector_profile"]
+                .pop("all_header_format_requirement"),
+            ),
+            (
+                "normalization-cold-journal-sector-match",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["journal_sector_profile"]
+                .__setitem__("exact_match", "use-pinned-default-512-offsets"),
+            ),
+            (
+                "normalization-cold-journal-header-padding",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["journal_sector_profile"]
+                .__setitem__(
+                    "header_layout",
+                    "exact-28-byte-header-followed-by-authoritative-zero-padding",
+                ),
+            ),
+            (
+                "normalization-journal-header-chunks",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["journal_sector_profile"]
+                .__setitem__("writer_header_chunks", "one-fixed-512-byte-write"),
+            ),
+            (
+                "normalization-journal-record-layout",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["journal_sector_profile"]
+                .__setitem__("page_record_layout", "first-record-starts-at-512"),
+            ),
+            (
+                "normalization-journal-next-header-layout",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["journal_sector_profile"]
+                .pop("next_header_layout"),
+            ),
+            (
+                "normalization-journal-checksum-authority",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["journal_sector_profile"]
+                .__setitem__("checksum_authority", "complete-byte-authority"),
+            ),
+            (
+                "normalization-receiptless-crash-draft",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"].pop(
+                    "receiptless_crash_profile_draft"
+                ),
+            ),
+            (
+                "normalization-receiptless-crash-draft-activation",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]
+                ["receiptless_crash_profile_draft"].__setitem__(
+                    "status", "accepted-authorizing"
+                ),
+            ),
+            (
+                "normalization-receiptless-family-completeness",
+                lambda value: terminal_receiptless(value)["family_partition"].pop(),
+            ),
+            (
+                "normalization-receiptless-family-uniqueness",
+                lambda value: terminal_receiptless(value)["family_partition"].__setitem__(
+                    1, terminal_receiptless(value)["family_partition"][0]
+                ),
+            ),
+            (
+                "normalization-receiptless-fz-dispatch-precedence",
+                lambda value: precreate_census(value)[
+                    "receiptless_zero_wal_dispatch"
+                ].__setitem__(
+                    "precedence",
+                    "after-preauthority_sidecar_candidate",
+                ),
+            ),
+            (
+                "normalization-receiptless-fz-generic-route-bypass",
+                lambda value: precreate_census(value)[
+                    "preauthority_sidecar_candidate"
+                ]["wal_participation_gate"].__setitem__(
+                    "zero_byte",
+                    "accept-on-the-generic-wal-route",
+                ),
+            ),
+            (
+                "normalization-receiptless-fz-pre-post-collapse",
+                lambda value: receiptless(value)["zero_wal_candidate"].__setitem__(
+                    "projection_split",
+                    "all-zero-wal-states-enter-a-live-normalizer",
+                ),
+            ),
+            (
+                "normalization-receiptless-cold-history-inference",
+                lambda value: terminal_receiptless(value).__setitem__(
+                    "cold_operation_history_inference",
+                    "infer-the-prior-normalization-edge",
+                ),
+            ),
+            (
+                "normalization-receiptless-known-path-rebind",
+                lambda value: receiptless(value).__setitem__(
+                    "delete_identity_limit",
+                    "path-delete-is-exact-object-deletion-and-rebind-safe",
+                ),
+            ),
+            (
+                "normalization-receiptless-f0-route",
+                lambda value: precreate_census(value)[
+                    "wal_header_sidecar_absent_exact_empty_candidate"
+                ].__setitem__("accepted_empty", "return-public-success"),
+            ),
+            (
+                "normalization-receiptless-fz-route",
+                lambda value: receiptless(value)["zero_wal_candidate"].__setitem__(
+                    "next_route", "infer-completed-operation-edge"
+                ),
+            ),
+            (
+                "normalization-receiptless-fp-route",
+                lambda value: receiptless(value)[
+                    "nonhot_prefix_candidate"
+                ].__setitem__("next_route", "return-public-success"),
+            ),
+            (
+                "normalization-receiptless-fh-route",
+                lambda value: receiptless(value)[
+                    "rollback_journal_candidate"
+                ].__setitem__("next_route", "infer-completed-operation-edge"),
+            ),
+            (
+                "normalization-receiptless-fi-route",
+                lambda value: receiptless(value)[
+                    "invalidated_journal_candidate"
+                ].__setitem__("next_route", "reconstruct-cold-operation-history"),
+            ),
+            (
+                "normalization-receiptless-fo-route",
+                lambda value: receiptless(value)["absent_post_candidate"].__setitem__(
+                    "next_route", "return-public-success"
+                ),
+            ),
+            (
+                "normalization-receiptless-fp-cleanup",
+                lambda value: receiptless(value)["nonhot_prefix_candidate"].pop(
+                    "cleanup_operation"
+                ),
+            ),
+            (
+                "normalization-receiptless-checksum-nonce-formula",
+                lambda value: receiptless(value)[
+                    "invalidated_journal_candidate"
+                ].__setitem__(
+                    "checksum_nonce_reconstruction",
+                    "trust-the-stored-checksum-as-a-provenance-token",
+                ),
+            ),
+            (
+                "normalization-effect-grammar-profile-receipt",
+                lambda value: normalization(value).pop(
+                    "effect_grammar_profile_receipt"
+                ),
+            ),
+            (
+                "normalization-bounded-effect-transcript-receipt",
+                lambda value: normalization(value).pop(
+                    "normalization_bounded_effect_transcript_receipt"
+                ),
+            ),
+            (
+                "normalization-coordination-wal-delete-parent-receipt",
+                lambda value: normalization(value).pop(
+                    "normalizer_coordination_wal_delete_durability_receipt"
+                ),
+            ),
+            (
+                "normalization-journal-creation-parent-receipt",
+                lambda value: normalization(value).pop(
+                    "normalizer_parent_durability_receipt"
+                ),
+            ),
+            (
+                "normalization-terminal-journal-delete-parent-receipt",
+                lambda value: normalization(value).pop(
+                    "normalizer_final_delete_durability_receipt"
+                ),
+            ),
+            (
+                "normalization-disposable-fixture-capability",
+                lambda value: receiptless(value)["two_layer_authorization"].pop(
+                    "disposable_fixture_capability"
+                ),
+            ),
+            (
+                "normalization-receiptless-zero-wal-format-authority",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]
+                ["receiptless_crash_profile_draft"]["zero_wal_candidate"].__setitem__(
+                    "format_status", "zero-byte-wal-is-a-valid-empty-wal"
+                ),
+            ),
+            (
+                "normalization-receiptless-fixture-only-authorization",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]
+                ["receiptless_crash_profile_draft"]["two_layer_authorization"].pop(
+                    "qualification_implementation_after_acceptance"
+                ),
+            ),
+            (
+                "normalization-receiptless-production-gate",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]
+                ["receiptless_crash_profile_draft"]["two_layer_authorization"]
+                .__setitem__(
+                    "canonical_or_production_activation",
+                    "enabled-after-one-shared-probe",
+                ),
+            ),
+            (
+                "normalization-receiptless-temporary-artifact-authority",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]
+                ["receiptless_crash_profile_draft"]["shared_probe_binding"].__setitem__(
+                    "authority_status",
+                    "temporary-hash-is-production-qualification-authority",
+                ),
+            ),
+            (
+                "normalization-receiptless-durable-report-gate",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]
+                ["receiptless_crash_profile_draft"]["shared_probe_binding"].pop(
+                    "durable_replacement_gate"
+                ),
+            ),
+            (
+                "normalization-receiptless-artifact-is-not-canonical-success",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]
+                ["receiptless_crash_profile_draft"]["two_layer_authorization"]
+                .__setitem__(
+                    "source_effect_gate_interpretation",
+                    "qualification-artifact-authorizes-canonical-success",
+                ),
+            ),
+            (
+                "normalization-receiptless-parent-durability",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"].pop(
+                    "normalizer_parent_durability_receipt"
+                ),
+            ),
+            (
+                "normalization-receiptless-large-sector-record-set",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["journal_sector_profile"]
+                .pop("large_sector_record_set"),
+            ),
+            (
+                "normalization-receiptless-invalidated-cleanup",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]
+                ["receiptless_crash_profile_draft"]["invalidated_journal_candidate"]
+                .pop("cleanup_operation"),
+            ),
+            (
+                "normalization-receiptless-hot-barrier",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]
+                ["receiptless_crash_profile_draft"]["rollback_journal_candidate"]
+                .pop("barrier_admission_and_totality"),
+            ),
+            (
+                "normalization-receiptless-journal-reserved-lock",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]
+                ["receiptless_crash_profile_draft"]
+                ["rollback_journal_candidate"].__setitem__(
+                    "recovery_lock_gate",
+                    "acquire-shared-then-reserved-then-exclusive",
+                ),
+            ),
+            (
+                "normalization-receiptless-journal-playback-authority",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]
+                ["receiptless_crash_profile_draft"]
+                ["rollback_journal_candidate"].__setitem__(
+                    "sqlite_playback_authority",
+                    "sqlite-playback-success-is-complete-acceptance-authority",
+                ),
+            ),
+            (
+                "normalization-receiptless-journal-source-effect",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]
+                ["receiptless_crash_profile_draft"]
+                ["rollback_journal_candidate"].__setitem__(
+                    "source_effect_gate", "recover-source-before-probe"
+                ),
+            ),
+            (
+                "normalization-failure-totality",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["failure_totality"].pop(
+                    "after_coordination_effect_before_normalization_receipt_seal"
+                ),
+            ),
+            (
+                "normalization-receipt-chain",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"].__setitem__(
+                    "handoff", "start-fresh-with-a-new-unbound-anchor"
+                ),
+            ),
+            (
+                "normalization-post-main-digest-only-validation",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"].__setitem__(
+                    "post_main_validation", "size-and-sha256-only"
+                ),
+            ),
+            (
+                "normalization-public-success",
+                lambda value: value["transaction"]["recovery_model"]
+                ["terminal_reclassification"].__setitem__(
+                    "accepted_empty_normalization_public_success", "allowed"
+                ),
+            ),
+            (
+                "normalization-candidate-is-success",
+                lambda value: value["transaction"]["recovery_model"]
+                ["terminal_reclassification"].__setitem__(
+                    "accepted_empty_normalization_candidate_identity",
+                    "planned-candidate-proves-success",
+                ),
+            ),
+            (
+                "normalization-completed-edge-seal-before-close",
+                lambda value: value["transaction"]["recovery_model"]
+                ["terminal_reclassification"].__setitem__(
+                    "accepted_empty_normalization_completed_edge_seal",
+                    "before-transition-or-close",
+                ),
+            ),
+            (
+                "normalization-edge-early-empty-return",
+                lambda value: value["transaction"]["recovery_model"]
+                ["terminal_reclassification"]
+                ["accepted_empty_normalization_physical_edge"].__setitem__(
+                    "exact_empty_early_return_before_physical_edge_test", "allowed"
+                ),
+            ),
+            (
+                "normalization-edge-candidate-alone",
+                lambda value: value["transaction"]["recovery_model"]
+                ["terminal_reclassification"]
+                ["accepted_empty_normalization_physical_edge"].__setitem__(
+                    "candidate_receipt_presence_alone", "success-authority"
+                ),
+            ),
+            (
+                "normalization-counter-basis",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"].__setitem__(
+                    "post_main_raw_projection",
+                    value["transaction"]["fresh_v3_initialization"]["guards"]
+                    ["filesystem"]["precreate_census"]
+                    ["preauthority_sidecar_candidate"]
+                    ["accepted_empty_original_normalization"]
+                    ["post_main_raw_projection"].replace(
+                        "pre-change-counter", "pre-version-valid-for"
+                    ),
+                ),
+            ),
+            (
+                "normalization-counter-modulo",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"].__setitem__(
+                    "post_main_raw_projection",
+                    value["transaction"]["fresh_v3_initialization"]["guards"]
+                    ["filesystem"]["precreate_census"]
+                    ["preauthority_sidecar_candidate"]
+                    ["accepted_empty_original_normalization"]
+                    ["post_main_raw_projection"].replace(
+                        "big-endian-u32-modulo-two-to-the-thirty-two-successor",
+                        "checked-nonoverflowing-successor",
+                    ),
+                ),
+            ),
+            (
+                "normalization-pinned-write-version",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"].__setitem__(
+                    "post_main_raw_projection", "header-mode-and-counter-only"
+                ),
+            ),
+            (
+                "normalization-write-version-encoding-and-api-source",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"].__setitem__(
+                    "post_main_raw_projection",
+                    value["transaction"]["fresh_v3_initialization"]["guards"]
+                    ["filesystem"]["precreate_census"]
+                    ["preauthority_sidecar_candidate"]
+                    ["accepted_empty_original_normalization"]
+                    ["post_main_raw_projection"].replace(
+                        "big-endian-u32-sqlite3_libversion_number-from-the-exact-"
+                        "pinned-runtime",
+                        "host-endian-pinned-runtime-version",
+                    ),
+                ),
+            ),
+            (
+                "normalization-counter-vectors",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["qualification"]
+                ["counter_vectors"].pop(),
+            ),
+            (
+                "rollback-empty-route-precedence",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["rollback_header_exact_empty_candidate"].__setitem__(
+                    "precedence", "after-expected-wal"
+                ),
+            ),
+            (
+                "rollback-empty-private-profile",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["rollback_header_exact_empty_candidate"].__setitem__(
+                    "private_classification", "read-write-source-open"
+                ),
+            ),
+            (
+                "rollback-empty-private-close",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["rollback_header_exact_empty_candidate"].pop("private_close"),
+            ),
+            (
+                "normalization-page-size-decode",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"].__setitem__(
+                    "page_size_decode", "fixed-4096"
+                ),
+            ),
+            (
+                "normalization-whole-main-page-bound",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"].__setitem__(
+                    "whole_main_bound", "exactly-one-page"
+                ),
+            ),
+            (
+                "normalization-runtime-receipt",
+                lambda value: value["transaction"]["recovery_model"]
+                ["terminal_reclassification"]["sealed_receipt_profiles"]
+                ["accepted_empty_normalization_source_anchor"].remove(
+                    "pinned-sqlite-runtime-identity-and-version"
+                ),
+            ),
+            (
+                "normalization-sealed-expected-post-digest",
+                lambda value: value["transaction"]["recovery_model"]
+                ["terminal_reclassification"]["sealed_receipt_profiles"]
+                ["accepted_empty_normalization_source_anchor"].pop(),
+            ),
+            (
+                "normalization-page-size-vectors",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["qualification"]
+                ["page_size_vectors"].pop(),
+            ),
+            (
+                "normalization-page-size-boundaries",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["qualification"]
+                ["page_size_boundary_qualification_required"].pop(),
+            ),
+            (
+                "normalization-journal-sector-pinned-vector",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["qualification"].pop(
+                    "journal_sector_pinned_default_vector"
+                ),
+            ),
+            (
+                "normalization-journal-sector-parameterized-vectors",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["qualification"]
+                ["journal_sector_parameterized_vectors_required"].pop(),
+            ),
+            (
+                "normalization-journal-sector-negative-vectors",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["qualification"]
+                ["journal_sector_negative_vectors_required"].remove(
+                    "record-offset-derived-from-512-instead-of-S"
+                ),
+            ),
+            (
+                "normalization-multi-page-freelist-vector",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["qualification"].pop(
+                    "multi_page_freelist_vector"
+                ),
+            ),
+            (
+                "rollback-empty-source-recheck",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["rollback_header_exact_empty_candidate"].pop("source_recheck"),
+            ),
+            (
+                "rollback-empty-drift-result",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["rollback_header_exact_empty_candidate"]["drift_result"].__setitem__(
+                    "detail", "ignore-drift"
+                ),
+            ),
+            (
+                "rollback-empty-private-close-failure",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["rollback_header_exact_empty_candidate"].pop(
+                    "private_open_or_close_failure"
+                ),
+            ),
+            (
+                "normalization-prearm-summary",
+                lambda value: value["runtime"]["capability_preflight"]
+                ["pre_arm_synchronous"].__setitem__(
+                    "accepted_empty_normalization_stage",
+                    "arm-coordination-before-first-exclusive-lock",
+                ),
+            ),
+            (
+                "normalization-first-lock-callback",
+                lambda value: value["transaction"]["connection_lifecycle"]
+                ["effect_gate_stages"]["accepted_empty_normalization_coordination"]
+                .__setitem__("coordination_arming_callback", "arm-before-xLock"),
+            ),
+            (
+                "normalization-zero-wal-held-lock",
+                lambda value: value["transaction"]["connection_lifecycle"]
+                ["effect_gate_stages"]["accepted_empty_normalization_coordination"]
+                ["sole_persistent_allowance"].__setitem__(
+                    "exclusive_lock", "not-required"
+                ),
+            ),
+            (
+                "normalization-second-lock-callback",
+                lambda value: value["transaction"]["connection_lifecycle"]
+                ["effect_gate_stages"]["accepted_empty_normalization_coordination"]
+                .__setitem__(
+                    "full_arming_callback", "first-exclusive-callback-full-arm"
+                ),
+            ),
+            (
+                "normalization-receipt-sequence-prior",
+                lambda value: value["transaction"]["connection_lifecycle"]
+                ["effect_gate_stages"]["accepted_empty_normalization_coordination"]
+                ["receipt_sequence"].__setitem__(
+                    "coordination", "sequence-two-with-no-prerequisite"
+                ),
+            ),
+            (
+                "normalization-receipt-sequence-full",
+                lambda value: value["transaction"]["connection_lifecycle"]
+                ["effect_gate_stages"]["accepted_empty_normalization_coordination"]
+                ["receipt_sequence"].__setitem__(
+                    "full", "sequence-three-with-no-prerequisite"
+                ),
+            ),
+            (
+                "normalization-receipt-sequence-fail-closed",
+                lambda value: value["transaction"]["connection_lifecycle"]
+                ["effect_gate_stages"]["accepted_empty_normalization_coordination"]
+                ["receipt_sequence"].__setitem__(
+                    "skipped-duplicate-reordered-or-wrong-prerequisite", "allowed"
+                ),
+            ),
+            (
+                "normalization-no-unlock-between-callbacks",
+                lambda value: value["transaction"]["connection_lifecycle"]
+                ["effect_gate_stages"]["accepted_empty_normalization_coordination"]
+                .__setitem__("lock_trace", "unlock-between-exclusive-callbacks"),
+            ),
+            (
+                "normalization-second-callback-receipt-seal",
+                lambda value: value["transaction"]["recovery_model"]
+                ["terminal_reclassification"].__setitem__(
+                    "accepted_empty_normalization_receipt_seal",
+                    "in-the-first-exclusive-xLock-callback",
+                ),
+            ),
+            (
+                "normalization-skipped-arm-qualification",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]["qualification"]
+                ["required"].remove(
+                    "skipped-duplicate-reordered-and-wrong-prerequisite-arm-fail-closed"
+                ),
+            ),
+            (
+                "normalization-no-truncate-trace",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"].__setitem__(
+                    "rollback_journal_effect_trace", "journal-write-sync-close"
+                ),
+            ),
+            (
+                "normalization-fixed-512-journal-trace",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"].__setitem__(
+                    "rollback_journal_effect_trace",
+                    "xWrite-512-at-zero-page-number-one-at-512",
+                ),
+            ),
+            (
+                "normalization-parent-directory-sync",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"].__setitem__(
+                    "parent_directory_effect_trace", "parent-sync-unobserved"
+                ),
+            ),
+            (
+                "normalization-supplied-vfs-parent-sync-qualification",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"]
+                ["vfs_parent_sync_admission"].__setitem__(
+                    "generic-supplied-vfs-inherits-linux-strace-claim", "allowed"
+                ),
+            ),
+            (
+                "normalization-final-journal-sync",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"].__setitem__(
+                    "rollback_journal_effect_trace",
+                    "journal-delete-without-final-normal-sync",
+                ),
+            ),
+            (
+                "normalization-main-sync-mode",
+                lambda value: value["transaction"]["fresh_v3_initialization"]
+                ["guards"]["filesystem"]["precreate_census"]
+                ["preauthority_sidecar_candidate"]
+                ["accepted_empty_original_normalization"].__setitem__(
+                    "main_effect_trace", "page-one-write-without-normal-sync"
+                ),
+            ),
+            (
                 "terminal-unreadable-order",
                 lambda value: value["transaction"]["recovery_model"][
                     "terminal_reclassification"
@@ -1080,6 +2031,140 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 handle_present=True,
                 close_result=None,
             )
+
+    def test_normalization_journal_sector_layout_is_parameterized(self) -> None:
+        self.assertEqual(effective_sqlite_sector_size(16), 512)
+        self.assertEqual(effective_sqlite_sector_size(4096), 4096)
+        self.assertEqual(effective_sqlite_sector_size(131_072), 65_536)
+        self.assertEqual(
+            effective_sqlite_sector_size(4096, powersafe_overwrite=True),
+            512,
+        )
+        self.assertEqual(
+            normalization_journal_layout(
+                raw_xsector_size=4096,
+                decoded_page_size=8192,
+            ),
+            {
+                "sector_size": 4096,
+                "header_offset": 0,
+                "header_field_end": 28,
+                "header_padding_begin": 28,
+                "header_padding_end": 4096,
+                "header_write_length": 4096,
+                "header_chunk_size": 4096,
+                "header_chunk_count": 1,
+                "record_index": 0,
+                "record_size": 8200,
+                "page_number_offset": 4096,
+                "page_image_offset": 4100,
+                "checksum_offset": 12_292,
+                "record_end": 12_296,
+                "next_header_offset": 16_384,
+            },
+        )
+        header = bytearray(4096)
+        header[20:24] = (4096).to_bytes(4, "big")
+        header[24:28] = (8192).to_bytes(4, "big")
+        header[28] = 1
+        header[-1] = 0xA5
+        self.assertEqual(
+            parse_normalization_journal_header_sector(
+                bytes(header),
+                expected_sector_size=4096,
+                expected_page_size=8192,
+            )["page_number_offset"],
+            4096,
+        )
+        with self.assertRaisesRegex(
+            SQLiteStoreContractError, "journal sector size mismatch"
+        ):
+            parse_normalization_journal_header_sector(
+                bytes(header[:-1]),
+                expected_sector_size=4096,
+                expected_page_size=8192,
+            )
+        with self.assertRaisesRegex(
+            SQLiteStoreContractError, "journal sector size mismatch"
+        ):
+            parse_normalization_journal_header_sector(
+                bytes(header) + b"\0",
+                expected_sector_size=4096,
+                expected_page_size=8192,
+            )
+        with self.assertRaisesRegex(
+            SQLiteStoreContractError,
+            "effective journal sector size is not a power of two",
+        ):
+            normalization_journal_layout(
+                raw_xsector_size=48,
+                decoded_page_size=8192,
+            )
+        large = normalization_large_sector_record_set(
+            raw_xsector_size=65_536,
+            decoded_page_size=4096,
+            database_page_count=66,
+        )
+        self.assertEqual(large["record_pages"], tuple(range(1, 17)))
+        self.assertEqual(large["record_count"], 16)
+        self.assertEqual(large["journal_size"], 131_200)
+        self.assertEqual(large["main_write_offsets"], tuple(range(0, 65_536, 4096)))
+        self.assertGreater(large["locking_page"], large["pages_per_sector"])
+        for page_count, expected_count in ((1, 1), (15, 15), (16, 16), (17, 16)):
+            self.assertEqual(
+                normalization_large_sector_record_set(
+                    raw_xsector_size=65_536,
+                    decoded_page_size=4096,
+                    database_page_count=page_count,
+                )["record_count"],
+                expected_count,
+            )
+        self.assertFalse(
+            normalization_record_pages_match(
+                raw_xsector_size=65_536,
+                decoded_page_size=4096,
+                database_page_count=16,
+                observed_pages=large["record_pages"] + (large["locking_page"],),
+            )
+        )
+        for page_size in (512, 1024, 2048, 4096, 8192, 16_384, 32_768, 65_536):
+            for sector_size in tuple(1 << exponent for exponent in range(5, 17)):
+                pages_per_sector = (
+                    sector_size // page_size if sector_size > page_size else 1
+                )
+                locking_page = (0x4000_0000 // page_size) + 1
+                self.assertGreater(locking_page, pages_per_sector)
+                for page_count in {
+                    value
+                    for value in (
+                        1,
+                        pages_per_sector - 1,
+                        pages_per_sector,
+                        pages_per_sector + 1,
+                    )
+                    if value > 0
+                }:
+                    expected = tuple(
+                        range(1, min(page_count, pages_per_sector) + 1)
+                    )
+                    self.assertEqual(
+                        normalization_large_sector_record_set(
+                            raw_xsector_size=sector_size,
+                            decoded_page_size=page_size,
+                            database_page_count=page_count,
+                        )["record_pages"],
+                        expected,
+                    )
+        page_image = bytes((index * 37 + 11) & 0xFF for index in range(4096))
+        nonce = 0x1234_5678
+        sparse_sum = sum(
+            page_image[index] for index in range(4096 - 200, 0, -200)
+        )
+        checksum = ((nonce + sparse_sum) & 0xFFFF_FFFF).to_bytes(4, "big")
+        self.assertEqual(
+            normalization_reconstruct_pager_nonce(checksum, page_image),
+            nonce,
+        )
 
     def test_readwrite_open_observation_is_zero_initialized_and_success_only(
         self,
@@ -2455,6 +3540,14 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 lambda value: value["format_compatibility"]
                 ["sqlite_source_shm_readonly_capability"].__setitem__(
                     "id", "sqlite-source-shm-readonly-drift"
+                ),
+            ),
+            (
+                "snapshot-only-normalization-completed-edge-binding",
+                lambda value: value["publication_transaction"]
+                ["sqlite_terminal_recovery"]["sealed_receipt_profiles"]
+                ["accepted_empty_normalization_completed_edge"].__setitem__(
+                    -1, "planned-normalization-candidate-id"
                 ),
             ),
             (

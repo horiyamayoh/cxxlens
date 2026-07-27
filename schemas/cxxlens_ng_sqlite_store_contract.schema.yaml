@@ -282,6 +282,7 @@ $defs:
         pre_arm_synchronous:
           ordinary-current-v3-fresh-and-memory: set-and-query-connection-local-full-before-first-store-write-with-no-new-persistent-authority-effect
           wal-only-recovery-stage: after-all-runtime-locator-identity-and-receipt-gates-permit-only-wal-index-shm-coordination-create-map-lock-and-bytes-while-main-wal-rollback-journal-write-delete-truncate-and-authority-effects-remain-denied-then-set-and-query-full
+          accepted_empty_normalization_stage: after-version-limit-locator-main-identity-source-anchor-and-exact-empty-gates-install-the-pending-coordination-arm-while-effects-remain-denied-then-set-and-query-connection-local-full-the-first-underlying-exclusive-xLock-callback-rechecks-and-arms-coordination-before-the-exact-zero-byte-wal-open-and-no-other-persistent-effect-is-permitted-before-the-later-full-arm
           final_arm: only-after-full-verification-enable-the-named-recovery-checkpoint-journal-transition-or-store-writes
         pre_arm_synchronous_failure:
           code: store.sqlite-failure
@@ -292,7 +293,9 @@ $defs:
           fresh_before-journal-receipt: finalize-and-attempt-exactly-one-close-v2-close-ok-returns-the-preserved-sqlite-runtime-diagnostic-with-no-store-and-no-reclassifier-close-non-ok-quarantines-the-connection-and-runtime-vfs-pins
           ephemeral_memory_before-authority: finalize-and-attempt-exactly-one-close-v2-close-ok-discards-the-sole-database-and-returns-the-preserved-sqlite-runtime-diagnostic-with-no-store-and-no-receipt-or-reclassifier-close-non-ok-quarantines-the-connection-and-runtime-vfs-pins
           wal-only-or-first-mutation-recovery-with-sealed-source-receipt: finalize-and-attempt-exactly-one-close-v2-close-ok-then-run-the-receipt-aware-phase-classifier-close-non-ok-quarantines-and-poisons-without-reopen
-          coordination_effect_limit: new-shm-is-coordination-only-never-authority-and-no-main-wal-journal-or-store-authority-write-is-permitted-before-final-arm
+          accepted_empty_normalization_with_or_without_coordination_effect: close-and-use-accepted_empty_original_normalization.failure_totality-selecting-pre-effect-or-after-coordination-from-the-latest-stage-evidence
+          coordination_effect_limit: wal-only-recovery-stage-new-shm-is-coordination-only-never-authority-and-no-main-wal-journal-or-store-authority-write-is-permitted-before-final-arm
+          accepted_empty_normalization_coordination_effect_limit: exact-zero-byte-wal-create-or-open-only-under-accepted-empty-normalization-coordination-with-all-other-persistent-effects-denied-before-full-arm
         recheck_failure_effects:
           filesystem_before_sealed_operation_or_recovery_receipt: finalize-no-live-statement-and-attempt-exactly-one-sqlite3-close-v2-close-ok-returns-the-selected-pre-effect-gate-error-with-no-store-install-reclassifier-or-retry-close-non-ok-quarantines-the-connection-and-runtime-vfs-pins-the-fresh-nonexistent-branch-may-retain-only-its-already-durable-raw-bootstrap-zero-byte-main
           filesystem_after_sealed_receipt_or_coordination_effect: finalize-all-statements-attempt-one-rollback-if-a-transaction-may-remain-then-attempt-exactly-one-sqlite3-close-v2-close-ok-delegates-to-the-receipt-aware-operation-phase-classifier-close-non-ok-quarantines-and-poisons-without-reopen-or-retry
@@ -907,6 +910,16 @@ $defs:
             - SQLITE_OPEN_URI
             main_precondition: same-existing-canonical-locator-vfs-and-file-identity
             sidecar_create: only-sqlite-required-wal-shm-coordination-after-the-named-arming-gate
+          accepted_empty_normalization:
+            main_flags:
+            - SQLITE_OPEN_READWRITE
+            - SQLITE_OPEN_PRIVATECACHE
+            - SQLITE_OPEN_FULLMUTEX
+            omitted:
+            - SQLITE_OPEN_CREATE
+            - SQLITE_OPEN_URI
+            main_precondition: same-anchored-existing-main-and-directory-entry-bound-to-the-confirmed-accepted-empty-private-recovery-source-receipt-with-exact-empty-header-two-two-and-either-no-sidecars-or-one-preexisting-exact-bound-size-zero-wal
+            sidecar_create: only-the-named-zero-wal-accepted-empty-normalization-coordination-effect-after-the-first-exclusive-callback-seals-the-source-anchor-and-publishes-coordination-sequence-two-WAL-absent-means-create-and-seal-new-object-identity-preexisting-size-zero-WAL-means-open-and-seal-the-same-rechecked-object-identity
           fresh_filesystem_after_raw_bootstrap:
             main_flags:
             - SQLITE_OPEN_READWRITE
@@ -948,12 +961,52 @@ $defs:
             vfs: explicit-owned-forwarding-alias
             filesystem_main_or_sidecar: none
           common_non_ok_return_cleanup:
-            applicability: every-sqlite3-open-v2-call-in-every-profile-including-probes-private-copies-writers-fresh-recovery-scratch-and-ephemeral-memory
+            applicability: every-sqlite3-open-v2-call-in-every-profile-including-probes-private-copies-writers-accepted-empty-normalization-fresh-recovery-scratch-and-ephemeral-memory
             null_handle: return-the-selected-profile-open-error-with-no-close-retry-reclassifier-or-authority-effect
             nonnull_handle: prepare-or-step-is-forbidden-after-the-non-ok-return-finalize-no-statements-and-attempt-exactly-one-sqlite3-close-v2-before-return
             close_ok: discard-the-handle-and-return-the-selected-profile-open-error-with-no-retry-reclassifier-or-new-authority-effect
             close_non_ok_or_unknown: quarantine-the-handle-and-associated-runtime-vfs-pins-do-not-unregister-reopen-or-retry-and-return-the-selected-profile-open-error-with-no-store
             fresh_nonexistent_exception: the-already-durable-raw-bootstrap-zero-byte-main-may-remain-but-is-never-format-or-store-authority
+        effect_gate_stages:
+          wal_shm_coordination_only:
+            accepted_empty_normalization_coordination: forbidden
+            semantics_expansion_for_accepted_empty_normalization: forbidden
+          accepted_empty_normalization_coordination:
+            operation: accepted-empty-normalization
+            entry: after-the-sealed-accepted-empty-source-anchor-and-before-the-first-wal-touch
+            has_moved_output_totality: before-each-arming-callback-SQLITE_FCNTL_HAS_MOVED-20-call-initialize-a-local-moved-integer-to-exact-zero-then-require-exact-SQLITE_OK-and-output-zero
+            coordination_arming_callback: first-underlying-xLock-exclusive-success-then-local-moved-integer-initialized-to-exact-zero-before-SQLITE_FCNTL_HAS_MOVED-20-require-exact-SQLITE_OK-and-output-zero-then-synchronous-same-main-entry-size-sha256-sidecar-census-and-exact-empty-recheck-under-the-continuously-held-exclusive-lock-seal-the-immutable-source-anchor-and-only-then-publish-accepted-empty-normalization-coordination-sequence-two
+            sole_persistent_allowance:
+              exclusive_lock: verified-held-continuously-from-the-coordination-arming-callback
+              flags_integer: 524294
+              flags:
+              - SQLITE_OPEN_READWRITE
+              - SQLITE_OPEN_CREATE
+              - SQLITE_OPEN_WAL
+              object: exact-one-same-bound-directory-zero-byte-wal-create-or-open
+              receipt: captured-wal-file-instance-identity-directory-entry-size-zero-and-sha256
+            otherwise_permitted:
+            - nonpersistent-identity-observation
+            - nonpersistent-lock-observation
+            - nonpersistent-file-control-observation
+            forbidden:
+            - main-or-wal-byte-write
+            - main-or-wal-truncate
+            - main-or-wal-sync
+            - main-or-wal-delete
+            - shm-or-rollback-journal-create
+            - schema-metadata-format-marker-semantic-diagnostic-payload-head-counter-or-process-state-authority-effect
+            full_arming_callback: later-repeated-underlying-pending-full-arm-xLock-exclusive-success-while-the-same-exclusive-lock-is-continuously-held-then-local-moved-integer-initialized-to-exact-zero-before-SQLITE_FCNTL_HAS_MOVED-20-require-exact-SQLITE_OK-and-output-zero-then-synchronous-same-main-entry-source-anchor-coordination-sequence-two-zero-wal-receipt-and-exact-empty-recheck-seal-the-pre-effect-full-receipt-with-only-a-planned-normalization-candidate-id-and-only-then-publish-the-pending-full-arm
+            full_arming_failure: any-xLock-HAS_MOVED-or-recheck-failure-leaves-full-unarmed-and-enters-accepted-empty-normalization-failure-totality-after-close
+            receipt_sequence:
+              denied: sequence-one-prior-to-pending-request-install-armed-after-exclusive-false
+              coordination: sequence-two-prerequisite-denied-sequence-one-armed-after-exclusive-true-only-after-first-HAS_MOVED-source-recheck-and-source-anchor-seal
+              full: sequence-three-prerequisite-coordination-sequence-two-armed-after-exclusive-true-only-after-zero-wal-plus-source-recheck-and-pre-effect-full-receipt-seal
+              skipped-duplicate-reordered-or-wrong-prerequisite: fail-closed
+            lock_trace: shared-then-first-exclusive-then-zero-wal-open-then-second-exclusive-then-zero-wal-close-delete-then-unlock-shared-none-with-no-unlock-between-the-two-exclusive-callbacks
+            next_stage: only-existing-fully-armed-from-the-underlying-exclusive-xLock-callback-after-exact-recheck-and-normalization-receipt-seal
+          fully_armed:
+            accepted_empty_normalization_entry: only-from-accepted-empty-normalization-coordination-after-the-underlying-exclusive-xLock-callback-rechecks-and-seals-the-receipt
         read_write_fallback_to_read_only:
           proof: owned-forwarding-vfs-zero-initializes-local-out-flags-passes-its-nonnull-address-to-underlying-xOpen-records-input-main-db-and-readwrite-request-and-only-after-success-records-the-returned-flags-and-requires-them-not-to-contain-SQLITE_OPEN_READONLY
           local_out_flags_before_call: exact-integer-zero
@@ -1248,6 +1301,7 @@ $defs:
           id: cxxlens.sqlite-terminal-reclassifier.v1
           scope:
           - initialization-recovery
+          - accepted-empty-normalization
           - publish
           - migration
           - compaction
@@ -1276,11 +1330,97 @@ $defs:
             - pre-arm-raw-main-size-and-digest-and-sidecar-census
             - deterministic-expected-empty-v3-projection
             - initialization-id
+            accepted_empty_normalization_source_anchor:
+            - canonical-locator
+            - exact-pinned-vfs-identity
+            - pinned-sqlite-runtime-identity-and-version
+            - exact-normalization-effect-grammar-profile-receipt
+            - accepted-empty-private-recovery-stable-source-receipt
+            - preinit-exact-empty-wal-header-anchor
+            - pre-coordination-zero-wal-branch-absent-create-or-preexisting-bound-size-zero-open
+            - actual-normalizer-main-open-file-instance-identity-and-directory-entry-binding
+            - retained-authenticated-parent-directory-capability-and-continuous-namespace-epoch
+            - pre-coordination-main-size-and-sha256-and-sidecar-census
+            - pre-coordination-decoded-main-page-size-and-file-offset-zero-database-page-one-sha256-and-exact-header-byte-range-zero-through-one-hundred-exclusive
+            - immutable-held-pre-main-exact-byte-snapshot-with-length-and-streaming-byte-receipt
+            - exact-empty-logical-projection
+            - normalization-id
+            - deterministic-expected-post-whole-main-exact-byte-projection-plus-size-and-sha256-derived-before-effect-from-the-immutable-pre-main-byte-snapshot-by-streaming-copy-with-only-the-authorized-page-one-field-patch-plus-the-complete-expected-rollback-empty-logical-projection-and-sidecar-census
+            accepted_empty_normalization:
+            - exact-accepted-empty-normalization-source-anchor-receipt
+            - exact-normalization-effect-grammar-profile-receipt
+            - exact-accepted-empty-normalization-coordination-sequence-two-receipt-with-denied-sequence-one-prerequisite-and-armed-after-exclusive-true
+            - later-repeated-exclusive-xLock-source-anchor-and-same-main-entry-recheck
+            - coordination-zero-wal-open-flags-file-instance-identity-directory-entry-size-and-sha256
+            - planned-normalization-candidate-id
+            accepted_empty_normalization_completed_edge:
+            - exact-accepted-empty-normalization-pre-effect-full-receipt
+            - exact-normalization-effect-grammar-profile-receipt
+            - exact-accepted-empty-normalization-full-sequence-three-receipt-with-coordination-sequence-two-prerequisite-and-armed-after-exclusive-true
+            - exact-normalization-bounded-effect-transcript-receipt
+            - exact-coordination-wal-delete-retained-authenticated-parent-fsync-receipt
+            - exact-journal-creation-retained-authenticated-parent-fsync-receipt
+            - confirmed-single-delete-normalization-transition-result
+            - exact-terminal-journal-delete-retained-authenticated-parent-fsync-receipt
+            - exactly-one-confirmed-connection-close
+            - same-main-and-entry-plus-streaming-exact-post-main-byte-equality-to-the-sealed-deterministic-expected-projection-with-size-and-sha256-only-acceleration-plus-complete-post-structural-logical-validation-and-sidecar-census
+            - sealed-normalization-edge-id
             fresh_empty_anchor_is_not_post_format_authority_state: true
+          accepted_empty_normalization_source_anchor: candidate-fields-computed-while-effects-are-denied-before-installing-the-pending-coordination-request-and-immutable-receipt-sealed-inside-the-first-exclusive-callback-before-coordination-publication-or-any-persistent-effect
+          accepted_empty_normalization_source_anchor_profile: terminal_reclassification.sealed_receipt_profiles.accepted_empty_normalization_source_anchor
+          accepted_empty_normalization_source_anchor_seal: pending-coordination-request-may-be-installed-while-effects-remain-denied-then-after-first-successful-underlying-exclusive-xLock-and-local-zero-initialized-HAS_MOVED-exact-SQLITE_OK-output-zero-source-recheck-seal-the-immutable-source-anchor-immediately-before-publishing-coordination-sequence-two-and-before-zero-wal-or-other-persistent-effect
+          accepted_empty_normalization_receipt_seal: in-the-later-repeated-second-pending-full-arm-exclusive-xLock-callback-after-prior-exact-coordination-sequence-two-receipt-and-exact-zero-wal-observation-and-before-full-arm-or-header-effect
+          accepted_empty_normalization_receipt_extension: exact-source-anchor-receipt-plus-exact-coordination-sequence-two-receipt-plus-the-later-repeated-exclusive-lock-recheck-plus-coordination-zero-wal-observation-plus-planned-normalization-candidate-id
+          accepted_empty_normalization_candidate_identity: planned-normalization-candidate-id-in-the-pre-effect-full-receipt-never-proves-transition-close-poststate-physical-edge-or-success
+          accepted_empty_normalization_completed_edge_profile: terminal_reclassification.sealed_receipt_profiles.accepted_empty_normalization_completed_edge
+          accepted_empty_normalization_completed_edge_seal: only-after-the-exact-normalization-bounded-effect-transcript-and-coordination-wal-delete-journal-creation-and-terminal-journal-delete-retained-authenticated-parent-fsync-receipts-the-single-delete-normalization-transition-finalize-exactly-one-confirmed-close-and-post-close-total-reclassification-bind-the-planned-candidate-source-coordination-and-full-arm-receipts-to-the-exact-same-identity-poststate
+          accepted_empty_normalization_operation_identity: accepted-empty-normalization-operation-plus-journal-normalization-boundary-plus-normalization-transition-phase-and-generic-connection-close-distinct-from-fresh-initialization
+          accepted_empty_normalization_success: intermediate-only-no-store-and-only-a-sealed-same-identity-normalized-empty-operation-edge-continues-into-ordinary-fresh-initialization
+          accepted_empty_normalization_public_success: forbidden-until-ordinary-fresh-initialization-independently-completes
+          accepted_empty_normalization_receiptless_crash_profile_draft:
+            status: proposed-unqualified-non-authorizing
+            sqlite_profile_path: transaction.fresh_v3_initialization.guards.filesystem.precreate_census.preauthority_sidecar_candidate.accepted_empty_original_normalization.receiptless_crash_profile_draft
+            activation: exactly-defer-to-the-named-SQLite-profile-two-layer-authorization-and-canonical-or-production-activation-gate-with-no-static-SQLite-runtime-inference
+            qualification_implementation: after-proposal-acceptance-may-proceed-only-for-classifier-ports-effect-gates-and-fixture-scoped-cleanup-recovery-normalizer-and-fault-harness-behind-the-nonforgeable-disposable-fixture-capability
+            production_activation: blocked-until-the-complete-evidence-gate-independent-review-and-accepted-profile-replacement
+            family_partition: [F0-exact-pre-no-sidecar, FZ-exact-pre-or-complete-valid-rollback-exact-empty-current-main-plus-size-zero-wal, FP-exact-pre-nonhot-journal-prefix, FH-valid-hot-journal-with-exact-preimages-and-pre-or-post-main, FI-journal-preimages-derive-exact-pre-and-deterministic-post-plus-first-28-zero-invalidated-journal, FO-complete-valid-rollback-exact-empty-current-main-no-sidecar]
+            sealed_receipt: [canonical-locator-and-pinned-runtime-vfs, exact-layer-discriminator-and-family-applicable-runtime-build-vfs-device-filesystem-S-P-N-E-receipt-with-disposable-run-plan-or-accepted-production-report-never-cross-authorizing, continuous-parent-namespace-epoch-and-object-entry-identities, exact-family-tag-and-raw-whole-main-plus-sidecar-byte-receipts, family-applicable-exact-pre-and-when-journal-preimages-exist-deterministic-post-projections-plus-byte-exact-current-main, private-validation-and-confirmed-close, source-effect-phase-and-exact-bounded-effect-receipt, post-effect-family-and-exact-next-route]
+            cold_operation_history_inference: forbidden-FZ-post-FI-and-FO-prove-only-an-independent-current-rollback-header-exact-empty-anchor-while-F0-FZ-pre-FP-and-FH-may-only-start-a-new-live-receipted-normalizer
+            disposable_fixture_capability: harness-minted-nonforgeable-private-root-capability-run-ID-and-internal-test-only-entrypoint-with-user-and-canonical-locators-rejected-and-no-production-API-route
+            profile_receipt_layering: disposable-binds-capability-run-plan-and-candidate-report-ID-without-the-future-report-production-rejects-that-capability-and-binds-an-accepted-canonical-report-digest
+            review_receipt_separation: proposal-design-review-authorizes-only-disposable-qualification-implementation-and-a-distinct-later-production-evidence-review-is-required
+            public_success: forbidden-the-only-success-is-an-internal-receipt-bound-handoff-to-clean-normalization-or-ordinary-fresh-initialization
+          accepted_empty_normalization_physical_edge:
+            id: cxxlens.sqlite-accepted-empty-normalization-edge.v1
+            applicability: accepted-empty-normalization-only
+            source_class: exact-logical-empty-preauthority
+            pre_physical_state: same-main-header-two-two-exact-empty-and-either-no-sidecars-before-coordination-or-one-bound-size-zero-wal-used-as-the-coordination-object
+            post_physical_state: same-main-complete-valid-rollback-mode-exact-empty-and-no-sidecars
+            seal_timing: only-after-coordination-wal-delete-journal-creation-and-terminal-journal-delete-retained-authenticated-parent-fsync-finalize-exactly-one-confirmed-close-and-post-close-total-reclassification
+            candidate_receipt_presence_alone: never-edge-or-success-authority
+            proof: exact-completed-edge-receipt-binding-the-planned-candidate-plus-source-coordination-full-arm-and-exact-normalization-bounded-effect-transcript-receipts-to-the-same-main-and-entry-plus-all-three-parent-durability-receipts-plus-streaming-exact-byte-compare-against-the-sealed-expected-post_main_raw_projection-with-size-and-sha256-only-acceleration-plus-complete-post-structural-logical-validation-and-sidecar-census
+            with_edge_terminal_class: authorized-post-state-with-operation-edge
+            prestate_terminal_class: authorized-pre-state
+            normalized_without_edge_terminal_class: authorized-post-state-without-operation-edge
+            exact_empty_early_return_before_physical_edge_test: forbidden
+            store_authority_descendant_algebra_membership: forbidden
+            state_install_or_public_store_success: forbidden
+          typed_control_surface:
+            accepted_empty_normalization:
+              operation: accepted-empty-normalization
+              transition_fault_boundary: journal-normalization
+              terminal_phase: normalization-transition
+              normalization_close_fault_event: accepted-empty-normalization-plus-connection-close
+              subsequent_fresh_close_fault_event: fresh-initialization-plus-connection-close
+              ordinal_or_total_as_phase_identity: forbidden
+              operation_or_phase_aliasing: forbidden
           main_identity:
             capture:
               transactional_writer: from-the-actual-writer-main-handle-under-begin-immediate-plus-synchronous-directory-entry-cross-check-before-first-write
               fresh_journal_transition: from-the-actual-target-main-handle-after-underlying-xLock-exclusive-and-the-same-entry-exact-empty-recheck-before-arming-journal-effects
+              accepted_empty_normalization:
+                source_anchor: capture-from-the-actual-normalizer-xOpen-main-handle-and-same-directory-entry-then-verify-and-seal-inside-the-first-underlying-exclusive-xLock-callback-before-coordination-publication
+                pre_effect_full: recheck-that-exact-main-file-instance-and-directory-entry-inside-the-later-repeated-second-exclusive-xLock-callback-before-sealing-the-pre-effect-full-receipt-and-publishing-full-arm
             recheck: reopened-main-handle-and-directory-entry-must-denote-the-same-file-instance
             path-or-byte-equality-without-identity: insufficient
             missing-or-replaced: concurrent-authority-change
@@ -1326,6 +1466,8 @@ $defs:
               initialization-recovery:
               - exact-logical-empty-preauthority
               - current-v3
+              accepted-empty-normalization:
+              - exact-logical-empty-preauthority
               publish:
               - current-v3
               migration:
@@ -1351,6 +1493,11 @@ $defs:
             journal-transition-or-precommit-uncertain: apply-fresh_v3_initialization-journal-transition-or-precommit-phase-exactly
             commit-outcome-unknown: apply-fresh_v3_initialization.commit_outcome_unknown-exactly
             successful-handoff: require-confirmed-close-before-reopen-or-apply-the-initialization-recovery-opaque-quarantine-rule
+          accepted-empty-normalization:
+            pre-persistent-effect-failure: after-exactly-one-confirmed-close-return-the-exact-trigger-and-no-store-whether-pending-source-anchor-or-coordination-sequence-two-receipts-exist-close-non-ok-applies-the-opaque-quarantine-rule
+            normalization-transition-or-close-uncertain: apply-accepted_empty_original_normalization.failure_totality-from-the-latest-effect-and-receipt-stage-and-return-no-store
+            authorized-post-state-with-operation-edge: internal-continue-fresh-initialization-with-no-store-yet
+            authorized-pre-state-or-authorized-post-state-without-operation-edge: return-store.sqlite-failure-sqlite-initialization-recovery-opaque-and-no-store
           publish:
             precommit-failure: apply-publish.precommit_failure-exactly-original-trigger-only-for-authorized-installed-state-otherwise-database-opaque-and-poison
             commit-outcome-unknown: apply-publish.commit_outcome_unknown-exactly-always-store.sqlite-failure-database-opaque-with-authorized-state-install-or-unsafe-state-poison
@@ -1419,22 +1566,58 @@ $defs:
                 detail: orphan-without-main
               sidecar_presence_precedence:
               - no-main-plus-any-sidecar-is-orphan-and-rejected
+              - only-after-receiptless-crash-profile-acceptance-and-matching-qualification-main-plus-one-readable-size-zero-wal-with-no-shm-or-journal-first-dispatches-exactly-through-receiptless_zero_wal_dispatch-as-FZ-pre-or-FZ-post
+              - readable-size-zero-wal-with-main-and-no-shm-or-journal-that-does-not-pass-the-accepted-FZ-gate-is-rejected-before-private-SQLite-recovery-normalization-or-source-effect
+              - only-after-receiptless-crash-profile-acceptance-and-matching-qualification-main-plus-journal-with-no-wal-or-shm-first-raw-classifies-exact-nonhot-prefix-hot-or-invalidated-family
               - any-journal-with-main-is-journal-present-and-rejected-even-with-wal-or-shm
               - wal-and-shm-with-main-first-uses-the-ordinary-active-wal-existing-database-route-and-exact-logical-empty-with-no-format-authority-uses-the-active-wal-empty-preauthority-route
               - shm-without-wal-is-incomplete-and-rejected
               - wal-without-shm-and-with-main-but-unreadable-wal-is-a-terminal-unreadable-wal-only-result
-              - readable-wal-without-shm-and-with-main-is-the-only-preauthority-crash-candidate
+              - readable-nonzero-wal-without-shm-and-with-main-is-the-only-generic-preauthority-crash-candidate
               - no-sidecar-with-main-is-the-ordinary-quiescent-or-clean-route
               unreadable_wal_only:
                 code: store.sqlite-failure
                 field: sqlite-initialization-sidecar
                 detail: unreadable-wal-only
               unreadable_wal_only_effects: no-copy-private-recovery-sqlite-open-or-source-effect
+              rollback_header_exact_empty_candidate:
+                raw_candidate: existing-nonzero-main-header-read-and-write-version-one-and-wal-shm-journal-absent
+                private_classification: bounded-held-main-only-copy-opened-with-transaction.connection_lifecycle.sqlite_open_profiles.quiescent_private_snapshot-for-complete-valid-sqlite-structure-and-exact-logical-empty-proof
+                private_close: exactly-one-confirmed-close-before-source-recheck-or-fresh-route
+                private_open_or_close_failure:
+                  open_non_ok: apply-transaction.connection_lifecycle.sqlite_open_profiles.common_non_ok_return_cleanup-and-return-the-selected-open-error-with-no-source-effect-or-fresh-receipt
+                  close_non_ok_or_unknown: quarantine-the-private-connection-and-runtime-vfs-pins-return-store.sqlite-failure-sqlite-initialization-recovery-opaque-with-no-source-effect-or-fresh-receipt
+                source_recheck: same-main-entry-size-sha256-and-sidecar-census-exact-to-the-pre-copy-receipt
+                drift_result:
+                  code: store.sqlite-failure
+                  field: sqlite-initialization-sidecar
+                  detail: concurrent-source-change
+                source_effects: none
+                precedence: before-the-nonzero-main-unconditional-header-two-two-gate-and-before-expected-wal
+                accepted_empty: zero-application-id-user-objects-metadata-and-semantic-or-diagnostic-authority-enters-ordinary-fresh-initialization-as-an-exact-empty-anchor-with-a-new-fresh-receipt-no-process-receipt-success-inference
+                nonempty_v2_current_or_unknown: never-relax-the-v2-or-current-v3-header-two-two-wal-oracle-route-to-the-existing-exact-format-incompatible-corrupt-or-sqlite-journal-mode-expected-wal-result
+              wal_header_sidecar_absent_exact_empty_candidate:
+                raw_candidate: existing-nonzero-main-header-read-and-write-version-two-and-wal-shm-journal-absent
+                activation: ordinary-cold-input-or-receiptless-F0-is-non-authorizing-until-the-receiptless-profile-is-accepted-and-qualified
+                private_classification: bounded-held-main-only-copy-opened-with-transaction.connection_lifecycle.sqlite_open_profiles.quiescent_private_snapshot-for-complete-valid-sqlite-structure-and-exact-logical-empty-proof
+                private_close: exactly-one-confirmed-close-before-source-recheck-or-normalization-route
+                source_recheck: same-main-entry-size-streaming-bytes-sha256-and-sidecar-absence-exact-to-the-pre-copy-receipt-under-the-continuous-parent-namespace-epoch
+                accepted_empty: seal-the-accepted-empty-normalization-source-anchor-and-enter-exactly-one-clean-normalizer-with-no-public-success-inference
+                nonempty_or_invalid: retain-the-existing-format-incompatible-corrupt-or-sqlite-journal-mode-expected-wal-result-with-no-source-effect
+                precedence: after-the-accepted-receiptless-main-plus-journal-raw-classifier-and-before-the-nonzero-main-unconditional-header-two-two-wal-oracle-rejection
+              receiptless_zero_wal_dispatch:
+                raw_candidate: existing-nonzero-main-plus-one-readable-stable-size-zero-wal-with-wal-shm-journal-super-journal-and-other-sidecars-otherwise-absent
+                activation: only-after-the-receiptless-crash-profile-is-accepted-and-the-exact-runtime-vfs-device-filesystem-S-P-page-count-and-recrash-vector-is-qualified
+                exact_pre_route: complete-valid-wal-header-two-two-exact-empty-main-is-FZ-pre-and-may-only-seal-a-new-live-normalizer-source-anchor-with-the-existing-bound-zero-wal-as-coordination-object
+                exact_post_route: complete-valid-rollback-header-one-one-exact-empty-current-main-is-FZ-post-and-may-only-run-the-typed-known-name-zero-wal-cleanup-then-enter-rollback_header_exact_empty_candidate-with-the-byte-exact-current-main-receipt
+                rejected: every-other-main-zero-wal-topology-profile-or-qualification-state-is-unrecognized-preauthority-state-with-no-private-SQLite-recovery-normalizer-cleanup-or-source-effect
+                cold_operation_history: never-infer-or-seal-the-prior-normalization-operation-edge
+                precedence: before-preauthority_sidecar_candidate-and-before-any-zero-wal-main-alone-classification
               preauthority_sidecar_candidate:
-                precondition: existing-main-plus-readable-wal-plus-absent-shm-and-journal-regardless-of-main-only-marker-visibility
+                precondition: existing-main-plus-readable-nonzero-wal-plus-absent-shm-and-journal-regardless-of-main-only-marker-visibility
                 stable_source_receipt: held-main-and-wal-before-and-after-identity-size-and-sha256-plus-directory-entry-census
                 wal_participation_gate:
-                  zero_byte: carries-no-wal-authority-stable-main-alone-may-prove-exact-empty-v2-or-current-v3-and-unrecognized-main-rejects
+                  zero_byte: forbidden-on-this-generic-route-must-have-been-exhaustively-dispatched-by-precreate_census.receiptless_zero_wal_dispatch
                   nonzero: require-valid-wal-header-page-size-and-salt-then-scan-ordered-frames-and-checksums-until-the-first-invalid-or-truncated-frame-with-only-the-exact-last-valid-commit-prefix-authoritative
                   post_authoritative_suffix: after-the-last-valid-commit-or-from-frame-zero-when-there-is-no-commit-all-valid-uncommitted-frames-and-the-terminal-invalid-or-truncated-remainder-are-nonauthoritative-never-resume-scan-after-the-first-invalid-frame
                   format_provenance_limit: sqlite-wal-has-no-durable-main-identity-or-historical-binding-salt-and-checksum-prove-only-wal-internal-validity
@@ -1475,7 +1658,276 @@ $defs:
                   code: store.sqlite-failure
                   field: sqlite-initialization-sidecar
                   detail: concurrent-source-change
-                accepted_empty_original_recovery: acquire-exclusive-lease-recheck-every-receipt-field-open-original-read-write-no-create-through-the-initially-write-denying-vfs-query-and-pass-the-actual-connection-v3-gate-arm-writes-let-sqlite-recover-and-checkpoint-then-prove-exact-empty-and-normalized-sidecars-before-journal-setup
+                accepted_empty_original_normalization:
+                  operation: accepted-empty-normalization
+                  precondition: prior-accepted-empty-private-recovery-and-confirmed-close-proof-bound-to-the-stable-source-receipt-same-main-identity-exact-logical-empty-wal-header-and-either-no-sidecars-or-one-exact-bound-size-zero-wal
+                  checkpoint: not-applicable-in-this-normalization-phase-no-explicit-checkpoint-or-busy-tuple
+                  page_size_decode: big-endian-header-bytes-sixteen-through-seventeen-value-one-means-65536-otherwise-value-must-be-a-power-of-two-from-512-through-32768
+                  whole_main_bound: pre-main-byte-count-is-a-positive-integral-multiple-of-the-decoded-page-size-and-matches-the-complete-valid-sqlite-structure-header-page-count-and-exact-logical-empty-proof
+                  connection: bound-vfs-read-write-no-create-private-cache-fullmutex-initially-write-denying
+                  locking_mode: set-and-confirm-connection-local-exclusive-before-the-first-wal-touch
+                  gate_stage_order:
+                  - initial-write-denying-through-actual-read-write-open-version-limit-main-identity-and-exact-empty-recheck
+                  - install-pending-accepted-empty-normalization-coordination-arm
+                  - first-underlying-exclusive-xLock-callback-rechecks-under-the-held-lock-seals-the-source-anchor-and-publishes-accepted-empty-normalization-coordination-sequence-two
+                  - exact-zero-byte-wal-open-while-that-exclusive-lock-remains-continuously-held
+                  - install-post-coordination-full-arm-request
+                  - later-repeated-underlying-pending-full-arm-exclusive-xLock-success-rechecks-and-seals-the-pre-effect-full-receipt-with-a-planned-normalization-candidate-id-before-publishing-full-sequence-three
+                  coordination_effect: exact-SQLITE_OPEN_READWRITE-CREATE-WAL-create-or-open-of-one-same-directory-zero-byte-wal-under-the-continuously-held-exclusive-lock-with-captured-file-identity-entry-size-and-sha256-no-shm-journal-main-or-wal-byte-write-truncate-sync-or-authority-effect
+                  coordination_observation: immutable-pre-coordination-source-anchor-plus-exact-accepted-empty-normalization-coordination-stage-receipt-and-zero-wal-open-flags-file-instance-identity-directory-entry-zero-size-and-sha256-sufficient-for-post-close-classification-before-the-normalization-receipt-is-sealed
+                  sealed_receipt: transaction.recovery_model.terminal_reclassification.sealed_receipt_profiles.accepted_empty_normalization
+                  completed_edge_receipt: transaction.recovery_model.terminal_reclassification.sealed_receipt_profiles.accepted_empty_normalization_completed_edge
+                  normalization_transition: execute-exactly-one-transaction-free-pragma-journal-mode-delete-after-full-arm-require-the-single-result-delete-and-never-control-on-diagnostic-prose
+                  allowed_effects:
+                  - exact-coordination-zero-byte-wal-create-open-followed-after-full-arm-by-close-and-unlink
+                  - one-same-directory-rollback-journal-lifecycle-create-write-the-derived-large-sector-record-set-of-exact-original-bound-page-images-sync-invalidate-with-the-observed-zero-header-write-sync-close-and-unlink
+                  - one-full-bound-page-write-for-each-derived-large-sector-record-page-in-ascending-page-number-order-with-page-one-equal-to-the-sealed-post-projection-and-every-other-page-byte-exact-to-its-preimage-plus-one-main-xSync-flags-two-normal-after-SQLITE_FCNTL_SYNC-under-the-confirmed-connection-local-synchronous-FULL-setting-for-the-sqlite-internal-wal-to-rollback-header-transition
+                  - necessary-nonauthority-lock-and-file-control-effects-bound-to-the-receipt-plus-the-exact-retained-authenticated-parent-directory-journal-creation-coordination-wal-delete-and-terminal-journal-delete-durability-receipts-with-platform-path-trace-only-nonauthoritative-evidence
+                  forbidden_effects:
+                  - main-replacement
+                  - main-size-change
+                  - any-main-page-outside-the-derived-large-sector-record-set-write
+                  - any-non-page-one-main-byte-change
+                  - any-wal-byte-write-truncate-or-sync
+                  - shm-create-or-effect
+                  - any-second-or-nonrollback-journal
+                  - any-main-or-journal-truncate
+                  - schema
+                  - metadata
+                  - format-marker
+                  - semantic-or-diagnostic-authority
+                  - payload-publication-head-or-publication-counter-authority
+                  - arbitrary-sql-fallback-or-retry
+                  - raw-header-edit-outside-sqlite
+                  wal_effect_trace: xOpen-flags-524294-readwrite-create-wal-then-after-full-arm-xFileControl-PERSIST_WAL-10-xClose-immediate-retained-parent-relative-current-wal-leaf-regular-identity-byte-check-wrapper-known-name-xDelete-syncDir-zero-with-zero-xWrite-xTruncate-or-xSync-then-full-fsync-the-retained-authenticated-parent-before-returning-the-delete-callback-or-journal-create
+                  journal_sector_profile:
+                    maximum_sector_size: 65536
+                    runtime_binding: maximum-sector-size-65536-is-an-exact-pinned-sqlite-pager-implementation-bound-not-a-stable-public-file-format-guarantee
+                    writer_effective_S: temporary-or-powersafe-overwrite-pager-forces-S-512-otherwise-raw-xSectorSize-less-than-32-maps-to-512-raw-greater-than-65536-maps-to-65536-and-every-other-raw-value-is-unchanged
+                    writer_admission: effective-S-is-a-power-of-two-from-32-through-65536-before-installing-the-pending-coordination-request
+                    writer_receipt: raw-xSectorSize-effective-S-temporary-status-exact-xDeviceCharacteristics-profile-and-exact-vfs-backend-token-sealed-before-the-pending-coordination-request
+                    effect_grammar_admission: require-the-exact-separately-qualified-xDeviceCharacteristics-and-SQLite-build-profile-before-installing-the-pending-coordination-request-SQLITE_IOCAP_SAFE_APPEND-SEQUENTIAL-atomic-family-BATCH_ATOMIC-or-UNDELETABLE_WHEN_OPEN-and-any-other-trace-altering-bit-or-build-option-require-a-separate-header-sync-journal-bypass-finalization-and-crash-family-grammar-and-never-inherit-the-default-matrix
+                    no_contract_default: fixed-S-is-forbidden-and-the-observed-pinned-S-512-is-qualification-evidence-only
+                    cold_parser_source: big-endian-u32-sector-size-field-at-journal-header-bytes-20-through-23
+                    cold_parser_admission: first-header-parsed-S-is-a-power-of-two-from-32-through-65536-before-any-layout-arithmetic
+                    all_header_format_requirement: every-header-segment-has-the-same-S-and-decoded-page-size
+                    exact_match: actual-header-bytes-20-through-23-decode-to-the-same-S-used-for-header-padding-record-offsets-and-length-validation
+                    header_layout: exact-28-byte-big-endian-header-fields-followed-by-an-opaque-uninterpreted-region-through-byte-S-exclusive-with-the-entire-header-region-exactly-S-bytes
+                    writer_header_chunks: exact-S-byte-header-region-written-in-minimum-of-decoded-page-size-and-S-byte-chunks-after-writer-admission
+                    page_record_layout: for-header-offset-H-and-zero-based-record-r-record-start-is-H-plus-S-plus-r-times-open-decoded-page-size-plus-8-close-page-number-is-at-record-start-page-image-is-at-record-start-plus-4-checksum-is-at-record-start-plus-4-plus-decoded-page-size-and-record-end-is-record-start-plus-8-plus-decoded-page-size
+                    large_sector_record_set: let-P-be-decoded-page-size-Q-be-S-divided-by-P-when-S-is-greater-than-P-otherwise-one-L-be-the-SQLite-pending-byte-locking-page-and-E-be-the-ascending-pages-one-through-minimum-of-database-page-count-and-Q-excluding-L-then-R-is-cardinality-E-the-journal-nRec-is-R-record-r-contains-page-E-r-and-the-complete-one-header-journal-length-is-S-plus-R-times-open-P-plus-8-close
+                    large_sector_main_projection: SQLite-may-write-every-page-in-E-page-one-is-the-deterministic-post-page-one-and-every-other-page-is-byte-exact-to-its-sealed-preimage-so-the-whole-main-projection-still-differs-only-in-the-authorized-page-one-fields
+                    next_header_layout: next-header-H-is-the-smallest-S-multiple-at-or-after-the-prior-record-end-and-its-first-record-starts-at-H-plus-S
+                    checksum_authority: high-probability-incomplete-write-guard-only-never-a-substitute-for-exact-original-page-one-bytes
+                    cold_parser_scope: format-classifier-input-only-never-recovery-or-success-authority-without-a-separately-accepted-receiptless-crash-profile
+                    invalid-or-mismatched-S: reject-candidate-before-offset-arithmetic-private-recovery-or-source-effect
+                  effect_grammar_profile_receipt: bind-an-exact-layer-discriminator-plus-loaded-SQLite-DSO-source-id-hash-build-options-VFS-backend-token-raw-xSectorSize-effective-S-temporary-status-xDeviceCharacteristics-device-filesystem-profile-decoded-P-database-page-count-N-and-derived-Q-E-R-the-disposable-qualification-layer-additionally-binds-the-nonforgeable-fixture-capability-private-root-identity-lifetime-harness-build-toolchain-run-plan-exact-proposal-review-receipt-and-fresh-qualification-run-and-candidate-report-IDs-without-requiring-its-not-yet-produced-report-and-never-authorizes-production-the-production-layer-cannot-accept-that-capability-and-binds-an-already-accepted-canonical-qualification-report-digest-and-distinct-production-profile-review-receipt-seal-before-the-pending-coordination-request-and-inherit-the-receipt-through-the-full-receipt-bounded-effect-transcript-completed-edge-and-handoff
+                  receiptless_crash_profile_draft:
+                    status: proposed-unqualified-non-authorizing
+                    activation: forbidden-until-both-static-and-shared-Cxxlens-qualification-runners-bind-the-same-exact-loaded-SQLite-DSO-source-id-hash-VFS-build-and-device-profile-and-subprocess-crash-probe-matrices-cover-every-effect-callback-boundary-for-every-qualified-S-P-page-count-record-set-recrash-idempotence-independent-review-and-authority-acceptance-any-genuinely-static-SQLite-image-requires-a-separate-binding-and-matrix
+                    two_layer_authorization:
+                      before_proposal_acceptance: investigation-contract-edit-and-readonly-or-temporary-probe-evidence-only-no-production-classifier-cleanup-recovery-or-normalizer-activation
+                      qualification_implementation_after_acceptance: may-implement-the-raw-classifier-typed-filesystem-and-VFS-ports-effect-gates-barrier-fault-harness-and-fixture-scoped-cleanup-recovery-and-normalizer-only-behind-the-disposable-fixture-capability-and-may-run-the-exact-effects-only-on-those-fixtures-with-no-canonical-or-user-source-input
+                      disposable_fixture_capability: qualification-harness-mints-an-unforgeable-process-local-capability-and-fresh-run-ID-only-after-it-creates-and-verifies-a-new-empty-private-root-bind-root-object-identity-lifetime-cleanup-policy-harness-build-and-run-plan-reject-all-user-or-canonical-locators-use-a-dedicated-internal-test-only-entrypoint-with-no-production-Store-API-route-to-mint-or-present-the-capability-and-fail-before-effect-if-any-binding-is-absent-or-drifted
+                      canonical_or_production_activation: forbidden-until-every-remaining-qualification-item-and-independent-review-is-bound-to-authority-and-the-draft-status-is-replaced-by-an-accepted-profile
+                      source_effect_gate_interpretation: every-family-source_effect_gate-below-applies-to-canonical-or-production-source-effects-and-does-not-circularly-forbid-the-separately-authorized-disposable-qualification-fixture-matrix-after-proposal-acceptance
+                      proposal_design_review_receipt: exact-proposal-commit-DF-resolution-independent-reviewer-and-authority-ref-authorizes-only-the-disposable-qualification-implementation-layer
+                      production_profile_review_receipt: distinct-later-exact-implementation-commit-canonical-qualification-report-digest-counterexample-reviewer-and-accepted-authority-ref-required-for-production-profile-replacement-and-never-satisfied-by-the-proposal-review
+                    shared_probe_binding:
+                      authority_status: temporary-investigation-evidence-only-ephemeral-paths-and-hashes-are-non-authoritative-and-never-qualification-or-production-activation-authority
+                      sqlite_libversion_number: 3045001
+                      sqlite_source_id: 2024-01-30 16:01:20 e876e51a0ed5c5b3126f52e532044363a014bc594cfefa87ffb5b82257ccalt1
+                      runtime_and_vfs: shared-library-loader-origin-default-unix
+                      dso_sha256: f2cd05de8b6f71ea9d0495a6f9ff9cae844b15d9c45b7ef49ee0af0f81658cc7
+                      probe_source_sha256: 97dc57fd4d275746a6e57f06372d8b70914a4b3693031ba989e61fa86757a053
+                      probe_binary_sha256: 40e04e1afc6a296d4e9372f2bff534b3a5de8f147275a44de1818927ae612545
+                      hot_recovery_barrier_probe_source_sha256: ec462a0dae7ca9f55405eb51fe94375acf1ee07428cc60d61f06df9b4b8b6b97
+                      hot_recovery_barrier_probe_binary_sha256: 24e00488761bafb6e5fc63abb8152904474c2591f835929397399883d240ebc0
+                      fixture: decoded-page-size-4096-effective-S-512-one-page-exact-empty-main
+                      pre_main_sha256: e3ba06536f7dbba337dee3c1c5f01b43660ce276abb54c5cee2d5defc5b970aa
+                      post_main_sha256: bd70f69256dee6875161b88a66f56baaf057e8f064a01108d11428b2d7a7b071
+                      complete_default_fixture_callback_boundary_partition: [ordinal-1-journal-size-0-pre-main, ordinal-2-journal-size-512-incomplete-header-pre-main, ordinal-3-journal-size-516-page-number-prefix-pre-main, ordinal-4-journal-size-4612-page-image-prefix-pre-main, ordinals-5-through-6-journal-size-4616-invalid-header-pre-main, ordinals-7-through-8-valid-nRec-one-journal-pre-main, ordinals-9-through-11-valid-nRec-one-journal-post-main, ordinals-12-through-16-first-28-journal-bytes-zero-post-main, ordinal-17-absent-journal-post-main]
+                      file_control_results: SQLITE_FCNTL_SYNC-21-and-SQLITE_FCNTL_COMMIT_PHASETWO-22-delegate-and-return-exact-SQLITE_NOTFOUND-12
+                      evidence_limit: this-one-shared-S-512-P-4096-one-page-matrix-is-not-static-runtime-or-parameterized-S-P-page-count-qualification
+                      durable_replacement_gate: before-production-activation-replace-every-temporary-artifact-with-a-repository-tracked-exact-harness-and-source-build-command-and-toolchain-both-Cxxlens-runner-identities-loaded-DSO-source-id-hash-VFS-build-device-and-filesystem-profile-plus-a-canonical-report-digest-validated-by-required-checks
+                      crash_model_limit: completed-VFS-callback-boundary-process-termination-only-power-loss-torn-or-partial-sector-write-kernel-or-device-cache-durability-termination-inside-an-underlying-callback-and-unqualified-filesystem-reordering-are-excluded-and-remain-fail-closed
+                    cold_classification_boundary: after-epoch-start-use-only-the-retained-authenticated-parent-fd-for-getdents-fstatat-openat-or-typed-equivalents-with-AT_SYMLINK_NOFOLLOW-and-O_NOFOLLOW-plus-fstat-streaming-read-and-sha256-never-logical-host-path-reresolution-with-no-sqlite-open-recovery-checkpoint-shm-create-delete-cleanup-or-source-effect-and-result-candidate-or-unresolved-never-success
+                    continuous_namespace_epoch: retain-the-authenticated-parent-directory-and-held-main-and-every-present-sidecar-object-start-a-parent-entry-create-delete-move-watch-before-the-first-raw-census-and-keep-it-through-exclusive-under-lock-recheck-source-effect-close-and-post-effect-census-require-zero-events-before-effect-arm-after-arm-exactly-consume-and-attribute-only-receipt-bound-expected-self-create-delete-events-and-reject-any-other-event-loss-overflow-or-object-or-entry-drift-without-inferring-A-to-B-to-A-stability
+                    sealed_topology_receipt: canonical-main-and-every-sidecar-path-retained-parent-entry-and-open-object-identity-size-streaming-byte-receipt-sha256-and-relevant-header-fields-sealed-before-locking-and-byte-for-byte-rechecked-under-the-required-exclusive-lock-before-private-validation-or-source-effect
+                    private_copy_validation: copy-only-the-held-exact-main-and-recognized-residue-objects-to-an-isolated-private-directory-run-the-family-specific-pinned-SQLite-validation-or-recovery-F0-FZ-pre-and-FP-require-the-byte-exact-pre-main-FH-and-FI-require-exact-journal-preimages-and-source-main-equal-to-the-reconstructed-pre-or-derived-deterministic-post-FZ-post-and-FO-require-only-a-complete-valid-rollback-header-one-one-exact-empty-byte-exact-current-main-with-no-prestate-relation-or-history-inference-then-confirm-close-and-recheck-the-untouched-source-receipt-before-any-source-effect
+                    cleanup_lock_profile: bound-underlying-VFS-MAIN_DB-xOpen-input-flags-258-readwrite-no-create-with-local-outFlags-initialized-zero-and-returned-readwrite-then-xLock-SHARED-1-and-xLock-EXCLUSIVE-4-with-no-RESERVED-or-PENDING-wrapper-callback-under-exclusive-immediately-before-the-final-topology-byte-check-and-unlink-call-SQLITE_FCNTL_HAS_MOVED-20-with-a-local-moved-integer-initialized-zero-before-delegation-and-require-exact-SQLITE_OK-output-zero-initialize-every-xCheckReservedLock-output-before-delegation-and-require-the-qualified-exact-result-if-called-hold-exclusive-through-retained-parent-relative-authenticated-known-name-unlink-parent-fsync-and-post-census-then-xUnlock-and-exactly-one-xClose-no-fd-for-the-same-main-inode-may-close-from-first-lock-through-final-unlock-and-all-fd-lifetimes-and-same-process-unixInode-bookkeeping-are-part-of-qualification
+                    cleanup_lock_qualification: cover-a-second-same-process-SQLite-handle-holding-SHARED-and-RESERVED-and-a-separate-process-lock-holder-each-forcing-no-spurious-exclusive-success-or-delete-plus-inject-an-unrelated-same-inode-fd-close-between-lock-and-unlock-and-require-admission-to-reject-the-POSIX-lock-drop-hazard-before-effect
+                    cleanup_vfs_admission: supplied-or-nondefault-VFS-without-the-exact-qualified-lock-retained-parent-relative-authenticated-known-name-delete-immediate-leaf-check-retained-parent-fsync-fd-lifetime-and-namespace-epoch-profile-fails-before-source-open-or-effect
+                    delete_identity_limit: immediately-before-each-typed-cleanup-unlink-observe-through-the-retained-authenticated-parent-fd-that-the-current-known-wal-or-journal-leaf-is-a-direct-regular-entry-and-matches-the-sealed-identity-and-bytes-then-use-one-retained-parent-relative-authenticated-known-name-unlink-this-is-not-conditional-or-exact-object-deletion-and-any-rebind-or-unexpected-namespace-event-from-that-check-through-unlink-or-uncertain-unlink-outcome-is-post-effect-durability-and-authority-opaque-with-no-retry-second-snapshot-or-handoff
+                    cleanup_failure_totality:
+                      lock_or_observation_failure_before_effect: {code: store.sqlite-failure, field: sqlite-initialization-recovery, detail: opaque}
+                      identity_or_byte_drift_before_unlink: {code: store.sqlite-failure, field: sqlite-initialization-sidecar, detail: concurrent-source-change}
+                      unlink_noent_replacement_or_unexpected_entry_before_effect: {code: store.sqlite-failure, field: sqlite-initialization-sidecar, detail: concurrent-source-change}
+                      unlink_known_no_effect_permission_readonly_or_backend_rejection: {code: store.sqlite-failure, field: sqlite-initialization-recovery, detail: environment-no-effect}
+                      final_check_to_unlink_rebind_or_unlink_outcome_unknown: {code: store.sqlite-failure, field: sqlite-initialization-recovery, detail: durability-opaque}
+                      parent_fsync_failure_after_confirmed_unlink: {code: store.sqlite-failure, field: sqlite-initialization-recovery, detail: durability-opaque}
+                      post_durable_cleanup_census_watch_unlock_or_close_non_ok_or_unknown: {code: store.sqlite-failure, field: sqlite-initialization-recovery, detail: opaque}
+                      effects: no-store-no-retry-no-fallback-no-second-snapshot-and-no-handoff-after-any-failure-close-non-ok-quarantines-the-connection-runtime-and-vfs-pins
+                      success: exactly-one-receipt-bound-planned-handoff-to-the-family-specific-next-operation
+                    common_rejection: extra-sidecar-identity-or-byte-drift-invalid-ambiguous-truncated-or-unavailable-observation-rejects-untouched-with-no-retry-fallback-recovery-or-success
+                    zero_wal_candidate:
+                      exact_topology: one-stable-main-plus-exactly-one-same-directory-stable-size-zero-wal-with-no-shm-journal-super-journal-or-other-sidecar
+                      format_status: zero-byte-wal-has-no-32-byte-wal-header-magic-version-page-size-salts-or-checksum-and-is-never-format-valid-empty-wal-authority
+                      main_fields_to_seal: header-read-and-write-version-bytes-18-and-19-page-size-database-size-change-counter-and-version-valid-for
+                      projection_split: exact-pre-main-WAL-header-two-two-enters-a-new-live-receipted-normalizer-with-the-existing-zero-wal-bound-as-its-coordination-object-a-complete-valid-rollback-header-one-one-exact-empty-current-main-preserves-its-byte-exact-current-receipt-and-requires-the-typed-zero-wal-cleanup-before-the-existing-rollback-header-empty-route-with-no-prestate-or-history-reconstruction
+                      shared_observation: the-temporary-default-fixture-exact-pre-main-plus-size-zero-wal-produced-at-the-coordination-open-boundary-cold-readonly-SQLite-created-private-shm-and-was-therefore-not-a-source-classifier-while-raw-classification-left-source-bytes-unchanged-and-direct-normalizer-resume-reused-the-zero-wal-and-reached-the-observed-fixture-post-main-with-no-sidecars-this-does-not-generalize-a-deterministic-post-projection-without-journal-preimages
+                      transition_lock_gate: future-wal-to-rollback-source-transition-or-post-main-zero-wal-cleanup-requires-the-continuous-namespace-epoch-a-separately-sealed-exclusive-main-lock-and-under-lock-topology-identity-and-byte-recheck
+                      post_main_cleanup_operation: after-private-validation-continuous-parent-epoch-exclusive-under-lock-HAS_MOVED-zero-and-immediate-current-leaf-regular-identity-byte-recheck-apply-delete_identity_limit-to-one-retained-parent-relative-authenticated-known-wal-name-unlink-then-require-a-separate-observed-successful-full-fsync-on-that-parent-fd-before-confirmed-close-byte-exact-current-main-equality-sidecar-absence-and-rollback-header-empty-handoff
+                      cleanup_interruption: before-unlink-remains-size-zero-wal-plus-current-rollback-empty-main-a-final-check-to-unlink-rebind-or-uncertain-unlink-has-no-bounded-namespace-poststate-and-is-durability-and-authority-opaque-with-no-retry-or-handoff-and-a-later-cold-classifier-must-fail-closed-on-any-unrecognized-remnant-only-a-quiescent-confirmed-known-name-unlink-crash-before-parent-sync-is-bounded-to-the-byte-exact-current-main-plus-size-zero-wal-or-absent-wal-after-confirmed-parent-sync-require-current-main-byte-equality-and-sidecar-absence
+                      next_route: exact-pre-size-zero-wal-enters-the-existing-zero-wal-normalizer-branch-exact-post-cleanup-success-enters-precreate_census.rollback_header_exact_empty_candidate
+                      authority: topology-marker-bound-to-an-accepted-crash-probe-receipt-only-never-success-recovery-or-main-terminal-state-authority-by-itself
+                      excluded: every-nonzero-wal-including-1-through-31-byte-fragments-and-a-32-byte-header-requires-a-separate-full-format-profile
+                      source_effect_gate: forbidden-until-this-draft-is-accepted-and-the-matching-static-shared-and-parameterized-recrash-vector-is-qualified
+                    nonhot_prefix_candidate:
+                      exact_topology: one-stable-exact-pre-main-plus-one-same-directory-journal-that-is-an-exact-callback-boundary-prefix-of-the-derived-normalization-journal-with-invalid-or-incomplete-header-and-no-wal-shm-super-journal-or-other-sidecar
+                      prefix_set: a-self-contained-ordered-prefix-with-k-complete-minimum-of-P-and-S-header-chunks-where-zero-is-less-than-or-equal-to-k-and-k-is-less-than-or-equal-to-S-divided-by-minimum-of-P-and-S-no-record-byte-is-allowed-until-k-is-the-full-count-every-available-header-byte-matches-incomplete-magic-zero-and-nRec-exact-zero-plus-one-current-nonce-exact-original-page-count-S-P-and-writer-zero-padding-then-m-zero-or-more-complete-records-each-with-page-number-exact-E-of-r-full-P-byte-page-image-exact-to-the-sealed-preimage-and-complete-big-endian-exact-checksum-plus-at-most-one-current-record-at-index-m-ending-only-after-its-complete-four-byte-page-number-exact-E-of-m-or-its-complete-P-byte-exact-preimage-no-partial-completed-callback-field-hole-trailing-byte-or-current-record-after-a-complete-checksum
+                      default_shared_observation: ordinals-one-through-six-have-journal-lengths-zero-S-S-plus-4-S-plus-4-plus-P-and-S-plus-8-plus-P-with-the-last-length-observed-before-and-after-the-first-sync-S-equals-512-P-equals-4096-main-remains-exact-pre
+                      direct_resume_limit: measured-integrated-resume-reuses-the-journal-but-opens-zero-wal-before-journal-finalization-so-a-recrash-produces-an-unaccepted-wal-plus-journal-mixed-family-and-direct-resume-is-not-authorized
+                      cleanup_operation: after-private-validation-continuous-parent-epoch-exclusive-under-lock-HAS_MOVED-zero-and-immediate-current-leaf-regular-identity-byte-recheck-apply-delete_identity_limit-to-one-retained-parent-relative-authenticated-known-journal-name-unlink-then-require-a-separate-observed-successful-full-fsync-on-that-same-retained-parent-fd-with-no-main-wal-shm-or-other-effect-then-confirm-close-and-reclassify-absent-pre-before-a-separate-new-live-receipted-normalizer
+                      interruption: before-unlink-remains-the-same-candidate-a-final-check-to-unlink-rebind-or-uncertain-unlink-has-no-bounded-namespace-poststate-and-is-durability-and-authority-opaque-with-no-retry-or-handoff-and-a-later-cold-classifier-must-fail-closed-on-any-unrecognized-remnant-only-a-quiescent-confirmed-known-name-unlink-crash-before-parent-sync-is-bounded-to-the-same-candidate-or-absent-pre-after-confirmed-sync-require-pre-main-byte-equality-and-sidecar-absence-before-new-live-normalizer-handoff
+                      next_route: cleanup-success-enters-precreate_census.wal_header_sidecar_absent_exact_empty_candidate-and-only-that-branch-may-seal-a-clean-normalizer-source-anchor
+                      source_effect_gate: forbidden-until-this-draft-is-accepted-and-the-complete-static-shared-parameterized-cleanup-sync-fault-and-recrash-matrix-is-qualified
+                    rollback_journal_candidate:
+                      exact_topology: one-stable-main-plus-exactly-one-same-directory-stable-rollback-journal-with-no-wal-shm-super-journal-or-other-sidecar
+                      public_hot_gate: journal-exists-size-greater-than-512-header-is-nonzero-and-well-formed-super-journal-name-is-empty-and-no-reserved-lock-is-held
+                      recovery_lock_gate: source-SQLite-acquires-shared-detects-hot-and-reaches-the-observed-wrapper-exclusive-callback-without-claiming-unobserved-pending-or-reserved-wrapper-callbacks-then-the-gate-rechecks-topology-identity-and-every-byte-under-exclusive-before-arming-playback
+                      header_gate: exact-magic-nRec-random-nonce-original-database-page-count-S-and-decoded-page-size-with-first-header-S-power-of-two-32-through-65536-and-every-header-using-the-same-S-and-page-size
+                      framing_gate: exact-S-byte-header-regions-with-opaque-uninterpreted-bytes-after-the-first-28-fields-and-whole-file-record-framing-page-number-plus-exact-page-image-plus-checksum-with-no-unparsed-trailing-or-partial-bytes
+                      record_gate: nRec-equals-R-and-record-count-page-numbers-and-every-original-page-image-equal-the-derived-large-sector-record-set-and-sealed-preimages-the-source-main-must-equal-either-the-exact-pre-main-or-the-deterministic-post-main
+                      checksum_authority: nonce-plus-sparse-checksum-is-an-incomplete-write-guard-only-and-never-replaces-exact-record-page-bytes
+                      sqlite_playback_authority: sqlite-playback-success-or-journal-finalization-alone-is-never-acceptance-authority
+                      private_validation_gate: apply-the-common-private-copy-validation-and-require-private-hot-playback-to-produce-the-exact-pre-main-and-delete-only-the-private-journal
+                      shared_replay_observation: default-S-512-P-4096-ordinals-seven-through-eight-pre-main-and-nine-through-eleven-post-main-all-have-valid-nRec-one-length-4616-journals-private-recovery-writes-the-exact-pre-page-one-syncs-main-and-deletes-journal-to-exact-pre-main
+                      shared_recovery_barrier_observation: default-pre-and-post-hot-and-S-65536-P-4096-R-16-post-hot-replay-delete-the-journal-then-the-next-SQLITE_OPEN_READWRITE-CREATE-WAL-xOpen-flags-524294-is-denied-before-underlying-delegation-with-exact-SQLITE_IOERR-10-integrity-validation-returns-10-close-returns-zero-and-post-close-is-exact-pre-main-with-no-sidecars
+                      separate_recovery_connection: source-open-readwrite-no-create-main-flags-258-shared-lock-journal-readonly-probe-flags-2049-exclusive-lock-journal-readwrite-flags-2050-sync-2-parse-exact-records-write-only-derived-preimage-pages-file-control-SYNC-21-return-12-main-sync-2-close-journal-then-immediate-current-leaf-regular-identity-byte-check-and-wrapper-retained-parent-relative-authenticated-known-journal-name-xDelete-syncDir-zero-subject-to-delete_identity_limit-with-no-host-path-delete-delegation-then-require-the-separate-authenticated-parent-fsync-receipt-and-exact-pre-main-read-before-the-next-WAL-xOpen-the-operation-latched-barrier-denies-that-exact-flags-524294-open-before-underlying-delegation-with-SQLITE_IOERR-10-require-the-expected-validation-10-and-confirmed-close-zero-then-post-close-absent-pre-reclassification-and-a-separate-new-live-receipted-normalizer-never-control-on-diagnostic-prose
+                      barrier_admission_and_totality: arm-exactly-once-only-after-the-exact-hot-transcript-same-journal-delete-success-authenticated-parent-fsync-receipt-and-exact-pre-main-observation-bind-an-internal-operation-token-require-the-first-and-only-WAL-xOpen-input-flags-524294-and-initialize-every-local-outFlags-or-result-output-before-returning-SQLITE_IOERR-10-without-underlying-delegation-consume-the-token-on-that-return-and-recognize-only-that-token-plus-exact-transcript-as-the-expected-internal-stop-every-other-IOERR-or-open-shape-is-a-real-opaque-failure
+                      recovery_interruption: before-journal-delete-remains-the-same-valid-hot-family-final-check-to-delete-rebind-uncertain-delete-and-after-confirmed-journal-delete-before-confirmed-parent-fsync-are-durability-and-authority-opaque-with-no-retry-or-handoff-after-fsync-and-before-or-at-the-predelegation-WAL-barrier-is-absent-pre-and-after-confirmed-close-is-absent-pre-no-journal-invalidation-size-zero-wal-or-wal-plus-journal-mixed-family-is-permitted
+                      integrated_resume_forbidden: integrated-hot-replay-invalidates-but-retains-the-journal-then-opens-zero-wal-before-reuse-and-can-recrash-as-main-pre-plus-zero-wal-plus-invalidated-journal-outside-the-accepted-family-partition
+                      failure_totality: before-playback-lock-or-byte-drift-uses-the-common-pre-effect-result-after-playback-arm-any-SQLite-error-observation-failure-unlock-or-close-non-ok-or-unknown-returns-store.sqlite-failure-sqlite-initialization-recovery-opaque-with-no-store-retry-fallback-or-same-invocation-normalizer-and-close-non-ok-quarantines
+                      next_route: confirmed-close-absent-pre-enters-precreate_census.wal_header_sidecar_absent_exact_empty_candidate-and-does-not-infer-success
+                      source_effect_gate: forbidden-until-this-draft-is-accepted-and-the-complete-static-shared-parameterized-separate-recovery-connection-and-recrash-matrix-is-qualified
+                    invalidated_journal_candidate:
+                      exact_topology: one-stable-exact-deterministic-post-main-plus-one-same-directory-journal-with-first-28-bytes-zero-no-wal-shm-super-journal-or-other-sidecar-and-a-unique-admitted-effective-S-and-derived-R-satisfying-exact-length-S-plus-R-times-open-P-plus-8-close
+                      receiptless_body_grammar: bytes-28-through-S-exclusive-are-writer-zero-each-record-page-number-is-the-derived-large-sector-record-page-and-each-page-image-is-an-exact-preimage-from-which-the-exact-empty-pre-main-and-current-deterministic-post-main-are-reconstructed-use-checksum_nonce_reconstruction-for-every-record-require-one-identical-nonce-candidate-across-all-R-records-and-reconstruct-the-pre-invalidation-magic-nRec-R-nonce-original-page-count-S-P-header-the-checksum-remains-an-incomplete-write-guard-never-provenance-or-authority-and-R-one-gains-no-extra-binding
+                      checksum_nonce_reconstruction: stored-checksum-is-big-endian-u32-and-for-each-record-the-nonce-candidate-is-stored-checksum-minus-modulo-two-to-the-thirty-two-sum-of-page-image-byte-values-at-zero-based-indexes-P-minus-200-P-minus-400-and-so-on-while-the-index-is-strictly-greater-than-zero-exactly-matching-the-pinned-SQLite-pager_cksum-loop
+                      shared_observation: default-S-512-P-4096-ordinals-twelve-through-sixteen-retain-the-byte-exact-4616-byte-journal-across-direct-normalizer-success-and-a-second-cold-open-with-no-exclusive-write-sync-or-delete-so-pragma-success-is-not-cleanup-authority
+                      cleanup_operation: after-private-validation-continuous-parent-epoch-exclusive-under-lock-HAS_MOVED-zero-and-immediate-current-leaf-regular-identity-byte-recheck-apply-delete_identity_limit-to-one-retained-parent-relative-authenticated-known-journal-name-unlink-then-require-a-separate-observed-successful-full-fsync-on-that-same-retained-parent-fd-with-no-main-wal-shm-or-other-effect
+                      interruption: before-unlink-remains-the-same-candidate-a-final-check-to-unlink-rebind-or-uncertain-unlink-has-no-bounded-namespace-poststate-and-is-durability-and-authority-opaque-with-no-retry-or-handoff-and-a-later-cold-classifier-must-fail-closed-on-any-unrecognized-remnant-only-a-quiescent-confirmed-known-name-unlink-crash-before-parent-sync-is-bounded-to-the-same-candidate-or-absent-current-rollback-empty-main-after-confirmed-sync-require-current-main-byte-equality-and-sidecar-absence-before-fresh-anchor-handoff
+                      next_route: cleanup-success-enters-precreate_census.rollback_header_exact_empty_candidate-with-no-operation-history-inference
+                      source_effect_gate: forbidden-until-this-draft-is-accepted-and-static-shared-cleanup-sync-fault-recrash-and-idempotence-vectors-are-qualified
+                    absent_post_candidate:
+                      exact_topology: one-complete-valid-rollback-header-one-one-exact-empty-current-main-and-no-sidecars-with-a-byte-exact-current-receipt
+                      authority: cold-receiptless-input-never-seals-a-completed-normalization-edge-or-operation-history-and-may-only-enter-the-existing-rollback-header-exact-empty-fresh-anchor-after-independent-validation
+                      next_route: precreate_census.rollback_header_exact_empty_candidate
+                    common_post_effect_rule: no-source-effect-or-SQLite-success-is-public-success-every-family-requires-confirmed-close-continuous-epoch-post-effect-exact-main-and-sidecar-census-F0-FZ-pre-FP-and-FH-may-only-route-to-a-new-live-receipted-normalizer-FZ-post-FI-and-FO-may-only-route-to-the-existing-independently-validated-rollback-header-exact-empty-fresh-anchor-and-only-a-still-live-original-operation-receipt-chain-may-seal-a-completed-normalization-edge
+                    common_recrash_rule: a-fault-at-every-permitted-open-lock-read-write-sync-file-control-close-delete-and-parent-sync-boundary-must-cold-classify-to-one-of-these-exact-families-or-fail-opaque-with-no-additional-classifier-effect-retry-second-snapshot-handoff-or-success-inference-while-retaining-the-exact-observed-remnant
+                    remaining_qualification: [static-and-shared-Cxxlens-runners-bind-the-same-loaded-SQLite-DSO-identity-source-id-hash-VFS-build-and-device-profile, every-supported-P-and-qualified-S-at-deduplicated-positive-N-boundaries-one-Q-minus-one-Q-and-Q-plus-one-plus-mechanical-L-greater-than-Q-proof-and-synthetic-L-record-rejection, every-header-chunk-and-record-field-boundary, hot-playback-every-page-preimage-write, typed-cleanup-known-name-rebind-at-unlink-and-parent-sync-faults, normalizer-final-delete-FI-to-FO-parent-sync-fault-and-recrash-boundaries, same-process-and-separate-process-lock-holder-and-same-inode-fd-close-hazard-matrix, repeated-cold-recrash-idempotence, separate-source-recovery-connection-exact-trace, distinct-production-evidence-counterexample-review]
+                  rollback_journal_effect_trace: xOpen-flags-2054-readwrite-create-main_journal-write-the-exact-S-byte-incomplete-header-in-minimum-of-P-and-S-byte-chunks-then-for-each-derived-large-sector-record-page-in-ascending-order-xWrite-4-page-number-xWrite-P-exact-preimage-xWrite-4-checksum-xSync-flags-2-normal-xWrite-12-at-zero-valid-magic-and-nRec-R-xSync-flags-2-normal-then-for-each-derived-record-page-xWrite-P-at-page-offset-with-page-one-postimage-and-every-other-page-byte-exact-xFileControl-SYNC-21-return-SQLITE_NOTFOUND-12-xSync-flags-2-normal-xWrite-28-at-zero-zero-header-invalidation-xSync-flags-18-normal-dataonly-xFileControl-COMMIT_PHASETWO-22-return-SQLITE_NOTFOUND-12-xSync-flags-2-normal-xClose-then-immediate-retained-parent-relative-current-journal-leaf-regular-identity-byte-check-wrapper-known-name-xDelete-syncDir-zero-with-no-xTruncate-and-after-wrapper-delete-success-before-returning-the-callback-full-fsync-the-retained-authenticated-parent
+                  parent_directory_effect_trace: separate-linux-unix-vfs-platform-syscall-evidence-after-the-first-journal-fdatasync-and-before-the-valid-journal-header-write-opens-the-same-path-parent-directory-performs-fdatasync-and-closes-it-but-unix-VFS-ignores-directory-fsync-failure-and-this-observation-is-never-the-per-operation-durability-receipt
+                  normalizer_parent_durability_receipt: after-the-underlying-first-journal-xSync-succeeds-and-before-returning-that-wrapper-callback-or-arming-the-valid-header-or-any-main-write-full-fsync-the-preopened-retained-authenticated-parent-directory-fd-require-observed-success-and-seal-the-same-parent-entry-journal-object-and-namespace-epoch-receipt-failure-enters-post-journal-pre-main-effect-totality-with-no-valid-header-or-main-write
+                  normalizer_delete_identity_limit: for-each-coordination-wal-or-terminal-journal-xDelete-callback-immediately-reobserve-through-the-retained-authenticated-parent-fd-that-the-current-authenticated-known-leaf-is-direct-regular-and-matches-the-sealed-identity-and-bytes-then-the-wrapper-performs-the-actual-unlink-through-that-same-retained-parent-capability-relative-known-leaf-with-no-host-path-delete-delegation-this-never-claims-conditional-or-exact-object-deletion-any-rebind-or-unexpected-namespace-event-from-final-check-through-xDelete-or-uncertain-delete-outcome-is-post-effect-durability-and-authority-opaque-with-no-bounded-poststate-retry-second-snapshot-handoff-edge-seal-or-success-and-a-VFS-or-platform-unable-to-provide-this-effect-fails-before-arm
+                  normalizer_coordination_wal_delete_durability_receipt: after-the-wrapper-retained-parent-relative-coordination-wal-xDelete-syncDir-zero-succeeds-and-before-returning-that-callback-or-creating-the-journal-full-fsync-the-same-preopened-retained-authenticated-parent-directory-fd-require-observed-success-and-bind-the-known-wal-name-delete-event-operation-token-and-continuous-namespace-epoch-failure-or-unknown-after-delete-is-durability-and-authority-opaque-with-no-handoff
+                  normalizer_final_delete_durability_receipt: after-the-wrapper-retained-parent-relative-terminal-journal-xDelete-syncDir-zero-succeeds-and-before-returning-that-callback-closing-the-normalizer-or-sealing-the-completed-edge-full-fsync-the-same-preopened-retained-authenticated-parent-directory-fd-require-observed-success-and-bind-the-known-journal-name-delete-event-current-main-operation-token-and-continuous-namespace-epoch-failure-or-unknown-after-delete-is-durability-opaque-with-no-handoff
+                  vfs_parent_sync_admission:
+                    pinned_default_linux_unix: require-the-exact-parent-directory-effect-trace-plus-the-separate-normalizer-parent-durability-receipt-normalizer-coordination-wal-delete-durability-receipt-and-normalizer-final-delete-durability-receipt
+                    supplied_or_exact_equivalent: require-independently-qualified-typed-durable-journal-creation-coordination-wal-delete-and-final-journal-delete-parent-namespace-sync-equivalents-bound-to-the-exact-vfs-backend-token-retained-authenticated-parent-fd-current-operation-receipt-and-delete-identity-limit
+                    qualification_unavailable_or_failed: fail-before-installing-the-pending-coordination-request-or-any-normalization-effect
+                    generic-supplied-vfs-inherits-linux-strace-claim: forbidden
+                  main_effect_trace: for-each-derived-large-sector-record-page-in-ascending-order-exactly-one-xWrite-decoded-page-size-at-file-offset-open-page-number-minus-one-close-times-P-with-page-one-the-sealed-expected-post-image-and-every-other-page-the-sealed-byte-exact-preimage-then-xFileControl-SYNC-21-exact-SQLITE_NOTFOUND-12-and-xSync-flags-2-normal-no-size-change-or-write-outside-the-derived-set
+                  normalization_file_control_trace: each-arming-HAS_MOVED-20-call-uses-a-local-moved-integer-initialized-to-exact-zero-and-requires-SQLITE_OK-output-zero-the-pending-full-arm-xLock-exclusive-success-second-call-seals-the-pre-effect-full-receipt-and-publishes-full-sequence-three-later-PERSIST_WAL-10-MMAP_SIZE-18-HAS_MOVED-20-and-after-main-sync-COMMIT_PHASETWO-22-PRAGMA-14-HAS_MOVED-20
+                  normalization_bounded_effect_transcript_receipt: bind-the-normalization-operation-token-exact-effect-grammar-profile-receipt-and-record-every-permitted-wal-journal-main-lock-file-control-sync-delete-parent-sync-close-callback-in-exact-order-with-input-role-flags-offset-bytes-and-result-output-plus-the-three-parent-durability-receipts-and-require-no-missing-duplicate-extra-or-out-of-grammar-effect-before-completed-edge-seal
+                  post_main_raw_projection: pre-normalization-main-bytes-exact-except-sqlite-defined-page-one-fields-read-and-write-version-bytes-18-through-19-equal-one-change-counter-bytes-24-through-27-equal-the-big-endian-u32-modulo-two-to-the-thirty-two-successor-of-the-pre-change-counter-version-valid-for-bytes-92-through-95-equal-that-post-change-counter-and-write-library-version-bytes-96-through-99-equal-the-big-endian-u32-sqlite3_libversion_number-from-the-exact-pinned-runtime-all-other-bytes-byte-exact
+                  observed_pinned_runtime_diff: only-ranges-18-through-20-27-through-28-and-95-through-96-with-two-to-one-one-to-two-and-one-to-two-respectively
+                  post_main_validation: unchanged-size-valid-positive-integer-page-count-complete-valid-rollback-mode-sqlite-structure-exact-logical-empty-zero-application-id-user-objects-metadata-and-semantic-or-diagnostic-authority-plus-streaming-exact-byte-equality-of-the-entire-post-main-to-the-sealed-deterministic-expected-projection-with-size-and-sha256-only-acceleration-plus-sidecar-census-captured-for-the-fresh-anchor
+                  success_postcondition: only-after-the-exact-normalization-bounded-effect-transcript-and-coordination-wal-delete-journal-creation-and-terminal-journal-delete-retained-authenticated-parent-fsync-receipts-finalize-and-exactly-one-confirmed-close-post-close-total-reclassification-seals-the-completed-normalization-edge-receipt-binding-the-planned-candidate-and-full-sequence-three-to-the-same-main-and-entry-unchanged-main-size-valid-positive-integer-page-count-valid-complete-rollback-mode-sqlite-structure-header-read-and-write-version-one-zero-application-id-zero-user-objects-metadata-and-semantic-or-diagnostic-authority-wal-shm-journal-absence-and-streaming-exact-whole-main-byte-equality-to-the-sealed-expected-post-projection-with-size-and-sha256-only-acceleration
+                  handoff: one-planned-nonretry-handoff-to-ordinary-fresh-initialization-requires-the-original-preinit-anchor-plus-the-exact-normalization-bounded-effect-transcript-and-coordination-wal-delete-journal-creation-and-terminal-journal-delete-retained-authenticated-parent-fsync-receipts-plus-the-separately-sealed-post-close-completed-physical-normalization-edge-receipt-plus-the-streaming-exact-post-main-byte-projection-and-sidecar-census-with-size-and-sha256-only-acceleration-before-the-fresh-receipt-is-sealed-the-pre-effect-full-receipt-or-planned-candidate-alone-never-authorizes-handoff
+                  cold_restart_or_interrupted_handoff: only-for-a-quiescent-accepted-completed-callback-boundary-trace-with-no-rebind-or-uncertain-delete-and-with-an-accepted-qualified-receiptless-profile-a-crash-before-or-after-the-final-delete-parent-fsync-cold-classifies-as-FI-or-FO-and-enters-only-precreate_census.rollback_header_exact_empty_candidate-with-no-process-receipt-success-or-operation-history-inference-rebind-or-uncertain-outcome-uses-the-unbounded-remnant-failure-rule-and-without-that-profile-fail-closed
+                  failure_totality:
+                    receipt_drift_before_effect: return-the-source_drift_result-with-no-store-and-no-arm
+                    sqlite_open_non_ok: apply-transaction.connection_lifecycle.sqlite_open_profiles.common_non_ok_return_cleanup
+                    pre_effect_no_receipt_or_persistent_effect_after_successful_open: when-no-persistent-effect-occurred-whether-or-not-a-pending-request-source-anchor-or-coordination-sequence-two-receipt-exists-return-the-exact-original-triggering-result-and-no-store-after-exactly-one-confirmed-close-close-non-ok-applies-the-opaque-quarantine-rule
+                    after_coordination_effect_before_normalization_receipt_seal: finalize-all-statements-no-transaction-rollback-inference-attempt-exactly-one-close-v2-and-only-after-close-ok-classify-from-the-immutable-pre-coordination-source-anchor-plus-exact-gate-and-zero-wal-observation-and-latest-stage-receipt-never-assume-a-sealed-normalization-edge
+                    after_normalization_receipt_seal_or_transition_attempt: finalize-all-statements-no-transaction-rollback-inference-attempt-exactly-one-close-v2-and-only-after-close-ok-run-the-total-reclassifier-from-the-pre-effect-full-receipt-and-full-sequence-three-receipt-never-infer-a-physical-edge-or-success-from-the-planned-candidate
+                    coordination_wal_or_terminal_journal_final_check_rebind_delete_unknown_or_parent_fsync_failure: return-store.sqlite-failure-sqlite-initialization-recovery-durability-opaque-treat-authority-as-opaque-with-no-store-bounded-namespace-poststate-retry-second-snapshot-handoff-edge-seal-or-further-classifier-effect-and-require-a-later-cold-invocation-to-classify-any-observed-remnant-fail-closed
+                    close_non_ok_or_unknown: quarantine-connection-and-runtime-vfs-pins-no-reopen-or-unregister-return-store.sqlite-failure-sqlite-initialization-recovery-opaque-and-no-store
+                    same_identity_normalized_empty_with_operation_edge: internal-normalization-completed-continue-fresh-initialization-with-no-store-yet
+                    same_identity_prestate_or_normalized_empty_without_operation_edge: return-store.sqlite-failure-sqlite-initialization-recovery-opaque-and-no-store
+                    valid_non_descendant_or_replaced_main: return-store.sqlite-failure-sqlite-initialization-recovery-concurrent-authority-change-and-no-store
+                    invalid_or_mixed: return-store.corrupt-sqlite-initialization-recovery-partial-or-mixed-authority-and-no-store
+                    observation_or_reclassifier_unavailable: return-store.sqlite-failure-sqlite-initialization-recovery-opaque-and-no-store
+                    terminal_reclassifier_source_effect: forbidden-no-repair-cleanup-or-second-normalization
+                    post_normalization_fresh_pre_effect_failure: when-normalization-close-postcondition-are-confirmed-and-fresh-has-made-no-persistent-effect-return-the-exact-fresh-trigger-and-no-store-without-claiming-zero-whole-invocation-effect-fresh-close-non-ok-and-post-arm-paths-retain-existing-fresh-totality
+                  implicit_retry_or_second_snapshot: forbidden
+                  qualification:
+                    matrix: exact-static-and-shared-Cxxlens-qualification-runners-bound-to-the-same-loaded-SQLite-DSO-identity-source-id-hash-VFS-build-and-device-profile-not-an-inferred-static-SQLite-runtime
+                    observed_fixture_page_size: 4096
+                    page_size_vectors:
+                    - 512-header-512-file-512
+                    - 1024-header-1024-file-1024
+                    - 2048-header-2048-file-2048
+                    - 4096-header-4096-file-4096
+                    - 8192-header-8192-file-8192
+                    - 16384-header-16384-file-16384
+                    - 32768-header-32768-file-32768
+                    - 65536-header-1-file-65536
+                    page_size_boundary_qualification_required:
+                    - 512-header-512-file-512
+                    - 65536-header-1-file-65536
+                    sector_page_count_matrix_required: for-every-supported-P-and-every-qualified-effective-S-let-Q-be-S-div-P-when-S-is-greater-than-P-otherwise-one-and-cover-the-deduplicated-positive-database-page-count-set-one-Q-minus-one-Q-and-Q-plus-one-then-mechanically-prove-L-equals-floor-0x40000000-div-P-plus-one-is-greater-than-Q-throughout-the-admitted-domain-and-reject-a-synthetic-record-containing-L
+                    journal_sector_pinned_default_vector: qualification-only-raw-xSectorSize-512-effective-S-512-incomplete-header-single-512-byte-write-at-zero-page-number-one-at-512-page-one-at-516-and-checksum-at-516-plus-decoded-page-size-never-a-contract-default
+                    journal_sector_parameterized_vectors_required:
+                    - raw-16-effective-512
+                    - raw-32-effective-32
+                    - raw-4096-effective-4096
+                    - raw-65536-effective-65536
+                    - raw-131072-effective-65536
+                    - raw-4096-powersafe-overwrite-effective-512
+                    - S-65536-page-size-4096-header-written-as-sixteen-4096-byte-chunks
+                    - S-65536-page-size-4096-page-count-at-least-16-nRec-16-record-pages-one-through-16-and-main-writes-page-one-postimage-plus-pages-two-through-16-exact-preimages
+                    journal_sector_negative_vectors_required:
+                    - effective-non-power-of-two
+                    - parsed-S-below-32
+                    - parsed-S-above-65536
+                    - header-field-S-mismatch
+                    - header-region-length-not-equal-to-S
+                    - record-offset-derived-from-512-instead-of-S
+                    - record-length-or-page-size-mismatch
+                    - padding-bytes-treated-as-authority
+                    - fixed-nRec-one-when-S-exceeds-page-size
+                    - omitted-large-sector-preimage
+                    - injected-locking-page-L-record
+                    - main-write-outside-derived-record-set
+                    - non-page-one-main-byte-change
+                    observed_fixture_pre_main_sha256: e3ba06536f7dbba337dee3c1c5f01b43660ce276abb54c5cee2d5defc5b970aa
+                    observed_fixture_post_main_sha256: bd70f69256dee6875161b88a66f56baaf057e8f064a01108d11428b2d7a7b071
+                    counter_vectors:
+                    - pre-change-counter-5-pre-version-valid-for-9-post-change-counter-6-post-version-valid-for-6
+                    - pre-change-counter-4294967295-pre-version-valid-for-305419896-post-change-counter-0-post-version-valid-for-0
+                    write_library_version_vector: pre-write-library-version-1-pre-change-counter-7-pre-version-valid-for-3-post-write-library-version-3045001-post-change-counter-8-post-version-valid-for-8
+                    multi_page_freelist_vector:
+                      page_count: 492
+                      page_size: 4096
+                      byte_count: 2015232
+                      freelist_pages: 491
+                      pre_main_sha256: bc708af76e44d33510e7f13224227e34a7a2730baf5e55a5b27c2cdf43c849c8
+                      post_main_sha256: 11add905bcdca94b67c443e7b74276f2c771f4924ee8a30170db1551af7f00a2
+                      projection: unchanged-size-and-page-one-only-authorized-fields-patched-with-pages-two-through-492-byte-exact
+                    required:
+                    - pre-and-post-exact-file-family-effect-trace
+                    - faults-before-and-after-first-coordination-callback-post-coordination-pre-full-zero-wal-gap-and-before-and-after-second-full-arm-callback
+                    - skipped-duplicate-reordered-and-wrong-prerequisite-arm-fail-closed
+                    - faults-at-every-parameterized-header-chunk-record-field-journal-sync-valid-header-main-page-write-main-sync-invalidation-close-coordination-wal-delete-parent-sync-terminal-journal-delete-parent-sync-and-creation-parent-sync-boundary-including-FI-to-FO
+                    - receiptless-nonhot-hot-invalidated-absent-and-zero-wal-cold-reopen-and-recrash-idempotence
+                    - rebind-at-every-known-name-unlink-and-wrapper-xDelete-final-check-boundary
+                    - same-process-shared-and-reserved-separate-process-lock-holder-and-unrelated-same-inode-fd-close-hazard
+                    - post-normalization-fresh-journal-transition-fault
+                    - cold-reopen-exact-outcome
+                    - no-effect-replacement-nonempty-mixed-unrecognized-journal-and-receipt-drift-cases
                 accepted_v2_compact_recovery: explicit-compact-acquires-exclusive-lease-rechecks-every-receipt-field-opens-original-read-write-no-create-through-the-initially-write-denying-vfs-queries-and-passes-the-actual-connection-v3-gate-arms-writes-lets-sqlite-recover-and-proves-the-exact-anchored-v2-state-before-migration-write-concurrent-byte-drift-is-the-source-drift-result
                 accepted_current_v3_first_mutation_recovery: acquire-exclusive-lease-recheck-every-receipt-field-query-source-limit-let-sqlite-recover-and-prove-the-exact-anchored-current-v3-state-and-wal-close-the-exclusive-recovery-connection-release-its-lock-normal-read-write-no-create-reopen-then-begin-immediate-and-recheck-exact-or-valid-descendant-wal-and-limit-before-write
                 special_recovery_concurrency: exact-receipt-only-is-a-conservative-exception-to-ordinary-valid-descendant-admission-until-normal-locking-handoff-concurrent-byte-drift-is-no-write-concurrent-source-change

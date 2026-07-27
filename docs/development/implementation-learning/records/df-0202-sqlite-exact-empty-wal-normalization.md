@@ -51,6 +51,25 @@ ordinary fresh initialization made an injected journal-transition remnant cold-r
 successfully. That persistent header/journal transition is not authorized by current ADR 0097 or
 the SQLite/Snapshot Store contracts.
 
+2026-07-28 investigation expanded the contradiction from the no-sidecar endpoint to every
+successful VFS callback boundary of the observed WAL-to-DELETE transition. Cold artifacts did not
+form a single generic “journal residue” class: they partitioned into exact-pre/no-sidecar,
+pre-form-or-post-form/zero-WAL, pre-form/non-hot journal prefix, pre-form-or-post-form/hot journal,
+post-form/invalidated journal, and post-form/no-sidecar families. Here post-form means the
+byte-exact current rollback-empty state, not a claim that an unavailable prestate or operation
+history was reconstructed. Directly resuming the
+normalizer from a non-hot journal prefix can open a zero-WAL before completing journal handling,
+creating a WAL+journal mixed artifact outside that partition. Separate family-specific cleanup or
+recovery is therefore required before a clean live-receipted normalizer or rollback-empty fresh
+route.
+
+The same investigation found that the cleanup proof must not claim more than the rooted VFS
+authority in integrated-design §17.6. A retained authenticated parent and immediate current-leaf
+regular/identity observation authorize one known-path unlink, but do not guarantee deletion of the
+previously held exact object across a final-check-to-unlink rebind. Every delete also requires a
+separate successful parent-directory sync before handoff; SQLite `xDelete(syncDir=1)` alone is not
+a durability receipt.
+
 ## Working mental model
 
 Logical exact emptiness and a normalized sidecar census do not establish the physical precondition
@@ -65,6 +84,21 @@ An explicit WAL-to-rollback normalization might bridge that state, but it is a p
 and needs its own pre-effect proof, effect boundary, close discipline, terminal classification,
 and receipt chaining. Success of the local prototype is evidence for feasibility only; it does not
 authorize that transition.
+
+Receiptless cold bytes can identify a finite physical family, but cannot reconstruct an operation
+receipt or history. In this receiptless partition, pre/post mean the byte-exact current
+complete-valid WAL-header 2/2 or rollback-header 1/1 empty main form; the post label alone does not
+mean that an unknown preimage was reconstructed. Exact-post/no-sidecar, invalidated-journal/post, and
+zero-WAL/post can become a new independently validated rollback-empty fresh anchor; none proves
+that an earlier normalizer completed. Exact-pre/no-sidecar, non-hot-prefix/pre, hot-journal/pre-or-post
+after exact recovery, and zero-WAL/pre can reach a new normalizer only after the current invocation
+seals a fresh source receipt. A completed normalization edge exists only when one live receipt
+chain binds pre-effect state, bounded effects, confirmed close, and exact poststate.
+
+The pager journal nonce/checksum and large-sector record grammar are useful incomplete-write
+guards, not provenance or success authority. The record set depends on decoded page size, effective
+sector size, database page count, locking-page exclusion, SQLite build, VFS, and device
+characteristics; the observed one-page/S=512 trace cannot be generalized by assumption.
 
 ## Mismatch or opportunity
 
@@ -81,6 +115,11 @@ accepted-empty recovery and ordinary fresh initialization. Silently adding that 
 the persistent-effect and receipt invariants; failing the state permanently would weaken the
 existing recoverable fresh/crash qualification. SQLite v3 activation under Issue #181 is therefore
 blocked on an authority-first resolution.
+
+The pending proposal must also distinguish authority acceptance from production activation.
+Independent acceptance may authorize implementation and effects on explicitly disposable
+qualification fixtures, while canonical/user-source effects remain blocked until repository-tracked
+evidence covers the full family, parameter, crash, rebind, parent-sync, and recrash matrix.
 
 ## Evidence
 
@@ -107,6 +146,54 @@ blocked on an authority-first resolution.
 - The canonical observation and required review boundary are tracked by
   <https://github.com/horiyamayoh/cxxlens/issues/202>.
 
+### 2026-07-28 temporary receiptless probes
+
+All paths and hashes in this subsection are temporary investigation evidence. They are neither
+repository-tracked qualification artifacts nor authority, and they do not activate any source
+effect.
+
+- The default completed-callback process-termination matrix used decoded page size `P=4096`,
+  effective journal sector `S=512`, one database page, pre-main SHA-256
+  `e3ba06536f7dbba337dee3c1c5f01b43660ce276abb54c5cee2d5defc5b970aa`, and post-main
+  SHA-256 `bd70f69256dee6875161b88a66f56baaf057e8f064a01108d11428b2d7a7b071`.
+  Boundaries 1–6 retained exact-pre plus a non-hot journal prefix; 7–11 retained a valid
+  one-record hot journal with exact-pre or exact-post main; 12–16 retained exact-post plus a
+  journal whose first 28 bytes were zero; boundary 17 retained exact-post with no journal.
+- The same trace observed `SQLITE_FCNTL_SYNC` 21 and `SQLITE_FCNTL_COMMIT_PHASETWO` 22
+  delegate and return exact `SQLITE_NOTFOUND` 12. This is profile evidence, not a portable SQLite
+  guarantee.
+- A larger `S=65536`, `P=4096`, 66-page fixture produced `R=16` ordered records for pages
+  1 through 16. Its pre-main SHA-256 was
+  `678f61863e69ffe142f4ab0d2fb220d7732f5047a945a97f8b38942906299536` and post-main
+  SHA-256 was `edf14063e8fe437b074840e39ee96d5c5b9b086abde7947298cc182145b2e75a`.
+  Page 1 became the deterministic postimage and pages 2–16 remained byte-exact preimages.
+  The temporary source `/tmp/cxxlens_sqlite_durability_probe.cpp` had SHA-256
+  `37cbef3a86edbad5c8315fd01f518ff98765da2a95873e6143ae75ac99cad8de`; one locally built
+  `/tmp/cxxlens_sqlite_durability_probe_large` had SHA-256
+  `25d005861a6eae541baa1a58cdf83a6a98653181a15618ceaeb037ba7cb380f5`.
+  The large probe inherited one-record ordinal labels, so it is not a complete large-sector
+  interruption matrix and its rebuild-specific binary hash is not a durable identity.
+- The temporary hot-recovery barrier source
+  `/tmp/cxxlens_sqlite_recovery_trace_probe.cpp` had SHA-256
+  `ec462a0dae7ca9f55405eb51fe94375acf1ee07428cc60d61f06df9b4b8b6b97`, and one binary had
+  SHA-256 `24e00488761bafb6e5fc63abb8152904474c2591f835929397399883d240ebc0`.
+  Exact-pre, exact-post, and `S=65536/P=4096/R=16` hot inputs replayed exact preimages,
+  deleted the journal, then stopped the next WAL open before underlying delegation with
+  `SQLITE_IOERR` 10 and confirmed close to exact-pre/no-sidecar. Trace SHA-256 values were
+  `2d9d3d343b370fbc6a0c2745a9ca2727c7dae68f1399313339d57074494eb5fb`
+  (small pre),
+  `a3eb4b4d498eccbcd4642a3536e5d7d41d2c4a3d568a7648a40375bcd7ea39f0`
+  (small post), and
+  `987f2bc83f6fe606423d25f50048fa9e28c0a3474b3c7d27f3542f2600c3c5d0`
+  (large post).
+- The prototype did not insert or fault the required authenticated parent-directory fsync and did
+  not cover the final-check-to-unlink leaf-rebind race. It denied WAL through a diagnostic
+  prototype latch rather than a production exact-state controller. These are explicit
+  qualification blockers.
+- These probes terminate only after successful callback returns. They do not cover power loss,
+  torn/partial sectors, kernel or device cache behavior, termination inside callbacks, or
+  unqualified filesystem reorder.
+
 ## Alternatives and trade-offs
 
 1. Authorize an exact-empty-only normalization transaction. Before any normalization effect, bind
@@ -119,9 +206,9 @@ blocked on an authority-first resolution.
    authority, schema mirrors, checker negatives, runtime fault injection, and independent review.
 2. Produce an implementation-backed recovery/checkpoint route that reaches a rollback-mode main
    header and sidecar-absent exact empty without any new persistent transition authority. This
-   would preserve the existing contract, but it must reproduce on the pinned static and shared
-   runtimes and prove the exact source file-family effects. The current trace does not establish
-   such a route.
+   would preserve the existing contract, but it must reproduce in both Cxxlens static/shared
+   runners while binding the SQLite image each runner actually loads, and prove the exact source
+   file-family effects. The current trace does not establish such a route.
 3. Fail every WAL-header exact-empty remnant closed. This avoids a new write boundary, but it loses
    the existing recoverable fresh/crash qualification. It is rejected unless higher authority
    explicitly accepts that semantic reduction; an implementation may not select it merely to
@@ -132,39 +219,66 @@ authorizes SQLite v3 activation or the persistent WAL-to-rollback transition.
 
 ## Recommendation
 
-Materialize Alternative 1 as an authority-first proposal, without treating this record or the
-working prototype as authority. The proposal should define one exact-empty-only normalization
-phase and an immutable composite receipt that binds the original accepted-empty source receipt,
-same main identity and directory entry, exclusive lease, recovery/checkpoint result, pre-effect
-exact-empty projection and sidecar census, exact permitted physical effects, confirmed close, and
-post-close rollback-header/sidecar-absent census. Successful normalization must remain an
-intermediate state, never public success, and must feed the original receipt chain into the one
-ordinary fresh `BEGIN IMMEDIATE` initialization.
+Materialize Alternative 1 as a pending authority-first amendment, without treating this record,
+temporary paths, hashes, probe output, SQLite result prose, or pager checksum as authority. The
+proposal should do all of the following:
 
-Before accepting that proposal, independently falsify all of the following:
+- Define the disjoint `F0/FZ/FP/FH/FI/FO` receiptless family partition, with raw no-effect
+  classification before generic journal rejection and explicit `FZ-pre`/`FZ-post` precedence.
+- Resolve that raw census only relative to a retained authenticated parent capability with
+  no-follow typed enumeration/open/stat and no host-path re-resolution.
+- Route `F0/FP/FH/FZ-pre` through their required cleanup/recovery into a newly sealed live
+  normalizer receipt. Route `FO/FI/FZ-post` only to an independently validated rollback-empty
+  fresh anchor. Never infer a cold operation history, completed edge, or success.
+- Bind the normalizer's original accepted-empty recovery receipt, same main identity and entry,
+  continuous namespace epoch, exclusive lock, exact pre-main bytes, VFS/runtime/device/build
+  profile, sidecar census, deterministic post-main bytes, exact allowed effects, confirmed close,
+  and post-close census in one immutable receipt chain.
+- Limit cleanup to authenticated-known-path unlink relative to a retained parent capability after
+  immediate current-leaf regular/identity observation. Do not promise exact-object deletion across
+  the final-check-to-unlink race; a rebind there is post-effect durability/authority opaque with
+  no retry, handoff, or second snapshot.
+- Require a separate successful retained-parent fsync after every deletion and before every
+  handoff, including hot recovery and the normalizer's coordination WAL deletion and terminal
+  rollback-journal deletion. Also require
+  journal namespace sync after the first journal sync and before valid header/main writes.
+- Treat the pager checksum and derived large-sector record grammar only as supporting
+  incomplete-write evidence, and bind all `S/P/page-count/record-set`, locking-page,
+  `xDeviceCharacteristics`, SQLite build, VFS, and filesystem assumptions. Prove mechanically
+  that the admitted bounds make the pending-byte locking page exceed every derived record-set
+  bound, and use a synthetic injected-locking-page rejection instead of requiring an impossible
+  crossing execution vector.
+- Preserve successful normalization as an internal intermediate edge, never Store/public success,
+  and carry its live receipt into exactly one ordinary fresh initialization.
 
-- Exact empty, same identity, and sidecar census are proved before any normalization effect.
-- Replacement, nonempty authority, mixed layout, journal presence, busy checkpoint, or receipt
-  drift causes no normalization write.
-- Only main-header and WAL/SHM/journal normalization effects are possible; schema, metadata,
-  publication, chunk, head, counter, and process-state writes remain absent.
-- Cleanup is statement finalization, at most one rollback when applicable, exactly one close, and
-  then total post-close classification.
-- Close non-OK, observation failure, residue, invalid/mixed state, and replacement map to the
-  operation-specific typed result, with no retry or second snapshot.
-- Successful normalization is not exposed as public success; the original receipt chain remains
-  bound to the subsequent fresh receipt and single `BEGIN IMMEDIATE` initialization.
-- Faults before and after checkpoint, normalization, close, and the fresh journal transition all
-  preserve the required cold-reopen outcome and exact source file-family effect bounds.
-- The full matrix passes for both static and shared pinned SQLite runtimes, including the direct
-  callback trace that originally falsified the current sequence.
+Before accepting that proposal, independent review must falsify replacement, nonempty authority,
+mixed/extra residue, identity/byte drift, watch loss, same-process lock release through another fd,
+rebind-at-unlink, parent-sync failure, close failure, skipped/reordered gate sequence, unqualified
+device/build profile, and every permitted callback-boundary interruption. Review must also confirm
+that static/shared Cxxlens runners bind the SQLite DSO they actually load rather than inferring two
+SQLite runtime forms from runner labels.
+
+Acceptance of the exact proposal may authorize classifier/port/gate/barrier/fault-harness and
+fixture-scoped cleanup/recovery/normalizer implementation, with source effects on explicitly
+disposable qualification fixtures only. Canonical/user
+source and production activation must remain blocked until repository-tracked harness and
+toolchain evidence, the full parameterized callback/recrash/idempotence matrix, canonical report
+digest, and an independent counterexample review are complete and the draft profile is explicitly
+replaced by an accepted profile. A fixture must be reachable only through an internal
+qualification entrypoint and a harness-minted nonforgeable capability created only after the
+isolated disposable root exists. It must bind retained-root identity/lifetime, exact fixture
+locator, run ID, selected runtime/VFS/device/build profile, and allowed family/effect/fault
+schedule; it must not be derivable from a path, environment, public flag, report field, or
+self-asserted boolean, and a public/user locator must never be accepted as fixture authority.
 
 Alternative 2 falsifies the need for this proposal only if it supplies the same implementation,
 trace, fault, cold-reopen, and exact file-effect evidence without relying on an unauthorized
 persistent transition. Any normative patch must cover the integrated design, ADR 0097,
 SQLite/Snapshot Store contracts and schema mirrors, exact checker expectations, negative tests,
 and design checksums, then receive a fresh independent review on Issue #202 before implementation
-resumes.
+of qualification-only classifier/port/gate/fault-harness and fixture-scoped cleanup/recovery/
+normalizer work resumes. Production activation
+remains separately blocked by the full qualification gate.
 
 ## Disposition
 
@@ -176,3 +290,13 @@ authority, public C++ API, logical Store semantic, production implementation, or
 changed by this record. SQLite v3 activation and the affected exact-empty recovery/fresh path
 remain blocked pending an authority-first proposal and independent review; reviewer identity and
 review references are intentionally unset.
+
+2026-07-28: A precise amendment is now drafted in the integrated design, ADR 0097, and the
+SQLite/Snapshot contract proposal. It adds the finite receiptless family model, live-versus-cold
+receipt boundary, known-path cleanup semantics, parent-sync requirements, process-callback-only
+crash scope, and two-layer authorization described above. The temporary probes establish
+feasibility and counterexamples only; they are not repository-tracked qualification and omit at
+least authenticated parent-fsync fault injection and rebind-at-unlink coverage. This record remains
+`investigating` / `blocked`, the amendment remains pending, production activation remains
+forbidden, and `resolution_refs`, reviewer identity, and review refs remain intentionally empty
+until an independent reviewer evaluates the exact proposal commit on Issue #202.

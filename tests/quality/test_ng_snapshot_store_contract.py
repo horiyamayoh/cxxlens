@@ -154,6 +154,96 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 ].update(fresh_initialization_receipt_seal="after-journal-arming"),
             ),
             (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"]
+                ["sqlite_terminal_recovery"]["sealed_receipt_profiles"]
+                ["accepted_empty_normalization_source_anchor"].remove(
+                    "pinned-sqlite-runtime-identity-and-version"
+                ),
+            ),
+            (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"]
+                ["sqlite_terminal_recovery"]["sealed_receipt_profiles"]
+                ["accepted_empty_normalization_source_anchor"].remove(
+                    "immutable-held-pre-main-exact-byte-snapshot-with-length-and-"
+                    "streaming-byte-receipt"
+                ),
+            ),
+            (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"]
+                ["sqlite_terminal_recovery"]["sealed_receipt_profiles"]
+                ["accepted_empty_normalization"].pop(),
+            ),
+            (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"]
+                ["sqlite_terminal_recovery"]["sealed_receipt_profiles"]
+                ["accepted_empty_normalization_completed_edge"].pop(1),
+            ),
+            (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"]
+                ["sqlite_terminal_recovery"].update(
+                    accepted_empty_normalization_source_anchor=(
+                        "after-coordination-effect"
+                    )
+                ),
+            ),
+            (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"]
+                ["sqlite_terminal_recovery"].update(
+                    accepted_empty_normalization_receipt_seal=(
+                        "in-the-first-exclusive-xLock-callback"
+                    )
+                ),
+            ),
+            (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"]
+                ["sqlite_terminal_recovery"].update(
+                    accepted_empty_normalization_source_anchor_seal=(
+                        "before-installing-pending-request"
+                    )
+                ),
+            ),
+            (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"]
+                ["sqlite_terminal_recovery"].update(
+                    accepted_empty_normalization_candidate_identity=(
+                        "planned-candidate-proves-success"
+                    )
+                ),
+            ),
+            (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"]
+                ["sqlite_terminal_recovery"].update(
+                    accepted_empty_normalization_completed_edge_seal=(
+                        "before-close"
+                    )
+                ),
+            ),
+            (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"]
+                ["sqlite_terminal_recovery"].update(
+                    accepted_empty_normalization_operation_identity=(
+                        "reuse-fresh-initialization-operation"
+                    )
+                ),
+            ),
+            (
+                "store.publication-cas-invalid",
+                lambda value: value["publication_transaction"]
+                ["sqlite_terminal_recovery"].update(
+                    accepted_empty_normalization_success="install-store"
+                ),
+            ),
+            (
                 "store.counter-allocation-invalid",
                 lambda value: value["publication_counters"]["sqlite_allocation"][
                     "compaction_range"
@@ -228,6 +318,148 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 changed = copy.deepcopy(self.contract)
                 mutate(changed)
                 with self.assertRaisesRegex(StoreContractError, code):
+                    validate_contract_shape(changed)
+
+    def test_df_0202_sqlite_terminal_recovery_projection_is_exact_and_closed(
+        self,
+    ) -> None:
+        sqlite_contract = load_yaml(
+            ROOT / "schemas" / "cxxlens_ng_sqlite_store_contract.yaml"
+        )
+        sqlite_terminal = sqlite_contract["transaction"]["recovery_model"][
+            "terminal_reclassification"
+        ]
+        snapshot_terminal = self.contract["publication_transaction"][
+            "sqlite_terminal_recovery"
+        ]
+        for receipt_name in (
+            "accepted_empty_normalization_source_anchor",
+            "accepted_empty_normalization",
+            "accepted_empty_normalization_completed_edge",
+        ):
+            self.assertEqual(
+                snapshot_terminal["sealed_receipt_profiles"][receipt_name],
+                sqlite_terminal["sealed_receipt_profiles"][receipt_name],
+            )
+        for field in (
+            "accepted_empty_normalization_source_anchor",
+            "accepted_empty_normalization_source_anchor_profile",
+            "accepted_empty_normalization_source_anchor_seal",
+            "accepted_empty_normalization_receipt_seal",
+            "accepted_empty_normalization_receipt_extension",
+            "accepted_empty_normalization_candidate_identity",
+            "accepted_empty_normalization_completed_edge_profile",
+            "accepted_empty_normalization_completed_edge_seal",
+            "accepted_empty_normalization_operation_identity",
+            "accepted_empty_normalization_success",
+            "accepted_empty_normalization_public_success",
+            "accepted_empty_normalization_receiptless_crash_profile_draft",
+        ):
+            self.assertEqual(snapshot_terminal[field], sqlite_terminal[field])
+
+        completed = "accepted_empty_normalization_completed_edge"
+        mutations = [
+            (
+                "effect-grammar-profile",
+                lambda value: value["publication_transaction"][
+                    "sqlite_terminal_recovery"
+                ]["sealed_receipt_profiles"][
+                    "accepted_empty_normalization_source_anchor"
+                ].remove("exact-normalization-effect-grammar-profile-receipt"),
+            ),
+            (
+                "bounded-effect-transcript",
+                lambda value: value["publication_transaction"][
+                    "sqlite_terminal_recovery"
+                ]["sealed_receipt_profiles"][completed].remove(
+                    "exact-normalization-bounded-effect-transcript-receipt"
+                ),
+            ),
+            (
+                "coordination-wal-delete-parent-sync",
+                lambda value: value["publication_transaction"][
+                    "sqlite_terminal_recovery"
+                ]["sealed_receipt_profiles"][completed].remove(
+                    "exact-coordination-wal-delete-retained-authenticated-parent-"
+                    "fsync-receipt"
+                ),
+            ),
+            (
+                "journal-creation-parent-sync",
+                lambda value: value["publication_transaction"][
+                    "sqlite_terminal_recovery"
+                ]["sealed_receipt_profiles"][completed].remove(
+                    "exact-journal-creation-retained-authenticated-parent-fsync-"
+                    "receipt"
+                ),
+            ),
+            (
+                "terminal-journal-delete-parent-sync",
+                lambda value: value["publication_transaction"][
+                    "sqlite_terminal_recovery"
+                ]["sealed_receipt_profiles"][completed].remove(
+                    "exact-terminal-journal-delete-retained-authenticated-parent-"
+                    "fsync-receipt"
+                ),
+            ),
+            (
+                "final-sync-seal",
+                lambda value: value["publication_transaction"][
+                    "sqlite_terminal_recovery"
+                ].__setitem__(
+                    "accepted_empty_normalization_completed_edge_seal",
+                    "seal-before-terminal-journal-delete-parent-fsync",
+                ),
+            ),
+            (
+                "six-family-route-partition",
+                lambda value: value["publication_transaction"][
+                    "sqlite_terminal_recovery"
+                ]["accepted_empty_normalization_receiptless_crash_profile_draft"][
+                    "family_partition"
+                ].pop(),
+            ),
+            (
+                "cold-operation-history",
+                lambda value: value["publication_transaction"][
+                    "sqlite_terminal_recovery"
+                ]["accepted_empty_normalization_receiptless_crash_profile_draft"]
+                .__setitem__(
+                    "cold_operation_history_inference",
+                    "infer-the-prior-normalization-edge",
+                ),
+            ),
+            (
+                "disposable-fixture-capability",
+                lambda value: value["publication_transaction"][
+                    "sqlite_terminal_recovery"
+                ]["accepted_empty_normalization_receiptless_crash_profile_draft"].pop(
+                    "disposable_fixture_capability"
+                ),
+            ),
+            (
+                "profile-receipt-layering",
+                lambda value: value["publication_transaction"][
+                    "sqlite_terminal_recovery"
+                ]["accepted_empty_normalization_receiptless_crash_profile_draft"].pop(
+                    "profile_receipt_layering"
+                ),
+            ),
+            (
+                "public-route",
+                lambda value: value["publication_transaction"][
+                    "sqlite_terminal_recovery"
+                ]["accepted_empty_normalization_receiptless_crash_profile_draft"]
+                .__setitem__("public_success", "allowed"),
+            ),
+        ]
+        for name, mutate in mutations:
+            with self.subTest(drift=name):
+                changed = copy.deepcopy(self.contract)
+                mutate(changed)
+                with self.assertRaisesRegex(
+                    StoreContractError, "store.publication-cas-invalid"
+                ):
                     validate_contract_shape(changed)
 
     def test_df_0200_accepted_materialization_ingress_is_closed(self) -> None:

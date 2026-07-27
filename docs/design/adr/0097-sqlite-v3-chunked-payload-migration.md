@@ -6,6 +6,7 @@
 - Decision issue: #200
 - Implementation issue: #181
 - Amends: ADR 0013, ADR 0096 D6
+- Pending amendment: #202 / DF-0202 receiptless normalization interruption profile
 
 ## Context
 
@@ -193,7 +194,9 @@ snapshot lock lossを `sqlite-open-snapshot / concurrent-source-change` とす�
 already-open WAL header/salt、SHM lockの観測I/O failureは
 `store.sqlite-failure / sqlite-open-snapshot / active-wal-observation-io-failure`であり、driftと推測しない。decode後はprobeを閉じ eager stateだけを保持する。
 この active read が exact logical empty/no-format を示す init-crash state は receipt/identity を exclusive に再検査し、
-actual-connection gate 後に SQLite recovery/checkpoint で normalized empty を証明して fresh initialization へ進める。
+actual-connection gate 後に SQLite recovery/checkpoint で normalized empty を証明する。その結果が WAL header 2/2 と
+sidecar absent の exact emptyなら、ordinary fresh initializationへ直接進めず、後述するDF-0202 pending amendmentが
+accept/qualifyされた場合だけaccepted-empty normalizerへ送る。それまではpersistent transitionを行わずfail closedとする。
 
 main+WAL/no-SHM/no-journal は main-only marker の有無を問わず分類するが、WALがunreadableならcopy/openせず
 `store.sqlite-failure / sqlite-initialization-sidecar / unreadable-wal-only`を返す。readable WALだけがpreauthority crash
@@ -273,6 +276,156 @@ SQLite recovery/checkpointをarmし、normalized exact-emptyを再証明する�
 receipt recovery、exclusive close/release、normal RW/no-create reopen、`BEGIN IMMEDIATE`内の exact/valid-descendant WAL/limit
 recheckを通る。receipt driftはno-write concurrent-source-change、recovery後handoff failureはStoreをpoisonし、result operationは
 `backend-unavailable / sqlite-connection / reopen-required`、`compatibility()`とpin countはlast validated stateを返す。
+
+### DF-0202 pending amendment: receiptless normalization interruption
+
+この subsection は Issue #202 の authority proposal であり、現時点では
+`proposed-unqualified-non-authorizing` である。exact proposal の independent acceptance と後述の
+qualification gateを満たすまで、canonical/user source またはproduction pathのclassifier、cleanup、
+recovery、normalizerをactivateしない。既存のunknown/mixed/journal-present rejectionをこのproposalの
+存在だけで緩和しない。
+
+対象 crash model は、underlying VFS callback が成功して caller へ戻った直後の境界で process を
+terminateする場合だけである。power loss、torn/partial sector write、kernel/device cache、
+underlying callback内termination、unqualified filesystem reorderはscope外であり、fail closedのまま
+別qualificationを要求する。cold raw classifierはnamespace epoch開始後、retained authenticated
+parent fd相対の`getdents`、`fstatat(AT_SYMLINK_NOFOLLOW)`、`openat(O_NOFOLLOW)`または同じtyped
+semantics、続く`fstat`、streaming bytes/SHA-256だけを使い、host-path再解決、SQLite
+open/recovery/checkpoint、SHM create、delete、cleanup、source effectを行わない。digestは比較の
+加速だけであり、byte equalityを代替しない。
+
+receiptless family partition は次のexact six familyに閉じる。ここでpre-formはcomplete-valid
+logical empty、zero `application_id`/user objects/metadata/semantic-or-diagnostic authority、WAL header
+read/write version 2/2を持つbyte-exact current mainである。post-formはcomplete-valid rollback-mode
+1/1 exact-emptyのbyte-exact current mainであり、receiptlessなpost-form単独から未知のpre bytes、
+normalizer由来、operation historyを復元しない。preからのdeterministic post projectionはlive
+receiptまたはexact journal preimagesが存在するbranchだけで検証する。
+
+| Family | Main | Sidecar |
+|---|---|---|
+| `F0` | pre-form | WAL/SHM/journal absent |
+| `FZ-pre` | pre-form | exact size-zero WAL only |
+| `FZ-post` | post-form | exact size-zero WAL only |
+| `FP` | pre-form | derived normalization journal の exact non-hot callback-boundary prefix only |
+| `FH` | pre-form またはpost-form | exact preimage record setを持つvalid hot journal only |
+| `FI` | post-form | first 28 bytes zero、残りがexact invalidated journal body only |
+| `FO` | post-form | WAL/SHM/journal absent |
+
+`FZ` は一つのtopology familyだが、main bytesを先にbyte-exact比較して`FZ-pre`と`FZ-post`を
+disjointにrouteする。pre/postをoperation history、journal presence、SQLite result prose、mtimeから
+推測しない。main不在+sidecarはorphanとして最初に拒否する。main+journal+WAL/SHM absentだけを
+generic `journal-present` より先にraw `FP/FH/FI` classifierへ送る。journalとWAL/SHMの混在、
+extra sidecar、SHM-only、ambiguous/unrecognized/truncated residueはfamily外でありsourceを変更せず
+既存typed rejectionまたはopaqueへ閉じる。main+WAL+SHMはordinary active-WAL、nonzero readable
+WAL-onlyはordinary preauthority WAL-only、unreadable WAL-onlyは既存terminal errorへ送る。
+sidecar absent pre-formは`F0`、post-formは`FO`として、nonempty/invalid/unknown mainをfamilyへ
+昇格しない。
+
+`F0` は新しいlive-receipted normalizerを開始する。`FZ-pre`は同じzero-WAL entryをrecheckして
+normalizerのcoordination objectとしてbindする。`FP`はfamily-specific cleanupを完了してabsent-preを、
+`FH`は専用recovery connectionがhot journalのexact preimagesをreplayし、journal delete、parent
+sync、one-shot predelegation WAL-open barrier、confirmed closeを完了してabsent-preを再検証した後、
+それぞれ新しいlive receiptのnormalizerを開始する。direct integrated resumeはzero-WAL+journalの
+mixed residueを作り得るため禁止する。
+
+`FZ-post`はzero-WAL cleanup後、`FI`はinvalidated journal cleanup後、`FO`はそのまま、complete
+rollback-mode exact-emptyを独立検証してordinary fresh initializationの新しいanchorをsealする。
+cold familyはpast operation receiptを持たないため、`F0/FZ/FP/FH/FI/FO`のいずれからも過去の
+normalization candidate、operation history、completed edge、successを復元しない。特に
+`FO/FI/FZ-post`はrollback-empty fresh anchorだけをauthorizeし、completed normalization edgeではない。
+`F0/FP/FH/FZ-pre`もfamily-specific route後に今回のinvocationで新しくsource/pre-effect receiptを
+sealするのであって、cold bytesからreceiptを合成しない。
+
+accepted-empty normalizerは、stable private recovery receipt、same main/entry、exact-pre whole bytes、
+sidecar census、runtime/VFS/device/build profile、live pre receiptから導くdeterministic post projectionをeffect-denying
+状態で準備する。pending coordination request後の最初のsuccessful underlying exclusive `xLock`
+callback内で`SQLITE_FCNTL_HAS_MOVED`とsame-main/entry/bytes/censusをrecheckし、source anchorを
+sealしてからexact one size-zero WAL create/openだけを許す。同じexclusive lockを維持した後続の
+full-arm callbackでzero-WAL receiptとsourceを再検査し、planned candidateを含むpre-effect receiptを
+sealしてから一回だけtransaction-free WAL-to-DELETE transitionをarmする。pre-effect candidateは
+effect、close、poststate、successを証明しない。
+
+permitted main effectはderived journal record setに対応するpage-size `P` bytes writeだけである。
+page 1はsealed deterministic postimage、large-sector protectionで含まれる他pageはexact preimageとし、
+main size change、record set外write、page 1以外のbyte change、WAL byte write/truncate/sync、SHM effect、
+schema/metadata/format-marker/payload/publication/head/counter/process-state authority effectを禁止する。
+live invocationのcompleted internal edgeは、permitted effect trace、finalize、exactly one confirmed
+close、same-main/entry、whole-main streaming equality against exact-post、complete logical empty、
+sidecar absentを一つのreceipt chainで証明した場合だけsealできる。normalization単独のStore/public
+successは禁止し、そのedgeとoriginal preinit anchorをordinary fresh receiptへ一回だけhandoffする。
+
+family cleanupは、held mainとpresent sidecar、retained authenticated parent directory capability、
+continuous create/delete/move namespace epochを保持し、private-copy validation後にbound underlying
+VFSのmainをRW/no-createで開く。same processのSQLite record-lock semanticsにより別のsame-inode fd
+closeがlockをreleaseし得るため、`SHARED`→`EXCLUSIVE`取得からfinal unlockまで同じmain inodeの
+全fd lifetimeをqualification profileにbindする。exclusive lock下でtopology/identity/whole bytesを
+再検査してからだけsource effectへ進む。
+
+delete authorityは§17.6と同じauthenticated-known-path semanticsである。retained parent capability
+relativeのknown sidecar leafについてunlink直前にcurrent leafがregular fileかつexpected identityで
+あることを観測し、一回だけfd-relative path unlinkを発行する。final observationとunlinkの間の
+concurrent leaf rebindに対するexact-object deletionは保証しない。rebind-at-unlinkではpath effectが
+既に発生した可能性があるため、resultはpost-effect
+`store.sqlite-failure / sqlite-initialization-recovery / durability-opaque`、no Store、no retry、
+no handoff、no second snapshotとする。fault matrixはこのwindowを明示的に含める。
+
+すべてのsidecar deletionは、同じretained authenticated parent fdへの別個のfull `fsync`成功と
+post-censusをhandoffより前に要求する。SQLite `xDelete(syncDir=1)`のreturnだけをnamespace durability
+receiptにしない。これは`FP/FI/FZ-post` cleanup、`FH` recovery journal delete、normalizerの
+coordination WAL deleteとterminal rollback-journal deleteを含む全deleteに適用する。coordination
+WAL deleteはjournal createより前に独立したparent-sync receiptをsealする。normalizerは
+最初のrollback-journal `xSync`成功後かつvalid header/main write前にもpreopened authenticated
+parent fdをfull syncしてjournal namespace durabilityをsealする。unlink outcome unknown、parent
+sync failure、unlink後のwatch/census/unlock/close failureはopaqueで、cleanup retryやfresh/normalizer
+handoffを行わない。
+
+`FH`の専用recoveryはexact hot transcriptだけを許す。shared→exclusive lock下でjournalを再検査し、
+SQLite playbackがderived exact preimage pagesだけをwriteしてmain syncとjournal deleteを完了した後、
+authenticated parent syncとexact-pre main observationをsealする。次のexact WAL
+`xOpen(READWRITE|CREATE|WAL)`をunderlying delegation前にone-shot operation tokenで
+`SQLITE_IOERR`として止め、expected internal stopをtyped event/traceだけで識別し、diagnostic proseを
+制御に使わない。token、flags、orderingが一項でも違えばordinary opaque failureである。barrier前の
+delete未完了は`FH`、delete後parent sync前はdurability-opaque、sync後confirmed closeまでは
+absent-preとしてだけ再分類し、normalizer successを推測しない。
+
+pager journal grammarはcandidate framingとpermitted effectのsupporting detailであり、単独のauthority
+ではない。headerからdecoded page size `P` と sector size `S` を検証し、fixed `S`を仮定しない。
+effective `S`、SQLite build、VFS token、`xSectorSize`、exact `xDeviceCharacteristics` profileを
+pre-effect receiptへbindする。`S>P`では`Q=S/P`、それ以外は`Q=1`とし、database page
+`1..min(page_count,Q)`からpending-byte locking pageを除いたascending setをrecord setとする。
+admitted `S<=65536`、`512<=P<=65536`では`Q<=128`かつlocking page
+`L=floor(0x40000000/P)+1>=16385`なので、全admitted pairで`L>Q`を機械的に証明する。
+実在しないlocking-page crossingを実行matrixに要求せず、synthetic grammar negativeでrecord setへ
+`L`を注入したcandidateが拒否されることを検証する。
+hot/invalidated journalは各recordのpage numberとexact preimageがそのsetに一致しなければならない。
+invalidated bodyはdestroyed nonce candidateを各recordから復元して全record一致を要求するが、
+SQLiteのnonce+sparse checksumはincomplete-write guardにすぎず、historical provenance、main
+binding、exact page bytes、success authorityを代替しない。one-record、S=512、parent filesystem
+由来のdevice profileをcontract defaultにしない。
+
+authorizationは二層に分ける。
+
+1. proposal acceptance前はauthority edit、read-only audit、temporary investigation probeだけを許し、
+   production classifier/cleanup/recovery/normalizer effectを禁止する。
+2. exact proposalのindependent acceptance後はraw classifier、typed filesystem/VFS ports、effect gates、
+   one-shot barrier、fault harness、およびfixture-scoped cleanup/recovery/normalizerを実装し、
+   そのsource effectを明示作成したisolated disposable qualification fixtureにだけ発行してよい。
+   fixtureはharnessだけがisolated disposable rootの作成後にmintできるnonforgeable capabilityへ
+   閉じ、retained root identity/lifetime、exact fixture locator、qualification run id、selected
+   runtime/VFS/device/build profile、許可family/effect/fault scheduleへbindする。path、environment、
+   public flag、report field、self-asserted booleanから導出できず、serializeせず、internal
+   qualification-only entrypointだけが受理してrun終了時にrevokeする。public locatorやproduction
+   APIからmint・注入・到達できず、canonical/user sourceへはまだeffectを発行しない。
+
+canonical/production activationは、temporary `/tmp` artifactをrepository-tracked exact harness、
+source/build command/toolchain、canonical report digestへ置換し、static/shared Cxxlens runnersが実際に
+loadする同一SQLite DSO identity/source-id/hash、VFS/build/device/filesystem profileをbindし、全
+callback boundary、parameterized `S/P/page-count/record-set`、parent-sync、rebind-at-unlink、
+recrash/idempotence、post-normalization fresh-transition matrixとindependent counterexample reviewを
+完了し、draft statusをaccepted profileへ置換した後だけ許す。一項でも不足すればeffect前に
+`store.backend-unavailable`またはphase-specific opaqueへfail closedする。Cxxlensのstatic/shared
+configuration labelはstatic SQLite runtimeを意味せず、genuinely static SQLite imageは別identityと
+完全な別matrixを要求する。
 
 process state は successful commit と cold validation 後だけ作る。DDL/metadataのprecommit failureでrollback/finalize/connectionが
 健全でも一回closeを試み、close OKでだけ元のtrigger errorとno Storeを返す。close non-OKはinit-recovery opaqueとquarantineに
