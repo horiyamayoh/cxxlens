@@ -464,11 +464,12 @@ def materialization_assignment_shape(qualification: str) -> dict[str, Any]:
                     "remediation": (
                         "Implement the accepted DF-0195 through DF-0199 sealed-evidence, "
                         "measured-occurrence, authenticated-streaming, head-observation, "
-                        "and canonical-Base64 authority; resolve DF-0200 bounded claim/Store "
-                        "staging and DF-0205 same-process Store race authority; then complete "
-                        "installed actual-source worker output adoption with exact publication "
-                        "and query evidence; do not claim generic relation-row reference "
-                        "enforcement."
+                        "and canonical-Base64 authority; implement the accepted DF-0200 bounded "
+                        "claim/Store staging and the accepted DF-0205 same-process writer-mapping "
+                        "lease with its full CAS/race counterexample matrix, and complete a "
+                        "distinct exact implementation review; then complete installed actual-"
+                        "source worker output adoption with exact publication and query evidence; "
+                        "do not claim generic relation-row reference enforcement."
                     ),
                 },
                 "feedback": list(MATERIALIZATION_ASSIGNMENT_FEEDBACK),

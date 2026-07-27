@@ -6,7 +6,10 @@
 - Decision issue: #68
 - Tracking issue: #56
 - Current-layout amendment: ADR 0097 / #200
-- Pending same-process SHM amendment: ADR 0097 / #205 / DF-0205
+- Accepted same-process SHM authority amendment: ADR 0097 / #205 / DF-0205
+- Exact accepted proposal: `6cb705c256c9576f74b50a2dca8fc4e8f72d06bb`
+- Independent review: <https://github.com/horiyamayoh/cxxlens/issues/205#issuecomment-5095883584>
+  (`P0=0 / P1=0 / P2=0`)
 
 ## Context
 
@@ -45,11 +48,18 @@ Issue #132 で physical minor を 2.5.0 とし、connection/process 間 publicat
 process の二つの live Store が同じ series head を競合更新した場合も、先に commit した一件だけが head を更新し、後続 writer は
 transaction を rollback して `store.publication-conflict` を返す。SQLite Unix VFS が同一 process・同一 runtime 内で既存 writer の
 SHM mapping を再利用し、後続 readonly probe の native `xShmMap(extend=0)` に `SQLITE_OK` と non-null pointer を返す場合の
-narrow admission は、ADR 0097 の DF-0205 pending amendment が定義する
-`cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1` にだけ基づく。proposal の independent acceptance 前は従来どおり全 native
-`SQLITE_OK` を fail closed とし、connection sharing、PID-only token、pointer equality、VFS name、path spelling、post-hoc endpoint
-equality を CAS または SHM nonmutation authority にしない。
-proposal はwriter `xShmMap`のcaller/delegated extend pair、writer cohort in-flight、stat-only namespace
+narrow admission authority は、ADR 0097 の DF-0205 accepted authority amendment が定義する
+`cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1` にだけ基づく。exact proposal
+`6cb705c256c9576f74b50a2dca8fc4e8f72d06bb` は Issue #205 の独立 review
+<https://github.com/horiyamayoh/cxxlens/issues/205#issuecomment-5095883584> で
+`accepted-authority-implementation-pending` (`P0=0 / P1=0 / P2=0`) として accept された。
+schema の `same_process_writer_mapping_lease_proposal` key は reviewed exact artifact/history として保持し、
+acceptance pending を意味しない。この acceptance は internal implementation を認可するが、それ自体では
+exception を activate しない。distinct exact implementation commit と全 counterexample matrix の独立 review が
+完了するまで、current source は従来どおり全 native `SQLITE_OK` を fail closed とし、production は block する。
+connection sharing、PID-only token、pointer equality、VFS name、path spelling、post-hoc endpoint equality を
+CAS または SHM nonmutation authority にしない。
+accepted authority はwriter `xShmMap`のcaller/delegated extend pair、writer cohort in-flight、stat-only namespace
 epoch、current-v3 Store gate、shared runtime/VFS cohortとaliasごとのdistinct lifetime pinをreceiptにする。
 pre-existing SHMは`{0,0}`のexact size不変と、authenticated `{1,1}`のpreallocated-range
 zero-size-effectまたはexact monotonic extensionを分け、absent SHMのexact createはauthenticated
@@ -87,11 +97,12 @@ same-main descendant判定はADR 0097と`cxxlens.sqlite-authority-state.v1`、
 partial closure rejection、cursor lifetime、pinned compaction を検証する。installed consumer は static/shared の両方で
 memory と SQLite factory を link/open する。contract conformance は root relocation、forward/reverse/seeded shuffle、
 jobs 1/2/8 の 36 通りを比較する。same-process CAS qualification は二つの独立 live Store/connection と materialization
-winner/loser raceを実行し、cross-process CAS と同じ durable head verdictを要求する。DF-0205 proposal の acceptance 後に lease
-implementationを検証する場合は、fork/PID reuse、writer unmap/last release、reader lifetime handoff、mapping pointer ABA、
+winner/loser raceを実行し、cross-process CAS と同じ durable head verdictを要求する。accepted DF-0205 authority に基づく
+internal lease implementation は、fork/PID reuse、writer unmap/last release、reader lifetime handoff、mapping pointer ABA、
 runtime/VFS unregister/unload、main/WAL/SHM object/entry/mount/namespace replacement、page/size/pointer drift、native callback
 outcome unknown、extend pair全分類、simultaneous first writers、writer in-flight対last-holder retire、
 new-page/size receipt、duplicate-target-FD lock loss、same-thread reentrant retirementとbounded wait timeoutを
 fail-closed matrixに含め、controlled VFSでprior-generation handoffと異なるpageへのsuccessor mapも
-file-family-wideに拒否する。物理契約は
+file-family-wideに拒否する。この exact implementation commit と matrix の独立 review が完了するまでは
+current source の blanket native `SQLITE_OK` rejection を維持し、production activation を block する。物理契約は
 `schemas/cxxlens_ng_sqlite_store_contract.yaml` と schema に固定する。

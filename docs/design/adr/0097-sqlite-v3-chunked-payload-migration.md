@@ -9,7 +9,10 @@
 - Accepted qualification amendment: #202 / DF-0202 receiptless normalization interruption profile
 - Proposal review: `b6cbb86347e02c4b374d7991a1f78d2535789ced` /
   <https://github.com/horiyamayoh/cxxlens/issues/202#issuecomment-5094406150>
-- Pending amendment: #205 / DF-0205 same-process authenticated writer-mapping lease
+- Accepted authority amendment: #205 / DF-0205 same-process authenticated writer-mapping lease
+- Exact accepted proposal: `6cb705c256c9576f74b50a2dca8fc4e8f72d06bb`
+- Independent review: <https://github.com/horiyamayoh/cxxlens/issues/205#issuecomment-5095883584>
+  (`P0=0 / P1=0 / P2=0`)
 
 ## Context
 
@@ -190,18 +193,24 @@ transaction を維持する。actual VFS-open main/WAL/SHM identity、directory 
 read-lock slot、complete decoded logical projection を receipt にする。post-close endpoint/digest-only private copy、別 connection、
 arbitrary SQLite errorからのfallbackは禁止する。
 
-#### DF-0205 pending amendment: same-process authenticated writer-mapping lease
+#### DF-0205 accepted authority amendment: same-process authenticated writer-mapping lease
 
 この subsection は Issue #205 の authority proposal
-`cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1` であり、現時点では
-`proposed-unqualified-non-authorizing` である。exact proposal の independent acceptance 前は上記
-blanket ruleを維持し、native `SQLITE_OK` はpointerのnull/non-nullを問わずterminal protocol
-violationである。proposalの存在、同一PID、同一path、同一pointer、同じVFS名、または一つのStore/
-connectionへの集約はexception authorityにならない。acceptance後に実装できるexceptionも、
+`cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1` を exact commit
+`6cb705c256c9576f74b50a2dca8fc4e8f72d06bb` で固定し、Issue #205 の独立 review
+<https://github.com/horiyamayoh/cxxlens/issues/205#issuecomment-5095883584> は
+`accepted-authority-implementation-pending` (`P0=0 / P1=0 / P2=0`) として accept した。
+schema の `same_process_writer_mapping_lease_proposal` key は reviewed exact artifact/history として保持し、
+未 review proposal または acceptance pending を表さない。この acceptance は internal registry/callback
+gates/tests の実装だけを認可する。distinct exact implementation commit と全 counterexample matrix の独立
+review が完了するまで、current source は上記 blanket ruleを維持し、native `SQLITE_OK` はpointerの
+null/non-nullを問わずterminal protocol violationであり、production activationはblockする。
+proposal artifactの存在、同一PID、同一path、同一pointer、同じVFS名、または一つのStore/
+connectionへの集約はexception authorityにならない。accepted authority に基づき実装できるexceptionも、
 exact `SQLITE_OK`+non-nullを同じpointerのexact `SQLITE_READONLY`+non-nullへprojectする一経路だけである。
 SQLite WAL coreはこのresultをread-only SHM mappingとして扱う。`SQLITE_OK`を外へpass throughせず、
 `SQLITE_OK`+null、CANTINIT/READONLY以外のcode、generic non-profile callerは変更しない。
-qualification scratch/map-sequence validatorはleaseを保持せず、acceptance後もnative OK terminal
+qualification scratch/map-sequence validatorはleaseを保持せず、implementation後もnative OK terminal
 rejectionを維持する。OK→READONLY projectionはproduction `qualified_source_shm_map_route`のexact
 lease receipt付きcallbackだけに閉じる。
 
@@ -364,10 +373,10 @@ fork child、stale generation、wrong page/size/pointer、identity/watch/effect 
 native mappingを可能ならnon-removing unmapし、既存protocol-violation latchへ閉じる。unmap outcome不明
 またはnative lifecycle ambiguityはquarantineする。
 
-proposal acceptance前はauthority edit、read-only audit、temporary reproductionだけを許す。exact
-proposalのindependent acceptance後にだけinternal registry、writer pending/promotion、reader
-pin/handoff、callback gatesとfocused testsを実装できる。public API、snapshot/publication identity、
-error tuple、generic VFS semanticsは変更しない。production activationには二つのlive Storeによる
+exact proposal は独立 review で accept されているため、internal registry、writer pending/promotion、
+reader pin/handoff、callback gatesとfocused testsを実装できる。acceptanceだけではproduction exceptionを
+activateせず、current source はblanket native `SQLITE_OK` rejectionを維持する。public API、
+snapshot/publication identity、error tuple、generic VFS semanticsは変更しない。production activationには二つのlive Storeによる
 durable CAS winner/loser、materialization competitor、cross-process CAS、CANTINIT/READONLY
 regressionと、pending-only、fork/PID reuse、holder/pin/unmap race、ABA、runtime/VFS/app-data/
 callback drift、file-family/mount replacement、namespace watch loss、page/pointer/route-specific size/effect、

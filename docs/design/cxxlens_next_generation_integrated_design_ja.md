@@ -2257,9 +2257,14 @@ profile で native `SQLITE_OK` が返ることは mapping の null/non-null を�
 `extend=0`+OK semantics は変更しない。この per-file READONLY-family state は成功した delegated `xShmUnmap` でだけ reset する。
 
 DF-0205 の `cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1` は Issue #205 の
-`proposed-unqualified-non-authorizing` authority proposalであり、independent acceptance前は上記
-blanket `SQLITE_OK` rejectionを変更しない。同じloaded SQLite Unix runtimeで既存writerのinode-bound
-SHM mappingが再利用される場合に限り、acceptance後のnarrow exceptionはwriter native map前のlocal
+exact proposal `6cb705c256c9576f74b50a2dca8fc4e8f72d06bb` を
+<https://github.com/horiyamayoh/cxxlens/issues/205#issuecomment-5095883584> の独立 review
+(`P0=0 / P1=0 / P2=0`) が `accepted-authority-implementation-pending` としてacceptした authority amendmentである。
+schema の `same_process_writer_mapping_lease_proposal` key は reviewed exact artifact/history として保持し、
+acceptance pendingを意味しない。この acceptance はinternal implementationを認可するが、distinct exact
+implementation commitと全counterexample matrixの独立 reviewが完了するまでcurrent sourceのblanket
+`SQLITE_OK` rejectionを変更せず、productionをblockする。同じloaded SQLite Unix runtimeで既存writerのinode-bound
+SHM mappingが再利用される場合に限り、accepted narrow exception authorityはwriter native map前のlocal
 non-authoritative attempt、exact OK+nonnullとpost-map receipt後のregistry pending、current-v3 Store
 writer gate完了後のlive leaseという順で成立し、reader delegation前にprocess-global cross-alias
 registryのexactly one leaseからin-flight pinを取得する。registry pendingをnative delegation前に
@@ -2360,9 +2365,9 @@ transitively mintできない。callback中に
 registry mutexを保持せず、handoff lifetime全体についてwriter closeをblockしたりnative unmap successを
 捏造しない。native lifecycle ambiguityはconnection/runtime/VFSをquarantineする。
 
-proposal acceptance前はauthority workとread-only/temporary investigationだけを許し、implementationを
-認可しない。acceptance後にinternal registry/callback gates/testsの実装を開始できるが、production
-activationは二つのlive StoreのCAS winner/loser、materialization race、cross-process CAS、
+exact proposal は独立 review でaccept済みなので、internal registry/callback gates/testsの実装を開始できる。
+acceptanceだけではproduction exceptionをactivateせず、current sourceはblanket native `SQLITE_OK`
+rejectionを維持する。production activationは二つのlive StoreのCAS winner/loser、materialization race、cross-process CAS、
 CANTINIT/READONLY regression、およびfork/PID reuse、holder/in-flight/handoff/unmap race、ABA、
 runtime/VFS/image/app-data/callback、object/entry/mount/namespace、page/pointer/route-specific size/effect、
 extend pair全分類、simultaneous first-writer join/mismatch、W2 in-flight対W1 retire、new-page atomic

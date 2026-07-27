@@ -80,6 +80,20 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
             document_digest(lease),
             EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST,
         )
+        self.assertEqual(
+            lease["status"], "accepted-authority-implementation-pending"
+        )
+        self.assertEqual(
+            lease["authorization"]["production_activation"],
+            "blocked-until-the-exact-implementation-and-complete-counterexample-"
+            "matrix-receive-a-distinct-independent-review",
+        )
+        self.assertEqual(
+            self.contract["format_compatibility"][
+                "sqlite_source_shm_readonly_capability"
+            ]["shm_map_state_machine"]["any_native_ok"],
+            "backend-protocol-violation-fail-closed-never-translate-to-readonly",
+        )
         schema_validate(self.contract, self.schema, "store contract")
 
         mutations = [
@@ -112,6 +126,13 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 lambda value: value["generation_and_races"].__setitem__(
                     "successor_while_handoff_live",
                     "allow-successor-when-pointer-matches",
+                ),
+            ),
+            (
+                "production-activation",
+                lambda value: value["authorization"].__setitem__(
+                    "production_activation",
+                    "allowed",
                 ),
             ),
         ]

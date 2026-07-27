@@ -7,10 +7,10 @@
 | Query Runtime Contract | `schemas/cxxlens_ng_query_runtime_contract.yaml` | #69 / #166 | implemented closure-bound anti-join |
 | Semantic Guarantee Contract | `schemas/cxxlens_ng_semantic_guarantee_contract.yaml` | #62 | accepted exact contract |
 | Snapshot / Store Contract | `schemas/cxxlens_ng_snapshot_store_contract.yaml` | #148 | accepted exact contract |
-| SQLite Physical Store | `schemas/cxxlens_ng_sqlite_store_contract.yaml` | #68 / #181 / #200 / #205 | v2 implemented; Option A v3 user-selected and DF-0205 authenticated SHM lease proposal pending independent acceptance |
+| SQLite Physical Store | `schemas/cxxlens_ng_sqlite_store_contract.yaml` | #68 / #181 / #200 / #205 | v2 implemented; Option A v3 user-selected; DF-0205 authenticated SHM lease authority accepted at `6cb705c256c9576f74b50a2dca8fc4e8f72d06bb`, with internal implementation pending and production blocked until exact implementation/matrix review |
 | Provider Protocol | `schemas/cxxlens_ng_provider_protocol.yaml` | #149 | accepted exact contract |
 | Provider Runtime | `schemas/cxxlens_ng_provider_runtime_contract.yaml` | #151 | implemented exact contract |
-| Clang 22 Installed Materialization | `schemas/cxxlens_ng_clang22_materialization_contract.yaml` | #181 / #205 | accepted option-2 boundary with DF-0191/DF-0192/DF-0194 and DF-0195–DF-0199 amendments; DF-0200 blocks claim/Store orchestration, detailed reporting, and scale qualification, and DF-0205 blocks same-process Store CAS/race activation, while the independent streaming/runtime foundation continues under #181 |
+| Clang 22 Installed Materialization | `schemas/cxxlens_ng_clang22_materialization_contract.yaml` | #181 / #205 | accepted option-2 boundary with DF-0191/DF-0192/DF-0194 and DF-0195–DF-0199 amendments; DF-0200 blocks claim/Store orchestration, detailed reporting, and scale qualification, and accepted DF-0205 authority still blocks same-process Store CAS/race activation pending exact implementation/matrix review, while the independent streaming/runtime foundation continues under #181 |
 | Public C++ API Catalog | `schemas/cxxlens_ng_public_api_catalog.yaml` | #66–#70 | implemented |
 | Public Callable Inventory | `schemas/cxxlens_ng_public_callable_inventory.yaml` | #169 | implemented exact Clang 22 AST and Doxygen bidirectional correspondence |
 | Acceptance Manifest | `schemas/cxxlens_ng_acceptance_manifest.yaml` | #71 | implemented foundation gates |

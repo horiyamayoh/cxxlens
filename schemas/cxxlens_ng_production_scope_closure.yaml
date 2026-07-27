@@ -228,7 +228,7 @@ assignments:
     qualification: tracked-gap
     gap:
       finding: scope.tracked-gap.clang22-installed-adoption
-      remediation: Implement the accepted DF-0195 through DF-0199 sealed-evidence, measured-occurrence, authenticated-streaming, head-observation, and canonical-Base64 authority; resolve DF-0200 bounded claim/Store staging and DF-0205 same-process Store race authority; then complete installed actual-source worker output adoption with exact publication and query evidence; do not claim generic relation-row reference enforcement.
+      remediation: Implement the accepted DF-0195 through DF-0199 sealed-evidence, measured-occurrence, authenticated-streaming, head-observation, and canonical-Base64 authority; implement the accepted DF-0200 bounded claim/Store staging and the accepted DF-0205 same-process writer-mapping lease with its full CAS/race counterexample matrix, and complete a distinct exact implementation review; then complete installed actual-source worker output adoption with exact publication and query evidence; do not claim generic relation-row reference enforcement.
     feedback: [DF-0182, DF-0187, DF-0191, DF-0192, DF-0195, DF-0196, DF-0197, DF-0198, DF-0199, DF-0200, DF-0205]
     surfaces:
       - {domain: distribution.consumer-configuration, id: shared/real-project}
@@ -251,7 +251,7 @@ assignments:
     qualification: tracked-gap
     gap:
       finding: scope.tracked-gap.sqlite-store-v3
-      remediation: Complete the SQLite v3 implementation and independent qualification, resolve DF-0205 with the reviewed same-process writer-mapping lease and full CAS/race counterexample matrix, bind its exact report into release evaluation and GR, and promote the catalog entry from contract-pending only with exact evidence.
+      remediation: Complete the SQLite v3 implementation and independent qualification, implement the accepted DF-0205 same-process writer-mapping lease and its full CAS/race counterexample matrix, complete a distinct exact implementation review, bind its exact report into release evaluation and GR, and promote the catalog entry from contract-pending only with exact evidence.
     feedback: [DF-0205]
     surfaces:
       - {domain: public.catalog-entry, id: public.snapshot-store-sqlite-v3}

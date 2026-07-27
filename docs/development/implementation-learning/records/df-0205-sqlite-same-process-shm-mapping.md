@@ -1,11 +1,11 @@
 ---
 id: DF-0205
 title: Reconcile same-process SQLite SHM reuse with multi-instance CAS
-status: observed
+status: accepted
 kind: contract-contradiction
 impact: invariant
 confidence: high
-implementation_disposition: blocked
+implementation_disposition: may-proceed
 scope:
   - store.sqlite-same-process-shm-mapping
   - store.sqlite-multi-instance-cas
@@ -21,13 +21,21 @@ authority_refs:
 tracking_issue: '#205'
 implementation_issues:
   - '#181'
-resolution_refs: []
+resolution_refs:
+  - docs/design/cxxlens_next_generation_integrated_design_ja.md
+  - docs/design/adr/0013-ng-sqlite-physical-store.md
+  - docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
+  - schemas/cxxlens_ng_sqlite_store_contract.yaml
+  - schemas/cxxlens_ng_sqlite_store_contract.schema.yaml
+  - schemas/cxxlens_ng_snapshot_store_contract.yaml
+  - schemas/cxxlens_ng_snapshot_store_contract.schema.yaml
 review:
   mode: independent
-  status: pending
+  status: complete
   author: codex-agent-sqlite-same-process-shm-observation
-  reviewer: null
-  refs: []
+  reviewer: codex-agent-sqlite-authority-completion
+  refs:
+    - https://github.com/horiyamayoh/cxxlens/issues/205#issuecomment-5095883584
 created: '2026-07-28'
 ---
 
@@ -123,9 +131,10 @@ qualification artifacts, or a production implementation.
 
 ## Recommendation
 
-Review Alternative 1 as the exact, still non-authorizing proposal
-`cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1`. Do not treat the proposal or this record
-as implementation permission. The proposal now defines:
+Alternative 1 is accepted as the exact internal implementation authority
+`cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1` by the independent review recorded on
+Issue #205. This acceptance permits the declared internal implementation and focused tests, but
+does not activate the production exception. The reviewed authority defines:
 
 - a process-global, cross-owned-forwarding-alias registry keyed by one non-reusable process
   instance, the shared loaded-runtime/image/source-id/callback and underlying VFS/app-data
@@ -167,10 +176,10 @@ as implementation permission. The proposal now defines:
   exact `SQLITE_READONLY` with the identical pointer. Qualification scratch/map-sequence
   validation stays leaseless and all native OK results remain terminal there.
 
-Any accepted change must update integrated design, ADR 0013 and ADR 0097, the SQLite/Snapshot
+The accepted authority is bound in integrated design, ADR 0013 and ADR 0097, the SQLite/Snapshot
 contracts and schema mirrors, checker expectations, source-negative tests, design checksums, and
-traceability before production implementation. Because this is an invariant and compatibility
-change, an independent counterexample review is required on Issue #205.
+traceability. Because this is an invariant and compatibility change, the exact implementation and
+complete counterexample matrix require a distinct independent review before production activation.
 
 ## Disposition
 
@@ -200,3 +209,13 @@ the two mixed-pair join directions plus different-page successor rejection into 
 machine-readable qualification matrix. The blocking review is recorded on Issue #205; fresh
 independent review of the revised exact commit is still required. This record therefore remains
 `observed`, blocked, and non-authorizing.
+
+2026-07-28: Independent semantic and structural review accepted exact proposal commit
+`6cb705c256c9576f74b50a2dca8fc4e8f72d06bb` with P0/P1/P2 `0/0/0`; the accepted proposal digest
+is `sha256:7018a853e3053beb5b93cd3713c49eb0350c7f32471822fb9f0f968196100a8f`.
+DF-0205 is therefore `accepted` with `implementation_disposition: may-proceed`, and the declared
+internal registry, writer pending/promotion, reader pin/handoff, callback gates, and focused tests
+may be implemented. The current source continues to reject every native `SQLITE_OK` in the
+qualified readonly-SHM profile. Production activation remains blocked until the exact
+implementation and complete positive/negative counterexample matrix receive their distinct
+independent review.

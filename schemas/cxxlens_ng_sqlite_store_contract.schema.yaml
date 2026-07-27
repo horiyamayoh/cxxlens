@@ -678,7 +678,7 @@ $defs:
                 any_native_ok: backend-protocol-violation-fail-closed-never-translate-to-readonly
                 same_process_writer_mapping_lease_proposal:
                   id: cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1
-                  status: proposed-unqualified-non-authorizing
+                  status: accepted-authority-implementation-pending
                   tracking: {issue: '#205', feedback: DF-0205}
                   current_rule_before_acceptance: every-native-SQLITE_OK-remains-a-terminal-backend-protocol-violation-regardless-of-pointer
                   public_surface: unchanged

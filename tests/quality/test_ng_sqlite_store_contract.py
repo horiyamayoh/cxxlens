@@ -93,6 +93,22 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
             document_digest(lease),
             EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST,
         )
+        self.assertEqual(
+            lease["status"], "accepted-authority-implementation-pending"
+        )
+        self.assertEqual(
+            lease["authorization"]["production_activation"],
+            "blocked-until-the-exact-implementation-and-complete-counterexample-"
+            "matrix-receive-a-distinct-independent-review",
+        )
+        self.assertEqual(
+            contract["compatibility"]["predecessor_v2"]["read_path_strategy"][
+                "active_wal"
+            ]["source_shm_readonly_capability"]["shm_map_state_machine"][
+                "any_native_ok"
+            ],
+            "backend-protocol-violation-fail-closed-never-translate-to-readonly",
+        )
 
     def test_option_a_structural_projection_and_vectors_pass_independently(self) -> None:
         validate_option_a_contract(self.contract)
@@ -676,6 +692,13 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 lambda value: writer_mapping_lease(value)["authorization"].__setitem__(
                     "before_independent_acceptance",
                     "production-implementation-authorized",
+                ),
+            ),
+            (
+                "writer-mapping-lease-production-activation-self-authorized",
+                lambda value: writer_mapping_lease(value)["authorization"].__setitem__(
+                    "production_activation",
+                    "allowed",
                 ),
             ),
             (
