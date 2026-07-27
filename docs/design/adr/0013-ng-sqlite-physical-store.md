@@ -7,8 +7,12 @@
 - Tracking issue: #56
 - Current-layout amendment: ADR 0097 / #200
 - Accepted same-process SHM authority amendment: ADR 0097 / #205 / DF-0205
-- Exact accepted proposal: `6cb705c256c9576f74b50a2dca8fc4e8f72d06bb`
-- Independent review: <https://github.com/horiyamayoh/cxxlens/issues/205#issuecomment-5095883584>
+- Exact accepted same-process proposal: `6cb705c256c9576f74b50a2dca8fc4e8f72d06bb`
+- Same-process independent review: <https://github.com/horiyamayoh/cxxlens/issues/205#issuecomment-5095883584>
+  (`P0=0 / P1=0 / P2=0`)
+- Accepted writer native-attachment amendment: ADR 0097 / #206 / DF-0206
+- Exact accepted writer attachment proposal: `bf30978eb34d5f94bbadfd675c8ce2b50fb2f899`
+- Writer attachment independent review: <https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062>
   (`P0=0 / P1=0 / P2=0`)
 
 ## Context
@@ -74,13 +78,18 @@ quarantineし、memory pin、final size、caller intentだけでauthorityを復�
 
 Issue #206 / DF-0206 は、一つのwriter native attachmentに複数page map holderが属し得る一方、
 native `xShmUnmap` がattachment全体を一 callbackで解放するcardinalityをDF-0205 authorityが定義して
-いないことを記録する。ADR 0097 と四つのSQLite/Snapshot contract/schema mirrorに置く
-`cxxlens.sqlite.writer-shm-native-attachment.v1` は現時点では
-`proposed-unqualified-non-authorizing` である。proposalはmap receiptをcallbackごとに保持しつつ、
+いないことを記録した。ADR 0097 と四つのSQLite/Snapshot contract/schema mirrorに置く
+`cxxlens.sqlite.writer-shm-native-attachment.v1` は exact proposal
+`bf30978eb34d5f94bbadfd675c8ce2b50fb2f899` を Issue #206 の独立 semantic/structural review
+<https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062> が
+`accepted-authority-implementation-pending` (`P0=0 / P1=0 / P2=0`) として accept した
+writer-only amendment である。proposalはmap receiptをcallbackごとに保持しつつ、
 checked attachment identityごとのcomplete pending/live holder setを一回のunmap outcomeへbindする。
 cross-attachment grouping、partial group、duplicate unmap、second-page validation failure後のfirst-page
-継続、closeのdouble cleanupを禁止する。fresh independent authority reviewまでattachment group実装と
-writer VFS production bindingをblockし、current blanket native `SQLITE_OK` rejectionを維持する。
+継続、closeのdouble cleanupを禁止する。この acceptance は internal writer attachment-group state
+machine と focused tests の実装だけを認可する。reader grouping は Issue #207 / DF-0207、writer VFS
+production binding は distinct exact implementation/matrix review まで blockし、current blanket native
+`SQLITE_OK` rejectionを維持する。
 
 exact proposal `3c52b7e01a4d2a4e382940017d1dfb8f07f1be54` の独立 review は
 `P0=0 / P1=2 / P2=1` でrejectした。non-last attachmentが唯一supportしたpageをcleanup後も
@@ -100,7 +109,12 @@ driftはcomplete groupをhide/quarantineし、successful gate後にpre-boundary 
 `sha256:612d450d22b676e4144b76f61cab60cade3ae860f3457b7ec168a9bd00cd9550` である。
 reader-predelegation orderingを加えたcurrent proposal digestは
 `sha256:05624ed7e918d43705a4dd6b37884c43c4e98e7a2b89427bbe64367e0655a15f`
-であり、このexact revisionのfresh independent reviewまでは引き続きnon-authorizingである。
+である。この exact revision は commit `bf30978eb34d5f94bbadfd675c8ce2b50fb2f899` として
+<https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062> の独立 semantic/structural
+reviewに合格した。review receiptとaccepted statusを加えたcurrent enclosing lease digestは
+`sha256:e522cbbe3c6bb9bf2ed645816941f1921f5884eacc36360e8dc546b779bded29` である。
+この acceptance は writer-only であり、DF-0207 の reader attachment authority や production activation
+を推移的に認可しない。
 
 ADR 0097 はこの hybrid と logical payload policy を維持しつつ、current physical layout を
 `cxxlens.sqlite-semantic-store.v3` / `3.0.0` の bounded chunk table に置き換える。本 ADR の v2.6.0 schema は

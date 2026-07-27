@@ -1,11 +1,11 @@
 ---
 id: DF-0206
 title: Bind SQLite writer SHM holders to native attachments
-status: observed
+status: accepted
 kind: contract-contradiction
 impact: invariant
 confidence: high
-implementation_disposition: blocked
+implementation_disposition: may-proceed
 scope:
   - store.sqlite-same-process-shm-mapping
   - store.sqlite-multi-instance-cas
@@ -21,13 +21,26 @@ authority_refs:
 tracking_issue: '#206'
 implementation_issues:
   - '#181'
-resolution_refs: []
+resolution_refs:
+  - docs/design/cxxlens_next_generation_integrated_design_ja.md
+  - docs/design/adr/0013-ng-sqlite-physical-store.md
+  - docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
+  - docs/design/catalogs/README.md
+  - schemas/cxxlens_ng_sqlite_store_contract.yaml
+  - schemas/cxxlens_ng_sqlite_store_contract.schema.yaml
+  - schemas/cxxlens_ng_snapshot_store_contract.yaml
+  - schemas/cxxlens_ng_snapshot_store_contract.schema.yaml
+  - tools/quality/check_ng_sqlite_store_contract.py
+  - tools/quality/check_ng_snapshot_store_contract.py
+  - tests/quality/test_ng_sqlite_store_contract.py
+  - tests/quality/test_ng_snapshot_store_contract.py
 review:
   mode: independent
-  status: pending
+  status: complete
   author: codex-agent-sqlite-writer-attachment-observation
-  reviewer: null
-  refs: []
+  reviewer: codex-agent-independent-semantic-and-structural-review
+  refs:
+    - https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062
 created: '2026-07-28'
 ---
 
@@ -190,3 +203,15 @@ mirrors. Focused mutation negatives and positive/negative matrix entries cover e
 The revised enclosing lease digest is
 `sha256:05624ed7e918d43705a4dd6b37884c43c4e98e7a2b89427bbe64367e0655a15f`.
 The revised proposal remains non-authorizing pending a fresh independent exact-commit review.
+
+2026-07-28: Fresh independent semantic and structural review accepted exact proposal commit
+`bf30978eb34d5f94bbadfd675c8ce2b50fb2f899` with `P0=0 / P1=0 / P2=0`; the canonical receipt is
+<https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062>. The reviewed proposal
+digest is `sha256:05624ed7e918d43705a4dd6b37884c43c4e98e7a2b89427bbe64367e0655a15f`;
+the current enclosing lease digest after adding only the accepted status and exact review receipt
+is `sha256:e522cbbe3c6bb9bf2ed645816941f1921f5884eacc36360e8dc546b779bded29`.
+DF-0206 is therefore `accepted` with `implementation_disposition: may-proceed`, authorizing the
+internal writer attachment-group state machine and focused tests. This acceptance is writer-only:
+Issue #207 / DF-0207 continues to block reader grouping, and production activation remains blocked
+until the distinct exact implementation and complete counterexample matrix receive independent
+review.

@@ -10,8 +10,12 @@
 - Proposal review: `b6cbb86347e02c4b374d7991a1f78d2535789ced` /
   <https://github.com/horiyamayoh/cxxlens/issues/202#issuecomment-5094406150>
 - Accepted authority amendment: #205 / DF-0205 same-process authenticated writer-mapping lease
-- Exact accepted proposal: `6cb705c256c9576f74b50a2dca8fc4e8f72d06bb`
-- Independent review: <https://github.com/horiyamayoh/cxxlens/issues/205#issuecomment-5095883584>
+- Exact accepted same-process proposal: `6cb705c256c9576f74b50a2dca8fc4e8f72d06bb`
+- Same-process independent review: <https://github.com/horiyamayoh/cxxlens/issues/205#issuecomment-5095883584>
+  (`P0=0 / P1=0 / P2=0`)
+- Accepted writer native-attachment amendment: #206 / DF-0206
+- Exact accepted writer attachment proposal: `bf30978eb34d5f94bbadfd675c8ce2b50fb2f899`
+- Writer attachment independent review: <https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062>
   (`P0=0 / P1=0 / P2=0`)
 
 ## Context
@@ -214,7 +218,7 @@ qualification scratch/map-sequence validatorはleaseを保持せず、implementa
 rejectionを維持する。OK→READONLY projectionはproduction `qualified_source_shm_map_route`のexact
 lease receipt付きcallbackだけに閉じる。
 
-##### DF-0206 review-pending proposal: writer native attachment grouping
+##### DF-0206 accepted authority amendment: writer native attachment grouping
 
 Issue #206 / DF-0206 は、上記 accepted authority の `holder` と SQLite の native SHM attachment の
 cardinality が未定義であることを記録する。SQLite Unix VFS は一つの `sqlite3_file` から複数 region の
@@ -223,10 +227,14 @@ map callback ごとに cleanup holder を作り、各 holder に別の native un
 複数 page を一 attachment で map する正当な lifecycle を表現できない。
 
 schema の `writer_native_attachment_amendment_proposal` は
-`cxxlens.sqlite.writer-shm-native-attachment.v1` の review-pending proposal であり、
-`proposed-unqualified-non-authorizing` である。独立 review が accept するまで、この subsection と
-schema object は implementation authority ではなく、attachment group、production registry/VFS binding、
-reader exception activation を認可しない。current native `SQLITE_OK` terminal rejection を維持する。
+`cxxlens.sqlite.writer-shm-native-attachment.v1` の reviewed artifact/history である。exact proposal
+`bf30978eb34d5f94bbadfd675c8ce2b50fb2f899` は Issue #206 の独立 semantic/structural review
+<https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062> に
+`accepted-authority-implementation-pending` (`P0=0 / P1=0 / P2=0`) として accept された。
+この acceptance は internal writer attachment-group state machine と focused tests の実装だけを認可する。
+production registry/VFS binding は distinct exact implementation/matrix review、reader grouping と reader
+exception activation は Issue #207 / DF-0207 の accepted authority まで認可しない。current native
+`SQLITE_OK` terminal rejection を維持する。
 
 proposal は、map attempt ごとの holder-specific pair/effect/page receipt を保持したまま、全
 post-native/pending/live holder を checked non-reusable native attachment identity で atomic group にする。
@@ -291,8 +299,14 @@ mutation negativeへ追加した。revised enclosing lease digestは
 であり、`9011b22` のreviewed checkpointを識別する。reader-predelegation orderingを加えたcurrent
 enclosing lease digestは
 `sha256:05624ed7e918d43705a4dd6b37884c43c4e98e7a2b89427bbe64367e0655a15f`
-である。四mirrorは同一だが、fresh independent reviewがこのrevised exact proposalをacceptするまでは
-`proposed-unqualified-non-authorizing` のままであり、attachment-group implementationを認可しない。
+である。四mirrorは同一であり、このrevised exact proposalを
+`bf30978eb34d5f94bbadfd675c8ce2b50fb2f899` として
+<https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062> の独立 semantic/structural
+reviewが `P0=0 / P1=0 / P2=0` で accept した。review receiptとaccepted statusを加えたcurrent
+enclosing lease digestは
+`sha256:e522cbbe3c6bb9bf2ed645816941f1921f5884eacc36360e8dc546b779bded29` である。
+internal writer grouping/testsだけを実装可能とし、reader grouping と production activation は引き続き
+blockする。
 
 Issue #207 / DF-0207 は、同じreader `sqlite3_file`のdifferent-page mapが別handoffを作る一方、
 native `xShmUnmap`はreader attachment全体を一回で解放するcardinality gapを記録する。DF-0206の

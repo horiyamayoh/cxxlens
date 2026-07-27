@@ -98,10 +98,18 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         )
         attachment = lease["writer_native_attachment_amendment_proposal"]
         self.assertEqual(
-            attachment["status"], "proposed-unqualified-non-authorizing"
+            attachment["status"], "accepted-authority-implementation-pending"
         )
         self.assertEqual(
             attachment["tracking"], {"issue": "#206", "feedback": "DF-0206"}
+        )
+        self.assertEqual(
+            attachment["acceptance_review_receipt"],
+            "exact-commit-bf30978eb34d5f94bbadfd675c8ce2b50fb2f899-"
+            "issue-206-comment-5097950062-independent-semantic-and-structural-"
+            "P0-0-P1-0-P2-0-authorizes-internal-writer-attachment-group-state-"
+            "machine-and-focused-tests-only-reader-grouping-blocked-by-DF-0207-"
+            "production-remains-blocked",
         )
         self.assertEqual(
             attachment["authorization"]["production_activation"],
@@ -486,9 +494,15 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
-                "writer-native-attachment-status-self-accepted",
+                "writer-native-attachment-status-regressed",
                 lambda value: writer_native_attachment(value).__setitem__(
-                    "status", "accepted-authority-implementation-pending"
+                    "status", "proposed-unqualified-non-authorizing"
+                ),
+            ),
+            (
+                "writer-native-attachment-review-receipt-removed",
+                lambda value: writer_native_attachment(value).pop(
+                    "acceptance_review_receipt"
                 ),
             ),
             (

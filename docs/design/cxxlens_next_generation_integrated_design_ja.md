@@ -2278,11 +2278,16 @@ Issue #206 / DF-0206 の実装監査は、同じ `sqlite3_file` attachmentで複
 `xShmMap`が成功し得る一方、native `xShmUnmap`はcomplete attachmentを一 callbackで解放するという
 cardinalityをaccepted DF-0205 authorityが未定義であることを示した。ADR 0097 とSQLite/Snapshot
 contract/schema mirrorの `cxxlens.sqlite.writer-shm-native-attachment.v1` は
-`proposed-unqualified-non-authorizing` のreview-pending amendmentである。map callbackごとの
+exact proposal `bf30978eb34d5f94bbadfd675c8ce2b50fb2f899` を Issue #206 の独立
+semantic/structural review
+<https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062> が
+`accepted-authority-implementation-pending` (`P0=0 / P1=0 / P2=0`) として accept した
+writer-only amendment である。map callbackごとの
 pair/effect/page authorityを保持しつつ、checked non-reusable attachment identityに属するcomplete
 post-native/pending/live member setを一回のnative unmapへatomicにbindし、cross-attachment/partial
-group、outcome複製、duplicate cleanupを拒否する。independent acceptance前にattachment groupや
-production VFS bindingを実装せず、既存 blanket native OK rejectionを変更しない。
+group、outcome複製、duplicate cleanupを拒否する。internal writer attachment-group state machine と
+focused tests の実装だけを認可し、production VFS binding と reader grouping は認可しない。既存
+blanket native OK rejectionを変更しない。
 
 exact proposal `3c52b7e01a4d2a4e382940017d1dfb8f07f1be54` の独立 review は
 `P0=0 / P1=2 / P2=1` でrejectした。non-last attachmentが唯一supportしたpageのfresh-reader
@@ -2304,8 +2309,14 @@ open-epoch driftはcomplete groupをhide/quarantineし、successful gate後にbo
 `sha256:612d450d22b676e4144b76f61cab60cade3ae860f3457b7ec168a9bd00cd9550` である。
 reader-predelegation orderingを加えたcurrent digest
 `sha256:05624ed7e918d43705a4dd6b37884c43c4e98e7a2b89427bbe64367e0655a15f`
-は四つのmirror/checkerへbindするが、このexact revisionのfresh independent acceptanceまでは
-non-authorizingである。
+は四つのmirror/checkerへbindする。この exact revision は
+`bf30978eb34d5f94bbadfd675c8ce2b50fb2f899` として
+<https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097950062> の独立
+semantic/structural reviewに合格した。review receiptとaccepted statusを加えたcurrent enclosing
+lease digestは
+`sha256:e522cbbe3c6bb9bf2ed645816941f1921f5884eacc36360e8dc546b779bded29`
+である。この acceptance は writer-only であり、DF-0207 の reader authority または production
+activation を推移的に認可しない。
 
 Issue #207 / DF-0207 のread-only implementation auditは、同じreader `sqlite3_file`のdifferent-page
 mapが別handoffを作る一方、native `xShmUnmap`はreader attachment全体を一回で解放するcardinality

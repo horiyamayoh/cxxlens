@@ -682,8 +682,9 @@ $defs:
                   tracking: {issue: '#205', feedback: DF-0205}
                   writer_native_attachment_amendment_proposal:
                     id: cxxlens.sqlite.writer-shm-native-attachment.v1
-                    status: proposed-unqualified-non-authorizing
+                    status: accepted-authority-implementation-pending
                     tracking: {issue: '#206', feedback: DF-0206}
+                    acceptance_review_receipt: exact-commit-bf30978eb34d5f94bbadfd675c8ce2b50fb2f899-issue-206-comment-5097950062-independent-semantic-and-structural-P0-0-P1-0-P2-0-authorizes-internal-writer-attachment-group-state-machine-and-focused-tests-only-reader-grouping-blocked-by-DF-0207-production-remains-blocked
                     observation: one-sqlite3_file-may-complete-multiple-writer-xShmMap-callbacks-but-one-xShmUnmap-releases-the-complete-native-SHM-attachment
                     attachment_identity: checked-nonreusable-per-main-native_file_node-xOpen-and-open-epoch-token-bound-to-process-runtime-vfs-file-family-alias-connection-and-exact-xShmMap-xShmUnmap-callback-cohort-never-file-pointer-connection-or-path-alone
                     holder_model: retain-one-holder-specific-map-authority-per-successful-map-callback-and-atomically-group-all-post-native-pending-and-live-holders-by-their-exact-native-attachment-identity
