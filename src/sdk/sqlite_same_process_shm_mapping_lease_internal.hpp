@@ -113,6 +113,9 @@ namespace cxxlens::sdk
 		[[nodiscard]] bool operator==(const sqlite_shm_reader_map_request&) const = default;
 	};
 
+	class sqlite_shm_writer_map_inflight;
+	class sqlite_shm_verified_writer_native_map_receipt;
+	class sqlite_writer_shm_native_map_receipt_validator;
 	class sqlite_writer_shm_mapping_receipt_validator;
 	class sqlite_same_process_shm_writer_gate_receipt_validator;
 	class sqlite_same_process_shm_reader_receipt_validator;
@@ -439,7 +442,60 @@ namespace cxxlens::sdk
 
 	  private:
 		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class sqlite_shm_verified_writer_native_map_receipt;
 		explicit sqlite_shm_writer_map_inflight(
+			std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
+			std::uint64_t token) noexcept;
+		void disarm() noexcept;
+
+		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state_;
+		std::uint64_t token_{};
+		bool native_result_observed_{};
+	};
+
+	/**
+	 * Cleanup-only seal produced immediately after exact native SQLITE_OK/non-null.
+	 *
+	 * This receipt binds the native pointer to one exact predelegate token. It grants no
+	 * pending, generation, holder, or reader authority; a complete post-map receipt is still
+	 * required before pending installation.
+	 */
+	class sqlite_shm_verified_writer_native_map_receipt
+	{
+	  public:
+		[[nodiscard]] const volatile void* native_mapping() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		friend class sqlite_writer_shm_native_map_receipt_validator;
+		friend class sqlite_same_process_shm_lease_test_peer;
+
+		sqlite_shm_verified_writer_native_map_receipt(
+			const sqlite_shm_writer_map_inflight& inflight,
+			const volatile void* native_mapping) noexcept;
+
+		std::weak_ptr<detail::sqlite_shm_mapping_lease_state> state_;
+		std::uint64_t token_{};
+		const volatile void* native_mapping_{};
+	};
+
+	class sqlite_shm_writer_post_native_mapping
+	{
+	  public:
+		~sqlite_shm_writer_post_native_mapping() noexcept;
+		sqlite_shm_writer_post_native_mapping(sqlite_shm_writer_post_native_mapping&&) noexcept;
+		sqlite_shm_writer_post_native_mapping&
+		operator=(sqlite_shm_writer_post_native_mapping&&) = delete;
+		sqlite_shm_writer_post_native_mapping(const sqlite_shm_writer_post_native_mapping&) =
+			delete;
+		sqlite_shm_writer_post_native_mapping&
+		operator=(const sqlite_shm_writer_post_native_mapping&) = delete;
+
+		[[nodiscard]] bool valid() const noexcept;
+
+	  private:
+		friend class detail::sqlite_shm_mapping_lease_state;
+		explicit sqlite_shm_writer_post_native_mapping(
 			std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
 			std::uint64_t token) noexcept;
 		void disarm() noexcept;
@@ -685,8 +741,12 @@ namespace cxxlens::sdk
 
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_map_inflight>
 		begin_writer_map(const sqlite_shm_writer_map_request& request);
+		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_post_native_mapping>
+		record_writer_native_mapping(
+			sqlite_shm_writer_map_inflight& inflight,
+			const sqlite_shm_verified_writer_native_map_receipt& receipt) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_pending_mapping>
-		install_pending(sqlite_shm_writer_map_inflight& inflight,
+		install_pending(sqlite_shm_writer_post_native_mapping& post_native,
 						const sqlite_shm_verified_writer_post_map_receipt& receipt);
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_holder>
 		promote_writer(sqlite_shm_pending_mapping& pending,
@@ -694,7 +754,7 @@ namespace cxxlens::sdk
 		[[nodiscard]] sqlite_shm_lease_result<void>
 		resolve_writer_map_failure(sqlite_shm_writer_map_inflight& inflight) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_cleanup_obligation>
-		begin_writer_cleanup(sqlite_shm_writer_map_inflight& rejected_mapping,
+		begin_writer_cleanup(sqlite_shm_writer_post_native_mapping& rejected_mapping,
 							 const sqlite_shm_callback_execution_receipt& callback) noexcept;
 		[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_cleanup_obligation>
 		begin_writer_cleanup(sqlite_shm_pending_mapping& pending,
@@ -740,6 +800,9 @@ namespace cxxlens::sdk
 		[[nodiscard]] sqlite_shm_mapping_lease_snapshot snapshot() const noexcept;
 
 	  private:
+		friend class sqlite_same_process_shm_lease_test_peer;
+		void inject_writer_native_transition_failure_for_testing() noexcept;
+
 		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state_;
 	};
 } // namespace cxxlens::sdk

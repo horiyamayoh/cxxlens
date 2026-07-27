@@ -114,6 +114,7 @@ namespace cxxlens::sdk
 		{
 			eligibility,
 			writer_inflight,
+			writer_post_native,
 			pending,
 			writer_cleanup,
 			holder,
@@ -133,6 +134,19 @@ namespace cxxlens::sdk
 		if (caller_extend == 0 && delegated_extend == 0)
 			return sqlite_shm_writer_extend_pair::zero_zero;
 		return std::nullopt;
+	}
+
+	sqlite_shm_verified_writer_native_map_receipt::sqlite_shm_verified_writer_native_map_receipt(
+		const sqlite_shm_writer_map_inflight& inflight,
+		const volatile void* native_mapping) noexcept
+		: state_{inflight.state_}, token_{inflight.token_}, native_mapping_{native_mapping}
+	{
+	}
+
+	const volatile void*
+	sqlite_shm_verified_writer_native_map_receipt::native_mapping() const noexcept
+	{
+		return native_mapping_;
 	}
 
 	sqlite_shm_verified_writer_post_map_receipt::sqlite_shm_verified_writer_post_map_receipt(
@@ -405,8 +419,12 @@ namespace cxxlens::sdk
 					const auto token = allocate_token_locked();
 					if (!token)
 						return sqlite_shm_unexpected(ambiguous());
-					writers_.push_back(
-						{*token, writer_phase::inflight, request, std::nullopt, std::nullopt});
+					writers_.push_back({*token,
+										writer_phase::inflight,
+										request,
+										nullptr,
+										std::nullopt,
+										std::nullopt});
 					return sqlite_shm_writer_map_inflight{shared_from_this(), *token};
 				}
 				catch (...)
@@ -417,41 +435,87 @@ namespace cxxlens::sdk
 				}
 			}
 
+			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_post_native_mapping>
+			record_native_mapping(
+				sqlite_shm_writer_map_inflight& inflight,
+				const sqlite_shm_verified_writer_native_map_receipt& receipt) noexcept
+			{
+				// Calling this transition asserts that the native callback has already produced a
+				// mapping. Set the token-local latch before any operation which can throw so even
+				// an internal transition failure can never be resolved as a pre-native no-map.
+				inflight.native_result_observed_ = true;
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					if (std::exchange(fail_next_writer_native_transition_for_testing_, false))
+						throw writer_native_transition_injected_failure{};
+					const auto receipt_state = receipt.state_.lock();
+					const auto receipt_matches = receipt_state.get() == this &&
+						receipt.token_ != 0U && receipt.native_mapping_ != nullptr;
+					if (!owns(inflight.state_, inflight.token_))
+					{
+						quarantine_locked();
+						return sqlite_shm_unexpected(ambiguous());
+					}
+					const auto found = find_by_token(writers_, inflight.token_);
+					if (found == writers_.end() || found->phase != writer_phase::inflight ||
+						!receipt_matches || receipt.token_ != inflight.token_)
+					{
+						quarantine_locked();
+						return sqlite_shm_unexpected(
+							rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
+									  sqlite_shm_lease_recovery_action::quarantine_no_retry));
+					}
+					const auto token = inflight.token_;
+					auto state = inflight.state_;
+					found->native_mapping = receipt.native_mapping_;
+					found->phase = writer_phase::post_native_mapping;
+					inflight.disarm();
+					return sqlite_shm_writer_post_native_mapping{std::move(state), token};
+				}
+				catch (...)
+				{
+					quarantine_after_native();
+					return sqlite_shm_unexpected(ambiguous());
+				}
+			}
+
 			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_pending_mapping>
-			install_pending(sqlite_shm_writer_map_inflight& inflight,
+			install_pending(sqlite_shm_writer_post_native_mapping& post_native,
 							const sqlite_shm_verified_writer_post_map_receipt& receipt)
 			{
 				try
 				{
 					std::scoped_lock lock{mutex_};
-					if (!owns(inflight.state_, inflight.token_))
+					if (!owns(post_native.state_, post_native.token_))
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::
 											attempt_nonremoving_unmap_then_outer_ioerr));
-					const auto found = find_by_token(writers_, inflight.token_);
-					if (found == writers_.end() || found->phase != writer_phase::inflight)
+					const auto found = find_by_token(writers_, post_native.token_);
+					if (found == writers_.end() ||
+						found->phase != writer_phase::post_native_mapping ||
+						found->native_mapping == nullptr)
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::
 											attempt_nonremoving_unmap_then_outer_ioerr));
-					// Entry into this method proves the native callback has returned. From this
-					// point the no-mapping failure transition is permanently unavailable.
-					found->phase = writer_phase::post_native_rejected;
-					found->receipt = receipt;
 					if (auto blocked =
 							blocked_locked(sqlite_shm_lease_recovery_action::
 											   attempt_nonremoving_unmap_then_outer_ioerr))
 						return sqlite_shm_unexpected(*blocked);
-					if (!valid_writer_receipt(receipt) || receipt.request() != found->request)
+					if (!valid_writer_receipt(receipt) || receipt.request() != found->request ||
+						receipt.mapping().native_mapping != found->native_mapping)
 					{
 						return sqlite_shm_unexpected(
 							rejection(sqlite_shm_lease_rejection_reason::receipt_mismatch,
 									  sqlite_shm_lease_recovery_action::
 										  attempt_nonremoving_unmap_then_outer_ioerr));
 					}
+					found->receipt = receipt;
 					found->phase = writer_phase::pending;
-					const auto token = inflight.token_;
-					inflight.disarm();
-					return sqlite_shm_pending_mapping{shared_from_this(), token};
+					const auto token = post_native.token_;
+					auto state = post_native.state_;
+					post_native.disarm();
+					return sqlite_shm_pending_mapping{std::move(state), token};
 				}
 				catch (...)
 				{
@@ -573,6 +637,8 @@ namespace cxxlens::sdk
 					if (!owns(inflight.state_, inflight.token_))
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::outer_ioerr_no_retry));
+					if (inflight.native_result_observed_)
+						return sqlite_shm_unexpected(ambiguous());
 					const auto found = find_by_token(writers_, inflight.token_);
 					if (found == writers_.end() || found->phase != writer_phase::inflight)
 						return sqlite_shm_unexpected(
@@ -589,36 +655,37 @@ namespace cxxlens::sdk
 			}
 
 			[[nodiscard]] sqlite_shm_lease_result<sqlite_shm_writer_cleanup_obligation>
-			begin_writer_cleanup(sqlite_shm_writer_map_inflight& inflight,
+			begin_writer_cleanup(sqlite_shm_writer_post_native_mapping& post_native,
 								 const sqlite_shm_callback_execution_receipt& callback) noexcept
 			{
 				try
 				{
 					std::scoped_lock lock{mutex_};
-					if (!owns(inflight.state_, inflight.token_))
+					if (!owns(post_native.state_, post_native.token_))
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::quarantine_no_retry));
-					const auto found = find_by_token(writers_, inflight.token_);
+					const auto found = find_by_token(writers_, post_native.token_);
 					if (found == writers_.end())
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::quarantine_no_retry));
-					if (found->phase != writer_phase::post_native_rejected)
+					if (found->phase != writer_phase::post_native_mapping ||
+						found->native_mapping == nullptr)
 						return sqlite_shm_unexpected(
 							stale_token(sqlite_shm_lease_recovery_action::quarantine_no_retry));
 					if (!admit_cleanup_callback_locked(found->request.callback, callback))
 					{
 						found->phase = writer_phase::terminal_quarantined;
-						inflight.disarm();
+						post_native.disarm();
 						quarantine_locked();
 						return sqlite_shm_unexpected(ambiguous());
 					}
-					const auto token = inflight.token_;
+					const auto token = post_native.token_;
 					const auto generation = generation_ ? generation_->value : 0U;
-					auto state = shared_from_this();
+					auto state = post_native.state_;
 					// The transient terminal phase consumes the only cleanup-admission attempt.
 					// If receipt storage throws, no later call can reissue native cleanup.
 					found->phase = writer_phase::terminal_quarantined;
-					inflight.disarm();
+					post_native.disarm();
 					found->cleanup_callback = callback;
 					found->phase = writer_phase::cleanup_obligation;
 					return sqlite_shm_writer_cleanup_obligation{
@@ -1287,6 +1354,19 @@ namespace cxxlens::sdk
 				return output;
 			}
 
+			void inject_writer_native_transition_failure_for_testing() noexcept
+			{
+				try
+				{
+					std::scoped_lock lock{mutex_};
+					fail_next_writer_native_transition_for_testing_ = true;
+				}
+				catch (...)
+				{
+					emergency_quarantine_.store(true, std::memory_order_release);
+				}
+			}
+
 			void abandon(const lease_token_kind kind, const std::uint64_t token) noexcept
 			{
 				if (token == 0U)
@@ -1308,6 +1388,7 @@ namespace cxxlens::sdk
 						switch (kind)
 						{
 							case lease_token_kind::writer_inflight:
+							case lease_token_kind::writer_post_native:
 							case lease_token_kind::pending:
 							case lease_token_kind::writer_cleanup:
 							{
@@ -1377,10 +1458,14 @@ namespace cxxlens::sdk
 			enum class writer_phase : std::uint8_t
 			{
 				inflight,
-				post_native_rejected,
+				post_native_mapping,
 				pending,
 				cleanup_obligation,
 				terminal_quarantined,
+			};
+
+			struct writer_native_transition_injected_failure
+			{
 			};
 
 			enum class reader_phase : std::uint8_t
@@ -1411,6 +1496,7 @@ namespace cxxlens::sdk
 				std::uint64_t token{};
 				writer_phase phase{writer_phase::inflight};
 				sqlite_shm_writer_map_request request;
+				const volatile void* native_mapping{};
 				std::optional<sqlite_shm_verified_writer_post_map_receipt> receipt;
 				std::optional<sqlite_shm_callback_execution_receipt> cleanup_callback;
 			};
@@ -1530,7 +1616,7 @@ namespace cxxlens::sdk
 						[&ordered_after](const writer_record& writer)
 						{
 							return (writer.phase == writer_phase::inflight ||
-									writer.phase == writer_phase::post_native_rejected ||
+									writer.phase == writer_phase::post_native_mapping ||
 									writer.phase == writer_phase::cleanup_obligation) &&
 								!ordered_after(writer.cleanup_callback ? *writer.cleanup_callback
 																	   : writer.request.callback);
@@ -1838,9 +1924,13 @@ namespace cxxlens::sdk
 					case lease_token_kind::writer_inflight:
 					{
 						const auto found = find_by_token(writers_, token);
+						return found != writers_.end() && found->phase == writer_phase::inflight;
+					}
+					case lease_token_kind::writer_post_native:
+					{
+						const auto found = find_by_token(writers_, token);
 						return found != writers_.end() &&
-							(found->phase == writer_phase::inflight ||
-							 found->phase == writer_phase::post_native_rejected);
+							found->phase == writer_phase::post_native_mapping;
 					}
 					case lease_token_kind::pending:
 					{
@@ -1905,6 +1995,7 @@ namespace cxxlens::sdk
 			bool token_exhausted_{};
 			bool alive_{true};
 			bool quarantined_{};
+			bool fail_next_writer_native_transition_for_testing_{};
 			std::atomic_bool emergency_quarantine_{false};
 		};
 	} // namespace detail
@@ -1954,7 +2045,8 @@ namespace cxxlens::sdk
 
 	sqlite_shm_writer_map_inflight::sqlite_shm_writer_map_inflight(
 		sqlite_shm_writer_map_inflight&& other) noexcept
-		: state_{std::move(other.state_)}, token_{std::exchange(other.token_, 0U)}
+		: state_{std::move(other.state_)}, token_{std::exchange(other.token_, 0U)},
+		  native_result_observed_{std::exchange(other.native_result_observed_, false)}
 	{
 	}
 
@@ -1964,6 +2056,37 @@ namespace cxxlens::sdk
 	}
 
 	void sqlite_shm_writer_map_inflight::disarm() noexcept
+	{
+		token_ = 0U;
+		native_result_observed_ = false;
+		state_.reset();
+	}
+
+	sqlite_shm_writer_post_native_mapping::sqlite_shm_writer_post_native_mapping(
+		std::shared_ptr<detail::sqlite_shm_mapping_lease_state> state,
+		const std::uint64_t token) noexcept
+		: state_{std::move(state)}, token_{token}
+	{
+	}
+
+	sqlite_shm_writer_post_native_mapping::~sqlite_shm_writer_post_native_mapping() noexcept
+	{
+		if (state_)
+			state_->abandon(lease_token_kind::writer_post_native, token_);
+	}
+
+	sqlite_shm_writer_post_native_mapping::sqlite_shm_writer_post_native_mapping(
+		sqlite_shm_writer_post_native_mapping&& other) noexcept
+		: state_{std::move(other.state_)}, token_{std::exchange(other.token_, 0U)}
+	{
+	}
+
+	bool sqlite_shm_writer_post_native_mapping::valid() const noexcept
+	{
+		return state_ != nullptr && token_ != 0U;
+	}
+
+	void sqlite_shm_writer_post_native_mapping::disarm() noexcept
 	{
 		token_ = 0U;
 		state_.reset();
@@ -2294,12 +2417,20 @@ namespace cxxlens::sdk
 		return state_->begin_writer(request);
 	}
 
+	sqlite_shm_lease_result<sqlite_shm_writer_post_native_mapping>
+	sqlite_same_process_shm_mapping_lease_coordinator::record_writer_native_mapping(
+		sqlite_shm_writer_map_inflight& inflight,
+		const sqlite_shm_verified_writer_native_map_receipt& receipt) noexcept
+	{
+		return state_->record_native_mapping(inflight, receipt);
+	}
+
 	sqlite_shm_lease_result<sqlite_shm_pending_mapping>
 	sqlite_same_process_shm_mapping_lease_coordinator::install_pending(
-		sqlite_shm_writer_map_inflight& inflight,
+		sqlite_shm_writer_post_native_mapping& post_native,
 		const sqlite_shm_verified_writer_post_map_receipt& receipt)
 	{
-		return state_->install_pending(inflight, receipt);
+		return state_->install_pending(post_native, receipt);
 	}
 
 	sqlite_shm_lease_result<sqlite_shm_writer_holder>
@@ -2318,7 +2449,7 @@ namespace cxxlens::sdk
 
 	sqlite_shm_lease_result<sqlite_shm_writer_cleanup_obligation>
 	sqlite_same_process_shm_mapping_lease_coordinator::begin_writer_cleanup(
-		sqlite_shm_writer_map_inflight& rejected_mapping,
+		sqlite_shm_writer_post_native_mapping& rejected_mapping,
 		const sqlite_shm_callback_execution_receipt& callback) noexcept
 	{
 		return state_->begin_writer_cleanup(rejected_mapping, callback);
@@ -2426,5 +2557,11 @@ namespace cxxlens::sdk
 	sqlite_same_process_shm_mapping_lease_coordinator::snapshot() const noexcept
 	{
 		return state_->snapshot();
+	}
+
+	void sqlite_same_process_shm_mapping_lease_coordinator::
+		inject_writer_native_transition_failure_for_testing() noexcept
+	{
+		state_->inject_writer_native_transition_failure_for_testing();
 	}
 } // namespace cxxlens::sdk

@@ -22,6 +22,19 @@ namespace cxxlens::sdk
 	class sqlite_same_process_shm_lease_test_peer
 	{
 	  public:
+		[[nodiscard]] static sqlite_shm_verified_writer_native_map_receipt
+		writer_native_map(const sqlite_shm_writer_map_inflight& inflight,
+						  const volatile void* native_mapping)
+		{
+			return {inflight, native_mapping};
+		}
+
+		static void fail_next_writer_native_transition(
+			sqlite_same_process_shm_mapping_lease_coordinator& coordinator) noexcept
+		{
+			coordinator.inject_writer_native_transition_failure_for_testing();
+		}
+
 		[[nodiscard]] static sqlite_shm_verified_writer_post_map_receipt
 		writer_map(sqlite_shm_writer_map_request request,
 				   sqlite_backend_opaque_identity open_epoch,
@@ -63,6 +76,8 @@ namespace
 
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_eligibility>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_map_inflight>);
+	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_post_native_mapping>);
+	static_assert(!std::is_default_constructible_v<sqlite_shm_verified_writer_native_map_receipt>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_pending_mapping>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_cleanup_obligation>);
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_holder>);
@@ -73,6 +88,7 @@ namespace
 	static_assert(!std::is_copy_constructible_v<sqlite_shm_writer_release>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_writer_eligibility>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_writer_map_inflight>);
+	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_writer_post_native_mapping>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_pending_mapping>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_writer_cleanup_obligation>);
 	static_assert(std::is_nothrow_move_constructible_v<sqlite_shm_writer_holder>);
@@ -206,6 +222,19 @@ namespace
 		return std::move(*installed);
 	}
 
+	[[nodiscard]] sqlite_shm_writer_post_native_mapping
+	record_native_mapping(sqlite_same_process_shm_mapping_lease_coordinator& coordinator,
+						  sqlite_shm_writer_map_inflight& inflight,
+						  const volatile void* native_mapping)
+	{
+		const auto receipt =
+			sqlite_same_process_shm_lease_test_peer::writer_native_map(inflight, native_mapping);
+		auto recorded = coordinator.record_writer_native_mapping(inflight, receipt);
+		require(recorded.has_value() && !inflight.valid(),
+				"record cleanup-only native writer mapping");
+		return std::move(*recorded);
+	}
+
 	[[nodiscard]] sqlite_shm_pending_mapping
 	install_pending(sqlite_same_process_shm_mapping_lease_coordinator& coordinator,
 					const sqlite_shm_writer_map_request& request,
@@ -217,9 +246,10 @@ namespace
 		auto begun = coordinator.begin_writer_map(request);
 		require(begun.has_value(), "begin writer map");
 		auto inflight = std::move(*begun);
+		auto post_native = record_native_mapping(coordinator, inflight, mapped.native_mapping);
 		auto pending = coordinator.install_pending(
-			inflight, writer_receipt(request, open_epoch, mapped, pair, marker));
-		require(pending.has_value() && !inflight.valid(), "install post-native pending");
+			post_native, writer_receipt(request, open_epoch, mapped, pair, marker));
+		require(pending.has_value() && !post_native.valid(), "install post-native pending");
 		return std::move(*pending);
 	}
 
@@ -277,11 +307,11 @@ namespace
 	}
 
 	void cleanup_rejected_writer(sqlite_same_process_shm_mapping_lease_coordinator& coordinator,
-								 sqlite_shm_writer_map_inflight& inflight,
+								 sqlite_shm_writer_post_native_mapping& post_native,
 								 const sqlite_shm_callback_execution_receipt& cleanup_callback)
 	{
-		auto begun = coordinator.begin_writer_cleanup(inflight, cleanup_callback);
-		require(begun.has_value() && !inflight.valid(),
+		auto begun = coordinator.begin_writer_cleanup(post_native, cleanup_callback);
+		require(begun.has_value() && !post_native.valid(),
 				"hide rejected writer mapping before cleanup");
 		auto cleanup = std::move(*begun);
 		require(
@@ -338,52 +368,258 @@ namespace
 		int first_page{};
 		int second_page{};
 
+		const auto no_mapping_request = writer_request(binding, connection, 30, 1, 29, 0, 1);
+		auto no_mapping = coordinator.begin_writer_map(no_mapping_request);
+		require(no_mapping.has_value(), "begin writer before native no-mapping result");
+		require(coordinator.resolve_writer_map_failure(*no_mapping).has_value() &&
+					!no_mapping->valid() && coordinator.snapshot().writer_inflight_count == 0U,
+				"pre-native token resolves only when no native mapping exists");
+
 		const auto request = writer_request(binding, connection, 30, 1, 30, 0, 1);
 		auto begun = coordinator.begin_writer_map(request);
-		require(begun.has_value(), "begin writer before malformed post receipt");
+		require(begun.has_value(), "begin writer before cleanup-only native receipt");
 		auto inflight = std::move(*begun);
-		auto mismatched_page =
-			coordinator.install_pending(inflight,
-										writer_receipt(request,
-													   open_epoch,
-													   mapping(1, &second_page, 8192U),
-													   sqlite_shm_writer_extend_pair::one_one,
-													   30));
-		require(!mismatched_page &&
-					mismatched_page.error().reason ==
-						sqlite_shm_lease_rejection_reason::receipt_mismatch &&
-					inflight.valid(),
-				"post receipt page and range must match the predelegate request");
+		auto post_native = record_native_mapping(coordinator, inflight, &first_page);
+		require(coordinator.snapshot().writer_inflight_count == 1U &&
+					!coordinator.snapshot().reader_admission_visible,
+				"cleanup-only native receipt grants no mapping or reader authority");
 		auto unsafe_resolution = coordinator.resolve_writer_map_failure(inflight);
 		require(!unsafe_resolution &&
 					unsafe_resolution.error().reason ==
 						sqlite_shm_lease_rejection_reason::stale_token,
-				"post-native rejection cannot use the no-mapping failure transition");
-		cleanup_rejected_writer(coordinator, inflight, request.callback);
+				"post-native mapping cannot use the no-mapping failure transition");
+		cleanup_rejected_writer(coordinator, post_native, request.callback);
 
-		const auto pair_request = writer_request(binding, connection, 30, 1, 31, 0, 1);
+		const auto mismatch_request = writer_request(binding, connection, 30, 1, 31, 0, 1);
+		auto mismatch_begun = coordinator.begin_writer_map(mismatch_request);
+		require(mismatch_begun.has_value(), "begin writer before malformed post receipt");
+		auto mismatch_inflight = std::move(*mismatch_begun);
+		auto mismatch_post_native =
+			record_native_mapping(coordinator, mismatch_inflight, &first_page);
+		auto mismatched_page =
+			coordinator.install_pending(mismatch_post_native,
+										writer_receipt(mismatch_request,
+													   open_epoch,
+													   mapping(1, &second_page, 8192U),
+													   sqlite_shm_writer_extend_pair::one_one,
+													   31));
+		require(!mismatched_page &&
+					mismatched_page.error().reason ==
+						sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+					mismatch_post_native.valid() &&
+					coordinator.snapshot().writer_holder_count == 0U &&
+					!coordinator.snapshot().reader_admission_visible,
+				"post receipt page and range must match the predelegate request");
+		cleanup_rejected_writer(coordinator, mismatch_post_native, mismatch_request.callback);
+
+		const auto pointer_request = writer_request(binding, connection, 30, 1, 32, 0, 1);
+		auto pointer_begun = coordinator.begin_writer_map(pointer_request);
+		require(pointer_begun.has_value(), "begin writer before native pointer mismatch");
+		auto pointer_inflight = std::move(*pointer_begun);
+		auto pointer_post_native =
+			record_native_mapping(coordinator, pointer_inflight, &first_page);
+		auto pointer_mismatch =
+			coordinator.install_pending(pointer_post_native,
+										writer_receipt(pointer_request,
+													   open_epoch,
+													   mapping(0, &second_page, 4096U),
+													   sqlite_shm_writer_extend_pair::one_one,
+													   32));
+		require(!pointer_mismatch && pointer_post_native.valid() &&
+					pointer_mismatch.error().reason ==
+						sqlite_shm_lease_rejection_reason::receipt_mismatch,
+				"full post-map receipt must retain the cleanup-only native pointer");
+		cleanup_rejected_writer(coordinator, pointer_post_native, pointer_request.callback);
+
+		const auto pair_request = writer_request(binding, connection, 30, 1, 33, 0, 1);
 		auto pair_begun = coordinator.begin_writer_map(pair_request);
 		require(pair_begun.has_value(), "begin writer before pair mismatch");
 		auto pair_inflight = std::move(*pair_begun);
+		auto pair_post_native = record_native_mapping(coordinator, pair_inflight, &first_page);
 		auto pair_mismatch =
-			coordinator.install_pending(pair_inflight,
+			coordinator.install_pending(pair_post_native,
 										writer_receipt(pair_request,
 													   open_epoch,
 													   mapping(0, &first_page, 4096U),
 													   sqlite_shm_writer_extend_pair::zero_zero,
-													   31));
+													   33));
 		require(!pair_mismatch &&
 					pair_mismatch.error().reason ==
-						sqlite_shm_lease_rejection_reason::receipt_mismatch,
+						sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+					pair_post_native.valid(),
 				"sealed extend pair must match caller intent");
-		auto begun_cleanup = coordinator.begin_writer_cleanup(pair_inflight, pair_request.callback);
-		require(begun_cleanup.has_value() && !pair_inflight.valid(),
+		auto begun_cleanup =
+			coordinator.begin_writer_cleanup(pair_post_native, pair_request.callback);
+		require(begun_cleanup.has_value() && !pair_post_native.valid(),
 				"unknown writer cleanup becomes an obligation");
 		auto cleanup = std::move(*begun_cleanup);
 		auto unknown_cleanup = coordinator.complete_writer_cleanup(
 			cleanup, pair_request.callback, sqlite_shm_native_cleanup_outcome::unknown);
 		require(!unknown_cleanup && !cleanup.valid() && coordinator.snapshot().quarantined,
 				"unknown post-native cleanup permanently quarantines the family");
+	}
+
+	void verify_native_writer_receipt_binding_and_replay()
+	{
+		{
+			constexpr std::uint8_t marker = 33;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			const auto request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			auto begun = coordinator.begin_writer_map(request);
+			require(begun.has_value(), "begin writer before invalid native-map receipt");
+			auto inflight = std::move(*begun);
+			const auto invalid =
+				sqlite_same_process_shm_lease_test_peer::writer_native_map(inflight, nullptr);
+			auto rejected = coordinator.record_writer_native_mapping(inflight, invalid);
+			require(!rejected && inflight.valid() && coordinator.snapshot().quarantined &&
+						rejected.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch,
+					"null native-map receipt creates no authority but retains the source attempt");
+			require(!coordinator.resolve_writer_map_failure(inflight),
+					"invalid post-native receipt cannot restore the no-map transition");
+			const auto exact =
+				sqlite_same_process_shm_lease_test_peer::writer_native_map(inflight, &page);
+			auto recovered = coordinator.record_writer_native_mapping(inflight, exact);
+			require(recovered.has_value() && !inflight.valid(),
+					"exact native receipt recovers cleanup after a malformed seal");
+			auto cleanup = coordinator.begin_writer_cleanup(*recovered, request.callback);
+			require(cleanup.has_value() && !recovered->valid(),
+					"malformed seal retains one mandatory cleanup admission");
+			require(!coordinator.complete_writer_cleanup(
+						*cleanup,
+						request.callback,
+						sqlite_shm_native_cleanup_outcome::confirmed_success),
+					"malformed-seal quarantine remains terminal after cleanup");
+		}
+
+		{
+			constexpr std::uint8_t marker = 34;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			const auto request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			auto begun = coordinator.begin_writer_map(request);
+			require(begun.has_value(), "begin writer before duplicate native-map receipt");
+			auto inflight = std::move(*begun);
+			const auto receipt =
+				sqlite_same_process_shm_lease_test_peer::writer_native_map(inflight, &page);
+			auto recorded = coordinator.record_writer_native_mapping(inflight, receipt);
+			require(recorded.has_value() && !inflight.valid(),
+					"exact native-map receipt creates one cleanup-only token");
+			auto post_native = std::move(*recorded);
+			auto duplicate = coordinator.record_writer_native_mapping(inflight, receipt);
+			require(!duplicate && post_native.valid() && coordinator.snapshot().quarantined,
+					"duplicate native-map transition quarantines without consuming cleanup duty");
+			auto cleanup = coordinator.begin_writer_cleanup(post_native, request.callback);
+			require(cleanup.has_value() && !post_native.valid(),
+					"duplicate transition still admits the one mandatory native cleanup");
+			auto completed = coordinator.complete_writer_cleanup(
+				*cleanup, request.callback, sqlite_shm_native_cleanup_outcome::confirmed_success);
+			require(!completed && !cleanup->valid() &&
+						completed.error().action ==
+							sqlite_shm_lease_recovery_action::quarantine_no_retry,
+					"cleanup under duplicate-callback quarantine never revives authority");
+		}
+
+		{
+			constexpr std::uint8_t marker = 35;
+			const auto binding = family(marker);
+			const auto source_connection = identity("test.connection", marker);
+			const auto target_connection = identity("test.connection", marker + 1U);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator source{binding, generations};
+			sqlite_same_process_shm_mapping_lease_coordinator target{binding, generations};
+			int source_page{};
+			int target_page{};
+			const auto source_request =
+				writer_request(binding, source_connection, marker, 1, marker, 0, 1);
+			const auto target_request =
+				writer_request(binding, target_connection, marker + 1U, 2, marker + 1U, 0, 1);
+			auto source_begun = source.begin_writer_map(source_request);
+			auto target_begun = target.begin_writer_map(target_request);
+			require(source_begun && target_begun, "begin cross-coordinator receipt fixture");
+			auto source_inflight = std::move(*source_begun);
+			auto target_inflight = std::move(*target_begun);
+			const auto source_receipt = sqlite_same_process_shm_lease_test_peer::writer_native_map(
+				source_inflight, &source_page);
+			const auto target_receipt = sqlite_same_process_shm_lease_test_peer::writer_native_map(
+				target_inflight, &target_page);
+			auto cross_bound = target.record_writer_native_mapping(target_inflight, source_receipt);
+			auto reverse_cross_bound =
+				source.record_writer_native_mapping(source_inflight, target_receipt);
+			require(!cross_bound && !reverse_cross_bound && target_inflight.valid() &&
+						source_inflight.valid() && target.snapshot().quarantined &&
+						source.snapshot().quarantined &&
+						cross_bound.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch &&
+						reverse_cross_bound.error().reason ==
+							sqlite_shm_lease_rejection_reason::receipt_mismatch,
+					"cross-routed native receipts retain both exact cleanup routes");
+			require(!target.resolve_writer_map_failure(target_inflight) &&
+						!source.resolve_writer_map_failure(source_inflight),
+					"cross-routed post-native attempts cannot resolve as no-map failures");
+			auto source_post = source.record_writer_native_mapping(source_inflight, source_receipt);
+			auto target_post = target.record_writer_native_mapping(target_inflight, target_receipt);
+			require(source_post.has_value() && target_post.has_value(),
+					"both exact receipts recover one cleanup-only token after cross-routing");
+			auto source_cleanup =
+				source.begin_writer_cleanup(*source_post, source_request.callback);
+			auto target_cleanup =
+				target.begin_writer_cleanup(*target_post, target_request.callback);
+			require(source_cleanup && target_cleanup && !source_post->valid() &&
+						!target_post->valid(),
+					"both cross-routed mappings retain mandatory cleanup admission");
+			require(!source.complete_writer_cleanup(
+						*source_cleanup,
+						source_request.callback,
+						sqlite_shm_native_cleanup_outcome::confirmed_success) &&
+						!target.complete_writer_cleanup(
+							*target_cleanup,
+							target_request.callback,
+							sqlite_shm_native_cleanup_outcome::confirmed_success),
+					"cross-routing quarantine remains terminal after both native cleanups");
+		}
+
+		{
+			constexpr std::uint8_t marker = 36;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			const auto request = writer_request(binding, connection, marker, 1, marker, 0, 1);
+			auto begun = coordinator.begin_writer_map(request);
+			require(begun.has_value(), "begin writer transition-failure fixture");
+			auto inflight = std::move(*begun);
+			const auto receipt =
+				sqlite_same_process_shm_lease_test_peer::writer_native_map(inflight, &page);
+			sqlite_same_process_shm_lease_test_peer::fail_next_writer_native_transition(
+				coordinator);
+			auto failed = coordinator.record_writer_native_mapping(inflight, receipt);
+			require(!failed && inflight.valid() && coordinator.snapshot().quarantined,
+					"injected native transition failure retains the exact source token");
+			auto unsafe_resolution = coordinator.resolve_writer_map_failure(inflight);
+			require(!unsafe_resolution &&
+						unsafe_resolution.error().action ==
+							sqlite_shm_lease_recovery_action::quarantine_no_retry,
+					"transition failure cannot erase a native mapping as a no-map result");
+			auto recovered = coordinator.record_writer_native_mapping(inflight, receipt);
+			require(recovered.has_value() && !inflight.valid(),
+					"exact retry recovers the cleanup-only post-native token");
+			auto cleanup = coordinator.begin_writer_cleanup(*recovered, request.callback);
+			require(cleanup.has_value() && !recovered->valid(),
+					"transition failure preserves mandatory cleanup admission");
+			auto completed = coordinator.complete_writer_cleanup(
+				*cleanup, request.callback, sqlite_shm_native_cleanup_outcome::confirmed_success);
+			require(!completed && !cleanup->valid(),
+					"transition failure quarantine remains terminal after native cleanup");
+		}
 	}
 
 	void verify_cleanup_completion_requires_exact_callback()
@@ -427,21 +663,22 @@ namespace
 			auto begun = coordinator.begin_writer_map(request);
 			require(begun.has_value(), "begin rejected writer cleanup-admission fixture");
 			auto inflight = std::move(*begun);
+			auto post_native = record_native_mapping(coordinator, inflight, &page);
 			auto rejected =
-				coordinator.install_pending(inflight,
+				coordinator.install_pending(post_native,
 											writer_receipt(request,
 														   open_epoch,
 														   mapping(1, &page, 8192U),
 														   sqlite_shm_writer_extend_pair::one_one,
 														   marker));
-			require(!rejected && inflight.valid(),
+			require(!rejected && post_native.valid(),
 					"writer post-native mismatch retains one cleanup-admission attempt");
 
-			auto bad = coordinator.begin_writer_cleanup(inflight, callback(1, marker + 1U));
-			require(!bad && !inflight.valid() && coordinator.snapshot().quarantined &&
+			auto bad = coordinator.begin_writer_cleanup(post_native, callback(1, marker + 1U));
+			require(!bad && !post_native.valid() && coordinator.snapshot().quarantined &&
 						coordinator.snapshot().writer_cleanup_count == 1U,
 					"reordered writer cleanup callback consumes the token into a tombstone");
-			auto retry = coordinator.begin_writer_cleanup(inflight, request.callback);
+			auto retry = coordinator.begin_writer_cleanup(post_native, request.callback);
 			require(!retry &&
 						retry.error().action ==
 							sqlite_shm_lease_recovery_action::quarantine_no_retry &&
@@ -1090,11 +1327,13 @@ namespace
 		auto inflight_b = coordinator.begin_writer_map(request_b);
 		require(inflight_a && inflight_b && coordinator.snapshot().writer_inflight_count == 2U,
 				"simultaneous first writers acquire one cohort before a generation exists");
+		auto post_native_a = record_native_mapping(coordinator, *inflight_a, mapped.native_mapping);
+		auto post_native_b = record_native_mapping(coordinator, *inflight_b, mapped.native_mapping);
 		auto pending_a = coordinator.install_pending(
-			*inflight_a,
+			post_native_a,
 			writer_receipt(request_a, epoch_a, mapped, sqlite_shm_writer_extend_pair::one_one, 6));
 		auto pending_b = coordinator.install_pending(
-			*inflight_b,
+			post_native_b,
 			writer_receipt(
 				request_b, epoch_b, mapped, sqlite_shm_writer_extend_pair::zero_zero, 7));
 		require(pending_a && pending_b, "both first writers install post-map pending");
@@ -1421,8 +1660,9 @@ namespace
 						sqlite_shm_writer_retirement_decision::wait_for_inflight &&
 					!coordinator.snapshot().reader_admission_visible,
 				"W1 retirement hides admission and waits only for W2 resolution");
+		auto post_native_b = record_native_mapping(coordinator, inflight_b, mapped.native_mapping);
 		auto pending_b_result = coordinator.install_pending(
-			inflight_b,
+			post_native_b,
 			writer_receipt(
 				request_b, epoch_b, mapped, sqlite_shm_writer_extend_pair::zero_zero, 11));
 		require(pending_b_result.has_value(), "pre-admitted W2 can finish its native receipt");
@@ -1556,7 +1796,8 @@ namespace
 				writer_request(binding, blocker_connection, marker + 1U, 2, marker + 1U, 0, 1);
 			auto blocker_begun = coordinator.begin_writer_map(blocker_request);
 			require(blocker_begun.has_value(), "begin quarantined-retirement blocker");
-			auto blocker = std::move(*blocker_begun);
+			auto blocker_inflight = std::move(*blocker_begun);
+			auto blocker = record_native_mapping(coordinator, blocker_inflight, &mismatched_page);
 			auto blocker_rejected =
 				coordinator.install_pending(blocker,
 											writer_receipt(blocker_request,
@@ -1994,6 +2235,27 @@ namespace
 		}
 
 		{
+			constexpr std::uint8_t marker = 48;
+			const auto binding = family(marker);
+			const auto connection = identity("test.connection", marker);
+			auto generations = std::make_shared<sqlite_shm_mapping_generation_source>();
+			sqlite_same_process_shm_mapping_lease_coordinator coordinator{binding, generations};
+			int page{};
+			{
+				auto begun = coordinator.begin_writer_map(
+					writer_request(binding, connection, marker, 1, marker, 0, 1));
+				require(begun.has_value(), "writer native-map abandonment fixture begins");
+				auto inflight = std::move(*begun);
+				auto post_native = record_native_mapping(coordinator, inflight, &page);
+				require(post_native.valid(),
+						"post-native cleanup-only token valid before abandonment");
+			}
+			require(coordinator.snapshot().quarantined &&
+						coordinator.snapshot().writer_cleanup_count == 1U,
+					"dropped post-native token quarantines without fabricating cleanup");
+		}
+
+		{
 			constexpr std::uint8_t marker = 41;
 			const auto binding = family(marker);
 			const auto connection = identity("test.connection", marker);
@@ -2173,6 +2435,7 @@ int main()
 	{
 		verify_extend_pair_classifier();
 		verify_post_native_writer_receipt_requires_exact_cleanup();
+		verify_native_writer_receipt_binding_and_replay();
 		verify_cleanup_completion_requires_exact_callback();
 		verify_failed_cleanup_admission_is_terminal_without_retry();
 		verify_family_quarantine_preserves_unattempted_mandatory_drains();
