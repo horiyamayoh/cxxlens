@@ -50,6 +50,22 @@ add_test(NAME unit.sdk-store COMMAND cxxlens-unit-sdk-store)
 set_tests_properties(unit.sdk-store PROPERTIES LABELS
                                                "unit;sdk;store;transaction")
 
+cxxlens_add_test_executable(
+  cxxlens-unit-sdk-sqlite-disposable-qualification
+  unit/sdk/sqlite_disposable_qualification_test.cpp)
+target_link_libraries(
+  cxxlens-unit-sdk-sqlite-disposable-qualification
+  PRIVATE cxxlens-sqlite-disposable-qualification-internal)
+target_include_directories(
+  cxxlens-unit-sdk-sqlite-disposable-qualification
+  PRIVATE "${PROJECT_SOURCE_DIR}/include" "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-sqlite-disposable-qualification
+         COMMAND cxxlens-unit-sdk-sqlite-disposable-qualification)
+set_tests_properties(
+  unit.sdk-sqlite-disposable-qualification
+  PROPERTIES LABELS
+             "unit;sdk;store;sqlite;qualification;capability;filesystem;security")
+
 add_library(cxxlens-sqlite-store-v3-scenario-support STATIC
             support/sqlite_store_v3_scenario.cpp)
 target_compile_features(cxxlens-sqlite-store-v3-scenario-support
