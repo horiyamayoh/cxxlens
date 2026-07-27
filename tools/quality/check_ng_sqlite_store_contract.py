@@ -27,14 +27,14 @@ SNAPSHOT_CONTRACT = pathlib.Path(
 # independent of the schema so a coordinated contract/schema weakening remains
 # fail closed while formatting-only YAML changes remain non-semantic.
 EXPECTED_CONTRACT_DIGEST = (
-    "sha256:517a10188df1f8e2bdeda0e2ad3311a4b7e86f86a816123695985bfc263a126c"
+    "sha256:0d5e7fd24dbda2d3f3376a3ee2c6c0e2eb7529843b96acde6997d4a700d1d199"
 )
 EXPECTED_SCHEMA_DIGEST = (
-    "sha256:ae6a434909210a199bf7b0c58596a9c87c0eee343060a18bf6630974993350b0"
+    "sha256:a7721f8e6ec304793068a5b6a12913a3f948e8aef5d0317fef50baa5da3b82a3"
 )
 
 EXPECTED_SNAPSHOT_BINDING = (
-    "sha256:97ff10adea7365082c883ab7a48a0bee1c6b13b6457e7a84fa19605d2f07da8e"
+    "sha256:6562f8f004dfadc1820e8759ccb05872d721ad47ed04f7066431f57857f860f9"
 )
 
 SOURCE_SHM_READONLY_CAPABILITY: dict[str, Any] = {
@@ -553,11 +553,11 @@ ACCEPTED_EMPTY_NORMALIZATION: dict[str, Any] = {
         "pending-coordination-request-and-inherit-the-receipt-through-the-full-receipt-"
         "bounded-effect-transcript-completed-edge-and-handoff"
     ),
-    # The nested draft is still non-authorizing, but every byte of its parsed
-    # projection remains fail-closed through this independent canonical digest.
+    # The nested production profile remains non-authorizing while the accepted
+    # disposable qualification layer stays fail-closed through this digest.
     "receiptless_crash_profile_draft": {
         "__canonical_sha256__": (
-            "sha256:e0988e9ed9e654533df8991517b78805dc08abccb2a77a0fce0adb27bb14f782"
+            "sha256:988a6a894080a5976e736f2e2508366451585e31c3f120ebbe5d1c11de19a06a"
         )
     },
     "rollback_journal_effect_trace": (

@@ -2121,9 +2121,11 @@ effect後ならfinalize/必要時一回rollback/一回close後のphase classifie
 close non-OKはquarantineし、`BEGIN IMMEDIATE`後のdriftはzero authority writeのまま該当publish/compaction/migration/fresh-init
 precommit規則へ委譲する。
 
-Issue #202 / DF-0202 の receiptless normalization interruption profile は、次の authority
-proposal として扱い、profile acceptance と qualification が完了するまで canonical source または production
-path を activate しない。対象 crash model は、underlying VFS callback が成功して呼出側へ戻った境界での process
+Issue #202 / DF-0202 の receiptless normalization interruption profile は、exact proposal
+`b6cbb86347e02c4b374d7991a1f78d2535789ced` の独立 review により disposable qualification
+implementation だけを accepted authority とする。canonical/user source または production path は、
+別の accepted production profile と qualification が完了するまで activate しない。対象 crash model は、
+underlying VFS callback が成功して呼出側へ戻った境界での process
 termination だけである。power loss、torn/partial sector write、kernel/device cache、callback 内 termination、
 unqualified filesystem reorder は含まず、これらを callback-boundary evidence から推測しない。cold raw classifier は
 SQLite open、recovery、checkpoint、SHM create、delete、cleanup を行わず、namespace epoch 開始後の

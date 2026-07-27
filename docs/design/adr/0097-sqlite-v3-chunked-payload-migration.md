@@ -6,7 +6,9 @@
 - Decision issue: #200
 - Implementation issue: #181
 - Amends: ADR 0013, ADR 0096 D6
-- Pending amendment: #202 / DF-0202 receiptless normalization interruption profile
+- Accepted qualification amendment: #202 / DF-0202 receiptless normalization interruption profile
+- Proposal review: `b6cbb86347e02c4b374d7991a1f78d2535789ced` /
+  <https://github.com/horiyamayoh/cxxlens/issues/202#issuecomment-5094406150>
 
 ## Context
 
@@ -195,8 +197,9 @@ already-open WAL header/salt、SHM lockの観測I/O failureは
 `store.sqlite-failure / sqlite-open-snapshot / active-wal-observation-io-failure`であり、driftと推測しない。decode後はprobeを閉じ eager stateだけを保持する。
 この active read が exact logical empty/no-format を示す init-crash state は receipt/identity を exclusive に再検査し、
 actual-connection gate 後に SQLite recovery/checkpoint で normalized empty を証明する。その結果が WAL header 2/2 と
-sidecar absent の exact emptyなら、ordinary fresh initializationへ直接進めず、後述するDF-0202 pending amendmentが
-accept/qualifyされた場合だけaccepted-empty normalizerへ送る。それまではpersistent transitionを行わずfail closedとする。
+sidecar absent の exact emptyなら、ordinary fresh initializationへ直接進めず、後述するDF-0202
+qualification amendmentが要求するaccepted production profileを満たした場合だけcanonical/user pathの
+accepted-empty normalizerへ送る。それまではcanonical/user sourceへpersistent transitionを行わずfail closedとする。
 
 main+WAL/no-SHM/no-journal は main-only marker の有無を問わず分類するが、WALがunreadableならcopy/openせず
 `store.sqlite-failure / sqlite-initialization-sidecar / unreadable-wal-only`を返す。readable WALだけがpreauthority crash
@@ -277,13 +280,14 @@ receipt recovery、exclusive close/release、normal RW/no-create reopen、`BEGIN
 recheckを通る。receipt driftはno-write concurrent-source-change、recovery後handoff failureはStoreをpoisonし、result operationは
 `backend-unavailable / sqlite-connection / reopen-required`、`compatibility()`とpin countはlast validated stateを返す。
 
-### DF-0202 pending amendment: receiptless normalization interruption
+### DF-0202 accepted qualification amendment: receiptless normalization interruption
 
-この subsection は Issue #202 の authority proposal であり、現時点では
-`proposed-unqualified-non-authorizing` である。exact proposal の independent acceptance と後述の
-qualification gateを満たすまで、canonical/user source またはproduction pathのclassifier、cleanup、
-recovery、normalizerをactivateしない。既存のunknown/mixed/journal-present rejectionをこのproposalの
-存在だけで緩和しない。
+この subsection の exact proposal `b6cbb86347e02c4b374d7991a1f78d2535789ced` は Issue #202 の
+independent reviewで、nonforgeable disposable fixture上のqualification implementationだけを
+`accepted-authority-disposable-qualification-implementation-pending-production-blocked` としてacceptした。
+後述のproduction qualification gateを満たすまで、canonical/user sourceまたはproduction pathの
+classifier、cleanup、recovery、normalizerをactivateしない。既存のunknown/mixed/journal-present
+rejectionをqualification acceptanceだけで緩和しない。
 
 対象 crash model は、underlying VFS callback が成功して caller へ戻った直後の境界で process を
 terminateする場合だけである。power loss、torn/partial sector write、kernel/device cache、

@@ -1,11 +1,11 @@
 ---
 id: DF-0202
 title: Bind exact-empty WAL normalization before fresh SQLite initialization
-status: investigating
+status: accepted
 kind: contract-contradiction
 impact: invariant
 confidence: high
-implementation_disposition: blocked
+implementation_disposition: may-proceed
 scope:
   - store.sqlite-accepted-empty-normalization
   - store.sqlite-fresh-journal-transition-receipt
@@ -18,13 +18,18 @@ authority_refs:
 tracking_issue: '#202'
 implementation_issues:
   - '#181'
-resolution_refs: []
+resolution_refs:
+  - docs/design/cxxlens_next_generation_integrated_design_ja.md
+  - docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
+  - schemas/cxxlens_ng_sqlite_store_contract.yaml
+  - schemas/cxxlens_ng_snapshot_store_contract.yaml
 review:
   mode: independent
-  status: pending
+  status: complete
   author: codex-agent-df0202-authority-resolution
-  reviewer: null
-  refs: []
+  reviewer: codex-agent-sqlite-independent-counterexample-review
+  refs:
+    - https://github.com/horiyamayoh/cxxlens/issues/202#issuecomment-5094406150
 created: '2026-07-23'
 ---
 
@@ -291,12 +296,19 @@ changed by this record. SQLite v3 activation and the affected exact-empty recove
 remain blocked pending an authority-first proposal and independent review; reviewer identity and
 review references are intentionally unset.
 
-2026-07-28: A precise amendment is now drafted in the integrated design, ADR 0097, and the
-SQLite/Snapshot contract proposal. It adds the finite receiptless family model, live-versus-cold
+2026-07-28: Independent zero-base review accepted exact proposal commit
+`b6cbb86347e02c4b374d7991a1f78d2535789ced` for the disposable qualification implementation
+layer only. The accepted amendment adds the finite receiptless family model, live-versus-cold
 receipt boundary, known-path cleanup semantics, parent-sync requirements, process-callback-only
-crash scope, and two-layer authorization described above. The temporary probes establish
-feasibility and counterexamples only; they are not repository-tracked qualification and omit at
-least authenticated parent-fsync fault injection and rebind-at-unlink coverage. This record remains
-`investigating` / `blocked`, the amendment remains pending, production activation remains
-forbidden, and `resolution_refs`, reviewer identity, and review refs remain intentionally empty
-until an independent reviewer evaluates the exact proposal commit on Issue #202.
+crash scope, and two-layer authorization described above. The implementation disposition is
+`may-proceed` only for classifier/ports/gates/barrier/harness and fixture-scoped cleanup/recovery/
+normalizer behind the harness-minted nonforgeable retained-root capability and internal
+qualification-only entrypoint.
+
+Canonical/user-source effects, production activation, public Store success, and accepted-profile
+replacement remain blocked. The temporary probes establish feasibility and counterexamples only;
+they are not repository-tracked qualification and omit at least authenticated parent-fsync fault
+injection and rebind-at-unlink coverage. Production may proceed only after the repository-tracked
+harness/build/toolchain and full parameterized callback/rebind/parent-sync/recrash matrix produce a
+canonical report digest and a distinct later independent review accepts the exact implementation
+and production profile.

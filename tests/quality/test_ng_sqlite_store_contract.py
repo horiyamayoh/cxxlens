@@ -1305,6 +1305,12 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
+                "normalization-proposal-design-review-receipt",
+                lambda value: receiptless(value)["two_layer_authorization"].pop(
+                    "proposal_design_review_receipt"
+                ),
+            ),
+            (
                 "normalization-receiptless-zero-wal-format-authority",
                 lambda value: value["transaction"]["fresh_v3_initialization"]
                 ["guards"]["filesystem"]["precreate_census"]

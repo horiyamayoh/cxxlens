@@ -1482,21 +1482,26 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
             "forbidden-until-ordinary-fresh-initialization-independently-completes"
         ),
         "accepted_empty_normalization_receiptless_crash_profile_draft": {
-            "status": "proposed-unqualified-non-authorizing",
+            "status": (
+                "accepted-authority-disposable-qualification-implementation-"
+                "pending-production-blocked"
+            ),
             "sqlite_profile_path": (
                 "transaction.fresh_v3_initialization.guards.filesystem."
                 "precreate_census.preauthority_sidecar_candidate."
                 "accepted_empty_original_normalization.receiptless_crash_profile_draft"
             ),
             "activation": (
-                "exactly-defer-to-the-named-SQLite-profile-two-layer-authorization-"
-                "and-canonical-or-production-activation-gate-with-no-static-SQLite-"
-                "runtime-inference"
+                "accepted-proposal-review-b6cbb86347e02c4b374d7991a1f78d2535789ced-"
+                "authorizes-only-the-named-SQLite-profile-disposable-qualification-"
+                "layer-and-canonical-or-production-activation-remains-gated-with-no-"
+                "static-SQLite-runtime-inference"
             ),
             "qualification_implementation": (
-                "after-proposal-acceptance-may-proceed-only-for-classifier-ports-"
-                "effect-gates-and-fixture-scoped-cleanup-recovery-normalizer-and-"
-                "fault-harness-behind-the-nonforgeable-disposable-fixture-capability"
+                "exact-proposal-review-accepted-may-proceed-only-for-classifier-"
+                "ports-effect-gates-and-fixture-scoped-cleanup-recovery-normalizer-"
+                "and-fault-harness-behind-the-nonforgeable-disposable-fixture-"
+                "capability"
             ),
             "production_activation": (
                 "blocked-until-the-complete-evidence-gate-independent-review-and-"
@@ -1549,7 +1554,8 @@ def validate_contract_shape(contract: dict[str, Any]) -> None:
                 "accepted-canonical-report-digest"
             ),
             "review_receipt_separation": (
-                "proposal-design-review-authorizes-only-disposable-qualification-"
+                "accepted-proposal-b6cbb86347e02c4b374d7991a1f78d2535789ced-issue-"
+                "202-comment-5094406150-authorizes-only-disposable-qualification-"
                 "implementation-and-a-distinct-later-production-evidence-review-is-"
                 "required"
             ),

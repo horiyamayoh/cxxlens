@@ -446,6 +446,14 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
+                "proposal-review-receipt-separation",
+                lambda value: value["publication_transaction"][
+                    "sqlite_terminal_recovery"
+                ]["accepted_empty_normalization_receiptless_crash_profile_draft"].pop(
+                    "review_receipt_separation"
+                ),
+            ),
+            (
                 "public-route",
                 lambda value: value["publication_transaction"][
                     "sqlite_terminal_recovery"
