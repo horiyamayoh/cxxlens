@@ -96,6 +96,18 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
         self.assertEqual(
             lease["status"], "accepted-authority-implementation-pending"
         )
+        attachment = lease["writer_native_attachment_amendment_proposal"]
+        self.assertEqual(
+            attachment["status"], "proposed-unqualified-non-authorizing"
+        )
+        self.assertEqual(
+            attachment["tracking"], {"issue": "#206", "feedback": "DF-0206"}
+        )
+        self.assertEqual(
+            attachment["authorization"]["production_activation"],
+            "blocked-until-attachment-amendment-acceptance-and-the-distinct-exact-"
+            "implementation-and-complete-counterexample-matrix-review",
+        )
         self.assertEqual(
             lease["authorization"]["production_activation"],
             "blocked-until-the-exact-implementation-and-complete-counterexample-"
@@ -460,6 +472,29 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 "writer-mapping-lease-status-self-accepted",
                 lambda value: writer_mapping_lease(value).__setitem__(
                     "status", "accepted"
+                ),
+            ),
+            (
+                "writer-native-attachment-amendment-removed",
+                lambda value: writer_mapping_lease(value).pop(
+                    "writer_native_attachment_amendment_proposal"
+                ),
+            ),
+            (
+                "writer-native-attachment-cross-grouping-weakened",
+                lambda value: writer_mapping_lease(value)[
+                    "writer_native_attachment_amendment_proposal"
+                ].__setitem__(
+                    "cross_attachment_grouping",
+                    "allowed-when-the-native-pointer-and-generation-match",
+                ),
+            ),
+            (
+                "writer-native-attachment-one-unmap-positive-removed",
+                lambda value: writer_mapping_lease(value)[
+                    "writer_native_attachment_amendment_proposal"
+                ]["fail_closed_matrix"]["positive"].remove(
+                    "one-connection-page-zero-and-page-one-one-native-unmap"
                 ),
             ),
             (

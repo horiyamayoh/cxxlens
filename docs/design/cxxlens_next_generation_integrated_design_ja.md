@@ -2274,6 +2274,16 @@ temporary/raw external/readonly/non-main/private recovery/normalization/CREATE h
 pending単独、PID/path/VFS name/pointer equality、post-hoc endpoint equality、connection sharingは
 authorityではない。
 
+Issue #206 / DF-0206 の実装監査は、同じ `sqlite3_file` attachmentで複数pageのwriter
+`xShmMap`が成功し得る一方、native `xShmUnmap`はcomplete attachmentを一 callbackで解放するという
+cardinalityをaccepted DF-0205 authorityが未定義であることを示した。ADR 0097 とSQLite/Snapshot
+contract/schema mirrorの `cxxlens.sqlite.writer-shm-native-attachment.v1` は
+`proposed-unqualified-non-authorizing` のreview-pending amendmentである。map callbackごとの
+pair/effect/page authorityを保持しつつ、checked non-reusable attachment identityに属するcomplete
+post-native/pending/live member setを一回のnative unmapへatomicにbindし、cross-attachment/partial
+group、outcome複製、duplicate cleanupを拒否する。independent acceptance前にattachment groupや
+production VFS bindingを実装せず、既存 blanket native OK rejectionを変更しない。
+
 local attemptはnative writer map前にwriter generation/first-writer cohort in-flight pinを取得し、
 pre-statより先に別個のwriter-map stat-only interfaceとretained-parent/ancestry namespace watchを
 開始する。registry mutexはnative callback越しに保持しない。pre-existing SHMはnamespace event zeroを

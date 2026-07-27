@@ -135,3 +135,12 @@ DF-0205 coordinator at `ad495cd7e43a48dee3274ebeadabe1efb4b78dbd`. Issue #206 an
 block the affected writer VFS integration. No normative authority or production source behavior
 has changed. Post-native cleanup reachability is a separate local implementation correction under
 the already-accepted DF-0205 contract and may proceed.
+
+2026-07-28: A non-authorizing amendment proposal,
+`cxxlens.sqlite.writer-shm-native-attachment.v1`, was drafted into integrated design, ADR 0013/0097,
+and identical SQLite/Snapshot contract and schema-mirror objects. It retains per-map authorities
+but groups the complete exact-attachment member set into one native cleanup outcome, and adds
+cross-attachment, partial-set, duplicate-unmap, second-page failure, remap, close, and map/unmap-race
+counterexamples. The proposal remains `proposed-unqualified-non-authorizing`; this record remains
+`observed`, blocked, with empty `resolution_refs` and independent review pending. No attachment
+group implementation or production binding is authorized by this draft.

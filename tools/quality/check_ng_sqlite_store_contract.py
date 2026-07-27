@@ -27,18 +27,18 @@ SNAPSHOT_CONTRACT = pathlib.Path(
 # independent of the schema so a coordinated contract/schema weakening remains
 # fail closed while formatting-only YAML changes remain non-semantic.
 EXPECTED_CONTRACT_DIGEST = (
-    "sha256:60605e6e0040a96261dac3b3e5fc3e538f3f83e252e4f96b019656dd4e5d7fb0"
+    "sha256:05986ed07a4e5741ec53cb444c58d4c84914142a00ea6f45811e4bfe94bf64f9"
 )
 EXPECTED_SCHEMA_DIGEST = (
-    "sha256:9c5e7b6e02f03af5b8864ac62b15fba54fa19a04429aabe5fc2c6dfa16cb3c83"
+    "sha256:baf465ed81c5bb9f3fa9d6deee63a5cabb6989d8683a1ceffe2288cd7215b552"
 )
 
 EXPECTED_SNAPSHOT_BINDING = (
-    "sha256:bda5fdae4d96935a2d2301906283aa0bbab5b06b1889692c8f8916fd256d45d3"
+    "sha256:b1a4abeb7c325edc1cab235aa9323e792090d9b06c81876211b0442217f08e20"
 )
 
 EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST = (
-    "sha256:d74fe1b11f4e542ca071460ee9e8bf1b2b76551fdcf9a9752cef6ad3d43f85ce"
+    "sha256:4a6d16acb13ddbc2b8e54cc727ea34056711927227a6d60302cc658b856bcad3"
 )
 
 SOURCE_SHM_READONLY_CAPABILITY: dict[str, Any] = {

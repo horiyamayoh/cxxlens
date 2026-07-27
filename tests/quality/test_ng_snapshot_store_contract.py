@@ -83,6 +83,18 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         self.assertEqual(
             lease["status"], "accepted-authority-implementation-pending"
         )
+        attachment = lease["writer_native_attachment_amendment_proposal"]
+        self.assertEqual(
+            attachment["status"], "proposed-unqualified-non-authorizing"
+        )
+        self.assertEqual(
+            attachment["tracking"], {"issue": "#206", "feedback": "DF-0206"}
+        )
+        self.assertEqual(
+            attachment["authorization"]["before_independent_acceptance"],
+            "authority-edit-readonly-audit-and-temporary-reproduction-only-no-"
+            "attachment-group-implementation-or-production-binding",
+        )
         self.assertEqual(
             lease["authorization"]["production_activation"],
             "blocked-until-the-exact-implementation-and-complete-counterexample-"
@@ -119,6 +131,21 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 lambda value: value["two_stage_writer_authority"].__setitem__(
                     "predelegate_attempt",
                     "install-pending-before-native-delegation",
+                ),
+            ),
+            (
+                "attachment-amendment",
+                lambda value: value.pop(
+                    "writer_native_attachment_amendment_proposal"
+                ),
+            ),
+            (
+                "attachment-group",
+                lambda value: value[
+                    "writer_native_attachment_amendment_proposal"
+                ].__setitem__(
+                    "cleanup_completion",
+                    "reuse-one-native-outcome-for-independent-holders",
                 ),
             ),
             (

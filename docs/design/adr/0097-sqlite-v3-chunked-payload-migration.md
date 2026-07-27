@@ -214,6 +214,49 @@ qualification scratch/map-sequence validatorはleaseを保持せず、implementa
 rejectionを維持する。OK→READONLY projectionはproduction `qualified_source_shm_map_route`のexact
 lease receipt付きcallbackだけに閉じる。
 
+##### DF-0206 review-pending proposal: writer native attachment grouping
+
+Issue #206 / DF-0206 は、上記 accepted authority の `holder` と SQLite の native SHM attachment の
+cardinality が未定義であることを記録する。SQLite Unix VFS は一つの `sqlite3_file` から複数 region の
+`xShmMap` を完了できる一方、`xShmUnmap` はその connection の complete SHM attachment を一回で外す。
+map callback ごとに cleanup holder を作り、各 holder に別の native unmap を要求する実装は、
+複数 page を一 attachment で map する正当な lifecycle を表現できない。
+
+schema の `writer_native_attachment_amendment_proposal` は
+`cxxlens.sqlite.writer-shm-native-attachment.v1` の review-pending proposal であり、
+`proposed-unqualified-non-authorizing` である。独立 review が accept するまで、この subsection と
+schema object は implementation authority ではなく、attachment group、production registry/VFS binding、
+reader exception activation を認可しない。current native `SQLITE_OK` terminal rejection を維持する。
+
+proposal は、map attempt ごとの holder-specific pair/effect/page receipt を保持したまま、全
+post-native/pending/live holder を checked non-reusable native attachment identity で atomic group にする。
+identity は process/runtime/VFS/file-family、alias、connection、main `native_file_node`/`xOpen`、open epoch、
+exact map/unmap callback cohort に bindし、file pointer、connection、path、pointer equalityだけでは作らない。
+同じ attachment の後続 page map と repeated same-page map は既存 predelegate/post-map/gate/page-set/size
+rules を再実行し、別 attachment の member を group に混ぜない。map-before-gate の複数 pending は
+complete groupとしてpromoteまたはcleanupし、partial promotion/cleanupを許さない。
+
+native mappingを得なかった later attempt の failure はその attemptだけを解決し、既存 live groupを
+無効化しない。native OK+nonnull後のpost validation failureでlive memberがない場合はgroupを先にhideし、
+一回のnon-removing unmap成功時だけauthorityなしで除去する。すでにlive memberがあるattachmentで同じ
+failureが起きた場合はcomplete groupをhideして一回unmapし、generationと関連attachment authorityを
+quarantineしてnew admission、retry、revivalを禁止する。
+
+unmap/close はcomplete exact member setと一つのcallback invocationをnative callback前にconsumeし、
+registry mutex外で一回だけunderlying `xShmUnmap(0)`をdelegateする。その一 outcomeを複数native effectへ
+複製しない。non-last attachmentのconfirmed cleanupはそのgroupだけを除去し、last attachmentは既存の
+in-flight retirement/handoff ruleに従う。prior unmapなしのcloseはeligibility revokeとgroup hide後に
+trusted non-removing unmapを一回試み、成功後だけcloseする。successful unmap後のcloseは再unmapせず、
+non-OK、throw、unknownはopaque handle/group/runtime/VFS/generationをquarantineしてretryしない。
+remapはfresh attachment epochを要求し、prior generationがretireした場合は同じobject/page/pointerでも
+fresh generationを要求する。
+
+acceptance review は少なくとも、one connectionのpage 0/page 1を一 unmapで解放するpositive、repeated
+same-page、two connectionsのexact two unmaps、pending/live mixed group、cross-attachment、incomplete set、
+duplicate unmap、second-page post-validation failure、unmap/remap epoch reuse、close before/after unmap、
+later-map対last-unmap raceを反証する。proposal digestは四つのSQLite/Snapshot contract/schema mirrorと
+checker mutation negativeに固定し、fresh independent review前は対象実装をblockする。
+
 lease は二段階で構築する。owned current-v3 writer の native `xShmMap` delegation前に保持できるのは
 callback-localなnon-authoritative attempt/pre-map receipt、generationまたはfirst-writer cohortの
 writer in-flight pin、別個のwriter-map stat-only interfaceとretained-parent/ancestry namespace

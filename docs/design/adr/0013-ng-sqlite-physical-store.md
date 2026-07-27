@@ -72,6 +72,16 @@ directory FD、既存main/WAL native-file-node/`xOpen` receipt、SHM native atta
 native close、same-thread reentrant retirement、unknown callback outcomeはleaseをfail closedにretire/
 quarantineし、memory pin、final size、caller intentだけでauthorityを復元しない。
 
+Issue #206 / DF-0206 は、一つのwriter native attachmentに複数page map holderが属し得る一方、
+native `xShmUnmap` がattachment全体を一 callbackで解放するcardinalityをDF-0205 authorityが定義して
+いないことを記録する。ADR 0097 と四つのSQLite/Snapshot contract/schema mirrorに置く
+`cxxlens.sqlite.writer-shm-native-attachment.v1` は現時点では
+`proposed-unqualified-non-authorizing` である。proposalはmap receiptをcallbackごとに保持しつつ、
+checked attachment identityごとのcomplete pending/live holder setを一回のunmap outcomeへbindする。
+cross-attachment grouping、partial group、duplicate unmap、second-page validation failure後のfirst-page
+継続、closeのdouble cleanupを禁止する。fresh independent authority reviewまでattachment group実装と
+writer VFS production bindingをblockし、current blanket native `SQLITE_OK` rejectionを維持する。
+
 ADR 0097 はこの hybrid と logical payload policy を維持しつつ、current physical layout を
 `cxxlens.sqlite-semantic-store.v3` / `3.0.0` の bounded chunk table に置き換える。本 ADR の v2.6.0 schema は
 read-only direct-open predecessor と registered migration source としてのみ authority を保つ。新規 DB と write は
