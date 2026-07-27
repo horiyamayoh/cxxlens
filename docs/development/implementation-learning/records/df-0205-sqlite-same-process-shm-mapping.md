@@ -194,7 +194,9 @@ protocol violation and no production or implementation exception is authorized.
 pre-existing-SHM size equality contradicted authenticated growth, holder-to-holder extend-pair
 equality rejected valid `{1,1}` / `{0,0}` joins, and successor exclusion covered one page rather
 than the complete native mapping generation. The revised four-mirror proposal digest
-`sha256:fc0990d3343b4e99b76b521d8db534bc05a30c03fd2e32e0d11adad668c34b89`
-closes those three contradictions and adds an old-rule negative for each affected field. The
-blocking review is recorded on Issue #205; fresh independent review of the revised exact commit
-is still required. This record therefore remains `observed`, blocked, and non-authorizing.
+`sha256:7018a853e3053beb5b93cd3713c49eb0350c7f32471822fb9f0f968196100a8f`
+closes those three contradictions, adds an old-rule negative for each affected field, and binds
+the two mixed-pair join directions plus different-page successor rejection into the
+machine-readable qualification matrix. The blocking review is recorded on Issue #205; fresh
+independent review of the revised exact commit is still required. This record therefore remains
+`observed`, blocked, and non-authorizing.

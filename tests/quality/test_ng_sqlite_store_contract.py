@@ -602,6 +602,22 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
+                "writer-mapping-lease-matrix-missing-one-one-to-zero-zero-join",
+                lambda value: writer_mapping_lease(value)["fail_closed_matrix"][
+                    "positive"
+                ].remove(
+                    "valid-one-one-holder-to-zero-zero-holder-same-generation-join"
+                ),
+            ),
+            (
+                "writer-mapping-lease-matrix-missing-zero-zero-to-one-one-join",
+                lambda value: writer_mapping_lease(value)["fail_closed_matrix"][
+                    "positive"
+                ].remove(
+                    "valid-zero-zero-holder-to-one-one-holder-same-generation-join"
+                ),
+            ),
+            (
                 "writer-mapping-lease-same-thread-wait",
                 lambda value: writer_mapping_lease(value)[
                     "reader_lifetime"
@@ -630,6 +646,14 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                         "for-the-exact-family-page-until-all-retired-or-retiring-"
                         "generation-reader-handoffs-drain"
                     ),
+                ),
+            ),
+            (
+                "writer-mapping-lease-matrix-missing-different-page-successor",
+                lambda value: writer_mapping_lease(value)["fail_closed_matrix"][
+                    "required"
+                ].remove(
+                    "W1-G1-reader-handoff-live-W2-different-page-successor-rejection"
                 ),
             ),
             (
