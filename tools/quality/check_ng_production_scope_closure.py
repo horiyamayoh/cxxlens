@@ -51,6 +51,15 @@ EVIDENCE_CONTRACTS = (
     "schemas/cxxlens_ng_security_conformance_vectors.yaml",
 )
 
+REQUIRED_FEEDBACK_ASSIGNMENT_BINDINGS = {
+    "DF-0205": frozenset(
+        {
+            "scope.clang22-installed-adoption-gap",
+            "scope.sqlite-store-v3-gap",
+        }
+    ),
+}
+
 CLANG22_MATERIALIZATION_CONTRACT = "schemas/cxxlens_ng_clang22_materialization_contract.yaml"
 CLANG22_MATERIALIZATION_TOOL = "cxxlens-clang22-materialize"
 CLANG22_CANONICAL_DESCRIPTORS = (
@@ -1064,6 +1073,22 @@ def validate_repository(root: Path | str) -> ValidatedModel:
     unknown_feedback = sorted((referenced_feedback | exclusions) - set(all_records))
     if unknown_feedback:
         fail(f"manifest references unknown design feedback: {unknown_feedback}")
+    feedback_assignments = {
+        feedback: frozenset(
+            assignment["id"]
+            for assignment in manifest["assignments"]
+            if feedback in assignment.get("feedback", [])
+        )
+        for feedback in referenced_feedback
+    }
+    for feedback, required_assignments in REQUIRED_FEEDBACK_ASSIGNMENT_BINDINGS.items():
+        actual_assignments = feedback_assignments.get(feedback, frozenset())
+        if actual_assignments != required_assignments:
+            fail(
+                "required design-feedback assignment binding differs: "
+                f"{feedback} expected={sorted(required_assignments)} "
+                f"actual={sorted(actual_assignments)}"
+            )
     nonblocking_unaccepted = sorted(
         feedback
         for feedback in referenced_feedback - set(records)

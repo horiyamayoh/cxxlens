@@ -15,7 +15,9 @@ authority_refs:
   - docs/design/adr/0013-ng-sqlite-physical-store.md
   - docs/design/adr/0097-sqlite-v3-chunked-payload-migration.md
   - schemas/cxxlens_ng_sqlite_store_contract.yaml
+  - schemas/cxxlens_ng_sqlite_store_contract.schema.yaml
   - schemas/cxxlens_ng_snapshot_store_contract.yaml
+  - schemas/cxxlens_ng_snapshot_store_contract.schema.yaml
 tracking_issue: '#205'
 implementation_issues:
   - '#181'
@@ -120,20 +122,43 @@ qualification artifacts, or a production implementation.
 
 ## Recommendation
 
-Develop Alternative 1 as an exact authority proposal, but do not treat this record as permission
-to implement the exception. The proposal must define:
+Review Alternative 1 as the exact, still non-authorizing proposal
+`cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1`. Do not treat the proposal or this record
+as implementation permission. The proposal now defines:
 
-- the lease mint, registry, lookup, transfer prohibition, PID and lifetime model;
-- exact runtime, underlying VFS implementation/app-data/image/callback, filesystem profile,
-  retained parent, main/WAL/SHM object and directory-entry bindings;
-- page number, page size, returned pointer identity, pre-existing mapping proof, and no
-  initialize/create/truncate/extend/delete/resize pre/post receipt;
-- unmap and last-writer release ordering, stale and pointer-reuse rejection, fork behavior,
-  VFS unregister/runtime unload behavior, identity replacement and namespace-watch loss;
-- the original fail-closed rule when any field is absent, mismatched, ambiguous, or cannot be
-  rechecked;
-- bounded positive tests for two Store instances and a materialization winner/loser race, plus
-  negative tests for every listed counterexample and cross-process qualification.
+- a process-global, cross-owned-forwarding-alias registry keyed by one non-reusable process
+  instance, the shared loaded-runtime/image/source-id/callback and underlying VFS/app-data
+  cohort, the authenticated file family, and a non-reused mapping generation; each writer/reader
+  `sqlite_api` keeps a distinct move-only runtime-lifetime pin, whose pointer equality is not a
+  cohort key;
+- a two-stage writer path: callback-local pre-map attempt and writer-cohort in-flight pin, then
+  an exact native `SQLITE_OK`/nonnull post-map receipt and non-authoritative pending state, then
+  promotion only after all current-v3 Store writer gates; no registry pending exists before
+  delegation, and simultaneous first writers install or join one exact generation;
+- a separate writer-map stat-only epoch whose namespace watch is armed before pre-stat:
+  pre-existing SHM permits zero events and exact pre/post identity/size equality, absent SHM
+  permits exactly one expected `IN_CREATE` and one direct regular post object; unavailable,
+  non-Linux, overflow, loss, extra-event, and A-B-A cases cannot mint;
+- exact caller/delegated writer `extend` pairs. `{1,1}` requires authenticated RW MAIN_DB plus
+  WAL write-lock/effect evidence and exact direct create/growth observation; `{0,0}` requires a
+  pre-existing direct SHM and a zero-effect transcript; `{1,0}`, `{0,1}`, and other values never
+  mint, pend, or join. Same-generation new-page/growth atomically advances the page set and
+  sealed SHM-size receipt before reader admission;
+- retained parent-directory authority plus the existing main/WAL native-file-node/xOpen and SHM
+  native-attachment receipts, with no duplicate target FD open/close while SQLite locks may be
+  live. Native main/WAL close revokes the lease; a memory pin never makes a closed OS handle
+  authoritative;
+- reader in-flight-to-handoff ownership, writer and reader callback thread/reentrancy tokens,
+  bounded ordered cross-thread retirement, nonblocking same-thread reentrant retirement to exact
+  outer `SQLITE_IOERR` plus opaque-handle/lease quarantine, and no fabricated unmap success or
+  retry;
+- conservative successor-generation exclusion while any prior reader handoff remains, including
+  W1/G1 handoff versus W2 same-pointer rejection, and the exact existing
+  `store.sqlite-failure / database / preserve-sqlite-runtime-diagnostic`, retryable-false
+  projection;
+- a production-only qualified route that may translate one leased native `SQLITE_OK`/nonnull to
+  exact `SQLITE_READONLY` with the identical pointer. Qualification scratch/map-sequence
+  validation stays leaseless and all native OK results remain terminal there.
 
 Any accepted change must update integrated design, ADR 0013 and ADR 0097, the SQLite/Snapshot
 contracts and schema mirrors, checker expectations, source-negative tests, design checksums, and
@@ -147,3 +172,12 @@ reproduction showed that SQLite's same-process Unix SHM mapping reuse makes the 
 `any_native_ok` rule incompatible with accepted multi-instance CAS semantics. Production
 multi-instance Store activation and the affected materialization race remain blocked. No public
 semantic, contract, source behavior, or qualification profile is changed by this record.
+
+2026-07-28: The exact proposal was drafted into integrated design, ADR 0013/0097, and identical
+SQLite/Snapshot contract and schema-mirror objects. Exact checker digests and mutation negatives
+bind its current-rejection rule, post-acceptance projection, pending order, writer namespace
+epoch, extend matrix, gate ordering, reader handoff, successor exclusion, target-FD discipline,
+and fresh-review boundary. This DF remains `observed`, `implementation_disposition: blocked`,
+`resolution_refs: []`, and independent review `pending`. Until that separate review accepts the
+proposal, every native `SQLITE_OK` in the qualified readonly-SHM profile remains a terminal
+protocol violation and no production or implementation exception is authorized.

@@ -18,6 +18,7 @@ from check_ng_sqlite_store_contract import (  # noqa: E402
     CONTRACT,
     CONTRACT_SCHEMA,
     EXPECTED_CONTRACT_DIGEST,
+    EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST,
     EXPECTED_SCHEMA_DIGEST,
     SNAPSHOT_CONTRACT,
     SQLITE_OPEN_PROFILE_NAMES,
@@ -81,6 +82,17 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
             contract["compatibility"]["predecessor_v2"]["readable_format"],
             "2.6.0",
         )
+        lease = contract["compatibility"]["predecessor_v2"][
+            "read_path_strategy"
+        ]["active_wal"]["source_shm_readonly_capability"][
+            "shm_map_state_machine"
+        ][
+            "same_process_writer_mapping_lease_proposal"
+        ]
+        self.assertEqual(
+            document_digest(lease),
+            EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST,
+        )
 
     def test_option_a_structural_projection_and_vectors_pass_independently(self) -> None:
         validate_option_a_contract(self.contract)
@@ -117,6 +129,15 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
             return value["transaction"]["recovery_model"][
                 "terminal_reclassification"
             ]["accepted_empty_normalization_receiptless_crash_profile_draft"]
+
+        def writer_mapping_lease(value: dict[str, Any]) -> dict[str, Any]:
+            return value["compatibility"]["predecessor_v2"][
+                "read_path_strategy"
+            ]["active_wal"]["source_shm_readonly_capability"][
+                "shm_map_state_machine"
+            ][
+                "same_process_writer_mapping_lease_proposal"
+            ]
 
         mutations: list[tuple[str, Mutation]] = [
             (
@@ -409,6 +430,165 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ["read_path_strategy"]["active_wal"]
                 ["source_shm_readonly_capability"]["shm_map_state_machine"].__setitem__(
                     "any_native_ok", "translate-ok-nonnull-to-readonly"
+                ),
+            ),
+            (
+                "writer-mapping-lease-proposal-removed",
+                lambda value: value["compatibility"]["predecessor_v2"]
+                ["read_path_strategy"]["active_wal"]
+                ["source_shm_readonly_capability"]["shm_map_state_machine"].pop(
+                    "same_process_writer_mapping_lease_proposal"
+                ),
+            ),
+            (
+                "writer-mapping-lease-status-self-accepted",
+                lambda value: writer_mapping_lease(value).__setitem__(
+                    "status", "accepted"
+                ),
+            ),
+            (
+                "writer-mapping-lease-current-rejection-weakened",
+                lambda value: writer_mapping_lease(value).__setitem__(
+                    "current_rule_before_acceptance",
+                    "translate-native-OK-when-pointer-is-nonnull",
+                ),
+            ),
+            (
+                "writer-mapping-lease-native-ok-pass-through",
+                lambda value: writer_mapping_lease(value)[
+                    "post_acceptance_native_projection"
+                ].__setitem__("outward_result", "exact-SQLITE_OK-plus-pointer"),
+            ),
+            (
+                "writer-mapping-lease-qualification-route-authorized",
+                lambda value: writer_mapping_lease(value)[
+                    "post_acceptance_native_projection"
+                ].__setitem__(
+                    "qualified_route_only",
+                    "qualification-and-production-routes",
+                ),
+            ),
+            (
+                "writer-mapping-lease-scratch-validator-authorized",
+                lambda value: writer_mapping_lease(value)[
+                    "post_acceptance_native_projection"
+                ].__setitem__(
+                    "qualification_scratch_or_map_sequence_validator",
+                    "may-consume-process-lease",
+                ),
+            ),
+            (
+                "writer-mapping-lease-pending-before-delegation",
+                lambda value: writer_mapping_lease(value)[
+                    "two_stage_writer_authority"
+                ].__setitem__(
+                    "predelegate_attempt",
+                    "install-registry-pending-before-native-map",
+                ),
+            ),
+            (
+                "writer-mapping-lease-writer-inflight-removed",
+                lambda value: writer_mapping_lease(value)[
+                    "two_stage_writer_authority"
+                ].pop("writer_predelegate_inflight"),
+            ),
+            (
+                "writer-mapping-lease-namespace-watch-after-stat",
+                lambda value: writer_mapping_lease(value)[
+                    "two_stage_writer_authority"
+                ].__setitem__(
+                    "writer_mapping_epoch_start",
+                    "arm-watch-after-pre-stat-or-native-map",
+                ),
+            ),
+            (
+                "writer-mapping-lease-absent-shm-extra-event",
+                lambda value: writer_mapping_lease(value)[
+                    "two_stage_writer_authority"
+                ].__setitem__(
+                    "absent_shm_transition",
+                    "accept-any-event-when-the-final-object-matches",
+                ),
+            ),
+            (
+                "writer-mapping-lease-extend-downgrade-mints",
+                lambda value: writer_mapping_lease(value)[
+                    "two_stage_writer_authority"
+                ]["writer_map_extend_matrix"].__setitem__(
+                    "one_zero", "effect-denied-downgrade-may-join"
+                ),
+            ),
+            (
+                "writer-mapping-lease-map-before-gate-no-cleanup",
+                lambda value: writer_mapping_lease(value)[
+                    "two_stage_writer_authority"
+                ].pop("map_before_gate_failure_cleanup"),
+            ),
+            (
+                "writer-mapping-lease-gate-before-map-deferred",
+                lambda value: writer_mapping_lease(value)[
+                    "two_stage_writer_authority"
+                ].__setitem__(
+                    "gate_before_map_callback_return",
+                    "defer-promotion-to-a-later-Store-gate",
+                ),
+            ),
+            (
+                "writer-mapping-lease-cross-alias-lifetime-equality",
+                lambda value: writer_mapping_lease(value)[
+                    "process_global_registry"
+                ].__setitem__(
+                    "lifetime_identity_equality",
+                    "required-as-a-cross-alias-cohort-key",
+                ),
+            ),
+            (
+                "writer-mapping-lease-duplicate-target-fd",
+                lambda value: writer_mapping_lease(value)[
+                    "identity_receipt"
+                ].__setitem__(
+                    "target_handle_discipline",
+                    "open-and-retain-duplicate-target-FDs",
+                ),
+            ),
+            (
+                "writer-mapping-lease-same-thread-wait",
+                lambda value: writer_mapping_lease(value)[
+                    "reader_lifetime"
+                ].__setitem__(
+                    "same_thread_reentrant_retirement",
+                    "block-until-the-reader-callback-finishes",
+                ),
+            ),
+            (
+                "writer-mapping-lease-successor-with-handoff",
+                lambda value: writer_mapping_lease(value)[
+                    "generation_and_races"
+                ].__setitem__(
+                    "successor_while_handoff_live",
+                    "allow-new-generation-when-pointer-matches",
+                ),
+            ),
+            (
+                "writer-mapping-lease-successor-retryable",
+                lambda value: writer_mapping_lease(value)[
+                    "generation_and_races"
+                ].__setitem__(
+                    "successor_outward_result",
+                    "outer-SQLITE_BUSY-and-retryable-true",
+                ),
+            ),
+            (
+                "writer-mapping-lease-final-size-only",
+                lambda value: writer_mapping_lease(value)[
+                    "reader_pre_post_receipt"
+                ].__setitem__("final_size_equality_alone", "sufficient"),
+            ),
+            (
+                "writer-mapping-lease-pre-review-implementation",
+                lambda value: writer_mapping_lease(value)["authorization"].__setitem__(
+                    "before_independent_acceptance",
+                    "production-implementation-authorized",
                 ),
             ),
             (

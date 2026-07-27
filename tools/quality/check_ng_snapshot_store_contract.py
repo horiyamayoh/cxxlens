@@ -31,6 +31,10 @@ REPORT_SCHEMA = pathlib.Path(
     "schemas/cxxlens_ng_store_conformance_report.schema.yaml"
 )
 
+EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST = (
+    "sha256:a3298d7ec04c54fc75cfb3c80affe9f53c578eb0ba9a866ffbcc8a7800c91b8b"
+)
+
 SELECTOR_FIELDS = (
     "catalog_id",
     "channel_id",
@@ -1175,6 +1179,30 @@ def execute(
 
 
 def validate_contract_shape(contract: dict[str, Any]) -> None:
+    try:
+        writer_mapping_lease = contract["format_compatibility"][
+            "sqlite_source_shm_readonly_capability"
+        ]["shm_map_state_machine"][
+            "same_process_writer_mapping_lease_proposal"
+        ]
+    except (KeyError, TypeError) as error:
+        fail(
+            "store.sqlite-shm-writer-lease-proposal-invalid",
+            f"required proposal field is missing: {error}",
+        )
+    actual_writer_mapping_lease_digest = document_digest(writer_mapping_lease)
+    if (
+        actual_writer_mapping_lease_digest
+        != EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST
+    ):
+        fail(
+            "store.sqlite-shm-writer-lease-proposal-invalid",
+            (
+                "same-process writer-mapping lease proposal differs: "
+                f"expected={EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST}, "
+                f"actual={actual_writer_mapping_lease_digest}"
+            ),
+        )
     if (
         contract.get("df_0200_materialization_ingress")
         != EXPECTED_DF_0200_MATERIALIZATION_INGRESS

@@ -267,7 +267,7 @@ class ProductionScopeClosureTest(unittest.TestCase):
         )
         self.assertEqual(
             self.model.blocking_feedback,
-            ("DF-0174",),
+            ("DF-0174", "DF-0205"),
         )
 
     def test_materialization_authority_is_bound_to_the_typed_census(self) -> None:
@@ -666,6 +666,37 @@ class ProductionScopeClosureTest(unittest.TestCase):
         static_blocker["feedback"] = ["DF-0182"]
         self.write_manifest(root, manifest)
         with self.assertRaisesRegex(closure.ContractError, r"not mapped: \['DF-0174'\]"):
+            closure.validate_repository(root)
+
+    def test_df0205_blocker_is_bound_to_sqlite_and_materialization_gaps(self) -> None:
+        manifest = self.read_manifest(ROOT)
+        actual = {
+            assignment["id"]
+            for assignment in manifest["assignments"]
+            if "DF-0205" in assignment.get("feedback", [])
+        }
+        self.assertEqual(
+            actual,
+            {
+                "scope.clang22-installed-adoption-gap",
+                "scope.sqlite-store-v3-gap",
+            },
+        )
+
+        temporary, root = self.clone_contract_root()
+        self.addCleanup(temporary.cleanup)
+        changed = self.read_manifest(root)
+        materialization_gap = next(
+            row
+            for row in changed["assignments"]
+            if row["id"] == "scope.clang22-installed-adoption-gap"
+        )
+        materialization_gap["feedback"].remove("DF-0205")
+        self.write_manifest(root, changed)
+        with self.assertRaisesRegex(
+            closure.ContractError,
+            "required design-feedback assignment binding differs: DF-0205",
+        ):
             closure.validate_repository(root)
 
     def test_feedback_exclusion_cannot_be_self_authorized(self) -> None:

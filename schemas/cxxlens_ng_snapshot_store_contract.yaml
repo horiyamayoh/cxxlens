@@ -879,6 +879,114 @@ format_compatibility:
       readonly_nonnull: preserve-exact-SQLITE_READONLY-and-the-native-nonnull-mapping
       expected_writer_attach_transition: SQLITE_READONLY_CANTINIT-null-to-exact-SQLITE_READONLY-nonnull
       any_native_ok: backend-protocol-violation-fail-closed-never-translate-to-readonly
+      same_process_writer_mapping_lease_proposal:
+        id: cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1
+        status: proposed-unqualified-non-authorizing
+        tracking: {issue: '#205', feedback: DF-0205}
+        current_rule_before_acceptance: every-native-SQLITE_OK-remains-a-terminal-backend-protocol-violation-regardless-of-pointer
+        public_surface: unchanged
+        post_acceptance_native_projection:
+          admitted_input: exact-SQLITE_OK-plus-nonnull-mapping-after-one-exact-live-lease-and-reader-handoff-proof
+          outward_result: exact-SQLITE_READONLY-plus-the-identical-native-pointer
+          pass_through_SQLITE_OK: forbidden
+          sqlite_ok_null: terminal-backend-protocol-violation
+          unleased_or_ambiguous_ok: terminal-backend-protocol-violation
+          cantinit_and_readonly_paths: unchanged
+          generic_nonprofile_semantics: unchanged
+          qualified_route_only: production-qualified_source_shm_map_route-with-an-exact-lease-receipt
+          qualification_scratch_or_map_sequence_validator: remains-leaseless-and-every-native-OK-remains-terminal
+        two_stage_writer_authority:
+          predelegate_attempt: callback-local-nonauthoritative-pre-map-receipt-only-never-install-a-registry-pending-before-native-delegation
+          writer_predelegate_inflight: acquire-one-generation-or-first-writer-cohort-inflight-pin-before-native-writer-map-without-holding-the-registry-mutex-through-the-callback-and-prevent-last-holder-retirement-until-this-writer-joins-or-fails
+          writer_mapping_epoch_start: before-the-pre-stat-and-native-writer-map-arm-a-distinct-writer-map-stat-only-interface-and-retained-parent-ancestry-IN_CREATE-watch-without-installing-registry-authority
+          preexisting_shm_transition: require-zero-namespace-events-and-the-exact-same-direct-entry-object-mount-and-size-from-pre-stat-through-post-map
+          absent_shm_transition: permit-exactly-one-IN_CREATE-for-the-expected-shm-leaf-and-require-one-post-map-direct-regular-object-entry-mount-and-size-with-no-other-event-or-indirection
+          writer_mapping_epoch_failure: non-Linux-or-unavailable-trusted-stat-only-watch-any-other-create-delete-move-watch-loss-overflow-A-to-B-to-A-or-observation-ambiguity-cannot-mint-and-fails-closed
+          mint_eligibility: production-owned-forwarding-MAIN_DB-input-and-returned-READWRITE-with-READONLY-and-CREATE-absent-current-v3-writer-only
+          mint_forbidden: [qualification, diagnostic, temporary-or-raw-external-sqlite, readonly, non-main, private-recovery, normalization, create-handle]
+          writer_map_extend_matrix:
+            receipt: exact-caller-extend-and-delegated-extend-pair-with-each-value-limited-to-zero-or-one
+            one_one: authenticated-READWRITE-MAIN_DB-plus-exact-WAL-write-lock-and-effect-gate-may-install-or-join-a-generation-or-add-a-page-preallocated-size-has-zero-size-effect-and-create-or-growth-requires-the-exact-permitted-direct-create-or-size-extension-transcript
+            zero_zero: authenticated-READWRITE-MAIN_DB-plus-preexisting-direct-SHM-and-zero-create-initialize-truncate-extend-delete-or-resize-transcript-may-install-pending-only-and-promotes-or-joins-only-after-the-full-current-v3-gate
+            one_zero: effect-denied-downgrade-never-mints-installs-pending-or-joins
+            zero_one_or_other: forbidden-never-mints-installs-pending-or-joins
+            caller_intent: never-proves-the-native-effect
+          pending_install: only-after-underlying-authenticated-writer-xShmMap-returns-exact-SQLITE_OK-nonnull-and-the-post-map-object-entry-size-and-effect-receipt-is-complete
+          post_map_seal: exact-retained-parent-main-and-WAL-authenticated-native_file_node-xOpen-receipts-SHM-native-attachment-stat-only-object-entry-receipt-plus-the-writer-mapping-epoch
+          pending_authority: no-reader-lookup-admission-transfer-serialization-or-capability-authority
+          map_observation: the-installed-exact-native-SQLITE_OK-nonnull-pointer-plus-post-map-receipt-remains-pending
+          promotion_gate: [writer-readwrite-mode-proved, runtime-version-limit-and-locator-gates-complete, exact-runtime-vfs-file-family-and-open-epoch, synchronous-full-and-wal-mode-proved, complete-current-v3-format-schema-head-counter-authority-validated, Store-writer-open-success-before-publication-effect]
+          map_before_gate: install-post-native-pending-then-gate-completion-atomically-promotes-after-exact-recheck
+          map_before_gate_failure_cleanup: remove-pending-then-attempt-trusted-nonremoving-xShmUnmap-zero-and-close-with-exact-outcome-nonOK-or-unknown-quarantines-the-opaque-handle-lease-runtime-vfs-and-generation-with-no-retry
+          gate_before_map: gate-completion-installs-immutable-connection-open-epoch-writer-eligibility-then-a-later-post-native-pending-rechecks-it-and-atomically-promotes
+          gate_before_map_callback_return: after-native-OK-nonnull-and-before-returning-OK-to-SQLite-install-pending-recheck-eligibility-and-atomically-promote-never-defer-to-a-later-Store-gate
+          gate_before_map_promotion_failure: attempt-nonremoving-xShmUnmap-zero-return-outer-SQLITE_IOERR-and-quarantine-any-unmap-or-lifecycle-ambiguity
+          writer_eligibility_authority: never-mapping-or-reader-authority-by-itself-and-revoke-before-close-or-open-epoch-format-head-counter-wal-synchronous-runtime-vfs-or-file-family-drift
+          promotion: atomically-promote-only-after-every-gate-in-either-order-to-one-live-mapping-generation
+          existing_mapping_holder: same-page-join-only-to-one-exact-live-generation-with-identical-runtime-vfs-file-family-caller-delegated-extend-tuple-page-size-pointer-and-zero-size-drift-effect-receipt
+          same_generation_new_page_or_growth: only-the-authenticated-one-one-route-may-atomically-add-the-exact-page-range-and-update-the-generation-mapping-page-set-and-sealed-SHM-size-before-any-new-reader-admission
+          reader_generation_size_binding: every-reader-predelegate-and-handoff-binds-the-latest-atomic-generation-mapping-page-set-and-sealed-SHM-size-receipt
+          simultaneous_first_writers: first-complete-authenticated-post-map-installs-the-generation-and-each-later-first-writer-cohort-callback-joins-only-that-same-generation-after-exact-pointer-page-size-range-and-receipt-equality-otherwise-it-cleans-up-and-fails
+          failed_unknown_or_ambiguous: discard-or-quarantine-never-reconstruct-live-authority
+        process_global_registry:
+          scope: one-nonreusable-SQLite-process-instance-cross-owned-forwarding-aliases
+          cross_alias_key: [process-instance, shared-dl-runtime-object-image-sourceid-load-generation-and-callback-cohort, underlying-vfs-pointer-version-app-data-and-registration-epoch, xOpen-xShmMap-xShmUnmap-callback-identities, filesystem-device-mount-profile, retained-parent-main-and-WAL-native-file-node-xOpen-receipts-SHM-native-attachment-stat-object-entry-and-namespace-epoch, shm-page-size-pointer-and-mapping-generation]
+          alias_binding: writer-and-reader-owned-alias-instances-have-distinct-sqlite_api-runtime_lifetime_identity-values-and-move-only-lifetime-pins-but-never-partition-the-shared-underlying-runtime-vfs-mapping-cohort
+          lifetime_identity_equality: forbidden-as-a-cross-alias-cohort-key
+          lookup_cardinality: exactly-one-live-new-admission-capable-generation
+          transfer_or_serialization: forbidden
+        identity_receipt:
+          process_instance: qualified-port-nonreusable-PID-namespace-PID-process-start-identity-live-self-pidfd-and-atfork-child-invalidation-epoch-never-PID-only
+          fork_and_pid_reuse: child-invalidates-all-inherited-pending-leases-pins-and-handoffs-before-any-Store-or-VFS-callback-and-ancestor-PID-reuse-never-revalidates
+          runtime_image: shared-dl-runtime-object-image-byte-digest-sqlite3-sourceid-load-generation-and-callback-cohort-plus-a-distinct-move-only-runtime_lifetime_identity-pin-for-each-writer-or-reader-sqlite_api
+          vfs: original-pointer-version-pAppData-pointer-owned-lifetime-registration-epoch-writer-reader-aliases-and-exact-xOpen-xShmMap-xShmUnmap-executable-identities
+          namespace: filesystem-device-mount-profile-retained-authenticated-parent-canonical-main-locator-main-and-WAL-existing-authenticated-native_file_node-xOpen-receipts-SHM-native-attachment-stat-only-object-and-direct-entry-receipt-and-continuous-watch-epoch
+          target_handle_discipline: no-duplicate-main-WAL-or-SHM-target-FD-open-or-close-while-any-SQLite-lock-may-be-live-retain-only-the-parent-directory-FD-and-existing-native-attachment-receipts
+          native_close: native-main-or-WAL-close-revokes-and-retires-the-lease-and-a-node-runtime-or-VFS-memory-pin-never-turns-a-closed-OS-handle-into-authority
+          callback_execution: exact-callback-thread-identity-reentrancy-depth-and-active-writer-reader-callback-token-bound-to-every-inflight-retirement-and-unmap-transition
+          writer_mapping_epoch_lifetime: starts-before-native-writer-map-and-is-move-only-retained-through-pending-live-holders-inflight-and-reader-handoffs-until-the-last-holder-and-handoff-release
+          path_family: exact-retained-parent-canonical-main-wal-shm-leaves-and-entry-family-reject-hardlink-path-or-sidecar-alias-mismatch-even-when-main-device-and-inode-match
+          mapping: exact-caller-and-delegated-extend-pair-page-number-page-size-byte-offset-range-native-nonnull-pointer-post-writer-map-shm-size-generation-mapping-page-set-and-writer-holder-generation
+          effect_census: exact-wrapper-observable-call-and-result-namespace-pre-post-stat-object-entry-mount-size-WAL-lock-history-sqlite3-sourceid-and-callback-transcript-without-claiming-unobservable-underlying-syscall-provenance
+          insufficient_alone: [PID, path, vfs-name, alias-name, pointer, inode, final-size-equality, post-hoc-endpoint-equality]
+        reader_lifetime:
+          predelegate_acquire: atomically-acquire-one-in-flight-pin-before-native-reader-map-without-holding-the-registry-mutex-through-the-callback
+          predelegate_scope: exact-process-reader-alias-callback-invocation-page-size-and-live-mapping-generation
+          handoff: promote-once-only-after-native-return-and-complete-post-map-receipt-to-a-reader-native-attachment-handoff
+          handoff_lifetime: through-eager-transaction-end-and-successful-delegated-reader-xShmUnmap
+          handoff_authority: may-outlive-all-writer-holders-and-may-revalidate-only-the-same-reader-connections-later-exact-already-mapped-callback-for-the-same-page-size-pointer-and-generation-without-minting-new-authority
+          different_reader_or_mapping: requires-a-new-in-flight-admission-from-an-active-writer-lease-and-cannot-be-transitively-minted-by-a-handoff
+          writer_retirement: remove-new-admission-visibility-first-and-wait-only-for-writer-map-cohort-inflight-join-or-fail-and-reader-predelegation-inflight-resolution-on-a-different-thread-with-a-bounded-ordered-wait-before-delegating-writer-native-unmap-and-close
+          same_thread_reentrant_retirement: never-block-return-exact-outer-SQLITE_IOERR-and-quarantine-the-opaque-native-handle-lease-and-generation-with-no-fabricated-unmap-success-or-retry
+          different_thread_wait: bounded-and-ordered-only-timeout-or-unknown-outcome-quarantines-under-the-existing-native-lifecycle-rule-with-no-retry
+          writer_after_handoff: native-writer-unmap-and-close-remain-required-and-may-complete-while-reader-handoff-retains-its-own-native-attachment
+          teardown: runtime-vfs-unregister-or-unload-waits-for-all-handoffs
+          forbidden_wait: never-block-writer-close-for-the-entire-reader-handoff-and-never-fabricate-native-unmap-success
+        generation_and_races:
+          token: checked-monotonic-nonreusable-process-instance-generation
+          retirement: hide-before-native-unmap-and-never-revive
+          remap: always-new-generation-even-for-the-same-object-page-size-and-pointer
+          successor_while_handoff_live: forbid-writer-attempt-pending-promotion-and-new-generation-for-the-exact-family-page-until-all-retired-or-retiring-generation-reader-handoffs-drain
+          successor_predelegate: fail-before-underlying-writer-map-when-the-conflict-is-observable
+          successor_postdelegate_race: nonremoving-unmap-and-quarantine-by-actual-outcome-with-no-internal-retry
+          successor_outward_result: exact-outer-SQLITE_IOERR-then-existing-store.sqlite-failure-database-preserve-sqlite-runtime-diagnostic-with-retryable-false
+          successor_continuity: same-object-page-pointer-does-not-prove-continuity-and-a-reader-handoff-never-mints-successor-writer-or-reader-authority
+          rejected: [counter-exhaustion, duplicate-generation, stale-pin-or-handoff, pointer-ABA, object-entry-or-mount-replacement, namespace-event-loss-or-A-to-B-to-A, unmap-versus-lookup-race, last-holder-release-versus-promotion-race, skipped-duplicate-or-reordered-callback]
+          native_lifecycle_ambiguity: quarantine-connection-runtime-vfs-generation-with-no-retry-reregister-or-revival
+        reader_pre_post_receipt:
+          predelegate: [exact-live-lease-and-in-flight-pin, process-runtime-vfs-app-data-callback-and-registration-identity, retained-parent-main-and-WAL-native-file-node-xOpen-SHM-native-attachment-object-entry-mount-and-watch-epoch, requested-extend-zero-page-size-offset-range, exact-shm-object-and-post-writer-map-size]
+          postdelegate: [native-exact-SQLITE_OK-and-nonnull, identical-leased-pointer-page-size-and-range, unchanged-object-entry-mount-watch-and-generation, live-pin-to-handoff-transition, zero-reader-create-initialize-truncate-extend-delete-or-resize-effects]
+          allowed_existing_effects: shm-coordination-byte-and-lock-callbacks-within-the-existing-active-wal-contract
+          final_size_equality_alone: insufficient
+          mismatch: nonremoving-unmap-if-possible-then-existing-protocol-violation-latch
+          unmap_or_observation_unknown: quarantine
+        fail_closed_matrix:
+          required: [pending-only, eligibility-only, stale-open-epoch-eligibility, no-lease, multiple-match, retiring-or-stale, cross-process, fork-child, PID-reuse, runtime-image-or-sourceid-drift, vfs-pointer-version-app-data-callback-or-registration-drift, alias-cross-binding-mismatch, per-alias-runtime-lifetime-identity-inequality-with-valid-shared-cohort, hardlink-path-or-sidecar-alias-mismatch, duplicate-target-FD-open-close-drops-process-lock, native-main-or-WAL-close-with-memory-pin, simultaneous-first-writer-same-generation-join-and-mismatch, W2-writer-predelegate-inflight-versus-W1-last-holder-retirement, writer-map-preexisting-shm-namespace-event-or-pre-post-identity-size-drift, writer-map-absent-shm-wrong-IN_CREATE-extra-event-or-post-object-drift, writer-mapping-stat-interface-unavailable-non-Linux-watch-loss-overflow-or-A-to-B-to-A, writer-extend-one-one-preallocated-zero-effect-and-exact-create-growth, writer-extend-zero-zero-preexisting-zero-effect, writer-extend-one-zero-downgrade-no-authority, writer-extend-zero-one-or-invalid-no-authority, same-page-join-size-drift, same-generation-new-page-atomic-size-receipt-and-stale-reader, map-before-gate-rejection-unmap-close-nonOK-or-unknown, main-wal-shm-object-entry-mount-or-namespace-drift, page-size-offset-range-or-pointer-mismatch, shm-size-or-no-resize-transcript-drift, holder-inflight-handoff-unmap-race, pointer-ABA, W1-G1-reader-handoff-live-W2-same-pointer-successor-rejection, runtime-unload-or-vfs-unregister, native-map-unmap-or-observation-unknown, same-thread-reentrant-writer-retirement-with-predelegate-inflight, different-thread-retirement-wait-timeout-or-unknown, handoff-transitive-mint-to-another-reader-or-page]
+          positive: [two-live-Store-current-v3-CAS-winner-loser, materialization-winner-loser-race, same-process-cross-alias-exact-mapping-reuse, cross-process-CAS-with-no-lease-transfer, existing-CANTINIT-null-and-READONLY-nonnull-routes]
+        authorization:
+          before_independent_acceptance: authority-edit-readonly-audit-and-temporary-reproduction-only-no-implementation-or-production-exception
+          after_proposal_acceptance: internal-registry-writer-pending-promotion-reader-pin-handoff-callback-gates-and-focused-tests-may-be-implemented
+          production_activation: blocked-until-the-exact-implementation-and-complete-counterexample-matrix-receive-a-distinct-independent-review
       readonly_null: normalize-to-SQLITE_READONLY_CANTINIT-and-null
       permanent_delegation_suppression: forbidden
       reset: successful-delegated-xShmUnmap-only

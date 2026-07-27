@@ -6,6 +6,7 @@
 - Decision issue: #68
 - Tracking issue: #56
 - Current-layout amendment: ADR 0097 / #200
+- Pending same-process SHM amendment: ADR 0097 / #205 / DF-0205
 
 ## Context
 
@@ -40,6 +41,21 @@ Issue #132 で physical minor を 2.5.0 とし、connection/process 間 publicat
 - compaction は payload を新 physical generation へ copy-on-write し、既存 handle が pin する generation は
   shared token の最終解放まで保持する。
 
+複数 connection/process の CAS は、一つの connection または Store implementation への process-local 集約で代替しない。同じ
+process の二つの live Store が同じ series head を競合更新した場合も、先に commit した一件だけが head を更新し、後続 writer は
+transaction を rollback して `store.publication-conflict` を返す。SQLite Unix VFS が同一 process・同一 runtime 内で既存 writer の
+SHM mapping を再利用し、後続 readonly probe の native `xShmMap(extend=0)` に `SQLITE_OK` と non-null pointer を返す場合の
+narrow admission は、ADR 0097 の DF-0205 pending amendment が定義する
+`cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1` にだけ基づく。proposal の independent acceptance 前は従来どおり全 native
+`SQLITE_OK` を fail closed とし、connection sharing、PID-only token、pointer equality、VFS name、path spelling、post-hoc endpoint
+equality を CAS または SHM nonmutation authority にしない。
+proposal はwriter `xShmMap`のcaller/delegated extend pair、writer cohort in-flight、stat-only namespace
+epoch、current-v3 Store gate、shared runtime/VFS cohortとaliasごとのdistinct lifetime pinをreceiptにする。
+SQLite lockがliveになり得る間にmain/WAL/SHM targetのduplicate FDをopen/closeせず、retained parent
+directory FD、既存main/WAL native-file-node/`xOpen` receipt、SHM native attachment receiptだけを使う。
+native close、same-thread reentrant retirement、unknown callback outcomeはleaseをfail closedにretire/
+quarantineし、memory pin、final size、caller intentだけでauthorityを復元しない。
+
 ADR 0097 はこの hybrid と logical payload policy を維持しつつ、current physical layout を
 `cxxlens.sqlite-semantic-store.v3` / `3.0.0` の bounded chunk table に置き換える。本 ADR の v2.6.0 schema は
 read-only direct-open predecessor と registered migration source としてのみ authority を保つ。新規 DB と write は
@@ -64,5 +80,11 @@ same-main descendant判定はADR 0097と`cxxlens.sqlite-authority-state.v1`、
 複数 SQLite instance の CAS、conflict rollback/retry、prior open、
 partial closure rejection、cursor lifetime、pinned compaction を検証する。installed consumer は static/shared の両方で
 memory と SQLite factory を link/open する。contract conformance は root relocation、forward/reverse/seeded shuffle、
-jobs 1/2/8 の 36 通りを比較する。物理契約は
+jobs 1/2/8 の 36 通りを比較する。same-process CAS qualification は二つの独立 live Store/connection と materialization
+winner/loser raceを実行し、cross-process CAS と同じ durable head verdictを要求する。DF-0205 proposal の acceptance 後に lease
+implementationを検証する場合は、fork/PID reuse、writer unmap/last release、reader lifetime handoff、mapping pointer ABA、
+runtime/VFS unregister/unload、main/WAL/SHM object/entry/mount/namespace replacement、page/size/pointer drift、native callback
+outcome unknown、extend pair全分類、simultaneous first writers、writer in-flight対last-holder retire、
+new-page/size receipt、duplicate-target-FD lock loss、same-thread reentrant retirementとbounded wait timeoutを
+fail-closed matrixに含める。物理契約は
 `schemas/cxxlens_ng_sqlite_store_contract.yaml` と schema に固定する。

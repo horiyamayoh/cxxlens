@@ -17,6 +17,7 @@ from check_ng_snapshot_store_contract import (  # noqa: E402
     CONTRACT,
     CONTRACT_SCHEMA,
     CLOSURE_FIELDS,
+    EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST,
     SELECTOR_FIELDS,
     StoreContractError,
     canonical_binary,
@@ -25,6 +26,7 @@ from check_ng_snapshot_store_contract import (  # noqa: E402
     closure_mutation_matrix,
     compact,
     decode_sqlite_unsigned_integer,
+    document_digest,
     format_open,
     identity_digest,
     load_yaml,
@@ -32,6 +34,7 @@ from check_ng_snapshot_store_contract import (  # noqa: E402
     publish,
     select_current,
     series_id,
+    schema_validate,
     sqlite_unsigned_integer,
     snapshot_digest_matrix,
     unsigned_counter_canonical_integer,
@@ -46,6 +49,7 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.contract = load_yaml(ROOT / CONTRACT)
+        cls.schema = load_yaml(ROOT / CONTRACT_SCHEMA)
 
     def test_contract_and_exact_vector_set(self) -> None:
         contract, results, comparisons = validate_all(ROOT)
@@ -63,6 +67,73 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
         )
         self.assertEqual(len(results), 31)
         self.assertEqual(comparisons, 36)
+
+    def test_sqlite_writer_mapping_lease_proposal_is_exact_and_fail_closed(
+        self,
+    ) -> None:
+        lease = self.contract["format_compatibility"][
+            "sqlite_source_shm_readonly_capability"
+        ]["shm_map_state_machine"][
+            "same_process_writer_mapping_lease_proposal"
+        ]
+        self.assertEqual(
+            document_digest(lease),
+            EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST,
+        )
+        schema_validate(self.contract, self.schema, "store contract")
+
+        mutations = [
+            (
+                "status",
+                lambda value: value.__setitem__("status", "accepted"),
+            ),
+            (
+                "current-rejection",
+                lambda value: value.__setitem__(
+                    "current_rule_before_acceptance",
+                    "allow-native-OK-before-review",
+                ),
+            ),
+            (
+                "projection",
+                lambda value: value["post_acceptance_native_projection"].__setitem__(
+                    "outward_result", "exact-SQLITE_OK-plus-pointer"
+                ),
+            ),
+            (
+                "pending-order",
+                lambda value: value["two_stage_writer_authority"].__setitem__(
+                    "predelegate_attempt",
+                    "install-pending-before-native-delegation",
+                ),
+            ),
+            (
+                "successor",
+                lambda value: value["generation_and_races"].__setitem__(
+                    "successor_while_handoff_live",
+                    "allow-successor-when-pointer-matches",
+                ),
+            ),
+        ]
+        for name, mutate in mutations:
+            with self.subTest(drift=name):
+                changed = copy.deepcopy(self.contract)
+                changed_lease = changed["format_compatibility"][
+                    "sqlite_source_shm_readonly_capability"
+                ]["shm_map_state_machine"][
+                    "same_process_writer_mapping_lease_proposal"
+                ]
+                mutate(changed_lease)
+                with self.assertRaisesRegex(
+                    StoreContractError,
+                    "store.sqlite-shm-writer-lease-proposal-invalid",
+                ):
+                    validate_contract_shape(changed)
+                with self.assertRaisesRegex(
+                    StoreContractError,
+                    "store.schema-invalid",
+                ):
+                    schema_validate(changed, self.schema, "store contract")
 
     def test_binary_encoding_separates_types_and_boundaries(self) -> None:
         values = [None, False, 0, b"0", "0", ["a", "bc"], ["ab", "c"]]

@@ -27,14 +27,18 @@ SNAPSHOT_CONTRACT = pathlib.Path(
 # independent of the schema so a coordinated contract/schema weakening remains
 # fail closed while formatting-only YAML changes remain non-semantic.
 EXPECTED_CONTRACT_DIGEST = (
-    "sha256:0d5e7fd24dbda2d3f3376a3ee2c6c0e2eb7529843b96acde6997d4a700d1d199"
+    "sha256:639a0dd1bd2754727e90e7bf90c5ec5ff8c9469dad6bfe4240330dd8febeabb8"
 )
 EXPECTED_SCHEMA_DIGEST = (
-    "sha256:a7721f8e6ec304793068a5b6a12913a3f948e8aef5d0317fef50baa5da3b82a3"
+    "sha256:f122defe1ec7ee386a4a62f343a4dddd2c604af4c7f0f1ab82daf8c2be28b306"
 )
 
 EXPECTED_SNAPSHOT_BINDING = (
-    "sha256:6562f8f004dfadc1820e8759ccb05872d721ad47ed04f7066431f57857f860f9"
+    "sha256:824fcf02dbc7db3ca7c61739267204f8d5bd77cfb7c72cb844e109f8f96b9696"
+)
+
+EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST = (
+    "sha256:a3298d7ec04c54fc75cfb3c80affe9f53c578eb0ba9a866ffbcc8a7800c91b8b"
 )
 
 SOURCE_SHM_READONLY_CAPABILITY: dict[str, Any] = {
@@ -188,6 +192,11 @@ SOURCE_SHM_READONLY_CAPABILITY: dict[str, Any] = {
         "any_native_ok": (
             "backend-protocol-violation-fail-closed-never-translate-to-readonly"
         ),
+        "same_process_writer_mapping_lease_proposal": {
+            "__canonical_sha256__": (
+                EXPECTED_SAME_PROCESS_WRITER_MAPPING_LEASE_PROPOSAL_DIGEST
+            )
+        },
         "readonly_null": "normalize-to-SQLITE_READONLY_CANTINIT-and-null",
         "permanent_delegation_suppression": "forbidden",
         "reset": "successful-delegated-xShmUnmap-only",
@@ -4823,7 +4832,9 @@ def validate_snapshot_binding(
         or actual["format_compatibility"]["current_sqlite"] != current_tag
         or actual["format_compatibility"]["readable_predecessor"]
         != predecessor_tag
-        or source_shm_capability != SOURCE_SHM_READONLY_CAPABILITY
+        or not _matches_exact_requirement(
+            source_shm_capability, SOURCE_SHM_READONLY_CAPABILITY
+        )
         or actual["format_compatibility"][
             "sqlite_source_shm_readonly_capability"
         ]

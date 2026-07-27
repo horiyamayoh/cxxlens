@@ -2255,6 +2255,114 @@ CANTINITへ正規化する。一度 READONLY-family を外へ返した後も後�
 profile で native `SQLITE_OK` が返ることは mapping の null/non-null を問わず backend protocol violation として fail closed にし、READONLYへ
 変換しない。writer attach 後の正当な transition は CANTINIT+null から exact READONLY+non-null である。generic non-profile caller の
 `extend=0`+OK semantics は変更しない。この per-file READONLY-family state は成功した delegated `xShmUnmap` でだけ reset する。
+
+DF-0205 の `cxxlens.sqlite.same-process-writer-shm-mapping-lease.v1` は Issue #205 の
+`proposed-unqualified-non-authorizing` authority proposalであり、independent acceptance前は上記
+blanket `SQLITE_OK` rejectionを変更しない。同じloaded SQLite Unix runtimeで既存writerのinode-bound
+SHM mappingが再利用される場合に限り、acceptance後のnarrow exceptionはwriter native map前のlocal
+non-authoritative attempt、exact OK+nonnullとpost-map receipt後のregistry pending、current-v3 Store
+writer gate完了後のlive leaseという順で成立し、reader delegation前にprocess-global cross-alias
+registryのexactly one leaseからin-flight pinを取得する。registry pendingをnative delegation前に
+installしない。mint eligibleなのはowned-forwarding production `MAIN_DB`のinput/returned flagsが
+READWRITEかつREADONLY/CREATEなしと証明されたcurrent-v3 writerだけで、qualification/diagnostic/
+temporary/raw external/readonly/non-main/private recovery/normalization/CREATE handleはmintしない。
+pending単独、PID/path/VFS name/pointer equality、post-hoc endpoint equality、connection sharingは
+authorityではない。
+
+local attemptはnative writer map前にwriter generation/first-writer cohort in-flight pinを取得し、
+pre-statより先に別個のwriter-map stat-only interfaceとretained-parent/ancestry namespace watchを
+開始する。registry mutexはnative callback越しに保持しない。pre-existing SHMはnamespace event zeroと
+pre/post exact same direct entry/object/mount/size、absent SHMはexpected leafのexact one `IN_CREATE`と
+post direct regular object/entry/mount/sizeだけを許す。それ以外、indirection、watch loss/overflow、
+A-to-B-to-A、またはtrusted equivalentを持たない非Linux profileはmint不可とする。post-mapでretained
+parent、既存main/WAL native-file-node/`xOpen` receipt、SHM native attachment/stat-only object/entryを
+sealし、epoch/watchをpending→live holder→in-flight→handoffへ継承してlast holder/handoffまで保持する。
+endpoint identity/pointerだけでcontinuityを代替しない。
+
+map-before-gateではnative OK+nonnullとpost receipt後のpendingをwriter gate completionがpromoteする。
+gate failureはpending remove後にtrusted non-removing unmap(0)とcloseをexact outcome付きで試し、
+non-OK/unknownならopaque handle/lease/runtime/VFS/generationをquarantineしてretryしない。
+gate-before-mapではgateがexact connection/open epochのimmutable eligibilityだけをinstallし、後続mapが
+local attempt→native result→pendingを経た後にeligibilityを再検査してpromoteする。eligibility単独は
+mapping/reader authorityではない。closeまたはopen epoch/format/head/counter/WAL/synchronous/runtime/
+VFS/file-family driftはeligibilityを先にrevokeし、stale pendingをpromoteしない。
+gate-before-mapのfirst mapはnative OK後かつouter writer callbackがOKを返す前にpending→eligibility
+recheck→live promotionを完了し、失敗はnon-removing unmap(0)+outer `SQLITE_IOERR`、ambiguityは
+quarantineとする。後段Store gateへ延期しない。
+
+writer map receiptはcaller/delegated `extend` pairをexactにbindし、各値を0/1に限定する。`{1,1}`は
+authenticated RW `MAIN_DB`+exact WAL write-lock/effect gateの下でgeneration install/join/new pageを
+許し、preallocated rangeはsize effect zero、create/growthはexpected direct create/size extensionを
+wrapper call/result、namespace、pre/post stat object/entry/mount/size、WAL-lock history、pinned
+source ID/callback transcriptで証明する。underlying syscall provenanceやcaller intentだけをeffect
+authorityにしない。`{0,0}`はpre-existing direct SHM+zero effect transcriptだけをpendingにでき、
+full current-v3 gate後にだけpromote/joinする。`{1,0}` effect-denied downgrade、`{0,1}`、他値は
+mint/pending/join不可である。same-page joinはpair/pointer/page/range/sizeとzero size driftを要求し、
+same-generation new-page/growthはmapping-page setとsealed SHM sizeをatomic更新して全readerを最新
+generation-size receiptへbindする。
+
+leaseはnon-reusable process-instance identity（PID-onlyは禁止し、pidfd/process-start witness、fork
+child invalidationとPID reuse rejectionを含む）、shared dl/runtime image/object/digest/source ID/load
+generation/callback cohort、underlying VFS pointer/version/`pAppData`/registration epoch、aliasごとに
+異なるwriter/reader `sqlite_api` runtime-lifetime identityとmove-only pin、exact
+`xOpen`/`xShmMap`/`xShmUnmap` callback identity、filesystem/device/mount profile、retained parent
+directory FD、既存main/WAL native-file-node/`xOpen` receipt、SHM native attachment/stat-only
+object+direct-entry receipt、continuous namespace-watch epoch、caller/delegated extend pair、SHM
+page/size/offset/pointer/post-writer-map size/mapping-page set、non-reused mapping/holder generation、
+wrapper-observable effect censusを
+一つにbindする。fork、runtime unload、VFS unregister/re-register、callback/app-data drift、watch
+loss/overflow/event、replacement/A-to-B-to-A、unmap/remap、pointer ABAはleaseをrevive不能にretireする。
+final size equalityだけをno-effect authorityにしない。main device/inodeが同じでもhardlink/path/
+retained-parent alias、またはWAL/SHM sidecar leaf/entry family mismatchはrejectする。
+aliasごとのruntime lifetime identity equalityをcross-alias cohort keyにしない。simultaneous first
+writersはcohort in-flightで一つのgeneration install/joinへtotal orderし、W2 callbackのjoin/failが
+確定する前にW1 last holderをretireしない。SQLite lockがliveになり得る間はduplicate main/WAL/SHM
+target FDをopen/closeせず、native main/WAL closeはleaseをrevoke/retireする。memory pinはclosed OS
+handleをauthorityに戻さない。
+
+retired/retiring generationにreader handoffが残るexact family/pageではsuccessor writer map/
+pending/promotion/new generationをadmitしない。predelegateで観測できればnative map前にfail closed、
+postdelegate raceで判明すればnon-removing unmapとlifecycle quarantineを行いretryしない。全handoff
+drain後だけfresh generationを開始する。W1/G1 handoff中にW2が同じpointerを得てもcontinuityではなく、
+handoffはsuccessor authorityをmintしない。successor rejectionはouter `SQLITE_IOERR`、既存
+`store.sqlite-failure / database / preserve-sqlite-runtime-diagnostic`、retryable falseでありsilent/
+internal retryしない。
+
+reader in-flight pinはnative callback returnまでwriter mappingを保持し、exact native attachmentと
+post-map receiptが成立した場合だけone-page/one-callbackのper-reader handoffへ昇格する。native
+`SQLITE_OK`+non-null後にprocess/runtime/VFS/file-family/namespace/generation/pin、latest atomic
+mapping-page set/sealed SHM size、requested page+size、same pointer、same SHM sizeを再検査し、reader callがinitialize/create/truncate/extend/delete/
+resizeを一切行わなかったことを証明した場合だけexact `SQLITE_READONLY`+same pointerへprojectし、
+`SQLITE_OK`を外へpass throughしない。missing/pending/retiring/ambiguous/cross-process/stale lease、
+`SQLITE_OK`+null、fork/PID reuse、page/size/pointer/identity/effect drift、unknown outcomeは従来の
+protocol-violationへfail closedにする。
+
+last writer unmap/closeは先にnew admissionを止め、writer cohort in-flightがjoin/failへ、reader
+predelegation in-flightがhandoff/failureへ確定するまでだけ待つ。異なるthreadだけがbounded/ordered
+waitできる。callback thread identity/reentrancy depth/active tokenをbindし、same-thread reentrant
+retirementは待たずexact outer `SQLITE_IOERR`とopaque handle/lease/generation quarantineへ進み、
+unmap successを捏造せずretryしない。別thread timeout/unknownもquarantineする。handoff確立後はreader自身のnative SHM attachmentがmappingを保持するため
+writer native unmap/closeをdelegateでき、handoffはwriterより長生きしてreader自身のsuccessful
+delegated unmapまでruntime/VFS teardownをpinする。同じreader connectionのlater exact already-mapped
+callbackはsame page/size/pointer/generationのexisting handoffをnew authorityなしで再検査できるが、
+別reader/pageまたは異なるmapping tupleはactive writer leaseからnew admissionを必要とし、handoffから
+transitively mintできない。callback中に
+registry mutexを保持せず、handoff lifetime全体についてwriter closeをblockしたりnative unmap successを
+捏造しない。native lifecycle ambiguityはconnection/runtime/VFSをquarantineする。
+
+proposal acceptance前はauthority workとread-only/temporary investigationだけを許し、implementationを
+認可しない。acceptance後にinternal registry/callback gates/testsの実装を開始できるが、production
+activationは二つのlive StoreのCAS winner/loser、materialization race、cross-process CAS、
+CANTINIT/READONLY regression、およびfork/PID reuse、holder/in-flight/handoff/unmap race、ABA、
+runtime/VFS/image/app-data/callback、object/entry/mount/namespace、page/pointer/size/no-resize、
+extend pair全分類、simultaneous first-writer join/mismatch、W2 in-flight対W1 retire、new-page atomic
+size、duplicate target FD lock-loss、native close後memory pin、unknown outcome、same-thread reentrant
+retirement、different-thread wait timeoutの全matrixをexact implementationへbindした別の
+independent counterexample review後だけ許す。public C++ API、snapshot/publication identity、error
+tuple、generic non-profile semanticsは変更しない。
+qualification scratch/map-sequence validatorはleaseを保持しないためnative OK terminal ruleを維持し、
+production `qualified_source_shm_map_route`のexact lease receipt付きcallbackだけがOK→READONLYを使える。
+
 CANTINIT 時は connection を閉じず、同じ connection と `WAL_READ_LOCK(0)` のまま SQLite heap WAL-index を使い、
 held main/WAL/SHM identity、WAL header/salt、lock、complete eager decode を一つの receipt に bind する。post-close digest/endpoint-only copy、
 別 connection への fallback、arbitrary-error fallback は禁止する。active-WAL はこの一つの explicit read transaction、quiescent source は held
