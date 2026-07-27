@@ -204,6 +204,19 @@ set_tests_properties(
   unit.sdk-sqlite-connection-lifecycle
   PROPERTIES LABELS "unit;sdk;store;sqlite;lifecycle;quarantine")
 
+cxxlens_add_test_executable(
+  cxxlens-unit-sdk-sqlite-shm-mapping-lease
+  unit/sdk/sqlite_same_process_shm_mapping_lease_test.cpp)
+target_link_libraries(cxxlens-unit-sdk-sqlite-shm-mapping-lease
+                      PRIVATE cxxlens::kernel)
+target_include_directories(cxxlens-unit-sdk-sqlite-shm-mapping-lease
+                           PRIVATE "${PROJECT_SOURCE_DIR}/src")
+add_test(NAME unit.sdk-sqlite-shm-mapping-lease
+         COMMAND cxxlens-unit-sdk-sqlite-shm-mapping-lease)
+set_tests_properties(
+  unit.sdk-sqlite-shm-mapping-lease
+  PROPERTIES LABELS "unit;sdk;store;sqlite;vfs;shm;lease;lifecycle;security")
+
 cxxlens_add_test_executable(cxxlens-unit-sdk-sqlite-store-terminal
                             unit/sdk/sqlite_store_terminal_test.cpp)
 target_link_libraries(cxxlens-unit-sdk-sqlite-store-terminal

@@ -162,6 +162,7 @@ add_library(
   src/sdk/claim.cpp
   src/sdk/store.cpp
   src/sdk/sqlite_connection_lifecycle_internal.cpp
+  src/sdk/sqlite_same_process_shm_mapping_lease_internal.cpp
   src/sdk/sqlite_limit_length_control_internal.cpp
   src/sdk/sqlite_payload_streaming_internal.cpp
   src/sdk/sqlite_wal_receipt_internal.cpp
