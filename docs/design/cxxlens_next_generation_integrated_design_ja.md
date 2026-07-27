@@ -2307,6 +2307,12 @@ reader-predelegation orderingを加えたcurrent digest
 は四つのmirror/checkerへbindするが、このexact revisionのfresh independent acceptanceまでは
 non-authorizingである。
 
+Issue #207 / DF-0207 のread-only implementation auditは、同じreader `sqlite3_file`のdifferent-page
+mapが別handoffを作る一方、native `xShmUnmap`はreader attachment全体を一回で解放するcardinality
+gapを記録する。DF-0206のwriter-only proposal/reviewはreader groupをtransitively認可しない。
+reader attachment authorityとdistinct exact implementation/matrix reviewが完了するまでreader grouping、
+production reader exception、VFS activation、qualificationをblockし、一native outcomeを複製しない。
+
 local attemptはnative writer map前にwriter generation/first-writer cohort in-flight pinを取得し、
 pre-statより先に別個のwriter-map stat-only interfaceとretained-parent/ancestry namespace watchを
 開始する。registry mutexはnative callback越しに保持しない。pre-existing SHMはnamespace event zeroを
@@ -5107,7 +5113,7 @@ memory が one shared catalog + fixed buffers + one task/index/source/output win
 task-count-times-catalog-count copies の resident retention、spool failure 後の effect、minor-0 materializer fallback があれば `not-qualified` とする。
 
 Issue #182 の authority-only rollout では、materializer 自身の production-scope assignment が exact
-`scope.clang22-installed-adoption-gap` / `#181` / `[DF-0182, DF-0187, DF-0191, DF-0192, DF-0195, DF-0196, DF-0197, DF-0198, DF-0199, DF-0200, DF-0205]` の `tracked-gap` である間だけ、normal release evaluation は request/report/set の
+`scope.clang22-installed-adoption-gap` / `#181` / `[DF-0182, DF-0187, DF-0191, DF-0192, DF-0195, DF-0196, DF-0197, DF-0198, DF-0199, DF-0200, DF-0205, DF-0206, DF-0207]` の `tracked-gap` である間だけ、normal release evaluation は request/report/set の
 exact zero を typed `tracked-gap-empty` として受理し、materializer executable 一件だけを install census から除外する。partial evidence、full
 matrix の先行、schema/worker の欠落は拒否する。同 assignment が `included` / `qualified` になった後は、他の tracked gap によって全体が
 `classified-with-gaps` のままでも例外を解除し、installed executable と exact four co-located request/report pairs、two report-set digest を

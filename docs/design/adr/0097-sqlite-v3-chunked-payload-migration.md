@@ -294,6 +294,12 @@ enclosing lease digestは
 である。四mirrorは同一だが、fresh independent reviewがこのrevised exact proposalをacceptするまでは
 `proposed-unqualified-non-authorizing` のままであり、attachment-group implementationを認可しない。
 
+Issue #207 / DF-0207 は、同じreader `sqlite3_file`のdifferent-page mapが別handoffを作る一方、
+native `xShmUnmap`はreader attachment全体を一回で解放するcardinality gapを記録する。DF-0206の
+writer-only proposal/reviewはreader groupをtransitively認可しない。accepted reader attachment
+authorityとdistinct exact implementation/matrix reviewが完了するまで、reader grouping、production
+reader exception、VFS activation、qualificationをblockし、per-map handoffへ一native outcomeを複製しない。
+
 lease は二段階で構築する。owned current-v3 writer の native `xShmMap` delegation前に保持できるのは
 callback-localなnon-authoritative attempt/pre-map receipt、generationまたはfirst-writer cohortの
 writer in-flight pin、別個のwriter-map stat-only interfaceとretained-parent/ancestry namespace

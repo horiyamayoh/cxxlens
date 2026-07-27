@@ -1084,6 +1084,8 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     "DF-0199",
                     "DF-0200",
                     "DF-0205",
+                    "DF-0206",
+                    "DF-0207",
                 ],
             },
         )
@@ -1117,7 +1119,7 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     release.ReleaseQualificationError,
                     "neither the exact "
                     "#181/DF-0182/DF-0187/DF-0191/DF-0192/DF-0195/DF-0196/"
-                    "DF-0197/DF-0198/DF-0199/DF-0200/DF-0205 "
+                    "DF-0197/DF-0198/DF-0199/DF-0200/DF-0205/DF-0206/DF-0207 "
                     "tracked gap",
                 ):
                     release.materialization_assignment_transition(ROOT)
@@ -1146,6 +1148,8 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     "DF-0199",
                     "DF-0200",
                     "DF-0205",
+                    "DF-0206",
+                    "DF-0207",
                 ],
             },
         }
@@ -2132,6 +2136,8 @@ class NgReleaseQualificationTests(unittest.TestCase):
                     "DF-0199",
                     "DF-0200",
                     "DF-0205",
+                    "DF-0206",
+                    "DF-0207",
                 ],
             }
             with mock.patch.object(
