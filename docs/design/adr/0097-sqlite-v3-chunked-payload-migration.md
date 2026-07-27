@@ -261,6 +261,14 @@ fresh generationを要求する。
 live groupのsupport unionからfresh-reader-admissible page setをatomicに再計算し、support zeroになった
 pageは既存exact reader handoffのsealed lifetimeを除いてfresh admissionから外す。別live attachmentが
 そのpageをfresh map/resealした場合だけ再加入でき、cleanup済みreceiptを別attachmentへtransferしない。
+non-last groupをhideした結果、他のlive attachment groupからのsupportがzeroになるpageについて、
+hide前に取得済みのreader predelegation pinはreader native mapのno-map resolution、rejected mapの
+confirmed cleanup、またはsealed pre-hide pinからexact handoffへのpromotionまでcleanup blockerとする。
+same-thread blockerは待たずwriter unmapをdelegateせずouter `SQLITE_IOERR`とquarantine、other-thread
+blockerはregistry mutex外のbounded ordered wait後にgroup/generation/open epoch/supportを再検査する。
+timeout、unknown、identity drift、unconfirmed cleanupはretryなしでquarantineする。別groupのexact
+supportが残るpageのinflightと、すでに確立済みのreader handoffはblockerではない。handoffは自身の
+sealed lifetimeだけを保持しfresh support、transfer、successor authorityにはならない。
 generationのsealed SHM sizeは物理縮小を推測せずmonotonic high-water observationとして保持するが、
 それ単独をpage authorityにしない。retired attachment receiptはimmutable audit historyにだけ残し、
 live support、cleanup eligibility、transfer authorityへ戻さない。inner unmap成功後のclose失敗も
@@ -269,7 +277,8 @@ retired group authorityを復元せず、opaque handleをquarantineしてretry�
 acceptance review は少なくとも、one connectionのpage 0/page 1を一 unmapで解放するpositive、repeated
 same-page、two connectionsのexact two unmaps、pending/live mixed group、cross-attachment、incomplete set、
 duplicate unmap、second-page post-validation failure、unmap/remap epoch reuse、close before/after unmap、
-later-map対last-unmap raceを反証する。proposal digestは四つのSQLite/Snapshot contract/schema mirrorと
+later-map対last-unmap race、non-last sole-support cleanup対reader predelegationのsame/other-thread、
+remaining-support、established-handoff casesを反証する。proposal digestは四つのSQLite/Snapshot contract/schema mirrorと
 checker mutation negativeに固定し、fresh independent review前は対象実装をblockする。
 
 exact proposal `3c52b7e01a4d2a4e382940017d1dfb8f07f1be54` の
@@ -279,6 +288,9 @@ per-attachment page-support recomputationとgate/later-map total orderは二つ�
 nested status/authorization/identity、untrusted platform mint、両P1 ruleのremoval/weakeningを直接
 mutation negativeへ追加した。revised enclosing lease digestは
 `sha256:612d450d22b676e4144b76f61cab60cade3ae860f3457b7ec168a9bd00cd9550`
+であり、`9011b22` のreviewed checkpointを識別する。reader-predelegation orderingを加えたcurrent
+enclosing lease digestは
+`sha256:05624ed7e918d43705a4dd6b37884c43c4e98e7a2b89427bbe64367e0655a15f`
 である。四mirrorは同一だが、fresh independent reviewがこのrevised exact proposalをacceptするまでは
 `proposed-unqualified-non-authorizing` のままであり、attachment-group implementationを認可しない。
 

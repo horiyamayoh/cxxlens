@@ -123,6 +123,14 @@ native map with no mapping resolves only its in-flight attempt; a native mapping
 failed post-validation must unmap the complete attachment and retire/quarantine all authority
 bound to it.
 
+When a non-last attachment is the sole remaining live support for a page, hide fresh admission
+first and block native writer unmap on exactly the reader predelegations admitted before that hide
+for that page. Resolve each blocker by no native mapping, confirmed rejected-map cleanup, or exact
+handoff promotion. Apply the existing same-thread no-wait quarantine and different-thread bounded
+ordered wait; timeout, unknown outcome, identity drift, or unconfirmed cleanup cannot retry.
+A page still supported by another exact live group and an established handoff are nonblockers.
+The handoff retains only its own sealed native lifetime and cannot mint fresh page support.
+
 Add positive and negative matrix entries for multi-page one-attachment/one-unmap, accidental
 cross-attachment aggregation, incomplete holder sets, duplicate unmap, second-map failure, and
 concurrent last-unmap versus later-map admission. Production integration must wait for an
@@ -165,3 +173,20 @@ expanded close/remap matrix bind these rules. The revised enclosing lease digest
 `sha256:612d450d22b676e4144b76f61cab60cade3ae860f3457b7ec168a9bd00cd9550`.
 This record remains `observed` / blocked with empty `resolution_refs`; the revised proposal remains
 `proposed-unqualified-non-authorizing` pending a fresh independent exact review.
+
+2026-07-28: Fresh semantic and structural reviews accepted exact proposal commit
+`9011b22abc16214caca60ffa5e36993695262756` with `P0=0 / P1=0 / P2=0`; the result was posted at
+<https://github.com/horiyamayoh/cxxlens/issues/206#issuecomment-5097647919>. Before committing the
+acceptance state or beginning implementation, the independent implementation-architecture pass
+found a further invariant-level ordering gap: a non-last group could be the sole support for the
+page of an already-admitted reader predelegation and still reach native writer unmap before that
+reader established its own attachment or failed cleanly. The `9011b22` review receipt does not
+cover this new authority delta, so acceptance was withheld and the record remains blocked.
+
+2026-07-28: The next proposal revision binds the exact pre-hide sole-page blocker set, its three
+terminal resolutions, same-thread no-wait quarantine, other-thread bounded wait and exact recheck,
+remaining-page nonblocking, and established-handoff nonblocking/nonminting behavior in all four
+mirrors. Focused mutation negatives and positive/negative matrix entries cover each boundary.
+The revised enclosing lease digest is
+`sha256:05624ed7e918d43705a4dd6b37884c43c4e98e7a2b89427bbe64367e0655a15f`.
+The revised proposal remains non-authorizing pending a fresh independent exact-commit review.

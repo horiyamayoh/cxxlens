@@ -527,6 +527,40 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
+                "writer-native-attachment-sole-page-inflight-blocker-removed",
+                lambda value: writer_native_attachment(value).pop(
+                    "nonlast_sole_page_reader_predelegate_blocker"
+                ),
+            ),
+            (
+                "writer-native-attachment-remaining-page-inflight-blocked",
+                lambda value: writer_native_attachment(value).__setitem__(
+                    "nonlast_remaining_page_reader_predelegate",
+                    "every-reader-predelegation-blocks-nonlast-cleanup",
+                ),
+            ),
+            (
+                "writer-native-attachment-sole-page-same-thread-waits",
+                lambda value: writer_native_attachment(value).__setitem__(
+                    "nonlast_sole_page_same_thread",
+                    "wait-on-the-cleanup-callback-thread-then-delegate-unmap",
+                ),
+            ),
+            (
+                "writer-native-attachment-sole-page-other-thread-retries",
+                lambda value: writer_native_attachment(value).__setitem__(
+                    "nonlast_sole_page_other_thread",
+                    "retry-after-timeout-unknown-or-unconfirmed-reader-cleanup",
+                ),
+            ),
+            (
+                "writer-native-attachment-handoff-becomes-page-support",
+                lambda value: writer_native_attachment(value).__setitem__(
+                    "established_reader_handoff_during_writer_cleanup",
+                    "block-writer-cleanup-and-mint-fresh-reader-page-support",
+                ),
+            ),
+            (
                 "writer-native-attachment-retired-evidence-transferable",
                 lambda value: writer_native_attachment(value).__setitem__(
                     "retired_attachment_evidence",
@@ -560,6 +594,60 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                     "fail_closed_matrix"
                 ]["required"].remove(
                     "nonlast-removal-sole-page-support-reused-by-fresh-reader"
+                ),
+            ),
+            (
+                "writer-native-attachment-sole-page-inflight-negative-removed",
+                lambda value: writer_native_attachment(value)[
+                    "fail_closed_matrix"
+                ]["required"].remove(
+                    "nonlast-sole-page-support-writer-unmap-before-reader-"
+                    "predelegation-resolution"
+                ),
+            ),
+            (
+                "writer-native-attachment-same-thread-negative-removed",
+                lambda value: writer_native_attachment(value)[
+                    "fail_closed_matrix"
+                ]["required"].remove(
+                    "nonlast-sole-page-reader-predelegation-same-thread-wait-"
+                    "or-native-unmap"
+                ),
+            ),
+            (
+                "writer-native-attachment-other-thread-negative-removed",
+                lambda value: writer_native_attachment(value)[
+                    "fail_closed_matrix"
+                ]["required"].remove(
+                    "nonlast-sole-page-reader-predelegation-other-thread-"
+                    "timeout-unknown-drift-or-unconfirmed-cleanup-retry"
+                ),
+            ),
+            (
+                "writer-native-attachment-remaining-support-negative-removed",
+                lambda value: writer_native_attachment(value)[
+                    "fail_closed_matrix"
+                ]["required"].remove(
+                    "nonlast-remaining-page-support-reader-predelegation-"
+                    "treated-as-cleanup-blocker"
+                ),
+            ),
+            (
+                "writer-native-attachment-handoff-negative-removed",
+                lambda value: writer_native_attachment(value)[
+                    "fail_closed_matrix"
+                ]["required"].remove(
+                    "established-reader-handoff-treated-as-writer-cleanup-"
+                    "blocker-or-fresh-page-support"
+                ),
+            ),
+            (
+                "writer-native-attachment-sole-page-handoff-positive-removed",
+                lambda value: writer_native_attachment(value)[
+                    "fail_closed_matrix"
+                ]["positive"].remove(
+                    "nonlast-sole-page-reader-predelegation-promotes-to-"
+                    "handoff-then-one-writer-unmap"
                 ),
             ),
             (

@@ -200,6 +200,48 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 ].pop("generation_fresh_reader_page_set"),
             ),
             (
+                "attachment-sole-page-inflight-blocker-removed",
+                lambda value: value[
+                    "writer_native_attachment_amendment_proposal"
+                ].pop("nonlast_sole_page_reader_predelegate_blocker"),
+            ),
+            (
+                "attachment-remaining-page-inflight-blocked",
+                lambda value: value[
+                    "writer_native_attachment_amendment_proposal"
+                ].__setitem__(
+                    "nonlast_remaining_page_reader_predelegate",
+                    "every-reader-predelegation-blocks-nonlast-cleanup",
+                ),
+            ),
+            (
+                "attachment-sole-page-same-thread-waits",
+                lambda value: value[
+                    "writer_native_attachment_amendment_proposal"
+                ].__setitem__(
+                    "nonlast_sole_page_same_thread",
+                    "wait-on-the-cleanup-callback-thread-then-delegate-unmap",
+                ),
+            ),
+            (
+                "attachment-sole-page-other-thread-retries",
+                lambda value: value[
+                    "writer_native_attachment_amendment_proposal"
+                ].__setitem__(
+                    "nonlast_sole_page_other_thread",
+                    "retry-after-timeout-unknown-or-unconfirmed-reader-cleanup",
+                ),
+            ),
+            (
+                "attachment-handoff-becomes-page-support",
+                lambda value: value[
+                    "writer_native_attachment_amendment_proposal"
+                ].__setitem__(
+                    "established_reader_handoff_during_writer_cleanup",
+                    "block-writer-cleanup-and-mint-fresh-reader-page-support",
+                ),
+            ),
+            (
                 "attachment-retired-evidence-transferable",
                 lambda value: value[
                     "writer_native_attachment_amendment_proposal"
@@ -221,6 +263,24 @@ class NgSnapshotStoreContractTest(unittest.TestCase):
                 ].__setitem__(
                     "successful_gate_postcondition",
                     "same-attachment-pending-members-may-survive-gate-success",
+                ),
+            ),
+            (
+                "attachment-sole-page-inflight-negative-removed",
+                lambda value: value[
+                    "writer_native_attachment_amendment_proposal"
+                ]["fail_closed_matrix"]["required"].remove(
+                    "nonlast-sole-page-support-writer-unmap-before-reader-"
+                    "predelegation-resolution"
+                ),
+            ),
+            (
+                "attachment-handoff-negative-removed",
+                lambda value: value[
+                    "writer_native_attachment_amendment_proposal"
+                ]["fail_closed_matrix"]["required"].remove(
+                    "established-reader-handoff-treated-as-writer-cleanup-"
+                    "blocker-or-fresh-page-support"
                 ),
             ),
             (

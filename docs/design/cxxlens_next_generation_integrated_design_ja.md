@@ -2290,13 +2290,22 @@ authorityと、map-before-gate group snapshot対later-map admissionのtotal orde
 revised proposalは各live attachment groupのexact page-support setを保持し、non-last cleanup後に残存
 support unionからfresh-reader-admissible page setをatomicに再計算する。support zeroのpageは既存exact
 handoffのsealed lifetimeを除きfresh admission不可とし、live attachmentのfresh map/resealだけで復活する。
+non-last groupのhideで他groupからのsupportがzeroになるpageについて、hide前にadmit済みのreader
+predelegationはno-map resolution、confirmed reader cleanup、またはsealed pinからexact handoffへの
+promotionまでcleanup blockerとする。same-threadは待たずwriter unmapをdelegateせずquarantineし、
+other-threadはregistry mutex外のbounded ordered wait後にexact recheckする。timeout、unknown、identity
+drift、unconfirmed cleanupはretryしない。別groupのsupportが残るpageのinflightと確立済みhandoffは
+blockerではなく、handoffをfresh support、transfer、successor authorityにはしない。
 cleanup済みreceiptはtransferせず、sealed SHM sizeはpage authorityと分離したmonotonic physical
 observationとして保持する。gate completionとlater mapは一つのregistry state boundaryでtotal-orderし、
 map-winningはbounded blocker、gate-winningはcallback return前promotionとする。timeout、unknown、
 open-epoch driftはcomplete groupをhide/quarantineし、successful gate後にboundary前pendingを残さない。
-revised enclosing lease digest
-`sha256:612d450d22b676e4144b76f61cab60cade3ae860f3457b7ec168a9bd00cd9550`
-は四つのmirror/checkerへbindするが、fresh independent acceptanceまではnon-authorizingである。
+`9011b22` review時のenclosing lease digestは
+`sha256:612d450d22b676e4144b76f61cab60cade3ae860f3457b7ec168a9bd00cd9550` である。
+reader-predelegation orderingを加えたcurrent digest
+`sha256:05624ed7e918d43705a4dd6b37884c43c4e98e7a2b89427bbe64367e0655a15f`
+は四つのmirror/checkerへbindするが、このexact revisionのfresh independent acceptanceまでは
+non-authorizingである。
 
 local attemptはnative writer map前にwriter generation/first-writer cohort in-flight pinを取得し、
 pre-statより先に別個のwriter-map stat-only interfaceとretained-parent/ancestry namespace watchを
