@@ -651,6 +651,33 @@ class NgSQLiteStoreContractTest(unittest.TestCase):
                 ),
             ),
             (
+                "writer-native-attachment-sole-page-resolution-positive-removed",
+                lambda value: writer_native_attachment(value)[
+                    "fail_closed_matrix"
+                ]["positive"].remove(
+                    "nonlast-sole-page-reader-predelegation-no-map-or-"
+                    "confirmed-cleanup-then-one-writer-unmap"
+                ),
+            ),
+            (
+                "writer-native-attachment-remaining-support-positive-removed",
+                lambda value: writer_native_attachment(value)[
+                    "fail_closed_matrix"
+                ]["positive"].remove(
+                    "nonlast-reader-predelegation-with-other-exact-page-"
+                    "support-does-not-block"
+                ),
+            ),
+            (
+                "writer-native-attachment-established-handoff-positive-removed",
+                lambda value: writer_native_attachment(value)[
+                    "fail_closed_matrix"
+                ]["positive"].remove(
+                    "nonlast-established-reader-handoff-does-not-block-and-"
+                    "retains-only-its-sealed-lifetime"
+                ),
+            ),
+            (
                 "writer-mapping-lease-current-rejection-weakened",
                 lambda value: writer_mapping_lease(value).__setitem__(
                     "current_rule_before_acceptance",
